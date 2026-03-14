@@ -20,6 +20,12 @@ let mockState = {
   briefing: [] as Thing[],
   loading: false,
   snoozeThing: vi.fn(),
+  calendarStatus: { configured: false, connected: false },
+  calendarEvents: [],
+  fetchCalendarStatus: vi.fn(),
+  fetchCalendarEvents: vi.fn(),
+  connectCalendar: vi.fn(),
+  disconnectCalendar: vi.fn(),
 }
 
 vi.mock('../store', () => ({
@@ -70,13 +76,22 @@ function setMobileViewport() {
   }))
 }
 
+const calendarDefaults = {
+  calendarStatus: { configured: false, connected: false },
+  calendarEvents: [] as unknown[],
+  fetchCalendarStatus: vi.fn(),
+  fetchCalendarEvents: vi.fn(),
+  connectCalendar: vi.fn(),
+  disconnectCalendar: vi.fn(),
+}
+
 beforeEach(() => {
   setDesktopViewport()
 })
 
 describe('Sidebar', () => {
   it('shows empty state when no things', () => {
-    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn() }
+    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn(), calendarStatus: { configured: false, connected: false }, calendarEvents: [], fetchCalendarStatus: vi.fn(), fetchCalendarEvents: vi.fn(), connectCalendar: vi.fn(), disconnectCalendar: vi.fn() }
     render(<Sidebar />)
     expect(screen.getByText('Start by typing in the chat…')).toBeInTheDocument()
   })
@@ -87,13 +102,14 @@ describe('Sidebar', () => {
       briefing: [],
       loading: false,
       snoozeThing: vi.fn(),
+      ...calendarDefaults,
     }
     render(<Sidebar />)
     expect(screen.getByText('Buy groceries')).toBeInTheDocument()
   })
 
   it('shows loading skeleton when loading with no things', () => {
-    mockState = { things: [], briefing: [], loading: true, snoozeThing: vi.fn() }
+    mockState = { things: [], briefing: [], loading: true, snoozeThing: vi.fn(), ...calendarDefaults }
     const { container } = render(<Sidebar />)
     expect(container.querySelector('.animate-pulse')).toBeInTheDocument()
   })
@@ -105,6 +121,7 @@ describe('Sidebar', () => {
       briefing: [makeThing({ id: 'b1', title: 'Overdue Task', checkin_date: overdueDate })],
       loading: false,
       snoozeThing: vi.fn(),
+      ...calendarDefaults,
     }
     render(<Sidebar />)
     expect(screen.getByText('📅 Daily Briefing')).toBeInTheDocument()
@@ -117,6 +134,7 @@ describe('Sidebar', () => {
       briefing: [],
       loading: false,
       snoozeThing: vi.fn(),
+      ...calendarDefaults,
     }
     render(<Sidebar />)
     expect(screen.getByTitle('Snooze')).toBeInTheDocument()
@@ -124,7 +142,7 @@ describe('Sidebar', () => {
 
   it('is expanded by default on desktop', () => {
     setDesktopViewport()
-    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn() }
+    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn(), calendarStatus: { configured: false, connected: false }, calendarEvents: [], fetchCalendarStatus: vi.fn(), fetchCalendarEvents: vi.fn(), connectCalendar: vi.fn(), disconnectCalendar: vi.fn() }
     render(<Sidebar />)
     expect(screen.getByLabelText('Close sidebar')).toBeInTheDocument()
     expect(screen.queryByLabelText('Open sidebar')).not.toBeInTheDocument()
@@ -132,14 +150,14 @@ describe('Sidebar', () => {
 
   it('is collapsed by default on mobile', () => {
     setMobileViewport()
-    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn() }
+    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn(), calendarStatus: { configured: false, connected: false }, calendarEvents: [], fetchCalendarStatus: vi.fn(), fetchCalendarEvents: vi.fn(), connectCalendar: vi.fn(), disconnectCalendar: vi.fn() }
     render(<Sidebar />)
     expect(screen.getByLabelText('Open sidebar')).toBeInTheDocument()
   })
 
   it('can be toggled open and closed', () => {
     setDesktopViewport()
-    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn() }
+    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn(), calendarStatus: { configured: false, connected: false }, calendarEvents: [], fetchCalendarStatus: vi.fn(), fetchCalendarEvents: vi.fn(), connectCalendar: vi.fn(), disconnectCalendar: vi.fn() }
     render(<Sidebar />)
 
     // Initially open on desktop

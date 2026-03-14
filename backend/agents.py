@@ -49,11 +49,15 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
   "filter_params": {
     "active_only": true,
     "type_hint": null
-  }
+  },
+  "include_calendar": false
 }
 - search_queries: 1-3 short text fragments to match against Thing titles/data
 - filter_params.active_only: true unless user asks about archived/all items
 - filter_params.type_hint: null or one of task|note|idea|project|goal|journal
+- include_calendar: true if the user asks about their schedule, calendar, meetings,
+  events, availability, free time, what's coming up today/this week, or anything
+  time/schedule related. Default false.
 """
 
 
@@ -113,7 +117,10 @@ Rules:
 
 
 async def run_reasoning_agent(
-    message: str, history: list[dict], relevant_things: list[dict]
+    message: str,
+    history: list[dict],
+    relevant_things: list[dict],
+    calendar_events: list[dict] | None = None,
 ) -> dict:
     """Stage 2: decide what changes to make."""
     from datetime import datetime, timezone
@@ -125,6 +132,9 @@ async def run_reasoning_agent(
         f"User message: {message}\n\n"
         f"Relevant Things from database:\n{things_json}"
     )
+    if calendar_events:
+        cal_json = json.dumps(calendar_events, default=str)
+        user_content += f"\n\nUpcoming Google Calendar events:\n{cal_json}"
     messages = [{"role": "system", "content": REASONING_AGENT_SYSTEM}]
     for h in history[-10:]:
         messages.append({"role": h["role"], "content": h["content"]})
@@ -273,6 +283,9 @@ Rules:
   prioritize: "We've got a few things in play. Want me to help pick the
   power move for today?"
 - Proactively nudge about items with approaching check-in dates when relevant.
+- When calendar events are provided, naturally weave them into your response.
+  Mention upcoming meetings, conflicts, or free blocks when relevant to the
+  user's request. Format times in a human-friendly way (e.g. "2pm" not ISO-8601).
 """
 
 

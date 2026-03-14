@@ -21,6 +21,21 @@ export interface AppliedChanges {
   deleted?: string[]
 }
 
+export interface CalendarEvent {
+  id: string
+  summary: string
+  start: string
+  end: string
+  all_day: boolean
+  location: string | null
+  status: string
+}
+
+export interface CalendarStatus {
+  configured: boolean
+  connected: boolean
+}
+
 export interface ChatMessage {
   id: number | string
   session_id: string
@@ -42,6 +57,8 @@ interface ReliState {
   historyLoading: boolean
   hasMoreHistory: boolean
   error: string | null
+  calendarStatus: CalendarStatus
+  calendarEvents: CalendarEvent[]
 
   fetchThings: () => Promise<void>
   fetchBriefing: () => Promise<void>
@@ -50,6 +67,10 @@ interface ReliState {
   fetchOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
   clearError: () => void
+  fetchCalendarStatus: () => Promise<void>
+  fetchCalendarEvents: () => Promise<void>
+  connectCalendar: () => Promise<void>
+  disconnectCalendar: () => Promise<void>
 }
 
 const HISTORY_PAGE_SIZE = 20
@@ -77,6 +98,8 @@ export const useStore = create<ReliState>((set, get) => ({
   historyLoading: false,
   hasMoreHistory: true,
   error: null,
+  calendarStatus: { configured: false, connected: false },
+  calendarEvents: [],
 
   fetchThings: async () => {
     set({ loading: true, error: null })
@@ -226,6 +249,51 @@ export const useStore = create<ReliState>((set, get) => ({
       }))
     } finally {
       set({ chatLoading: false })
+    }
+  },
+
+  fetchCalendarStatus: async () => {
+    try {
+      const res = await fetch(`${BASE}/calendar/status`)
+      if (!res.ok) return
+      const data: CalendarStatus = await res.json()
+      set({ calendarStatus: data })
+    } catch {
+      // ignore
+    }
+  },
+
+  fetchCalendarEvents: async () => {
+    try {
+      const res = await fetch(`${BASE}/calendar/events`)
+      if (!res.ok) return
+      const data = await res.json()
+      set({ calendarEvents: data.events ?? [] })
+    } catch {
+      // ignore
+    }
+  },
+
+  connectCalendar: async () => {
+    try {
+      const res = await fetch(`${BASE}/calendar/auth`)
+      if (!res.ok) return
+      const data = await res.json()
+      if (data.auth_url) {
+        window.location.href = data.auth_url
+      }
+    } catch (e) {
+      set({ error: String(e) })
+    }
+  },
+
+  disconnectCalendar: async () => {
+    try {
+      const res = await fetch(`${BASE}/calendar/disconnect`, { method: 'DELETE' })
+      if (!res.ok) return
+      set({ calendarStatus: { configured: true, connected: false }, calendarEvents: [] })
+    } catch (e) {
+      set({ error: String(e) })
     }
   },
 
