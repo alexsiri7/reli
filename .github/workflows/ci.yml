@@ -27,10 +27,10 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt pytest pytest-asyncio httpx pytest-cov
+        run: pip install -r backend/requirements.txt
 
       - name: Run tests
-        run: pytest backend/tests/ --tb=short --cov=backend --cov-report=term-missing
+        run: pytest backend/
 
   frontend:
     name: Frontend (Node 20)
@@ -57,8 +57,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Run tests
+        run: npm run test
 
-      - name: Test
-        run: npm test --if-present
+  # Deploy job runs only on push to master (not PRs), after tests pass.
+  # Required GitHub Actions secrets:
+  #   SSH_DEPLOY_KEY  — private SSH key authorized on the server (ed25519 recommended)
+  #   DEPLOY_HOST     — server hostname or IP address
+  #   DEPLOY_USER     — SSH username on the server
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_DEPLOY_KEY }}
+          script: |
+            cd ~/reli
+            git pull
+            cd frontend && npm ci && npm run build && cd ..
+            docker compose build
+            docker compose up -d
