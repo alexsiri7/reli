@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type AppliedChanges, type ChatMessage } from '../store'
+import { useStore, type AppliedChanges, type ChatMessage, type WebSearchResult } from '../store'
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso)
@@ -14,6 +14,48 @@ function formatTimestamp(iso: string): string {
   if (isToday) return time
   const monthDay = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   return `${monthDay}, ${time}`
+}
+
+function WebSources({ results }: { results: WebSearchResult[] }) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (results.length === 0) return null
+
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
+      >
+        <svg
+          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        {results.length} source{results.length !== 1 ? 's' : ''}
+      </button>
+      {expanded && (
+        <div className="mt-1.5 space-y-1.5">
+          {results.map((r, i) => (
+            <a
+              key={i}
+              href={r.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block text-xs text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+            >
+              <span className="font-medium">{r.title}</span>
+              <span className="block text-gray-400 dark:text-gray-500 truncate">{r.snippet}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function ActionEntry({ changes }: { changes: AppliedChanges }) {
@@ -85,6 +127,9 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           {msg.content}
           {msg.streaming && (
             <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
+          )}
+          {!isUser && msg.applied_changes?.web_results && msg.applied_changes.web_results.length > 0 && (
+            <WebSources results={msg.applied_changes.web_results} />
           )}
           {!isUser && msg.questions_for_user && msg.questions_for_user.length > 0 && (
             <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
@@ -198,10 +243,10 @@ export function ChatPanel() {
         )}
         {messages.map(msg => (
           <div key={msg.id}>
-            <MessageBubble msg={msg} />
             {msg.role === 'assistant' && msg.applied_changes && (
               <ActionEntry changes={msg.applied_changes} />
             )}
+            <MessageBubble msg={msg} />
           </div>
         ))}
         <div ref={bottomRef} />

@@ -14,6 +14,7 @@ from ..agents import (
 from ..database import db
 from ..models import ChatMessage, ChatMessageCreate, ChatRequest, ChatResponse
 from ..vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
+from ..web_search import google_search, is_search_configured
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -203,8 +204,16 @@ async def chat(body: ChatRequest):
     with db() as conn:
         relevant_things = _fetch_relevant_things(conn, search_queries, filter_params)
 
+    # Web search (if Context Agent requested it and API is configured)
+    web_results: list[dict] | None = None
+    if context_result.get("needs_web_search") and is_search_configured():
+        web_query = context_result.get("web_search_query") or message
+        results = await google_search(web_query)
+        if results:
+            web_results = [r.to_dict() for r in results]
+
     # Stage 2: Reasoning Agent
-    reasoning_result = await run_reasoning_agent(message, history, relevant_things)
+    reasoning_result = await run_reasoning_agent(message, history, relevant_things, web_results)
     storage_changes = reasoning_result.get("storage_changes", {})
     questions_for_user = reasoning_result.get("questions_for_user", [])
     reasoning_summary = reasoning_result.get("reasoning_summary", "")
@@ -214,10 +223,15 @@ async def chat(body: ChatRequest):
         applied_changes = apply_storage_changes(storage_changes, conn)
 
     # Stage 4: Response Agent
-    reply = await run_response_agent(message, reasoning_summary, questions_for_user, applied_changes)
+    reply = await run_response_agent(
+        message, reasoning_summary, questions_for_user, applied_changes, web_results
+    )
 
     # Persist both sides of the exchange to chat history
-    changes_json = json.dumps(applied_changes)
+    applied_with_sources = applied_changes.copy()
+    if web_results:
+        applied_with_sources["web_results"] = web_results
+    changes_json = json.dumps(applied_with_sources)
     with db() as conn:
         conn.execute(
             "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
@@ -231,6 +245,6 @@ async def chat(body: ChatRequest):
     return ChatResponse(
         session_id=session_id,
         reply=reply,
-        applied_changes=applied_changes,
+        applied_changes=applied_with_sources,
         questions_for_user=questions_for_user,
     )
