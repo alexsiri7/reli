@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 
@@ -32,20 +32,48 @@ function MessageBubble({ role, content, streaming }: {
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, sendMessage } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
+      historyLoading: s.historyLoading,
+      hasMoreHistory: s.hasMoreHistory,
       sendMessage: s.sendMessage,
+      fetchOlderMessages: s.fetchOlderMessages,
     }))
   )
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const prevScrollHeightRef = useRef<number>(0)
+  const isLoadingOlderRef = useRef(false)
 
+  // Auto-scroll to bottom on new messages (but not when loading older ones)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (isLoadingOlderRef.current) {
+      // Preserve scroll position after prepending older messages
+      const container = scrollContainerRef.current
+      if (container) {
+        const newScrollHeight = container.scrollHeight
+        container.scrollTop = newScrollHeight - prevScrollHeightRef.current
+      }
+      isLoadingOlderRef.current = false
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])
+
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container || historyLoading || !hasMoreHistory) return
+
+    if (container.scrollTop < 100) {
+      isLoadingOlderRef.current = true
+      prevScrollHeightRef.current = container.scrollHeight
+      fetchOlderMessages()
+    }
+  }, [historyLoading, hasMoreHistory, fetchOlderMessages])
 
   const submit = async () => {
     const text = input.trim()
@@ -70,8 +98,17 @@ export function ChatPanel() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-4">
-        {messages.length === 0 && (
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto px-5 py-4"
+        onScroll={handleScroll}
+      >
+        {historyLoading && hasMoreHistory && (
+          <div className="flex justify-center py-2">
+            <span className="w-4 h-4 border-2 border-gray-300 border-t-indigo-600 rounded-full animate-spin" />
+          </div>
+        )}
+        {messages.length === 0 && !historyLoading && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="text-5xl mb-4">✨</div>
             <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">What's on your mind?</h3>

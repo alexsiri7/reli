@@ -14,7 +14,10 @@ type Msg = {
 const mockStore = {
   messages: [] as Msg[],
   chatLoading: false,
+  historyLoading: false,
+  hasMoreHistory: false,
   sendMessage: vi.fn(),
+  fetchOlderMessages: vi.fn(),
 }
 
 vi.mock('../store', () => ({
@@ -25,8 +28,11 @@ import { ChatPanel } from '../components/ChatPanel'
 
 beforeEach(() => {
   mockStore.sendMessage = vi.fn()
+  mockStore.fetchOlderMessages = vi.fn()
   mockStore.messages = []
   mockStore.chatLoading = false
+  mockStore.historyLoading = false
+  mockStore.hasMoreHistory = false
 })
 
 describe('ChatPanel', () => {
@@ -85,5 +91,12 @@ describe('ChatPanel', () => {
     render(<ChatPanel />)
     const btn = screen.getByTitle('Send (Enter)')
     expect(btn).toBeDisabled()
+  })
+
+  it('hides empty state while history is loading', () => {
+    mockStore.historyLoading = true
+    mockStore.hasMoreHistory = true
+    render(<ChatPanel />)
+    expect(screen.queryByText("What's on your mind?")).not.toBeInTheDocument()
   })
 })

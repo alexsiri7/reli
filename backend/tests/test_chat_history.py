@@ -73,16 +73,28 @@ class TestGetHistory:
         for i in range(10):
             _append(client, "sess-page", "user", f"Message {i}")
         resp = client.get("/api/chat/history/sess-page?limit=3")
-        assert len(resp.json()) == 3
+        msgs = resp.json()
+        assert len(msgs) == 3
+        # Default (no before) returns most recent messages
+        assert msgs[0]["content"] == "Message 7"
+        assert msgs[2]["content"] == "Message 9"
 
-    def test_get_history_pagination_offset(self, client):
+    def test_get_history_pagination_before(self, client):
         for i in range(5):
-            _append(client, "sess-offset", "user", f"Message {i}")
-        resp_first = client.get("/api/chat/history/sess-offset?limit=2&offset=0")
-        resp_second = client.get("/api/chat/history/sess-offset?limit=2&offset=2")
-        first_ids = [m["id"] for m in resp_first.json()]
-        second_ids = [m["id"] for m in resp_second.json()]
-        assert not set(first_ids) & set(second_ids)  # no overlap
+            _append(client, "sess-before", "user", f"Message {i}")
+        # Get latest 2 messages
+        resp_latest = client.get("/api/chat/history/sess-before?limit=2")
+        latest_msgs = resp_latest.json()
+        assert len(latest_msgs) == 2
+        oldest_id = latest_msgs[0]["id"]
+        # Get 2 messages before the oldest loaded
+        resp_older = client.get(f"/api/chat/history/sess-before?limit=2&before={oldest_id}")
+        older_msgs = resp_older.json()
+        assert len(older_msgs) == 2
+        # No overlap between the two pages
+        latest_ids = {m["id"] for m in latest_msgs}
+        older_ids = {m["id"] for m in older_msgs}
+        assert not latest_ids & older_ids
 
 
 class TestDeleteHistory:

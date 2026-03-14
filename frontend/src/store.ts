@@ -32,17 +32,31 @@ interface ReliState {
   sessionId: string
   loading: boolean
   chatLoading: boolean
+  historyLoading: boolean
+  hasMoreHistory: boolean
   error: string | null
 
   fetchThings: () => Promise<void>
   fetchBriefing: () => Promise<void>
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
   fetchHistory: () => Promise<void>
+  fetchOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
   clearError: () => void
 }
 
-const SESSION_ID = `reli-${Math.random().toString(36).slice(2)}`
+const HISTORY_PAGE_SIZE = 20
+
+function getOrCreateSessionId(): string {
+  const key = 'reli-session-id'
+  const stored = localStorage.getItem(key)
+  if (stored) return stored
+  const id = `reli-${Math.random().toString(36).slice(2)}`
+  localStorage.setItem(key, id)
+  return id
+}
+
+const SESSION_ID = getOrCreateSessionId()
 
 const BASE = '/api'
 
@@ -53,6 +67,8 @@ export const useStore = create<ReliState>((set, get) => ({
   sessionId: SESSION_ID,
   loading: false,
   chatLoading: false,
+  historyLoading: false,
+  hasMoreHistory: true,
   error: null,
 
   fetchThings: async () => {
@@ -99,13 +115,44 @@ export const useStore = create<ReliState>((set, get) => ({
   },
 
   fetchHistory: async () => {
+    set({ historyLoading: true })
     try {
-      const res = await fetch(`${BASE}/chat/history/${SESSION_ID}?limit=100`)
+      const res = await fetch(`${BASE}/chat/history/${SESSION_ID}?limit=${HISTORY_PAGE_SIZE}`)
       if (!res.ok) return
       const data: ChatMessage[] = await res.json()
-      set({ messages: data })
+      set({
+        messages: data,
+        hasMoreHistory: data.length >= HISTORY_PAGE_SIZE,
+      })
     } catch {
       // ignore
+    } finally {
+      set({ historyLoading: false })
+    }
+  },
+
+  fetchOlderMessages: async () => {
+    const { messages, historyLoading, hasMoreHistory } = get()
+    if (historyLoading || !hasMoreHistory) return
+
+    const oldestMsg = messages[0]
+    if (!oldestMsg || typeof oldestMsg.id !== 'number') return
+
+    set({ historyLoading: true })
+    try {
+      const res = await fetch(
+        `${BASE}/chat/history/${SESSION_ID}?limit=${HISTORY_PAGE_SIZE}&before=${oldestMsg.id}`
+      )
+      if (!res.ok) return
+      const data: ChatMessage[] = await res.json()
+      set(state => ({
+        messages: [...data, ...state.messages],
+        hasMoreHistory: data.length >= HISTORY_PAGE_SIZE,
+      }))
+    } catch {
+      // ignore
+    } finally {
+      set({ historyLoading: false })
     }
   },
 

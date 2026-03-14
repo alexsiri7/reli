@@ -44,13 +44,21 @@ def _row_to_msg(row) -> ChatMessage:
 def get_history(
     session_id: str,
     limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    before: int | None = Query(None, description="Return messages with id < before (for loading older messages)"),
 ):
     with db() as conn:
-        rows = conn.execute(
-            "SELECT * FROM chat_history WHERE session_id = ? ORDER BY timestamp ASC LIMIT ? OFFSET ?",
-            (session_id, limit, offset),
-        ).fetchall()
+        if before is not None:
+            rows = conn.execute(
+                "SELECT * FROM chat_history WHERE session_id = ? AND id < ? ORDER BY id DESC LIMIT ?",
+                (session_id, before, limit),
+            ).fetchall()
+            rows = list(reversed(rows))
+        else:
+            rows = conn.execute(
+                "SELECT * FROM chat_history WHERE session_id = ? ORDER BY id DESC LIMIT ?",
+                (session_id, limit),
+            ).fetchall()
+            rows = list(reversed(rows))
     return [_row_to_msg(r) for r in rows]
 
 
