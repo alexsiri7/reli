@@ -181,6 +181,30 @@ def _fetch_relevant_things(conn, search_queries: list[str], filter_params: dict)
     return results
 
 
+def _fetch_gmail_context(query: str) -> list[dict]:
+    """Fetch Gmail messages matching query for injection into the reasoning agent."""
+    try:
+        from .gmail import _get_service, _parse_message
+
+        service = _get_service()
+        result = service.users().messages().list(userId="me", q=query, maxResults=10).execute()
+        msg_refs = result.get("messages", [])
+        messages = []
+        for ref in msg_refs[:10]:
+            msg = service.users().messages().get(userId="me", id=ref["id"], format="full").execute()
+            parsed = _parse_message(msg)
+            messages.append({
+                "id": parsed.id,
+                "subject": parsed.subject,
+                "from": parsed.sender,
+                "date": parsed.date,
+                "snippet": parsed.snippet,
+            })
+        return messages
+    except Exception:
+        return []
+
+
 @router.post("", response_model=ChatResponse, summary="Send a message through the multi-agent pipeline")
 async def chat(body: ChatRequest):
     """4-stage pipeline: Context → Retrieve → Reasoning → Validate → Respond."""
@@ -199,6 +223,7 @@ async def chat(body: ChatRequest):
     context_result = await run_context_agent(message, history)
     search_queries = context_result.get("search_queries", [message])
     filter_params = context_result.get("filter_params", {})
+    gmail_query = context_result.get("gmail_query")
 
     # Retrieve relevant Things
     with db() as conn:
@@ -212,8 +237,11 @@ async def chat(body: ChatRequest):
         if results:
             web_results = [r.to_dict() for r in results]
 
+    # Optionally fetch Gmail context
+    gmail_context = _fetch_gmail_context(gmail_query) if gmail_query else []
+
     # Stage 2: Reasoning Agent
-    reasoning_result = await run_reasoning_agent(message, history, relevant_things, web_results)
+    reasoning_result = await run_reasoning_agent(message, history, relevant_things, web_results, gmail_context)
     storage_changes = reasoning_result.get("storage_changes", {})
     questions_for_user = reasoning_result.get("questions_for_user", [])
     reasoning_summary = reasoning_result.get("reasoning_summary", "")

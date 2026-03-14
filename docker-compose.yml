@@ -12,4 +12,6 @@ services:
       - GOOGLE_SEARCH_API_KEY=${GOOGLE_SEARCH_API_KEY:-}
       - GOOGLE_SEARCH_CX=${GOOGLE_SEARCH_CX:-}
       - DATA_DIR=/app/data
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
     restart: unless-stopped
