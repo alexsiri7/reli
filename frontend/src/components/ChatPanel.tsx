@@ -198,10 +198,10 @@ export function ChatPanel() {
         )}
         {messages.map(msg => (
           <div key={msg.id}>
-            <MessageBubble msg={msg} />
             {msg.role === 'assistant' && msg.applied_changes && (
               <ActionEntry changes={msg.applied_changes} />
             )}
+            <MessageBubble msg={msg} />
           </div>
         ))}
         <div ref={bottomRef} />
