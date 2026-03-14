@@ -5,8 +5,8 @@ import { ThingCard } from '../components/ThingCard'
 const snoozeThing = vi.fn()
 
 vi.mock('../store', () => ({
-  useStore: (selector: (s: { snoozeThing: typeof snoozeThing }) => unknown) =>
-    selector({ snoozeThing }),
+  useStore: (selector: (s: { snoozeThing: typeof snoozeThing; things: typeof things }) => unknown) =>
+    selector({ snoozeThing, things }),
 }))
 
 const baseThing = {
@@ -21,6 +21,22 @@ const baseThing = {
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 }
+
+const things = [
+  baseThing,
+  {
+    id: 't2',
+    title: 'Sub-task A',
+    type_hint: 'task' as const,
+    parent_id: 't1',
+    checkin_date: null,
+    priority: 3,
+    active: true,
+    data: null,
+    created_at: '2026-01-02T00:00:00Z',
+    updated_at: '2026-01-02T00:00:00Z',
+  },
+]
 
 beforeEach(() => {
   snoozeThing.mockReset()
@@ -77,5 +93,48 @@ describe('ThingCard', () => {
     const nextWeek = new Date()
     nextWeek.setDate(nextWeek.getDate() + 7)
     expect(passed.getDate()).toBe(nextWeek.getDate())
+  })
+
+  it('does not show details by default', () => {
+    render(<ThingCard thing={baseThing} />)
+    expect(screen.queryByText(/Critical/)).not.toBeInTheDocument()
+  })
+
+  it('expands to show priority and timestamps on click', () => {
+    render(<ThingCard thing={baseThing} />)
+    fireEvent.click(screen.getByRole('button', { name: /Finish report/ }))
+    expect(screen.getByText('🔴 Critical')).toBeInTheDocument()
+    expect(screen.getByText(/Created/)).toBeInTheDocument()
+  })
+
+  it('shows data entries when expanded', () => {
+    const thingWithData = { ...baseThing, data: { birthday: '1990-05-20', notes: 'Important' } }
+    render(<ThingCard thing={thingWithData} />)
+    fireEvent.click(screen.getByRole('button', { name: /Finish report/ }))
+    expect(screen.getByText('birthday:')).toBeInTheDocument()
+    expect(screen.getByText('1990-05-20')).toBeInTheDocument()
+    expect(screen.getByText('notes:')).toBeInTheDocument()
+    expect(screen.getByText('Important')).toBeInTheDocument()
+  })
+
+  it('shows children when expanded', () => {
+    render(<ThingCard thing={baseThing} />)
+    fireEvent.click(screen.getByRole('button', { name: /Finish report/ }))
+    expect(screen.getByText(/Sub-task A/)).toBeInTheDocument()
+  })
+
+  it('shows parent when expanded', () => {
+    render(<ThingCard thing={things[1]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Sub-task A/ }))
+    expect(screen.getByText(/Finish report/)).toBeInTheDocument()
+  })
+
+  it('collapses on second click', () => {
+    render(<ThingCard thing={baseThing} />)
+    const row = screen.getByRole('button', { name: /Finish report/ })
+    fireEvent.click(row)
+    expect(screen.getByText('🔴 Critical')).toBeInTheDocument()
+    fireEvent.click(row)
+    expect(screen.queryByText('🔴 Critical')).not.toBeInTheDocument()
   })
 })
