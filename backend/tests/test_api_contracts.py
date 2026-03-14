@@ -30,9 +30,11 @@ def assert_thing_shape(obj: dict) -> None:
     assert obj["checkin_date"] is None or isinstance(obj["checkin_date"], str)
     assert isinstance(obj["priority"], int)
     assert isinstance(obj["active"], bool)
+    assert isinstance(obj["surface"], bool)
     assert obj["data"] is None or isinstance(obj["data"], dict)
     assert isinstance(obj["created_at"], str)
     assert isinstance(obj["updated_at"], str)
+    assert obj["last_referenced"] is None or isinstance(obj["last_referenced"], str)
     # Dates must be ISO strings (frontend parses them as strings, not Date objects)
     assert ISO_DATE_RE.match(obj["created_at"]), f"created_at not ISO: {obj['created_at']}"
     assert ISO_DATE_RE.match(obj["updated_at"]), f"updated_at not ISO: {obj['updated_at']}"

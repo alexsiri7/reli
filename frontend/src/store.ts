@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | string
+export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | string
 
 export interface Thing {
   id: string
@@ -10,9 +10,11 @@ export interface Thing {
   checkin_date: string | null
   priority: number
   active: boolean
+  surface: boolean
   data: Record<string, unknown> | null
   created_at: string
   updated_at: string
+  last_referenced: string | null
 }
 
 export interface WebSearchResult {

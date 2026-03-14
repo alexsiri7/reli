@@ -15,6 +15,7 @@ class ThingCreate(BaseModel):
     checkin_date: datetime | None = None
     priority: int = Field(default=3, ge=1, le=5)
     active: bool = True
+    surface: bool = True
     data: dict[str, Any] | None = None
 
 
@@ -25,6 +26,7 @@ class ThingUpdate(BaseModel):
     checkin_date: datetime | None = None
     priority: int | None = Field(default=None, ge=1, le=5)
     active: bool | None = None
+    surface: bool | None = None
     data: dict[str, Any] | None = None
 
 
@@ -36,9 +38,31 @@ class Thing(BaseModel):
     checkin_date: datetime | None
     priority: int
     active: bool
+    surface: bool
     data: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime
+    last_referenced: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# ── Relationships ────────────────────────────────────────────────────────────
+
+class RelationshipCreate(BaseModel):
+    from_thing_id: str
+    to_thing_id: str
+    relationship_type: str = Field(..., min_length=1, max_length=100)
+    metadata: dict[str, Any] | None = None
+
+
+class Relationship(BaseModel):
+    id: str
+    from_thing_id: str
+    to_thing_id: str
+    relationship_type: str
+    metadata: dict[str, Any] | None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
