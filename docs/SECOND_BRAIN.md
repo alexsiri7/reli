@@ -34,6 +34,28 @@ The distinction isn't type-based — a person CAN be tracked ("Check in with
 Tom weekly") and a project CAN be an entity (a past project referenced for
 context). **The user decides what surfaces, not the system.**
 
+**Exception: proactive surfacing.** The system CAN promote an entity Thing to
+"top of mind" temporarily when time-sensitive data makes it relevant. If Tom
+has a birthday in 3 days, Tom surfaces in the sidebar even though he's not
+explicitly tracked. This is the system being a good assistant — reminding you
+of things you'd want to know. These proactive surfaces are temporary and
+disappear after the event passes.
+
+## The Sidebar: "Top of Mind"
+
+The sidebar is NOT an inventory. It's **what you should be thinking about
+right now.** It combines:
+
+1. **Tracked Things** — projects, active tasks, goals you're working on
+2. **Upcoming dates** — check-ins, deadlines, birthdays approaching
+3. **Recently discussed** — Things from recent conversations (fades over time)
+4. **Proactive surfaces** — entity Things the system thinks are relevant now
+5. **Review flags** — Things the overnight sweep tagged for attention
+
+The sidebar should have a **search bar** at the top. Search reaches into the
+full graph — every Thing, every entity, every relationship — not just what's
+currently surfaced. This is how you access the deep brain.
+
 ## Relationships
 
 Things connect to other Things. Relationships are typed and directional:
@@ -51,6 +73,62 @@ Things connect to other Things. Relationships are typed and directional:
 ### Temporal relationships
 - **followed-by / preceded-by**: Sequential events
 - **spawned-from**: "This task came from that meeting"
+
+## The Review Sweep (Background Process)
+
+A scheduled background process (e.g. daily at a quiet hour) that reviews the
+graph and surfaces things that need attention. This is Reli being proactive —
+thinking while you sleep.
+
+### What the sweep checks
+
+**Time-sensitive surfacing:**
+- Approaching dates: birthdays, deadlines, check-in dates within N days
+- Entity Things with temporal data that's becoming relevant (Tom's birthday)
+- Promote these to "top of mind" temporarily
+
+**Staleness detection:**
+- Active Things untouched for 2+ weeks → tag for review
+  ("Are you still working on the website redesign?")
+- Tasks with no progress → suggest breaking down or deferring
+
+**Orphan detection:**
+- Things with no relationships → might be forgotten or need connecting
+- Recently created Things that were never referenced again
+
+**Inconsistency checks:**
+- Projects with all tasks complete but project still "active"
+- Dependencies where the blocker is done but the blocked task hasn't started
+- Overdue check-in dates that were never snoozed or completed
+
+**Open questions:**
+- Past conversations where the AI asked a clarifying question but never
+  got an answer → resurface the question
+
+### Sweep output
+
+The sweep produces a **daily briefing** that appears at the top of the
+sidebar. It's a short, prioritized list:
+
+- "Tom's birthday is Thursday — want to set a reminder?"
+- "Website redesign has been idle for 2 weeks. Still active?"
+- "You never answered: what's the deadline for the Q2 report?"
+- "3 tasks under 'Launch prep' are done — looks like the project is complete?"
+
+The user can dismiss, snooze, or act on each item. Acting opens the relevant
+Thing in the chat context.
+
+### Implementation notes
+
+The sweep is NOT a real-time process. It runs periodically (configurable,
+default daily) and writes its findings to a `sweep_findings` table or
+directly tags Things with review metadata. The briefing endpoint reads
+from these findings.
+
+The sweep should be an LLM call with the full graph context (or relevant
+subset) — it's the AI reflecting on what it knows, not just rule-based
+date checking. This lets it catch nuanced things like "you mentioned wanting
+to follow up with Sarah about the partnership — that was 10 days ago."
 
 ## How the AI Uses This
 
@@ -73,6 +151,10 @@ When deciding what to create/update:
   - Create "Redesign homepage" (tracked, type: project)
   - Surface in sidebar
   - If user describes subtasks, create them as children
+- "Tom's birthday is March 20th" →
+  - Find or create Tom (entity, type: person)
+  - Store birthday in Tom's data: `{"birthday": "03-20"}`
+  - The sweep will handle surfacing this when it's approaching
 
 ### Response Agent (Stage 4)
 When responding, show awareness of the graph:
@@ -83,10 +165,11 @@ When responding, show awareness of the graph:
 ## UI Implications
 
 ### Sidebar
-- Show **tracked Things** grouped by type (Projects, Tasks, Goals)
+- **Search bar** at top — searches full graph
+- **Daily briefing** section — sweep findings, dismissable
+- **Top of mind** — tracked Things + proactive surfaces, grouped by type
 - Projects show child count and completion progress
-- Things with approaching check-in dates surface prominently
-- Entity Things don't appear here unless explicitly tracked
+- Proactive surfaces have a subtle indicator (why they're showing)
 
 ### Thing Detail View
 - Expand a Thing to see all its connections
@@ -114,22 +197,30 @@ id, from_thing_id, to_thing_id, relationship_type, metadata, created_at
 This replaces the flat parent_id with a proper graph. parent_id can stay
 as a shortcut for the common parent-child case.
 
+**sweep_findings table:**
+```
+id, thing_id, finding_type, message, priority, dismissed, created_at, expires_at
+```
+Stores review sweep output. Feeds the daily briefing. Findings expire
+automatically (birthday reminder disappears after the date passes).
+
 **New type_hints:**
 - Current: task, note, idea, project, goal, journal
 - Add: person, place, event, concept, reference
 
 **New Thing fields:**
-- `surface`: boolean — whether this Thing appears in the sidebar
+- `surface`: boolean — whether this Thing appears in the sidebar (default: true
+  for tasks/projects/goals, false for entity types)
 - `last_referenced`: timestamp — when this was last mentioned in conversation
-  (for relevance ranking of entity Things)
+  (for relevance ranking and staleness detection)
 
 ## Migration Path
 
 1. Add `thing_relationships` table (non-breaking)
-2. Add `surface` column with default=true for existing Things (non-breaking)
-3. Update reasoning agent prompts to create relationships
-4. Update context agent to traverse relationships when searching
-5. Update sidebar to group by type and show project progress
-6. Update ThingCard to show relationship context
-</content>
-</invoke>
+2. Add `sweep_findings` table (non-breaking)
+3. Add `surface`, `last_referenced` columns (non-breaking, sensible defaults)
+4. Update reasoning agent prompts to create relationships and entities
+5. Update context agent to traverse relationships when searching
+6. Build the review sweep as a scheduled background job
+7. Update sidebar: add search, briefing section, grouped display
+8. Update ThingCard to show relationship context and expand into detail view
