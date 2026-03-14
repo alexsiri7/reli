@@ -6,6 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query, status
 
 from ..agents import (
+    UsageStats,
     apply_storage_changes,
     run_context_agent,
     run_reasoning_agent,
@@ -13,7 +14,7 @@ from ..agents import (
 )
 from ..database import db
 from ..google_calendar import fetch_upcoming_events, is_connected as gcal_connected
-from ..models import ChatMessage, ChatMessageCreate, ChatRequest, ChatResponse
+from ..models import ChatMessage, ChatMessageCreate, ChatRequest, ChatResponse, SessionUsage, UsageInfo
 from ..vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 from ..web_search import google_search, is_search_configured
 
@@ -220,8 +221,11 @@ async def chat(body: ChatRequest):
         ).fetchall()
     history = [{"role": r["role"], "content": r["content"]} for r in rows]
 
+    # Track usage across all pipeline stages
+    usage = UsageStats()
+
     # Stage 1: Context Agent
-    context_result = await run_context_agent(message, history)
+    context_result = await run_context_agent(message, history, usage_stats=usage)
     search_queries = context_result.get("search_queries", [message])
     filter_params = context_result.get("filter_params", {})
     gmail_query = context_result.get("gmail_query")
@@ -250,7 +254,7 @@ async def chat(body: ChatRequest):
             calendar_events = None
 
     # Stage 2: Reasoning Agent
-    reasoning_result = await run_reasoning_agent(message, history, relevant_things, web_results, gmail_context, calendar_events)
+    reasoning_result = await run_reasoning_agent(message, history, relevant_things, web_results, gmail_context, calendar_events, usage_stats=usage)
     storage_changes = reasoning_result.get("storage_changes", {})
     questions_for_user = reasoning_result.get("questions_for_user", [])
     reasoning_summary = reasoning_result.get("reasoning_summary", "")
@@ -261,7 +265,7 @@ async def chat(body: ChatRequest):
 
     # Stage 4: Response Agent
     reply = await run_response_agent(
-        message, reasoning_summary, questions_for_user, applied_changes, web_results
+        message, reasoning_summary, questions_for_user, applied_changes, web_results, usage_stats=usage
     )
 
     # Persist both sides of the exchange to chat history
@@ -275,13 +279,33 @@ async def chat(body: ChatRequest):
             (session_id, "user", message, None),
         )
         conn.execute(
-            "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
-            (session_id, "assistant", reply, changes_json),
+            "INSERT INTO chat_history (session_id, role, content, applied_changes, prompt_tokens, completion_tokens, cost_usd, api_calls, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (session_id, "assistant", reply, changes_json,
+             usage.prompt_tokens, usage.completion_tokens, usage.cost_usd, usage.api_calls, usage.model),
         )
+
+        # Compute cumulative session usage
+        row = conn.execute(
+            "SELECT COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
+            "COALESCE(SUM(cost_usd), 0.0) as cost, COALESCE(SUM(api_calls), 0) as calls "
+            "FROM chat_history WHERE session_id = ? AND role = 'assistant'",
+            (session_id,),
+        ).fetchone()
+
+    session_usage = SessionUsage(
+        prompt_tokens=row["pt"],
+        completion_tokens=row["ct"],
+        total_tokens=row["pt"] + row["ct"],
+        cost_usd=round(row["cost"], 6),
+        api_calls=row["calls"],
+        model=usage.model,
+    )
 
     return ChatResponse(
         session_id=session_id,
         reply=reply,
         applied_changes=applied_with_sources,
         questions_for_user=questions_for_user,
+        usage=UsageInfo(**usage.to_dict()),
+        session_usage=session_usage,
     )

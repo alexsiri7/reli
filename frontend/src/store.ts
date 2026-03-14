@@ -43,6 +43,15 @@ export interface CalendarStatus {
   connected: boolean
 }
 
+export interface SessionStats {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  cost_usd: number
+  api_calls: number
+  model: string
+}
+
 export interface ChatMessage {
   id: number | string
   session_id: string
@@ -59,6 +68,7 @@ interface ReliState {
   briefing: Thing[]
   messages: ChatMessage[]
   sessionId: string
+  sessionStats: SessionStats
   loading: boolean
   chatLoading: boolean
   historyLoading: boolean
@@ -100,6 +110,7 @@ export const useStore = create<ReliState>((set, get) => ({
   briefing: [],
   messages: [],
   sessionId: SESSION_ID,
+  sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost_usd: 0, api_calls: 0, model: '' },
   loading: false,
   chatLoading: false,
   historyLoading: false,
@@ -238,9 +249,13 @@ export const useStore = create<ReliState>((set, get) => ({
         timestamp: new Date().toISOString(),
       }
 
-      set(state => ({
-        messages: state.messages.map(m => m.streaming ? assistantMsg : m),
-      }))
+      const updates: Partial<ReliState> = {
+        messages: get().messages.map(m => m.streaming ? assistantMsg : m),
+      }
+      if (data.session_usage) {
+        updates.sessionStats = data.session_usage
+      }
+      set(updates as ReliState)
 
       // Refresh things in case the pipeline made changes
       get().fetchThings()

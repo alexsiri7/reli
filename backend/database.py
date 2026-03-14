@@ -31,6 +31,20 @@ def db():
         conn.close()
 
 
+def _migrate_chat_history_usage(conn: sqlite3.Connection) -> None:
+    """Add usage tracking columns to chat_history if missing."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(chat_history)").fetchall()}
+    for col, typedef in [
+        ("prompt_tokens", "INTEGER DEFAULT 0"),
+        ("completion_tokens", "INTEGER DEFAULT 0"),
+        ("cost_usd", "REAL DEFAULT 0.0"),
+        ("api_calls", "INTEGER DEFAULT 0"),
+        ("model", "TEXT"),
+    ]:
+        if col not in cols:
+            conn.execute(f"ALTER TABLE chat_history ADD COLUMN {col} {typedef}")
+
+
 def init_db() -> None:
     """Create tables if they don't exist."""
     with db() as conn:
@@ -55,6 +69,11 @@ def init_db() -> None:
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
                 applied_changes JSON,
+                prompt_tokens INTEGER DEFAULT 0,
+                completion_tokens INTEGER DEFAULT 0,
+                cost_usd REAL DEFAULT 0.0,
+                api_calls INTEGER DEFAULT 0,
+                model TEXT,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -75,3 +94,4 @@ def init_db() -> None:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        _migrate_chat_history_usage(conn)
