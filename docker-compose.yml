@@ -11,6 +11,8 @@ services:
       - EMBED_MODEL=${EMBED_MODEL:-text-embedding-3-small}
       - GOOGLE_SEARCH_API_KEY=${GOOGLE_SEARCH_API_KEY:-}
       - GOOGLE_SEARCH_CX=${GOOGLE_SEARCH_CX:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - DATA_DIR=/app/data
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}

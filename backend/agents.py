@@ -1,12 +1,15 @@
 """Multi-agent chat pipeline using Requesty as LLM gateway."""
 
 import json
+import logging
 import os
 import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
 from openai import AsyncOpenAI
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # LLM client — Requesty OpenAI-compatible gateway
@@ -16,9 +19,20 @@ REQUESTY_BASE_URL = os.environ.get("REQUESTY_BASE_URL", "https://router.requesty
 REQUESTY_API_KEY = os.environ.get("REQUESTY_API_KEY", "")
 REQUESTY_MODEL = os.environ.get("REQUESTY_MODEL", "google/gemini-2.0-flash-001")
 
+# ---------------------------------------------------------------------------
+# Ollama — optional local LLM for context agent
+# ---------------------------------------------------------------------------
+
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "")
+
 
 def _client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
+
+
+def _ollama_client() -> AsyncOpenAI:
+    return AsyncOpenAI(api_key="ollama", base_url=f"{OLLAMA_BASE_URL}/v1")
 
 
 # Per-model pricing: (input_cost_per_million, output_cost_per_million)
@@ -160,16 +174,57 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
 """
 
 
+async def _chat_ollama(
+    messages: list[dict[str, Any]],
+    usage_stats: UsageStats | None = None,
+    **kwargs: Any,
+) -> str:
+    """Call local Ollama and return the response text."""
+    client = _ollama_client()
+    response = await client.chat.completions.create(
+        model=OLLAMA_MODEL,
+        messages=messages,  # type: ignore[arg-type]
+        **kwargs,
+    )
+    if usage_stats is not None and response.usage:
+        usage_stats.accumulate(
+            prompt=response.usage.prompt_tokens or 0,
+            completion=response.usage.completion_tokens or 0,
+            total=response.usage.total_tokens or 0,
+            cost=0.0,  # local model, no cost
+            model=OLLAMA_MODEL,
+        )
+    return response.choices[0].message.content or ""
+
+
 async def run_context_agent(
     message: str, history: list[dict[str, Any]], usage_stats: UsageStats | None = None
 ) -> dict[str, Any]:
-    """Stage 1: decide what to search for."""
+    """Stage 1: decide what to search for.
+
+    Uses local Ollama when OLLAMA_MODEL is configured, with graceful fallback
+    to Requesty if Ollama is unavailable.
+    """
     messages = [{"role": "system", "content": CONTEXT_AGENT_SYSTEM}]
     for h in history[-10:]:
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": message})
 
-    raw = await _chat(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
+    raw = None
+
+    # Try Ollama first if configured
+    if OLLAMA_MODEL:
+        try:
+            raw = await _chat_ollama(
+                messages, response_format={"type": "json_object"}, usage_stats=usage_stats
+            )
+        except Exception as exc:
+            logger.warning("Ollama context agent failed, falling back to Requesty: %s", exc)
+
+    # Fall back to Requesty
+    if raw is None:
+        raw = await _chat(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
+
     try:
         result: dict[str, Any] = json.loads(raw)
         return result
