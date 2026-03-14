@@ -4,7 +4,10 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "reli.db"
+import os
+
+_data_dir = os.environ.get("DATA_DIR", str(Path(__file__).parent))
+DB_PATH = Path(_data_dir) / "reli.db"
 
 
 def get_connection() -> sqlite3.Connection:
