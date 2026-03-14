@@ -105,6 +105,26 @@ function ActionEntry({ changes }: { changes: AppliedChanges }) {
   )
 }
 
+function formatCost(usd: number): string {
+  if (usd === 0) return ''
+  if (usd < 0.001) return `$${usd.toFixed(5)}`
+  if (usd < 0.01) return `$${usd.toFixed(4)}`
+  return `$${usd.toFixed(3)}`
+}
+
+function UsagePill({ msg }: { msg: ChatMessage }) {
+  const totalTokens = (msg.prompt_tokens ?? 0) + (msg.completion_tokens ?? 0)
+  if (totalTokens === 0) return null
+  const cost = msg.cost_usd ?? 0
+  const costStr = formatCost(cost)
+
+  return (
+    <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
+      {formatTokens(totalTokens)} tokens{costStr && ` · ~${costStr}`}
+    </span>
+  )
+}
+
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === 'user'
   const ts = formatTimestamp(msg.timestamp)
@@ -141,15 +161,14 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
             </div>
           )}
         </div>
-        {ts && (
-          <span
-            className={`text-[10px] mt-1 text-gray-400 dark:text-gray-500 ${
-              isUser ? 'text-right' : 'text-left'
-            }`}
-          >
-            {ts}
-          </span>
-        )}
+        <div className={`flex items-center gap-2 mt-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
+          {ts && (
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">
+              {ts}
+            </span>
+          )}
+          {!isUser && <UsagePill msg={msg} />}
+        </div>
       </div>
     </div>
   )
