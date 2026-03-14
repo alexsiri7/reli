@@ -1,4 +1,23 @@
-# Reli: Second Brain Architecture
+# Reli: Second Brain + Personal Assistant
+
+## Vision
+
+Reli is a **Personal Assistant (PA)**, not a database. The difference:
+- A database stores what you tell it and retrieves what you ask for.
+- A PA *knows more than you do* about your own life, anticipates what's
+  relevant, and brings the right thing to mind at the right time.
+
+This frees the user from "Level 1 thinking" (remembering, tracking, reminding)
+so they can focus on **Level 2 thinking** (deciding, creating, strategizing).
+
+A good PA:
+- Remembers everything — people, projects, ideas, offhand comments
+- Connects the dots — "Tom mentioned he knows someone at that company
+  you're trying to partner with"
+- Anticipates needs — "Your meeting with Sarah is tomorrow and you never
+  followed up on the proposal she asked about"
+- Asks the right questions — "You said Q2 budget is due soon but haven't
+  set a deadline — when is it actually due?"
 
 ## Core Concept
 
@@ -74,17 +93,44 @@ Things connect to other Things. Relationships are typed and directional:
 - **followed-by / preceded-by**: Sequential events
 - **spawned-from**: "This task came from that meeting"
 
-## The Review Sweep (Background Process)
+## The Nightly Sweep (Background Process)
 
-A scheduled background process (e.g. daily at a quiet hour) that reviews the
-graph and surfaces things that need attention. This is Reli being proactive —
-thinking while you sleep.
+A scheduled background process (default: once daily at a quiet hour) where
+Reli reviews its knowledge and surfaces things that need the user's attention.
+This is the PA "thinking overnight" — anticipating tomorrow's needs.
 
-### What the sweep checks
+### Design principle: incremental, not exhaustive
+
+The sweep must NOT read the entire graph through the LLM every night. That's
+expensive and unnecessary. A good PA doesn't re-read every file in the
+cabinet — they know what's time-sensitive and check those things.
+
+**Two-phase architecture:**
+
+**Phase 1: SQL candidate selection (cheap, no LLM)**
+Identify Things that might need attention using simple queries:
+- Things with dates in the next 7 days (birthdays, deadlines, check-ins)
+- Active Things not updated in 14+ days (staleness)
+- Things with no relationships (orphans)
+- Projects where all children are inactive but project is still active
+- Unanswered questions from recent chat history (last AI question with
+  no subsequent user message in that thread)
+
+**Phase 2: LLM reflection (targeted, small context)**
+Send ONLY the candidate Things (typically 5-20 items) to the LLM with
+the prompt: "You are reviewing these items for the user. What should they
+know tomorrow? What's urgent, what's been forgotten, what connections
+should they be aware of?"
+
+This keeps LLM costs proportional to the number of *interesting* Things,
+not the total graph size. A graph with 1,000 Things but only 8 candidates
+costs the same as a graph with 50 Things and 8 candidates.
+
+### What the sweep catches
 
 **Time-sensitive surfacing:**
 - Approaching dates: birthdays, deadlines, check-in dates within N days
-- Entity Things with temporal data that's becoming relevant (Tom's birthday)
+- Entity Things with temporal data becoming relevant (Tom's birthday)
 - Promote these to "top of mind" temporarily
 
 **Staleness detection:**
@@ -105,6 +151,12 @@ thinking while you sleep.
 - Past conversations where the AI asked a clarifying question but never
   got an answer → resurface the question
 
+**Connection opportunities (LLM-powered):**
+- "You mentioned Tom knows someone at Acme Corp — you're also tracking
+  a partnership outreach to Acme. Want to ask Tom for an intro?"
+- "The conference you're attending has a talk on caching — you had an
+  idea about caching last week. Might be relevant."
+
 ### Sweep output
 
 The sweep produces a **daily briefing** that appears at the top of the
@@ -120,15 +172,14 @@ Thing in the chat context.
 
 ### Implementation notes
 
-The sweep is NOT a real-time process. It runs periodically (configurable,
-default daily) and writes its findings to a `sweep_findings` table or
-directly tags Things with review metadata. The briefing endpoint reads
-from these findings.
+The sweep runs on a schedule (cron or similar). It writes findings to a
+`sweep_findings` table with expiry dates. The briefing endpoint reads
+from these findings. Findings expire automatically (birthday reminder
+disappears after the date passes).
 
-The sweep should be an LLM call with the full graph context (or relevant
-subset) — it's the AI reflecting on what it knows, not just rule-based
-date checking. This lets it catch nuanced things like "you mentioned wanting
-to follow up with Sarah about the partnership — that was 10 days ago."
+Cost target: the nightly sweep should cost less than a single chat
+interaction. If it's costing more, the SQL candidate selection isn't
+filtering aggressively enough.
 
 ## How the AI Uses This
 
