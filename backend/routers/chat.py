@@ -96,7 +96,7 @@ def _sql_things_count(conn) -> int:
 
 
 def _fetch_with_family(conn, seed_ids: list[str]) -> list[dict]:
-    """Given seed Thing IDs, return those Things plus their parents and children."""
+    """Given seed Thing IDs, return those Things plus their parents, children, and related Things via relationships."""
     seen_ids: set[str] = set()
     results: list[dict] = []
 
@@ -110,17 +110,28 @@ def _fetch_with_family(conn, seed_ids: list[str]) -> list[dict]:
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
         if row:
             _add_row(row)
-            # Fetch parent
+            # Fetch parent (shortcut via parent_id)
             if row["parent_id"]:
                 parent = conn.execute("SELECT * FROM things WHERE id = ?", (row["parent_id"],)).fetchone()
                 if parent:
                     _add_row(parent)
-            # Fetch children
+            # Fetch children (shortcut via parent_id)
             children = conn.execute(
                 "SELECT * FROM things WHERE parent_id = ?", (thing_id,)
             ).fetchall()
             for child in children:
                 _add_row(child)
+            # Fetch related Things via thing_relationships
+            rels = conn.execute(
+                "SELECT * FROM thing_relationships WHERE from_thing_id = ? OR to_thing_id = ?",
+                (thing_id, thing_id),
+            ).fetchall()
+            for rel in rels:
+                other_id = rel["to_thing_id"] if rel["from_thing_id"] == thing_id else rel["from_thing_id"]
+                if other_id not in seen_ids:
+                    other = conn.execute("SELECT * FROM things WHERE id = ?", (other_id,)).fetchone()
+                    if other:
+                        _add_row(other)
 
     return results
 
@@ -230,9 +241,18 @@ async def chat(body: ChatRequest):
     filter_params = context_result.get("filter_params", {})
     gmail_query = context_result.get("gmail_query")
 
-    # Retrieve relevant Things
+    # Retrieve relevant Things and update last_referenced
     with db() as conn:
         relevant_things = _fetch_relevant_things(conn, search_queries, filter_params)
+        if relevant_things:
+            from datetime import timezone
+            now = datetime.now(timezone.utc).isoformat()
+            ids = [t["id"] for t in relevant_things]
+            placeholders = ",".join("?" for _ in ids)
+            conn.execute(
+                f"UPDATE things SET last_referenced = ? WHERE id IN ({placeholders})",
+                [now] + ids,
+            )
 
     # Web search (if Context Agent requested it and API is configured)
     web_results: list[dict] | None = None

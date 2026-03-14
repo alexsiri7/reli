@@ -45,6 +45,17 @@ def _migrate_chat_history_usage(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE chat_history ADD COLUMN {col} {typedef}")
 
 
+def _migrate_things_graph(conn: sqlite3.Connection) -> None:
+    """Add surface and last_referenced columns to things if missing."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(things)").fetchall()}
+    for col, typedef in [
+        ("surface", "BOOLEAN DEFAULT 1"),
+        ("last_referenced", "TIMESTAMP"),
+    ]:
+        if col not in cols:
+            conn.execute(f"ALTER TABLE things ADD COLUMN {col} {typedef}")
+
+
 def init_db() -> None:
     """Create tables if they don't exist."""
     with db() as conn:
@@ -77,9 +88,23 @@ def init_db() -> None:
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS thing_relationships (
+                id TEXT PRIMARY KEY,
+                from_thing_id TEXT NOT NULL,
+                to_thing_id TEXT NOT NULL,
+                relationship_type TEXT NOT NULL,
+                metadata JSON,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(from_thing_id) REFERENCES things(id) ON DELETE CASCADE,
+                FOREIGN KEY(to_thing_id) REFERENCES things(id) ON DELETE CASCADE
+            );
+
             CREATE INDEX IF NOT EXISTS idx_things_checkin ON things(checkin_date);
             CREATE INDEX IF NOT EXISTS idx_things_active ON things(active);
             CREATE INDEX IF NOT EXISTS idx_chat_session ON chat_history(session_id);
+            CREATE INDEX IF NOT EXISTS idx_rel_from ON thing_relationships(from_thing_id);
+            CREATE INDEX IF NOT EXISTS idx_rel_to ON thing_relationships(to_thing_id);
+            CREATE INDEX IF NOT EXISTS idx_rel_type ON thing_relationships(relationship_type);
 
             CREATE TABLE IF NOT EXISTS google_tokens (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -95,3 +120,4 @@ def init_db() -> None:
             );
         """)
         _migrate_chat_history_usage(conn)
+        _migrate_things_graph(conn)

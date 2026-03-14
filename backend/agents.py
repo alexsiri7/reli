@@ -104,7 +104,7 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
 }
 - search_queries: 1-3 short text fragments to match against Thing titles/data
 - filter_params.active_only: true unless user asks about archived/all items
-- filter_params.type_hint: null or one of task|note|idea|project|goal|journal
+- filter_params.type_hint: null or one of task|note|idea|project|goal|journal|person|place|event|concept|reference
 - needs_web_search: true if the user is asking about external/real-world info
   that would benefit from a web search (current events, facts, how-to questions,
   product info, documentation, etc.). false for personal task management requests
@@ -152,9 +152,10 @@ You MUST only output JSON — no natural language, no markdown fences.
 Output schema:
 {
   "storage_changes": {
-    "create": [{"title": "...", "type_hint": "...", "priority": 3, "checkin_date": null, "data": {}}],
+    "create": [{"title": "...", "type_hint": "...", "priority": 3, "checkin_date": null, "surface": true, "data": {}}],
     "update": [{"id": "...", "changes": {"title": "...", "checkin_date": "...", "active": true}}],
-    "delete": ["id1"]
+    "delete": ["id1"],
+    "relationships": [{"from_thing_id": "...", "to_thing_id": "...", "relationship_type": "..."}]
   },
   "questions_for_user": [],
   "reasoning_summary": "Brief internal note explaining intent."
@@ -164,6 +165,7 @@ Rules:
 - "create" items: title required; type_hint optional; checkin_date ISO-8601 or null
 - "update" items: id required; changes = only the fields to change
 - "delete" items: list of UUIDs to hard-delete
+- "relationships": create typed links between Things (see below)
 - If the user's intent is ambiguous, add ONE clarifying question and make NO changes.
   Focus on what would make the task actionable: "What's the specific deliverable?"
   or "Can we break this into smaller steps?"
@@ -176,6 +178,37 @@ Rules:
 - Include relevant context in data.notes when the user provides background info.
 - When the user completes a task (marks done, says "finished X"), set active=false
   on the matching Thing. Note what was accomplished in reasoning_summary.
+
+Entity Types:
+When the user mentions people, places, events, concepts, or references, create
+entity Things to build a knowledge graph:
+- type_hint "person" — people the user interacts with (e.g. "Sarah Chen", "Dr. Rodriguez")
+- type_hint "place" — locations (e.g. "Office HQ", "Tokyo")
+- type_hint "event" — specific occurrences (e.g. "Q1 Review Meeting", "Sarah's birthday")
+- type_hint "concept" — abstract ideas (e.g. "Microservices migration", "OKR framework")
+- type_hint "reference" — external resources (e.g. "RFC 2616", "Design spec v2")
+
+Entity Things default to surface=false (they exist in the graph but don't clutter
+the sidebar). Use surface=true only for entities the user explicitly wants to track.
+
+Relationships:
+Create relationships to link Things together. Use from_thing_id and to_thing_id
+(both must be existing Thing IDs or IDs of Things being created in this same batch).
+
+Relationship types:
+- Structural: "parent-of", "child-of", "depends-on", "blocks", "part-of"
+- Associative: "related-to", "involves", "tagged-with"
+- Temporal: "followed-by", "preceded-by", "spawned-from"
+
+For example, if user says "Meeting with Sarah about the budget project":
+1. Create entity "Sarah" (type_hint: person, surface: false) if not already known
+2. Create relationship: Sarah → "Budget project" with type "involves"
+3. Create the meeting Thing if needed
+
+When referencing existing Things for relationships, use their IDs from the
+relevant Things list. For newly created Things, use the placeholder "NEW:<index>"
+where <index> is the 0-based position in the create array (e.g. "NEW:0" for the
+first created item).
 """
 
 
@@ -240,9 +273,12 @@ def apply_storage_changes(
 
     from .vector_store import delete_thing as vs_delete, upsert_thing
 
-    applied: dict[str, list] = {"created": [], "updated": [], "deleted": []}
+    applied: dict[str, list] = {"created": [], "updated": [], "deleted": [], "relationships_created": []}
 
     now = datetime.now(timezone.utc).isoformat()
+
+    # Entity type_hints default to surface=false
+    ENTITY_TYPES = {"person", "place", "event", "concept", "reference"}
 
     # ── Creates ──────────────────────────────────────────────────────────────
     for item in storage_changes.get("create", []):
@@ -253,17 +289,24 @@ def apply_storage_changes(
         checkin = item.get("checkin_date")
         raw_data = item.get("data") or {}
         data_json = raw_data if isinstance(raw_data, str) else _json.dumps(raw_data)
+        type_hint = item.get("type_hint")
+        surface = item.get("surface")
+        if surface is None:
+            surface = 0 if type_hint in ENTITY_TYPES else 1
+        else:
+            surface = int(bool(surface))
         conn.execute(
             """INSERT INTO things
-               (id, title, type_hint, parent_id, checkin_date, priority, active, data, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)""",
+               (id, title, type_hint, parent_id, checkin_date, priority, active, surface, data, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
             (
                 thing_id,
                 title,
-                item.get("type_hint"),
+                type_hint,
                 item.get("parent_id"),
                 checkin,
                 item.get("priority", 3),
+                surface,
                 data_json,
                 now,
                 now,
@@ -290,6 +333,8 @@ def apply_storage_changes(
                 fields[key] = changes[key]
         if "active" in changes:
             fields["active"] = int(bool(changes["active"]))
+        if "surface" in changes:
+            fields["surface"] = int(bool(changes["surface"]))
         if "data" in changes:
             raw_data = changes["data"]
             fields["data"] = raw_data if isinstance(raw_data, str) else _json.dumps(raw_data)
@@ -314,6 +359,44 @@ def apply_storage_changes(
         conn.execute("DELETE FROM things WHERE id = ?", (thing_id,))
         applied["deleted"].append(thing_id)
         vs_delete(thing_id)
+
+    # Build lookup for NEW:<index> placeholders from created things
+    created_id_map: dict[str, str] = {}
+    for idx, created_thing in enumerate(applied["created"]):
+        created_id_map[f"NEW:{idx}"] = created_thing["id"]
+
+    # ── Relationships ────────────────────────────────────────────────────────
+    for rel in storage_changes.get("relationships", []):
+        from_id = rel.get("from_thing_id", "").strip()
+        to_id = rel.get("to_thing_id", "").strip()
+        rel_type = rel.get("relationship_type", "").strip()
+        if not from_id or not to_id or not rel_type:
+            continue
+        # Resolve NEW:<index> placeholders
+        from_id = created_id_map.get(from_id, from_id)
+        to_id = created_id_map.get(to_id, to_id)
+        if from_id == to_id:
+            continue
+        # Verify both things exist
+        from_row = conn.execute("SELECT id FROM things WHERE id = ?", (from_id,)).fetchone()
+        to_row = conn.execute("SELECT id FROM things WHERE id = ?", (to_id,)).fetchone()
+        if not from_row or not to_row:
+            continue
+        rel_id = str(uuid.uuid4())
+        meta = rel.get("metadata")
+        meta_json = _json.dumps(meta) if meta else None
+        conn.execute(
+            "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type, metadata) VALUES (?, ?, ?, ?, ?)",
+            (rel_id, from_id, to_id, rel_type, meta_json),
+        )
+        applied["relationships_created"].append({
+            "id": rel_id, "from_thing_id": from_id, "to_thing_id": to_id,
+            "relationship_type": rel_type,
+        })
+
+    # ── Update last_referenced on all retrieved things ────────────────────
+    # This is called after reasoning runs; mark all referenced things
+    # (handled by the caller for relevant_things)
 
     return applied
 

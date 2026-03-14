@@ -7,6 +7,11 @@ const TYPE_ICONS: Record<string, string> = {
   idea: '💡',
   goal: '🎯',
   journal: '📓',
+  person: '👤',
+  place: '📍',
+  event: '📅',
+  concept: '🧠',
+  reference: '🔗',
 }
 
 export function typeIcon(hint: TypeHint | null | undefined): string {
