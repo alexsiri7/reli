@@ -42,9 +42,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(things.router)
-app.include_router(briefing.router)
-app.include_router(chat.router)
+app.include_router(things.router, prefix="/api")
+app.include_router(briefing.router, prefix="/api")
+app.include_router(chat.router, prefix="/api")
 
 
 @app.get("/healthz", tags=["health"])
