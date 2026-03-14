@@ -1,5 +1,13 @@
-FROM python:3.12-slim
+# Stage 1: Build frontend
+FROM node:20-slim AS frontend-build
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --legacy-peer-deps
+COPY frontend/ ./
+RUN npm run build
 
+# Stage 2: Production image
+FROM python:3.12-slim
 WORKDIR /app
 
 # Install Python dependencies
@@ -9,9 +17,8 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Copy backend
 COPY backend/ ./backend/
 
-# Copy frontend static build (produced by: cd frontend && npm run build)
-# This directory is populated during CI/CD or by running `make build-frontend` locally
-COPY frontend/dist/ ./frontend/dist/
+# Copy frontend build from stage 1
+COPY --from=frontend-build /app/frontend/dist/ ./frontend/dist/
 
 EXPOSE 8000
 
