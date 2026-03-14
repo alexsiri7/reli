@@ -63,6 +63,20 @@ class ChatMessage(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Chat Pipeline ─────────────────────────────────────────────────────────────
+
+class ChatRequest(BaseModel):
+    session_id: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1)
+
+
+class ChatResponse(BaseModel):
+    session_id: str
+    reply: str
+    applied_changes: dict[str, Any]
+    questions_for_user: list[str]
+
+
 # ── Briefing ──────────────────────────────────────────────────────────────────
 
 class BriefingResponse(BaseModel):

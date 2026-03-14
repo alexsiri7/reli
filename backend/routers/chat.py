@@ -1,12 +1,18 @@
-"""Chat history endpoints."""
+"""Chat history endpoints and the multi-agent chat pipeline."""
 
 import json
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from ..agents import (
+    apply_storage_changes,
+    run_context_agent,
+    run_reasoning_agent,
+    run_response_agent,
+)
 from ..database import db
-from ..models import ChatMessage, ChatMessageCreate
+from ..models import ChatMessage, ChatMessageCreate, ChatRequest, ChatResponse
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -65,3 +71,98 @@ def delete_history(session_id: str):
         result = conn.execute("DELETE FROM chat_history WHERE session_id = ?", (session_id,))
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail=f"No chat history found for session '{session_id}'")
+
+
+# ---------------------------------------------------------------------------
+# Multi-agent pipeline endpoint
+# ---------------------------------------------------------------------------
+
+def _fetch_relevant_things(conn, search_queries: list[str], filter_params: dict) -> list[dict]:
+    """Search Things by text queries using SQLite LIKE matching."""
+    active_only = filter_params.get("active_only", True)
+    type_hint = filter_params.get("type_hint")
+
+    seen_ids: set[str] = set()
+    results: list[dict] = []
+
+    for query in search_queries[:3]:
+        pattern = f"%{query}%"
+        sql = "SELECT * FROM things WHERE (title LIKE ? OR data LIKE ?)"
+        params: list = [pattern, pattern]
+        if active_only:
+            sql += " AND active = 1"
+        if type_hint:
+            sql += " AND type_hint = ?"
+            params.append(type_hint)
+        sql += " ORDER BY updated_at DESC LIMIT 20"
+        rows = conn.execute(sql, params).fetchall()
+        for row in rows:
+            if row["id"] not in seen_ids:
+                seen_ids.add(row["id"])
+                results.append(dict(row))
+
+    # Always include recent active things for context when no specific results
+    if len(results) < 5:
+        sql = "SELECT * FROM things WHERE active = 1 ORDER BY updated_at DESC LIMIT 10"
+        for row in conn.execute(sql).fetchall():
+            if row["id"] not in seen_ids:
+                seen_ids.add(row["id"])
+                results.append(dict(row))
+
+    return results
+
+
+@router.post("", response_model=ChatResponse, summary="Send a message through the multi-agent pipeline")
+async def chat(body: ChatRequest):
+    """4-stage pipeline: Context → Retrieve → Reasoning → Validate → Respond."""
+    session_id = body.session_id
+    message = body.message
+
+    # Fetch conversation history
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT role, content FROM chat_history WHERE session_id = ? ORDER BY timestamp ASC LIMIT 20",
+            (session_id,),
+        ).fetchall()
+    history = [{"role": r["role"], "content": r["content"]} for r in rows]
+
+    # Stage 1: Context Agent
+    context_result = await run_context_agent(message, history)
+    search_queries = context_result.get("search_queries", [message])
+    filter_params = context_result.get("filter_params", {})
+
+    # Retrieve relevant Things
+    with db() as conn:
+        relevant_things = _fetch_relevant_things(conn, search_queries, filter_params)
+
+    # Stage 2: Reasoning Agent
+    reasoning_result = await run_reasoning_agent(message, history, relevant_things)
+    storage_changes = reasoning_result.get("storage_changes", {})
+    questions_for_user = reasoning_result.get("questions_for_user", [])
+    reasoning_summary = reasoning_result.get("reasoning_summary", "")
+
+    # Stage 3: Validator — apply changes
+    with db() as conn:
+        applied_changes = apply_storage_changes(storage_changes, conn)
+
+    # Stage 4: Response Agent
+    reply = await run_response_agent(message, reasoning_summary, questions_for_user, applied_changes)
+
+    # Persist both sides of the exchange to chat history
+    changes_json = json.dumps(applied_changes)
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
+            (session_id, "user", message, None),
+        )
+        conn.execute(
+            "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
+            (session_id, "assistant", reply, changes_json),
+        )
+
+    return ChatResponse(
+        session_id=session_id,
+        reply=reply,
+        applied_changes=applied_changes,
+        questions_for_user=questions_for_user,
+    )
