@@ -47,7 +47,7 @@ def get_auth_url() -> str:
         include_granted_scopes="true",
         prompt="consent",
     )
-    return auth_url
+    return str(auth_url)
 
 
 def exchange_code(code: str) -> Credentials:
@@ -55,7 +55,7 @@ def exchange_code(code: str) -> Credentials:
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI
     flow.fetch_token(code=code)
-    creds = flow.credentials
+    creds: Credentials = flow.credentials
     _save_credentials(creds)
     return creds
 

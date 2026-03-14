@@ -1,6 +1,7 @@
 """Reli FastAPI application entry point."""
 
 import pathlib
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -19,7 +20,7 @@ _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_db()
     yield
 
@@ -51,7 +52,7 @@ app.include_router(calendar.router, prefix="/api")
 
 
 @app.get("/healthz", tags=["health"])
-def health():
+def health() -> dict[str, str]:
     return {"status": "ok", "service": "reli"}
 
 
@@ -60,5 +61,5 @@ if _FRONTEND_DIST.is_dir():
     app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
-    def spa_fallback(full_path: str):  # noqa: ARG001
+    def spa_fallback(full_path: str) -> FileResponse:  # noqa: ARG001
         return FileResponse(_FRONTEND_DIST / "index.html")

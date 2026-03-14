@@ -12,7 +12,7 @@ router = APIRouter(prefix="/briefing", tags=["briefing"])
 
 
 @router.get("", response_model=BriefingResponse, summary="Daily Briefing")
-def get_briefing(as_of: date | None = None):
+def get_briefing(as_of: date | None = None) -> BriefingResponse:
     """Return all active Things whose checkin_date is today or earlier.
 
     Pass `as_of` to query for a specific date (defaults to today UTC).

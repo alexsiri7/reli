@@ -1,8 +1,10 @@
 """CRUD endpoints for Things."""
 
 import json
+import sqlite3
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 
@@ -22,7 +24,7 @@ def _parse_dt(val: str | None) -> datetime | None:
     return datetime.fromisoformat(val)
 
 
-def _row_to_thing(row) -> Thing:
+def _row_to_thing(row: sqlite3.Row) -> Thing:
     data = row["data"]
     # SQLite data may be double-encoded (string containing JSON string).
     # Unwrap until we get a dict/list/None or a non-JSON string.
@@ -56,8 +58,8 @@ def _row_to_thing(row) -> Thing:
         active=bool(row["active"]),
         surface=surface,
         data=data,
-        created_at=_parse_dt(row["created_at"]),
-        updated_at=_parse_dt(row["updated_at"]),
+        created_at=_parse_dt(row["created_at"]) or datetime.min,
+        updated_at=_parse_dt(row["updated_at"]) or datetime.min,
         last_referenced=last_referenced,
     )
 
@@ -67,7 +69,7 @@ def list_things(
     active_only: bool = Query(True, description="Filter to active Things only"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-):
+) -> list[Thing]:
     with db() as conn:
         if active_only:
             rows = conn.execute(
@@ -83,7 +85,7 @@ def list_things(
 
 
 @router.post("", response_model=Thing, status_code=status.HTTP_201_CREATED, summary="Create a Thing")
-def create_thing(body: ThingCreate, background_tasks: BackgroundTasks):
+def create_thing(body: ThingCreate, background_tasks: BackgroundTasks) -> Thing:
     thing_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     data_json = json.dumps(body.data) if body.data is not None else None
@@ -121,7 +123,7 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks):
 
 
 @router.get("/{thing_id}", response_model=Thing, summary="Get a Thing")
-def get_thing(thing_id: str):
+def get_thing(thing_id: str) -> Thing:
     with db() as conn:
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
     if not row:
@@ -130,7 +132,7 @@ def get_thing(thing_id: str):
 
 
 @router.patch("/{thing_id}", response_model=Thing, summary="Update a Thing")
-def update_thing(thing_id: str, body: ThingUpdate, background_tasks: BackgroundTasks):
+def update_thing(thing_id: str, body: ThingUpdate, background_tasks: BackgroundTasks) -> Thing:
     with db() as conn:
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
         if not row:
@@ -143,7 +145,7 @@ def update_thing(thing_id: str, body: ThingUpdate, background_tasks: BackgroundT
             if not parent:
                 raise HTTPException(status_code=404, detail=f"Parent thing '{body.parent_id}' not found")
 
-        fields: dict = {}
+        fields: dict[str, Any] = {}
         if body.title is not None:
             fields["title"] = body.title
         if body.type_hint is not None:
@@ -171,7 +173,7 @@ def update_thing(thing_id: str, body: ThingUpdate, background_tasks: BackgroundT
 
 
 @router.delete("/{thing_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a Thing")
-def delete_thing(thing_id: str, background_tasks: BackgroundTasks):
+def delete_thing(thing_id: str, background_tasks: BackgroundTasks) -> None:
     with db() as conn:
         row = conn.execute("SELECT id FROM things WHERE id = ?", (thing_id,)).fetchone()
         if not row:
@@ -183,7 +185,7 @@ def delete_thing(thing_id: str, background_tasks: BackgroundTasks):
 # ── Relationships ────────────────────────────────────────────────────────────
 
 
-def _parse_rel_row(row) -> Relationship:
+def _parse_rel_row(row: sqlite3.Row) -> Relationship:
     meta = row["metadata"]
     if isinstance(meta, str) and meta:
         try:
@@ -198,12 +200,12 @@ def _parse_rel_row(row) -> Relationship:
         to_thing_id=row["to_thing_id"],
         relationship_type=row["relationship_type"],
         metadata=meta,
-        created_at=_parse_dt(row["created_at"]),
+        created_at=_parse_dt(row["created_at"]) or datetime.min,
     )
 
 
 @router.get("/{thing_id}/relationships", response_model=list[Relationship], summary="List relationships for a Thing")
-def list_relationships(thing_id: str):
+def list_relationships(thing_id: str) -> list[Relationship]:
     with db() as conn:
         row = conn.execute("SELECT id FROM things WHERE id = ?", (thing_id,)).fetchone()
         if not row:
@@ -218,7 +220,7 @@ def list_relationships(thing_id: str):
 @router.post(
     "/relationships", response_model=Relationship, status_code=status.HTTP_201_CREATED, summary="Create a relationship"
 )
-def create_relationship(body: RelationshipCreate):
+def create_relationship(body: RelationshipCreate) -> Relationship:
     rel_id = str(uuid.uuid4())
     meta_json = json.dumps(body.metadata) if body.metadata is not None else None
     with db() as conn:
@@ -238,7 +240,7 @@ def create_relationship(body: RelationshipCreate):
 
 
 @router.delete("/relationships/{rel_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a relationship")
-def delete_relationship(rel_id: str):
+def delete_relationship(rel_id: str) -> None:
     with db() as conn:
         row = conn.execute("SELECT id FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()
         if not row:

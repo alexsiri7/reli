@@ -32,6 +32,9 @@ jobs:
       - name: Lint (ruff)
         run: ruff check backend/ && ruff format --check backend/
 
+      - name: Type check (mypy)
+        run: mypy backend/
+
       - name: Run tests with coverage
         run: pytest backend/ --cov=backend --cov-report=term --cov-fail-under=70
 

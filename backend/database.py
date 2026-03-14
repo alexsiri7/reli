@@ -2,6 +2,7 @@
 
 import os
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -18,7 +19,7 @@ def get_connection() -> sqlite3.Connection:
 
 
 @contextmanager
-def db():
+def db() -> Generator[sqlite3.Connection, None, None]:
     conn = get_connection()
     try:
         yield conn
