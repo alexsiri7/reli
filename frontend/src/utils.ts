@@ -1,0 +1,39 @@
+import type { TypeHint } from './store'
+
+const TYPE_ICONS: Record<string, string> = {
+  task: '📋',
+  note: '📝',
+  project: '📁',
+  idea: '💡',
+  goal: '🎯',
+  journal: '📓',
+}
+
+export function typeIcon(hint: TypeHint | null | undefined): string {
+  if (!hint) return '📌'
+  return TYPE_ICONS[hint.toLowerCase()] ?? '📌'
+}
+
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const target = new Date(d)
+  target.setHours(0, 0, 0, 0)
+  const diff = Math.round((target.getTime() - today.getTime()) / 86400000)
+  if (diff === 0) return 'Today'
+  if (diff === 1) return 'Tomorrow'
+  if (diff === -1) return 'Yesterday'
+  if (diff < 0) return `${Math.abs(diff)}d overdue`
+  if (diff < 7) return `In ${diff}d`
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+export function isOverdue(iso: string | null | undefined): boolean {
+  if (!iso) return false
+  const d = new Date(iso)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return d < today
+}

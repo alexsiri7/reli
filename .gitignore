@@ -14,3 +14,7 @@ data/
 __pycache__/
 state.json
 .beads/
+
+# Frontend build artifacts and dependencies
+frontend/node_modules/
+frontend/dist/
