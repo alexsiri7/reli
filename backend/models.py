@@ -5,8 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 # ── Things ────────────────────────────────────────────────────────────────────
+
 
 class ThingCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
@@ -49,6 +49,7 @@ class Thing(BaseModel):
 
 # ── Relationships ────────────────────────────────────────────────────────────
 
+
 class RelationshipCreate(BaseModel):
     from_thing_id: str
     to_thing_id: str
@@ -68,6 +69,7 @@ class Relationship(BaseModel):
 
 
 # ── Chat ──────────────────────────────────────────────────────────────────────
+
 
 class ChatMessageCreate(BaseModel):
     session_id: str = Field(..., min_length=1)
@@ -89,6 +91,7 @@ class ChatMessage(BaseModel):
 
 # ── Chat Pipeline ─────────────────────────────────────────────────────────────
 
+
 class ChatRequest(BaseModel):
     session_id: str = Field(..., min_length=1)
     message: str = Field(..., min_length=1)
@@ -105,6 +108,7 @@ class UsageInfo(BaseModel):
 
 class SessionUsage(BaseModel):
     """Cumulative usage stats for the current session."""
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
@@ -123,6 +127,7 @@ class ChatResponse(BaseModel):
 
 
 # ── Briefing ──────────────────────────────────────────────────────────────────
+
 
 class BriefingResponse(BaseModel):
     date: str

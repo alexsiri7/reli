@@ -1,6 +1,6 @@
 """Tests for the daily briefing endpoint."""
 
-from datetime import date, datetime, timezone
+from datetime import date
 
 
 def _create_thing(client, title: str, checkin_date: str | None = None, active: bool = True) -> dict:

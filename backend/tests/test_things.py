@@ -1,12 +1,11 @@
 """Tests for Things CRUD endpoints."""
 
-import pytest
 from fastapi.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def create_thing(client: TestClient, **kwargs) -> dict:
     payload = {"title": "Test Thing", **kwargs}
@@ -18,6 +17,7 @@ def create_thing(client: TestClient, **kwargs) -> dict:
 # ---------------------------------------------------------------------------
 # Create
 # ---------------------------------------------------------------------------
+
 
 class TestCreateThing:
     def test_create_minimal(self, client):
@@ -74,6 +74,7 @@ class TestCreateThing:
 # List
 # ---------------------------------------------------------------------------
 
+
 class TestListThings:
     def test_list_empty(self, client):
         resp = client.get("/api/things")
@@ -115,6 +116,7 @@ class TestListThings:
 # Get
 # ---------------------------------------------------------------------------
 
+
 class TestGetThing:
     def test_get_existing(self, client):
         created = create_thing(client, title="Fetch Me")
@@ -130,6 +132,7 @@ class TestGetThing:
 # ---------------------------------------------------------------------------
 # Update (PATCH)
 # ---------------------------------------------------------------------------
+
 
 class TestUpdateThing:
     def test_update_title(self, client):
@@ -174,6 +177,7 @@ class TestUpdateThing:
 # ---------------------------------------------------------------------------
 # Delete
 # ---------------------------------------------------------------------------
+
 
 class TestDeleteThing:
     def test_delete_existing(self, client):

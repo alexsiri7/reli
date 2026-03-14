@@ -13,7 +13,8 @@ from ..agents import (
     run_response_agent,
 )
 from ..database import db
-from ..google_calendar import fetch_upcoming_events, is_connected as gcal_connected
+from ..google_calendar import fetch_upcoming_events
+from ..google_calendar import is_connected as gcal_connected
 from ..models import ChatMessage, ChatMessageCreate, ChatRequest, ChatResponse, SessionUsage, UsageInfo
 from ..vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 from ..web_search import google_search, is_search_configured
@@ -65,7 +66,9 @@ def get_history(
     return [_row_to_msg(r) for r in rows]
 
 
-@router.post("/history", response_model=ChatMessage, status_code=status.HTTP_201_CREATED, summary="Append a chat message")
+@router.post(
+    "/history", response_model=ChatMessage, status_code=status.HTTP_201_CREATED, summary="Append a chat message"
+)
 def append_message(body: ChatMessageCreate):
     changes_json = json.dumps(body.applied_changes) if body.applied_changes is not None else None
     with db() as conn:
@@ -77,7 +80,9 @@ def append_message(body: ChatMessageCreate):
     return _row_to_msg(row)
 
 
-@router.delete("/history/{session_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a session's chat history")
+@router.delete(
+    "/history/{session_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a session's chat history"
+)
 def delete_history(session_id: str):
     with db() as conn:
         result = conn.execute("DELETE FROM chat_history WHERE session_id = ?", (session_id,))
@@ -88,6 +93,7 @@ def delete_history(session_id: str):
 # ---------------------------------------------------------------------------
 # Multi-agent pipeline endpoint
 # ---------------------------------------------------------------------------
+
 
 def _sql_things_count(conn) -> int:
     """Return total number of Things in SQLite."""
@@ -116,9 +122,7 @@ def _fetch_with_family(conn, seed_ids: list[str]) -> list[dict]:
                 if parent:
                     _add_row(parent)
             # Fetch children (shortcut via parent_id)
-            children = conn.execute(
-                "SELECT * FROM things WHERE parent_id = ?", (thing_id,)
-            ).fetchall()
+            children = conn.execute("SELECT * FROM things WHERE parent_id = ?", (thing_id,)).fetchall()
             for child in children:
                 _add_row(child)
             # Fetch related Things via thing_relationships
@@ -206,13 +210,15 @@ def _fetch_gmail_context(query: str) -> list[dict]:
         for ref in msg_refs[:10]:
             msg = service.users().messages().get(userId="me", id=ref["id"], format="full").execute()
             parsed = _parse_message(msg)
-            messages.append({
-                "id": parsed.id,
-                "subject": parsed.subject,
-                "from": parsed.sender,
-                "date": parsed.date,
-                "snippet": parsed.snippet,
-            })
+            messages.append(
+                {
+                    "id": parsed.id,
+                    "subject": parsed.subject,
+                    "from": parsed.sender,
+                    "date": parsed.date,
+                    "snippet": parsed.snippet,
+                }
+            )
         return messages
     except Exception:
         return []
@@ -246,6 +252,7 @@ async def chat(body: ChatRequest):
         relevant_things = _fetch_relevant_things(conn, search_queries, filter_params)
         if relevant_things:
             from datetime import timezone
+
             now = datetime.now(timezone.utc).isoformat()
             ids = [t["id"] for t in relevant_things]
             placeholders = ",".join("?" for _ in ids)
@@ -274,7 +281,9 @@ async def chat(body: ChatRequest):
             calendar_events = None
 
     # Stage 2: Reasoning Agent
-    reasoning_result = await run_reasoning_agent(message, history, relevant_things, web_results, gmail_context, calendar_events, usage_stats=usage)
+    reasoning_result = await run_reasoning_agent(
+        message, history, relevant_things, web_results, gmail_context, calendar_events, usage_stats=usage
+    )
     storage_changes = reasoning_result.get("storage_changes", {})
     questions_for_user = reasoning_result.get("questions_for_user", [])
     reasoning_summary = reasoning_result.get("reasoning_summary", "")
@@ -299,9 +308,21 @@ async def chat(body: ChatRequest):
             (session_id, "user", message, None),
         )
         conn.execute(
-            "INSERT INTO chat_history (session_id, role, content, applied_changes, prompt_tokens, completion_tokens, cost_usd, api_calls, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (session_id, "assistant", reply, changes_json,
-             usage.prompt_tokens, usage.completion_tokens, usage.cost_usd, usage.api_calls, usage.model),
+            "INSERT INTO chat_history"
+            " (session_id, role, content, applied_changes,"
+            " prompt_tokens, completion_tokens, cost_usd, api_calls, model)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                session_id,
+                "assistant",
+                reply,
+                changes_json,
+                usage.prompt_tokens,
+                usage.completion_tokens,
+                usage.cost_usd,
+                usage.api_calls,
+                usage.model,
+            ),
         )
 
         # Compute cumulative session usage

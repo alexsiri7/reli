@@ -175,16 +175,18 @@ def fetch_upcoming_events(
     for event in events_result.get("items", []):
         start = event.get("start", {})
         end = event.get("end", {})
-        events.append({
-            "id": event.get("id", ""),
-            "summary": event.get("summary", "(No title)"),
-            "start": start.get("dateTime") or start.get("date", ""),
-            "end": end.get("dateTime") or end.get("date", ""),
-            "all_day": "date" in start and "dateTime" not in start,
-            "location": event.get("location"),
-            "description": event.get("description"),
-            "status": event.get("status", "confirmed"),
-            "html_link": event.get("htmlLink"),
-        })
+        events.append(
+            {
+                "id": event.get("id", ""),
+                "summary": event.get("summary", "(No title)"),
+                "start": start.get("dateTime") or start.get("date", ""),
+                "end": end.get("dateTime") or end.get("date", ""),
+                "all_day": "date" in start and "dateTime" not in start,
+                "location": event.get("location"),
+                "description": event.get("description"),
+                "status": event.get("status", "confirmed"),
+                "html_link": event.get("htmlLink"),
+            }
+        )
 
     return events

@@ -33,6 +33,7 @@ VECTOR_SEARCH_THRESHOLD = 500
 # Embedding function
 # ---------------------------------------------------------------------------
 
+
 class _ThingEmbedder(EmbeddingFunction):
     """Embed text via Requesty (OpenAI-compatible) with Ollama fallback."""
 
@@ -41,6 +42,7 @@ class _ThingEmbedder(EmbeddingFunction):
         if REQUESTY_API_KEY:
             try:
                 from openai import OpenAI
+
                 client = OpenAI(api_key=REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
                 resp = client.embeddings.create(model=EMBEDDING_MODEL, input=input)
                 return [e.embedding for e in resp.data]
@@ -49,6 +51,7 @@ class _ThingEmbedder(EmbeddingFunction):
 
         # Fallback: Ollama HTTP API
         import urllib.request
+
         embeddings = []
         for text in input:
             payload = json.dumps({"model": OLLAMA_EMBED_MODEL, "prompt": text}).encode()
@@ -70,6 +73,7 @@ _embedder = _ThingEmbedder()
 # ChromaDB client / collection helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_collection() -> chromadb.Collection:
     client = chromadb.PersistentClient(path=str(CHROMA_PATH))
     return client.get_or_create_collection(
@@ -82,6 +86,7 @@ def _get_collection() -> chromadb.Collection:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def _thing_to_text(thing: dict[str, Any]) -> str:
     """Flatten a Thing dict into a single searchable string."""
@@ -108,10 +113,12 @@ def upsert_thing(thing: dict[str, Any]) -> None:
         collection.upsert(
             ids=[thing["id"]],
             documents=[text],
-            metadatas=[{
-                "type_hint": thing.get("type_hint") or "",
-                "active": 1 if thing.get("active", True) else 0,
-            }],
+            metadatas=[
+                {
+                    "type_hint": thing.get("type_hint") or "",
+                    "active": 1 if thing.get("active", True) else 0,
+                }
+            ],
         )
     except Exception as exc:
         logger.error("ChromaDB upsert failed for thing %s: %s", thing.get("id"), exc)

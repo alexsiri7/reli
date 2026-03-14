@@ -1,11 +1,8 @@
 """Tests for POST /chat multi-agent pipeline endpoint."""
 
-import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-import pytest_asyncio
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -48,6 +45,7 @@ def _patch_agents(
 # Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestChatPipeline:
     async def test_basic_chat_returns_200(self, async_client):
@@ -81,9 +79,7 @@ class TestChatPipeline:
     async def test_chat_with_storage_changes_create(self, async_client):
         reasoning_with_create = {
             "storage_changes": {
-                "create": [
-                    {"title": "New Pipeline Task", "type_hint": "task", "priority": 2}
-                ],
+                "create": [{"title": "New Pipeline Task", "type_hint": "task", "priority": 2}],
                 "update": [],
                 "delete": [],
             },
@@ -103,9 +99,7 @@ class TestChatPipeline:
 
     async def test_chat_with_storage_changes_update(self, async_client):
         # First create a thing via REST
-        create_resp = await async_client.post(
-            "/api/things", json={"title": "Thing to Update"}
-        )
+        create_resp = await async_client.post("/api/things", json={"title": "Thing to Update"})
         thing_id = create_resp.json()["id"]
 
         reasoning_with_update = {
@@ -128,9 +122,7 @@ class TestChatPipeline:
         assert len(data["applied_changes"]["updated"]) == 1
 
     async def test_chat_with_storage_changes_delete(self, async_client):
-        create_resp = await async_client.post(
-            "/api/things", json={"title": "Thing to Delete"}
-        )
+        create_resp = await async_client.post("/api/things", json={"title": "Thing to Delete"})
         thing_id = create_resp.json()["id"]
 
         reasoning_with_delete = {
@@ -175,7 +167,7 @@ class TestChatPipeline:
             json={"session_id": "history-sess", "role": "user", "content": "Prior message"},
         )
         patches = _patch_agents()
-        with patches[0], patches[1], patches[2] as mock_resp:
+        with patches[0], patches[1], patches[2]:
             # Also spy on reasoning agent to verify history is passed
             with patch(
                 "backend.routers.chat.run_reasoning_agent",

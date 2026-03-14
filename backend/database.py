@@ -1,10 +1,9 @@
 """SQLite database setup and connection management."""
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-
-import os
 
 _data_dir = os.environ.get("DATA_DIR", str(Path(__file__).parent))
 DB_PATH = Path(_data_dir) / "reli.db"
