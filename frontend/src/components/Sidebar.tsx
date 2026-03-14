@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
+import { CalendarSection } from './CalendarSection'
 import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
 
@@ -90,6 +91,9 @@ export function Sidebar() {
             <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
           </div>
         )}
+
+        {/* Google Calendar */}
+        <CalendarSection />
 
         {/* Daily Briefing */}
         {briefing.length > 0 && (

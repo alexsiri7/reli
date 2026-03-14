@@ -58,4 +58,17 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_things_checkin ON things(checkin_date);
             CREATE INDEX IF NOT EXISTS idx_things_active ON things(active);
             CREATE INDEX IF NOT EXISTS idx_chat_session ON chat_history(session_id);
+
+            CREATE TABLE IF NOT EXISTS google_tokens (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                access_token TEXT NOT NULL,
+                refresh_token TEXT,
+                token_uri TEXT NOT NULL,
+                client_id TEXT NOT NULL,
+                client_secret TEXT NOT NULL,
+                expiry TEXT,
+                scopes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)

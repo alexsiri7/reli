@@ -5,10 +5,11 @@ import { Sidebar } from './components/Sidebar'
 import { ChatPanel } from './components/ChatPanel'
 
 function App() {
-  const { fetchThings, fetchHistory, error } = useStore(
+  const { fetchThings, fetchHistory, fetchCalendarStatus, error } = useStore(
     useShallow(s => ({
       fetchThings: s.fetchThings,
       fetchHistory: s.fetchHistory,
+      fetchCalendarStatus: s.fetchCalendarStatus,
       error: s.error,
     }))
   )
@@ -17,8 +18,17 @@ function App() {
     fetchThings()
     fetchHistory()
     const interval = setInterval(fetchThings, 30_000)
+
+    // Handle OAuth callback redirect
+    const params = new URLSearchParams(window.location.search)
+    if (params.has('calendar_connected') || params.has('calendar_error')) {
+      // Clean up URL params
+      window.history.replaceState({}, '', '/')
+      fetchCalendarStatus()
+    }
+
     return () => clearInterval(interval)
-  }, [fetchThings, fetchHistory])
+  }, [fetchThings, fetchHistory, fetchCalendarStatus])
 
   return (
     <div className="flex w-full h-full overflow-hidden bg-white dark:bg-gray-900">

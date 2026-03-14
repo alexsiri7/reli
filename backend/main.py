@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .database import init_db
-from .routers import briefing, chat, gmail, things
+from .routers import briefing, calendar, chat, gmail, things
 
 _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
 
@@ -46,6 +46,7 @@ app.include_router(things.router, prefix="/api")
 app.include_router(briefing.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(gmail.router, prefix="/api")
+app.include_router(calendar.router, prefix="/api")
 
 
 @app.get("/healthz", tags=["health"])

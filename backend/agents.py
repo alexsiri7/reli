@@ -52,7 +52,8 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
   },
   "needs_web_search": false,
   "web_search_query": null,
-  "gmail_query": null
+  "gmail_query": null,
+  "include_calendar": false
 }
 - search_queries: 1-3 short text fragments to match against Thing titles/data
 - filter_params.active_only: true unless user asks about archived/all items
@@ -70,6 +71,9 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
   - "any emails from John" → "from:John"
   - "check my inbox for project updates" → "subject:project update"
   - "summarize my unread emails" → "is:unread"
+- include_calendar: true if the user asks about their schedule, calendar, meetings,
+  events, availability, free time, what's coming up today/this week, or anything
+  time/schedule related. Default false.
 """
 
 
@@ -134,6 +138,7 @@ async def run_reasoning_agent(
     relevant_things: list[dict],
     web_results: list[dict] | None = None,
     gmail_context: list[dict] | None = None,
+    calendar_events: list[dict] | None = None,
 ) -> dict:
     """Stage 2: decide what changes to make."""
     from datetime import datetime, timezone
@@ -149,6 +154,9 @@ async def run_reasoning_agent(
         user_content += f"\n\nWeb search results:\n{json.dumps(web_results, default=str)}"
     if gmail_context:
         user_content += f"\n\nRecent Gmail messages matching user's query:\n{json.dumps(gmail_context, default=str)}"
+    if calendar_events:
+        cal_json = json.dumps(calendar_events, default=str)
+        user_content += f"\n\nUpcoming Google Calendar events:\n{cal_json}"
     messages = [{"role": "system", "content": REASONING_AGENT_SYSTEM}]
     for h in history[-10:]:
         messages.append({"role": h["role"], "content": h["content"]})
@@ -297,6 +305,9 @@ Rules:
   prioritize: "We've got a few things in play. Want me to help pick the
   power move for today?"
 - Proactively nudge about items with approaching check-in dates when relevant.
+- When calendar events are provided, naturally weave them into your response.
+  Mention upcoming meetings, conflicts, or free blocks when relevant to the
+  user's request. Format times in a human-friendly way (e.g. "2pm" not ISO-8601).
 """
 
 

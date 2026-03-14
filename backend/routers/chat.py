@@ -12,6 +12,7 @@ from ..agents import (
     run_response_agent,
 )
 from ..database import db
+from ..google_calendar import fetch_upcoming_events, is_connected as gcal_connected
 from ..models import ChatMessage, ChatMessageCreate, ChatRequest, ChatResponse
 from ..vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 from ..web_search import google_search, is_search_configured
@@ -240,8 +241,16 @@ async def chat(body: ChatRequest):
     # Optionally fetch Gmail context
     gmail_context = _fetch_gmail_context(gmail_query) if gmail_query else []
 
+    # Fetch calendar events if requested by Context Agent and connected
+    calendar_events: list[dict] | None = None
+    if context_result.get("include_calendar") and gcal_connected():
+        try:
+            calendar_events = fetch_upcoming_events(max_results=15, days_ahead=7)
+        except Exception:
+            calendar_events = None
+
     # Stage 2: Reasoning Agent
-    reasoning_result = await run_reasoning_agent(message, history, relevant_things, web_results, gmail_context)
+    reasoning_result = await run_reasoning_agent(message, history, relevant_things, web_results, gmail_context, calendar_events)
     storage_changes = reasoning_result.get("storage_changes", {})
     questions_for_user = reasoning_result.get("questions_for_user", [])
     reasoning_summary = reasoning_result.get("reasoning_summary", "")
