@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { Sidebar } from '../components/Sidebar'
 
 type Thing = {
@@ -38,6 +38,40 @@ const makeThing = (overrides: Partial<Thing> = {}): Thing => ({
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   ...overrides,
+})
+
+// Helper to simulate desktop viewport (>=768px)
+function setDesktopViewport() {
+  Object.defineProperty(window, 'innerWidth', { value: 1024, writable: true })
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: query === '(min-width: 768px)',
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    onchange: null,
+    dispatchEvent: vi.fn(),
+  }))
+}
+
+// Helper to simulate mobile viewport (<768px)
+function setMobileViewport() {
+  Object.defineProperty(window, 'innerWidth', { value: 375, writable: true })
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    onchange: null,
+    dispatchEvent: vi.fn(),
+  }))
+}
+
+beforeEach(() => {
+  setDesktopViewport()
 })
 
 describe('Sidebar', () => {
@@ -86,5 +120,37 @@ describe('Sidebar', () => {
     }
     render(<Sidebar />)
     expect(screen.getByTitle('Snooze')).toBeInTheDocument()
+  })
+
+  it('is expanded by default on desktop', () => {
+    setDesktopViewport()
+    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn() }
+    render(<Sidebar />)
+    expect(screen.getByLabelText('Close sidebar')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Open sidebar')).not.toBeInTheDocument()
+  })
+
+  it('is collapsed by default on mobile', () => {
+    setMobileViewport()
+    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn() }
+    render(<Sidebar />)
+    expect(screen.getByLabelText('Open sidebar')).toBeInTheDocument()
+  })
+
+  it('can be toggled open and closed', () => {
+    setDesktopViewport()
+    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn() }
+    render(<Sidebar />)
+
+    // Initially open on desktop
+    expect(screen.getByLabelText('Close sidebar')).toBeInTheDocument()
+
+    // Close it
+    fireEvent.click(screen.getByLabelText('Close sidebar'))
+    expect(screen.getByLabelText('Open sidebar')).toBeInTheDocument()
+
+    // Open it again
+    fireEvent.click(screen.getByLabelText('Open sidebar'))
+    expect(screen.getByLabelText('Close sidebar')).toBeInTheDocument()
   })
 })
