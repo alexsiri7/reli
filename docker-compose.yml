@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - REQUESTY_API_KEY=${REQUESTY_API_KEY}
+      - MODEL_NAME=${MODEL_NAME:-google/gemini-2.0-flash-exp}
+      - EMBED_MODEL=${EMBED_MODEL:-text-embedding-3-small}
+      - DATA_DIR=/app/data
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: always
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run
+    depends_on:
+      - app

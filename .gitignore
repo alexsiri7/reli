@@ -1,4 +1,8 @@
 
+# Local env (never commit secrets)
+.env
+data/
+
 # Dolt database files (added by bd init)
 .dolt/
 *.db

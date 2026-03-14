@@ -1,4 +1,4 @@
-.PHONY: test test-backend test-frontend install install-backend install-frontend
+.PHONY: test test-backend test-frontend install install-backend install-frontend build build-frontend dev
 
 test: test-backend test-frontend
 
@@ -15,3 +15,12 @@ install-backend:
 
 install-frontend:
 	cd frontend && npm install
+
+build-frontend:
+	cd frontend && npm install && npm run build
+
+build: build-frontend
+	docker-compose build
+
+dev:
+	uvicorn backend.main:app --reload --port 8000
