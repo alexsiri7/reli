@@ -2,6 +2,7 @@
 
 import json
 import os
+import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,7 +19,6 @@ REQUESTY_MODEL = os.environ.get("REQUESTY_MODEL", "google/gemini-2.0-flash-001")
 
 def _client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
-
 
 
 # Per-model pricing: (input_cost_per_million, output_cost_per_million)
@@ -70,7 +70,7 @@ class UsageStats:
         if model:
             self.model = model
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
@@ -81,13 +81,18 @@ class UsageStats:
         }
 
 
-async def _chat(messages: list[dict], model: str | None = None, usage_stats: UsageStats | None = None, **kwargs) -> str:
+async def _chat(
+    messages: list[dict[str, Any]],
+    model: str | None = None,
+    usage_stats: UsageStats | None = None,
+    **kwargs: Any,
+) -> str:
     """Call the LLM and return the response text."""
     client = _client()
     used_model = model or REQUESTY_MODEL
     response = await client.chat.completions.create(
         model=used_model,
-        messages=messages,
+        messages=messages,  # type: ignore[arg-type]
         **kwargs,
     )
     if usage_stats is not None and response.usage:
@@ -155,7 +160,9 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
 """
 
 
-async def run_context_agent(message: str, history: list[dict], usage_stats: UsageStats | None = None) -> dict:
+async def run_context_agent(
+    message: str, history: list[dict[str, Any]], usage_stats: UsageStats | None = None
+) -> dict[str, Any]:
     """Stage 1: decide what to search for."""
     messages = [{"role": "system", "content": CONTEXT_AGENT_SYSTEM}]
     for h in history[-10:]:
@@ -164,7 +171,8 @@ async def run_context_agent(message: str, history: list[dict], usage_stats: Usag
 
     raw = await _chat(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
     try:
-        return json.loads(raw)
+        result: dict[str, Any] = json.loads(raw)
+        return result
     except json.JSONDecodeError:
         return {"search_queries": [message], "filter_params": {"active_only": True, "type_hint": None}}
 
@@ -245,13 +253,13 @@ first created item).
 
 async def run_reasoning_agent(
     message: str,
-    history: list[dict],
-    relevant_things: list[dict],
-    web_results: list[dict] | None = None,
-    gmail_context: list[dict] | None = None,
-    calendar_events: list[dict] | None = None,
+    history: list[dict[str, Any]],
+    relevant_things: list[dict[str, Any]],
+    web_results: list[dict[str, Any]] | None = None,
+    gmail_context: list[dict[str, Any]] | None = None,
+    calendar_events: list[dict[str, Any]] | None = None,
     usage_stats: UsageStats | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Stage 2: decide what changes to make."""
     from datetime import datetime, timezone
 
@@ -272,7 +280,7 @@ async def run_reasoning_agent(
 
     raw = await _chat(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
     try:
-        result = json.loads(raw)
+        result: dict[str, Any] = json.loads(raw)
     except json.JSONDecodeError:
         result = {}
 
@@ -291,7 +299,7 @@ async def run_reasoning_agent(
 # ---------------------------------------------------------------------------
 
 
-def apply_storage_changes(storage_changes: dict, conn) -> dict[str, list[dict]]:
+def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connection) -> dict[str, list[Any]]:
     """Stage 3: validate and apply changes; return what was actually applied."""
     import json as _json
     import uuid
@@ -480,8 +488,8 @@ async def run_response_agent(
     message: str,
     reasoning_summary: str,
     questions_for_user: list[str],
-    applied_changes: dict,
-    web_results: list[dict] | None = None,
+    applied_changes: dict[str, Any],
+    web_results: list[dict[str, Any]] | None = None,
     usage_stats: UsageStats | None = None,
 ) -> str:
     """Stage 4: generate friendly user-facing response."""

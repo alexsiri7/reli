@@ -1,7 +1,9 @@
 """Chat history endpoints and the multi-agent chat pipeline."""
 
 import json
+import sqlite3
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -30,7 +32,7 @@ def _parse_dt(val: str | None) -> datetime | None:
     return datetime.fromisoformat(val)
 
 
-def _row_to_msg(row) -> ChatMessage:
+def _row_to_msg(row: sqlite3.Row) -> ChatMessage:
     changes = row["applied_changes"]
     if isinstance(changes, str):
         changes = json.loads(changes) if changes else None
@@ -44,7 +46,7 @@ def _row_to_msg(row) -> ChatMessage:
         completion_tokens=row["completion_tokens"] or 0,
         cost_usd=row["cost_usd"] or 0.0,
         model=row["model"],
-        timestamp=_parse_dt(row["timestamp"]),
+        timestamp=_parse_dt(row["timestamp"]) or datetime.min,
     )
 
 
@@ -53,7 +55,7 @@ def get_history(
     session_id: str,
     limit: int = Query(50, ge=1, le=500),
     before: int | None = Query(None, description="Return messages with id < before (for loading older messages)"),
-):
+) -> list[ChatMessage]:
     with db() as conn:
         if before is not None:
             rows = conn.execute(
@@ -73,7 +75,7 @@ def get_history(
 @router.post(
     "/history", response_model=ChatMessage, status_code=status.HTTP_201_CREATED, summary="Append a chat message"
 )
-def append_message(body: ChatMessageCreate):
+def append_message(body: ChatMessageCreate) -> ChatMessage:
     changes_json = json.dumps(body.applied_changes) if body.applied_changes is not None else None
     with db() as conn:
         cursor = conn.execute(
@@ -87,7 +89,7 @@ def append_message(body: ChatMessageCreate):
 @router.delete(
     "/history/{session_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a session's chat history"
 )
-def delete_history(session_id: str):
+def delete_history(session_id: str) -> None:
     with db() as conn:
         result = conn.execute("DELETE FROM chat_history WHERE session_id = ?", (session_id,))
     if result.rowcount == 0:
@@ -99,18 +101,18 @@ def delete_history(session_id: str):
 # ---------------------------------------------------------------------------
 
 
-def _sql_things_count(conn) -> int:
+def _sql_things_count(conn: sqlite3.Connection) -> int:
     """Return total number of Things in SQLite."""
     row = conn.execute("SELECT COUNT(*) as cnt FROM things").fetchone()
     return row["cnt"] if row else 0
 
 
-def _fetch_with_family(conn, seed_ids: list[str]) -> list[dict]:
+def _fetch_with_family(conn: sqlite3.Connection, seed_ids: list[str]) -> list[dict[str, Any]]:
     """Given seed Thing IDs, return those Things plus their parents, children, and related Things via relationships."""
     seen_ids: set[str] = set()
     results: list[dict] = []
 
-    def _add_row(row) -> None:
+    def _add_row(row: sqlite3.Row) -> None:
         if row["id"] not in seen_ids:
             seen_ids.add(row["id"])
             results.append(dict(row))
@@ -144,7 +146,9 @@ def _fetch_with_family(conn, seed_ids: list[str]) -> list[dict]:
     return results
 
 
-def _fetch_relevant_things(conn, search_queries: list[str], filter_params: dict) -> list[dict]:
+def _fetch_relevant_things(
+    conn: sqlite3.Connection, search_queries: list[str], filter_params: dict[str, Any]
+) -> list[dict[str, Any]]:
     """Retrieve relevant Things using vector search (≥500 Things) or SQL LIKE fallback (<500).
 
     Always augments results with parent and children of every matched Thing.
@@ -202,7 +206,7 @@ def _fetch_relevant_things(conn, search_queries: list[str], filter_params: dict)
     return results
 
 
-def _fetch_gmail_context(query: str) -> list[dict]:
+def _fetch_gmail_context(query: str) -> list[dict[str, Any]]:
     """Fetch Gmail messages matching query for injection into the reasoning agent."""
     try:
         from .gmail import _get_service, _parse_message
@@ -229,7 +233,7 @@ def _fetch_gmail_context(query: str) -> list[dict]:
 
 
 @router.post("", response_model=ChatResponse, summary="Send a message through the multi-agent pipeline")
-async def chat(body: ChatRequest):
+async def chat(body: ChatRequest) -> ChatResponse:
     """4-stage pipeline: Context → Retrieve → Reasoning → Validate → Respond."""
     session_id = body.session_id
     message = body.message

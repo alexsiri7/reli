@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import chromadb
-from chromadb import EmbeddingFunction, Embeddings
+from chromadb import EmbeddingFunction
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ VECTOR_SEARCH_THRESHOLD = 500
 class _ThingEmbedder(EmbeddingFunction):
     """Embed text via Requesty (OpenAI-compatible) with Ollama fallback."""
 
-    def __call__(self, input: list[str]) -> Embeddings:  # noqa: A002
+    def __call__(self, input: list[str]) -> list[list[float]]:  # type: ignore[override]  # noqa: A002
         # Try Requesty first (if API key configured)
         if REQUESTY_API_KEY:
             try:
