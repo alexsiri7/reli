@@ -3,7 +3,7 @@ import { useStore } from '../store'
 import { ThingCard } from './ThingCard'
 
 export function Sidebar() {
-  const { things, loading } = useStore(useShallow(s => ({ things: s.things, loading: s.loading })))
+  const { things, briefing, loading } = useStore(useShallow(s => ({ things: s.things, briefing: s.briefing, loading: s.loading })))
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -28,8 +28,22 @@ export function Sidebar() {
         </p>
       </div>
 
-      {loading && (
-        <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-500">Loading…</div>
+      {loading && things.length === 0 && (
+        <div className="px-4 py-3 space-y-2 animate-pulse">
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+        </div>
+      )}
+
+      {/* Daily Briefing */}
+      {briefing.length > 0 && (
+        <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+          <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+            📅 Daily Briefing
+          </h2>
+          {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
+        </section>
       )}
 
       {/* Upcoming Check-ins */}
@@ -54,8 +68,7 @@ export function Sidebar() {
 
       {!loading && things.length === 0 && (
         <div className="px-4 py-6 text-sm text-gray-400 dark:text-gray-500 text-center">
-          No things yet.<br />
-          <span className="text-xs">Start a conversation to create some!</span>
+          Start by typing in the chat…
         </div>
       )}
     </aside>
