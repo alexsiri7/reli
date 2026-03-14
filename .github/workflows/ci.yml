@@ -78,8 +78,9 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_DEPLOY_KEY }}
           script: |
-            cd ~/reli
-            git pull
-            cd frontend && npm ci && npm run build && cd ..
+            cd /home/asiri/gt/reli/mayor/rig
+            git pull --rebase
+            npm --prefix frontend ci --legacy-peer-deps
+            npm --prefix frontend run build
             docker compose build
             docker compose up -d
