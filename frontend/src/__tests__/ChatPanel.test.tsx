@@ -9,6 +9,10 @@ type Msg = {
   applied_changes: null
   timestamp: string
   streaming?: boolean
+  prompt_tokens?: number
+  completion_tokens?: number
+  cost_usd?: number
+  model?: string | null
 }
 
 const mockStore = {
@@ -18,6 +22,7 @@ const mockStore = {
   hasMoreHistory: false,
   sendMessage: vi.fn(),
   fetchOlderMessages: vi.fn(),
+  sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost_usd: 0, api_calls: 0, model: '' },
 }
 
 vi.mock('../store', () => ({

@@ -40,6 +40,10 @@ def _row_to_msg(row) -> ChatMessage:
         role=row["role"],
         content=row["content"],
         applied_changes=changes,
+        prompt_tokens=row["prompt_tokens"] or 0,
+        completion_tokens=row["completion_tokens"] or 0,
+        cost_usd=row["cost_usd"] or 0.0,
+        model=row["model"],
         timestamp=_parse_dt(row["timestamp"]),
     )
 

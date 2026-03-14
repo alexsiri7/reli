@@ -84,6 +84,10 @@ class ChatMessage(BaseModel):
     role: str
     content: str
     applied_changes: dict[str, Any] | None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost_usd: float = 0.0
+    model: str | None = None
     timestamp: datetime
 
     model_config = {"from_attributes": True}

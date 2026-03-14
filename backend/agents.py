@@ -20,6 +20,32 @@ def _client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
 
 
+
+# Per-model pricing: (input_cost_per_million, output_cost_per_million)
+MODEL_PRICING: dict[str, tuple[float, float]] = {
+    "openai/gpt-4o-mini": (0.15, 0.60),
+    "openai/gpt-4o": (2.50, 10.00),
+    "anthropic/claude-sonnet-4-20250514": (3.00, 15.00),
+    "google/gemini-2.0-flash-001": (0.10, 0.40),
+    "google/gemini-2.5-flash-preview-05-20": (0.15, 0.60),
+}
+
+
+def estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """Estimate USD cost from token counts using per-model pricing."""
+    pricing = MODEL_PRICING.get(model)
+    if not pricing:
+        # Try partial match (model name without version suffix)
+        for key, val in MODEL_PRICING.items():
+            if model.startswith(key.split("-")[0]) or key.startswith(model.split("-")[0]):
+                pricing = val
+                break
+    if not pricing:
+        return 0.0
+    input_cost, output_cost = pricing
+    return (prompt_tokens * input_cost + completion_tokens * output_cost) / 1_000_000
+
+
 @dataclass
 class UsageStats:
     """Accumulated LLM usage statistics across pipeline stages."""
@@ -35,7 +61,11 @@ class UsageStats:
         self.prompt_tokens += prompt
         self.completion_tokens += completion
         self.total_tokens += total
-        self.cost_usd += cost
+        # Use provided cost if available, otherwise estimate from model pricing
+        if cost > 0:
+            self.cost_usd += cost
+        else:
+            self.cost_usd += estimate_cost(model, prompt, completion)
         self.api_calls += 1
         if model:
             self.model = model

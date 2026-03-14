@@ -47,6 +47,10 @@ def assert_chat_message_shape(obj: dict) -> None:
     assert obj["role"] in ("user", "assistant")
     assert isinstance(obj["content"], str)
     assert obj["applied_changes"] is None or isinstance(obj["applied_changes"], dict)
+    assert isinstance(obj["prompt_tokens"], int)
+    assert isinstance(obj["completion_tokens"], int)
+    assert isinstance(obj["cost_usd"], (int, float))
+    assert obj["model"] is None or isinstance(obj["model"], str)
     assert isinstance(obj["timestamp"], str)
     assert ISO_DATE_RE.match(obj["timestamp"]), f"timestamp not ISO: {obj['timestamp']}"
 

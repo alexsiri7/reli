@@ -61,6 +61,10 @@ export interface ChatMessage {
   content: string
   applied_changes: AppliedChanges | null
   questions_for_user: string[]
+  prompt_tokens?: number
+  completion_tokens?: number
+  cost_usd?: number
+  model?: string | null
   timestamp: string
   streaming?: boolean
 }
@@ -248,6 +252,10 @@ export const useStore = create<ReliState>((set, get) => ({
         content: data.reply,
         applied_changes: data.applied_changes ?? null,
         questions_for_user: data.questions_for_user ?? [],
+        prompt_tokens: data.usage?.prompt_tokens ?? 0,
+        completion_tokens: data.usage?.completion_tokens ?? 0,
+        cost_usd: data.usage?.cost_usd ?? 0,
+        model: data.usage?.model ?? null,
         timestamp: new Date().toISOString(),
       }
 
