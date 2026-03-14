@@ -49,11 +49,19 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
   "filter_params": {
     "active_only": true,
     "type_hint": null
-  }
+  },
+  "needs_web_search": false,
+  "web_search_query": null
 }
 - search_queries: 1-3 short text fragments to match against Thing titles/data
 - filter_params.active_only: true unless user asks about archived/all items
 - filter_params.type_hint: null or one of task|note|idea|project|goal|journal
+- needs_web_search: true if the user is asking about external/real-world info
+  that would benefit from a web search (current events, facts, how-to questions,
+  product info, documentation, etc.). false for personal task management requests
+  (creating, updating, listing things).
+- web_search_query: a concise, effective Google search query when needs_web_search
+  is true; null otherwise.
 """
 
 
@@ -113,7 +121,10 @@ Rules:
 
 
 async def run_reasoning_agent(
-    message: str, history: list[dict], relevant_things: list[dict]
+    message: str,
+    history: list[dict],
+    relevant_things: list[dict],
+    web_results: list[dict] | None = None,
 ) -> dict:
     """Stage 2: decide what changes to make."""
     from datetime import datetime, timezone
@@ -125,6 +136,8 @@ async def run_reasoning_agent(
         f"User message: {message}\n\n"
         f"Relevant Things from database:\n{things_json}"
     )
+    if web_results:
+        user_content += f"\n\nWeb search results:\n{json.dumps(web_results, default=str)}"
     messages = [{"role": "system", "content": REASONING_AGENT_SYSTEM}]
     for h in history[-10:]:
         messages.append({"role": h["role"], "content": h["content"]})
@@ -281,6 +294,7 @@ async def run_response_agent(
     reasoning_summary: str,
     questions_for_user: list[str],
     applied_changes: dict,
+    web_results: list[dict] | None = None,
 ) -> str:
     """Stage 4: generate friendly user-facing response."""
     context = (
@@ -289,6 +303,8 @@ async def run_response_agent(
         f"Applied changes: {json.dumps(applied_changes, default=str)}\n\n"
         f"Questions for user (if any): {json.dumps(questions_for_user)}"
     )
+    if web_results:
+        context += f"\n\nWeb search results (cite relevant sources in your response):\n{json.dumps(web_results, default=str)}"
     messages = [
         {"role": "system", "content": RESPONSE_AGENT_SYSTEM},
         {"role": "user", "content": context},

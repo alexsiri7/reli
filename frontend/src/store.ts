@@ -15,10 +15,17 @@ export interface Thing {
   updated_at: string
 }
 
+export interface WebSearchResult {
+  title: string
+  url: string
+  snippet: string
+}
+
 export interface AppliedChanges {
   created?: { id: string; title: string; type_hint?: string }[]
   updated?: { id: string; title: string; [key: string]: unknown }[]
   deleted?: string[]
+  web_results?: WebSearchResult[]
 }
 
 export interface ChatMessage {

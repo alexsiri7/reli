@@ -9,5 +9,7 @@ services:
       - REQUESTY_API_KEY=${REQUESTY_API_KEY}
       - MODEL_NAME=${MODEL_NAME:-google/gemini-2.0-flash-exp}
       - EMBED_MODEL=${EMBED_MODEL:-text-embedding-3-small}
+      - GOOGLE_SEARCH_API_KEY=${GOOGLE_SEARCH_API_KEY:-}
+      - GOOGLE_SEARCH_CX=${GOOGLE_SEARCH_CX:-}
       - DATA_DIR=/app/data
     restart: unless-stopped

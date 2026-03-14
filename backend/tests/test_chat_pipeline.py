@@ -211,6 +211,58 @@ class TestChatPipeline:
         # Unknown ID silently skipped — not in deleted list
         assert "nonexistent-id-xyz" not in resp.json()["applied_changes"]["deleted"]
 
+    async def test_chat_with_web_search(self, async_client):
+        """When context agent requests web search and it's configured, results are included."""
+        from backend.web_search import SearchResult
+
+        context_with_search = {
+            "search_queries": ["test"],
+            "filter_params": {"active_only": True, "type_hint": None},
+            "needs_web_search": True,
+            "web_search_query": "python fastapi tutorial",
+        }
+
+        mock_search_results = [
+            SearchResult(title="FastAPI Tutorial", url="https://example.com/fastapi", snippet="Learn FastAPI..."),
+            SearchResult(title="Python Docs", url="https://docs.python.org", snippet="Official docs..."),
+        ]
+
+        patches = _patch_agents(context_result=context_with_search)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patch("backend.routers.chat.is_search_configured", return_value=True),
+            patch("backend.routers.chat.google_search", new=AsyncMock(return_value=mock_search_results)),
+        ):
+            resp = await async_client.post(
+                "/api/chat",
+                json={"session_id": "search-sess", "message": "How do I use FastAPI?"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "web_results" in data["applied_changes"]
+        assert len(data["applied_changes"]["web_results"]) == 2
+        assert data["applied_changes"]["web_results"][0]["title"] == "FastAPI Tutorial"
+
+    async def test_chat_web_search_skipped_when_not_configured(self, async_client):
+        """When search is not configured, web search is skipped even if requested."""
+        context_with_search = {
+            "search_queries": ["test"],
+            "filter_params": {"active_only": True, "type_hint": None},
+            "needs_web_search": True,
+            "web_search_query": "something",
+        }
+        patches = _patch_agents(context_result=context_with_search)
+        with patches[0], patches[1], patches[2]:
+            resp = await async_client.post(
+                "/api/chat",
+                json={"session_id": "no-search-sess", "message": "Search for something"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "web_results" not in data["applied_changes"]
+
     async def test_chat_invalid_request_returns_422(self, async_client):
         resp = await async_client.post("/api/chat", json={"session_id": "", "message": ""})
         assert resp.status_code == 422
