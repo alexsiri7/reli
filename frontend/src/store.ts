@@ -119,7 +119,7 @@ export const useStore = create<ReliState>((set, get) => ({
       timestamp: new Date().toISOString(),
     }
     const placeholderMsg: ChatMessage = {
-      id: `stream-${Date.now()}`,
+      id: `pending-${Date.now()}`,
       session_id: SESSION_ID,
       role: 'assistant',
       content: '',
@@ -134,52 +134,28 @@ export const useStore = create<ReliState>((set, get) => ({
     }))
 
     try {
-      // Persist user message
-      await fetch(`${BASE}/chat/history`, {
+      const res = await fetch(`${BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: SESSION_ID,
-          role: 'user',
-          content: text,
-        }),
+        body: JSON.stringify({ session_id: SESSION_ID, message: text }),
       })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
 
-      // Simple echo response (full AI pipeline is Phase 5+)
-      // For now, stream a placeholder assistant response
-      const assistantText = `Got it! I've noted: "${text}". (AI pipeline coming in a future phase.)`
-
-      // Simulate streaming
-      let accumulated = ''
-      for (const char of assistantText) {
-        accumulated += char
-        set(state => ({
-          messages: state.messages.map(m =>
-            m.streaming ? { ...m, content: accumulated } : m,
-          ),
-        }))
-        await new Promise(r => setTimeout(r, 15))
+      const assistantMsg: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        session_id: SESSION_ID,
+        role: 'assistant',
+        content: data.reply,
+        applied_changes: data.applied_changes ?? null,
+        timestamp: new Date().toISOString(),
       }
 
-      // Persist assistant message
-      const saveRes = await fetch(`${BASE}/chat/history`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: SESSION_ID,
-          role: 'assistant',
-          content: accumulated,
-        }),
-      })
-      const saved: ChatMessage = await saveRes.json()
-
       set(state => ({
-        messages: state.messages.map(m =>
-          m.streaming ? { ...saved, streaming: false } : m,
-        ),
+        messages: state.messages.map(m => m.streaming ? assistantMsg : m),
       }))
 
-      // Refresh things in case they changed
+      // Refresh things in case the pipeline made changes
       get().fetchThings()
       get().fetchBriefing()
     } catch (e) {
