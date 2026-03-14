@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type AppliedChanges, type ChatMessage, type WebSearchResult } from '../store'
+import { useStore, type AppliedChanges, type ChatMessage, type SessionStats, type WebSearchResult } from '../store'
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso)
@@ -155,8 +155,39 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   )
 }
 
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return String(n)
+}
+
+function NerdStatsBar({ stats }: { stats: SessionStats }) {
+  if (stats.api_calls === 0) return null
+
+  return (
+    <div className="px-4 py-1.5 border-b border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-950 shrink-0 flex items-center gap-4 font-mono text-[11px] text-gray-500 dark:text-gray-500">
+      {stats.model && (
+        <span className="text-gray-600 dark:text-gray-400" title="Model">
+          {stats.model.split('/').pop()}
+        </span>
+      )}
+      <span title="Total tokens (prompt + completion)">
+        {formatTokens(stats.total_tokens)} tokens
+      </span>
+      {stats.cost_usd > 0 && (
+        <span title="Session cost">
+          ${stats.cost_usd < 0.01 ? stats.cost_usd.toFixed(4) : stats.cost_usd.toFixed(2)}
+        </span>
+      )}
+      <span title="API calls this session">
+        {stats.api_calls} call{stats.api_calls !== 1 ? 's' : ''}
+      </span>
+    </div>
+  )
+}
+
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -164,6 +195,7 @@ export function ChatPanel() {
       hasMoreHistory: s.hasMoreHistory,
       sendMessage: s.sendMessage,
       fetchOlderMessages: s.fetchOlderMessages,
+      sessionStats: s.sessionStats,
     }))
   )
   const [input, setInput] = useState('')
@@ -220,6 +252,9 @@ export function ChatPanel() {
         <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Chat</h2>
         <p className="text-xs text-gray-400 dark:text-gray-500">Talk to Reli — create, update, and query your Things</p>
       </div>
+
+      {/* Nerd stats bar */}
+      <NerdStatsBar stats={sessionStats} />
 
       {/* Messages */}
       <div

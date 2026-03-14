@@ -70,11 +70,32 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1)
 
 
+class UsageInfo(BaseModel):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    api_calls: int = 0
+    model: str = ""
+
+
+class SessionUsage(BaseModel):
+    """Cumulative usage stats for the current session."""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    api_calls: int = 0
+    model: str = ""
+
+
 class ChatResponse(BaseModel):
     session_id: str
     reply: str
     applied_changes: dict[str, Any]
     questions_for_user: list[str]
+    usage: UsageInfo | None = None
+    session_usage: SessionUsage | None = None
 
 
 # ── Briefing ──────────────────────────────────────────────────────────────────

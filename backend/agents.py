@@ -2,6 +2,7 @@
 
 import json
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -19,14 +20,60 @@ def _client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
 
 
-async def _chat(messages: list[dict], model: str | None = None, **kwargs) -> str:
+@dataclass
+class UsageStats:
+    """Accumulated LLM usage statistics across pipeline stages."""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    api_calls: int = 0
+    model: str = ""
+
+    def accumulate(self, prompt: int, completion: int, total: int, cost: float, model: str) -> None:
+        self.prompt_tokens += prompt
+        self.completion_tokens += completion
+        self.total_tokens += total
+        self.cost_usd += cost
+        self.api_calls += 1
+        if model:
+            self.model = model
+
+    def to_dict(self) -> dict:
+        return {
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
+            "cost_usd": round(self.cost_usd, 6),
+            "api_calls": self.api_calls,
+            "model": self.model,
+        }
+
+
+async def _chat(messages: list[dict], model: str | None = None, usage_stats: UsageStats | None = None, **kwargs) -> str:
     """Call the LLM and return the response text."""
     client = _client()
+    used_model = model or REQUESTY_MODEL
     response = await client.chat.completions.create(
-        model=model or REQUESTY_MODEL,
+        model=used_model,
         messages=messages,
         **kwargs,
     )
+    if usage_stats is not None and response.usage:
+        # Requesty returns cost in x-request-cost header, but the OpenAI SDK
+        # doesn't expose headers. We can check for cost in the response model
+        # or compute from usage. For now, use 0 and let the frontend show tokens.
+        cost = 0.0
+        # Some Requesty responses include cost info in the response object
+        if hasattr(response, 'x_request_cost'):
+            cost = float(getattr(response, 'x_request_cost', 0))
+        usage_stats.accumulate(
+            prompt=response.usage.prompt_tokens or 0,
+            completion=response.usage.completion_tokens or 0,
+            total=response.usage.total_tokens or 0,
+            cost=cost,
+            model=response.model or used_model,
+        )
     return response.choices[0].message.content or ""
 
 
@@ -77,14 +124,14 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
 """
 
 
-async def run_context_agent(message: str, history: list[dict]) -> dict:
+async def run_context_agent(message: str, history: list[dict], usage_stats: UsageStats | None = None) -> dict:
     """Stage 1: decide what to search for."""
     messages = [{"role": "system", "content": CONTEXT_AGENT_SYSTEM}]
     for h in history[-10:]:
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": message})
 
-    raw = await _chat(messages, response_format={"type": "json_object"})
+    raw = await _chat(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -139,6 +186,7 @@ async def run_reasoning_agent(
     web_results: list[dict] | None = None,
     gmail_context: list[dict] | None = None,
     calendar_events: list[dict] | None = None,
+    usage_stats: UsageStats | None = None,
 ) -> dict:
     """Stage 2: decide what changes to make."""
     from datetime import datetime, timezone
@@ -162,7 +210,7 @@ async def run_reasoning_agent(
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": user_content})
 
-    raw = await _chat(messages, response_format={"type": "json_object"})
+    raw = await _chat(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
     try:
         result = json.loads(raw)
     except json.JSONDecodeError:
@@ -319,6 +367,7 @@ async def run_response_agent(
     questions_for_user: list[str],
     applied_changes: dict,
     web_results: list[dict] | None = None,
+    usage_stats: UsageStats | None = None,
 ) -> str:
     """Stage 4: generate friendly user-facing response."""
     context = (
@@ -333,4 +382,4 @@ async def run_response_agent(
         {"role": "system", "content": RESPONSE_AGENT_SYSTEM},
         {"role": "user", "content": context},
     ]
-    return await _chat(messages)
+    return await _chat(messages, usage_stats=usage_stats)
