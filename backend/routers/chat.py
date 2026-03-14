@@ -13,6 +13,7 @@ from ..agents import (
 )
 from ..database import db
 from ..models import ChatMessage, ChatMessageCreate, ChatRequest, ChatResponse
+from ..vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -77,32 +78,91 @@ def delete_history(session_id: str):
 # Multi-agent pipeline endpoint
 # ---------------------------------------------------------------------------
 
-def _fetch_relevant_things(conn, search_queries: list[str], filter_params: dict) -> list[dict]:
-    """Search Things by text queries using SQLite LIKE matching."""
-    active_only = filter_params.get("active_only", True)
-    type_hint = filter_params.get("type_hint")
+def _sql_things_count(conn) -> int:
+    """Return total number of Things in SQLite."""
+    row = conn.execute("SELECT COUNT(*) as cnt FROM things").fetchone()
+    return row["cnt"] if row else 0
 
+
+def _fetch_with_family(conn, seed_ids: list[str]) -> list[dict]:
+    """Given seed Thing IDs, return those Things plus their parents and children."""
     seen_ids: set[str] = set()
     results: list[dict] = []
 
-    for query in search_queries[:3]:
-        pattern = f"%{query}%"
-        sql = "SELECT * FROM things WHERE (title LIKE ? OR data LIKE ?)"
-        params: list = [pattern, pattern]
-        if active_only:
-            sql += " AND active = 1"
-        if type_hint:
-            sql += " AND type_hint = ?"
-            params.append(type_hint)
-        sql += " ORDER BY updated_at DESC LIMIT 20"
-        rows = conn.execute(sql, params).fetchall()
-        for row in rows:
-            if row["id"] not in seen_ids:
-                seen_ids.add(row["id"])
-                results.append(dict(row))
+    def _add_row(row) -> None:
+        if row["id"] not in seen_ids:
+            seen_ids.add(row["id"])
+            results.append(dict(row))
 
-    # Always include recent active things for context when no specific results
+    # Fetch seed Things
+    for thing_id in seed_ids:
+        row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+        if row:
+            _add_row(row)
+            # Fetch parent
+            if row["parent_id"]:
+                parent = conn.execute("SELECT * FROM things WHERE id = ?", (row["parent_id"],)).fetchone()
+                if parent:
+                    _add_row(parent)
+            # Fetch children
+            children = conn.execute(
+                "SELECT * FROM things WHERE parent_id = ?", (thing_id,)
+            ).fetchall()
+            for child in children:
+                _add_row(child)
+
+    return results
+
+
+def _fetch_relevant_things(conn, search_queries: list[str], filter_params: dict) -> list[dict]:
+    """Retrieve relevant Things using vector search (≥500 Things) or SQL LIKE fallback (<500).
+
+    Always augments results with parent and children of every matched Thing.
+    """
+    active_only = filter_params.get("active_only", True)
+    type_hint = filter_params.get("type_hint")
+
+    # Choose retrieval strategy based on indexed count
+    use_vector = vector_count() >= VECTOR_SEARCH_THRESHOLD
+
+    seed_ids: list[str] = []
+
+    if use_vector:
+        # --- Vector search path ---
+        seed_ids = vector_search(
+            queries=search_queries,
+            n_results=20,
+            active_only=active_only,
+            type_hint=type_hint,
+        )
+        # If vector search returns nothing (embedding failure), fall through to SQL
+        if not seed_ids:
+            use_vector = False
+
+    if not use_vector:
+        # --- SQL LIKE fallback ---
+        seen_sql: set[str] = set()
+        for query in search_queries[:3]:
+            pattern = f"%{query}%"
+            sql = "SELECT id FROM things WHERE (title LIKE ? OR data LIKE ?)"
+            params: list = [pattern, pattern]
+            if active_only:
+                sql += " AND active = 1"
+            if type_hint:
+                sql += " AND type_hint = ?"
+                params.append(type_hint)
+            sql += " ORDER BY updated_at DESC LIMIT 20"
+            for row in conn.execute(sql, params).fetchall():
+                if row["id"] not in seen_sql:
+                    seen_sql.add(row["id"])
+                    seed_ids.append(row["id"])
+
+    # Hydrate seed IDs with parent/children expansion
+    results = _fetch_with_family(conn, seed_ids)
+
+    # Always include recent active things when there aren't enough results
     if len(results) < 5:
+        seen_ids = {r["id"] for r in results}
         sql = "SELECT * FROM things WHERE active = 1 ORDER BY updated_at DESC LIMIT 10"
         for row in conn.execute(sql).fetchall():
             if row["id"] not in seen_ids:

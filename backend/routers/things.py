@@ -4,10 +4,11 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 
 from ..database import db
 from ..models import Thing, ThingCreate, ThingUpdate
+from ..vector_store import delete_thing as vs_delete, upsert_thing
 
 router = APIRouter(prefix="/things", tags=["things"])
 
@@ -59,7 +60,7 @@ def list_things(
 
 
 @router.post("", response_model=Thing, status_code=status.HTTP_201_CREATED, summary="Create a Thing")
-def create_thing(body: ThingCreate):
+def create_thing(body: ThingCreate, background_tasks: BackgroundTasks):
     thing_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     data_json = json.dumps(body.data) if body.data is not None else None
@@ -79,6 +80,7 @@ def create_thing(body: ThingCreate):
              body.priority, int(body.active), data_json, now, now),
         )
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+    background_tasks.add_task(upsert_thing, dict(row))
     return _row_to_thing(row)
 
 
@@ -92,7 +94,7 @@ def get_thing(thing_id: str):
 
 
 @router.patch("/{thing_id}", response_model=Thing, summary="Update a Thing")
-def update_thing(thing_id: str, body: ThingUpdate):
+def update_thing(thing_id: str, body: ThingUpdate, background_tasks: BackgroundTasks):
     with db() as conn:
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
         if not row:
@@ -126,13 +128,15 @@ def update_thing(thing_id: str, body: ThingUpdate):
         values = list(fields.values()) + [thing_id]
         conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+    background_tasks.add_task(upsert_thing, dict(row))
     return _row_to_thing(row)
 
 
 @router.delete("/{thing_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a Thing")
-def delete_thing(thing_id: str):
+def delete_thing(thing_id: str, background_tasks: BackgroundTasks):
     with db() as conn:
         row = conn.execute("SELECT id FROM things WHERE id = ?", (thing_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
         conn.execute("DELETE FROM things WHERE id = ?", (thing_id,))
+    background_tasks.add_task(vs_delete, thing_id)

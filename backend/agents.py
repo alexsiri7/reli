@@ -141,6 +141,8 @@ def apply_storage_changes(
     import uuid
     from datetime import datetime, timezone
 
+    from .vector_store import delete_thing as vs_delete, upsert_thing
+
     applied: dict[str, list] = {"created": [], "updated": [], "deleted": []}
 
     now = datetime.now(timezone.utc).isoformat()
@@ -172,6 +174,7 @@ def apply_storage_changes(
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
         if row:
             applied["created"].append(dict(row))
+            upsert_thing(dict(row))
 
     # ── Updates ──────────────────────────────────────────────────────────────
     for item in storage_changes.get("update", []):
@@ -201,6 +204,7 @@ def apply_storage_changes(
         updated_row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
         if updated_row:
             applied["updated"].append(dict(updated_row))
+            upsert_thing(dict(updated_row))
 
     # ── Deletes ──────────────────────────────────────────────────────────────
     for thing_id in storage_changes.get("delete", []):
@@ -210,6 +214,7 @@ def apply_storage_changes(
             continue
         conn.execute("DELETE FROM things WHERE id = ?", (thing_id,))
         applied["deleted"].append(thing_id)
+        vs_delete(thing_id)
 
     return applied
 
