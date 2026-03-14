@@ -24,6 +24,28 @@ docker compose build && docker compose up -d
 
 Frontend has a peer dependency conflict — always use `--legacy-peer-deps` with npm.
 
+## Database Safety Policy
+
+Reli stores user data in two places — both contain production data that must be protected.
+
+### SQLite (`data/reli.db`)
+
+1. **NEVER delete or recreate the database file.** The Docker volume mounts `./data:/app/data` — the DB persists across container rebuilds.
+2. **Schema changes must use additive SQL migrations** (`ALTER TABLE`, `CREATE TABLE IF NOT EXISTS`). See `backend/database.py` for the existing migration pattern. Never use destructive DDL (`DROP TABLE`, `DROP COLUMN`) without a data migration plan.
+3. **Test migrations on a copy first** — copy `reli.db` and run your migration against the copy before committing.
+4. **Never hard-code a different DB path** — the path is set by `DATA_DIR` env var (defaults to `backend/`). Production uses `/app/data` inside the container.
+
+### ChromaDB (`backend/chroma_db/`)
+
+1. **NEVER delete the `chroma_db/` directory.** It contains vector embeddings for user data.
+2. Collection deletions require explicit justification and should preserve the data elsewhere first.
+
+### What's safe
+
+- The Dockerfile does NOT touch the database on startup (it only runs uvicorn).
+- `docker compose build` is safe — it rebuilds the image without affecting the mounted `data/` volume.
+- `init_db()` in `database.py` uses `IF NOT EXISTS` — safe to call repeatedly.
+
 ## Key paths
 
 - Backend: `backend/` (FastAPI, Python)
