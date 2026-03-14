@@ -85,9 +85,6 @@ async function waitForApp(page: Page) {
   })
 }
 
-// Mask the date header (changes daily) so snapshots are stable
-const DATE_MASK = [{ selector: 'aside p.text-xs', color: '#e2e8f0' as `#${string}` }]
-
 test.describe('Visual regression – reli frontend', () => {
   test('full layout – empty state', async ({ page }) => {
     await interceptApiEmpty(page)
