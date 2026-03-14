@@ -23,6 +23,7 @@ def _client() -> AsyncOpenAI:
 @dataclass
 class UsageStats:
     """Accumulated LLM usage statistics across pipeline stages."""
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
@@ -65,8 +66,8 @@ async def _chat(messages: list[dict], model: str | None = None, usage_stats: Usa
         # or compute from usage. For now, use 0 and let the frontend show tokens.
         cost = 0.0
         # Some Requesty responses include cost info in the response object
-        if hasattr(response, 'x_request_cost'):
-            cost = float(getattr(response, 'x_request_cost', 0))
+        if hasattr(response, "x_request_cost"):
+            cost = float(getattr(response, "x_request_cost", 0))
         usage_stats.accumulate(
             prompt=response.usage.prompt_tokens or 0,
             completion=response.usage.completion_tokens or 0,
@@ -226,11 +227,7 @@ async def run_reasoning_agent(
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d (%A)")
     things_json = json.dumps(relevant_things, default=str)
-    user_content = (
-        f"Today's date: {today}\n\n"
-        f"User message: {message}\n\n"
-        f"Relevant Things from database:\n{things_json}"
-    )
+    user_content = f"Today's date: {today}\n\nUser message: {message}\n\nRelevant Things from database:\n{things_json}"
     if web_results:
         user_content += f"\n\nWeb search results:\n{json.dumps(web_results, default=str)}"
     if gmail_context:
@@ -263,15 +260,15 @@ async def run_reasoning_agent(
 # Stage 3: Validator — applies changes to SQLite
 # ---------------------------------------------------------------------------
 
-def apply_storage_changes(
-    storage_changes: dict, conn
-) -> dict[str, list[dict]]:
+
+def apply_storage_changes(storage_changes: dict, conn) -> dict[str, list[dict]]:
     """Stage 3: validate and apply changes; return what was actually applied."""
     import json as _json
     import uuid
     from datetime import datetime, timezone
 
-    from .vector_store import delete_thing as vs_delete, upsert_thing
+    from .vector_store import delete_thing as vs_delete
+    from .vector_store import upsert_thing
 
     applied: dict[str, list] = {"created": [], "updated": [], "deleted": [], "relationships_created": []}
 
@@ -386,13 +383,18 @@ def apply_storage_changes(
         meta = rel.get("metadata")
         meta_json = _json.dumps(meta) if meta else None
         conn.execute(
-            "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type, metadata) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type, metadata)"
+            " VALUES (?, ?, ?, ?, ?)",
             (rel_id, from_id, to_id, rel_type, meta_json),
         )
-        applied["relationships_created"].append({
-            "id": rel_id, "from_thing_id": from_id, "to_thing_id": to_id,
-            "relationship_type": rel_type,
-        })
+        applied["relationships_created"].append(
+            {
+                "id": rel_id,
+                "from_thing_id": from_id,
+                "to_thing_id": to_id,
+                "relationship_type": rel_type,
+            }
+        )
 
     # ── Update last_referenced on all retrieved things ────────────────────
     # This is called after reasoning runs; mark all referenced things
@@ -460,7 +462,9 @@ async def run_response_agent(
         f"Questions for user (if any): {json.dumps(questions_for_user)}"
     )
     if web_results:
-        context += f"\n\nWeb search results (cite relevant sources in your response):\n{json.dumps(web_results, default=str)}"
+        context += (
+            f"\n\nWeb search results (cite relevant sources in your response):\n{json.dumps(web_results, default=str)}"
+        )
     messages = [
         {"role": "system", "content": RESPONSE_AGENT_SYSTEM},
         {"role": "user", "content": context},

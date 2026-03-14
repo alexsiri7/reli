@@ -8,7 +8,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 
 from ..database import db
 from ..models import Relationship, RelationshipCreate, Thing, ThingCreate, ThingUpdate
-from ..vector_store import delete_thing as vs_delete, upsert_thing
+from ..vector_store import delete_thing as vs_delete
+from ..vector_store import upsert_thing
 
 router = APIRouter(prefix="/things", tags=["things"])
 
@@ -96,10 +97,23 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks):
 
     with db() as conn:
         conn.execute(
-            """INSERT INTO things (id, title, type_hint, parent_id, checkin_date, priority, active, surface, data, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (thing_id, body.title, body.type_hint, body.parent_id, checkin,
-             body.priority, int(body.active), int(body.surface), data_json, now, now),
+            "INSERT INTO things"
+            " (id, title, type_hint, parent_id, checkin_date, priority, active, surface, data,"
+            " created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                thing_id,
+                body.title,
+                body.type_hint,
+                body.parent_id,
+                checkin,
+                body.priority,
+                int(body.active),
+                int(body.surface),
+                data_json,
+                now,
+                now,
+            ),
         )
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
     background_tasks.add_task(upsert_thing, dict(row))
@@ -201,7 +215,9 @@ def list_relationships(thing_id: str):
     return [_parse_rel_row(r) for r in rows]
 
 
-@router.post("/relationships", response_model=Relationship, status_code=status.HTTP_201_CREATED, summary="Create a relationship")
+@router.post(
+    "/relationships", response_model=Relationship, status_code=status.HTTP_201_CREATED, summary="Create a relationship"
+)
 def create_relationship(body: RelationshipCreate):
     rel_id = str(uuid.uuid4())
     meta_json = json.dumps(body.metadata) if body.metadata is not None else None
@@ -213,7 +229,8 @@ def create_relationship(body: RelationshipCreate):
         if body.from_thing_id == body.to_thing_id:
             raise HTTPException(status_code=422, detail="A Thing cannot have a relationship with itself")
         conn.execute(
-            "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type, metadata) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type, metadata)"
+            " VALUES (?, ?, ?, ?, ?)",
             (rel_id, body.from_thing_id, body.to_thing_id, body.relationship_type, meta_json),
         )
         row = conn.execute("SELECT * FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()

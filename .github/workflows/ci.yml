@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
 
+      - name: Lint (ruff)
+        run: ruff check backend/ && ruff format --check backend/
+
       - name: Run tests
         run: pytest backend/
 

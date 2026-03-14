@@ -4,15 +4,16 @@ import pathlib
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
 
 load_dotenv()
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
-from .database import init_db
-from .routers import briefing, calendar, chat, gmail, things
+from fastapi import FastAPI  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import FileResponse  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+from .database import init_db  # noqa: E402
+from .routers import briefing, calendar, chat, gmail, things  # noqa: E402
 
 _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
 

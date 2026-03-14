@@ -1,20 +1,18 @@
 """Shared pytest fixtures for backend tests."""
 
-import sqlite3
-import tempfile
 from collections.abc import Generator
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
-
 # ---------------------------------------------------------------------------
 # Database fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def tmp_db_path(tmp_path: Path) -> Path:
@@ -35,6 +33,7 @@ def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
 # ---------------------------------------------------------------------------
 # Vector store mock
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def mock_vector_store():
@@ -65,6 +64,7 @@ def mock_vector_store():
 # ---------------------------------------------------------------------------
 # FastAPI test clients
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def client(patched_db) -> Generator[TestClient, None, None]:

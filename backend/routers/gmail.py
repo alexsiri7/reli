@@ -1,9 +1,7 @@
 """Gmail read-only integration: OAuth2 flow and message endpoints."""
 
 import base64
-import json
 import os
-from datetime import datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any

@@ -94,6 +94,7 @@ def assert_calendar_events_response_shape(obj: dict) -> None:
 # Fixtures — helpers for seeding data
 # ---------------------------------------------------------------------------
 
+
 def _create_thing(client, **overrides) -> dict:
     """Create a Thing and return the JSON response."""
     payload = {"title": "Test Thing", "priority": 3, **overrides}
@@ -104,11 +105,14 @@ def _create_thing(client, **overrides) -> dict:
 
 def _create_chat_message(client, session_id: str, role: str = "user", content: str = "hello") -> dict:
     """Post a chat history message and return the JSON response."""
-    resp = client.post("/api/chat/history", json={
-        "session_id": session_id,
-        "role": role,
-        "content": content,
-    })
+    resp = client.post(
+        "/api/chat/history",
+        json={
+            "session_id": session_id,
+            "role": role,
+            "content": content,
+        },
+    )
     assert resp.status_code == 201
     return resp.json()
 
@@ -116,6 +120,7 @@ def _create_chat_message(client, session_id: str, role: str = "user", content: s
 # ===========================================================================
 # Contract tests — Things endpoints
 # ===========================================================================
+
 
 class TestThingsContract:
     """GET/POST/PATCH /api/things — response shapes match frontend Thing type."""
@@ -132,12 +137,15 @@ class TestThingsContract:
             assert_thing_shape(item)
 
     def test_create_thing_returns_thing(self, client):
-        resp = client.post("/api/things", json={
-            "title": "New Contract Thing",
-            "type_hint": "task",
-            "priority": 2,
-            "data": {"key": "value"},
-        })
+        resp = client.post(
+            "/api/things",
+            json={
+                "title": "New Contract Thing",
+                "type_hint": "task",
+                "priority": 2,
+                "data": {"key": "value"},
+            },
+        )
         assert resp.status_code == 201
         assert_thing_shape(resp.json())
 
@@ -184,15 +192,19 @@ class TestThingsContract:
 # Contract tests — Chat History endpoints
 # ===========================================================================
 
+
 class TestChatHistoryContract:
     """GET/POST /api/chat/history — response shapes match frontend ChatMessage type."""
 
     def test_append_message_returns_chat_message(self, client):
-        resp = client.post("/api/chat/history", json={
-            "session_id": "contract-sess",
-            "role": "user",
-            "content": "hello",
-        })
+        resp = client.post(
+            "/api/chat/history",
+            json={
+                "session_id": "contract-sess",
+                "role": "user",
+                "content": "hello",
+            },
+        )
         assert resp.status_code == 201
         assert_chat_message_shape(resp.json())
 
@@ -237,12 +249,9 @@ MOCK_REASONING = {
 def _agent_patches(context=None, reasoning=None, reply="OK"):
     """Return a list of patch context managers for all chat pipeline agents."""
     return [
-        patch("backend.routers.chat.run_context_agent",
-              new=AsyncMock(return_value=context or MOCK_CONTEXT)),
-        patch("backend.routers.chat.run_reasoning_agent",
-              new=AsyncMock(return_value=reasoning or MOCK_REASONING)),
-        patch("backend.routers.chat.run_response_agent",
-              new=AsyncMock(return_value=reply)),
+        patch("backend.routers.chat.run_context_agent", new=AsyncMock(return_value=context or MOCK_CONTEXT)),
+        patch("backend.routers.chat.run_reasoning_agent", new=AsyncMock(return_value=reasoning or MOCK_REASONING)),
+        patch("backend.routers.chat.run_response_agent", new=AsyncMock(return_value=reply)),
     ]
 
 
@@ -253,10 +262,13 @@ class TestChatPipelineContract:
     async def test_chat_response_shape(self, async_client):
         patches = _agent_patches(reply="Hello back!")
         with patches[0], patches[1], patches[2]:
-            resp = await async_client.post("/api/chat", json={
-                "session_id": "contract-pipeline",
-                "message": "hi",
-            })
+            resp = await async_client.post(
+                "/api/chat",
+                json={
+                    "session_id": "contract-pipeline",
+                    "message": "hi",
+                },
+            )
         assert resp.status_code == 200
         assert_chat_response_shape(resp.json())
 
@@ -274,10 +286,13 @@ class TestChatPipelineContract:
         }
         patches = _agent_patches(reasoning=reasoning, reply="Created a task")
         with patches[0], patches[1], patches[2]:
-            resp = await async_client.post("/api/chat", json={
-                "session_id": "contract-changes",
-                "message": "create a task",
-            })
+            resp = await async_client.post(
+                "/api/chat",
+                json={
+                    "session_id": "contract-changes",
+                    "message": "create a task",
+                },
+            )
         body = resp.json()
         assert resp.status_code == 200
         assert_chat_response_shape(body)
@@ -289,6 +304,7 @@ class TestChatPipelineContract:
 # ===========================================================================
 # Contract tests — Briefing endpoint
 # ===========================================================================
+
 
 class TestBriefingContract:
     """GET /api/briefing — response shape matches BriefingResponse."""
@@ -320,12 +336,15 @@ class TestBriefingContract:
 # Contract tests — Calendar endpoints
 # ===========================================================================
 
+
 class TestCalendarContract:
     """GET /api/calendar/* — response shapes match frontend CalendarStatus/Event types."""
 
     def test_calendar_status_shape(self, client):
-        with patch("backend.routers.calendar.is_configured", return_value=False), \
-             patch("backend.routers.calendar.is_connected", return_value=False):
+        with (
+            patch("backend.routers.calendar.is_configured", return_value=False),
+            patch("backend.routers.calendar.is_connected", return_value=False),
+        ):
             resp = client.get("/api/calendar/status")
         assert resp.status_code == 200
         assert_calendar_status_shape(resp.json())
@@ -351,8 +370,10 @@ class TestCalendarContract:
                 "status": "confirmed",
             },
         ]
-        with patch("backend.routers.calendar.is_connected", return_value=True), \
-             patch("backend.routers.calendar.fetch_upcoming_events", return_value=mock_events):
+        with (
+            patch("backend.routers.calendar.is_connected", return_value=True),
+            patch("backend.routers.calendar.fetch_upcoming_events", return_value=mock_events),
+        ):
             resp = client.get("/api/calendar/events")
         assert resp.status_code == 200
         body = resp.json()
@@ -370,6 +391,7 @@ class TestCalendarContract:
 # ===========================================================================
 # Contract tests — Health endpoint
 # ===========================================================================
+
 
 class TestHealthContract:
     """GET /healthz — response shape."""
