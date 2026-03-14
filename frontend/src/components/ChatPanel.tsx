@@ -1,15 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-}
-
-function MessageBubble({ role, content, streaming, timestamp }: {
+function MessageBubble({ role, content, streaming }: {
   role: 'user' | 'assistant'
   content: string
   streaming?: boolean
-  timestamp: string
 }) {
   const isUser = role === 'user'
   return (
@@ -19,23 +15,16 @@ function MessageBubble({ role, content, streaming, timestamp }: {
           R
         </div>
       )}
-      <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[75%]`}>
-        <div
-          className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-            isUser
-              ? 'bg-indigo-600 text-white rounded-br-sm'
-              : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-sm'
-          }`}
-        >
-          {content}
-          {streaming && (
-            <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
-          )}
-        </div>
-        {!streaming && (
-          <span className="text-[10px] text-gray-400 dark:text-gray-600 mt-0.5 px-1">
-            {formatTime(timestamp)}
-          </span>
+      <div
+        className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+          isUser
+            ? 'bg-indigo-600 text-white rounded-br-sm'
+            : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-sm'
+        }`}
+      >
+        {content}
+        {streaming && (
+          <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
         )}
       </div>
     </div>
@@ -43,11 +32,13 @@ function MessageBubble({ role, content, streaming, timestamp }: {
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, sendMessage } = useStore(s => ({
-    messages: s.messages,
-    chatLoading: s.chatLoading,
-    sendMessage: s.sendMessage,
-  }))
+  const { messages, chatLoading, sendMessage } = useStore(
+    useShallow(s => ({
+      messages: s.messages,
+      chatLoading: s.chatLoading,
+      sendMessage: s.sendMessage,
+    }))
+  )
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -95,7 +86,6 @@ export function ChatPanel() {
             role={msg.role}
             content={msg.content}
             streaming={msg.streaming}
-            timestamp={msg.timestamp}
           />
         ))}
         <div ref={bottomRef} />
