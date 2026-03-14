@@ -27,6 +27,7 @@ export interface ChatMessage {
 
 interface ReliState {
   things: Thing[]
+  briefing: Thing[]
   messages: ChatMessage[]
   sessionId: string
   loading: boolean
@@ -34,9 +35,11 @@ interface ReliState {
   error: string | null
 
   fetchThings: () => Promise<void>
-  snoozeThing: (id: string, days: number) => Promise<void>
+  fetchBriefing: () => Promise<void>
+  snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
   fetchHistory: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
+  clearError: () => void
 }
 
 const SESSION_ID = `reli-${Math.random().toString(36).slice(2)}`
@@ -45,6 +48,7 @@ const BASE = '/api'
 
 export const useStore = create<ReliState>((set, get) => ({
   things: [],
+  briefing: [],
   messages: [],
   sessionId: SESSION_ID,
   loading: false,
@@ -65,22 +69,29 @@ export const useStore = create<ReliState>((set, get) => ({
     }
   },
 
-  snoozeThing: async (id: string, days: number) => {
-    const thing = get().things.find(t => t.id === id)
-    if (!thing) return
-    const base = thing.checkin_date ? new Date(thing.checkin_date) : new Date()
-    base.setDate(base.getDate() + days)
-    const newDate = base.toISOString()
+  fetchBriefing: async () => {
+    try {
+      const res = await fetch(`${BASE}/briefing`)
+      if (!res.ok) return
+      const data: Thing[] = await res.json()
+      set({ briefing: data })
+    } catch {
+      // ignore — briefing is best-effort
+    }
+  },
+
+  snoozeThing: async (id: string, checkinDate: string | null) => {
     try {
       const res = await fetch(`${BASE}/things/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ checkin_date: newDate }),
+        body: JSON.stringify({ checkin_date: checkinDate }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const updated: Thing = await res.json()
       set(state => ({
         things: state.things.map(t => t.id === id ? updated : t),
+        briefing: state.briefing.map(t => t.id === id ? updated : t),
       }))
     } catch (e) {
       set({ error: String(e) })
@@ -170,6 +181,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
       // Refresh things in case they changed
       get().fetchThings()
+      get().fetchBriefing()
     } catch (e) {
       set(state => ({
         messages: state.messages.map(m =>
@@ -183,4 +195,6 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ chatLoading: false })
     }
   },
+
+  clearError: () => set({ error: null }),
 }))
