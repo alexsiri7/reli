@@ -23,8 +23,15 @@ def _parse_dt(val: str | None) -> datetime | None:
 
 def _row_to_thing(row) -> Thing:
     data = row["data"]
+    # SQLite data may be double-encoded (string containing JSON string).
+    # Unwrap until we get a dict/list/None or a non-JSON string.
+    while isinstance(data, str) and data:
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            break
     if isinstance(data, str):
-        data = json.loads(data) if data else None
+        data = None
     return Thing(
         id=row["id"],
         title=row["title"],
