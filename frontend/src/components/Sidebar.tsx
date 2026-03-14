@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import { ThingCard } from './ThingCard'
+import { GmailPanel } from './GmailPanel'
 
 export function Sidebar() {
   const { things, briefing, loading } = useStore(useShallow(s => ({ things: s.things, briefing: s.briefing, loading: s.loading })))
@@ -119,6 +120,9 @@ export function Sidebar() {
             {active.map(t => <ThingCard key={t.id} thing={t} />)}
           </section>
         )}
+
+        {/* Gmail */}
+        <GmailPanel />
 
         {!loading && things.length === 0 && (
           <div className="px-4 py-6 text-sm text-gray-400 dark:text-gray-500 text-center">

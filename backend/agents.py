@@ -49,11 +49,19 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
   "filter_params": {
     "active_only": true,
     "type_hint": null
-  }
+  },
+  "gmail_query": null
 }
 - search_queries: 1-3 short text fragments to match against Thing titles/data
 - filter_params.active_only: true unless user asks about archived/all items
 - filter_params.type_hint: null or one of task|note|idea|project|goal|journal
+- gmail_query: If the user is asking about emails/messages/inbox, set this to a Gmail
+  search query string (e.g. "from:boss", "subject:report", "is:unread"). Otherwise null.
+  Examples of user intents that need gmail_query:
+  - "what emails did I get today" → "newer_than:1d"
+  - "any emails from John" → "from:John"
+  - "check my inbox for project updates" → "subject:project update"
+  - "summarize my unread emails" → "is:unread"
 """
 
 
@@ -113,7 +121,8 @@ Rules:
 
 
 async def run_reasoning_agent(
-    message: str, history: list[dict], relevant_things: list[dict]
+    message: str, history: list[dict], relevant_things: list[dict],
+    gmail_context: list[dict] | None = None,
 ) -> dict:
     """Stage 2: decide what changes to make."""
     from datetime import datetime, timezone
@@ -125,6 +134,8 @@ async def run_reasoning_agent(
         f"User message: {message}\n\n"
         f"Relevant Things from database:\n{things_json}"
     )
+    if gmail_context:
+        user_content += f"\n\nRecent Gmail messages matching user's query:\n{json.dumps(gmail_context, default=str)}"
     messages = [{"role": "system", "content": REASONING_AGENT_SYSTEM}]
     for h in history[-10:]:
         messages.append({"role": h["role"], "content": h["content"]})
