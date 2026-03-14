@@ -15,12 +15,19 @@ export interface Thing {
   updated_at: string
 }
 
+export interface AppliedChanges {
+  created?: { id: string; title: string; type_hint?: string }[]
+  updated?: { id: string; title: string; [key: string]: unknown }[]
+  deleted?: string[]
+}
+
 export interface ChatMessage {
   id: number | string
   session_id: string
   role: 'user' | 'assistant'
   content: string
-  applied_changes: Record<string, unknown> | null
+  applied_changes: AppliedChanges | null
+  questions_for_user: string[]
   timestamp: string
   streaming?: boolean
 }
@@ -121,7 +128,7 @@ export const useStore = create<ReliState>((set, get) => ({
       if (!res.ok) return
       const data: ChatMessage[] = await res.json()
       set({
-        messages: data,
+        messages: data.map(m => ({ ...m, questions_for_user: m.questions_for_user ?? [] })),
         hasMoreHistory: data.length >= HISTORY_PAGE_SIZE,
       })
     } catch {
@@ -163,6 +170,7 @@ export const useStore = create<ReliState>((set, get) => ({
       role: 'user',
       content: text,
       applied_changes: null,
+      questions_for_user: [],
       timestamp: new Date().toISOString(),
     }
     const placeholderMsg: ChatMessage = {
@@ -171,6 +179,7 @@ export const useStore = create<ReliState>((set, get) => ({
       role: 'assistant',
       content: '',
       applied_changes: null,
+      questions_for_user: [],
       timestamp: new Date().toISOString(),
       streaming: true,
     }
@@ -195,6 +204,7 @@ export const useStore = create<ReliState>((set, get) => ({
         role: 'assistant',
         content: data.reply,
         applied_changes: data.applied_changes ?? null,
+        questions_for_user: data.questions_for_user ?? [],
         timestamp: new Date().toISOString(),
       }
 

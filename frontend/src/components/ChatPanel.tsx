@@ -1,13 +1,72 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore } from '../store'
+import { useStore, type AppliedChanges, type ChatMessage } from '../store'
 
-function MessageBubble({ role, content, streaming }: {
-  role: 'user' | 'assistant'
-  content: string
-  streaming?: boolean
-}) {
-  const isUser = role === 'user'
+function formatTimestamp(iso: string): string {
+  const date = new Date(iso)
+  if (isNaN(date.getTime())) return ''
+  const now = new Date()
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  if (isToday) return time
+  const monthDay = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return `${monthDay}, ${time}`
+}
+
+function ActionEntry({ changes }: { changes: AppliedChanges }) {
+  const items: { label: string; detail: string }[] = []
+
+  if (changes.created) {
+    for (const c of changes.created) {
+      const hint = c.type_hint ? ` (${c.type_hint})` : ''
+      items.push({ label: 'Created', detail: `${c.title}${hint}` })
+    }
+  }
+  if (changes.updated) {
+    for (const u of changes.updated) {
+      items.push({ label: 'Updated', detail: u.title })
+    }
+  }
+  if (changes.deleted) {
+    for (const id of changes.deleted) {
+      items.push({ label: 'Deleted', detail: id })
+    }
+  }
+
+  if (items.length === 0) return null
+
+  return (
+    <div className="flex flex-col items-center gap-1 my-2">
+      {items.map((item, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"
+        >
+          <span
+            className={`font-medium ${
+              item.label === 'Created'
+                ? 'text-green-600 dark:text-green-400'
+                : item.label === 'Updated'
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-red-500 dark:text-red-400'
+            }`}
+          >
+            {item.label}:
+          </span>
+          <span>{item.detail}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MessageBubble({ msg }: { msg: ChatMessage }) {
+  const isUser = msg.role === 'user'
+  const ts = formatTimestamp(msg.timestamp)
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
       {!isUser && (
@@ -15,16 +74,36 @@ function MessageBubble({ role, content, streaming }: {
           R
         </div>
       )}
-      <div
-        className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-          isUser
-            ? 'bg-indigo-600 text-white rounded-br-sm'
-            : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-sm'
-        }`}
-      >
-        {content}
-        {streaming && (
-          <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
+      <div className="flex flex-col max-w-[75%]">
+        <div
+          className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+            isUser
+              ? 'bg-indigo-600 text-white rounded-br-sm'
+              : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-sm'
+          }`}
+        >
+          {msg.content}
+          {msg.streaming && (
+            <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
+          )}
+          {!isUser && msg.questions_for_user && msg.questions_for_user.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+              {msg.questions_for_user.map((q, i) => (
+                <p key={i} className="text-sm font-medium text-indigo-600 dark:text-indigo-300">
+                  {q}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+        {ts && (
+          <span
+            className={`text-[10px] mt-1 text-gray-400 dark:text-gray-500 ${
+              isUser ? 'text-right' : 'text-left'
+            }`}
+          >
+            {ts}
+          </span>
         )}
       </div>
     </div>
@@ -118,12 +197,12 @@ export function ChatPanel() {
           </div>
         )}
         {messages.map(msg => (
-          <MessageBubble
-            key={msg.id}
-            role={msg.role}
-            content={msg.content}
-            streaming={msg.streaming}
-          />
+          <div key={msg.id}>
+            <MessageBubble msg={msg} />
+            {msg.role === 'assistant' && msg.applied_changes && (
+              <ActionEntry changes={msg.applied_changes} />
+            )}
+          </div>
         ))}
         <div ref={bottomRef} />
       </div>
