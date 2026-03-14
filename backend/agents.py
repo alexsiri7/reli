@@ -203,7 +203,8 @@ def apply_storage_changes(
             continue
         thing_id = str(uuid.uuid4())
         checkin = item.get("checkin_date")
-        data_json = _json.dumps(item.get("data") or {})
+        raw_data = item.get("data") or {}
+        data_json = raw_data if isinstance(raw_data, str) else _json.dumps(raw_data)
         conn.execute(
             """INSERT INTO things
                (id, title, type_hint, parent_id, checkin_date, priority, active, data, created_at, updated_at)
@@ -242,7 +243,8 @@ def apply_storage_changes(
         if "active" in changes:
             fields["active"] = int(bool(changes["active"]))
         if "data" in changes:
-            fields["data"] = _json.dumps(changes["data"])
+            raw_data = changes["data"]
+            fields["data"] = raw_data if isinstance(raw_data, str) else _json.dumps(raw_data)
         if not fields:
             continue
         fields["updated_at"] = now
