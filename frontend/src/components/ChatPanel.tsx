@@ -82,7 +82,7 @@ function ContextDropdown({ changes }: { changes: AppliedChanges }) {
     <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+        className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors cursor-pointer"
       >
         <svg
           className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -107,7 +107,7 @@ function ContextDropdown({ changes }: { changes: AppliedChanges }) {
                   <button
                     key={t.id}
                     onClick={() => openThingDetail(t.id)}
-                    className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors w-full text-left"
+                    className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors w-full text-left cursor-pointer"
                   >
                     <span>{typeIcon(t.type_hint, thingTypes)}</span>
                     <span className="truncate">{t.title}</span>
@@ -131,7 +131,7 @@ function ContextDropdown({ changes }: { changes: AppliedChanges }) {
                   <button
                     key={c.id}
                     onClick={() => openThingDetail(c.id)}
-                    className="flex items-center gap-1.5 text-xs w-full text-left hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                    className="flex items-center gap-1.5 text-xs w-full text-left hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
                   >
                     <span className="font-medium text-green-600 dark:text-green-400 shrink-0">Created</span>
                     <span>{typeIcon(c.type_hint, thingTypes)}</span>
@@ -142,7 +142,7 @@ function ContextDropdown({ changes }: { changes: AppliedChanges }) {
                   <button
                     key={u.id}
                     onClick={() => openThingDetail(u.id)}
-                    className="flex items-center gap-1.5 text-xs w-full text-left hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                    className="flex items-center gap-1.5 text-xs w-full text-left hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
                   >
                     <span className="font-medium text-amber-600 dark:text-amber-400 shrink-0">Updated</span>
                     <span>{typeIcon((u as { type_hint?: string }).type_hint, thingTypes)}</span>
