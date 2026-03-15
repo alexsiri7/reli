@@ -68,17 +68,23 @@ def mock_vector_store():
 
 @pytest.fixture()
 def client(patched_db) -> Generator[TestClient, None, None]:
-    """Synchronous TestClient with temp DB and mocked vector store."""
+    """Synchronous TestClient with temp DB, mocked vector store, and API key."""
+    from backend.auth import API_KEY
     from backend.main import app
 
-    with TestClient(app) as c:
+    with TestClient(app, headers={"X-API-Key": API_KEY}) as c:
         yield c
 
 
 @pytest_asyncio.fixture()
 async def async_client(patched_db) -> AsyncClient:
     """Async HTTPX client for async endpoint tests."""
+    from backend.auth import API_KEY
     from backend.main import app
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-API-Key": API_KEY},
+    ) as ac:
         yield ac

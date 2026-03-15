@@ -8,11 +8,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import Depends, FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import FileResponse  # noqa: E402
+from fastapi.responses import FileResponse, HTMLResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
+from .auth import API_KEY, require_api_key  # noqa: E402
 from .database import init_db  # noqa: E402
 from .routers import briefing, calendar, chat, gmail, proactive, sweep, thing_types, things  # noqa: E402
 from .sweep_scheduler import start_scheduler, stop_scheduler  # noqa: E402
@@ -47,14 +48,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(things.router, prefix="/api")
-app.include_router(thing_types.router, prefix="/api")
-app.include_router(briefing.router, prefix="/api")
-app.include_router(chat.router, prefix="/api")
-app.include_router(gmail.router, prefix="/api")
-app.include_router(calendar.router, prefix="/api")
-app.include_router(proactive.router, prefix="/api")
-app.include_router(sweep.router, prefix="/api")
+# All /api routes require a valid API key
+_api_deps = [Depends(require_api_key)]
+
+app.include_router(things.router, prefix="/api", dependencies=_api_deps)
+app.include_router(thing_types.router, prefix="/api", dependencies=_api_deps)
+app.include_router(briefing.router, prefix="/api", dependencies=_api_deps)
+app.include_router(chat.router, prefix="/api", dependencies=_api_deps)
+app.include_router(gmail.router, prefix="/api", dependencies=_api_deps)
+app.include_router(calendar.router, prefix="/api", dependencies=_api_deps)
+app.include_router(proactive.router, prefix="/api", dependencies=_api_deps)
+app.include_router(sweep.router, prefix="/api", dependencies=_api_deps)
 
 
 @app.get("/healthz", tags=["health"])
@@ -66,12 +70,22 @@ def health() -> dict[str, str]:
 if _FRONTEND_DIST.is_dir():
     app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
 
+    _INDEX_HTML: str | None = None
+
+    def _get_index_html() -> str:
+        """Read index.html and inject the API key as a window global."""
+        global _INDEX_HTML  # noqa: PLW0603
+        if _INDEX_HTML is None:
+            raw = (_FRONTEND_DIST / "index.html").read_text()
+            inject = f'<script>window.__RELI_API_KEY__="{API_KEY}";</script>'
+            _INDEX_HTML = raw.replace("</head>", f"{inject}</head>", 1)
+        return _INDEX_HTML
+
     @app.get("/{full_path:path}", include_in_schema=False)
-    def spa_fallback(full_path: str) -> FileResponse:
-        # Serve static files from dist root (favicon, icons, etc.)
+    def spa_fallback(full_path: str) -> FileResponse | HTMLResponse:
         # Resolve to prevent directory traversal (e.g. ../../etc/passwd)
         if full_path:
             static_file = (_FRONTEND_DIST / full_path).resolve()
             if static_file.is_relative_to(_FRONTEND_DIST.resolve()) and static_file.is_file():
                 return FileResponse(static_file)
-        return FileResponse(_FRONTEND_DIST / "index.html")
+        return HTMLResponse(_get_index_html())

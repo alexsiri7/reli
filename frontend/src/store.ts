@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { apiFetch } from './api'
 import { cacheThings, getCachedThings } from './offline/cache-things'
 import { cacheThingTypes, getCachedThingTypes } from './offline/cache-thing-types'
 import { cacheRelationships, getCachedRelationships } from './offline/cache-relationships'
@@ -201,8 +202,8 @@ async function fetchThingDetailWithFallback(
 ): Promise<[Thing | null, Relationship[]]> {
   try {
     const [thing, rels] = await Promise.all([
-      fetch(`${BASE}/things/${id}`).then(r => r.ok ? r.json() : null),
-      fetch(`${BASE}/things/${id}/relationships`).then(r => r.ok ? r.json() : []),
+      apiFetch(`${BASE}/things/${id}`).then(r => r.ok ? r.json() : null),
+      apiFetch(`${BASE}/things/${id}/relationships`).then(r => r.ok ? r.json() : []),
     ])
     if (rels.length > 0) cacheRelationships(rels).catch(() => {})
     return [thing, rels]
@@ -299,7 +300,7 @@ export const useStore = create<ReliState>((set, get) => ({
     }
     set({ searchLoading: true })
     try {
-      const res = await fetch(`${BASE}/things/search?q=${encodeURIComponent(query)}&limit=50`)
+      const res = await apiFetch(`${BASE}/things/search?q=${encodeURIComponent(query)}&limit=50`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: Thing[] = await res.json()
       set({ searchResults: data })
@@ -314,7 +315,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
   fetchThingTypes: async () => {
     try {
-      const res = await fetch(`${BASE}/thing-types`)
+      const res = await apiFetch(`${BASE}/thing-types`)
       if (!res.ok) return
       const data: ThingType[] = await res.json()
       set({ thingTypes: data })
@@ -330,7 +331,7 @@ export const useStore = create<ReliState>((set, get) => ({
   fetchThings: async () => {
     set({ loading: true, error: null })
     try {
-      const res = await fetch(`${BASE}/things?active_only=true&limit=200`)
+      const res = await apiFetch(`${BASE}/things?active_only=true&limit=200`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: Thing[] = await res.json()
       set({ things: data })
@@ -351,7 +352,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
   fetchBriefing: async () => {
     try {
-      const res = await fetch(`${BASE}/briefing`)
+      const res = await apiFetch(`${BASE}/briefing`)
       if (!res.ok) return
       const data = await res.json()
       set({ briefing: data.things ?? [], findings: data.findings ?? [] })
@@ -362,7 +363,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
   fetchProactiveSurfaces: async () => {
     try {
-      const res = await fetch(`${BASE}/proactive?days=7`)
+      const res = await apiFetch(`${BASE}/proactive?days=7`)
       if (!res.ok) return
       const data: ProactiveSurface[] = await res.json()
       set({ proactiveSurfaces: data })
@@ -388,7 +389,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
   snoozeFinding: async (findingId: string, until: string) => {
     try {
-      const res = await fetch(`${BASE}/briefing/findings/${findingId}/snooze`, {
+      const res = await apiFetch(`${BASE}/briefing/findings/${findingId}/snooze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ until }),
@@ -434,7 +435,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
   fetchDailyStats: async () => {
     try {
-      const res = await fetch(`${BASE}/chat/stats/today`)
+      const res = await apiFetch(`${BASE}/chat/stats/today`)
       if (!res.ok) return
       const data: SessionStats = await res.json()
       set({ sessionStats: data })
@@ -446,7 +447,7 @@ export const useStore = create<ReliState>((set, get) => ({
   fetchHistory: async () => {
     set({ historyLoading: true })
     try {
-      const res = await fetch(`${BASE}/chat/history/${SESSION_ID}?limit=${HISTORY_PAGE_SIZE}`)
+      const res = await apiFetch(`${BASE}/chat/history/${SESSION_ID}?limit=${HISTORY_PAGE_SIZE}`)
       if (!res.ok) return
       const data: ChatMessage[] = await res.json()
       set({
@@ -469,7 +470,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
     set({ historyLoading: true })
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${BASE}/chat/history/${SESSION_ID}?limit=${HISTORY_PAGE_SIZE}&before=${oldestMsg.id}`
       )
       if (!res.ok) return
@@ -512,7 +513,7 @@ export const useStore = create<ReliState>((set, get) => ({
     }))
 
     try {
-      const res = await fetch(`${BASE}/chat`, {
+      const res = await apiFetch(`${BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: SESSION_ID, message: text }),
@@ -562,7 +563,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
   fetchCalendarStatus: async () => {
     try {
-      const res = await fetch(`${BASE}/calendar/status`)
+      const res = await apiFetch(`${BASE}/calendar/status`)
       if (!res.ok) return
       const data: CalendarStatus = await res.json()
       set({ calendarStatus: data })
@@ -573,7 +574,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
   fetchCalendarEvents: async () => {
     try {
-      const res = await fetch(`${BASE}/calendar/events`)
+      const res = await apiFetch(`${BASE}/calendar/events`)
       if (!res.ok) return
       const data = await res.json()
       set({ calendarEvents: data.events ?? [] })
@@ -584,7 +585,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
   connectCalendar: async () => {
     try {
-      const res = await fetch(`${BASE}/calendar/auth`)
+      const res = await apiFetch(`${BASE}/calendar/auth`)
       if (!res.ok) return
       const data = await res.json()
       if (data.auth_url) {
@@ -597,7 +598,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
   disconnectCalendar: async () => {
     try {
-      const res = await fetch(`${BASE}/calendar/disconnect`, { method: 'DELETE' })
+      const res = await apiFetch(`${BASE}/calendar/disconnect`, { method: 'DELETE' })
       if (!res.ok) return
       set({ calendarStatus: { configured: true, connected: false }, calendarEvents: [] })
     } catch (e) {
