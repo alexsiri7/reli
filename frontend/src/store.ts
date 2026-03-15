@@ -65,12 +65,22 @@ export interface ContextThing {
   type_hint?: string | null
 }
 
+export interface GmailMessage {
+  id: string
+  subject: string
+  from: string
+  date: string
+  snippet: string
+}
+
 export interface AppliedChanges {
   created?: { id: string; title: string; type_hint?: string }[]
   updated?: { id: string; title: string; [key: string]: unknown }[]
   deleted?: string[]
   context_things?: ContextThing[]
   web_results?: WebSearchResult[]
+  gmail_context?: GmailMessage[]
+  calendar_events?: CalendarEvent[]
 }
 
 export interface ProactiveSurface {

@@ -409,6 +409,10 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
             }
             for c in usage.calls
         ]
+    if gmail_context:
+        applied_with_sources["gmail_context"] = gmail_context
+    if calendar_events:
+        applied_with_sources["calendar_events"] = calendar_events
     changes_json = json.dumps(applied_with_sources)
     with db() as conn:
         conn.execute(
