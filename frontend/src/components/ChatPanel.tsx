@@ -359,6 +359,15 @@ export function ChatPanel() {
   const prevScrollHeightRef = useRef<number>(0)
   const isLoadingOlderRef = useRef(false)
 
+  // Scroll to bottom instantly on initial mount
+  const hasMountScrolled = useRef(false)
+  useEffect(() => {
+    if (!hasMountScrolled.current && messages.length > 0) {
+      hasMountScrolled.current = true
+      bottomRef.current?.scrollIntoView()
+    }
+  }, [messages])
+
   // Auto-scroll to bottom on new messages (but not when loading older ones)
   useEffect(() => {
     if (isLoadingOlderRef.current) {
@@ -369,7 +378,7 @@ export function ChatPanel() {
         container.scrollTop = newScrollHeight - prevScrollHeightRef.current
       }
       isLoadingOlderRef.current = false
-    } else {
+    } else if (hasMountScrolled.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages])
