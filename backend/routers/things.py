@@ -76,16 +76,60 @@ def search_things(
 
     pattern = f"%{q}%"
     with db() as conn:
-        sql = "SELECT * FROM things WHERE (title LIKE ? OR data LIKE ?)"
-        params: list[str | int] = [pattern, pattern]
+        # Build a WHERE filter applied to all branches of the UNION
+        filters = ""
+        filter_params: list[str | int] = []
         if active_only:
-            sql += " AND active = 1"
+            filters += " AND t.active = 1"
         if type_hint:
-            sql += " AND type_hint = ?"
-            params.append(type_hint)
-        sql += " ORDER BY updated_at DESC LIMIT ?"
-        params.append(limit)
+            filters += " AND t.type_hint = ?"
+            filter_params.append(type_hint)
+
+        # Direct matches on title, data, or type_hint
+        direct_params: list[str | int] = [pattern, pattern, pattern, *filter_params]
+        direct_sql = (
+            "SELECT t.*, 1 AS _rank FROM things t"
+            " WHERE (t.title LIKE ? OR t.data LIKE ? OR t.type_hint LIKE ?)"
+            + filters
+        )
+
+        # Things connected via relationships to directly matching Things,
+        # or connected by a relationship whose type matches the query
+        rel_sql = (
+            "SELECT t.*, 2 AS _rank FROM things t"
+            " WHERE t.id IN ("
+            "   SELECT r.to_thing_id FROM thing_relationships r"
+            "   JOIN things m ON r.from_thing_id = m.id"
+            "   WHERE m.title LIKE ? OR m.data LIKE ?"
+            "   UNION"
+            "   SELECT r.from_thing_id FROM thing_relationships r"
+            "   JOIN things m ON r.to_thing_id = m.id"
+            "   WHERE m.title LIKE ? OR m.data LIKE ?"
+            "   UNION"
+            "   SELECT r.from_thing_id FROM thing_relationships r"
+            "   WHERE r.relationship_type LIKE ?"
+            "   UNION"
+            "   SELECT r.to_thing_id FROM thing_relationships r"
+            "   WHERE r.relationship_type LIKE ?"
+            " )"
+            + filters
+        )
+        rel_params: list[str | int] = [pattern, pattern, pattern, pattern, pattern, pattern, *filter_params]
+
+        # Combine with deduplication: direct matches first, then related
+        sql = (
+            "SELECT * FROM ("
+            f"  {direct_sql}"
+            f"  UNION ALL"
+            f"  {rel_sql}"
+            ") sub"
+            " GROUP BY sub.id"
+            " ORDER BY MIN(sub._rank), sub.updated_at DESC"
+            " LIMIT ?"
+        )
+        params = [*direct_params, *rel_params, limit]
         rows = conn.execute(sql, params).fetchall()
+
     return [_row_to_thing(r) for r in rows]
 
 

@@ -159,7 +159,7 @@ export function Sidebar() {
             </svg>
             <input
               type="text"
-              placeholder="Search all things…"
+              placeholder="Search everything…"
               value={searchQuery}
               onChange={e => handleSearchChange(e.target.value)}
               className="w-full pl-8 pr-7 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
