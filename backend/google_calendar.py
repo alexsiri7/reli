@@ -11,6 +11,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 from .database import db
+from .token_encryption import decrypt_or_plaintext, encrypt
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
@@ -61,10 +62,15 @@ def exchange_code(code: str) -> Credentials:
 
 
 def _save_credentials(creds: Credentials) -> None:
-    """Store credentials in SQLite."""
+    """Store credentials in SQLite with sensitive fields encrypted."""
     expiry_str = creds.expiry.isoformat() if creds.expiry else None
     scopes_str = json.dumps(list(creds.scopes)) if creds.scopes else None
     now = datetime.now(timezone.utc).isoformat()
+
+    # Encrypt sensitive token fields
+    enc_access = encrypt(creds.token) if creds.token else None
+    enc_refresh = encrypt(creds.refresh_token) if creds.refresh_token else None
+    enc_secret = encrypt(creds.client_secret) if creds.client_secret else ""
 
     with db() as conn:
         conn.execute(
@@ -81,11 +87,11 @@ def _save_credentials(creds: Credentials) -> None:
                scopes=excluded.scopes,
                updated_at=excluded.updated_at""",
             (
-                creds.token,
-                creds.refresh_token,
+                enc_access,
+                enc_refresh,
                 creds.token_uri,
                 creds.client_id,
-                creds.client_secret,
+                enc_secret,
                 expiry_str,
                 scopes_str,
                 now,
@@ -94,21 +100,35 @@ def _save_credentials(creds: Credentials) -> None:
 
 
 def _load_credentials() -> Credentials | None:
-    """Load stored credentials from SQLite."""
+    """Load stored credentials from SQLite, decrypting sensitive fields.
+
+    Transparently migrates plaintext tokens written before encryption was
+    enabled: if decryption fails the value is treated as plaintext and
+    re-encrypted on next save.
+    """
     with db() as conn:
         row = conn.execute("SELECT * FROM google_tokens WHERE id = 1").fetchone()
     if not row:
         return None
 
+    # Decrypt sensitive fields (handles plaintext migration)
+    access_token, access_enc = decrypt_or_plaintext(row["access_token"]) if row["access_token"] else (None, True)
+    refresh_token, refresh_enc = decrypt_or_plaintext(row["refresh_token"]) if row["refresh_token"] else (None, True)
+    client_secret, secret_enc = decrypt_or_plaintext(row["client_secret"]) if row["client_secret"] else ("", True)
+
     creds = Credentials(
-        token=row["access_token"],
-        refresh_token=row["refresh_token"],
+        token=access_token,
+        refresh_token=refresh_token,
         token_uri=row["token_uri"],
         client_id=row["client_id"],
-        client_secret=row["client_secret"],
+        client_secret=client_secret,
     )
     if row["expiry"]:
         creds.expiry = datetime.fromisoformat(row["expiry"]).replace(tzinfo=None)
+
+    # Migrate: if any field was stored as plaintext, re-save encrypted
+    if not (access_enc and refresh_enc and secret_enc):
+        _save_credentials(creds)
 
     return creds
 

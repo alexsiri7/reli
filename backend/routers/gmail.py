@@ -58,20 +58,37 @@ class GmailThread(BaseModel):
 
 
 def _save_token(creds: Any) -> None:
-    """Persist OAuth2 credentials to disk."""
+    """Persist OAuth2 credentials to disk (encrypted)."""
+    from ..token_encryption import encrypt_json
+
     TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-    TOKEN_PATH.write_text(creds.to_json())
+    TOKEN_PATH.write_text(encrypt_json(creds.to_json()))
 
 
 def _load_creds() -> Any:
-    """Load and refresh credentials. Returns None if not connected."""
+    """Load and refresh credentials. Returns None if not connected.
+
+    Transparently migrates plaintext token files to encrypted format.
+    """
     if not TOKEN_PATH.exists():
         return None
+
+    import json as _json
 
     from google.auth.transport.requests import Request as GoogleRequest
     from google.oauth2.credentials import Credentials
 
-    creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), GMAIL_SCOPES)
+    from ..token_encryption import decrypt_json_or_plaintext
+
+    raw = TOKEN_PATH.read_text()
+    json_str, was_encrypted = decrypt_json_or_plaintext(raw)
+
+    creds = Credentials.from_authorized_user_info(_json.loads(json_str), GMAIL_SCOPES)
+
+    # Migrate plaintext file to encrypted
+    if not was_encrypted:
+        _save_token(creds)
+
     if creds.expired and creds.refresh_token:
         creds.refresh(GoogleRequest())
         _save_token(creds)
