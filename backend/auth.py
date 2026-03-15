@@ -1,41 +1,55 @@
-"""Simple API-key authentication for single-user Reli deployment."""
+"""JWT session authentication for Reli.
+
+Provides require_user() dependency that decodes the JWT from the session cookie
+and returns the user_id. Used as a FastAPI dependency on all protected routes.
+"""
 
 import os
-import secrets
-from pathlib import Path
 
-from fastapi import Depends, HTTPException, Security, status
-from fastapi.security import APIKeyHeader
+import jwt
+from fastapi import HTTPException, Request, status
 
-_data_dir = os.environ.get("DATA_DIR", str(Path(__file__).parent))
-_KEY_FILE = Path(_data_dir) / "api_key.txt"
-
-_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+JWT_ALGORITHM = "HS256"
+COOKIE_NAME = "reli_session"
 
 
-def _load_or_create_key() -> str:
-    """Load the API key from disk, or generate one on first run."""
-    if _KEY_FILE.exists():
-        key = _KEY_FILE.read_text().strip()
-        if key:
-            return key
-    key = secrets.token_urlsafe(32)
-    _KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _KEY_FILE.write_text(key + "\n")
-    _KEY_FILE.chmod(0o600)
-    return key
+async def require_user(request: Request) -> str:
+    """FastAPI dependency that validates the session cookie and returns user_id.
 
+    Returns the user_id (sub claim) from the JWT.
+    Raises 401 if the cookie is missing, expired, or invalid.
+    """
+    if not SECRET_KEY:
+        # No SECRET_KEY configured — auth is disabled, allow all requests.
+        # This preserves backward compatibility for local development.
+        return ""
 
-API_KEY: str = _load_or_create_key()
-
-
-async def require_api_key(
-    api_key: str | None = Security(_api_key_header),
-) -> str:
-    """FastAPI dependency that validates the X-API-Key header."""
-    if api_key is None or not secrets.compare_digest(api_key, API_KEY):
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key",
+            detail="Not authenticated",
         )
-    return api_key
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired",
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
+
+    user_id: str = payload.get("sub", "")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session payload",
+        )
+
+    return user_id

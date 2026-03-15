@@ -1,0 +1,175 @@
+"""Google OAuth2 login + JWT session authentication."""
+
+import os
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
+from google_auth_oauthlib.flow import Flow
+
+from ..database import db
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.environ.get(
+    "GOOGLE_AUTH_REDIRECT_URI",
+    "http://localhost:8000/api/auth/google/callback",
+)
+AUTH_SCOPES = ["openid", "email", "profile"]
+
+# JWT settings
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_SECONDS = 60 * 60 * 24 * 7  # 7 days
+COOKIE_NAME = "reli_session"
+
+
+def _client_config() -> dict:
+    return {
+        "web": {
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [GOOGLE_REDIRECT_URI],
+        }
+    }
+
+
+def _create_jwt(user_id: str, email: str) -> str:
+    """Create a signed JWT for the given user."""
+    import jwt
+
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "iat": now,
+        "exp": now.timestamp() + JWT_EXPIRY_SECONDS,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def _decode_jwt(token: str) -> dict[str, str]:
+    """Decode and validate a JWT. Raises on invalid/expired tokens."""
+    import jwt
+
+    result: dict[str, str] = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    return result
+
+
+def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> str:
+    """Create or update a user from Google profile info. Returns user_id."""
+    now = datetime.now(timezone.utc).isoformat()
+    user_id: str
+    with db() as conn:
+        row = conn.execute("SELECT id FROM users WHERE google_id = ?", (google_id,)).fetchone()
+        if row:
+            user_id = row["id"]
+            conn.execute(
+                "UPDATE users SET email = ?, name = ?, picture = ?, updated_at = ? WHERE id = ?",
+                (email, name, picture, now, user_id),
+            )
+        else:
+            user_id = f"u-{uuid.uuid4().hex[:12]}"
+            conn.execute(
+                """INSERT INTO users (id, email, google_id, name, picture, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (user_id, email, google_id, name, picture, now, now),
+            )
+    return user_id
+
+
+@router.get("/google", summary="Start Google OAuth flow")
+def google_login() -> dict:
+    """Return the Google OAuth2 authorization URL."""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(status_code=501, detail="Google OAuth not configured")
+    if not SECRET_KEY:
+        raise HTTPException(status_code=501, detail="SECRET_KEY not configured")
+
+    flow = Flow.from_client_config(_client_config(), scopes=AUTH_SCOPES)
+    flow.redirect_uri = GOOGLE_REDIRECT_URI
+    auth_url, _ = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+    )
+    return {"auth_url": str(auth_url)}
+
+
+@router.get("/google/callback", include_in_schema=False)
+def google_callback(code: str, response: Response) -> RedirectResponse:
+    """Exchange authorization code for tokens, create session."""
+    if not SECRET_KEY:
+        raise HTTPException(status_code=501, detail="SECRET_KEY not configured")
+
+    flow = Flow.from_client_config(_client_config(), scopes=AUTH_SCOPES)
+    flow.redirect_uri = GOOGLE_REDIRECT_URI
+    flow.fetch_token(code=code)
+
+    # Verify and extract user info from the id_token
+    credentials = flow.credentials
+    id_info = google_id_token.verify_oauth2_token(
+        credentials.id_token,
+        google_requests.Request(),
+        GOOGLE_CLIENT_ID,
+    )
+
+    google_id = id_info["sub"]
+    email = id_info.get("email", "")
+    name = id_info.get("name", email)
+    picture = id_info.get("picture")
+
+    user_id = _upsert_user(google_id, email, name, picture)
+    token = _create_jwt(user_id, email)
+
+    redirect = RedirectResponse(url="/")
+    redirect.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=False,  # Set True in production with HTTPS
+        samesite="lax",
+        max_age=JWT_EXPIRY_SECONDS,
+        path="/",
+    )
+    return redirect
+
+
+@router.get("/me", summary="Get current user")
+def get_current_user(request: Request) -> dict:
+    """Return the current user's profile from their JWT session cookie."""
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload = _decode_jwt(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    user_id = payload.get("sub")
+    with db() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    return {
+        "id": row["id"],
+        "email": row["email"],
+        "name": row["name"],
+        "picture": row["picture"],
+    }
+
+
+@router.post("/logout", summary="Log out")
+def logout(response: Response) -> dict:
+    """Clear the session cookie."""
+    response.delete_cookie(key=COOKIE_NAME, path="/")
+    return {"status": "logged_out"}
