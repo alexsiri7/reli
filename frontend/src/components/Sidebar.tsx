@@ -402,9 +402,15 @@ export function Sidebar() {
         {/* Drag handle — desktop only */}
         <div
           onPointerDown={handleDragStart}
-          className="hidden md:block absolute top-0 right-0 w-1.5 h-full cursor-col-resize group/handle z-10"
+          className="hidden md:flex absolute top-0 right-0 w-2 h-full cursor-col-resize group/handle z-10 items-center justify-center"
         >
-          <div className="w-0.5 h-full mx-auto bg-transparent group-hover/handle:bg-indigo-400 dark:group-hover/handle:bg-indigo-500 transition-colors" />
+          <div className="w-1 h-full bg-gray-300 dark:bg-gray-600 group-hover/handle:bg-indigo-400 dark:group-hover/handle:bg-indigo-500 transition-colors" />
+          {/* Grip indicator — three dots centered vertically */}
+          <div className="absolute flex flex-col gap-1 pointer-events-none">
+            <div className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 group-hover/handle:bg-indigo-300 dark:group-hover/handle:bg-indigo-400 transition-colors" />
+            <div className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 group-hover/handle:bg-indigo-300 dark:group-hover/handle:bg-indigo-400 transition-colors" />
+            <div className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 group-hover/handle:bg-indigo-300 dark:group-hover/handle:bg-indigo-400 transition-colors" />
+          </div>
         </div>
       </aside>
     </>
