@@ -112,15 +112,24 @@ class UsageInfo(BaseModel):
     model: str = ""
 
 
+class ModelUsage(BaseModel):
+    """Per-model usage breakdown."""
+
+    model: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_calls: int = 0
+
+
 class SessionUsage(BaseModel):
     """Cumulative usage stats for the current session."""
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
-    cost_usd: float = 0.0
     api_calls: int = 0
-    model: str = ""
+    per_model: list[ModelUsage] = []
 
 
 class ChatResponse(BaseModel):

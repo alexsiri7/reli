@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type AppliedChanges, type ChatMessage, type SessionStats, type WebSearchResult } from '../store'
+import { useStore, type AppliedChanges, type ChatMessage, type ModelUsage, type SessionStats, type WebSearchResult } from '../store'
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso)
@@ -105,22 +105,13 @@ function ActionEntry({ changes }: { changes: AppliedChanges }) {
   )
 }
 
-function formatCost(usd: number): string {
-  if (usd === 0) return ''
-  if (usd < 0.001) return `$${usd.toFixed(5)}`
-  if (usd < 0.01) return `$${usd.toFixed(4)}`
-  return `$${usd.toFixed(3)}`
-}
-
 function UsagePill({ msg }: { msg: ChatMessage }) {
   const totalTokens = (msg.prompt_tokens ?? 0) + (msg.completion_tokens ?? 0)
   if (totalTokens === 0) return null
-  const cost = msg.cost_usd ?? 0
-  const costStr = formatCost(cost)
 
   return (
     <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
-      {formatTokens(totalTokens)} tokens{costStr && ` · ~${costStr}`}
+      {formatTokens(totalTokens)} tokens
     </span>
   )
 }
@@ -180,27 +171,72 @@ function formatTokens(n: number): string {
   return String(n)
 }
 
-function NerdStatsBar({ stats }: { stats: SessionStats }) {
+function ModelRow({ m }: { m: ModelUsage }) {
+  return (
+    <tr className="border-t border-gray-200 dark:border-gray-700">
+      <td className="py-1.5 pr-3 text-gray-700 dark:text-gray-300 font-medium whitespace-nowrap">
+        {m.model.split('/').pop()}
+      </td>
+      <td className="py-1.5 px-3 text-right tabular-nums">{formatTokens(m.prompt_tokens)}</td>
+      <td className="py-1.5 px-3 text-right tabular-nums">{formatTokens(m.completion_tokens)}</td>
+      <td className="py-1.5 pl-3 text-right tabular-nums">{m.api_calls}</td>
+    </tr>
+  )
+}
+
+function NerdStatsIcon({ stats }: { stats: SessionStats }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
   if (stats.api_calls === 0) return null
 
   return (
-    <div className="px-4 py-1.5 border-b border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-950 shrink-0 flex items-center gap-4 font-mono text-[11px] text-gray-500 dark:text-gray-500">
-      {stats.model && (
-        <span className="text-gray-600 dark:text-gray-400" title="Model">
-          {stats.model.split('/').pop()}
-        </span>
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
+        title="Session usage stats"
+        aria-label="Session usage stats"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 13h2v8H3zM9 8h2v13H9zM15 11h2v10h-2zM21 4h2v17h-2z" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[280px] font-mono text-[11px] text-gray-500 dark:text-gray-400">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold text-xs text-gray-700 dark:text-gray-300">Session Usage</span>
+            <span className="text-gray-400">{formatTokens(stats.total_tokens)} tokens · {stats.api_calls} call{stats.api_calls !== 1 ? 's' : ''}</span>
+          </div>
+          {stats.per_model.length > 0 && (
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="text-gray-400 dark:text-gray-500">
+                  <th className="text-left font-normal pr-3 pb-1">Model</th>
+                  <th className="text-right font-normal px-3 pb-1">Prompt</th>
+                  <th className="text-right font-normal px-3 pb-1">Compl.</th>
+                  <th className="text-right font-normal pl-3 pb-1">Calls</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.per_model.map(m => (
+                  <ModelRow key={m.model} m={m} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       )}
-      <span title="Total tokens (prompt + completion)">
-        {formatTokens(stats.total_tokens)} tokens
-      </span>
-      {stats.cost_usd > 0 && (
-        <span title="Session cost">
-          ${stats.cost_usd < 0.01 ? stats.cost_usd.toFixed(4) : stats.cost_usd.toFixed(2)}
-        </span>
-      )}
-      <span title="API calls this session">
-        {stats.api_calls} call{stats.api_calls !== 1 ? 's' : ''}
-      </span>
     </div>
   )
 }
@@ -267,13 +303,13 @@ export function ChatPanel() {
   return (
     <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 min-w-0">
       {/* Title bar */}
-      <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
-        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Chat</h2>
-        <p className="text-xs text-gray-400 dark:text-gray-500">Talk to Reli — create, update, and query your Things</p>
+      <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0 flex items-start justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Chat</h2>
+          <p className="text-xs text-gray-400 dark:text-gray-500">Talk to Reli — create, update, and query your Things</p>
+        </div>
+        <NerdStatsIcon stats={sessionStats} />
       </div>
-
-      {/* Nerd stats bar */}
-      <NerdStatsBar stats={sessionStats} />
 
       {/* Messages */}
       <div

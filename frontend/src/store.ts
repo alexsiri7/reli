@@ -54,13 +54,20 @@ export interface CalendarStatus {
   connected: boolean
 }
 
+export interface ModelUsage {
+  model: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  api_calls: number
+}
+
 export interface SessionStats {
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
-  cost_usd: number
   api_calls: number
-  model: string
+  per_model: ModelUsage[]
 }
 
 export interface ChatMessage {
@@ -131,7 +138,7 @@ export const useStore = create<ReliState>((set, get) => ({
   briefing: [],
   messages: [],
   sessionId: SESSION_ID,
-  sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost_usd: 0, api_calls: 0, model: '' },
+  sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, per_model: [] },
   loading: false,
   chatLoading: false,
   historyLoading: false,

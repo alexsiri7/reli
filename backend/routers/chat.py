@@ -17,7 +17,7 @@ from ..agents import (
 from ..database import db
 from ..google_calendar import fetch_upcoming_events
 from ..google_calendar import is_connected as gcal_connected
-from ..models import ChatMessage, ChatMessageCreate, ChatRequest, ChatResponse, SessionUsage, UsageInfo
+from ..models import ChatMessage, ChatMessageCreate, ChatRequest, ChatResponse, ModelUsage, SessionUsage, UsageInfo
 from ..vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 from ..web_search import google_search, is_search_configured
 
@@ -333,21 +333,40 @@ async def chat(body: ChatRequest) -> ChatResponse:
             ),
         )
 
-        # Compute cumulative session usage
-        row = conn.execute(
+        # Compute cumulative session usage with per-model breakdown
+        totals_row = conn.execute(
             "SELECT COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
-            "COALESCE(SUM(cost_usd), 0.0) as cost, COALESCE(SUM(api_calls), 0) as calls "
+            "COALESCE(SUM(api_calls), 0) as calls "
             "FROM chat_history WHERE session_id = ? AND role = 'assistant'",
             (session_id,),
         ).fetchone()
 
+        model_rows = conn.execute(
+            "SELECT COALESCE(model, 'unknown') as model, "
+            "COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
+            "COALESCE(SUM(api_calls), 0) as calls "
+            "FROM chat_history WHERE session_id = ? AND role = 'assistant' "
+            "GROUP BY model ORDER BY calls DESC",
+            (session_id,),
+        ).fetchall()
+
+    per_model = [
+        ModelUsage(
+            model=r["model"],
+            prompt_tokens=r["pt"],
+            completion_tokens=r["ct"],
+            total_tokens=r["pt"] + r["ct"],
+            api_calls=r["calls"],
+        )
+        for r in model_rows
+    ]
+
     session_usage = SessionUsage(
-        prompt_tokens=row["pt"],
-        completion_tokens=row["ct"],
-        total_tokens=row["pt"] + row["ct"],
-        cost_usd=round(row["cost"], 6),
-        api_calls=row["calls"],
-        model=usage.model,
+        prompt_tokens=totals_row["pt"],
+        completion_tokens=totals_row["ct"],
+        total_tokens=totals_row["pt"] + totals_row["ct"],
+        api_calls=totals_row["calls"],
+        per_model=per_model,
     )
 
     return ChatResponse(
