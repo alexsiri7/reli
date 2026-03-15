@@ -63,5 +63,9 @@ if _FRONTEND_DIST.is_dir():
     app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
-    def spa_fallback(full_path: str) -> FileResponse:  # noqa: ARG001
+    def spa_fallback(full_path: str) -> FileResponse:
+        # Serve static files from dist root (favicon, icons, etc.)
+        static_file = _FRONTEND_DIST / full_path
+        if full_path and static_file.is_file():
+            return FileResponse(static_file)
         return FileResponse(_FRONTEND_DIST / "index.html")
