@@ -62,9 +62,7 @@ _config = _load_config()
 REQUESTY_BASE_URL = os.environ.get("REQUESTY_BASE_URL", _config["llm"]["base_url"])
 REQUESTY_API_KEY = os.environ.get("REQUESTY_API_KEY", "")
 _models = _config["llm"]["models"]
-REQUESTY_MODEL = os.environ.get(
-    "REQUESTY_MODEL", _models.get("context", "google/gemini-2.5-flash-lite")
-)
+REQUESTY_MODEL = os.environ.get("REQUESTY_MODEL", _models.get("context", "google/gemini-2.5-flash-lite"))
 REQUESTY_REASONING_MODEL = os.environ.get(
     "REQUESTY_REASONING_MODEL", _models.get("reasoning", "google/gemini-3-flash-preview")
 )

@@ -41,7 +41,7 @@ let mockState: Record<string, unknown> = {
 }
 
 vi.mock('zustand/react/shallow', () => ({
-  useShallow: (fn: Function) => fn,
+  useShallow: <T,>(fn: (state: unknown) => T) => fn,
 }))
 
 vi.mock('../store', () => ({
