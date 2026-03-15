@@ -122,6 +122,15 @@ class ChatMessageCreate(BaseModel):
     applied_changes: dict[str, Any] | None = None
 
 
+class CallUsage(BaseModel):
+    """Usage for a single API call."""
+
+    model: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost_usd: float = 0.0
+
+
 class ChatMessage(BaseModel):
     id: int
     session_id: str
@@ -132,6 +141,7 @@ class ChatMessage(BaseModel):
     completion_tokens: int = 0
     cost_usd: float = 0.0
     model: str | None = None
+    per_call_usage: list[CallUsage] = []
     timestamp: datetime
 
     model_config = {"from_attributes": True}
@@ -154,6 +164,7 @@ class UsageInfo(BaseModel):
     cost_usd: float = 0.0
     api_calls: int = 0
     model: str = ""
+    per_call_usage: list[CallUsage] = []
 
 
 class ModelUsage(BaseModel):

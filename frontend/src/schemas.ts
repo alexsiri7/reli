@@ -52,6 +52,13 @@ export const AppliedChangesSchema = z.object({
   web_results: z.array(WebSearchResultSchema).optional(),
 })
 
+const CallUsageSchema = z.object({
+  model: z.string(),
+  prompt_tokens: z.number(),
+  completion_tokens: z.number(),
+  cost_usd: z.number(),
+})
+
 export const ChatMessageSchema = z.object({
   id: z.union([z.number(), z.string()]),
   session_id: z.string(),
@@ -63,6 +70,7 @@ export const ChatMessageSchema = z.object({
   completion_tokens: z.number().optional(),
   cost_usd: z.number().optional(),
   model: z.string().nullable().optional(),
+  per_call_usage: z.array(CallUsageSchema).optional(),
   timestamp: z.string(),
 })
 
@@ -75,6 +83,7 @@ export const ChatResponseSchema = z.object({
     completion_tokens: z.number(),
     cost_usd: z.number(),
     model: z.string().nullable(),
+    per_call_usage: z.array(CallUsageSchema).optional(),
   }).optional(),
   session_usage: z.object({
     prompt_tokens: z.number(),

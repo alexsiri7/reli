@@ -215,6 +215,15 @@ class UsageStats:
             "cost_usd": round(self.cost_usd, 6),
             "api_calls": self.api_calls,
             "model": self.model,
+            "per_call_usage": [
+                {
+                    "model": c.model,
+                    "prompt_tokens": c.prompt_tokens,
+                    "completion_tokens": c.completion_tokens,
+                    "cost_usd": round(c.cost_usd, 6),
+                }
+                for c in self.calls
+            ],
         }
 
 

@@ -138,6 +138,13 @@ export interface SessionStats {
   per_model: ModelUsage[]
 }
 
+export interface CallUsage {
+  model: string
+  prompt_tokens: number
+  completion_tokens: number
+  cost_usd: number
+}
+
 export interface ChatMessage {
   id: number | string
   session_id: string
@@ -149,6 +156,7 @@ export interface ChatMessage {
   completion_tokens?: number
   cost_usd?: number
   model?: string | null
+  per_call_usage?: CallUsage[]
   timestamp: string
   streaming?: boolean
 }
@@ -630,6 +638,7 @@ export const useStore = create<ReliState>((set, get) => ({
         completion_tokens: data.usage?.completion_tokens ?? 0,
         cost_usd: data.usage?.cost_usd ?? 0,
         model: data.usage?.model ?? null,
+        per_call_usage: data.usage?.per_call_usage ?? [],
         timestamp: new Date().toISOString(),
       }
 

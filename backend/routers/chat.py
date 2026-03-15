@@ -41,6 +41,10 @@ def _row_to_msg(row: sqlite3.Row) -> ChatMessage:
     changes = row["applied_changes"]
     if isinstance(changes, str):
         changes = json.loads(changes) if changes else None
+    # Extract per-call usage from applied_changes if present
+    per_call_usage = []
+    if isinstance(changes, dict) and "per_call_usage" in changes:
+        per_call_usage = changes["per_call_usage"]
     return ChatMessage(
         id=row["id"],
         session_id=row["session_id"],
@@ -51,6 +55,7 @@ def _row_to_msg(row: sqlite3.Row) -> ChatMessage:
         completion_tokens=row["completion_tokens"] or 0,
         cost_usd=row["cost_usd"] or 0.0,
         model=row["model"],
+        per_call_usage=per_call_usage,
         timestamp=_parse_dt(row["timestamp"]) or datetime.min,
     )
 
@@ -393,6 +398,17 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     applied_with_sources["context_things"] = context_things
     if web_results:
         applied_with_sources["web_results"] = web_results
+    # Store per-call usage breakdown so it's available when loading history
+    if usage.calls:
+        applied_with_sources["per_call_usage"] = [
+            {
+                "model": c.model,
+                "prompt_tokens": c.prompt_tokens,
+                "completion_tokens": c.completion_tokens,
+                "cost_usd": round(c.cost_usd, 6),
+            }
+            for c in usage.calls
+        ]
     changes_json = json.dumps(applied_with_sources)
     with db() as conn:
         conn.execute(
