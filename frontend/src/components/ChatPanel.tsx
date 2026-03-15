@@ -289,8 +289,6 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  if (stats.api_calls === 0) return null
-
   return (
     <div ref={ref} className="relative">
       <button
@@ -309,7 +307,7 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
             <span className="font-semibold text-xs text-gray-700 dark:text-gray-300">Session Usage</span>
             <span className="text-gray-400">{formatTokens(stats.total_tokens)} tokens · {stats.api_calls} call{stats.api_calls !== 1 ? 's' : ''} · {formatCost(stats.cost_usd)}</span>
           </div>
-          {stats.per_model.length > 0 && (
+          {stats.per_model.length > 0 ? (
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="text-gray-400 dark:text-gray-500">
@@ -326,6 +324,8 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
                 ))}
               </tbody>
             </table>
+          ) : (
+            <p className="text-center text-gray-400 dark:text-gray-500 py-2">No usage yet</p>
           )}
         </div>
       )}
