@@ -7,6 +7,7 @@ type Msg = {
   role: 'user' | 'assistant'
   content: string
   applied_changes: null
+  questions_for_user: string[]
   timestamp: string
   streaming?: boolean
   prompt_tokens?: number
@@ -27,6 +28,19 @@ const mockStore = {
 
 vi.mock('../store', () => ({
   useStore: (selector: (s: typeof mockStore) => unknown) => selector(mockStore),
+}))
+
+vi.mock('../hooks/useVoiceInput', () => ({
+  speechRecognitionSupported: false,
+  useVoiceInput: () => ({ listening: false, toggleListening: vi.fn() }),
+}))
+
+vi.mock('../hooks/useTTS', () => ({
+  ttsSupported: false,
+  useTTS: () => ({ speakingId: null, speak: vi.fn(), stop: vi.fn() }),
+  useAvailableVoices: () => [],
+  getStoredVoiceURI: () => null,
+  setStoredVoiceURI: vi.fn(),
 }))
 
 import { ChatPanel } from '../components/ChatPanel'
@@ -54,6 +68,7 @@ describe('ChatPanel', () => {
         role: 'user',
         content: 'Hello there',
         applied_changes: null,
+        questions_for_user: [],
         timestamp: '2026-01-01T12:00:00Z',
       },
       {
@@ -62,6 +77,7 @@ describe('ChatPanel', () => {
         role: 'assistant',
         content: 'Hi back',
         applied_changes: null,
+        questions_for_user: [],
         timestamp: '2026-01-01T12:01:00Z',
       },
     ]

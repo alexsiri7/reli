@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore, type AppliedChanges, type ChatMessage, type ModelUsage, type SessionStats, type WebSearchResult } from '../store'
+import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
+import { useTTS, ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso)
@@ -116,7 +118,88 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
   )
 }
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+function SpeakButton({ msg, speakingId, speak }: { msg: ChatMessage; speakingId: string | null; speak: (text: string, id: string) => void }) {
+  if (!ttsSupported || msg.role === 'user') return null
+
+  const isSpeaking = speakingId === String(msg.id)
+
+  return (
+    <button
+      onClick={() => speak(msg.content, String(msg.id))}
+      className={`p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${
+        isSpeaking ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500'
+      }`}
+      title={isSpeaking ? 'Stop speaking' : 'Read aloud'}
+      aria-label={isSpeaking ? 'Stop speaking' : 'Read aloud'}
+    >
+      {isSpeaking ? (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h12v12H6z" />
+        </svg>
+      ) : (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25h2.24z" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
+function VoiceSettings() {
+  const [open, setOpen] = useState(false)
+  const voices = useAvailableVoices()
+  const [selectedURI, setSelectedURI] = useState(getStoredVoiceURI)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  if (!ttsSupported || voices.length <= 1) return null
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
+        title="Voice settings"
+        aria-label="Voice settings"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25h2.24z" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[220px]">
+          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">TTS Voice</label>
+          <select
+            value={selectedURI ?? ''}
+            onChange={e => {
+              const uri = e.target.value || null
+              setSelectedURI(uri)
+              setStoredVoiceURI(uri)
+            }}
+            className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1.5"
+          >
+            <option value="">Default</option>
+            {voices.map(v => (
+              <option key={v.voiceURI} value={v.voiceURI}>
+                {v.name} ({v.lang})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingId: string | null; speak: (text: string, id: string) => void }) {
   const isUser = msg.role === 'user'
   const ts = formatTimestamp(msg.timestamp)
 
@@ -159,6 +242,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
             </span>
           )}
           {!isUser && <UsagePill msg={msg} />}
+          {!isUser && <SpeakButton msg={msg} speakingId={speakingId} speak={speak} />}
         </div>
       </div>
     </div>
@@ -265,6 +349,13 @@ export function ChatPanel() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const { speakingId, speak } = useTTS()
+
+  const handleTranscript = useCallback((text: string) => {
+    setInput(prev => (prev ? prev + ' ' + text : text))
+    inputRef.current?.focus()
+  }, [])
+  const { listening, toggleListening } = useVoiceInput(handleTranscript)
   const prevScrollHeightRef = useRef<number>(0)
   const isLoadingOlderRef = useRef(false)
 
@@ -316,7 +407,10 @@ export function ChatPanel() {
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Chat</h2>
           <p className="text-xs text-gray-400 dark:text-gray-500">Talk to Reli — create, update, and query your Things</p>
         </div>
-        <NerdStatsIcon stats={sessionStats} />
+        <div className="flex items-center gap-1">
+          <VoiceSettings />
+          <NerdStatsIcon stats={sessionStats} />
+        </div>
       </div>
 
       {/* Messages */}
@@ -344,7 +438,7 @@ export function ChatPanel() {
             {msg.role === 'assistant' && msg.applied_changes && (
               <ActionEntry changes={msg.applied_changes} />
             )}
-            <MessageBubble msg={msg} />
+            <MessageBubble msg={msg} speakingId={speakingId} speak={speak} />
           </div>
         ))}
         <div ref={bottomRef} />
@@ -368,6 +462,22 @@ export function ChatPanel() {
               t.style.height = `${t.scrollHeight}px`
             }}
           />
+          {speechRecognitionSupported && (
+            <button
+              onClick={toggleListening}
+              className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                listening
+                  ? 'bg-red-500 text-white animate-pulse'
+                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+              title={listening ? 'Stop recording' : 'Voice input'}
+              aria-label={listening ? 'Stop recording' : 'Voice input'}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={submit}
             disabled={!input.trim() || chatLoading}
@@ -384,7 +494,7 @@ export function ChatPanel() {
           </button>
         </div>
         <p className="text-xs text-gray-400 dark:text-gray-600 text-center mt-1.5">
-          Enter to send · Shift+Enter for new line
+          Enter to send · Shift+Enter for new line{speechRecognitionSupported ? ' · 🎤 for voice' : ''}
         </p>
       </div>
     </div>
