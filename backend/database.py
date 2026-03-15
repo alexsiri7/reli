@@ -279,7 +279,6 @@ def init_db() -> None:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(user_id, service)
             );
-            CREATE INDEX IF NOT EXISTS idx_google_tokens_user_id ON google_tokens(user_id);
         """)
         _migrate_chat_history_usage(conn)
         _migrate_things_graph(conn)
