@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { Relationship, ThingType } from '../store'
-import { typeIcon, formatTimestamp, priorityLabel } from '../utils'
+import { typeIcon, formatTimestamp, formatDate, isOverdue, priorityLabel } from '../utils'
 
 export function DetailPanel() {
   const {
@@ -144,6 +144,20 @@ export function DetailPanel() {
                 )}
                 <span className="text-gray-500 dark:text-gray-400">{priorityLabel(thing.priority)}</span>
               </div>
+
+              {/* Check-in date */}
+              {thing.checkin_date && (() => {
+                const overdue = isOverdue(thing.checkin_date)
+                const dateLabel = formatDate(thing.checkin_date)
+                return (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="shrink-0">📅</span>
+                    <span className={overdue ? 'text-red-500 font-semibold' : 'text-gray-600 dark:text-gray-300'}>
+                      {overdue ? '⚠ ' : ''}{dateLabel}
+                    </span>
+                  </div>
+                )
+              })()}
 
               {/* Data fields */}
               {dataEntries.length > 0 && (
