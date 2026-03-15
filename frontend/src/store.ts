@@ -108,6 +108,15 @@ export interface ChatMessage {
   streaming?: boolean
 }
 
+export interface Relationship {
+  id: string
+  from_thing_id: string
+  to_thing_id: string
+  relationship_type: string
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
+
 interface ReliState {
   thingTypes: ThingType[]
   things: Thing[]
@@ -129,6 +138,17 @@ interface ReliState {
   searchLoading: boolean
   searchThings: (query: string) => Promise<void>
   clearSearch: () => void
+
+  // Detail panel
+  detailThingId: string | null
+  detailHistory: string[]
+  detailThing: Thing | null
+  detailRelationships: Relationship[]
+  detailLoading: boolean
+  openThingDetail: (id: string) => void
+  navigateThingDetail: (id: string) => void
+  goBackThingDetail: () => void
+  closeThingDetail: () => void
   fetchThingTypes: () => Promise<void>
   fetchThings: () => Promise<void>
   fetchBriefing: () => Promise<void>
@@ -178,6 +198,70 @@ export const useStore = create<ReliState>((set, get) => ({
   proactiveSurfaces: [],
   searchResults: [],
   searchLoading: false,
+
+  // Detail panel
+  detailThingId: null,
+  detailHistory: [],
+  detailThing: null,
+  detailRelationships: [],
+  detailLoading: false,
+
+  openThingDetail: (id: string) => {
+    set({ detailThingId: id, detailHistory: [], detailLoading: true, detailThing: null, detailRelationships: [] })
+    Promise.all([
+      fetch(`${BASE}/things/${id}`).then(r => r.ok ? r.json() : null),
+      fetch(`${BASE}/things/${id}/relationships`).then(r => r.ok ? r.json() : []),
+    ]).then(([thing, rels]) => {
+      if (get().detailThingId === id) {
+        set({ detailThing: thing, detailRelationships: rels, detailLoading: false })
+      }
+    }).catch(() => {
+      if (get().detailThingId === id) set({ detailLoading: false })
+    })
+  },
+
+  navigateThingDetail: (id: string) => {
+    const current = get().detailThingId
+    if (!current || current === id) return
+    set(s => ({
+      detailThingId: id,
+      detailHistory: [...s.detailHistory, current],
+      detailLoading: true,
+      detailThing: null,
+      detailRelationships: [],
+    }))
+    Promise.all([
+      fetch(`${BASE}/things/${id}`).then(r => r.ok ? r.json() : null),
+      fetch(`${BASE}/things/${id}/relationships`).then(r => r.ok ? r.json() : []),
+    ]).then(([thing, rels]) => {
+      if (get().detailThingId === id) {
+        set({ detailThing: thing, detailRelationships: rels, detailLoading: false })
+      }
+    }).catch(() => {
+      if (get().detailThingId === id) set({ detailLoading: false })
+    })
+  },
+
+  goBackThingDetail: () => {
+    const history = get().detailHistory
+    if (history.length === 0) return
+    const prevId = history[history.length - 1]
+    set({ detailThingId: prevId, detailHistory: history.slice(0, -1), detailLoading: true, detailThing: null, detailRelationships: [] })
+    Promise.all([
+      fetch(`${BASE}/things/${prevId}`).then(r => r.ok ? r.json() : null),
+      fetch(`${BASE}/things/${prevId}/relationships`).then(r => r.ok ? r.json() : []),
+    ]).then(([thing, rels]) => {
+      if (get().detailThingId === prevId) {
+        set({ detailThing: thing, detailRelationships: rels, detailLoading: false })
+      }
+    }).catch(() => {
+      if (get().detailThingId === prevId) set({ detailLoading: false })
+    })
+  },
+
+  closeThingDetail: () => {
+    set({ detailThingId: null, detailHistory: [], detailThing: null, detailRelationships: [], detailLoading: false })
+  },
 
   searchThings: async (query: string) => {
     if (!query.trim()) {

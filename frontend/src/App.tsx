@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore } from './store'
 import { Sidebar } from './components/Sidebar'
 import { ChatPanel } from './components/ChatPanel'
+import { DetailPanel } from './components/DetailPanel'
 
 function App() {
   const { fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
@@ -45,6 +46,7 @@ function App() {
       )}
       <Sidebar />
       <ChatPanel />
+      <DetailPanel />
     </div>
   )
 }

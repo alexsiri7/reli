@@ -3,12 +3,13 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { ThingCard } from '../components/ThingCard'
 
 const snoozeThing = vi.fn()
+const openThingDetail = vi.fn()
 
 const thingTypes: { name: string; icon: string }[] = []
 
 vi.mock('../store', () => ({
-  useStore: (selector: (s: { snoozeThing: typeof snoozeThing; things: typeof things; thingTypes: typeof thingTypes }) => unknown) =>
-    selector({ snoozeThing, things, thingTypes }),
+  useStore: (selector: (s: { snoozeThing: typeof snoozeThing; thingTypes: typeof thingTypes; openThingDetail: typeof openThingDetail }) => unknown) =>
+    selector({ snoozeThing, thingTypes, openThingDetail }),
 }))
 
 const baseThing = {
@@ -29,30 +30,10 @@ const baseThing = {
   completed_count: null,
 }
 
-const things = [
-  baseThing,
-  {
-    id: 't2',
-    title: 'Sub-task A',
-    type_hint: 'task' as const,
-    parent_id: 't1',
-    checkin_date: null,
-    priority: 3,
-    active: true,
-    surface: true,
-    data: null,
-    created_at: '2026-01-02T00:00:00Z',
-    updated_at: '2026-01-02T00:00:00Z',
-    last_referenced: null,
-    open_questions: null,
-    children_count: null,
-    completed_count: null,
-  },
-]
-
 beforeEach(() => {
   snoozeThing.mockReset()
   snoozeThing.mockResolvedValue(undefined)
+  openThingDetail.mockReset()
 })
 
 describe('ThingCard', () => {
@@ -107,46 +88,33 @@ describe('ThingCard', () => {
     expect(passed.getDate()).toBe(nextWeek.getDate())
   })
 
-  it('does not show details by default', () => {
+  it('does not show inline details (detail panel handles this)', () => {
     render(<ThingCard thing={baseThing} />)
     expect(screen.queryByText(/Critical/)).not.toBeInTheDocument()
   })
 
-  it('expands to show priority and timestamps on click', () => {
+  it('calls openThingDetail on click', () => {
     render(<ThingCard thing={baseThing} />)
     fireEvent.click(screen.getByRole('button', { name: /Finish report/ }))
-    expect(screen.getByText('🔴 Critical')).toBeInTheDocument()
-    expect(screen.getByText(/Created/)).toBeInTheDocument()
+    expect(openThingDetail).toHaveBeenCalledWith('t1')
   })
 
-  it('shows data entries when expanded', () => {
-    const thingWithData = { ...baseThing, data: { birthday: '1990-05-20', notes: 'Important' } }
-    render(<ThingCard thing={thingWithData} />)
-    fireEvent.click(screen.getByRole('button', { name: /Finish report/ }))
-    expect(screen.getByText('birthday:')).toBeInTheDocument()
-    expect(screen.getByText('1990-05-20')).toBeInTheDocument()
-    expect(screen.getByText('notes:')).toBeInTheDocument()
-    expect(screen.getByText('Important')).toBeInTheDocument()
-  })
-
-  it('shows children when expanded', () => {
+  it('does not call openThingDetail when snooze is clicked', () => {
     render(<ThingCard thing={baseThing} />)
-    fireEvent.click(screen.getByRole('button', { name: /Finish report/ }))
-    expect(screen.getByText(/Sub-task A/)).toBeInTheDocument()
+    fireEvent.click(screen.getByTitle('Snooze'))
+    expect(openThingDetail).not.toHaveBeenCalled()
   })
 
-  it('shows parent when expanded', () => {
-    render(<ThingCard thing={things[1]} />)
-    fireEvent.click(screen.getByRole('button', { name: /Sub-task A/ }))
-    expect(screen.getByText(/Finish report/)).toBeInTheDocument()
+  it('shows project progress bar', () => {
+    const project = { ...baseThing, type_hint: 'project' as const, children_count: 5, completed_count: 3 }
+    render(<ThingCard thing={project} />)
+    expect(screen.getByText('3/5')).toBeInTheDocument()
   })
 
-  it('collapses on second click', () => {
-    render(<ThingCard thing={baseThing} />)
-    const row = screen.getByRole('button', { name: /Finish report/ })
-    fireEvent.click(row)
-    expect(screen.getByText('🔴 Critical')).toBeInTheDocument()
-    fireEvent.click(row)
-    expect(screen.queryByText('🔴 Critical')).not.toBeInTheDocument()
+  it('shows overdue indicator', () => {
+    const pastDate = new Date()
+    pastDate.setDate(pastDate.getDate() - 3)
+    render(<ThingCard thing={{ ...baseThing, checkin_date: pastDate.toISOString() }} />)
+    expect(screen.getByText(/overdue/)).toBeInTheDocument()
   })
 })
