@@ -7,11 +7,12 @@ const CHECK_INTERVAL_MS = 60_000
 /**
  * Polls /version.json to detect when a new frontend build has been deployed.
  * Returns whether a new version is available and a dismiss handler.
- * The banner reappears on the next successful check after dismissal.
+ * The banner reappears only if a newer version is detected after dismissal.
  */
 export function useVersionCheck() {
   const [newVersionAvailable, setNewVersionAvailable] = useState(false)
-  const dismissedRef = useRef(false)
+  const dismissedVersionRef = useRef<string | null>(null)
+  const detectedVersionRef = useRef<string | null>(null)
 
   useEffect(() => {
     // __APP_BUILD_VERSION__ is injected at build time by the versionJsonPlugin.
@@ -26,7 +27,8 @@ export function useVersionCheck() {
         if (!res.ok) return
         const data = await res.json()
         if (data.version && data.version !== currentVersion) {
-          if (!dismissedRef.current) {
+          detectedVersionRef.current = data.version
+          if (dismissedVersionRef.current !== data.version) {
             setNewVersionAvailable(true)
           }
         }
@@ -40,7 +42,6 @@ export function useVersionCheck() {
     // Also check on visibility change (user returns to tab)
     function onVisibilityChange() {
       if (document.visibilityState === 'visible') {
-        dismissedRef.current = false
         check()
       }
     }
@@ -54,7 +55,7 @@ export function useVersionCheck() {
 
   function dismiss() {
     setNewVersionAvailable(false)
-    dismissedRef.current = true
+    dismissedVersionRef.current = detectedVersionRef.current
   }
 
   function refresh() {
