@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import date, datetime
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
@@ -12,7 +13,7 @@ from .things import _row_to_thing
 router = APIRouter(prefix="/briefing", tags=["briefing"])
 
 
-def _row_to_finding(row, thing: Thing | None = None) -> SweepFinding:
+def _row_to_finding(row: Any, thing: Thing | None = None) -> SweepFinding:
     return SweepFinding(
         id=row["id"],
         thing_id=row["thing_id"],

@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -19,7 +20,7 @@ def _parse_dt(val: str | None) -> datetime | None:
     return datetime.fromisoformat(val)
 
 
-def _row_to_thing_type(row) -> ThingType:
+def _row_to_thing_type(row: Any) -> ThingType:
     return ThingType(
         id=row["id"],
         name=row["name"],
