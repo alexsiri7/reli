@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type AppliedChanges, type ChatMessage, type ContextThing, type ModelUsage, type SessionStats, type WebSearchResult } from '../store'
+import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ContextThing, type GmailMessage, type ModelUsage, type SessionStats, type WebSearchResult } from '../store'
 import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
@@ -55,6 +55,88 @@ function WebSources({ results }: { results: WebSearchResult[] }) {
               <span className="font-medium">{r.title}</span>
               <span className="block text-gray-400 dark:text-gray-500 truncate">{r.snippet}</span>
             </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GmailSources({ messages }: { messages: GmailMessage[] }) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (messages.length === 0) return null
+
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+      >
+        <svg
+          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        {messages.length} email{messages.length !== 1 ? 's' : ''}
+      </button>
+      {expanded && (
+        <div className="mt-1.5 space-y-1.5">
+          {messages.map((m, i) => (
+            <div
+              key={i}
+              className="text-xs text-gray-600 dark:text-gray-300"
+            >
+              <span className="font-medium">{m.subject}</span>
+              <span className="text-gray-400 dark:text-gray-500"> — {m.from}</span>
+              <span className="block text-gray-400 dark:text-gray-500 truncate">{m.snippet}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CalendarSources({ events }: { events: CalendarEvent[] }) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (events.length === 0) return null
+
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 transition-colors"
+      >
+        <svg
+          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        {events.length} event{events.length !== 1 ? 's' : ''}
+      </button>
+      {expanded && (
+        <div className="mt-1.5 space-y-1.5">
+          {events.map((ev, i) => (
+            <div
+              key={i}
+              className="text-xs text-gray-600 dark:text-gray-300"
+            >
+              <span className="font-medium">{ev.summary}</span>
+              <span className="text-gray-400 dark:text-gray-500"> — {new Date(ev.start).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+              {ev.location && (
+                <span className="block text-gray-400 dark:text-gray-500 truncate">{ev.location}</span>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -375,6 +457,12 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
           )}
           {!isUser && msg.applied_changes?.web_results && msg.applied_changes.web_results.length > 0 && (
             <WebSources results={msg.applied_changes.web_results} />
+          )}
+          {!isUser && msg.applied_changes?.gmail_context && msg.applied_changes.gmail_context.length > 0 && (
+            <GmailSources messages={msg.applied_changes.gmail_context} />
+          )}
+          {!isUser && msg.applied_changes?.calendar_events && msg.applied_changes.calendar_events.length > 0 && (
+            <CalendarSources events={msg.applied_changes.calendar_events} />
           )}
           {!isUser && msg.applied_changes && (
             <ContextDropdown changes={msg.applied_changes} />
