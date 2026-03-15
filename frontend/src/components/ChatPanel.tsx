@@ -171,6 +171,7 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const totalTokens = (msg.prompt_tokens ?? 0) + (msg.completion_tokens ?? 0)
+  const calls = msg.per_call_usage ?? []
 
   useEffect(() => {
     if (!open) return
@@ -192,30 +193,75 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
         {formatTokens(totalTokens)} tokens
       </button>
       {open && (
-        <div className="absolute left-0 bottom-full mb-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2.5 min-w-[180px] font-mono text-[11px] text-gray-500 dark:text-gray-400">
-          {msg.model && (
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 truncate">
-              {msg.model.split('/').pop()}
-            </p>
-          )}
-          <div className="space-y-0.5">
-            <div className="flex justify-between">
-              <span>Prompt</span>
-              <span className="tabular-nums">{formatTokens(msg.prompt_tokens ?? 0)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Completion</span>
-              <span className="tabular-nums">{formatTokens(msg.completion_tokens ?? 0)}</span>
-            </div>
-            <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-0.5 mt-0.5 font-medium text-gray-700 dark:text-gray-300">
-              <span>Total</span>
-              <span className="tabular-nums">{formatTokens(totalTokens)}</span>
-            </div>
-          </div>
-          {msg.cost_usd != null && msg.cost_usd > 0 && (
-            <p className="mt-1.5 text-right text-gray-600 dark:text-gray-300 font-medium">
-              {formatCost(msg.cost_usd)}
-            </p>
+        <div className="absolute left-0 bottom-full mb-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2.5 min-w-[200px] font-mono text-[11px] text-gray-500 dark:text-gray-400">
+          {calls.length > 1 ? (
+            <>
+              <p className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">Per-call breakdown</p>
+              <div className="space-y-2">
+                {calls.map((call, i) => (
+                  <div key={i}>
+                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
+                      {call.model.split('/').pop()}
+                    </p>
+                    <div className="space-y-0.5 mt-0.5">
+                      <div className="flex justify-between gap-3">
+                        <span>Prompt</span>
+                        <span className="tabular-nums">{formatTokens(call.prompt_tokens)}</span>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <span>Completion</span>
+                        <span className="tabular-nums">{formatTokens(call.completion_tokens)}</span>
+                      </div>
+                      {call.cost_usd > 0 && (
+                        <div className="flex justify-between gap-3 text-gray-600 dark:text-gray-300">
+                          <span>Cost</span>
+                          <span className="tabular-nums">{formatCost(call.cost_usd)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-1.5 mt-1.5 font-medium text-gray-700 dark:text-gray-300">
+                <div className="flex justify-between">
+                  <span>Total</span>
+                  <span className="tabular-nums">{formatTokens(totalTokens)}</span>
+                </div>
+                {msg.cost_usd != null && msg.cost_usd > 0 && (
+                  <div className="flex justify-between mt-0.5">
+                    <span>Cost</span>
+                    <span className="tabular-nums">{formatCost(msg.cost_usd)}</span>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {msg.model && (
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 truncate">
+                  {msg.model.split('/').pop()}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                <div className="flex justify-between">
+                  <span>Prompt</span>
+                  <span className="tabular-nums">{formatTokens(msg.prompt_tokens ?? 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Completion</span>
+                  <span className="tabular-nums">{formatTokens(msg.completion_tokens ?? 0)}</span>
+                </div>
+                <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-0.5 mt-0.5 font-medium text-gray-700 dark:text-gray-300">
+                  <span>Total</span>
+                  <span className="tabular-nums">{formatTokens(totalTokens)}</span>
+                </div>
+              </div>
+              {msg.cost_usd != null && msg.cost_usd > 0 && (
+                <p className="mt-1.5 text-right text-gray-600 dark:text-gray-300 font-medium">
+                  {formatCost(msg.cost_usd)}
+                </p>
+              )}
+            </>
           )}
         </div>
       )}
