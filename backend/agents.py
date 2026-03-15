@@ -143,13 +143,21 @@ def _fetch_requesty_pricing() -> dict[str, tuple[float, float]]:
 MODEL_PRICING: dict[str, tuple[float, float]] = _fetch_requesty_pricing()
 
 
+def _strip_provider(model: str) -> str:
+    """Strip provider prefix (e.g. 'google/gemini-2.5-flash' -> 'gemini-2.5-flash')."""
+    return model.split("/", 1)[-1]
+
+
 def estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
     """Estimate USD cost from token counts using per-model pricing."""
     pricing = MODEL_PRICING.get(model)
     if not pricing:
-        # Try partial match (model name without version suffix)
+        # Try matching with/without provider prefix (e.g. "gemini-2.5-flash-lite"
+        # should match "google/gemini-2.5-flash-lite" and vice versa)
+        model_bare = _strip_provider(model)
         for key, val in MODEL_PRICING.items():
-            if model.startswith(key.split("-")[0]) or key.startswith(model.split("-")[0]):
+            key_bare = _strip_provider(key)
+            if model_bare == key_bare or model == key_bare or model_bare == key:
                 pricing = val
                 break
     if not pricing:
