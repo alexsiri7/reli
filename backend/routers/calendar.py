@@ -38,14 +38,18 @@ def calendar_auth() -> dict[str, str]:
 
 
 @router.get("/callback", summary="OAuth2 callback", include_in_schema=False)
-def calendar_callback(code: str = Query(...), error: str | None = Query(None)) -> RedirectResponse:
+def calendar_callback(
+    code: str = Query(...),
+    state: str = Query(""),
+    error: str | None = Query(None),
+) -> RedirectResponse:
     """Handle the OAuth2 callback from Google."""
     if error:
         # Redirect to frontend with error
         return RedirectResponse(url=f"/?calendar_error={error}")
 
     try:
-        exchange_code(code)
+        exchange_code(code, state=state)
     except Exception as exc:
         return RedirectResponse(url=f"/?calendar_error={exc}")
 

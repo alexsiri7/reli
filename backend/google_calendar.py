@@ -20,6 +20,9 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/calendar/callback")
 
+# PKCE state storage: state -> code_verifier (single-process, in-memory)
+_pending_flows: dict[str, str] = {}
+
 
 def _client_config() -> dict:
     """Build OAuth client config from environment variables."""
@@ -43,18 +46,29 @@ def get_auth_url() -> str:
     """Generate the Google OAuth2 authorization URL."""
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI
-    auth_url, _ = flow.authorization_url(
+    auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
     )
+    # Store PKCE code_verifier for the callback
+    _pending_flows[state] = flow.code_verifier or ""
     return str(auth_url)
 
 
-def exchange_code(code: str) -> Credentials:
+def exchange_code(code: str, state: str = "") -> Credentials:
     """Exchange authorization code for credentials and store them."""
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI
+
+    # Restore PKCE code_verifier from the auth request
+    code_verifier = _pending_flows.pop(state, None) if state else None
+    if code_verifier:
+        flow.code_verifier = code_verifier
+
+    # Google returns scopes in expanded URI form; tell oauthlib to accept it
+    os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
+
     flow.fetch_token(code=code)
     creds: Credentials = flow.credentials
     _save_credentials(creds)
