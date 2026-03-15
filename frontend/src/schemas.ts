@@ -191,6 +191,7 @@ export const ModelSettingsSchema = z.object({
   context: z.string(),
   reasoning: z.string(),
   response: z.string(),
+  chat_context_window: z.number(),
 })
 
 export const RequestyModelSchema = z.object({
