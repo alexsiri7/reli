@@ -1,7 +1,8 @@
-"""Nightly sweep — Phase 1: SQL candidate queries.
+"""Nightly sweep — SQL candidate queries and LLM reflection.
 
-Identifies Things that may need the user's attention using cheap SQL queries.
-The candidate list is returned for the LLM reflection phase (Phase 2).
+Phase 1 (SQL): Identifies Things that may need the user's attention using cheap
+SQL queries.  Phase 2 (LLM): Sends the candidate list to an LLM for nuanced
+reflection, producing sweep_findings with priority and expiry.
 
 Finding types:
   - approaching_date: Thing with a date (checkin, birthday, deadline, etc.) within 7 days
@@ -9,17 +10,22 @@ Finding types:
   - orphan: Active Thing with no relationships (no parent, no children, no graph edges)
   - completed_project: Project where all children are inactive but project is still active
   - open_question: Active Thing with unanswered open_questions
+  - llm_insight: LLM-generated finding from reflection phase
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
+import uuid
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from .database import db
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Date parsing (shared with proactive.py)
@@ -364,3 +370,160 @@ def collect_candidates(
     result = list(seen.values())
     result.sort(key=lambda c: (c.priority, c.thing_title))
     return result
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: LLM reflection
+# ---------------------------------------------------------------------------
+
+SWEEP_REFLECTION_SYSTEM = """\
+You are the Nightly Sweep Analyst for Reli, an AI personal information manager.
+You receive a list of candidate Things that SQL queries flagged for review.
+
+Your job: provide nuanced, actionable reflection. Think about what the user
+should know tomorrow morning. Be genuinely helpful, not generic.
+
+Consider:
+- What's truly urgent vs what can wait?
+- What connections exist between items that the user might not see?
+- What's been forgotten or neglected that deserves attention?
+- Are there patterns (too many stale items, many orphans, etc.)?
+- What specific action would help most right now?
+
+Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
+{
+  "findings": [
+    {
+      "thing_id": "uuid-or-null",
+      "finding_type": "llm_insight",
+      "message": "Concise, actionable message for the user",
+      "priority": 1,
+      "expires_in_days": 7
+    }
+  ]
+}
+
+Rules:
+- finding_type MUST be "llm_insight" for all your findings
+- priority: 0=critical, 1=high, 2=medium, 3=low
+- expires_in_days: how long this finding stays relevant (1-30, null for no expiry)
+- thing_id: link to a specific Thing when relevant, null for general observations
+- message: written for the USER, not for a system. Be warm and direct.
+  Good: "Your dentist appointment is tomorrow — don't forget to confirm!"
+  Bad: "approaching_date detected for thing_id abc123"
+- Keep findings to 3-8 items. Quality over quantity.
+- Don't just repeat what the SQL queries found — add insight and connections.
+- If candidates are empty or trivial, return {"findings": []} — don't fabricate.
+"""
+
+
+@dataclass
+class ReflectionResult:
+    """Result of the LLM reflection phase."""
+
+    findings_created: int = 0
+    findings: list[dict] = field(default_factory=list)
+    usage: dict = field(default_factory=dict)
+
+
+def _format_candidates_for_llm(candidates: list[SweepCandidate]) -> str:
+    """Format candidates into a compact prompt for the LLM."""
+    if not candidates:
+        return "No candidates flagged by SQL queries today."
+
+    lines = [f"Today: {date.today().isoformat()}", "", f"{len(candidates)} candidates:"]
+    for i, c in enumerate(candidates, 1):
+        extra_str = ""
+        if c.extra:
+            extra_parts = [f"{k}={v}" for k, v in c.extra.items()]
+            extra_str = f" ({', '.join(extra_parts)})"
+        lines.append(f"{i}. [{c.finding_type}] {c.message} [id={c.thing_id}, pri={c.priority}{extra_str}]")
+    return "\n".join(lines)
+
+
+async def reflect_on_candidates(
+    candidates: list[SweepCandidate] | None = None,
+) -> ReflectionResult:
+    """Phase 2: Send SQL candidates to LLM for nuanced reflection.
+
+    If *candidates* is None, runs collect_candidates() first.
+    Returns a ReflectionResult with the findings created in sweep_findings.
+    """
+    from .agents import UsageStats, _chat
+
+    if candidates is None:
+        candidates = collect_candidates()
+
+    usage_stats = UsageStats()
+    prompt = _format_candidates_for_llm(candidates)
+
+    raw = await _chat(
+        messages=[
+            {"role": "system", "content": SWEEP_REFLECTION_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        model=None,  # uses default context model (cheapest)
+        response_format={"type": "json_object"},
+        usage_stats=usage_stats,
+    )
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("Sweep reflection returned invalid JSON: %s", raw[:200])
+        return ReflectionResult(usage=usage_stats.to_dict())
+
+    raw_findings = parsed.get("findings", [])
+    if not isinstance(raw_findings, list):
+        raw_findings = []
+
+    now = datetime.now(timezone.utc)
+    created: list[dict] = []
+
+    # Collect valid thing_ids from candidates for validation
+    valid_thing_ids = {c.thing_id for c in candidates}
+
+    with db() as conn:
+        for f in raw_findings:
+            if not isinstance(f, dict):
+                continue
+            message = str(f.get("message", "")).strip()
+            if not message:
+                continue
+
+            thing_id = f.get("thing_id")
+            if thing_id and thing_id not in valid_thing_ids:
+                thing_id = None  # don't link to unknown things
+
+            priority = f.get("priority", 2)
+            if not isinstance(priority, int) or priority < 0 or priority > 4:
+                priority = 2
+
+            expires_in = f.get("expires_in_days")
+            expires_at = None
+            if isinstance(expires_in, (int, float)) and 1 <= expires_in <= 30:
+                expires_at = (now + timedelta(days=int(expires_in))).isoformat()
+
+            finding_id = f"sf-{uuid.uuid4().hex[:8]}"
+            conn.execute(
+                """INSERT INTO sweep_findings
+                   (id, thing_id, finding_type, message, priority, dismissed, created_at, expires_at)
+                   VALUES (?, ?, ?, ?, ?, 0, ?, ?)""",
+                (finding_id, thing_id, "llm_insight", message, priority, now.isoformat(), expires_at),
+            )
+            created.append(
+                {
+                    "id": finding_id,
+                    "thing_id": thing_id,
+                    "finding_type": "llm_insight",
+                    "message": message,
+                    "priority": priority,
+                    "expires_at": expires_at,
+                }
+            )
+
+    return ReflectionResult(
+        findings_created=len(created),
+        findings=created,
+        usage=usage_stats.to_dict(),
+    )
