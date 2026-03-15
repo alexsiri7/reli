@@ -300,9 +300,25 @@ async def chat(body: ChatRequest) -> ChatResponse:
     with db() as conn:
         applied_changes = apply_storage_changes(storage_changes, conn)
 
+    # Collect open_questions from relevant Things and newly created/updated Things
+    open_questions_by_thing: dict[str, list[str]] = {}
+    for thing in relevant_things:
+        oq = thing.get("open_questions")
+        if oq:
+            parsed = json.loads(oq) if isinstance(oq, str) else oq
+            if parsed:
+                open_questions_by_thing[thing.get("title", thing["id"])] = parsed
+    for thing in applied_changes.get("created", []) + applied_changes.get("updated", []):
+        oq = thing.get("open_questions")
+        if oq:
+            parsed = json.loads(oq) if isinstance(oq, str) else oq
+            if parsed:
+                open_questions_by_thing[thing.get("title", thing.get("id", ""))] = parsed
+
     # Stage 4: Response Agent
     reply = await run_response_agent(
-        message, reasoning_summary, questions_for_user, applied_changes, web_results, usage_stats=usage
+        message, reasoning_summary, questions_for_user, applied_changes, web_results,
+        usage_stats=usage, open_questions_by_thing=open_questions_by_thing or None,
     )
 
     # Persist both sides of the exchange to chat history

@@ -664,6 +664,15 @@ Rules:
 - When calendar events are provided, naturally weave them into your response.
   Mention upcoming meetings, conflicts, or free blocks when relevant to the
   user's request. Format times in a human-friendly way (e.g. "2pm" not ISO-8601).
+- PROACTIVE CURIOSITY: When open_questions are provided for Things, naturally
+  weave 1-2 of the most relevant questions into your response. Don't list them
+  like a form — ask them conversationally, as a genuinely curious assistant would.
+  For example: "By the way, do you have a deadline in mind for this?" or "Oh, one
+  thing — who else is involved in this project?" Pick questions that would make the
+  Thing most actionable right now. Even when you CAN proceed without the info,
+  asking shows you care about getting it right.
+- Be genuinely curious, not just reactive. If the user shares something interesting,
+  ask a follow-up that shows you're engaged — not just processing commands.
 """
 
 
@@ -674,6 +683,7 @@ async def run_response_agent(
     applied_changes: dict[str, Any],
     web_results: list[dict[str, Any]] | None = None,
     usage_stats: UsageStats | None = None,
+    open_questions_by_thing: dict[str, list[str]] | None = None,
 ) -> str:
     """Stage 4: generate friendly user-facing response."""
     context = (
@@ -682,6 +692,11 @@ async def run_response_agent(
         f"Applied changes: {json.dumps(applied_changes, default=str)}\n\n"
         f"Questions for user (if any): {json.dumps(questions_for_user)}"
     )
+    if open_questions_by_thing:
+        context += (
+            f"\n\nOpen questions on Things (knowledge gaps to ask about conversationally):\n"
+            f"{json.dumps(open_questions_by_thing, default=str)}"
+        )
     if web_results:
         context += (
             f"\n\nWeb search results (cite relevant sources in your response):\n{json.dumps(web_results, default=str)}"
