@@ -1,8 +1,8 @@
 # Stage 1: Build frontend
-FROM node:20.18-slim AS frontend-build
+FROM node:22-slim AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm ci --legacy-peer-deps && npm rebuild rolldown
 COPY frontend/ ./
 RUN npm run build
 
