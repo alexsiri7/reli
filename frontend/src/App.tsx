@@ -101,8 +101,8 @@ function App() {
       {/* Desktop: side-by-side layout */}
       <div className="hidden md:contents">
         <Sidebar />
-        <ChatPanel />
         <DetailPanel />
+        <ChatPanel />
       </div>
       {/* Mobile: show one panel at a time based on mobileView */}
       <div className="contents md:hidden">
