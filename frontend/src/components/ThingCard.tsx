@@ -1,7 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Thing } from '../store'
 import { useStore } from '../store'
 import { formatDate, formatTimestamp, isOverdue, priorityLabel, typeIcon } from '../utils'
+
+interface Relationship {
+  id: string
+  from_thing_id: string
+  to_thing_id: string
+  relationship_type: string
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
 
 interface Props {
   thing: Thing
@@ -19,6 +28,17 @@ export function ThingCard({ thing }: Props) {
   const things = useStore(s => s.things)
   const [showSnooze, setShowSnooze] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [relationships, setRelationships] = useState<Relationship[]>([])
+  const [relsLoaded, setRelsLoaded] = useState(false)
+
+  useEffect(() => {
+    if (!expanded || relsLoaded) return
+    fetch(`/api/things/${thing.id}/relationships`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setRelationships(data))
+      .catch(() => setRelationships([]))
+      .finally(() => setRelsLoaded(true))
+  }, [expanded, relsLoaded, thing.id])
 
   const overdue = isOverdue(thing.checkin_date)
   const dateLabel = formatDate(thing.checkin_date)
@@ -152,6 +172,38 @@ export function ThingCard({ thing }: Props) {
                   <li key={c.id}>{typeIcon(c.type_hint)} {c.title}</li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* Relationships / Connections */}
+          {relationships.length > 0 && (
+            <div>
+              <span className="font-medium">Connections:</span>
+              <ul className="ml-3 mt-0.5 space-y-0.5">
+                {relationships.map(rel => {
+                  const otherId = rel.from_thing_id === thing.id ? rel.to_thing_id : rel.from_thing_id
+                  const other = things.find(t => t.id === otherId)
+                  const direction = rel.from_thing_id === thing.id ? '→' : '←'
+                  return (
+                    <li key={rel.id} className="flex items-center gap-1">
+                      <span className="text-gray-400 dark:text-gray-500">{direction}</span>
+                      <span className="italic text-gray-500 dark:text-gray-400">{rel.relationship_type}</span>
+                      {other ? (
+                        <span className="text-gray-700 dark:text-gray-300">{typeIcon(other.type_hint)} {other.title}</span>
+                      ) : (
+                        <span className="text-gray-400 dark:text-gray-500">{otherId}</span>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+
+          {/* Last referenced */}
+          {thing.last_referenced && (
+            <div className="text-gray-400 dark:text-gray-500">
+              Discussed {formatTimestamp(thing.last_referenced)}
             </div>
           )}
         </div>

@@ -39,6 +39,7 @@ export function Sidebar() {
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+  const nowMs = Date.now()
 
   const upcoming = things
     .filter(t => t.checkin_date != null)
@@ -49,6 +50,14 @@ export function Sidebar() {
     })
 
   const active = things.filter(t => t.checkin_date == null)
+
+  // Recently discussed: things referenced in the last 7 days, sorted by most recent
+  const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+  const recentlyDiscussed = useMemo(() => {
+    return things
+      .filter(t => t.last_referenced != null && (nowMs - new Date(t.last_referenced).getTime()) < RECENT_WINDOW_MS)
+      .sort((a, b) => new Date(b.last_referenced!).getTime() - new Date(a.last_referenced!).getTime())
+  }, [things, nowMs])
 
   // Group active things by type, excluding children of projects (shown under parent)
   const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal'] as const
@@ -236,6 +245,24 @@ export function Sidebar() {
               </section>
             )}
 
+            {/* Recently Discussed */}
+            {recentlyDiscussed.length > 0 && (
+              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                  Recently Discussed
+                </h2>
+                {recentlyDiscussed.map(t => {
+                  const ageMs = nowMs - new Date(t.last_referenced!).getTime()
+                  const opacity = Math.max(0.4, 1 - ageMs / RECENT_WINDOW_MS)
+                  return (
+                    <div key={t.id} style={{ opacity }}>
+                      <ThingCard thing={t} />
+                    </div>
+                  )
+                })}
+              </section>
+            )}
+
         {/* Active Things grouped by type */}
         {activeGroups.map(group => (
           <section key={group.type} className="py-2 border-t border-gray-100 dark:border-gray-800">
@@ -257,7 +284,6 @@ export function Sidebar() {
                 {upcoming.map(t => <ThingCard key={t.id} thing={t} />)}
               </section>
             )}
-
 
             {/* Gmail */}
             <GmailPanel />
