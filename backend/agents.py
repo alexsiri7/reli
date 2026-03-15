@@ -535,17 +535,51 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
     # Entity type_hints default to surface=false
     ENTITY_TYPES = {"person", "place", "event", "concept", "reference"}
 
+    # Map from create-array index to resolved Thing ID (for NEW:<index> placeholders)
+    create_index_to_id: dict[int, str] = {}
+
     # ── Creates ──────────────────────────────────────────────────────────────
-    for item in storage_changes.get("create", []):
+    for create_idx, item in enumerate(storage_changes.get("create", [])):
         title = item.get("title", "").strip()
         if not title:
             continue
-        # Deduplicate: if an active Thing with the same title already exists, skip the create
+        # Deduplicate: if an active Thing with the same title already exists (case-insensitive),
+        # convert the create into an update on the existing Thing instead of silently skipping.
         existing = conn.execute(
-            "SELECT id FROM things WHERE title = ? AND active = 1 LIMIT 1", (title,)
+            "SELECT * FROM things WHERE LOWER(title) = LOWER(?) AND active = 1 LIMIT 1", (title,)
         ).fetchone()
         if existing:
-            logger.info("Skipping create for '%s' — already exists as %s", title, existing["id"])
+            logger.info("Dedup: converting create for '%s' into update on %s", title, existing["id"])
+            # Merge any new data from the create intent into the existing Thing
+            merge_fields: dict[str, Any] = {}
+            raw_data = item.get("data")
+            if raw_data:
+                existing_data = existing["data"]
+                if existing_data:
+                    try:
+                        old = _json.loads(existing_data) if isinstance(existing_data, str) else existing_data
+                    except (ValueError, TypeError):
+                        old = {}
+                else:
+                    old = {}
+                new_data = raw_data if isinstance(raw_data, dict) else {}
+                if new_data:
+                    merged = {**old, **new_data}
+                    merge_fields["data"] = _json.dumps(merged)
+            if item.get("open_questions"):
+                merge_fields["open_questions"] = _json.dumps(item["open_questions"])
+            if item.get("checkin_date") and not existing["checkin_date"]:
+                merge_fields["checkin_date"] = item["checkin_date"]
+            if merge_fields:
+                merge_fields["updated_at"] = now
+                set_clause = ", ".join(f"{k} = ?" for k in merge_fields)
+                values = list(merge_fields.values()) + [existing["id"]]
+                conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
+            updated_row = conn.execute("SELECT * FROM things WHERE id = ?", (existing["id"],)).fetchone()
+            if updated_row:
+                applied["updated"].append(dict(updated_row))
+                upsert_thing(dict(updated_row))
+            create_index_to_id[create_idx] = existing["id"]
             continue
         thing_id = str(uuid.uuid4())
         checkin = item.get("checkin_date")
@@ -582,6 +616,7 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
         if row:
             applied["created"].append(dict(row))
             upsert_thing(dict(row))
+            create_index_to_id[create_idx] = thing_id
 
     # ── Updates ──────────────────────────────────────────────────────────────
     for item in storage_changes.get("update", []):
@@ -629,10 +664,11 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
         applied["deleted"].append(thing_id)
         vs_delete(thing_id)
 
-    # Build lookup for NEW:<index> placeholders from created things
+    # Build lookup for NEW:<index> placeholders — covers both genuinely created
+    # Things and deduped creates that were converted to updates.
     created_id_map: dict[str, str] = {}
-    for idx, created_thing in enumerate(applied["created"]):
-        created_id_map[f"NEW:{idx}"] = created_thing["id"]
+    for idx, resolved_id in create_index_to_id.items():
+        created_id_map[f"NEW:{idx}"] = resolved_id
 
     # ── Relationships ────────────────────────────────────────────────────────
     for rel in storage_changes.get("relationships", []):
