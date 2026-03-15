@@ -326,8 +326,14 @@ async def chat(body: ChatRequest) -> ChatResponse:
         open_questions_by_thing=open_questions_by_thing or None,
     )
 
+    # Build context_things list from the Things that informed this response
+    context_things = [
+        {"id": t["id"], "title": t.get("title", ""), "type_hint": t.get("type_hint")} for t in relevant_things
+    ]
+
     # Persist both sides of the exchange to chat history
     applied_with_sources = applied_changes.copy()
+    applied_with_sources["context_things"] = context_things
     if web_results:
         applied_with_sources["web_results"] = web_results
     changes_json = json.dumps(applied_with_sources)

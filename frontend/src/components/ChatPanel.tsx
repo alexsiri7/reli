@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type AppliedChanges, type ChatMessage, type ModelUsage, type SessionStats, type WebSearchResult } from '../store'
+import { useStore, type AppliedChanges, type ChatMessage, type ContextThing, type ModelUsage, type SessionStats, type WebSearchResult } from '../store'
+import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
 
@@ -60,49 +61,107 @@ function WebSources({ results }: { results: WebSearchResult[] }) {
   )
 }
 
-function ActionEntry({ changes }: { changes: AppliedChanges }) {
-  const items: { label: string; detail: string }[] = []
+function ContextDropdown({ changes }: { changes: AppliedChanges }) {
+  const [expanded, setExpanded] = useState(false)
+  const thingTypes = useStore(s => s.thingTypes)
+  const openThingDetail = useStore(s => s.openThingDetail)
 
-  if (changes.created) {
-    for (const c of changes.created) {
-      const hint = c.type_hint ? ` (${c.type_hint})` : ''
-      items.push({ label: 'Created', detail: `${c.title}${hint}` })
-    }
-  }
-  if (changes.updated) {
-    for (const u of changes.updated) {
-      items.push({ label: 'Updated', detail: u.title })
-    }
-  }
-  if (changes.deleted) {
-    for (const id of changes.deleted) {
-      items.push({ label: 'Deleted', detail: id })
-    }
-  }
+  const contextThings = changes.context_things ?? []
+  const created = changes.created ?? []
+  const updated = changes.updated ?? []
+  const deleted = changes.deleted ?? []
+  const hasEffects = created.length > 0 || updated.length > 0 || deleted.length > 0
+  const hasContext = contextThings.length > 0
 
-  if (items.length === 0) return null
+  if (!hasContext && !hasEffects) return null
+
+  const totalCount = contextThings.length + created.length + updated.length + deleted.length
 
   return (
-    <div className="flex flex-col items-center gap-1 my-2">
-      {items.map((item, i) => (
-        <div
-          key={i}
-          className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"
+    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+      >
+        <svg
+          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
         >
-          <span
-            className={`font-medium ${
-              item.label === 'Created'
-                ? 'text-green-600 dark:text-green-400'
-                : item.label === 'Updated'
-                  ? 'text-amber-600 dark:text-amber-400'
-                  : 'text-red-500 dark:text-red-400'
-            }`}
-          >
-            {item.label}:
-          </span>
-          <span>{item.detail}</span>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        Context &amp; changes
+        <span className="text-gray-400 dark:text-gray-500 font-normal">({totalCount})</span>
+      </button>
+      {expanded && (
+        <div className="mt-1.5 space-y-2">
+          {/* Context section — Things that informed the response */}
+          {hasContext ? (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold mb-1">Context</p>
+              <div className="space-y-0.5">
+                {contextThings.map((t: ContextThing) => (
+                  <button
+                    key={t.id}
+                    onClick={() => openThingDetail(t.id)}
+                    className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors w-full text-left"
+                  >
+                    <span>{typeIcon(t.type_hint, thingTypes)}</span>
+                    <span className="truncate">{t.title}</span>
+                    {t.type_hint && (
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 capitalize ml-auto shrink-0">{t.type_hint}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">No database context used</p>
+          )}
+
+          {/* Effects section — Things that were created/updated/deleted */}
+          {hasEffects && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold mb-1">Effects</p>
+              <div className="space-y-0.5">
+                {created.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => openThingDetail(c.id)}
+                    className="flex items-center gap-1.5 text-xs w-full text-left hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                  >
+                    <span className="font-medium text-green-600 dark:text-green-400 shrink-0">Created</span>
+                    <span>{typeIcon(c.type_hint, thingTypes)}</span>
+                    <span className="truncate text-gray-600 dark:text-gray-300">{c.title}</span>
+                  </button>
+                ))}
+                {updated.map(u => (
+                  <button
+                    key={u.id}
+                    onClick={() => openThingDetail(u.id)}
+                    className="flex items-center gap-1.5 text-xs w-full text-left hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                  >
+                    <span className="font-medium text-amber-600 dark:text-amber-400 shrink-0">Updated</span>
+                    <span>{typeIcon((u as { type_hint?: string }).type_hint, thingTypes)}</span>
+                    <span className="truncate text-gray-600 dark:text-gray-300">{u.title}</span>
+                  </button>
+                ))}
+                {deleted.map(id => (
+                  <div
+                    key={id}
+                    className="flex items-center gap-1.5 text-xs"
+                  >
+                    <span className="font-medium text-red-500 dark:text-red-400 shrink-0">Deleted</span>
+                    <span className="truncate text-gray-600 dark:text-gray-300">{id}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      ))}
+      )}
     </div>
   )
 }
@@ -224,6 +283,9 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
           )}
           {!isUser && msg.applied_changes?.web_results && msg.applied_changes.web_results.length > 0 && (
             <WebSources results={msg.applied_changes.web_results} />
+          )}
+          {!isUser && msg.applied_changes && (
+            <ContextDropdown changes={msg.applied_changes} />
           )}
           {!isUser && msg.questions_for_user && msg.questions_for_user.length > 0 && (
             <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
@@ -443,12 +505,7 @@ export function ChatPanel() {
           </div>
         )}
         {messages.map(msg => (
-          <div key={msg.id}>
-            {msg.role === 'assistant' && msg.applied_changes && (
-              <ActionEntry changes={msg.applied_changes} />
-            )}
-            <MessageBubble msg={msg} speakingId={speakingId} speak={speak} />
-          </div>
+          <MessageBubble key={msg.id} msg={msg} speakingId={speakingId} speak={speak} />
         ))}
         <div ref={bottomRef} />
       </div>
