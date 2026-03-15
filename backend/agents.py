@@ -406,6 +406,8 @@ Rules:
   "Are there any blockers?". Tailor questions to the Thing's type and context.
   Don't ask questions whose answers are already in the Thing's data or title.
   For completed/deleted items, omit open_questions.
+- NEVER create a Thing that already exists in the "Relevant Things" list. If a
+  matching Thing is already present, use "update" with its ID instead of "create".
 - If the user's intent is ambiguous, add ONE clarifying question and make NO changes.
   Focus on what would make the task actionable: "What's the specific deliverable?"
   or "Can we break this into smaller steps?"
@@ -529,6 +531,13 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
     for item in storage_changes.get("create", []):
         title = item.get("title", "").strip()
         if not title:
+            continue
+        # Deduplicate: if an active Thing with the same title already exists, skip the create
+        existing = conn.execute(
+            "SELECT id FROM things WHERE title = ? AND active = 1 LIMIT 1", (title,)
+        ).fetchone()
+        if existing:
+            logger.info("Skipping create for '%s' — already exists as %s", title, existing["id"])
             continue
         thing_id = str(uuid.uuid4())
         checkin = item.get("checkin_date")
