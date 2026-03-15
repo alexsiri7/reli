@@ -72,7 +72,7 @@ describe('store: snoozeThing', () => {
 
     await useStore.getState().snoozeThing('t1', '2026-01-08T00:00:00.000Z')
 
-    expect(useStore.getState().things[0].checkin_date).toBe('2026-01-08T00:00:00.000Z')
+    expect(useStore.getState().things[0]!.checkin_date).toBe('2026-01-08T00:00:00.000Z')
   })
 
   it('sets error when PATCH fails', async () => {

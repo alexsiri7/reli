@@ -341,7 +341,7 @@ export const useStore = create<ReliState>((set, get) => ({
   goBackThingDetail: () => {
     const history = get().detailHistory
     if (history.length === 0) return
-    const prevId = history[history.length - 1]
+    const prevId = history[history.length - 1]!
     set({ detailThingId: prevId, detailHistory: history.slice(0, -1), detailLoading: true, detailThing: null, detailRelationships: [] })
     fetchThingDetailWithFallback(prevId).then(([thing, rels]) => {
       if (get().detailThingId === prevId) {
