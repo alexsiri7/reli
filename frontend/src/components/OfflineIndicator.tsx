@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react'
 import { useNetworkStatus } from '../hooks/useNetworkStatus'
 import { getPendingCount } from '../offline/pending-ops'
 import { onSyncEvent, initSyncEngine } from '../offline/sync-engine'
+import { useStore } from '../store'
 
 export function OfflineIndicator() {
   const { isOnline, wasOffline } = useNetworkStatus()
   const [pendingCount, setPendingCount] = useState(0)
+  const fetchThings = useStore(s => s.fetchThings)
+  const fetchBriefing = useStore(s => s.fetchBriefing)
 
   // Initialize sync engine once and subscribe to sync events
   useEffect(() => {
@@ -22,6 +25,9 @@ export function OfflineIndicator() {
       if (event.type === 'sync:done') {
         // Re-read from IDB for accuracy after sync completes
         getPendingCount().then(setPendingCount)
+        // Refresh store data after sync replays queued mutations
+        fetchThings()
+        fetchBriefing()
       }
     })
 
@@ -35,7 +41,7 @@ export function OfflineIndicator() {
       cleanupListener()
       clearInterval(interval)
     }
-  }, [])
+  }, [fetchThings, fetchBriefing])
 
   if (isOnline && !wasOffline && pendingCount === 0) return null
 

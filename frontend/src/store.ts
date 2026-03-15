@@ -3,6 +3,7 @@ import { cacheThings, getCachedThings } from './offline/cache-things'
 import { cacheThingTypes, getCachedThingTypes } from './offline/cache-thing-types'
 import { cacheRelationships, getCachedRelationships } from './offline/cache-relationships'
 import { getByKey } from './offline/idb'
+import { mutationFetch } from './offline/mutation-fetch'
 
 export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | string
 
@@ -372,7 +373,12 @@ export const useStore = create<ReliState>((set, get) => ({
 
   dismissFinding: async (findingId: string) => {
     try {
-      const res = await fetch(`${BASE}/briefing/findings/${findingId}/dismiss`, { method: 'PATCH' })
+      const res = await mutationFetch(`${BASE}/briefing/findings/${findingId}/dismiss`, { method: 'PATCH' })
+      if (res.status === 202) {
+        // Queued offline — optimistically remove from UI
+        set(state => ({ findings: state.findings.filter(f => f.id !== findingId) }))
+        return
+      }
       if (!res.ok) return
       set(state => ({ findings: state.findings.filter(f => f.id !== findingId) }))
     } catch {
@@ -402,11 +408,19 @@ export const useStore = create<ReliState>((set, get) => ({
 
   snoozeThing: async (id: string, checkinDate: string | null) => {
     try {
-      const res = await fetch(`${BASE}/things/${id}`, {
+      const res = await mutationFetch(`${BASE}/things/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ checkin_date: checkinDate }),
       })
+      if (res.status === 202) {
+        // Queued offline — optimistically update local state
+        set(state => ({
+          things: state.things.map(t => t.id === id ? { ...t, checkin_date: checkinDate } : t),
+          briefing: state.briefing.map(t => t.id === id ? { ...t, checkin_date: checkinDate } : t),
+        }))
+        return
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const updated: Thing = await res.json()
       set(state => ({
