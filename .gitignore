@@ -23,3 +23,4 @@ htmlcov/
 # Frontend build artifacts and dependencies
 frontend/node_modules/
 frontend/dist/
+api_key.txt
