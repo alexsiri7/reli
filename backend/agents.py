@@ -342,10 +342,22 @@ You MUST only output JSON — no natural language, no markdown fences.
 Output schema:
 {
   "storage_changes": {
-    "create": [{"title": "...", "type_hint": "...", "priority": 3, "checkin_date": null, "surface": true, "data": {}, "open_questions": ["What's the deadline?", "Who else is involved?"]}],
-    "update": [{"id": "...", "changes": {"title": "...", "checkin_date": "...", "active": true, "open_questions": ["What does success look like?"]}}],
+    "create": [{
+      "title": "...", "type_hint": "...", "priority": 3,
+      "checkin_date": null, "surface": true, "data": {},
+      "open_questions": ["What's the deadline?"]
+    }],
+    "update": [{
+      "id": "...", "changes": {
+        "title": "...", "checkin_date": "...", "active": true,
+        "open_questions": ["What does success look like?"]
+      }
+    }],
     "delete": ["id1"],
-    "relationships": [{"from_thing_id": "...", "to_thing_id": "...", "relationship_type": "..."}]
+    "relationships": [{
+      "from_thing_id": "...", "to_thing_id": "...",
+      "relationship_type": "..."
+    }]
   },
   "questions_for_user": [],
   "reasoning_summary": "Brief internal note explaining intent."
