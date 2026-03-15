@@ -22,8 +22,10 @@ type Thing = {
 let mockState: Record<string, unknown> = {
   things: [] as Thing[],
   briefing: [] as Thing[],
+  findings: [],
   loading: false,
   snoozeThing: vi.fn(),
+  dismissFinding: vi.fn(),
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [],
   fetchCalendarStatus: vi.fn(),
@@ -102,6 +104,8 @@ const calendarDefaults = {
   fetchCalendarEvents: vi.fn(),
   connectCalendar: vi.fn(),
   disconnectCalendar: vi.fn(),
+  findings: [],
+  dismissFinding: vi.fn(),
   ...searchDefaults,
 }
 
@@ -144,7 +148,7 @@ describe('Sidebar', () => {
       ...calendarDefaults,
     }
     render(<Sidebar />)
-    expect(screen.getByText('📅 Daily Briefing')).toBeInTheDocument()
+    expect(screen.getByText('Daily Briefing')).toBeInTheDocument()
     expect(screen.getByText('Overdue Task')).toBeInTheDocument()
   })
 

@@ -1,14 +1,52 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { Thing } from '../store'
+import type { Thing, SweepFinding } from '../store'
 import { typeIcon } from '../utils'
 import { CalendarSection } from './CalendarSection'
 import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
 
+const FINDING_TYPE_ICONS: Record<string, string> = {
+  approaching_date: '\u23F0',
+  stale: '\u{1F4A4}',
+  orphan: '\u{1F50D}',
+  inconsistency: '\u26A0\uFE0F',
+  open_question: '\u2753',
+  connection: '\u{1F517}',
+}
+
+function FindingCard({ finding, onDismiss }: { finding: SweepFinding; onDismiss: (id: string) => void }) {
+  const icon = FINDING_TYPE_ICONS[finding.finding_type] ?? '\u{1F4CB}'
+  return (
+    <div className="group px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors">
+      <div className="flex items-start gap-2">
+        <span className="text-sm mt-0.5 shrink-0">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{finding.message}</p>
+          {finding.thing && (
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
+              {typeIcon(finding.thing.type_hint)} {finding.thing.title}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={() => onDismiss(finding.id)}
+          className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-opacity"
+          aria-label="Dismiss"
+          title="Dismiss"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function Sidebar() {
-  const { things, thingTypes, briefing, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch } = useStore(useShallow(s => ({ things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch })))
+  const { things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding } = useStore(useShallow(s => ({ things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding })))
   const [searchQuery, setSearchQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -217,12 +255,19 @@ export function Sidebar() {
             {/* Google Calendar */}
             <CalendarSection />
 
-            {/* Daily Briefing */}
-            {briefing.length > 0 && (
+            {/* Daily Briefing — sweep findings + checkin-due things */}
+            {(findings.length > 0 || briefing.length > 0) && (
               <section className="py-2 border-b border-gray-100 dark:border-gray-800">
                 <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-                  📅 Daily Briefing
+                  Daily Briefing
                 </h2>
+
+                {/* Sweep findings */}
+                {findings.map(f => (
+                  <FindingCard key={f.id} finding={f} onDismiss={dismissFinding} />
+                ))}
+
+                {/* Checkin-due things */}
                 {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
               </section>
             )}

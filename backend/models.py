@@ -169,9 +169,32 @@ class ChatResponse(BaseModel):
 # ── Briefing ──────────────────────────────────────────────────────────────────
 
 
+class SweepFinding(BaseModel):
+    id: str
+    thing_id: str | None
+    finding_type: str
+    message: str
+    priority: int
+    dismissed: bool
+    created_at: datetime
+    expires_at: datetime | None
+    thing: Thing | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class SweepFindingCreate(BaseModel):
+    thing_id: str | None = None
+    finding_type: str = Field(..., min_length=1, max_length=100)
+    message: str = Field(..., min_length=1)
+    priority: int = Field(default=2, ge=0, le=4)
+    expires_at: datetime | None = None
+
+
 class BriefingResponse(BaseModel):
     date: str
     things: list[Thing]
+    findings: list[SweepFinding]
     total: int
 
 

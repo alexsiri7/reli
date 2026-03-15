@@ -47,6 +47,18 @@ export interface ProactiveSurface {
   days_away: number
 }
 
+export interface SweepFinding {
+  id: string
+  thing_id: string | null
+  finding_type: string
+  message: string
+  priority: number
+  dismissed: boolean
+  created_at: string
+  expires_at: string | null
+  thing: Thing | null
+}
+
 export interface CalendarEvent {
   id: string
   summary: string
@@ -97,6 +109,7 @@ interface ReliState {
   thingTypes: ThingType[]
   things: Thing[]
   briefing: Thing[]
+  findings: SweepFinding[]
   messages: ChatMessage[]
   sessionId: string
   sessionStats: SessionStats
@@ -117,6 +130,7 @@ interface ReliState {
   fetchThings: () => Promise<void>
   fetchBriefing: () => Promise<void>
   fetchProactiveSurfaces: () => Promise<void>
+  dismissFinding: (findingId: string) => Promise<void>
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
   fetchHistory: () => Promise<void>
   fetchOlderMessages: () => Promise<void>
@@ -147,6 +161,7 @@ export const useStore = create<ReliState>((set, get) => ({
   thingTypes: [],
   things: [],
   briefing: [],
+  findings: [],
   messages: [],
   sessionId: SESSION_ID,
   sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, per_model: [] },
@@ -210,13 +225,14 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await fetch(`${BASE}/briefing`)
       if (!res.ok) return
-      const data: Thing[] = await res.json()
-      set({ briefing: data })
+      const data = await res.json()
+      set({ briefing: data.things ?? [], findings: data.findings ?? [] })
     } catch {
       // ignore — briefing is best-effort
     }
   },
 
+<<<<<<< HEAD
   fetchProactiveSurfaces: async () => {
     try {
       const res = await fetch(`${BASE}/proactive?days=7`)
@@ -225,6 +241,15 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ proactiveSurfaces: data })
     } catch {
       // best-effort
+=======
+  dismissFinding: async (findingId: string) => {
+    try {
+      const res = await fetch(`${BASE}/briefing/findings/${findingId}/dismiss`, { method: 'PATCH' })
+      if (!res.ok) return
+      set(state => ({ findings: state.findings.filter(f => f.id !== findingId) }))
+    } catch {
+      // ignore
+>>>>>>> 7423160 (feat: add daily briefing section with sweep findings support (re-t0k))
     }
   },
 

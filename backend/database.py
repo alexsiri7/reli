@@ -139,6 +139,21 @@ def init_db() -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS sweep_findings (
+                id TEXT PRIMARY KEY,
+                thing_id TEXT,
+                finding_type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                priority INTEGER DEFAULT 2,
+                dismissed BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP,
+                FOREIGN KEY(thing_id) REFERENCES things(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_sweep_active ON sweep_findings(dismissed, expires_at);
+            CREATE INDEX IF NOT EXISTS idx_sweep_thing ON sweep_findings(thing_id);
+
             CREATE TABLE IF NOT EXISTS google_tokens (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 access_token TEXT NOT NULL,

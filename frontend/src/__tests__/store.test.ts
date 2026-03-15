@@ -22,6 +22,7 @@ beforeEach(() => {
   useStore.setState({
     things: [],
     briefing: [],
+    findings: [],
     messages: [],
     loading: false,
     chatLoading: false,

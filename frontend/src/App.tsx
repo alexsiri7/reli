@@ -5,10 +5,11 @@ import { Sidebar } from './components/Sidebar'
 import { ChatPanel } from './components/ChatPanel'
 
 function App() {
-  const { fetchThingTypes, fetchThings, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
+  const { fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
     useShallow(s => ({
       fetchThingTypes: s.fetchThingTypes,
       fetchThings: s.fetchThings,
+      fetchBriefing: s.fetchBriefing,
       fetchHistory: s.fetchHistory,
       fetchCalendarStatus: s.fetchCalendarStatus,
       fetchProactiveSurfaces: s.fetchProactiveSurfaces,
@@ -19,9 +20,10 @@ function App() {
   useEffect(() => {
     fetchThingTypes()
     fetchThings()
+    fetchBriefing()
     fetchHistory()
     fetchProactiveSurfaces()
-    const interval = setInterval(() => { fetchThings(); fetchProactiveSurfaces() }, 30_000)
+    const interval = setInterval(() => { fetchThings(); fetchBriefing(); fetchProactiveSurfaces() }, 30_000)
 
     // Handle OAuth callback redirect
     const params = new URLSearchParams(window.location.search)
@@ -32,7 +34,7 @@ function App() {
     }
 
     return () => clearInterval(interval)
-  }, [fetchThingTypes, fetchThings, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces])
+  }, [fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces])
 
   return (
     <div className="flex w-full h-full overflow-hidden bg-white dark:bg-gray-900">
