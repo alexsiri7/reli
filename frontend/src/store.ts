@@ -7,6 +7,23 @@ import { cacheBriefing, getCachedBriefing } from './offline/cache-briefing'
 import { cacheCalendarEvents, getCachedCalendarEvents } from './offline/cache-calendar'
 import { getByKey } from './offline/idb'
 import { mutationFetch } from './offline/mutation-fetch'
+import {
+  validateResponse,
+  ThingSchema,
+  ThingTypeSchema,
+  RelationshipSchema,
+  AuthUserSchema,
+  BriefingResponseSchema,
+  ProactiveSurfaceSchema,
+  ChatMessageSchema,
+  ChatResponseSchema,
+  SessionStatsSchema,
+  CalendarStatusSchema,
+  CalendarEventSchema,
+  ModelSettingsSchema,
+  RequestyModelSchema,
+} from './schemas'
+import { z } from 'zod'
 
 export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | string
 
@@ -249,8 +266,8 @@ async function fetchThingDetailWithFallback(
 ): Promise<[Thing | null, Relationship[]]> {
   try {
     const [thing, rels] = await Promise.all([
-      apiFetch(`${BASE}/things/${id}`).then(r => r.ok ? r.json() : null),
-      apiFetch(`${BASE}/things/${id}/relationships`).then(r => r.ok ? r.json() : []),
+      apiFetch(`${BASE}/things/${id}`).then(r => r.ok ? r.json().then(d => validateResponse(ThingSchema, d, `/things/${id}`)) : null),
+      apiFetch(`${BASE}/things/${id}/relationships`).then(r => r.ok ? r.json().then(d => validateResponse(z.array(RelationshipSchema), d, `/things/${id}/relationships`)) : []),
     ])
     if (rels.length > 0) cacheRelationships(rels).catch(() => {})
     return [thing, rels]
@@ -274,7 +291,7 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await apiFetch(`${BASE}/auth/me`)
       if (res.ok) {
-        const user: AuthUser = await res.json()
+        const user: AuthUser = validateResponse(AuthUserSchema, await res.json(), '/auth/me')
         set({ currentUser: user, authChecked: true })
       } else {
         set({ currentUser: null, authChecked: true })
@@ -376,7 +393,7 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await apiFetch(`${BASE}/things/search?q=${encodeURIComponent(query)}&limit=50`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data: Thing[] = await res.json()
+      const data: Thing[] = validateResponse(z.array(ThingSchema), await res.json(), '/things/search')
       set({ searchResults: data })
     } catch {
       set({ searchResults: [] })
@@ -391,7 +408,7 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await apiFetch(`${BASE}/thing-types`)
       if (!res.ok) return
-      const data: ThingType[] = await res.json()
+      const data: ThingType[] = validateResponse(z.array(ThingTypeSchema), await res.json(), '/thing-types')
       set({ thingTypes: data })
       cacheThingTypes(data).catch(() => {})
     } catch {
@@ -407,7 +424,7 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await apiFetch(`${BASE}/things?active_only=true&limit=200`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data: Thing[] = await res.json()
+      const data: Thing[] = validateResponse(z.array(ThingSchema), await res.json(), '/things')
       set({ things: data })
       cacheThings(data).catch(() => {})
     } catch (e) {
@@ -428,7 +445,7 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await apiFetch(`${BASE}/briefing`)
       if (!res.ok) return
-      const data = await res.json()
+      const data = validateResponse(BriefingResponseSchema, await res.json(), '/briefing')
       const things = data.things ?? []
       const findings = data.findings ?? []
       set({ briefing: things, findings })
@@ -445,7 +462,7 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await apiFetch(`${BASE}/proactive?days=7`)
       if (!res.ok) return
-      const data: ProactiveSurface[] = await res.json()
+      const data: ProactiveSurface[] = validateResponse(z.array(ProactiveSurfaceSchema), await res.json(), '/proactive')
       set({ proactiveSurfaces: data })
     } catch {
       // best-effort
@@ -503,7 +520,7 @@ export const useStore = create<ReliState>((set, get) => ({
         return
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const updated: Thing = await res.json()
+      const updated: Thing = validateResponse(ThingSchema, await res.json(), `/things/${id}`)
       set(state => ({
         things: state.things.map(t => t.id === id ? updated : t),
         briefing: state.briefing.map(t => t.id === id ? updated : t),
@@ -517,7 +534,7 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await apiFetch(`${BASE}/chat/stats/today`)
       if (!res.ok) return
-      const data: SessionStats = await res.json()
+      const data: SessionStats = validateResponse(SessionStatsSchema, await res.json(), '/chat/stats/today')
       set({ sessionStats: data })
     } catch {
       // best-effort
@@ -529,7 +546,7 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await apiFetch(`${BASE}/chat/history/${SESSION_ID}?limit=${HISTORY_PAGE_SIZE}`)
       if (!res.ok) return
-      const data: ChatMessage[] = await res.json()
+      const data: ChatMessage[] = validateResponse(z.array(ChatMessageSchema), await res.json(), '/chat/history')
       set({
         messages: data.map(m => ({ ...m, questions_for_user: m.questions_for_user ?? [] })),
         hasMoreHistory: data.length >= HISTORY_PAGE_SIZE,
@@ -554,7 +571,7 @@ export const useStore = create<ReliState>((set, get) => ({
         `${BASE}/chat/history/${SESSION_ID}?limit=${HISTORY_PAGE_SIZE}&before=${oldestMsg.id}`
       )
       if (!res.ok) return
-      const data: ChatMessage[] = await res.json()
+      const data: ChatMessage[] = validateResponse(z.array(ChatMessageSchema), await res.json(), '/chat/history')
       set(state => ({
         messages: [...data, ...state.messages],
         hasMoreHistory: data.length >= HISTORY_PAGE_SIZE,
@@ -599,7 +616,7 @@ export const useStore = create<ReliState>((set, get) => ({
         body: JSON.stringify({ session_id: SESSION_ID, message: text }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
+      const data = validateResponse(ChatResponseSchema, await res.json(), '/chat')
 
       const assistantMsg: ChatMessage = {
         id: `assistant-${Date.now()}`,
@@ -645,7 +662,7 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await apiFetch(`${BASE}/calendar/status`)
       if (!res.ok) return
-      const data: CalendarStatus = await res.json()
+      const data: CalendarStatus = validateResponse(CalendarStatusSchema, await res.json(), '/calendar/status')
       set({ calendarStatus: data })
     } catch {
       // ignore
@@ -657,7 +674,7 @@ export const useStore = create<ReliState>((set, get) => ({
       const res = await apiFetch(`${BASE}/calendar/events`)
       if (!res.ok) return
       const data = await res.json()
-      const events = data.events ?? []
+      const events = validateResponse(z.array(CalendarEventSchema), data.events ?? [], '/calendar/events')
       set({ calendarEvents: events })
       cacheCalendarEvents(events).catch(() => {})
     } catch {
@@ -723,7 +740,7 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await apiFetch(`${BASE}/settings`)
       if (!res.ok) return
-      const data = await res.json()
+      const data = validateResponse(ModelSettingsSchema, await res.json(), '/settings')
       set({ modelSettings: data })
     } catch {
       // ignore
@@ -737,7 +754,7 @@ export const useStore = create<ReliState>((set, get) => ({
     try {
       const res = await apiFetch(`${BASE}/settings/models`)
       if (!res.ok) return
-      const data = await res.json()
+      const data = validateResponse(z.array(RequestyModelSchema), await res.json(), '/settings/models')
       set({ availableModels: data })
     } catch {
       // ignore
@@ -754,7 +771,7 @@ export const useStore = create<ReliState>((set, get) => ({
         body: JSON.stringify(settings),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
+      const data = validateResponse(ModelSettingsSchema, await res.json(), '/settings')
       set({ modelSettings: data })
     } catch (e) {
       set({ error: String(e) })
