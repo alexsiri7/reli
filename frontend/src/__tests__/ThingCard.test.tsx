@@ -68,7 +68,7 @@ describe('ThingCard', () => {
     fireEvent.click(screen.getByText('Tomorrow'))
 
     expect(snoozeThing).toHaveBeenCalledWith('t1', expect.any(String))
-    const dateArg = snoozeThing.mock.calls[0][1] as string
+    const dateArg = snoozeThing.mock.calls[0]![1] as string
     const passed = new Date(dateArg)
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
@@ -81,7 +81,7 @@ describe('ThingCard', () => {
     fireEvent.click(screen.getByText('Next week'))
 
     expect(snoozeThing).toHaveBeenCalledWith('t1', expect.any(String))
-    const dateArg = snoozeThing.mock.calls[0][1] as string
+    const dateArg = snoozeThing.mock.calls[0]![1] as string
     const passed = new Date(dateArg)
     const nextWeek = new Date()
     nextWeek.setDate(nextWeek.getDate() + 7)

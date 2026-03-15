@@ -22,7 +22,7 @@ interface GmailStatus {
 function formatSender(from: string): string {
   // "John Doe <john@example.com>" → "John Doe"
   const match = from.match(/^"?([^"<]+)"?\s*</)
-  return match ? match[1].trim() : from
+  return match?.[1] ? match[1].trim() : from
 }
 
 function formatDate(iso: string): string {
