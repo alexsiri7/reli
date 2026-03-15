@@ -321,7 +321,10 @@ async def _chat_ollama(
 
 
 async def run_context_agent(
-    message: str, history: list[dict[str, Any]], usage_stats: UsageStats | None = None
+    message: str,
+    history: list[dict[str, Any]],
+    usage_stats: UsageStats | None = None,
+    context_window: int = 10,
 ) -> dict[str, Any]:
     """Stage 1: decide what to search for.
 
@@ -329,7 +332,7 @@ async def run_context_agent(
     to Requesty if Ollama is unavailable.
     """
     messages = [{"role": "system", "content": CONTEXT_AGENT_SYSTEM}]
-    for h in history[-10:]:
+    for h in history[-context_window:]:
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": message})
 
@@ -470,6 +473,7 @@ async def run_reasoning_agent(
     gmail_context: list[dict[str, Any]] | None = None,
     calendar_events: list[dict[str, Any]] | None = None,
     usage_stats: UsageStats | None = None,
+    context_window: int = 10,
 ) -> dict[str, Any]:
     """Stage 2: decide what changes to make."""
     from datetime import datetime, timezone
@@ -489,7 +493,7 @@ async def run_reasoning_agent(
         cal_json = json.dumps(calendar_events, default=str)
         user_content += f"\n\nUpcoming Google Calendar events:\n{cal_json}"
     messages = [{"role": "system", "content": REASONING_AGENT_SYSTEM}]
-    for h in history[-10:]:
+    for h in history[-context_window:]:
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": user_content})
 
