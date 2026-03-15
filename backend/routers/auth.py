@@ -31,6 +31,9 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_SECONDS = 60 * 60 * 24 * 7  # 7 days
 COOKIE_NAME = "reli_session"
 
+# PKCE state storage: state -> code_verifier (single-process, in-memory)
+_pending_flows: dict[str, str] = {}
+
 
 def _client_config() -> dict:
     return {
@@ -98,16 +101,18 @@ def google_login() -> dict:
 
     flow = Flow.from_client_config(_client_config(), scopes=AUTH_SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI
-    auth_url, _ = flow.authorization_url(
+    auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
     )
+    # Store PKCE code_verifier for the callback
+    _pending_flows[state] = flow.code_verifier or ""
     return {"auth_url": str(auth_url)}
 
 
 @router.get("/google/callback", include_in_schema=False)
-def google_callback(code: str, request: Request) -> RedirectResponse:
+def google_callback(code: str, state: str = "", request: Request = None) -> RedirectResponse:
     """Exchange authorization code for tokens, create session."""
     if not SECRET_KEY:
         raise HTTPException(status_code=501, detail="SECRET_KEY not configured")
@@ -116,6 +121,16 @@ def google_callback(code: str, request: Request) -> RedirectResponse:
 
     flow = Flow.from_client_config(_client_config(), scopes=AUTH_SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI
+
+    # Restore PKCE code_verifier from the auth request
+    code_verifier = _pending_flows.pop(state, None)
+    if code_verifier:
+        flow.code_verifier = code_verifier
+
+    # Google returns scopes in expanded URI form; tell oauthlib to accept it
+    import os as _os
+    _os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
+
     try:
         flow.fetch_token(code=code)
     except Exception as exc:
