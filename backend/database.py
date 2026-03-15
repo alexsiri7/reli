@@ -111,6 +111,16 @@ def _migrate_add_users(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN user_id TEXT REFERENCES users(id)")
             conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_user_id ON {table}(user_id)")
 
+    # 3. Backfill usage_log.user_id from chat_history for pre-migration rows
+    conn.execute("""
+        UPDATE usage_log SET user_id = (
+            SELECT ch.user_id FROM chat_history ch
+            WHERE ch.session_id = usage_log.session_id
+              AND ch.user_id IS NOT NULL
+            LIMIT 1
+        ) WHERE usage_log.user_id IS NULL
+    """)
+
 
 def _migrate_google_tokens_multi_user(conn: sqlite3.Connection) -> None:
     """Refactor google_tokens to support multiple users and services.
