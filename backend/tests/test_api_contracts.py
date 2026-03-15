@@ -418,8 +418,6 @@ class TestSpaFallbackSecurity:
 
     def test_traversal_blocked(self, client, tmp_path):
         """Paths with .. must not serve files outside frontend/dist."""
-        import backend.main as main_mod
-
         # Set up a minimal fake frontend/dist with index.html
         dist = tmp_path / "dist"
         dist.mkdir()
@@ -427,7 +425,6 @@ class TestSpaFallbackSecurity:
         index.write_text("<html>SPA</html>")
 
         # Temporarily register the SPA fallback route
-        from fastapi import FastAPI
         from fastapi.responses import FileResponse
 
         resolved_dist = dist.resolve()
@@ -453,6 +450,4 @@ class TestSpaFallbackSecurity:
         for path in traversal_paths:
             resp = client.get(path, follow_redirects=True)
             if resp.status_code == 200:
-                assert "LEAKED" not in resp.text, (
-                    f"Directory traversal succeeded for {path} — secret file was served!"
-                )
+                assert "LEAKED" not in resp.text, f"Directory traversal succeeded for {path} — secret file was served!"

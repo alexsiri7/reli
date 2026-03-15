@@ -74,10 +74,10 @@ def _save_credentials(creds: Credentials) -> None:
 
     with db() as conn:
         conn.execute(
-            """INSERT INTO google_tokens (id, access_token, refresh_token, token_uri,
-               client_id, client_secret, expiry, scopes, updated_at)
-               VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET
+            """INSERT INTO google_tokens (user_id, service, access_token, refresh_token,
+               token_uri, client_id, client_secret, expiry, scopes, updated_at)
+               VALUES (NULL, 'calendar', ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(user_id, service) DO UPDATE SET
                access_token=excluded.access_token,
                refresh_token=COALESCE(excluded.refresh_token, google_tokens.refresh_token),
                token_uri=excluded.token_uri,
@@ -107,7 +107,7 @@ def _load_credentials() -> Credentials | None:
     re-encrypted on next save.
     """
     with db() as conn:
-        row = conn.execute("SELECT * FROM google_tokens WHERE id = 1").fetchone()
+        row = conn.execute("SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'").fetchone()
     if not row:
         return None
 
@@ -156,7 +156,7 @@ def get_credentials() -> Credentials | None:
 def disconnect() -> None:
     """Remove stored credentials."""
     with db() as conn:
-        conn.execute("DELETE FROM google_tokens WHERE id = 1")
+        conn.execute("DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'")
 
 
 def is_connected() -> bool:

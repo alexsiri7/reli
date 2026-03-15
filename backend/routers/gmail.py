@@ -1,7 +1,9 @@
 """Gmail read-only integration: OAuth2 flow and message endpoints."""
 
 import base64
+import json
 import os
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
@@ -9,6 +11,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+
+from ..database import db
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
 
@@ -19,7 +23,7 @@ router = APIRouter(prefix="/gmail", tags=["gmail"])
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-# Token file lives alongside the SQLite DB
+# Legacy token file path — used only for migration fallback
 _DATA_DIR = Path(os.environ.get("DATA_DIR", str(Path(__file__).parent.parent)))
 TOKEN_PATH = _DATA_DIR / "gmail_token.json"
 
@@ -58,36 +62,68 @@ class GmailThread(BaseModel):
 
 
 def _save_token(creds: Any) -> None:
-    """Persist OAuth2 credentials to disk (encrypted)."""
-    from ..token_encryption import encrypt_json
+    """Persist OAuth2 credentials to the google_tokens table."""
+    expiry_str = creds.expiry.isoformat() if creds.expiry else None
+    scopes_str = json.dumps(list(creds.scopes)) if creds.scopes else None
+    now = datetime.now(timezone.utc).isoformat()
 
-    TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-    TOKEN_PATH.write_text(encrypt_json(creds.to_json()))
+    with db() as conn:
+        conn.execute(
+            """INSERT INTO google_tokens (user_id, service, access_token, refresh_token,
+               token_uri, client_id, client_secret, expiry, scopes, updated_at)
+               VALUES (NULL, 'gmail', ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(user_id, service) DO UPDATE SET
+               access_token=excluded.access_token,
+               refresh_token=COALESCE(excluded.refresh_token, google_tokens.refresh_token),
+               token_uri=excluded.token_uri,
+               client_id=excluded.client_id,
+               client_secret=excluded.client_secret,
+               expiry=excluded.expiry,
+               scopes=excluded.scopes,
+               updated_at=excluded.updated_at""",
+            (
+                creds.token,
+                creds.refresh_token,
+                creds.token_uri,
+                creds.client_id,
+                creds.client_secret,
+                expiry_str,
+                scopes_str,
+                now,
+            ),
+        )
 
 
 def _load_creds() -> Any:
     """Load and refresh credentials. Returns None if not connected.
 
-    Transparently migrates plaintext token files to encrypted format.
+    Checks the google_tokens table first, falls back to legacy gmail_token.json
+    for migration, then stores it in the DB.
     """
-    if not TOKEN_PATH.exists():
-        return None
-
-    import json as _json
-
     from google.auth.transport.requests import Request as GoogleRequest
     from google.oauth2.credentials import Credentials
 
-    from ..token_encryption import decrypt_json_or_plaintext
+    # Try DB first
+    with db() as conn:
+        row = conn.execute("SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'").fetchone()
 
-    raw = TOKEN_PATH.read_text()
-    json_str, was_encrypted = decrypt_json_or_plaintext(raw)
-
-    creds = Credentials.from_authorized_user_info(_json.loads(json_str), GMAIL_SCOPES)
-
-    # Migrate plaintext file to encrypted
-    if not was_encrypted:
+    if row:
+        creds = Credentials(
+            token=row["access_token"],
+            refresh_token=row["refresh_token"],
+            token_uri=row["token_uri"],
+            client_id=row["client_id"],
+            client_secret=row["client_secret"],
+        )
+        if row["expiry"]:
+            creds.expiry = datetime.fromisoformat(row["expiry"]).replace(tzinfo=None)
+    elif TOKEN_PATH.exists():
+        # Migrate legacy file-based token to DB
+        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), GMAIL_SCOPES)
         _save_token(creds)
+        TOKEN_PATH.unlink()  # Remove legacy file after migration
+    else:
+        return None
 
     if creds.expired and creds.refresh_token:
         creds.refresh(GoogleRequest())
@@ -235,6 +271,9 @@ def gmail_callback(request: Request, code: str = Query(...), error: str | None =
 @router.delete("/disconnect", status_code=204, summary="Disconnect Gmail")
 def gmail_disconnect() -> None:
     """Remove stored Gmail credentials."""
+    with db() as conn:
+        conn.execute("DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'")
+    # Also clean up legacy file if it exists
     if TOKEN_PATH.exists():
         TOKEN_PATH.unlink()
 
