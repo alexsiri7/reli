@@ -190,12 +190,14 @@ class UsageStats:
         self.api_calls += 1
         if model:
             self.model = model
-        self.calls.append(UsageRecord(
-            model=model or "unknown",
-            prompt_tokens=prompt,
-            completion_tokens=completion,
-            cost_usd=actual_cost,
-        ))
+        self.calls.append(
+            UsageRecord(
+                model=model or "unknown",
+                prompt_tokens=prompt,
+                completion_tokens=completion,
+                cost_usd=actual_cost,
+            )
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
