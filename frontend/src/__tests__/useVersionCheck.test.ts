@@ -6,7 +6,7 @@ let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   fetchMock = vi.fn()
-  globalThis.fetch = fetchMock
+  globalThis.fetch = fetchMock as unknown as typeof fetch
   vi.useFakeTimers()
   // Define __APP_BUILD_VERSION__ for tests
   ;(globalThis as Record<string, unknown>).__APP_BUILD_VERSION__ = 'v1.0.0'

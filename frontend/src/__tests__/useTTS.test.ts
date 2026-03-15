@@ -32,6 +32,7 @@ const { mockSpeak, mockCancel, mockGetVoices, mockAddEventListener, mockRemoveEv
       onerror: (() => void) | null = null
       constructor(text: string) {
         this.text = text
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
         _lastUtterance = this
       }
     },

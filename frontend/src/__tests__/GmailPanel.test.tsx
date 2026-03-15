@@ -5,7 +5,7 @@ let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   fetchMock = vi.fn()
-  globalThis.fetch = fetchMock
+  globalThis.fetch = fetchMock as unknown as typeof fetch
 })
 
 import { GmailPanel } from '../components/GmailPanel'

@@ -28,17 +28,18 @@ class MockSpeechRecognition {
   onend: MockRecognitionInstance['onend'] = null
 
   constructor() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     mockRecognitionInstance = this
   }
 }
 
 beforeEach(() => {
-  ;(window as Record<string, unknown>).SpeechRecognition = MockSpeechRecognition
+  ;(window as unknown as Record<string, unknown>).SpeechRecognition = MockSpeechRecognition
   vi.useFakeTimers()
 })
 
 afterEach(() => {
-  delete (window as Record<string, unknown>).SpeechRecognition
+  delete (window as unknown as Record<string, unknown>).SpeechRecognition
   vi.useRealTimers()
 })
 

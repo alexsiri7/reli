@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
 
 const mockStore: Record<string, unknown> = {
@@ -23,6 +23,7 @@ vi.mock('../offline/pending-ops', () => ({
 }))
 
 const mockInitSyncEngine = vi.fn(() => vi.fn())
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const mockOnSyncEvent = vi.fn((_cb: (event: { type: string; remaining?: number }) => void) => {
   return vi.fn()
 })
