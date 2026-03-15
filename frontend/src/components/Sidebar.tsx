@@ -85,7 +85,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters })))
   const [searchQuery, setSearchQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -140,6 +140,21 @@ export function Sidebar() {
       searchThings(value)
     }, 250)
   }, [searchThings, clearSearch])
+
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false)
+  const filterDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close filter dropdown on outside click
+  useEffect(() => {
+    if (!filterDropdownOpen) return
+    const handler = (e: MouseEvent) => {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(e.target as Node)) {
+        setFilterDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [filterDropdownOpen])
 
   const [isOpen, setIsOpen] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 768 : true
@@ -196,7 +211,17 @@ export function Sidebar() {
     }
     const projectIds = new Set(active.filter(t => t.type_hint === 'project').map(t => t.id))
     // Don't show children of projects as standalone items
-    const standalone = active.filter(t => !t.parent_id || !projectIds.has(t.parent_id))
+    let standalone = active.filter(t => !t.parent_id || !projectIds.has(t.parent_id))
+
+    // Apply client-side filters
+    const filterQ = thingFilterQuery.trim().toLowerCase()
+    if (filterQ) {
+      standalone = standalone.filter(t => t.title.toLowerCase().includes(filterQ))
+    }
+    if (thingFilterTypes.length > 0) {
+      standalone = standalone.filter(t => thingFilterTypes.includes(t.type_hint ?? 'other'))
+    }
+
     const groups: { type: string; label: string; icon: string; items: Thing[] }[] = []
     const byType = new Map<string, Thing[]>()
     for (const t of standalone) {
@@ -219,7 +244,37 @@ export function Sidebar() {
       }
     }
     return groups
+  }, [active, thingTypes, thingFilterQuery, thingFilterTypes])
+
+  // Available types for the filter dropdown (derived from active things)
+  const availableTypes = useMemo(() => {
+    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal']
+    const FALLBACK_LABELS: Record<string, string> = {
+      project: 'Projects', goal: 'Goals', task: 'Tasks',
+      note: 'Notes', idea: 'Ideas', journal: 'Journal',
+    }
+    const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
+    for (const tt of thingTypes) {
+      if (!typeLabels[tt.name]) {
+        typeLabels[tt.name] = tt.name.charAt(0).toUpperCase() + tt.name.slice(1) + 's'
+      }
+    }
+    const typesInUse = new Set(active.map(t => t.type_hint ?? 'other'))
+    const ordered: { type: string; label: string; icon: string }[] = []
+    for (const type of TYPE_ORDER) {
+      if (typesInUse.has(type)) {
+        ordered.push({ type, label: typeLabels[type] ?? type, icon: typeIcon(type, thingTypes) })
+        typesInUse.delete(type)
+      }
+    }
+    for (const type of typesInUse) {
+      ordered.push({ type, label: typeLabels[type] ?? type.charAt(0).toUpperCase() + type.slice(1), icon: typeIcon(type, thingTypes) })
+    }
+    return ordered
   }, [active, thingTypes])
+
+  const activeFilterCount = thingFilterTypes.length + (thingFilterQuery.trim() ? 1 : 0)
+  const isThingFilterActive = activeFilterCount > 0
 
   return (
     <>
@@ -427,6 +482,89 @@ export function Sidebar() {
                 })}
               </section>
             )}
+
+        {/* Things filter bar */}
+        {active.length > 0 && (
+          <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Filter things…"
+                  value={thingFilterQuery}
+                  onChange={e => setThingFilterQuery(e.target.value)}
+                  className="w-full pl-7 pr-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500"
+                />
+              </div>
+              <div className="relative" ref={filterDropdownRef}>
+                <button
+                  onClick={() => setFilterDropdownOpen(o => !o)}
+                  className={`p-1 rounded transition-colors relative ${
+                    thingFilterTypes.length > 0
+                      ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
+                      : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                  aria-label="Filter by type"
+                  title="Filter by type"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  {thingFilterTypes.length > 0 && (
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center h-3.5 w-3.5 rounded-full bg-indigo-500 text-white text-[9px] font-bold leading-none">
+                      {thingFilterTypes.length}
+                    </span>
+                  )}
+                </button>
+                {filterDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 py-1">
+                    {availableTypes.map(t => (
+                      <button
+                        key={t.type}
+                        onClick={() => toggleThingFilterType(t.type)}
+                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors ${
+                          thingFilterTypes.includes(t.type)
+                            ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        <span>{t.icon}</span>
+                        <span className="flex-1">{t.label}</span>
+                        {thingFilterTypes.includes(t.type) && (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                    {availableTypes.length === 0 && (
+                      <p className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">No types available</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              {isThingFilterActive && (
+                <button
+                  onClick={clearThingFilters}
+                  className="text-[10px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 whitespace-nowrap"
+                  title="Clear all filters"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* No results state for filtered things */}
+        {isThingFilterActive && activeGroups.length === 0 && (
+          <div className="px-4 py-4 text-sm text-gray-400 dark:text-gray-500 text-center">
+            No things match your filters
+          </div>
+        )}
 
         {/* Active Things grouped by type */}
         {activeGroups.map(group => (

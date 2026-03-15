@@ -205,6 +205,13 @@ interface ReliState {
   connectCalendar: () => Promise<void>
   disconnectCalendar: () => Promise<void>
 
+  // Things list filter (client-side, persists across panel switches)
+  thingFilterQuery: string
+  thingFilterTypes: string[]
+  setThingFilterQuery: (query: string) => void
+  toggleThingFilterType: (type: string) => void
+  clearThingFilters: () => void
+
   // Mobile navigation
   mobileView: 'things' | 'chat'
   setMobileView: (view: 'things' | 'chat') => void
@@ -685,6 +692,17 @@ export const useStore = create<ReliState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  // Things list filter
+  thingFilterQuery: '',
+  thingFilterTypes: [],
+  setThingFilterQuery: (query: string) => set({ thingFilterQuery: query }),
+  toggleThingFilterType: (type: string) => set(s => ({
+    thingFilterTypes: s.thingFilterTypes.includes(type)
+      ? s.thingFilterTypes.filter(t => t !== type)
+      : [...s.thingFilterTypes, type],
+  })),
+  clearThingFilters: () => set({ thingFilterQuery: '', thingFilterTypes: [] }),
 
   // Mobile navigation
   mobileView: 'things',
