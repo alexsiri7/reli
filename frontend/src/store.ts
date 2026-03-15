@@ -64,6 +64,7 @@ export interface SweepFinding {
   dismissed: boolean
   created_at: string
   expires_at: string | null
+  snoozed_until: string | null
   thing: Thing | null
 }
 
@@ -162,6 +163,8 @@ interface ReliState {
   fetchBriefing: () => Promise<void>
   fetchProactiveSurfaces: () => Promise<void>
   dismissFinding: (findingId: string) => Promise<void>
+  snoozeFinding: (findingId: string, until: string) => Promise<void>
+  actOnFinding: (finding: SweepFinding) => void
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
   fetchHistory: () => Promise<void>
   fetchOlderMessages: () => Promise<void>
@@ -345,6 +348,26 @@ export const useStore = create<ReliState>((set, get) => ({
       set(state => ({ findings: state.findings.filter(f => f.id !== findingId) }))
     } catch {
       // ignore
+    }
+  },
+
+  snoozeFinding: async (findingId: string, until: string) => {
+    try {
+      const res = await fetch(`${BASE}/briefing/findings/${findingId}/snooze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ until }),
+      })
+      if (!res.ok) return
+      set(state => ({ findings: state.findings.filter(f => f.id !== findingId) }))
+    } catch {
+      // ignore
+    }
+  },
+
+  actOnFinding: (finding: SweepFinding) => {
+    if (finding.thing_id) {
+      get().openThingDetail(finding.thing_id)
     }
   },
 

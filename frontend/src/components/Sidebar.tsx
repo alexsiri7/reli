@@ -16,13 +16,16 @@ const FINDING_TYPE_ICONS: Record<string, string> = {
   connection: '\u{1F517}',
 }
 
-function FindingCard({ finding, onDismiss }: { finding: SweepFinding; onDismiss: (id: string) => void }) {
+function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
+  finding: SweepFinding
+  onDismiss: (id: string) => void
+  onSnooze: (id: string) => void
+  onAct: (finding: SweepFinding) => void
+}) {
   const icon = FINDING_TYPE_ICONS[finding.finding_type] ?? '\u{1F4CB}'
   return (
     <div
-      className="group px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors cursor-pointer"
-      onClick={() => finding.thing_id && useStore.getState().openThingDetail(finding.thing_id)}
-      role={finding.thing_id ? 'button' : undefined}
+      className="group px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
     >
       <div className="flex items-start gap-2">
         <span className="text-sm mt-0.5 shrink-0">{icon}</span>
@@ -33,17 +36,33 @@ function FindingCard({ finding, onDismiss }: { finding: SweepFinding; onDismiss:
               {typeIcon(finding.thing.type_hint)} {finding.thing.title}
             </p>
           )}
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            {finding.thing_id && (
+              <button
+                onClick={() => onAct(finding)}
+                className="text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium"
+                title="Open in detail panel"
+              >
+                Open
+              </button>
+            )}
+            <button
+              onClick={() => onSnooze(finding.id)}
+              className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+              title="Snooze for 1 day"
+            >
+              Snooze
+            </button>
+            <button
+              onClick={() => onDismiss(finding.id)}
+              className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
+              title="Dismiss"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => onDismiss(finding.id)}
-          className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-opacity"
-          aria-label="Dismiss"
-          title="Dismiss"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
       </div>
     </div>
   )
@@ -66,7 +85,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding } = useStore(useShallow(s => ({ things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding })))
+  const { things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding } = useStore(useShallow(s => ({ things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding })))
   const [searchQuery, setSearchQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -100,6 +119,13 @@ export function Sidebar() {
     document.addEventListener('pointermove', onPointerMove)
     document.addEventListener('pointerup', onPointerUp)
   }, [])
+
+  const handleSnooze = useCallback((findingId: string) => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    tomorrow.setHours(9, 0, 0, 0)
+    snoozeFinding(findingId, tomorrow.toISOString())
+  }, [snoozeFinding])
 
   const isSearching = searchQuery.trim().length > 0
 
@@ -319,7 +345,7 @@ export function Sidebar() {
 
                 {/* Sweep findings */}
                 {findings.map(f => (
-                  <FindingCard key={f.id} finding={f} onDismiss={dismissFinding} />
+                  <FindingCard key={f.id} finding={f} onDismiss={dismissFinding} onSnooze={handleSnooze} onAct={actOnFinding} />
                 ))}
 
                 {/* Checkin-due things */}
