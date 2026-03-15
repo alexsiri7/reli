@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { Thing, SweepFinding } from '../store'
@@ -45,10 +45,57 @@ function FindingCard({ finding, onDismiss }: { finding: SweepFinding; onDismiss:
   )
 }
 
+const SIDEBAR_MIN_WIDTH = 200
+const SIDEBAR_MAX_WIDTH = 500
+const SIDEBAR_DEFAULT_WIDTH = 288 // w-72
+const SIDEBAR_WIDTH_KEY = 'reli-sidebar-width'
+
+function loadSidebarWidth(): number {
+  try {
+    const stored = localStorage.getItem(SIDEBAR_WIDTH_KEY)
+    if (stored) {
+      const val = Number(stored)
+      if (val >= SIDEBAR_MIN_WIDTH && val <= SIDEBAR_MAX_WIDTH) return val
+    }
+  } catch { /* ignore */ }
+  return SIDEBAR_DEFAULT_WIDTH
+}
+
 export function Sidebar() {
   const { things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding } = useStore(useShallow(s => ({ things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding })))
   const [searchQuery, setSearchQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  // --- Resizable sidebar state (desktop only) ---
+  const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
+  const isDraggingRef = useRef(false)
+
+  const handleDragStart = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    isDraggingRef.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const onPointerMove = (ev: globalThis.PointerEvent) => {
+      if (!isDraggingRef.current) return
+      const newWidth = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, ev.clientX))
+      setSidebarWidth(newWidth)
+    }
+    const onPointerUp = () => {
+      isDraggingRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      document.removeEventListener('pointermove', onPointerMove)
+      document.removeEventListener('pointerup', onPointerUp)
+      // Persist on release
+      setSidebarWidth(w => {
+        try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(w)) } catch { /* ignore */ }
+        return w
+      })
+    }
+    document.addEventListener('pointermove', onPointerMove)
+    document.addEventListener('pointerup', onPointerUp)
+  }, [])
 
   const isSearching = searchQuery.trim().length > 0
 
@@ -169,11 +216,12 @@ export function Sidebar() {
 
       {/* Sidebar panel */}
       <aside
+        style={{ width: window.innerWidth >= 768 ? sidebarWidth : undefined }}
         className={`
-          fixed inset-y-0 left-0 z-50 w-72 flex flex-col border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 overflow-y-auto
+          fixed inset-y-0 left-0 z-50 w-72 md:w-auto flex flex-col border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 overflow-y-auto
           transform transition-transform duration-200 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:static md:z-auto md:shrink-0
+          md:static md:z-auto md:shrink-0 md:relative
           ${isOpen ? '' : 'md:-translate-x-full md:hidden'}
         `}
       >
@@ -348,6 +396,13 @@ export function Sidebar() {
             )}
           </>
         )}
+        {/* Drag handle — desktop only */}
+        <div
+          onPointerDown={handleDragStart}
+          className="hidden md:block absolute top-0 right-0 w-1.5 h-full cursor-col-resize group/handle z-10"
+        >
+          <div className="w-0.5 h-full mx-auto bg-transparent group-hover/handle:bg-indigo-400 dark:group-hover/handle:bg-indigo-500 transition-colors" />
+        </div>
       </aside>
     </>
   )
