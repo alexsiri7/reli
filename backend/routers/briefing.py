@@ -4,8 +4,9 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from ..auth import require_user, user_filter
 from ..database import db
 from ..models import BriefingResponse, SweepFinding, SweepFindingCreate, SweepFindingSnooze, Thing
 from .things import _row_to_thing
@@ -29,26 +30,29 @@ def _row_to_finding(row: Any, thing: Thing | None = None) -> SweepFinding:
 
 
 @router.get("", response_model=BriefingResponse, summary="Daily Briefing")
-def get_briefing(as_of: date | None = None) -> BriefingResponse:
+def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)) -> BriefingResponse:
     """Return checkin-due Things and active sweep findings for the daily briefing."""
     target = as_of or date.today()
     cutoff = datetime.combine(target, datetime.max.time()).isoformat()
     now = datetime.utcnow().isoformat()
 
+    uf_sql, uf_params = user_filter(user_id)
+    sf_uf_sql, sf_uf_params = user_filter(user_id, "sf")
+
     with db() as conn:
         # Things with checkin_date due today or earlier
         thing_rows = conn.execute(
-            """SELECT * FROM things
+            f"""SELECT * FROM things
                WHERE active = 1
                  AND checkin_date IS NOT NULL
-                 AND checkin_date <= ?
+                 AND checkin_date <= ?{uf_sql}
                ORDER BY checkin_date ASC, priority ASC""",
-            (cutoff,),
+            [cutoff, *uf_params],
         ).fetchall()
 
         # Active (not dismissed, not expired, not snoozed) sweep findings
         finding_rows = conn.execute(
-            """SELECT sf.*, t.id AS t_id, t.title AS t_title, t.type_hint AS t_type_hint,
+            f"""SELECT sf.*, t.id AS t_id, t.title AS t_title, t.type_hint AS t_type_hint,
                       t.parent_id AS t_parent_id, t.checkin_date AS t_checkin_date,
                       t.priority AS t_priority, t.active AS t_active, t.surface AS t_surface,
                       t.data AS t_data, t.created_at AS t_created_at,
@@ -57,9 +61,9 @@ def get_briefing(as_of: date | None = None) -> BriefingResponse:
                LEFT JOIN things t ON sf.thing_id = t.id
                WHERE sf.dismissed = 0
                  AND (sf.expires_at IS NULL OR sf.expires_at > ?)
-                 AND (sf.snoozed_until IS NULL OR sf.snoozed_until <= ?)
+                 AND (sf.snoozed_until IS NULL OR sf.snoozed_until <= ?){sf_uf_sql}
                ORDER BY sf.priority ASC, sf.created_at DESC""",
-            (now, now),
+            [now, now, *sf_uf_params],
         ).fetchall()
 
     things: list[Thing] = [_row_to_thing(r) for r in thing_rows]
@@ -93,7 +97,7 @@ def get_briefing(as_of: date | None = None) -> BriefingResponse:
 
 
 @router.post("/findings", response_model=SweepFinding, status_code=201)
-def create_finding(body: SweepFindingCreate) -> SweepFinding:
+def create_finding(body: SweepFindingCreate, user_id: str = Depends(require_user)) -> SweepFinding:
     """Create a new sweep finding."""
     finding_id = f"sf-{uuid.uuid4().hex[:8]}"
     now = datetime.utcnow().isoformat()
@@ -101,15 +105,25 @@ def create_finding(body: SweepFindingCreate) -> SweepFinding:
     with db() as conn:
         # Validate thing_id if provided
         if body.thing_id:
-            row = conn.execute("SELECT id FROM things WHERE id = ?", (body.thing_id,)).fetchone()
+            uf_sql, uf_params = user_filter(user_id)
+            row = conn.execute(f"SELECT id FROM things WHERE id = ?{uf_sql}", [body.thing_id, *uf_params]).fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail=f"Thing {body.thing_id} not found")
 
         conn.execute(
             """INSERT INTO sweep_findings
-               (id, thing_id, finding_type, message, priority, dismissed, created_at, expires_at)
-               VALUES (?, ?, ?, ?, ?, 0, ?, ?)""",
-            (finding_id, body.thing_id, body.finding_type, body.message, body.priority, now, body.expires_at),
+               (id, thing_id, finding_type, message, priority, dismissed, created_at, expires_at, user_id)
+               VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)""",
+            (
+                finding_id,
+                body.thing_id,
+                body.finding_type,
+                body.message,
+                body.priority,
+                now,
+                body.expires_at,
+                user_id or None,
+            ),
         )
 
         row = conn.execute("SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
@@ -118,30 +132,32 @@ def create_finding(body: SweepFindingCreate) -> SweepFinding:
 
 
 @router.patch("/findings/{finding_id}/dismiss", response_model=SweepFinding)
-def dismiss_finding(finding_id: str) -> SweepFinding:
+def dismiss_finding(finding_id: str, user_id: str = Depends(require_user)) -> SweepFinding:
     """Dismiss a sweep finding."""
+    uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
-        row = conn.execute("SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
+        row = conn.execute(f"SELECT * FROM sweep_findings WHERE id = ?{uf_sql}", [finding_id, *uf_params]).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Finding not found")
 
-        conn.execute("UPDATE sweep_findings SET dismissed = 1 WHERE id = ?", (finding_id,))
+        conn.execute(f"UPDATE sweep_findings SET dismissed = 1 WHERE id = ?{uf_sql}", [finding_id, *uf_params])
         row = conn.execute("SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
 
     return _row_to_finding(row)
 
 
 @router.post("/findings/{finding_id}/snooze", response_model=SweepFinding)
-def snooze_finding(finding_id: str, body: SweepFindingSnooze) -> SweepFinding:
+def snooze_finding(finding_id: str, body: SweepFindingSnooze, user_id: str = Depends(require_user)) -> SweepFinding:
     """Snooze a sweep finding — hide it from the briefing until the given date."""
+    uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
-        row = conn.execute("SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
+        row = conn.execute(f"SELECT * FROM sweep_findings WHERE id = ?{uf_sql}", [finding_id, *uf_params]).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Finding not found")
 
         conn.execute(
-            "UPDATE sweep_findings SET snoozed_until = ? WHERE id = ?",
-            (body.until.isoformat(), finding_id),
+            f"UPDATE sweep_findings SET snoozed_until = ? WHERE id = ?{uf_sql}",
+            [body.until.isoformat(), finding_id, *uf_params],
         )
         row = conn.execute("SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
 

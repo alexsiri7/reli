@@ -6,8 +6,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 
+from ..auth import require_user, user_filter
 from ..database import db
 from ..models import Relationship, RelationshipCreate, Thing, ThingCreate, ThingUpdate
 from ..vector_store import delete_thing as vs_delete
@@ -86,6 +87,7 @@ def search_things(
     active_only: bool = Query(False, description="Filter to active Things only"),
     type_hint: str | None = Query(None, description="Filter by type_hint"),
     limit: int = Query(50, ge=1, le=200),
+    user_id: str = Depends(require_user),
 ) -> list[Thing]:
     if not q.strip():
         return []
@@ -95,6 +97,9 @@ def search_things(
         # Build a WHERE filter applied to all branches of the UNION
         filters = ""
         filter_params: list[str | int] = []
+        uf_sql, uf_params = user_filter(user_id, "t")
+        filters += uf_sql
+        filter_params.extend(uf_params)
         if active_only:
             filters += " AND t.active = 1"
         if type_hint:
@@ -152,12 +157,20 @@ def list_things(
     active_only: bool = Query(True, description="Filter to active Things only"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    user_id: str = Depends(require_user),
 ) -> list[Thing]:
     with db() as conn:
-        where = "WHERE active = 1" if active_only else ""
+        where = "WHERE 1=1"
+        params: list[str | int] = []
+        uf_sql, uf_params = user_filter(user_id)
+        where += uf_sql
+        params.extend(uf_params)
+        if active_only:
+            where += " AND active = 1"
+        params.extend([limit, offset])
         rows = conn.execute(
             f"SELECT * FROM things {where} ORDER BY checkin_date ASC, priority ASC LIMIT ? OFFSET ?",
-            (limit, offset),
+            params,
         ).fetchall()
         things = [_row_to_thing(r) for r in rows]
 
@@ -184,7 +197,7 @@ def list_things(
 
 
 @router.post("", response_model=Thing, status_code=status.HTTP_201_CREATED, summary="Create a Thing")
-def create_thing(body: ThingCreate, background_tasks: BackgroundTasks) -> Thing:
+def create_thing(body: ThingCreate, background_tasks: BackgroundTasks, user_id: str = Depends(require_user)) -> Thing:
     thing_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     data_json = json.dumps(body.data) if body.data is not None else None
@@ -201,8 +214,8 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks) -> Thing:
         conn.execute(
             "INSERT INTO things"
             " (id, title, type_hint, parent_id, checkin_date, priority, active, surface, data,"
-            " open_questions, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " open_questions, created_at, updated_at, user_id)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 thing_id,
                 body.title,
@@ -216,6 +229,7 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks) -> Thing:
                 oq_json,
                 now,
                 now,
+                user_id or None,
             ),
         )
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
@@ -224,18 +238,22 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks) -> Thing:
 
 
 @router.get("/{thing_id}", response_model=Thing, summary="Get a Thing")
-def get_thing(thing_id: str) -> Thing:
+def get_thing(thing_id: str, user_id: str = Depends(require_user)) -> Thing:
+    uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
-        row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+        row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
     return _row_to_thing(row)
 
 
 @router.patch("/{thing_id}", response_model=Thing, summary="Update a Thing")
-def update_thing(thing_id: str, body: ThingUpdate, background_tasks: BackgroundTasks) -> Thing:
+def update_thing(
+    thing_id: str, body: ThingUpdate, background_tasks: BackgroundTasks, user_id: str = Depends(require_user)
+) -> Thing:
+    uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
-        row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+        row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
 
@@ -276,12 +294,13 @@ def update_thing(thing_id: str, body: ThingUpdate, background_tasks: BackgroundT
 
 
 @router.delete("/{thing_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a Thing")
-def delete_thing(thing_id: str, background_tasks: BackgroundTasks) -> None:
+def delete_thing(thing_id: str, background_tasks: BackgroundTasks, user_id: str = Depends(require_user)) -> None:
+    uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
-        row = conn.execute("SELECT id FROM things WHERE id = ?", (thing_id,)).fetchone()
+        row = conn.execute(f"SELECT id FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
-        conn.execute("DELETE FROM things WHERE id = ?", (thing_id,))
+        conn.execute(f"DELETE FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params])
     background_tasks.add_task(vs_delete, thing_id)
 
 
@@ -308,9 +327,10 @@ def _parse_rel_row(row: sqlite3.Row) -> Relationship:
 
 
 @router.get("/{thing_id}/relationships", response_model=list[Relationship], summary="List relationships for a Thing")
-def list_relationships(thing_id: str) -> list[Relationship]:
+def list_relationships(thing_id: str, user_id: str = Depends(require_user)) -> list[Relationship]:
+    uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
-        row = conn.execute("SELECT id FROM things WHERE id = ?", (thing_id,)).fetchone()
+        row = conn.execute(f"SELECT id FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
         rows = conn.execute(
@@ -323,13 +343,14 @@ def list_relationships(thing_id: str) -> list[Relationship]:
 @router.post(
     "/relationships", response_model=Relationship, status_code=status.HTTP_201_CREATED, summary="Create a relationship"
 )
-def create_relationship(body: RelationshipCreate) -> Relationship:
+def create_relationship(body: RelationshipCreate, user_id: str = Depends(require_user)) -> Relationship:
     rel_id = str(uuid.uuid4())
     meta_json = json.dumps(body.metadata) if body.metadata is not None else None
+    uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
-        # Validate both things exist
+        # Validate both things exist and belong to this user
         for tid, label in [(body.from_thing_id, "from"), (body.to_thing_id, "to")]:
-            if not conn.execute("SELECT id FROM things WHERE id = ?", (tid,)).fetchone():
+            if not conn.execute(f"SELECT id FROM things WHERE id = ?{uf_sql}", [tid, *uf_params]).fetchone():
                 raise HTTPException(status_code=404, detail=f"{label}_thing_id '{tid}' not found")
         if body.from_thing_id == body.to_thing_id:
             raise HTTPException(status_code=422, detail="A Thing cannot have a relationship with itself")

@@ -5,7 +5,7 @@ import sqlite3
 from datetime import date, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..agents import (
     UsageStats,
@@ -14,6 +14,7 @@ from ..agents import (
     run_reasoning_agent,
     run_response_agent,
 )
+from ..auth import require_user, user_filter
 from ..database import db
 from ..google_calendar import fetch_upcoming_events
 from ..google_calendar import is_connected as gcal_connected
@@ -55,18 +56,20 @@ def get_history(
     session_id: str,
     limit: int = Query(50, ge=1, le=500),
     before: int | None = Query(None, description="Return messages with id < before (for loading older messages)"),
+    user_id: str = Depends(require_user),
 ) -> list[ChatMessage]:
+    uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
         if before is not None:
             rows = conn.execute(
-                "SELECT * FROM chat_history WHERE session_id = ? AND id < ? ORDER BY id DESC LIMIT ?",
-                (session_id, before, limit),
+                f"SELECT * FROM chat_history WHERE session_id = ? AND id < ?{uf_sql} ORDER BY id DESC LIMIT ?",
+                [session_id, before, *uf_params, limit],
             ).fetchall()
             rows = list(reversed(rows))
         else:
             rows = conn.execute(
-                "SELECT * FROM chat_history WHERE session_id = ? ORDER BY id DESC LIMIT ?",
-                (session_id, limit),
+                f"SELECT * FROM chat_history WHERE session_id = ?{uf_sql} ORDER BY id DESC LIMIT ?",
+                [session_id, *uf_params, limit],
             ).fetchall()
             rows = list(reversed(rows))
     return [_row_to_msg(r) for r in rows]
@@ -75,12 +78,12 @@ def get_history(
 @router.post(
     "/history", response_model=ChatMessage, status_code=status.HTTP_201_CREATED, summary="Append a chat message"
 )
-def append_message(body: ChatMessageCreate) -> ChatMessage:
+def append_message(body: ChatMessageCreate, user_id: str = Depends(require_user)) -> ChatMessage:
     changes_json = json.dumps(body.applied_changes) if body.applied_changes is not None else None
     with db() as conn:
         cursor = conn.execute(
-            "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
-            (body.session_id, body.role, body.content, changes_json),
+            "INSERT INTO chat_history (session_id, role, content, applied_changes, user_id) VALUES (?, ?, ?, ?, ?)",
+            (body.session_id, body.role, body.content, changes_json, user_id or None),
         )
         row = conn.execute("SELECT * FROM chat_history WHERE id = ?", (cursor.lastrowid,)).fetchone()
     return _row_to_msg(row)
@@ -89,9 +92,10 @@ def append_message(body: ChatMessageCreate) -> ChatMessage:
 @router.delete(
     "/history/{session_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a session's chat history"
 )
-def delete_history(session_id: str) -> None:
+def delete_history(session_id: str, user_id: str = Depends(require_user)) -> None:
+    uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
-        result = conn.execute("DELETE FROM chat_history WHERE session_id = ?", (session_id,))
+        result = conn.execute(f"DELETE FROM chat_history WHERE session_id = ?{uf_sql}", [session_id, *uf_params])
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail=f"No chat history found for session '{session_id}'")
 
@@ -233,7 +237,7 @@ def _fetch_gmail_context(query: str) -> list[dict[str, Any]]:
 
 
 @router.post("", response_model=ChatResponse, summary="Send a message through the multi-agent pipeline")
-async def chat(body: ChatRequest) -> ChatResponse:
+async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatResponse:
     """4-stage pipeline: Context → Retrieve → Reasoning → Validate → Respond."""
     session_id = body.session_id
     message = body.message
@@ -339,14 +343,14 @@ async def chat(body: ChatRequest) -> ChatResponse:
     changes_json = json.dumps(applied_with_sources)
     with db() as conn:
         conn.execute(
-            "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
-            (session_id, "user", message, None),
+            "INSERT INTO chat_history (session_id, role, content, applied_changes, user_id) VALUES (?, ?, ?, ?, ?)",
+            (session_id, "user", message, None, user_id or None),
         )
         conn.execute(
             "INSERT INTO chat_history"
             " (session_id, role, content, applied_changes,"
-            " prompt_tokens, completion_tokens, cost_usd, api_calls, model)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " prompt_tokens, completion_tokens, cost_usd, api_calls, model, user_id)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 session_id,
                 "assistant",
@@ -357,18 +361,19 @@ async def chat(body: ChatRequest) -> ChatResponse:
                 usage.cost_usd,
                 usage.api_calls,
                 usage.model,
+                user_id or None,
             ),
         )
 
         # Insert per-call usage records for accurate per-model tracking
         for call in usage.calls:
             conn.execute(
-                "INSERT INTO usage_log (session_id, model, prompt_tokens, completion_tokens, cost_usd)"
-                " VALUES (?, ?, ?, ?, ?)",
-                (session_id, call.model, call.prompt_tokens, call.completion_tokens, call.cost_usd),
+                "INSERT INTO usage_log (session_id, model, prompt_tokens, completion_tokens, cost_usd, user_id)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (session_id, call.model, call.prompt_tokens, call.completion_tokens, call.cost_usd, user_id or None),
             )
 
-    daily_usage = _compute_daily_usage()
+    daily_usage = _compute_daily_usage(user_id)
 
     return ChatResponse(
         session_id=session_id,
@@ -380,23 +385,24 @@ async def chat(body: ChatRequest) -> ChatResponse:
     )
 
 
-def _compute_daily_usage() -> SessionUsage:
+def _compute_daily_usage(user_id: str = "") -> SessionUsage:
     """Aggregate usage stats for today (since midnight local time)."""
     today_start = datetime.combine(date.today(), datetime.min.time()).isoformat()
+    uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
         totals_row = conn.execute(
             "SELECT COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
             "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
-            "FROM usage_log WHERE timestamp >= ?",
-            (today_start,),
+            f"FROM usage_log WHERE timestamp >= ?{uf_sql}",
+            [today_start, *uf_params],
         ).fetchone()
 
         model_rows = conn.execute(
             "SELECT model, COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
             "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
-            "FROM usage_log WHERE timestamp >= ? "
+            f"FROM usage_log WHERE timestamp >= ?{uf_sql} "
             "GROUP BY model ORDER BY cost DESC",
-            (today_start,),
+            [today_start, *uf_params],
         ).fetchall()
 
     per_model = [
@@ -422,6 +428,6 @@ def _compute_daily_usage() -> SessionUsage:
 
 
 @router.get("/stats/today", response_model=SessionUsage, summary="Get today's usage stats")
-def get_daily_stats() -> SessionUsage:
+def get_daily_stats(user_id: str = Depends(require_user)) -> SessionUsage:
     """Return aggregated usage stats for today (since midnight local time)."""
-    return _compute_daily_usage()
+    return _compute_daily_usage(user_id)

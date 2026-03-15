@@ -3,8 +3,9 @@
 import re
 from datetime import date
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from ..auth import require_user, user_filter
 from ..database import db
 from ..models import ProactiveSurface
 from .things import _row_to_thing
@@ -108,14 +109,17 @@ def _scan_data(data: dict, today: date, window: int) -> list[tuple[str, str, int
 @router.get("", response_model=list[ProactiveSurface], summary="Proactive Surfaces")
 def get_proactive_surfaces(
     days: int = Query(7, ge=0, le=90, description="Look-ahead window in days"),
+    user_id: str = Depends(require_user),
 ) -> list[ProactiveSurface]:
     """Return Things with time-relevant dates approaching within *days*."""
     today = date.today()
+    uf_sql, uf_params = user_filter(user_id)
 
     with db() as conn:
         # Fetch all Things that have a non-null data field (entities live here).
         rows = conn.execute(
-            "SELECT * FROM things WHERE data IS NOT NULL AND data != '{}' AND data != 'null'"
+            f"SELECT * FROM things WHERE data IS NOT NULL AND data != '{{}}'  AND data != 'null'{uf_sql}",
+            uf_params,
         ).fetchall()
 
     surfaces: list[ProactiveSurface] = []
