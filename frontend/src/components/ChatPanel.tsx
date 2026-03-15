@@ -168,13 +168,58 @@ function ContextDropdown({ changes }: { changes: AppliedChanges }) {
 }
 
 function UsagePill({ msg }: { msg: ChatMessage }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
   const totalTokens = (msg.prompt_tokens ?? 0) + (msg.completion_tokens ?? 0)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
   if (totalTokens === 0) return null
 
   return (
-    <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
-      {formatTokens(totalTokens)} tokens
-    </span>
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="text-[10px] text-gray-400 dark:text-gray-500 font-mono hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
+      >
+        {formatTokens(totalTokens)} tokens
+      </button>
+      {open && (
+        <div className="absolute left-0 bottom-full mb-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2.5 min-w-[180px] font-mono text-[11px] text-gray-500 dark:text-gray-400">
+          {msg.model && (
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 truncate">
+              {msg.model.split('/').pop()}
+            </p>
+          )}
+          <div className="space-y-0.5">
+            <div className="flex justify-between">
+              <span>Prompt</span>
+              <span className="tabular-nums">{formatTokens(msg.prompt_tokens ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Completion</span>
+              <span className="tabular-nums">{formatTokens(msg.completion_tokens ?? 0)}</span>
+            </div>
+            <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-0.5 mt-0.5 font-medium text-gray-700 dark:text-gray-300">
+              <span>Total</span>
+              <span className="tabular-nums">{formatTokens(totalTokens)}</span>
+            </div>
+          </div>
+          {msg.cost_usd != null && msg.cost_usd > 0 && (
+            <p className="mt-1.5 text-right text-gray-600 dark:text-gray-300 font-medium">
+              {formatCost(msg.cost_usd)}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
