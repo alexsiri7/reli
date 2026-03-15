@@ -3,6 +3,8 @@ import { apiFetch } from './api'
 import { cacheThings, getCachedThings } from './offline/cache-things'
 import { cacheThingTypes, getCachedThingTypes } from './offline/cache-thing-types'
 import { cacheRelationships, getCachedRelationships } from './offline/cache-relationships'
+import { cacheBriefing, getCachedBriefing } from './offline/cache-briefing'
+import { cacheCalendarEvents, getCachedCalendarEvents } from './offline/cache-calendar'
 import { getByKey } from './offline/idb'
 import { mutationFetch } from './offline/mutation-fetch'
 
@@ -393,9 +395,15 @@ export const useStore = create<ReliState>((set, get) => ({
       const res = await apiFetch(`${BASE}/briefing`)
       if (!res.ok) return
       const data = await res.json()
-      set({ briefing: data.things ?? [], findings: data.findings ?? [] })
+      const things = data.things ?? []
+      const findings = data.findings ?? []
+      set({ briefing: things, findings })
+      cacheBriefing(things, findings).catch(() => {})
     } catch {
-      // ignore — briefing is best-effort
+      if (!navigator.onLine) {
+        const cached = await getCachedBriefing().catch(() => undefined)
+        if (cached) set({ briefing: cached.things, findings: cached.findings })
+      }
     }
   },
 
@@ -615,9 +623,14 @@ export const useStore = create<ReliState>((set, get) => ({
       const res = await apiFetch(`${BASE}/calendar/events`)
       if (!res.ok) return
       const data = await res.json()
-      set({ calendarEvents: data.events ?? [] })
+      const events = data.events ?? []
+      set({ calendarEvents: events })
+      cacheCalendarEvents(events).catch(() => {})
     } catch {
-      // ignore
+      if (!navigator.onLine) {
+        const cached = await getCachedCalendarEvents().catch(() => [])
+        if (cached.length > 0) set({ calendarEvents: cached })
+      }
     }
   },
 

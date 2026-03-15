@@ -6,6 +6,14 @@ import type {
   ChatMessage,
 } from '../store'
 
+// --- Key-value cache entry ---
+
+export interface KVCacheEntry {
+  key: string
+  value: unknown
+  cachedAt: string
+}
+
 // --- Pending operation types ---
 
 export type PendingOpStatus = 'pending' | 'in_flight' | 'failed'
@@ -51,35 +59,44 @@ export interface ReliDB extends DBSchema {
     value: PendingOp
     autoIncrement: true
   }
+  kvCache: {
+    key: string
+    value: KVCacheEntry
+  }
 }
 
 const DB_NAME = 'reli'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 let dbPromise: Promise<IDBPDatabase<ReliDB>> | null = null
 
 export function getDB(): Promise<IDBPDatabase<ReliDB>> {
   if (!dbPromise) {
     dbPromise = openDB<ReliDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        db.createObjectStore('things', { keyPath: 'id' })
-        db.createObjectStore('thingTypes', { keyPath: 'id' })
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          db.createObjectStore('things', { keyPath: 'id' })
+          db.createObjectStore('thingTypes', { keyPath: 'id' })
 
-        const relStore = db.createObjectStore('relationships', {
-          keyPath: 'id',
-        })
-        relStore.createIndex('by_from_thing_id', 'from_thing_id')
-        relStore.createIndex('by_to_thing_id', 'to_thing_id')
+          const relStore = db.createObjectStore('relationships', {
+            keyPath: 'id',
+          })
+          relStore.createIndex('by_from_thing_id', 'from_thing_id')
+          relStore.createIndex('by_to_thing_id', 'to_thing_id')
 
-        const chatStore = db.createObjectStore('chatMessages', {
-          keyPath: 'id',
-        })
-        chatStore.createIndex('by_session_id', 'session_id')
+          const chatStore = db.createObjectStore('chatMessages', {
+            keyPath: 'id',
+          })
+          chatStore.createIndex('by_session_id', 'session_id')
 
-        db.createObjectStore('pendingOps', {
-          keyPath: 'id',
-          autoIncrement: true,
-        })
+          db.createObjectStore('pendingOps', {
+            keyPath: 'id',
+            autoIncrement: true,
+          })
+        }
+        if (oldVersion < 2) {
+          db.createObjectStore('kvCache', { keyPath: 'key' })
+        }
       },
     })
   }
@@ -172,7 +189,20 @@ export async function putAll<S extends 'things' | 'thingTypes' | 'relationships'
   await tx.done
 }
 
-export async function clearStore(store: 'things' | 'thingTypes' | 'relationships' | 'chatMessages' | 'pendingOps'): Promise<void> {
+export async function clearStore(store: 'things' | 'thingTypes' | 'relationships' | 'chatMessages' | 'pendingOps' | 'kvCache'): Promise<void> {
   const db = await getDB()
   return db.clear(store)
+}
+
+// --- Key-value cache ---
+
+export async function setCacheEntry(key: string, value: unknown): Promise<void> {
+  const db = await getDB()
+  await db.put('kvCache', { key, value, cachedAt: new Date().toISOString() })
+}
+
+export async function getCacheEntry<T = unknown>(key: string): Promise<T | undefined> {
+  const db = await getDB()
+  const entry = await db.get('kvCache', key)
+  return entry?.value as T | undefined
 }
