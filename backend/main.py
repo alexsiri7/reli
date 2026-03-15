@@ -69,7 +69,9 @@ if _FRONTEND_DIST.is_dir():
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str) -> FileResponse:
         # Serve static files from dist root (favicon, icons, etc.)
-        static_file = _FRONTEND_DIST / full_path
-        if full_path and static_file.is_file():
-            return FileResponse(static_file)
+        # Resolve to prevent directory traversal (e.g. ../../etc/passwd)
+        if full_path:
+            static_file = (_FRONTEND_DIST / full_path).resolve()
+            if static_file.is_relative_to(_FRONTEND_DIST.resolve()) and static_file.is_file():
+                return FileResponse(static_file)
         return FileResponse(_FRONTEND_DIST / "index.html")

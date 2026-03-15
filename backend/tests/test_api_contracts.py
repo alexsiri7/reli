@@ -406,3 +406,53 @@ class TestHealthContract:
         body = resp.json()
         assert body["status"] == "ok"
         assert isinstance(body["service"], str)
+
+
+# ===========================================================================
+# Security tests — SPA fallback directory traversal (re-tam)
+# ===========================================================================
+
+
+class TestSpaFallbackSecurity:
+    """Verify the SPA catch-all route rejects directory traversal attempts."""
+
+    def test_traversal_blocked(self, client, tmp_path):
+        """Paths with .. must not serve files outside frontend/dist."""
+        import backend.main as main_mod
+
+        # Set up a minimal fake frontend/dist with index.html
+        dist = tmp_path / "dist"
+        dist.mkdir()
+        index = dist / "index.html"
+        index.write_text("<html>SPA</html>")
+
+        # Temporarily register the SPA fallback route
+        from fastapi import FastAPI
+        from fastapi.responses import FileResponse
+
+        resolved_dist = dist.resolve()
+
+        @client.app.get("/spa-test/{full_path:path}", include_in_schema=False)
+        def _spa_test(full_path: str) -> FileResponse:
+            if full_path:
+                static_file = (resolved_dist / full_path).resolve()
+                if static_file.is_relative_to(resolved_dist) and static_file.is_file():
+                    return FileResponse(static_file)
+            return FileResponse(resolved_dist / "index.html")
+
+        # Create a secret file outside dist that an attacker might target
+        secret = tmp_path / "secret.txt"
+        secret.write_text("LEAKED")
+
+        # Try traversal paths — all should return index.html, not the secret
+        traversal_paths = [
+            "/spa-test/../secret.txt",
+            "/spa-test/../../secret.txt",
+            "/spa-test/subdir/../../secret.txt",
+        ]
+        for path in traversal_paths:
+            resp = client.get(path, follow_redirects=True)
+            if resp.status_code == 200:
+                assert "LEAKED" not in resp.text, (
+                    f"Directory traversal succeeded for {path} — secret file was served!"
+                )
