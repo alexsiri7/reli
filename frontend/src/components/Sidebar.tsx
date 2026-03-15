@@ -228,7 +228,10 @@ export function Sidebar() {
         {/* Header */}
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white tracking-tight">Reli</h1>
+            <div className="flex items-center gap-2">
+              <img src="/logo.svg" alt="Reli" className="h-7 w-7 rounded-md" />
+              <h1 className="text-lg font-bold text-gray-900 dark:text-white tracking-tight">Reli</h1>
+            </div>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
               {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
             </p>
