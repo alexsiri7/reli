@@ -2,6 +2,7 @@
 # Local env (never commit secrets)
 .env
 data/
+api_key.txt
 
 # Dolt database files (added by bd init)
 .dolt/
