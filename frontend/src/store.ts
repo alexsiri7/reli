@@ -205,6 +205,10 @@ interface ReliState {
   connectCalendar: () => Promise<void>
   disconnectCalendar: () => Promise<void>
 
+  // Mobile navigation
+  mobileView: 'things' | 'chat'
+  setMobileView: (view: 'things' | 'chat') => void
+
   // Settings
   settingsOpen: boolean
   modelSettings: ModelSettings | null
@@ -681,6 +685,10 @@ export const useStore = create<ReliState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  // Mobile navigation
+  mobileView: 'things',
+  setMobileView: (view) => set({ mobileView: view }),
 
   // Settings
   settingsOpen: false,
