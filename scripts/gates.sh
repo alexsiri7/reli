@@ -50,6 +50,11 @@ run_build() {
     docker build -t reli:gate-check .
 }
 
+run_screenshots() {
+    echo "=== Screenshots (visual regression) ==="
+    cd frontend && npm run test:screenshots && cd ..
+}
+
 # If no args, run all stages
 STAGES=("${@:-setup lint typecheck test build}")
 if [ $# -eq 0 ]; then
