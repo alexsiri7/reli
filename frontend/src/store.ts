@@ -23,6 +23,7 @@ export interface Thing {
   created_at: string
   updated_at: string
   last_referenced: string | null
+  open_questions: string[] | null
   children_count: number | null
   completed_count: number | null
 }

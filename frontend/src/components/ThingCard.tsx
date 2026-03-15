@@ -147,6 +147,18 @@ export function ThingCard({ thing }: Props) {
             </div>
           )}
 
+          {/* Open questions */}
+          {thing.open_questions && thing.open_questions.length > 0 && (
+            <div>
+              <span className="font-medium text-amber-600 dark:text-amber-400">Open questions:</span>
+              <ul className="ml-3 mt-0.5 space-y-0.5">
+                {thing.open_questions.map((q, i) => (
+                  <li key={i} className="text-amber-700 dark:text-amber-300">? {q}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Timestamps */}
           <div className="text-gray-400 dark:text-gray-500">
             Created {formatTimestamp(thing.created_at)}

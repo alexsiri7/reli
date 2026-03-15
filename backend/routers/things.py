@@ -48,6 +48,21 @@ def _row_to_thing(row: sqlite3.Row) -> Thing:
     except (IndexError, KeyError):
         pass
 
+    open_questions = None
+    try:
+        raw_oq = row["open_questions"]
+        if raw_oq:
+            oq = raw_oq
+            while isinstance(oq, str):
+                try:
+                    oq = json.loads(oq)
+                except (json.JSONDecodeError, ValueError):
+                    break
+            if isinstance(oq, list):
+                open_questions = oq
+    except (IndexError, KeyError):
+        pass
+
     return Thing(
         id=row["id"],
         title=row["title"],
@@ -61,6 +76,7 @@ def _row_to_thing(row: sqlite3.Row) -> Thing:
         created_at=_parse_dt(row["created_at"]) or datetime.min,
         updated_at=_parse_dt(row["updated_at"]) or datetime.min,
         last_referenced=last_referenced,
+        open_questions=open_questions,
     )
 
 
@@ -173,6 +189,7 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks) -> Thing:
     now = datetime.now(timezone.utc).isoformat()
     data_json = json.dumps(body.data) if body.data is not None else None
     checkin = body.checkin_date.isoformat() if body.checkin_date else None
+    oq_json = json.dumps(body.open_questions) if body.open_questions is not None else None
 
     if body.parent_id:
         with db() as conn:
@@ -184,8 +201,8 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks) -> Thing:
         conn.execute(
             "INSERT INTO things"
             " (id, title, type_hint, parent_id, checkin_date, priority, active, surface, data,"
-            " created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " open_questions, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 thing_id,
                 body.title,
@@ -196,6 +213,7 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks) -> Thing:
                 int(body.active),
                 int(body.surface),
                 data_json,
+                oq_json,
                 now,
                 now,
             ),
@@ -245,6 +263,8 @@ def update_thing(thing_id: str, body: ThingUpdate, background_tasks: BackgroundT
             fields["surface"] = int(body.surface)
         if body.data is not None:
             fields["data"] = json.dumps(body.data)
+        if body.open_questions is not None:
+            fields["open_questions"] = json.dumps(body.open_questions)
         fields["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         set_clause = ", ".join(f"{k} = ?" for k in fields)

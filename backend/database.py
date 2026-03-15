@@ -71,11 +71,12 @@ def _seed_thing_types(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_things_graph(conn: sqlite3.Connection) -> None:
-    """Add surface and last_referenced columns to things if missing."""
+    """Add surface, last_referenced, and open_questions columns to things if missing."""
     cols = {row[1] for row in conn.execute("PRAGMA table_info(things)").fetchall()}
     for col, typedef in [
         ("surface", "BOOLEAN DEFAULT 1"),
         ("last_referenced", "TIMESTAMP"),
+        ("open_questions", "JSON"),
     ]:
         if col not in cols:
             conn.execute(f"ALTER TABLE things ADD COLUMN {col} {typedef}")

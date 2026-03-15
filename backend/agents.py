@@ -342,8 +342,8 @@ You MUST only output JSON — no natural language, no markdown fences.
 Output schema:
 {
   "storage_changes": {
-    "create": [{"title": "...", "type_hint": "...", "priority": 3, "checkin_date": null, "surface": true, "data": {}}],
-    "update": [{"id": "...", "changes": {"title": "...", "checkin_date": "...", "active": true}}],
+    "create": [{"title": "...", "type_hint": "...", "priority": 3, "checkin_date": null, "surface": true, "data": {}, "open_questions": ["What's the deadline?", "Who else is involved?"]}],
+    "update": [{"id": "...", "changes": {"title": "...", "checkin_date": "...", "active": true, "open_questions": ["What does success look like?"]}}],
     "delete": ["id1"],
     "relationships": [{"from_thing_id": "...", "to_thing_id": "...", "relationship_type": "..."}]
   },
@@ -356,6 +356,14 @@ Rules:
 - "update" items: id required; changes = only the fields to change
 - "delete" items: list of UUIDs to hard-delete
 - "relationships": create typed links between Things (see below)
+- "open_questions": when creating or updating a Thing, proactively generate 1-3
+  open questions that would help deepen understanding of that Thing. These are
+  knowledge gaps — things the user hasn't told us yet that would make the Thing
+  more actionable or complete. Examples: "What's the deadline for this?",
+  "Who else is involved?", "What does success look like?", "What's the budget?",
+  "Are there any blockers?". Tailor questions to the Thing's type and context.
+  Don't ask questions whose answers are already in the Thing's data or title.
+  For completed/deleted items, omit open_questions.
 - If the user's intent is ambiguous, add ONE clarifying question and make NO changes.
   Focus on what would make the task actionable: "What's the specific deliverable?"
   or "Can we break this into smaller steps?"
@@ -486,10 +494,13 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
             surface = 0 if type_hint in ENTITY_TYPES else 1
         else:
             surface = int(bool(surface))
+        open_questions = item.get("open_questions")
+        oq_json = _json.dumps(open_questions) if open_questions else None
         conn.execute(
             """INSERT INTO things
-               (id, title, type_hint, parent_id, checkin_date, priority, active, surface, data, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
+               (id, title, type_hint, parent_id, checkin_date, priority, active, surface, data,
+                open_questions, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)""",
             (
                 thing_id,
                 title,
@@ -499,6 +510,7 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
                 item.get("priority", 3),
                 surface,
                 data_json,
+                oq_json,
                 now,
                 now,
             ),
@@ -529,6 +541,9 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
         if "data" in changes:
             raw_data = changes["data"]
             fields["data"] = raw_data if isinstance(raw_data, str) else _json.dumps(raw_data)
+        if "open_questions" in changes:
+            oq = changes["open_questions"]
+            fields["open_questions"] = _json.dumps(oq) if oq else None
         if not fields:
             continue
         fields["updated_at"] = now

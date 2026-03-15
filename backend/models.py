@@ -42,6 +42,7 @@ class ThingCreate(BaseModel):
     active: bool = True
     surface: bool = True
     data: dict[str, Any] | None = None
+    open_questions: list[str] | None = None
 
 
 class ThingUpdate(BaseModel):
@@ -53,6 +54,7 @@ class ThingUpdate(BaseModel):
     active: bool | None = None
     surface: bool | None = None
     data: dict[str, Any] | None = None
+    open_questions: list[str] | None = None
 
 
 class Thing(BaseModel):
@@ -68,6 +70,7 @@ class Thing(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_referenced: datetime | None = None
+    open_questions: list[str] | None = None
     children_count: int | None = None
     completed_count: int | None = None
 
