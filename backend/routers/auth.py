@@ -129,6 +129,7 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
 
     # Google returns scopes in expanded URI form; tell oauthlib to accept it
     import os as _os
+
     _os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
 
     try:

@@ -39,15 +39,66 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     stop_scheduler()
 
 
+_TAG_METADATA = [
+    {
+        "name": "auth",
+        "description": "Google OAuth2 login, JWT session management, and user profile.",
+    },
+    {
+        "name": "things",
+        "description": "CRUD operations for Things — the universal data model (tasks, notes, projects, ideas, goals).",
+    },
+    {
+        "name": "thing-types",
+        "description": "Manage custom Thing Types with icons and colors.",
+    },
+    {
+        "name": "chat",
+        "description": "Multi-agent chat pipeline and chat history management.",
+    },
+    {
+        "name": "briefing",
+        "description": "Daily briefing: checkin-due Things and sweep findings.",
+    },
+    {
+        "name": "gmail",
+        "description": "Gmail read-only integration: OAuth2 connection and message access.",
+    },
+    {
+        "name": "calendar",
+        "description": "Google Calendar read-only integration: OAuth2 connection and upcoming events.",
+    },
+    {
+        "name": "proactive",
+        "description": "Proactive surfaces — Things with upcoming time-relevant dates.",
+    },
+    {
+        "name": "settings",
+        "description": "Application settings: LLM model configuration via Requesty.",
+    },
+    {
+        "name": "sweep",
+        "description": "Nightly sweep: SQL candidate collection and LLM-powered reflection.",
+    },
+    {
+        "name": "health",
+        "description": "Health check endpoint.",
+    },
+]
+
 app = FastAPI(
     title="Reli API",
     description=(
         "Reli is a conversation-driven personal information manager. "
         "All data is stored locally in SQLite. "
-        "The Universal Thing model represents tasks, notes, projects, ideas, and goals."
+        "The Universal Thing model represents tasks, notes, projects, ideas, and goals.\n\n"
+        "## Authentication\n\n"
+        "Most endpoints require a valid JWT session cookie (`reli_session`). "
+        "Obtain one by completing the Google OAuth2 flow via `/api/auth/google`."
     ),
     version="0.1.0",
     lifespan=lifespan,
+    openapi_tags=_TAG_METADATA,
 )
 
 app.add_middleware(
@@ -79,8 +130,9 @@ app.include_router(settings.router, prefix="/api", dependencies=_api_deps)
 app.include_router(sweep.router, prefix="/api", dependencies=_api_deps)
 
 
-@app.get("/healthz", tags=["health"])
+@app.get("/healthz", tags=["health"], summary="Health check", description="Returns service health status.")
 def health() -> dict[str, str]:
+    """Returns service health status."""
     return {"status": "ok", "service": "reli"}
 
 

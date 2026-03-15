@@ -83,12 +83,13 @@ def _row_to_thing(row: sqlite3.Row) -> Thing:
 
 @router.get("/search", response_model=list[Thing], summary="Search Things across the full graph")
 def search_things(
-    q: str = Query("", description="Search query"),
+    q: str = Query("", description="Free-text search query matched against title, data, type_hint, and relationships"),
     active_only: bool = Query(False, description="Filter to active Things only"),
-    type_hint: str | None = Query(None, description="Filter by type_hint"),
-    limit: int = Query(50, ge=1, le=200),
+    type_hint: str | None = Query(None, description="Filter by type_hint (e.g. 'task', 'project', 'person')"),
+    limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
     user_id: str = Depends(require_user),
 ) -> list[Thing]:
+    """Search Things by text query across title, data, type_hint, and related Things."""
     if not q.strip():
         return []
 
@@ -155,10 +156,11 @@ def search_things(
 @router.get("", response_model=list[Thing], summary="List Things")
 def list_things(
     active_only: bool = Query(True, description="Filter to active Things only"),
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
     user_id: str = Depends(require_user),
 ) -> list[Thing]:
+    """List all Things with optional filtering and pagination. Projects include child counts."""
     with db() as conn:
         where = "WHERE 1=1"
         params: list[str | int] = []
@@ -198,6 +200,7 @@ def list_things(
 
 @router.post("", response_model=Thing, status_code=status.HTTP_201_CREATED, summary="Create a Thing")
 def create_thing(body: ThingCreate, background_tasks: BackgroundTasks, user_id: str = Depends(require_user)) -> Thing:
+    """Create a new Thing and index it for vector search."""
     thing_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     data_json = json.dumps(body.data) if body.data is not None else None
@@ -239,6 +242,7 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks, user_id: 
 
 @router.get("/{thing_id}", response_model=Thing, summary="Get a Thing")
 def get_thing(thing_id: str, user_id: str = Depends(require_user)) -> Thing:
+    """Retrieve a single Thing by ID."""
     uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
         row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
@@ -251,6 +255,7 @@ def get_thing(thing_id: str, user_id: str = Depends(require_user)) -> Thing:
 def update_thing(
     thing_id: str, body: ThingUpdate, background_tasks: BackgroundTasks, user_id: str = Depends(require_user)
 ) -> Thing:
+    """Partially update a Thing. Only provided fields are changed."""
     uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
         row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
@@ -295,6 +300,7 @@ def update_thing(
 
 @router.delete("/{thing_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a Thing")
 def delete_thing(thing_id: str, background_tasks: BackgroundTasks, user_id: str = Depends(require_user)) -> None:
+    """Delete a Thing and remove it from the vector index."""
     uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
         row = conn.execute(f"SELECT id FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
@@ -306,6 +312,7 @@ def delete_thing(thing_id: str, background_tasks: BackgroundTasks, user_id: str 
 
 @router.post("/reindex", summary="Re-embed all Things with the current embedding model")
 def reindex_things(user_id: str = Depends(require_user)) -> dict[str, int]:
+    """Rebuild the vector search index for all Things. Returns the count of re-indexed items."""
     count = reindex_all()
     return {"reindexed": count}
 
@@ -334,6 +341,7 @@ def _parse_rel_row(row: sqlite3.Row) -> Relationship:
 
 @router.get("/{thing_id}/relationships", response_model=list[Relationship], summary="List relationships for a Thing")
 def list_relationships(thing_id: str, user_id: str = Depends(require_user)) -> list[Relationship]:
+    """List all relationships where the given Thing is either the source or target."""
     uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
         row = conn.execute(f"SELECT id FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
@@ -350,6 +358,7 @@ def list_relationships(thing_id: str, user_id: str = Depends(require_user)) -> l
     "/relationships", response_model=Relationship, status_code=status.HTTP_201_CREATED, summary="Create a relationship"
 )
 def create_relationship(body: RelationshipCreate, user_id: str = Depends(require_user)) -> Relationship:
+    """Create a typed relationship between two Things."""
     rel_id = str(uuid.uuid4())
     meta_json = json.dumps(body.metadata) if body.metadata is not None else None
     uf_sql, uf_params = user_filter(user_id)
@@ -371,6 +380,7 @@ def create_relationship(body: RelationshipCreate, user_id: str = Depends(require
 
 @router.delete("/relationships/{rel_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a relationship")
 def delete_relationship(rel_id: str) -> None:
+    """Delete a relationship by ID."""
     with db() as conn:
         row = conn.execute("SELECT id FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()
         if not row:

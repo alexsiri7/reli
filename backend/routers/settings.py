@@ -69,7 +69,7 @@ def _reload_agent_vars(models: dict[str, str]) -> None:
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 
-@router.get("/models", response_model=list[RequestyModel])
+@router.get("/models", response_model=list[RequestyModel], summary="List available LLM models")
 def list_models(_user_id: str = Depends(require_user)) -> list[RequestyModel]:
     """Proxy the Requesty /v1/models endpoint and return available model IDs."""
     cfg = _read_config()
@@ -85,9 +85,9 @@ def list_models(_user_id: str = Depends(require_user)) -> list[RequestyModel]:
         raise HTTPException(status_code=502, detail="Could not fetch models from Requesty API") from exc
 
 
-@router.get("", response_model=ModelSettings)
+@router.get("", response_model=ModelSettings, summary="Get current model settings")
 def get_settings(_user_id: str = Depends(require_user)) -> ModelSettings:
-    """Return current model configuration."""
+    """Return current model configuration for the context, reasoning, and response agents."""
     cfg = _read_config()
     models = cfg.get("llm", {}).get("models", {})
     return ModelSettings(
@@ -97,12 +97,12 @@ def get_settings(_user_id: str = Depends(require_user)) -> ModelSettings:
     )
 
 
-@router.put("", response_model=ModelSettings)
+@router.put("", response_model=ModelSettings, summary="Update model settings")
 def update_settings(
     body: ModelSettingsUpdate,
     _user_id: str = Depends(require_user),
 ) -> ModelSettings:
-    """Update model configuration in config.yaml and reload in-memory vars."""
+    """Update model configuration in config.yaml and reload in-memory vars. Only provided fields are changed."""
     cfg = _read_config()
 
     if "llm" not in cfg:
