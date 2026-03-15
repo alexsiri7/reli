@@ -37,10 +37,6 @@ export function Sidebar() {
     return () => mql.removeEventListener('change', handler)
   }, [])
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const nowMs = Date.now()
-
   const upcoming = things
     .filter(t => t.checkin_date != null)
     .sort((a, b) => {
@@ -52,25 +48,30 @@ export function Sidebar() {
   const active = things.filter(t => t.checkin_date == null)
 
   // Recently discussed: things referenced in the last 7 days, sorted by most recent
-  const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    // Refresh timestamp every minute to keep recency filter current
+    const interval = setInterval(() => setNowMs(Date.now()), 60_000)
+    return () => clearInterval(interval)
+  }, [])
   const recentlyDiscussed = useMemo(() => {
+    const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
     return things
       .filter(t => t.last_referenced != null && (nowMs - new Date(t.last_referenced).getTime()) < RECENT_WINDOW_MS)
       .sort((a, b) => new Date(b.last_referenced!).getTime() - new Date(a.last_referenced!).getTime())
   }, [things, nowMs])
 
   // Group active things by type, excluding children of projects (shown under parent)
-  const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal'] as const
-  const TYPE_LABELS: Record<string, string> = {
-    project: 'Projects',
-    goal: 'Goals',
-    task: 'Tasks',
-    note: 'Notes',
-    idea: 'Ideas',
-    journal: 'Journal',
-  }
-
   const activeGroups = useMemo(() => {
+    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal'] as const
+    const TYPE_LABELS: Record<string, string> = {
+      project: 'Projects',
+      goal: 'Goals',
+      task: 'Tasks',
+      note: 'Notes',
+      idea: 'Ideas',
+      journal: 'Journal',
+    }
     const projectIds = new Set(active.filter(t => t.type_hint === 'project').map(t => t.id))
     // Don't show children of projects as standalone items
     const standalone = active.filter(t => !t.parent_id || !projectIds.has(t.parent_id))
@@ -220,7 +221,7 @@ export function Sidebar() {
             )}
 
             {/* Proactive Surfaces */}
-            {proactiveSurfaces.length > 0 && (
+            {proactiveSurfaces && proactiveSurfaces.length > 0 && (
               <section className="py-2 border-b border-gray-100 dark:border-gray-800">
                 <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
                   ✨ Coming Up
