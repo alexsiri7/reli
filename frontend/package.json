@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:screenshots": "npx playwright test --config playwright.config.ts",
+    "test:screenshots:update": "npx playwright test --config playwright.config.ts --update-snapshots"
   },
   "dependencies": {
     "date-fns": "^4.1.0",
