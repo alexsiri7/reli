@@ -232,15 +232,6 @@ export function Sidebar() {
               </section>
             )}
 
-            {/* Active Things (no check-in date) */}
-            {active.length > 0 && (
-              <section className="py-2 border-t border-gray-100 dark:border-gray-800">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-                  Active Things
-                </h2>
-                {active.map(t => <ThingCard key={t.id} thing={t} />)}
-              </section>
-            )}
 
             {/* Gmail */}
             <GmailPanel />
