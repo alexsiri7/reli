@@ -2,7 +2,6 @@
 
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -86,11 +85,14 @@ class TestCreateThingType:
         assert data["created_at"]
 
     def test_create_with_all_fields(self, client):
-        resp = client.post("/api/thing-types", json={
-            "name": "fancy",
-            "icon": "✨",
-            "color": "#ff0000",
-        })
+        resp = client.post(
+            "/api/thing-types",
+            json={
+                "name": "fancy",
+                "icon": "✨",
+                "color": "#ff0000",
+            },
+        )
         assert resp.status_code == 201
         data = resp.json()
         assert data["name"] == "fancy"

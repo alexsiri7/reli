@@ -432,8 +432,10 @@ async def run_reasoning_agent(
     messages.append({"role": "user", "content": user_content})
 
     raw = await _chat(
-        messages, model=REQUESTY_REASONING_MODEL,
-        response_format={"type": "json_object"}, usage_stats=usage_stats,
+        messages,
+        model=REQUESTY_REASONING_MODEL,
+        response_format={"type": "json_object"},
+        usage_stats=usage_stats,
     )
     try:
         result: dict[str, Any] = json.loads(raw)

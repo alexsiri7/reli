@@ -36,7 +36,13 @@ let mockState: Record<string, unknown> = {
   searchLoading: false,
   searchThings: vi.fn(),
   clearSearch: vi.fn(),
+  thingTypes: [],
+  proactiveSurfaces: [],
 }
+
+vi.mock('zustand/react/shallow', () => ({
+  useShallow: (fn: Function) => fn,
+}))
 
 vi.mock('../store', () => ({
   useStore: (selector: (s: typeof mockState) => unknown) => selector(mockState),
@@ -106,6 +112,8 @@ const calendarDefaults = {
   disconnectCalendar: vi.fn(),
   findings: [],
   dismissFinding: vi.fn(),
+  thingTypes: [],
+  proactiveSurfaces: [],
   ...searchDefaults,
 }
 

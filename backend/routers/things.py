@@ -89,8 +89,7 @@ def search_things(
         direct_params: list[str | int] = [pattern, pattern, pattern, *filter_params]
         direct_sql = (
             "SELECT t.*, 1 AS _rank FROM things t"
-            " WHERE (t.title LIKE ? OR t.data LIKE ? OR t.type_hint LIKE ?)"
-            + filters
+            " WHERE (t.title LIKE ? OR t.data LIKE ? OR t.type_hint LIKE ?)" + filters
         )
 
         # Things connected via relationships to directly matching Things,
@@ -111,8 +110,7 @@ def search_things(
             "   UNION"
             "   SELECT r.to_thing_id FROM thing_relationships r"
             "   WHERE r.relationship_type LIKE ?"
-            " )"
-            + filters
+            " )" + filters
         )
         rel_params: list[str | int] = [pattern, pattern, pattern, pattern, pattern, pattern, *filter_params]
 

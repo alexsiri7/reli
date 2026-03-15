@@ -57,9 +57,7 @@ def create_thing_type(body: ThingTypeCreate) -> ThingType:
     now = datetime.now(timezone.utc).isoformat()
     with db() as conn:
         # Check for duplicate name
-        existing = conn.execute(
-            "SELECT id FROM thing_types WHERE name = ?", (body.name,)
-        ).fetchone()
+        existing = conn.execute("SELECT id FROM thing_types WHERE name = ?", (body.name,)).fetchone()
         if existing:
             raise HTTPException(
                 status_code=409,

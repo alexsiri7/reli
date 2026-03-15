@@ -26,6 +26,7 @@ function snoozeDate(days: number): string {
 export function ThingCard({ thing }: Props) {
   const snoozeThing = useStore(s => s.snoozeThing)
   const things = useStore(s => s.things)
+  const thingTypes = useStore(s => s.thingTypes)
   const [showSnooze, setShowSnooze] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [relationships, setRelationships] = useState<Relationship[]>([])
@@ -63,7 +64,7 @@ export function ThingCard({ thing }: Props) {
         aria-expanded={expanded}
       >
         <span className="text-lg leading-none mt-0.5 select-none" title={thing.type_hint ?? 'thing'}>
-          {typeIcon(thing.type_hint)}
+          {typeIcon(thing.type_hint, thingTypes)}
         </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
@@ -159,7 +160,7 @@ export function ThingCard({ thing }: Props) {
           {/* Parent */}
           {parent && (
             <div>
-              Parent: <span className="font-medium text-gray-700 dark:text-gray-300">{typeIcon(parent.type_hint)} {parent.title}</span>
+              Parent: <span className="font-medium text-gray-700 dark:text-gray-300">{typeIcon(parent.type_hint, thingTypes)} {parent.title}</span>
             </div>
           )}
 
@@ -169,7 +170,7 @@ export function ThingCard({ thing }: Props) {
               <span className="font-medium">Children:</span>
               <ul className="ml-3 mt-0.5 space-y-0.5">
                 {children.map(c => (
-                  <li key={c.id}>{typeIcon(c.type_hint)} {c.title}</li>
+                  <li key={c.id}>{typeIcon(c.type_hint, thingTypes)} {c.title}</li>
                 ))}
               </ul>
             </div>
@@ -189,7 +190,7 @@ export function ThingCard({ thing }: Props) {
                       <span className="text-gray-400 dark:text-gray-500">{direction}</span>
                       <span className="italic text-gray-500 dark:text-gray-400">{rel.relationship_type}</span>
                       {other ? (
-                        <span className="text-gray-700 dark:text-gray-300">{typeIcon(other.type_hint)} {other.title}</span>
+                        <span className="text-gray-700 dark:text-gray-300">{typeIcon(other.type_hint, thingTypes)} {other.title}</span>
                       ) : (
                         <span className="text-gray-400 dark:text-gray-500">{otherId}</span>
                       )}

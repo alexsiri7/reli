@@ -4,9 +4,11 @@ import { ThingCard } from '../components/ThingCard'
 
 const snoozeThing = vi.fn()
 
+const thingTypes: { name: string; icon: string }[] = []
+
 vi.mock('../store', () => ({
-  useStore: (selector: (s: { snoozeThing: typeof snoozeThing; things: typeof things }) => unknown) =>
-    selector({ snoozeThing, things }),
+  useStore: (selector: (s: { snoozeThing: typeof snoozeThing; things: typeof things; thingTypes: typeof thingTypes }) => unknown) =>
+    selector({ snoozeThing, things, thingTypes }),
 }))
 
 const baseThing = {

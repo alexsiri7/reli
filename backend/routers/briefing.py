@@ -103,7 +103,8 @@ def create_finding(body: SweepFindingCreate) -> SweepFinding:
                 raise HTTPException(status_code=404, detail=f"Thing {body.thing_id} not found")
 
         conn.execute(
-            """INSERT INTO sweep_findings (id, thing_id, finding_type, message, priority, dismissed, created_at, expires_at)
+            """INSERT INTO sweep_findings
+               (id, thing_id, finding_type, message, priority, dismissed, created_at, expires_at)
                VALUES (?, ?, ?, ?, ?, 0, ?, ?)""",
             (finding_id, body.thing_id, body.finding_type, body.message, body.priority, now, body.expires_at),
         )

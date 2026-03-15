@@ -232,7 +232,6 @@ export const useStore = create<ReliState>((set, get) => ({
     }
   },
 
-<<<<<<< HEAD
   fetchProactiveSurfaces: async () => {
     try {
       const res = await fetch(`${BASE}/proactive?days=7`)
@@ -241,7 +240,9 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ proactiveSurfaces: data })
     } catch {
       // best-effort
-=======
+    }
+  },
+
   dismissFinding: async (findingId: string) => {
     try {
       const res = await fetch(`${BASE}/briefing/findings/${findingId}/dismiss`, { method: 'PATCH' })
@@ -249,7 +250,6 @@ export const useStore = create<ReliState>((set, get) => ({
       set(state => ({ findings: state.findings.filter(f => f.id !== findingId) }))
     } catch {
       // ignore
->>>>>>> 7423160 (feat: add daily briefing section with sweep findings support (re-t0k))
     }
   },
 

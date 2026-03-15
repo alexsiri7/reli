@@ -26,7 +26,7 @@ function FindingCard({ finding, onDismiss }: { finding: SweepFinding; onDismiss:
           <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{finding.message}</p>
           {finding.thing && (
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
-              {typeIcon(finding.thing.type_hint)} {finding.thing.title}
+              {typeIcon(finding.thing.type_hint, thingTypes)} {finding.thing.title}
             </p>
           )}
         </div>
@@ -282,7 +282,7 @@ export function Sidebar() {
                   <div key={`${s.thing.id}-${s.date_key}`} className="px-3 py-1">
                     <div className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors px-1">
                       <span className="text-lg leading-none mt-0.5 select-none" title={s.thing.type_hint ?? 'thing'}>
-                        {typeIcon(s.thing.type_hint)}
+                        {typeIcon(s.thing.type_hint, thingTypes)}
                       </span>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
