@@ -39,6 +39,11 @@ let mockState: Record<string, unknown> = {
   clearSearch: vi.fn(),
   thingTypes: [],
   proactiveSurfaces: [],
+  thingFilterQuery: '',
+  thingFilterTypes: [] as string[],
+  setThingFilterQuery: vi.fn(),
+  toggleThingFilterType: vi.fn(),
+  clearThingFilters: vi.fn(),
 }
 
 vi.mock('zustand/react/shallow', () => ({
@@ -105,6 +110,14 @@ const searchDefaults = {
   clearSearch: vi.fn(),
 }
 
+const filterDefaults = {
+  thingFilterQuery: '',
+  thingFilterTypes: [] as string[],
+  setThingFilterQuery: vi.fn(),
+  toggleThingFilterType: vi.fn(),
+  clearThingFilters: vi.fn(),
+}
+
 const calendarDefaults = {
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [] as never[],
@@ -117,6 +130,7 @@ const calendarDefaults = {
   thingTypes: [],
   proactiveSurfaces: [],
   ...searchDefaults,
+  ...filterDefaults,
 }
 
 beforeEach(() => {
