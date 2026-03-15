@@ -5,8 +5,9 @@ import { Sidebar } from './components/Sidebar'
 import { ChatPanel } from './components/ChatPanel'
 
 function App() {
-  const { fetchThings, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
+  const { fetchThingTypes, fetchThings, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
     useShallow(s => ({
+      fetchThingTypes: s.fetchThingTypes,
       fetchThings: s.fetchThings,
       fetchHistory: s.fetchHistory,
       fetchCalendarStatus: s.fetchCalendarStatus,
@@ -16,6 +17,7 @@ function App() {
   )
 
   useEffect(() => {
+    fetchThingTypes()
     fetchThings()
     fetchHistory()
     fetchProactiveSurfaces()
@@ -30,7 +32,7 @@ function App() {
     }
 
     return () => clearInterval(interval)
-  }, [fetchThings, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces])
+  }, [fetchThingTypes, fetchThings, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces])
 
   return (
     <div className="flex w-full h-full overflow-hidden bg-white dark:bg-gray-900">

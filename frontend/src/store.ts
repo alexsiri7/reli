@@ -2,6 +2,14 @@ import { create } from 'zustand'
 
 export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | string
 
+export interface ThingType {
+  id: string
+  name: string
+  icon: string
+  color: string | null
+  created_at: string
+}
+
 export interface Thing {
   id: string
   title: string
@@ -86,6 +94,7 @@ export interface ChatMessage {
 }
 
 interface ReliState {
+  thingTypes: ThingType[]
   things: Thing[]
   briefing: Thing[]
   messages: ChatMessage[]
@@ -104,6 +113,7 @@ interface ReliState {
   searchLoading: boolean
   searchThings: (query: string) => Promise<void>
   clearSearch: () => void
+  fetchThingTypes: () => Promise<void>
   fetchThings: () => Promise<void>
   fetchBriefing: () => Promise<void>
   fetchProactiveSurfaces: () => Promise<void>
@@ -134,6 +144,7 @@ const SESSION_ID = getOrCreateSessionId()
 const BASE = '/api'
 
 export const useStore = create<ReliState>((set, get) => ({
+  thingTypes: [],
   things: [],
   briefing: [],
   messages: [],
@@ -169,6 +180,17 @@ export const useStore = create<ReliState>((set, get) => ({
   },
 
   clearSearch: () => set({ searchResults: [], searchLoading: false }),
+
+  fetchThingTypes: async () => {
+    try {
+      const res = await fetch(`${BASE}/thing-types`)
+      if (!res.ok) return
+      const data: ThingType[] = await res.json()
+      set({ thingTypes: data })
+    } catch {
+      // best-effort
+    }
+  },
 
   fetchThings: async () => {
     set({ loading: true, error: null })

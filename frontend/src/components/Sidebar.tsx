@@ -8,7 +8,7 @@ import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
 
 export function Sidebar() {
-  const { things, briefing, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch } = useStore(useShallow(s => ({ things: s.things, briefing: s.briefing, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch })))
+  const { things, thingTypes, briefing, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch } = useStore(useShallow(s => ({ things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch })))
   const [searchQuery, setSearchQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -64,13 +64,20 @@ export function Sidebar() {
   // Group active things by type, excluding children of projects (shown under parent)
   const activeGroups = useMemo(() => {
     const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal'] as const
-    const TYPE_LABELS: Record<string, string> = {
+    const FALLBACK_LABELS: Record<string, string> = {
       project: 'Projects',
       goal: 'Goals',
       task: 'Tasks',
       note: 'Notes',
       idea: 'Ideas',
       journal: 'Journal',
+    }
+    // Build label map from DB types (pluralise by appending 's')
+    const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
+    for (const tt of thingTypes) {
+      if (!typeLabels[tt.name]) {
+        typeLabels[tt.name] = tt.name.charAt(0).toUpperCase() + tt.name.slice(1) + 's'
+      }
     }
     const projectIds = new Set(active.filter(t => t.type_hint === 'project').map(t => t.id))
     // Don't show children of projects as standalone items
@@ -86,18 +93,18 @@ export function Sidebar() {
     for (const type of TYPE_ORDER) {
       const items = byType.get(type)
       if (items && items.length > 0) {
-        groups.push({ type, label: TYPE_LABELS[type] ?? type, icon: typeIcon(type), items })
+        groups.push({ type, label: typeLabels[type] ?? type, icon: typeIcon(type, thingTypes), items })
         byType.delete(type)
       }
     }
-    // Remaining types
+    // Remaining types (including custom user types)
     for (const [type, items] of byType) {
       if (items.length > 0) {
-        groups.push({ type, label: type.charAt(0).toUpperCase() + type.slice(1), icon: typeIcon(type), items })
+        groups.push({ type, label: typeLabels[type] ?? type.charAt(0).toUpperCase() + type.slice(1), icon: typeIcon(type, thingTypes), items })
       }
     }
     return groups
-  }, [active])
+  }, [active, thingTypes])
 
   return (
     <>

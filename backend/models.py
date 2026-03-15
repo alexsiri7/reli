@@ -5,6 +5,31 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+# ── Thing Types ───────────────────────────────────────────────────────────────
+
+
+class ThingTypeCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    icon: str = Field(default="📌", max_length=10)
+    color: str | None = Field(default=None, max_length=50)
+
+
+class ThingTypeUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    icon: str | None = Field(default=None, max_length=10)
+    color: str | None = Field(default=None, max_length=50)
+
+
+class ThingType(BaseModel):
+    id: str
+    name: str
+    icon: str
+    color: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ── Things ────────────────────────────────────────────────────────────────────
 
 

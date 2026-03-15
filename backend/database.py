@@ -45,6 +45,31 @@ def _migrate_chat_history_usage(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE chat_history ADD COLUMN {col} {typedef}")
 
 
+_DEFAULT_THING_TYPES = [
+    ("task", "📋", None),
+    ("note", "📝", None),
+    ("project", "📁", None),
+    ("idea", "💡", None),
+    ("goal", "🎯", None),
+    ("journal", "📓", None),
+    ("person", "👤", None),
+    ("place", "📍", None),
+    ("event", "📅", None),
+    ("concept", "🧠", None),
+    ("reference", "🔗", None),
+]
+
+
+def _seed_thing_types(conn: sqlite3.Connection) -> None:
+    """Seed default thing types if the table is empty."""
+    count = conn.execute("SELECT COUNT(*) FROM thing_types").fetchone()[0]
+    if count == 0:
+        conn.executemany(
+            "INSERT OR IGNORE INTO thing_types (id, name, icon, color) VALUES (?, ?, ?, ?)",
+            [(name, name, icon, color) for name, icon, color in _DEFAULT_THING_TYPES],
+        )
+
+
 def _migrate_things_graph(conn: sqlite3.Connection) -> None:
     """Add surface and last_referenced columns to things if missing."""
     cols = {row[1] for row in conn.execute("PRAGMA table_info(things)").fetchall()}
@@ -106,6 +131,14 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_rel_to ON thing_relationships(to_thing_id);
             CREATE INDEX IF NOT EXISTS idx_rel_type ON thing_relationships(relationship_type);
 
+            CREATE TABLE IF NOT EXISTS thing_types (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                icon TEXT NOT NULL DEFAULT '📌',
+                color TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS google_tokens (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 access_token TEXT NOT NULL,
@@ -121,3 +154,4 @@ def init_db() -> None:
         """)
         _migrate_chat_history_usage(conn)
         _migrate_things_graph(conn)
+        _seed_thing_types(conn)

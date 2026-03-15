@@ -1,6 +1,7 @@
-import type { TypeHint } from './store'
+import type { ThingType, TypeHint } from './store'
+import { useStore } from './store'
 
-const TYPE_ICONS: Record<string, string> = {
+const FALLBACK_ICONS: Record<string, string> = {
   task: '📋',
   note: '📝',
   project: '📁',
@@ -14,9 +15,14 @@ const TYPE_ICONS: Record<string, string> = {
   reference: '🔗',
 }
 
-export function typeIcon(hint: TypeHint | null | undefined): string {
+export function typeIcon(hint: TypeHint | null | undefined, thingTypes?: ThingType[]): string {
   if (!hint) return '📌'
-  return TYPE_ICONS[hint.toLowerCase()] ?? '📌'
+  const key = hint.toLowerCase()
+  // Look up from DB-backed types first
+  const types = thingTypes ?? useStore.getState().thingTypes
+  const match = types.find(t => t.name === key)
+  if (match) return match.icon
+  return FALLBACK_ICONS[key] ?? '📌'
 }
 
 export function formatDate(iso: string | null | undefined): string {
