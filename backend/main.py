@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from .auth import require_user  # noqa: E402
 from .database import init_db  # noqa: E402
 from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
+from .response_metrics import ResponseMetricsMiddleware, metrics_store  # noqa: E402
 from .routers import auth, briefing, calendar, chat, gmail, proactive, settings, sweep, thing_types, things  # noqa: E402
 from .sweep_scheduler import start_scheduler, stop_scheduler  # noqa: E402
 
@@ -59,6 +60,7 @@ app.add_middleware(
 
 _rl_config = get_rate_limit_config()
 app.add_middleware(RateLimitMiddleware, **_rl_config)
+app.add_middleware(ResponseMetricsMiddleware)
 
 # Auth routes are public (login/callback/logout)
 app.include_router(auth.router, prefix="/api")
@@ -80,6 +82,45 @@ app.include_router(sweep.router, prefix="/api", dependencies=_api_deps)
 @app.get("/healthz", tags=["health"])
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "reli"}
+
+
+@app.get("/api/health", tags=["health"])
+def health_detailed() -> dict:
+    """Detailed health check with DB, ChromaDB, and performance metrics."""
+    from .database import get_connection
+    from .vector_store import vector_count
+
+    # DB status
+    db_ok = False
+    try:
+        conn = get_connection()
+        conn.execute("SELECT 1")
+        conn.close()
+        db_ok = True
+    except Exception:
+        pass
+
+    # ChromaDB status
+    chroma_ok = False
+    vec_count = 0
+    try:
+        vec_count = vector_count()
+        chroma_ok = True
+    except Exception:
+        pass
+
+    avg_ms = metrics_store.avg_response_time_ms()
+
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "service": "reli",
+        "uptime_seconds": round(metrics_store.uptime_seconds(), 1),
+        "db_connected": db_ok,
+        "chromadb_connected": chroma_ok,
+        "vector_count": vec_count,
+        "avg_response_time_ms": round(avg_ms, 2) if avg_ms is not None else None,
+        "recent_request_count": metrics_store.request_count(),
+    }
 
 
 # Serve React SPA (only when the built dist directory exists)
