@@ -8,13 +8,16 @@ import type {
 
 // --- Pending operation types ---
 
+export type PendingOpStatus = 'pending' | 'in_flight' | 'failed'
+
 export interface PendingOp {
   id?: number
-  store: 'things' | 'thingTypes' | 'relationships' | 'chatMessages'
-  op: 'put' | 'delete'
-  key: string
-  payload?: unknown
-  created_at: string
+  url: string
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  body?: unknown
+  timestamp: string
+  status: PendingOpStatus
+  retries: number
 }
 
 // --- IndexedDB schema ---
