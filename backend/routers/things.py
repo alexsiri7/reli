@@ -64,6 +64,31 @@ def _row_to_thing(row: sqlite3.Row) -> Thing:
     )
 
 
+@router.get("/search", response_model=list[Thing], summary="Search Things across the full graph")
+def search_things(
+    q: str = Query("", description="Search query"),
+    active_only: bool = Query(False, description="Filter to active Things only"),
+    type_hint: str | None = Query(None, description="Filter by type_hint"),
+    limit: int = Query(50, ge=1, le=200),
+) -> list[Thing]:
+    if not q.strip():
+        return []
+
+    pattern = f"%{q}%"
+    with db() as conn:
+        sql = "SELECT * FROM things WHERE (title LIKE ? OR data LIKE ?)"
+        params: list[str | int] = [pattern, pattern]
+        if active_only:
+            sql += " AND active = 1"
+        if type_hint:
+            sql += " AND type_hint = ?"
+            params.append(type_hint)
+        sql += " ORDER BY updated_at DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(sql, params).fetchall()
+    return [_row_to_thing(r) for r in rows]
+
+
 @router.get("", response_model=list[Thing], summary="List Things")
 def list_things(
     active_only: bool = Query(True, description="Filter to active Things only"),

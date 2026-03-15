@@ -83,6 +83,10 @@ interface ReliState {
   calendarStatus: CalendarStatus
   calendarEvents: CalendarEvent[]
 
+  searchResults: Thing[]
+  searchLoading: boolean
+  searchThings: (query: string) => Promise<void>
+  clearSearch: () => void
   fetchThings: () => Promise<void>
   fetchBriefing: () => Promise<void>
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
@@ -124,6 +128,28 @@ export const useStore = create<ReliState>((set, get) => ({
   error: null,
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [],
+  searchResults: [],
+  searchLoading: false,
+
+  searchThings: async (query: string) => {
+    if (!query.trim()) {
+      set({ searchResults: [], searchLoading: false })
+      return
+    }
+    set({ searchLoading: true })
+    try {
+      const res = await fetch(`${BASE}/things/search?q=${encodeURIComponent(query)}&limit=50`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data: Thing[] = await res.json()
+      set({ searchResults: data })
+    } catch {
+      set({ searchResults: [] })
+    } finally {
+      set({ searchLoading: false })
+    }
+  },
+
+  clearSearch: () => set({ searchResults: [], searchLoading: false }),
 
   fetchThings: async () => {
     set({ loading: true, error: null })

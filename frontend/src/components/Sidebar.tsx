@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import { CalendarSection } from './CalendarSection'
@@ -6,7 +6,23 @@ import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
 
 export function Sidebar() {
-  const { things, briefing, loading } = useStore(useShallow(s => ({ things: s.things, briefing: s.briefing, loading: s.loading })))
+  const { things, briefing, loading, searchResults, searchLoading, searchThings, clearSearch } = useStore(useShallow(s => ({ things: s.things, briefing: s.briefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch })))
+  const [searchQuery, setSearchQuery] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  const isSearching = searchQuery.trim().length > 0
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!value.trim()) {
+      clearSearch()
+      return
+    }
+    debounceRef.current = setTimeout(() => {
+      searchThings(value)
+    }, 250)
+  }, [searchThings, clearSearch])
 
   const [isOpen, setIsOpen] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 768 : true
@@ -84,54 +100,104 @@ export function Sidebar() {
           </button>
         </div>
 
-        {loading && things.length === 0 && (
-          <div className="px-4 py-3 space-y-2 animate-pulse">
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+        {/* Search bar */}
+        <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-800">
+          <div className="relative">
+            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search all things…"
+              value={searchQuery}
+              onChange={e => handleSearchChange(e.target.value)}
+              className="w-full pl-8 pr-7 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => handleSearchChange('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                aria-label="Clear search"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* Google Calendar */}
-        <CalendarSection />
-
-        {/* Daily Briefing */}
-        {briefing.length > 0 && (
-          <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+        {/* Search results */}
+        {isSearching ? (
+          <section className="py-2 flex-1">
             <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-              📅 Daily Briefing
+              Search Results {!searchLoading && `(${searchResults.length})`}
             </h2>
-            {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
+            {searchLoading ? (
+              <div className="px-4 py-3 space-y-2 animate-pulse">
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+              </div>
+            ) : searchResults.length === 0 ? (
+              <div className="px-4 py-4 text-sm text-gray-400 dark:text-gray-500 text-center">
+                No results found
+              </div>
+            ) : (
+              searchResults.map(t => <ThingCard key={t.id} thing={t} />)
+            )}
           </section>
-        )}
+        ) : (
+          <>
+            {loading && things.length === 0 && (
+              <div className="px-4 py-3 space-y-2 animate-pulse">
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+              </div>
+            )}
 
-        {/* Upcoming Check-ins */}
-        {upcoming.length > 0 && (
-          <section className="py-2">
-            <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-              Upcoming Check-ins
-            </h2>
-            {upcoming.map(t => <ThingCard key={t.id} thing={t} />)}
-          </section>
-        )}
+            {/* Google Calendar */}
+            <CalendarSection />
 
-        {/* Active Things (no check-in date) */}
-        {active.length > 0 && (
-          <section className="py-2 border-t border-gray-100 dark:border-gray-800">
-            <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-              Active Things
-            </h2>
-            {active.map(t => <ThingCard key={t.id} thing={t} />)}
-          </section>
-        )}
+            {/* Daily Briefing */}
+            {briefing.length > 0 && (
+              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                  📅 Daily Briefing
+                </h2>
+                {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
+              </section>
+            )}
 
-        {/* Gmail */}
-        <GmailPanel />
+            {/* Upcoming Check-ins */}
+            {upcoming.length > 0 && (
+              <section className="py-2">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                  Upcoming Check-ins
+                </h2>
+                {upcoming.map(t => <ThingCard key={t.id} thing={t} />)}
+              </section>
+            )}
 
-        {!loading && things.length === 0 && (
-          <div className="px-4 py-6 text-sm text-gray-400 dark:text-gray-500 text-center">
-            Start by typing in the chat…
-          </div>
+            {/* Active Things (no check-in date) */}
+            {active.length > 0 && (
+              <section className="py-2 border-t border-gray-100 dark:border-gray-800">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                  Active Things
+                </h2>
+                {active.map(t => <ThingCard key={t.id} thing={t} />)}
+              </section>
+            )}
+
+            {/* Gmail */}
+            <GmailPanel />
+
+            {!loading && things.length === 0 && (
+              <div className="px-4 py-6 text-sm text-gray-400 dark:text-gray-500 text-center">
+                Start by typing in the chat…
+              </div>
+            )}
+          </>
         )}
       </aside>
     </>
