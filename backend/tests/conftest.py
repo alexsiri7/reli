@@ -1,5 +1,6 @@
 """Shared pytest fixtures for backend tests."""
 
+import os
 from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import patch
@@ -8,6 +9,9 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
+
+# Disable rate limiting for all tests (except test_rate_limit.py which uses its own app)
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 # ---------------------------------------------------------------------------
 # Database fixtures

@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 from .auth import API_KEY, require_api_key  # noqa: E402
 from .database import init_db  # noqa: E402
+from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
 from .routers import briefing, calendar, chat, gmail, proactive, sweep, thing_types, things  # noqa: E402
 from .sweep_scheduler import start_scheduler, stop_scheduler  # noqa: E402
 
@@ -47,6 +48,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_rl_config = get_rate_limit_config()
+app.add_middleware(RateLimitMiddleware, **_rl_config)
 
 # All /api routes require a valid API key
 _api_deps = [Depends(require_api_key)]
