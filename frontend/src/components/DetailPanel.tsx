@@ -34,14 +34,27 @@ export function DetailPanel() {
 
   // Group relationships by type (must be before early return for hooks rule)
   const groupedRels = useMemo(() => {
+    const opposites: Record<string, string> = {
+      'child-of': 'parent-of',
+      'parent-of': 'child-of',
+      'depends-on': 'blocks',
+      'blocks': 'depends-on',
+      'part-of': 'contains',
+      'contains': 'part-of',
+      'followed-by': 'preceded-by',
+      'preceded-by': 'followed-by',
+      'spawned-from': 'spawned',
+      'spawned': 'spawned-from',
+    }
     const groups = new Map<string, { rel: Relationship; otherId: string; direction: string }[]>()
     for (const rel of detailRelationships) {
       const isFrom = rel.from_thing_id === detailThingId
       const otherId = isFrom ? rel.to_thing_id : rel.from_thing_id
-      const direction = isFrom ? '\u2192' : '\u2190'
-      const type = rel.relationship_type
-      if (!groups.has(type)) groups.set(type, [])
-      groups.get(type)!.push({ rel, otherId, direction })
+      const rawType = rel.relationship_type
+      const displayType = isFrom ? rawType : (opposites[rawType] ?? rawType)
+      const direction = '\u2192'
+      if (!groups.has(displayType)) groups.set(displayType, [])
+      groups.get(displayType)!.push({ rel, otherId, direction })
     }
     return groups
   }, [detailRelationships, detailThingId])

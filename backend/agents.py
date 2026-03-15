@@ -425,10 +425,10 @@ Relationships:
 Create relationships to link Things together. Use from_thing_id and to_thing_id
 (both must be existing Thing IDs or IDs of Things being created in this same batch).
 
-Relationship types:
-- Structural: "parent-of", "child-of", "depends-on", "blocks", "part-of"
+Relationship types (with semantic opposites for reverse display):
+- Structural: "parent-of" ↔ "child-of", "depends-on" ↔ "blocks", "part-of" ↔ "contains"
 - Associative: "related-to", "involves", "tagged-with"
-- Temporal: "followed-by", "preceded-by", "spawned-from"
+- Temporal: "followed-by" ↔ "preceded-by", "spawned-from" ↔ "spawned"
 
 For example, if user says "Meeting with Sarah about the budget project":
 1. Create entity "Sarah" (type_hint: person, surface: false) if not already known
