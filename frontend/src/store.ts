@@ -1,4 +1,8 @@
 import { create } from 'zustand'
+import { cacheThings, getCachedThings } from './offline/cache-things'
+import { cacheThingTypes, getCachedThingTypes } from './offline/cache-thing-types'
+import { cacheRelationships, getCachedRelationships } from './offline/cache-relationships'
+import { getByKey } from './offline/idb'
 
 export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | string
 
@@ -191,6 +195,28 @@ const SESSION_ID = getOrCreateSessionId()
 
 const BASE = '/api'
 
+async function fetchThingDetailWithFallback(
+  id: string,
+): Promise<[Thing | null, Relationship[]]> {
+  try {
+    const [thing, rels] = await Promise.all([
+      fetch(`${BASE}/things/${id}`).then(r => r.ok ? r.json() : null),
+      fetch(`${BASE}/things/${id}/relationships`).then(r => r.ok ? r.json() : []),
+    ])
+    if (rels.length > 0) cacheRelationships(rels).catch(() => {})
+    return [thing, rels]
+  } catch {
+    if (!navigator.onLine) {
+      const [thing, rels] = await Promise.all([
+        getByKey('things', id).catch(() => undefined),
+        getCachedRelationships(id).catch(() => []),
+      ])
+      return [thing ?? null, rels]
+    }
+    throw new Error('Network error')
+  }
+}
+
 export const useStore = create<ReliState>((set, get) => ({
   thingTypes: [],
   things: [],
@@ -219,10 +245,7 @@ export const useStore = create<ReliState>((set, get) => ({
 
   openThingDetail: (id: string) => {
     set({ detailThingId: id, detailHistory: [], detailLoading: true, detailThing: null, detailRelationships: [] })
-    Promise.all([
-      fetch(`${BASE}/things/${id}`).then(r => r.ok ? r.json() : null),
-      fetch(`${BASE}/things/${id}/relationships`).then(r => r.ok ? r.json() : []),
-    ]).then(([thing, rels]) => {
+    fetchThingDetailWithFallback(id).then(([thing, rels]) => {
       if (get().detailThingId === id) {
         set({ detailThing: thing, detailRelationships: rels, detailLoading: false })
       }
@@ -241,10 +264,7 @@ export const useStore = create<ReliState>((set, get) => ({
       detailThing: null,
       detailRelationships: [],
     }))
-    Promise.all([
-      fetch(`${BASE}/things/${id}`).then(r => r.ok ? r.json() : null),
-      fetch(`${BASE}/things/${id}/relationships`).then(r => r.ok ? r.json() : []),
-    ]).then(([thing, rels]) => {
+    fetchThingDetailWithFallback(id).then(([thing, rels]) => {
       if (get().detailThingId === id) {
         set({ detailThing: thing, detailRelationships: rels, detailLoading: false })
       }
@@ -258,10 +278,7 @@ export const useStore = create<ReliState>((set, get) => ({
     if (history.length === 0) return
     const prevId = history[history.length - 1]
     set({ detailThingId: prevId, detailHistory: history.slice(0, -1), detailLoading: true, detailThing: null, detailRelationships: [] })
-    Promise.all([
-      fetch(`${BASE}/things/${prevId}`).then(r => r.ok ? r.json() : null),
-      fetch(`${BASE}/things/${prevId}/relationships`).then(r => r.ok ? r.json() : []),
-    ]).then(([thing, rels]) => {
+    fetchThingDetailWithFallback(prevId).then(([thing, rels]) => {
       if (get().detailThingId === prevId) {
         set({ detailThing: thing, detailRelationships: rels, detailLoading: false })
       }
@@ -300,8 +317,12 @@ export const useStore = create<ReliState>((set, get) => ({
       if (!res.ok) return
       const data: ThingType[] = await res.json()
       set({ thingTypes: data })
+      cacheThingTypes(data).catch(() => {})
     } catch {
-      // best-effort
+      if (!navigator.onLine) {
+        const cached = await getCachedThingTypes().catch(() => [])
+        if (cached.length > 0) set({ thingTypes: cached })
+      }
     }
   },
 
@@ -312,7 +333,15 @@ export const useStore = create<ReliState>((set, get) => ({
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: Thing[] = await res.json()
       set({ things: data })
+      cacheThings(data).catch(() => {})
     } catch (e) {
+      if (!navigator.onLine) {
+        const cached = await getCachedThings().catch(() => [])
+        if (cached.length > 0) {
+          set({ things: cached })
+          return
+        }
+      }
       set({ error: String(e) })
     } finally {
       set({ loading: false })
