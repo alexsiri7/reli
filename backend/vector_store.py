@@ -20,13 +20,13 @@ COLLECTION_NAME = "things"
 
 REQUESTY_BASE_URL = os.environ.get("REQUESTY_BASE_URL", "https://router.requesty.ai/v1")
 REQUESTY_API_KEY = os.environ.get("REQUESTY_API_KEY", "")
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small")
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "text-embedding-3-large")
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 
 # Threshold: use vector search when Things count >= this value
-VECTOR_SEARCH_THRESHOLD = 500
+VECTOR_SEARCH_THRESHOLD = 0
 
 
 # ---------------------------------------------------------------------------
@@ -89,19 +89,59 @@ def _get_collection() -> chromadb.Collection:
 
 
 def _thing_to_text(thing: dict[str, Any]) -> str:
-    """Flatten a Thing dict into a single searchable string."""
+    """Flatten a Thing dict into a rich searchable string.
+
+    Includes title (repeated for weight), type, formatted data fields,
+    and titles of related Things for relationship context.
+    """
+    from .database import db
+
     parts: list[str] = []
-    if thing.get("title"):
-        parts.append(thing["title"])
+    title = thing.get("title") or ""
+    if title:
+        # Repeat title for extra weight in embedding
+        parts.append(title)
+        parts.append(title)
     if thing.get("type_hint"):
-        parts.append(f"type:{thing['type_hint']}")
+        parts.append(f"type: {thing['type_hint']}")
+
+    # Format data fields with human-readable labels
     raw_data = thing.get("data")
     if raw_data:
         if isinstance(raw_data, str):
-            raw_data = json.loads(raw_data) if raw_data else {}
+            try:
+                raw_data = json.loads(raw_data)
+            except (json.JSONDecodeError, ValueError):
+                raw_data = None
         if isinstance(raw_data, dict):
             for k, v in raw_data.items():
-                parts.append(f"{k}:{v}")
+                label = k.replace("_", " ").replace("-", " ")
+                if isinstance(v, list):
+                    v = ", ".join(str(item) for item in v)
+                elif isinstance(v, dict):
+                    v = json.dumps(v)
+                parts.append(f"{label}: {v}")
+
+    # Relationship context: fetch related Things' titles
+    thing_id = thing.get("id")
+    if thing_id:
+        try:
+            with db() as conn:
+                rows = conn.execute(
+                    "SELECT t.title, r.relationship_type"
+                    " FROM thing_relationships r"
+                    " JOIN things t ON t.id = CASE"
+                    "   WHEN r.from_thing_id = ? THEN r.to_thing_id"
+                    "   ELSE r.from_thing_id END"
+                    " WHERE r.from_thing_id = ? OR r.to_thing_id = ?",
+                    (thing_id, thing_id, thing_id),
+                ).fetchall()
+                if rows:
+                    related = [f"{row['title']} ({row['relationship_type']})" for row in rows]
+                    parts.append("related to: " + ", ".join(related))
+        except Exception as exc:
+            logger.debug("Could not fetch relationships for thing %s: %s", thing_id, exc)
+
     return " | ".join(parts)
 
 
@@ -140,6 +180,49 @@ def vector_count() -> int:
     except Exception as exc:
         logger.error("ChromaDB count failed: %s", exc)
         return 0
+
+
+def reindex_all() -> int:
+    """Delete and re-embed all Things from the database.
+
+    Returns the number of Things re-indexed.
+    """
+    from .database import db
+
+    try:
+        collection = _get_collection()
+        # Clear existing embeddings
+        existing = collection.get()
+        if existing["ids"]:
+            collection.delete(ids=existing["ids"])
+
+        # Fetch all things from the database
+        with db() as conn:
+            rows = conn.execute("SELECT * FROM things").fetchall()
+
+        if not rows:
+            return 0
+
+        # Batch upsert
+        ids: list[str] = []
+        documents: list[str] = []
+        metadatas: list[dict[str, str | int]] = []
+        for row in rows:
+            thing = dict(row)
+            ids.append(thing["id"])
+            documents.append(_thing_to_text(thing))
+            metadatas.append(
+                {
+                    "type_hint": thing.get("type_hint") or "",
+                    "active": 1 if thing.get("active", True) else 0,
+                }
+            )
+
+        collection.upsert(ids=ids, documents=documents, metadatas=metadatas)  # type: ignore[arg-type]
+        return len(ids)
+    except Exception as exc:
+        logger.error("ChromaDB reindex_all failed: %s", exc)
+        raise
 
 
 def vector_search(
