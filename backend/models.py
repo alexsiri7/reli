@@ -148,6 +148,7 @@ class ModelUsage(BaseModel):
     completion_tokens: int = 0
     total_tokens: int = 0
     api_calls: int = 0
+    cost_usd: float = 0.0
 
 
 class SessionUsage(BaseModel):
@@ -157,6 +158,7 @@ class SessionUsage(BaseModel):
     completion_tokens: int = 0
     total_tokens: int = 0
     api_calls: int = 0
+    cost_usd: float = 0.0
     per_model: list[ModelUsage] = []
 
 

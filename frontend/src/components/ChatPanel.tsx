@@ -171,6 +171,12 @@ function formatTokens(n: number): string {
   return String(n)
 }
 
+function formatCost(usd: number): string {
+  if (usd === 0) return '$0.00'
+  if (usd < 0.01) return `$${usd.toFixed(4)}`
+  return `$${usd.toFixed(2)}`
+}
+
 function ModelRow({ m }: { m: ModelUsage }) {
   return (
     <tr className="border-t border-gray-200 dark:border-gray-700">
@@ -179,7 +185,8 @@ function ModelRow({ m }: { m: ModelUsage }) {
       </td>
       <td className="py-1.5 px-3 text-right tabular-nums">{formatTokens(m.prompt_tokens)}</td>
       <td className="py-1.5 px-3 text-right tabular-nums">{formatTokens(m.completion_tokens)}</td>
-      <td className="py-1.5 pl-3 text-right tabular-nums">{m.api_calls}</td>
+      <td className="py-1.5 px-3 text-right tabular-nums">{m.api_calls}</td>
+      <td className="py-1.5 pl-3 text-right tabular-nums">{formatCost(m.cost_usd)}</td>
     </tr>
   )
 }
@@ -216,7 +223,7 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
         <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[280px] font-mono text-[11px] text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-between mb-2">
             <span className="font-semibold text-xs text-gray-700 dark:text-gray-300">Session Usage</span>
-            <span className="text-gray-400">{formatTokens(stats.total_tokens)} tokens · {stats.api_calls} call{stats.api_calls !== 1 ? 's' : ''}</span>
+            <span className="text-gray-400">{formatTokens(stats.total_tokens)} tokens · {stats.api_calls} call{stats.api_calls !== 1 ? 's' : ''} · {formatCost(stats.cost_usd)}</span>
           </div>
           {stats.per_model.length > 0 && (
             <table className="w-full text-[11px]">
@@ -225,7 +232,8 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
                   <th className="text-left font-normal pr-3 pb-1">Model</th>
                   <th className="text-right font-normal px-3 pb-1">Prompt</th>
                   <th className="text-right font-normal px-3 pb-1">Compl.</th>
-                  <th className="text-right font-normal pl-3 pb-1">Calls</th>
+                  <th className="text-right font-normal px-3 pb-1">Calls</th>
+                  <th className="text-right font-normal pl-3 pb-1">Cost</th>
                 </tr>
               </thead>
               <tbody>

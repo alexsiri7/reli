@@ -336,7 +336,7 @@ async def chat(body: ChatRequest) -> ChatResponse:
         # Compute cumulative session usage with per-model breakdown
         totals_row = conn.execute(
             "SELECT COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
-            "COALESCE(SUM(api_calls), 0) as calls "
+            "COALESCE(SUM(api_calls), 0) as calls, COALESCE(SUM(cost_usd), 0) as cost "
             "FROM chat_history WHERE session_id = ? AND role = 'assistant'",
             (session_id,),
         ).fetchone()
@@ -344,7 +344,7 @@ async def chat(body: ChatRequest) -> ChatResponse:
         model_rows = conn.execute(
             "SELECT COALESCE(model, 'unknown') as model, "
             "COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
-            "COALESCE(SUM(api_calls), 0) as calls "
+            "COALESCE(SUM(api_calls), 0) as calls, COALESCE(SUM(cost_usd), 0) as cost "
             "FROM chat_history WHERE session_id = ? AND role = 'assistant' "
             "GROUP BY model ORDER BY calls DESC",
             (session_id,),
@@ -357,6 +357,7 @@ async def chat(body: ChatRequest) -> ChatResponse:
             completion_tokens=r["ct"],
             total_tokens=r["pt"] + r["ct"],
             api_calls=r["calls"],
+            cost_usd=round(r["cost"], 6),
         )
         for r in model_rows
     ]
@@ -366,6 +367,7 @@ async def chat(body: ChatRequest) -> ChatResponse:
         completion_tokens=totals_row["ct"],
         total_tokens=totals_row["pt"] + totals_row["ct"],
         api_calls=totals_row["calls"],
+        cost_usd=round(totals_row["cost"], 6),
         per_model=per_model,
     )
 

@@ -22,7 +22,7 @@ const mockStore = {
   hasMoreHistory: false,
   sendMessage: vi.fn(),
   fetchOlderMessages: vi.fn(),
-  sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, per_model: [] },
+  sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, cost_usd: 0, per_model: [] },
 }
 
 vi.mock('../store', () => ({

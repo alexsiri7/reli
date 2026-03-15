@@ -81,6 +81,7 @@ export interface ModelUsage {
   completion_tokens: number
   total_tokens: number
   api_calls: number
+  cost_usd: number
 }
 
 export interface SessionStats {
@@ -88,6 +89,7 @@ export interface SessionStats {
   completion_tokens: number
   total_tokens: number
   api_calls: number
+  cost_usd: number
   per_model: ModelUsage[]
 }
 
@@ -165,7 +167,7 @@ export const useStore = create<ReliState>((set, get) => ({
   findings: [],
   messages: [],
   sessionId: SESSION_ID,
-  sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, per_model: [] },
+  sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, cost_usd: 0, per_model: [] },
   loading: false,
   chatLoading: false,
   historyLoading: false,
