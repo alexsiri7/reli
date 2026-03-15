@@ -1,11 +1,14 @@
 """Chat history endpoints and the multi-agent chat pipeline."""
 
 import json
+import logging
 import sqlite3
 from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+logger = logging.getLogger(__name__)
 
 from ..agents import (
     UsageStats,
@@ -161,7 +164,19 @@ def _fetch_relevant_things(
     type_hint = filter_params.get("type_hint")
 
     # Choose retrieval strategy based on indexed count
-    use_vector = vector_count() >= VECTOR_SEARCH_THRESHOLD
+    vc = vector_count()
+    use_vector = vc >= VECTOR_SEARCH_THRESHOLD
+    sql_thing_count = _sql_things_count(conn)
+
+    logger.info(
+        "Retrieval strategy: vector_count=%d, sql_things=%d, threshold=%d, use_vector=%s, active_only=%s, type_hint=%r",
+        vc,
+        sql_thing_count,
+        VECTOR_SEARCH_THRESHOLD,
+        use_vector,
+        active_only,
+        type_hint,
+    )
 
     seed_ids: list[str] = []
 
@@ -173,6 +188,7 @@ def _fetch_relevant_things(
             active_only=active_only,
             type_hint=type_hint,
         )
+        logger.info("Vector search returned %d seed IDs", len(seed_ids))
         # If vector search returns nothing (embedding failure), fall through to SQL
         if not seed_ids:
             use_vector = False
@@ -190,13 +206,18 @@ def _fetch_relevant_things(
                 sql += " AND type_hint = ?"
                 params.append(type_hint)
             sql += " ORDER BY updated_at DESC LIMIT 20"
-            for row in conn.execute(sql, params).fetchall():
+            matches = conn.execute(sql, params).fetchall()
+            logger.info("SQL LIKE query=%r matched %d rows", query, len(matches))
+            for row in matches:
                 if row["id"] not in seen_sql:
                     seen_sql.add(row["id"])
                     seed_ids.append(row["id"])
 
+    logger.info("Total seed IDs before hydration: %d", len(seed_ids))
+
     # Hydrate seed IDs with parent/children expansion
     results = _fetch_with_family(conn, seed_ids)
+    logger.info("After family expansion: %d Things", len(results))
 
     # Always include recent active things when there aren't enough results
     if len(results) < 5:
@@ -259,9 +280,26 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     filter_params = context_result.get("filter_params", {})
     gmail_query = context_result.get("gmail_query")
 
+    logger.info(
+        "Context agent result — search_queries=%r, filter_params=%r, gmail_query=%r, "
+        "needs_web_search=%r, include_calendar=%r",
+        search_queries,
+        filter_params,
+        gmail_query,
+        context_result.get("needs_web_search"),
+        context_result.get("include_calendar"),
+    )
+
     # Retrieve relevant Things and update last_referenced
     with db() as conn:
         relevant_things = _fetch_relevant_things(conn, search_queries, filter_params)
+        logger.info(
+            "Retrieved %d relevant Things for queries %r (vector_count=%d, threshold=%d)",
+            len(relevant_things),
+            search_queries,
+            vector_count(),
+            VECTOR_SEARCH_THRESHOLD,
+        )
         if relevant_things:
             from datetime import timezone
 

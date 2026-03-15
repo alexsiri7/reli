@@ -331,17 +331,27 @@ async def run_context_agent(
     if OLLAMA_MODEL:
         try:
             raw = await _chat_ollama(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
+            logger.info("Context agent (Ollama/%s) raw response: %s", OLLAMA_MODEL, raw[:500] if raw else raw)
         except Exception as exc:
             logger.warning("Ollama context agent failed, falling back to Requesty: %s", exc)
 
     # Fall back to Requesty
     if raw is None:
         raw = await _chat(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
+        logger.info("Context agent (Requesty/%s) raw response: %s", REQUESTY_MODEL, raw[:500] if raw else raw)
 
     try:
         result: dict[str, Any] = json.loads(raw)
+        logger.info(
+            "Context agent parsed — search_queries=%r, filter_params=%r",
+            result.get("search_queries"),
+            result.get("filter_params"),
+        )
         return result
     except json.JSONDecodeError:
+        logger.warning(
+            "Context agent returned invalid JSON, falling back to message as query: %s", raw[:200] if raw else raw
+        )
         return {"search_queries": [message], "filter_params": {"active_only": True, "type_hint": None}}
 
 
