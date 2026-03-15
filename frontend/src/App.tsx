@@ -7,12 +7,14 @@ import { DetailPanel } from './components/DetailPanel'
 import { LoginPage } from './components/LoginPage'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
+import { SettingsPanel } from './components/SettingsPanel'
 
 function App() {
-  const { currentUser, authChecked, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
+      settingsOpen: s.settingsOpen,
       fetchCurrentUser: s.fetchCurrentUser,
       fetchThingTypes: s.fetchThingTypes,
       fetchThings: s.fetchThings,
@@ -97,6 +99,7 @@ function App() {
       <Sidebar />
       <ChatPanel />
       <DetailPanel />
+      {settingsOpen && <SettingsPanel />}
     </div>
   )
 }

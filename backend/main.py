@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from .auth import require_user  # noqa: E402
 from .database import init_db  # noqa: E402
 from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
-from .routers import auth, briefing, calendar, chat, gmail, proactive, sweep, thing_types, things  # noqa: E402
+from .routers import auth, briefing, calendar, chat, gmail, proactive, settings, sweep, thing_types, things  # noqa: E402
 from .sweep_scheduler import start_scheduler, stop_scheduler  # noqa: E402
 
 _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
@@ -73,6 +73,7 @@ app.include_router(chat.router, prefix="/api", dependencies=_api_deps)
 app.include_router(gmail.router, prefix="/api", dependencies=_api_deps)
 app.include_router(calendar.router, prefix="/api", dependencies=_api_deps)
 app.include_router(proactive.router, prefix="/api", dependencies=_api_deps)
+app.include_router(settings.router, prefix="/api", dependencies=_api_deps)
 app.include_router(sweep.router, prefix="/api", dependencies=_api_deps)
 
 

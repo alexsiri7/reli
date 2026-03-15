@@ -287,6 +287,12 @@ export function Sidebar() {
                     <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{currentUser.email}</p>
                   </div>
                   <button
+                    onClick={() => useStore.getState().openSettings()}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Settings
+                  </button>
+                  <button
                     onClick={logout}
                     className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg transition-colors"
                   >

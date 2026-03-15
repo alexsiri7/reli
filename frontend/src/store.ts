@@ -91,6 +91,17 @@ export interface CalendarStatus {
   connected: boolean
 }
 
+export interface ModelSettings {
+  context: string
+  reasoning: string
+  response: string
+}
+
+export interface RequestyModel {
+  id: string
+  name: string | null
+}
+
 export interface ModelUsage {
   model: string
   prompt_tokens: number
@@ -193,6 +204,18 @@ interface ReliState {
   fetchCalendarEvents: () => Promise<void>
   connectCalendar: () => Promise<void>
   disconnectCalendar: () => Promise<void>
+
+  // Settings
+  settingsOpen: boolean
+  modelSettings: ModelSettings | null
+  availableModels: RequestyModel[]
+  settingsLoading: boolean
+  modelsLoading: boolean
+  openSettings: () => void
+  closeSettings: () => void
+  fetchModelSettings: () => Promise<void>
+  fetchAvailableModels: () => Promise<void>
+  updateModelSettings: (settings: Partial<ModelSettings>) => Promise<void>
 }
 
 const HISTORY_PAGE_SIZE = 20
@@ -658,4 +681,57 @@ export const useStore = create<ReliState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  // Settings
+  settingsOpen: false,
+  modelSettings: null,
+  availableModels: [],
+  settingsLoading: false,
+  modelsLoading: false,
+
+  openSettings: () => set({ settingsOpen: true }),
+  closeSettings: () => set({ settingsOpen: false }),
+
+  fetchModelSettings: async () => {
+    set({ settingsLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/settings`)
+      if (!res.ok) return
+      const data = await res.json()
+      set({ modelSettings: data })
+    } catch {
+      // ignore
+    } finally {
+      set({ settingsLoading: false })
+    }
+  },
+
+  fetchAvailableModels: async () => {
+    set({ modelsLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/settings/models`)
+      if (!res.ok) return
+      const data = await res.json()
+      set({ availableModels: data })
+    } catch {
+      // ignore
+    } finally {
+      set({ modelsLoading: false })
+    }
+  },
+
+  updateModelSettings: async (settings: Partial<ModelSettings>) => {
+    try {
+      const res = await apiFetch(`${BASE}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      set({ modelSettings: data })
+    } catch (e) {
+      set({ error: String(e) })
+    }
+  },
 }))
