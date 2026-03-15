@@ -15,6 +15,7 @@ type Thing = {
   created_at: string
   updated_at: string
   last_referenced: string | null
+  open_questions: string[] | null
   children_count: number | null
   completed_count: number | null
 }
@@ -61,6 +62,7 @@ const makeThing = (overrides: Partial<Thing> = {}): Thing => ({
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   last_referenced: null,
+  open_questions: null,
   children_count: null,
   completed_count: null,
   ...overrides,
