@@ -109,6 +109,8 @@ jobs:
 
   # Deploy by pulling the new image on the server.
   # Tags the current running image as :rollback before switching.
+  # Verifies deploy by hitting /healthz endpoint (up to 5 retries).
+  # Auto-rollbacks to previous image if health check fails.
   # Required GitHub Actions secrets:
   #   TAILSCALE_AUTHKEY   - Tailscale auth key for VPN access
   #   SSH_DEPLOY_KEY      - private SSH key authorized on the server
@@ -155,12 +157,29 @@ jobs:
             git pull --rebase
             RELI_IMAGE_TAG="$NEW_TAG" docker compose up -d
 
-            # Verify the container started
-            sleep 3
-            if docker inspect --format='{{.State.Running}}' reli-reli-1 2>/dev/null | grep -q true; then
-              echo "Deploy successful: $NEW_TAG"
+            # Verify the container is healthy by hitting the live endpoint
+            echo "Waiting for health check..."
+            HEALTHY=false
+            for i in 1 2 3 4 5; do
+              sleep 3
+              if curl -sf --max-time 5 http://localhost:8000/healthz | grep -q '"status":"ok"'; then
+                HEALTHY=true
+                break
+              fi
+              echo "Health check attempt $i failed, retrying..."
+            done
+
+            if [ "$HEALTHY" = true ]; then
+              echo "Deploy successful: $NEW_TAG (health check passed)"
             else
-              echo "Deploy FAILED — rolling back to previous image"
+              echo "Deploy FAILED — health check did not pass after 5 attempts"
+              echo "Rolling back to previous image..."
               RELI_IMAGE_TAG=rollback docker compose up -d
+              sleep 5
+              if curl -sf --max-time 5 http://localhost:8000/healthz | grep -q '"status":"ok"'; then
+                echo "Rollback successful — previous version is healthy"
+              else
+                echo "WARNING: Rollback version also failed health check"
+              fi
               exit 1
             fi
