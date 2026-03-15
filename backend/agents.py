@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 REQUESTY_BASE_URL = os.environ.get("REQUESTY_BASE_URL", "https://router.requesty.ai/v1")
 REQUESTY_API_KEY = os.environ.get("REQUESTY_API_KEY", "")
 REQUESTY_MODEL = os.environ.get("REQUESTY_MODEL", "google/gemini-2.0-flash-001")
+REQUESTY_REASONING_MODEL = os.environ.get("REQUESTY_REASONING_MODEL", "google/gemini-3-flash-preview")
 
 # ---------------------------------------------------------------------------
 # Ollama — optional local LLM for context agent
@@ -42,6 +43,7 @@ MODEL_PRICING: dict[str, tuple[float, float]] = {
     "anthropic/claude-sonnet-4-20250514": (3.00, 15.00),
     "google/gemini-2.0-flash-001": (0.10, 0.40),
     "google/gemini-2.5-flash-preview-05-20": (0.15, 0.60),
+    "google/gemini-3-flash-preview": (0.15, 0.60),
 }
 
 
@@ -231,7 +233,7 @@ async def run_context_agent(
 
 
 # ---------------------------------------------------------------------------
-# Stage 2: Reasoning Agent
+# Stage 2: Reasoning Agent (uses thinking model via REQUESTY_REASONING_MODEL)
 # ---------------------------------------------------------------------------
 
 REASONING_AGENT_SYSTEM = """\
@@ -331,7 +333,7 @@ async def run_reasoning_agent(
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": user_content})
 
-    raw = await _chat(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
+    raw = await _chat(messages, model=REQUESTY_REASONING_MODEL, response_format={"type": "json_object"}, usage_stats=usage_stats)
     try:
         result: dict[str, Any] = json.loads(raw)
     except json.JSONDecodeError:
