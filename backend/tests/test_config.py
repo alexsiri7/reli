@@ -119,3 +119,28 @@ def test_config_pricing_overrides():
         pricing = _fetch_requesty_pricing()
 
     assert pricing["google/gemini-2.0-flash-001"] == (0.20, 0.80)
+
+
+def test_estimate_cost_exact_match():
+    """estimate_cost should work with exact model name match."""
+    from backend.agents import estimate_cost
+
+    cost = estimate_cost("google/gemini-2.5-flash-lite", 1_000_000, 1_000_000)
+    assert cost > 0
+
+
+def test_estimate_cost_without_provider_prefix():
+    """estimate_cost should match model names without provider prefix."""
+    from backend.agents import estimate_cost
+
+    # "gemini-2.5-flash-lite" should match "google/gemini-2.5-flash-lite"
+    cost = estimate_cost("gemini-2.5-flash-lite", 1_000_000, 1_000_000)
+    assert cost > 0
+
+
+def test_estimate_cost_unknown_model():
+    """estimate_cost should return 0 for completely unknown models."""
+    from backend.agents import estimate_cost
+
+    cost = estimate_cost("unknown/nonexistent-model-xyz", 1000, 1000)
+    assert cost == 0.0
