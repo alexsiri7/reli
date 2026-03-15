@@ -30,8 +30,17 @@ COPY --from=frontend-build /app/frontend/dist/ ./frontend/dist/
 # Create data directory with correct ownership
 RUN mkdir -p /app/data && chown reli:reli /app/data
 
+# Entrypoint fixes bind-mount permissions then drops to non-root
+COPY --chmod=755 <<'ENTRY' /app/entrypoint.sh
+#!/bin/sh
+# Fix ownership of bind-mounted data dir (runs as root initially)
+chown -R reli:reli /app/data 2>/dev/null || true
+exec gosu reli "$@"
+ENTRY
+
+RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
+
 EXPOSE 8000
 
-USER reli
-
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
