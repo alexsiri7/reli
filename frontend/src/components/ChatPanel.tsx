@@ -4,6 +4,7 @@ import { useStore, type AppliedChanges, type ChatMessage, type ContextThing, typ
 import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
+import { useNetworkStatus } from '../hooks/useNetworkStatus'
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso)
@@ -407,6 +408,7 @@ export function ChatPanel() {
       sessionStats: s.sessionStats,
     }))
   )
+  const { isOnline } = useNetworkStatus()
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -512,6 +514,11 @@ export function ChatPanel() {
 
       {/* Input */}
       <div className="px-4 pb-4 pt-2 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 shrink-0">
+        {!isOnline && (
+          <div className="mb-2 px-3 py-2 text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-xl text-center">
+            Chat requires an internet connection
+          </div>
+        )}
         <div className="flex items-end gap-2 bg-gray-100 dark:bg-gray-800 rounded-2xl px-3 py-2">
           <textarea
             ref={inputRef}
@@ -519,8 +526,9 @@ export function ChatPanel() {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Message Reli…"
-            className="flex-1 bg-transparent resize-none outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 max-h-32 py-1 leading-relaxed"
+            placeholder={isOnline ? "Message Reli\u2026" : "Chat unavailable offline"}
+            disabled={!isOnline}
+            className="flex-1 bg-transparent resize-none outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 max-h-32 py-1 leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ height: 'auto' }}
             onInput={e => {
               const t = e.currentTarget
@@ -546,7 +554,7 @@ export function ChatPanel() {
           )}
           <button
             onClick={submit}
-            disabled={!input.trim() || chatLoading}
+            disabled={!input.trim() || chatLoading || !isOnline}
             className="shrink-0 w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
             title="Send (Enter)"
           >
