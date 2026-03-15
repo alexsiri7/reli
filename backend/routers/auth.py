@@ -112,7 +112,7 @@ def google_login() -> dict:
 
 
 @router.get("/google/callback", include_in_schema=False)
-def google_callback(code: str, state: str = "", request: Request | None = None) -> RedirectResponse:
+def google_callback(code: str, state: str = "") -> RedirectResponse:
     """Exchange authorization code for tokens, create session."""
     if not SECRET_KEY:
         raise HTTPException(status_code=501, detail="SECRET_KEY not configured")
