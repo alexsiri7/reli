@@ -2,19 +2,46 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
-import { writeFileSync } from 'fs'
+import { createHash } from 'crypto'
+import { readFileSync, writeFileSync } from 'fs'
 import { resolve } from 'path'
 
 function versionJsonPlugin(): Plugin {
-  const buildVersion = Date.now().toString()
+  let contentHash = ''
   return {
     name: 'version-json',
     config() {
-      return { define: { __APP_BUILD_VERSION__: JSON.stringify(buildVersion) } }
+      // __APP_BUILD_VERSION__ reads from globalThis at runtime; the actual
+      // value is injected into index.html by writeBundle once the
+      // content hash is known.
+      return { define: { __APP_BUILD_VERSION__: 'globalThis.__APP_BUILD_VERSION__' } }
+    },
+    generateBundle(_options, bundle) {
+      // Hash the content of all JS chunks so the version only changes
+      // when actual code changes, not on every redeploy.
+      const hash = createHash('sha256')
+      for (const fileName of Object.keys(bundle).sort()) {
+        const chunk = bundle[fileName]
+        if (chunk.type === 'chunk') {
+          hash.update(chunk.code)
+        }
+      }
+      contentHash = hash.digest('hex').slice(0, 16)
+
+      // Emit version.json for the polling check
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ version: contentHash }),
+      })
     },
     writeBundle(options) {
       const outDir = options.dir ?? resolve(__dirname, 'dist')
-      writeFileSync(resolve(outDir, 'version.json'), JSON.stringify({ version: buildVersion }))
+      // Inject the content hash into index.html so the app knows its version
+      const htmlPath = resolve(outDir, 'index.html')
+      const html = readFileSync(htmlPath, 'utf-8')
+      const script = `<script>globalThis.__APP_BUILD_VERSION__=${JSON.stringify(contentHash)}</script>`
+      writeFileSync(htmlPath, html.replace('<head>', `<head>${script}`))
     },
   }
 }
