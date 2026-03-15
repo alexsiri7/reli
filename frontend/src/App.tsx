@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar'
 import { ChatPanel } from './components/ChatPanel'
 import { DetailPanel } from './components/DetailPanel'
 import { useVersionCheck } from './hooks/useVersionCheck'
+import { OfflineIndicator } from './components/OfflineIndicator'
 
 function App() {
   const { fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
@@ -67,6 +68,7 @@ function App() {
           ⚠ {error}
         </div>
       )}
+      <OfflineIndicator />
       <Sidebar />
       <ChatPanel />
       <DetailPanel />
