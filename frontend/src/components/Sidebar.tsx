@@ -223,12 +223,12 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Toggle button — visible when sidebar is closed */}
+      {/* Toggle button — visible on desktop when sidebar is closed */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
           aria-label="Open sidebar"
-          className="fixed top-3 left-3 z-50 p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors md:static md:m-0 md:border-0 md:shadow-none md:rounded-none md:bg-gray-50 md:dark:bg-gray-950 md:border-r md:border-gray-200 md:dark:border-gray-800 md:px-2 md:py-3"
+          className="hidden md:block md:static md:m-0 md:border-0 md:shadow-none md:rounded-none md:bg-gray-50 md:dark:bg-gray-950 md:border-r md:border-gray-200 md:dark:border-gray-800 md:px-2 md:py-3 p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -236,23 +236,14 @@ export function Sidebar() {
         </button>
       )}
 
-      {/* Backdrop — mobile only, when sidebar is open */}
-      {isOpen && (
-        <div
-          onClick={() => { if (window.innerWidth < 768) setIsOpen(false) }}
-          className="fixed inset-0 z-40 bg-black/30 transition-opacity md:hidden"
-        />
-      )}
-
       {/* Sidebar panel */}
       <aside
         style={{ width: window.innerWidth >= 768 ? sidebarWidth : undefined }}
         className={`
-          fixed inset-y-0 left-0 z-50 w-72 md:w-auto flex flex-col border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 overflow-y-auto
-          transform transition-transform duration-200 ease-in-out
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:static md:z-auto md:shrink-0 md:relative
-          ${isOpen ? '' : 'md:-translate-x-full md:hidden'}
+          flex flex-col border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 overflow-y-auto
+          w-full pb-14
+          md:pb-0 md:w-auto md:shrink-0 md:relative
+          ${isOpen ? '' : 'md:hidden'}
         `}
       >
         {/* Header */}
@@ -304,7 +295,7 @@ export function Sidebar() {
             <button
               onClick={() => setIsOpen(false)}
               aria-label="Close sidebar"
-              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              className="hidden md:block p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
