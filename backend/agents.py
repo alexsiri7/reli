@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -159,6 +159,16 @@ def estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> flo
 
 
 @dataclass
+class UsageRecord:
+    """A single LLM API call's usage."""
+
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+    cost_usd: float
+
+
+@dataclass
 class UsageStats:
     """Accumulated LLM usage statistics across pipeline stages."""
 
@@ -168,19 +178,24 @@ class UsageStats:
     cost_usd: float = 0.0
     api_calls: int = 0
     model: str = ""
+    calls: list[UsageRecord] = field(default_factory=list)
 
     def accumulate(self, prompt: int, completion: int, total: int, cost: float, model: str) -> None:
         self.prompt_tokens += prompt
         self.completion_tokens += completion
         self.total_tokens += total
         # Use provided cost if available, otherwise estimate from model pricing
-        if cost > 0:
-            self.cost_usd += cost
-        else:
-            self.cost_usd += estimate_cost(model, prompt, completion)
+        actual_cost = cost if cost > 0 else estimate_cost(model, prompt, completion)
+        self.cost_usd += actual_cost
         self.api_calls += 1
         if model:
             self.model = model
+        self.calls.append(UsageRecord(
+            model=model or "unknown",
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            cost_usd=actual_cost,
+        ))
 
     def to_dict(self) -> dict[str, Any]:
         return {

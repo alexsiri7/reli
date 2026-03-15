@@ -149,6 +149,7 @@ interface ReliState {
   navigateThingDetail: (id: string) => void
   goBackThingDetail: () => void
   closeThingDetail: () => void
+  fetchDailyStats: () => Promise<void>
   fetchThingTypes: () => Promise<void>
   fetchThings: () => Promise<void>
   fetchBriefing: () => Promise<void>
@@ -355,6 +356,17 @@ export const useStore = create<ReliState>((set, get) => ({
       }))
     } catch (e) {
       set({ error: String(e) })
+    }
+  },
+
+  fetchDailyStats: async () => {
+    try {
+      const res = await fetch(`${BASE}/chat/stats/today`)
+      if (!res.ok) return
+      const data: SessionStats = await res.json()
+      set({ sessionStats: data })
+    } catch {
+      // best-effort
     }
   },
 

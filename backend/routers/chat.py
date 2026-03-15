@@ -2,7 +2,7 @@
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -354,21 +354,43 @@ async def chat(body: ChatRequest) -> ChatResponse:
             ),
         )
 
-        # Compute cumulative session usage with per-model breakdown
+        # Insert per-call usage records for accurate per-model tracking
+        for call in usage.calls:
+            conn.execute(
+                "INSERT INTO usage_log (session_id, model, prompt_tokens, completion_tokens, cost_usd)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (session_id, call.model, call.prompt_tokens, call.completion_tokens, call.cost_usd),
+            )
+
+    daily_usage = _compute_daily_usage()
+
+    return ChatResponse(
+        session_id=session_id,
+        reply=reply,
+        applied_changes=applied_with_sources,
+        questions_for_user=questions_for_user,
+        usage=UsageInfo(**usage.to_dict()),
+        session_usage=daily_usage,
+    )
+
+
+def _compute_daily_usage() -> SessionUsage:
+    """Aggregate usage stats for today (since midnight local time)."""
+    today_start = datetime.combine(date.today(), datetime.min.time()).isoformat()
+    with db() as conn:
         totals_row = conn.execute(
             "SELECT COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
-            "COALESCE(SUM(api_calls), 0) as calls, COALESCE(SUM(cost_usd), 0) as cost "
-            "FROM chat_history WHERE session_id = ? AND role = 'assistant'",
-            (session_id,),
+            "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
+            "FROM usage_log WHERE timestamp >= ?",
+            (today_start,),
         ).fetchone()
 
         model_rows = conn.execute(
-            "SELECT COALESCE(model, 'unknown') as model, "
-            "COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
-            "COALESCE(SUM(api_calls), 0) as calls, COALESCE(SUM(cost_usd), 0) as cost "
-            "FROM chat_history WHERE session_id = ? AND role = 'assistant' "
-            "GROUP BY model ORDER BY calls DESC",
-            (session_id,),
+            "SELECT model, COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
+            "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
+            "FROM usage_log WHERE timestamp >= ? "
+            "GROUP BY model ORDER BY cost DESC",
+            (today_start,),
         ).fetchall()
 
     per_model = [
@@ -383,7 +405,7 @@ async def chat(body: ChatRequest) -> ChatResponse:
         for r in model_rows
     ]
 
-    session_usage = SessionUsage(
+    return SessionUsage(
         prompt_tokens=totals_row["pt"],
         completion_tokens=totals_row["ct"],
         total_tokens=totals_row["pt"] + totals_row["ct"],
@@ -392,11 +414,8 @@ async def chat(body: ChatRequest) -> ChatResponse:
         per_model=per_model,
     )
 
-    return ChatResponse(
-        session_id=session_id,
-        reply=reply,
-        applied_changes=applied_with_sources,
-        questions_for_user=questions_for_user,
-        usage=UsageInfo(**usage.to_dict()),
-        session_usage=session_usage,
-    )
+
+@router.get("/stats/today", response_model=SessionUsage, summary="Get today's usage stats")
+def get_daily_stats() -> SessionUsage:
+    """Return aggregated usage stats for today (since midnight local time)."""
+    return _compute_daily_usage()

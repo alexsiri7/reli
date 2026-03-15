@@ -6,12 +6,13 @@ import { ChatPanel } from './components/ChatPanel'
 import { DetailPanel } from './components/DetailPanel'
 
 function App() {
-  const { fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
+  const { fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
     useShallow(s => ({
       fetchThingTypes: s.fetchThingTypes,
       fetchThings: s.fetchThings,
       fetchBriefing: s.fetchBriefing,
       fetchHistory: s.fetchHistory,
+      fetchDailyStats: s.fetchDailyStats,
       fetchCalendarStatus: s.fetchCalendarStatus,
       fetchProactiveSurfaces: s.fetchProactiveSurfaces,
       error: s.error,
@@ -23,6 +24,7 @@ function App() {
     fetchThings()
     fetchBriefing()
     fetchHistory()
+    fetchDailyStats()
     fetchProactiveSurfaces()
     const interval = setInterval(() => { fetchThings(); fetchBriefing(); fetchProactiveSurfaces() }, 30_000)
 
@@ -35,7 +37,7 @@ function App() {
     }
 
     return () => clearInterval(interval)
-  }, [fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces])
+  }, [fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces])
 
   return (
     <div className="flex w-full h-full overflow-hidden bg-white dark:bg-gray-900">

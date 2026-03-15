@@ -294,8 +294,8 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
       <button
         onClick={() => setOpen(o => !o)}
         className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
-        title="Session usage stats"
-        aria-label="Session usage stats"
+        title="Today's usage stats"
+        aria-label="Today's usage stats"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 13h2v8H3zM9 8h2v13H9zM15 11h2v10h-2zM21 4h2v17h-2z" />
@@ -304,7 +304,7 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
       {open && (
         <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[280px] font-mono text-[11px] text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-xs text-gray-700 dark:text-gray-300">Session Usage</span>
+            <span className="font-semibold text-xs text-gray-700 dark:text-gray-300">Today's Usage</span>
             <span className="text-gray-400">{formatTokens(stats.total_tokens)} tokens · {stats.api_calls} call{stats.api_calls !== 1 ? 's' : ''} · {formatCost(stats.cost_usd)}</span>
           </div>
           {stats.per_model.length > 0 ? (

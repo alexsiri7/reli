@@ -155,6 +155,19 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_sweep_active ON sweep_findings(dismissed, expires_at);
             CREATE INDEX IF NOT EXISTS idx_sweep_thing ON sweep_findings(thing_id);
 
+            CREATE TABLE IF NOT EXISTS usage_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                model TEXT NOT NULL,
+                prompt_tokens INTEGER DEFAULT 0,
+                completion_tokens INTEGER DEFAULT 0,
+                cost_usd REAL DEFAULT 0.0,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_usage_log_timestamp ON usage_log(timestamp);
+            CREATE INDEX IF NOT EXISTS idx_usage_log_session ON usage_log(session_id);
+
             CREATE TABLE IF NOT EXISTS google_tokens (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 access_token TEXT NOT NULL,
