@@ -82,11 +82,11 @@ export function DetailPanel() {
       {/* Backdrop for mobile */}
       <div
         onClick={closeThingDetail}
-        className="fixed inset-0 z-50 bg-black/20 md:bg-transparent md:pointer-events-none"
+        className="fixed inset-0 z-50 bg-black/20 md:hidden"
       />
 
-      {/* Panel */}
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 shadow-xl flex flex-col overflow-hidden animate-slide-in-right">
+      {/* Panel — desktop: inline flex child on left; mobile: fixed overlay from left */}
+      <div className="fixed left-0 top-0 bottom-0 z-50 w-full max-w-md bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-xl flex flex-col overflow-hidden animate-slide-in-left md:relative md:z-auto md:w-80 md:max-w-none md:shrink-0 md:shadow-none md:animate-none md:border-r">
         {/* Header */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
           {canGoBack && (
