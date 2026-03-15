@@ -65,7 +65,7 @@ export function SettingsPanel() {
               </div>
             ) : modelSettings ? (
               <SettingsForm
-                key={`${modelSettings.context}|${modelSettings.reasoning}|${modelSettings.response}`}
+                key={`${modelSettings.context}|${modelSettings.reasoning}|${modelSettings.response}|${modelSettings.chat_context_window}`}
                 initial={modelSettings}
                 modelOptions={modelOptions}
                 onClose={closeSettings}
@@ -105,18 +105,20 @@ function SettingsForm({
   const [context, setContext] = useState(initial.context)
   const [reasoning, setReasoning] = useState(initial.reasoning)
   const [response, setResponse] = useState(initial.response)
+  const [chatContextWindow, setChatContextWindow] = useState(initial.chat_context_window)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const hasChanges =
     context !== initial.context ||
     reasoning !== initial.reasoning ||
-    response !== initial.response
+    response !== initial.response ||
+    chatContextWindow !== initial.chat_context_window
 
   const handleSave = async () => {
     setSaving(true)
     setSaved(false)
-    await updateModelSettings({ context, reasoning, response })
+    await updateModelSettings({ context, reasoning, response, chat_context_window: chatContextWindow })
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -146,6 +148,29 @@ function SettingsForm({
           options={modelOptions}
           onChange={setResponse}
         />
+      </div>
+
+      <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Chat</h3>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Context Window Size
+          </label>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">
+            Number of recent messages included as context for AI responses (1–50)
+          </p>
+          <input
+            type="number"
+            min={1}
+            max={50}
+            value={chatContextWindow}
+            onChange={e => {
+              const v = parseInt(e.target.value, 10)
+              if (!isNaN(v)) setChatContextWindow(Math.max(1, Math.min(50, v)))
+            }}
+            className="w-24 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
+          />
+        </div>
       </div>
       <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
         {saved && (

@@ -19,6 +19,7 @@ from ..agents import (
 )
 from ..auth import require_user, user_filter
 from ..database import db
+from .settings import get_chat_context_window
 from ..google_calendar import fetch_upcoming_events
 from ..google_calendar import is_connected as gcal_connected
 from ..models import ChatMessage, ChatMessageCreate, ChatRequest, ChatResponse, ModelUsage, SessionUsage, UsageInfo
@@ -263,11 +264,15 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     session_id = body.session_id
     message = body.message
 
-    # Fetch conversation history
+    # Read configured context window size
+    context_window = get_chat_context_window()
+
+    # Fetch conversation history (2x window as buffer, agents slice to window size)
+    history_limit = context_window * 2
     with db() as conn:
         rows = conn.execute(
-            "SELECT role, content FROM chat_history WHERE session_id = ? ORDER BY timestamp ASC LIMIT 20",
-            (session_id,),
+            "SELECT role, content FROM chat_history WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
+            (session_id, history_limit),
         ).fetchall()
     history = [{"role": r["role"], "content": r["content"]} for r in rows]
 
@@ -275,7 +280,7 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     usage = UsageStats()
 
     # Stage 1: Context Agent
-    context_result = await run_context_agent(message, history, usage_stats=usage)
+    context_result = await run_context_agent(message, history, usage_stats=usage, context_window=context_window)
     search_queries = context_result.get("search_queries", [message])
     filter_params = context_result.get("filter_params", {})
     gmail_query = context_result.get("gmail_query")
@@ -332,7 +337,14 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
 
     # Stage 2: Reasoning Agent
     reasoning_result = await run_reasoning_agent(
-        message, history, relevant_things, web_results, gmail_context, calendar_events, usage_stats=usage
+        message,
+        history,
+        relevant_things,
+        web_results,
+        gmail_context,
+        calendar_events,
+        usage_stats=usage,
+        context_window=context_window,
     )
     storage_changes = reasoning_result.get("storage_changes", {})
     questions_for_user = reasoning_result.get("questions_for_user", [])

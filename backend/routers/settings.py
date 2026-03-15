@@ -25,12 +25,14 @@ class ModelSettings(BaseModel):
     context: str
     reasoning: str
     response: str
+    chat_context_window: int = 10
 
 
 class ModelSettingsUpdate(BaseModel):
     context: str | None = None
     reasoning: str | None = None
     response: str | None = None
+    chat_context_window: int | None = None
 
 
 class RequestyModel(BaseModel):
@@ -66,6 +68,13 @@ def _reload_agent_vars(models: dict[str, str]) -> None:
         agents_mod.REQUESTY_RESPONSE_MODEL = models["response"]
 
 
+def get_chat_context_window() -> int:
+    """Return the configured chat context window size."""
+    cfg = _read_config()
+    val: int = cfg.get("chat", {}).get("context_window", 10)
+    return val
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 
@@ -94,6 +103,7 @@ def get_settings(_user_id: str = Depends(require_user)) -> ModelSettings:
         context=models.get("context", "google/gemini-2.5-flash-lite"),
         reasoning=models.get("reasoning", "google/gemini-3-flash-preview"),
         response=models.get("response", "google/gemini-2.5-flash-lite"),
+        chat_context_window=cfg.get("chat", {}).get("context_window", 10),
     )
 
 
@@ -121,6 +131,11 @@ def update_settings(
         cfg["llm"]["models"]["response"] = body.response
         updates["response"] = body.response
 
+    if body.chat_context_window is not None:
+        if "chat" not in cfg:
+            cfg["chat"] = {}
+        cfg["chat"]["context_window"] = max(1, min(body.chat_context_window, 50))
+
     _write_config(cfg)
     _reload_agent_vars(updates)
 
@@ -129,4 +144,5 @@ def update_settings(
         context=models.get("context", "google/gemini-2.5-flash-lite"),
         reasoning=models.get("reasoning", "google/gemini-3-flash-preview"),
         response=models.get("response", "google/gemini-2.5-flash-lite"),
+        chat_context_window=cfg.get("chat", {}).get("context_window", 10),
     )

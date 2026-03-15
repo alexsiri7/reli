@@ -95,6 +95,7 @@ export interface ModelSettings {
   context: string
   reasoning: string
   response: string
+  chat_context_window: number
 }
 
 export interface RequestyModel {
