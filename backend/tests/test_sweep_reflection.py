@@ -1,19 +1,17 @@
 """Tests for the nightly sweep Phase 2: LLM reflection."""
 
 import json
-from datetime import date, timedelta
+from datetime import date
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from backend.database import db
 from backend.sweep import (
-    ReflectionResult,
     SweepCandidate,
     _format_candidates_for_llm,
     reflect_on_candidates,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
