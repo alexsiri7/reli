@@ -317,8 +317,13 @@ async def chat(body: ChatRequest) -> ChatResponse:
 
     # Stage 4: Response Agent
     reply = await run_response_agent(
-        message, reasoning_summary, questions_for_user, applied_changes, web_results,
-        usage_stats=usage, open_questions_by_thing=open_questions_by_thing or None,
+        message,
+        reasoning_summary,
+        questions_for_user,
+        applied_changes,
+        web_results,
+        usage_stats=usage,
+        open_questions_by_thing=open_questions_by_thing or None,
     )
 
     # Persist both sides of the exchange to chat history
