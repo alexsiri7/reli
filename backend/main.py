@@ -81,7 +81,7 @@ if _FRONTEND_DIST.is_dir():
             _INDEX_HTML = raw.replace("</head>", f"{inject}</head>", 1)
         return _INDEX_HTML
 
-    @app.get("/{full_path:path}", include_in_schema=False)
+    @app.get("/{full_path:path}", include_in_schema=False, response_model=None)
     def spa_fallback(full_path: str) -> FileResponse | HTMLResponse:
         # Resolve to prevent directory traversal (e.g. ../../etc/passwd)
         if full_path:
