@@ -26,7 +26,7 @@ function FindingCard({ finding, onDismiss }: { finding: SweepFinding; onDismiss:
           <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{finding.message}</p>
           {finding.thing && (
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
-              {typeIcon(finding.thing.type_hint, thingTypes)} {finding.thing.title}
+              {typeIcon(finding.thing.type_hint)} {finding.thing.title}
             </p>
           )}
         </div>
