@@ -4,12 +4,16 @@ import { useStore } from './store'
 import { Sidebar } from './components/Sidebar'
 import { ChatPanel } from './components/ChatPanel'
 import { DetailPanel } from './components/DetailPanel'
+import { LoginPage } from './components/LoginPage'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
 
 function App() {
-  const { fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
+  const { currentUser, authChecked, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
     useShallow(s => ({
+      currentUser: s.currentUser,
+      authChecked: s.authChecked,
+      fetchCurrentUser: s.fetchCurrentUser,
       fetchThingTypes: s.fetchThingTypes,
       fetchThings: s.fetchThings,
       fetchBriefing: s.fetchBriefing,
@@ -23,7 +27,15 @@ function App() {
 
   const { newVersionAvailable, dismiss, refresh } = useVersionCheck()
 
+  // Check auth on mount
   useEffect(() => {
+    fetchCurrentUser()
+  }, [fetchCurrentUser])
+
+  // Load app data once authenticated
+  useEffect(() => {
+    if (!currentUser) return
+
     fetchThingTypes()
     fetchThings()
     fetchBriefing()
@@ -35,13 +47,26 @@ function App() {
     // Handle OAuth callback redirect
     const params = new URLSearchParams(window.location.search)
     if (params.has('calendar_connected') || params.has('calendar_error')) {
-      // Clean up URL params
       window.history.replaceState({}, '', '/')
       fetchCalendarStatus()
     }
 
     return () => clearInterval(interval)
-  }, [fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces])
+  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces])
+
+  // Show nothing while checking auth
+  if (!authChecked) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="h-8 w-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  // Show login page if not authenticated
+  if (!currentUser) {
+    return <LoginPage />
+  }
 
   return (
     <div className="flex w-full h-full overflow-hidden bg-white dark:bg-gray-900">

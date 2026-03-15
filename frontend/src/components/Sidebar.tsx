@@ -85,7 +85,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding } = useStore(useShallow(s => ({ things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding })))
   const [searchQuery, setSearchQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -266,15 +266,45 @@ export function Sidebar() {
               {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
             </p>
           </div>
-          <button
-            onClick={() => setIsOpen(false)}
-            aria-label="Close sidebar"
-            className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-1.5">
+            {currentUser && (
+              <div className="group relative">
+                {currentUser.picture ? (
+                  <img
+                    src={currentUser.picture}
+                    alt={currentUser.name}
+                    className="h-7 w-7 rounded-full cursor-pointer"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="h-7 w-7 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-medium cursor-pointer">
+                    {currentUser.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                  <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{currentUser.name}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{currentUser.email}</p>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg transition-colors"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => setIsOpen(false)}
+              aria-label="Close sidebar"
+              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Search bar */}

@@ -131,7 +131,18 @@ export interface Relationship {
   created_at: string
 }
 
+export interface AuthUser {
+  id: string
+  email: string
+  name: string
+  picture: string | null
+}
+
 interface ReliState {
+  currentUser: AuthUser | null
+  authChecked: boolean
+  fetchCurrentUser: () => Promise<void>
+  logout: () => Promise<void>
   thingTypes: ThingType[]
   things: Thing[]
   briefing: Thing[]
@@ -220,6 +231,33 @@ async function fetchThingDetailWithFallback(
 }
 
 export const useStore = create<ReliState>((set, get) => ({
+  currentUser: null,
+  authChecked: false,
+
+  fetchCurrentUser: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/auth/me`)
+      if (res.ok) {
+        const user: AuthUser = await res.json()
+        set({ currentUser: user, authChecked: true })
+      } else {
+        set({ currentUser: null, authChecked: true })
+      }
+    } catch {
+      set({ currentUser: null, authChecked: true })
+    }
+  },
+
+  logout: async () => {
+    try {
+      await apiFetch(`${BASE}/auth/logout`, { method: 'POST' })
+    } catch {
+      // ignore
+    }
+    set({ currentUser: null })
+    window.location.href = '/'
+  },
+
   thingTypes: [],
   things: [],
   briefing: [],
