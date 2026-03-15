@@ -3,10 +3,8 @@
 import logging
 import time
 from collections import deque
-from dataclasses import dataclass, field
-
 from collections.abc import Awaitable, Callable
-from typing import Any
+from dataclasses import dataclass, field
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
