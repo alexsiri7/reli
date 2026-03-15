@@ -12,7 +12,7 @@ from ..auth import require_user, user_filter
 from ..database import db
 from ..models import Relationship, RelationshipCreate, Thing, ThingCreate, ThingUpdate
 from ..vector_store import delete_thing as vs_delete
-from ..vector_store import upsert_thing
+from ..vector_store import reindex_all, upsert_thing
 
 router = APIRouter(prefix="/things", tags=["things"])
 
@@ -302,6 +302,12 @@ def delete_thing(thing_id: str, background_tasks: BackgroundTasks, user_id: str 
             raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
         conn.execute(f"DELETE FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params])
     background_tasks.add_task(vs_delete, thing_id)
+
+
+@router.post("/reindex", summary="Re-embed all Things with the current embedding model")
+def reindex_things(user_id: str = Depends(require_user)) -> dict[str, int]:
+    count = reindex_all()
+    return {"reindexed": count}
 
 
 # ── Relationships ────────────────────────────────────────────────────────────
