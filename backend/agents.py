@@ -215,9 +215,7 @@ async def run_context_agent(
     # Try Ollama first if configured
     if OLLAMA_MODEL:
         try:
-            raw = await _chat_ollama(
-                messages, response_format={"type": "json_object"}, usage_stats=usage_stats
-            )
+            raw = await _chat_ollama(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
         except Exception as exc:
             logger.warning("Ollama context agent failed, falling back to Requesty: %s", exc)
 
