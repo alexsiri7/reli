@@ -1,5 +1,6 @@
 """Google OAuth2 login + JWT session authentication."""
 
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -9,6 +10,8 @@ from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from google_auth_oauthlib.flow import Flow
+
+logger = logging.getLogger(__name__)
 
 from ..database import db
 
@@ -104,14 +107,20 @@ def google_login() -> dict:
 
 
 @router.get("/google/callback", include_in_schema=False)
-def google_callback(code: str, response: Response) -> RedirectResponse:
+def google_callback(code: str, request: Request) -> RedirectResponse:
     """Exchange authorization code for tokens, create session."""
     if not SECRET_KEY:
         raise HTTPException(status_code=501, detail="SECRET_KEY not configured")
 
+    logger.info("OAuth callback: redirect_uri=%s, code=%s...", GOOGLE_REDIRECT_URI, code[:20])
+
     flow = Flow.from_client_config(_client_config(), scopes=AUTH_SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI
-    flow.fetch_token(code=code)
+    try:
+        flow.fetch_token(code=code)
+    except Exception as exc:
+        logger.error("OAuth token exchange failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"Google login failed: {exc}")
 
     # Verify and extract user info from the id_token
     credentials = flow.credentials
@@ -134,7 +143,7 @@ def google_callback(code: str, response: Response) -> RedirectResponse:
         key=COOKIE_NAME,
         value=token,
         httponly=True,
-        secure=False,  # Set True in production with HTTPS
+        secure=GOOGLE_REDIRECT_URI.startswith("https://"),
         samesite="lax",
         max_age=JWT_EXPIRY_SECONDS,
         path="/",
