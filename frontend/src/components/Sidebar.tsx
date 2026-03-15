@@ -19,7 +19,11 @@ const FINDING_TYPE_ICONS: Record<string, string> = {
 function FindingCard({ finding, onDismiss }: { finding: SweepFinding; onDismiss: (id: string) => void }) {
   const icon = FINDING_TYPE_ICONS[finding.finding_type] ?? '\u{1F4CB}'
   return (
-    <div className="group px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors">
+    <div
+      className="group px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors cursor-pointer"
+      onClick={() => finding.thing_id && useStore.getState().openThingDetail(finding.thing_id)}
+      role={finding.thing_id ? 'button' : undefined}
+    >
       <div className="flex items-start gap-2">
         <span className="text-sm mt-0.5 shrink-0">{icon}</span>
         <div className="flex-1 min-w-0">
@@ -331,7 +335,11 @@ export function Sidebar() {
                 </h2>
                 {proactiveSurfaces.map(s => (
                   <div key={`${s.thing.id}-${s.date_key}`} className="px-3 py-1">
-                    <div className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors px-1">
+                    <div
+                      className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors px-1 cursor-pointer"
+                      onClick={() => useStore.getState().openThingDetail(s.thing.id)}
+                      role="button"
+                    >
                       <span className="text-lg leading-none mt-0.5 select-none" title={s.thing.type_hint ?? 'thing'}>
                         {typeIcon(s.thing.type_hint, thingTypes)}
                       </span>
