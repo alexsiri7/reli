@@ -14,6 +14,9 @@ WORKDIR /app
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
+# Copy config
+COPY config.yaml ./config.yaml
+
 # Copy backend
 COPY backend/ ./backend/
 

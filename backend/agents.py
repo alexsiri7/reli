@@ -5,27 +5,79 @@ import logging
 import os
 import sqlite3
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+import yaml
 from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Config — load from config.yaml
+# ---------------------------------------------------------------------------
+
+_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
+
+
+def _load_config() -> dict[str, Any]:
+    """Load config from config.yaml, falling back to defaults."""
+    defaults: dict[str, Any] = {
+        "llm": {
+            "base_url": "https://router.requesty.ai/v1",
+            "models": {
+                "context": "google/gemini-2.5-flash-lite",
+                "reasoning": "google/gemini-3-flash-preview",
+                "response": "google/gemini-2.5-flash-lite",
+            },
+        },
+        "ollama": {"base_url": "http://localhost:11434", "model": ""},
+        "embedding": {"model": "text-embedding-3-small"},
+    }
+    try:
+        with open(_CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+        # Merge top-level keys (config overrides defaults)
+        for key in defaults:
+            if key in cfg:
+                if isinstance(defaults[key], dict) and isinstance(cfg[key], dict):
+                    defaults[key] = {**defaults[key], **cfg[key]}
+                else:
+                    defaults[key] = cfg[key]
+        # Preserve pricing overrides if present
+        if "pricing" in cfg:
+            defaults["pricing"] = cfg["pricing"]
+        return defaults
+    except FileNotFoundError:
+        logger.warning("config.yaml not found at %s, using defaults", _CONFIG_PATH)
+        return defaults
+
+
+_config = _load_config()
+
+# ---------------------------------------------------------------------------
 # LLM client — Requesty OpenAI-compatible gateway
 # ---------------------------------------------------------------------------
 
-REQUESTY_BASE_URL = os.environ.get("REQUESTY_BASE_URL", "https://router.requesty.ai/v1")
+REQUESTY_BASE_URL = os.environ.get("REQUESTY_BASE_URL", _config["llm"]["base_url"])
 REQUESTY_API_KEY = os.environ.get("REQUESTY_API_KEY", "")
-REQUESTY_MODEL = os.environ.get("REQUESTY_MODEL", "google/gemini-2.0-flash-001")
-REQUESTY_REASONING_MODEL = os.environ.get("REQUESTY_REASONING_MODEL", "google/gemini-3-flash-preview")
+_models = _config["llm"]["models"]
+REQUESTY_MODEL = os.environ.get(
+    "REQUESTY_MODEL", _models.get("context", "google/gemini-2.5-flash-lite")
+)
+REQUESTY_REASONING_MODEL = os.environ.get(
+    "REQUESTY_REASONING_MODEL", _models.get("reasoning", "google/gemini-3-flash-preview")
+)
+REQUESTY_RESPONSE_MODEL = os.environ.get(
+    "REQUESTY_RESPONSE_MODEL", _models.get("response", "google/gemini-2.5-flash-lite")
+)
 
 # ---------------------------------------------------------------------------
 # Ollama — optional local LLM for context agent
 # ---------------------------------------------------------------------------
 
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "")
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", _config["ollama"]["base_url"])
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", _config["ollama"].get("model", ""))
 
 
 def _client() -> AsyncOpenAI:
@@ -37,14 +89,60 @@ def _ollama_client() -> AsyncOpenAI:
 
 
 # Per-model pricing: (input_cost_per_million, output_cost_per_million)
-MODEL_PRICING: dict[str, tuple[float, float]] = {
+_DEFAULT_PRICING: dict[str, tuple[float, float]] = {
     "openai/gpt-4o-mini": (0.15, 0.60),
     "openai/gpt-4o": (2.50, 10.00),
     "anthropic/claude-sonnet-4-20250514": (3.00, 15.00),
     "google/gemini-2.0-flash-001": (0.10, 0.40),
     "google/gemini-2.5-flash-preview-05-20": (0.15, 0.60),
-    "google/gemini-3-flash-preview": (0.15, 0.60),
+    "google/gemini-2.5-flash-lite": (0.10, 0.40),
+    "google/gemini-3-flash-preview": (0.50, 3.00),
 }
+
+
+def _fetch_requesty_pricing() -> dict[str, tuple[float, float]]:
+    """Fetch model pricing from Requesty API, merging with defaults.
+
+    Config.yaml ``pricing:`` section overrides API prices.
+    Falls back to hardcoded defaults if the API is unreachable.
+    """
+    pricing = dict(_DEFAULT_PRICING)
+
+    # Try fetching from Requesty API
+    try:
+        import httpx
+
+        resp = httpx.get(f"{REQUESTY_BASE_URL}/models", timeout=5.0)
+        if resp.status_code == 200:
+            data = resp.json().get("data", [])
+            for model_info in data:
+                model_id = model_info.get("id", "")
+                input_price = model_info.get("input_price")
+                output_price = model_info.get("output_price")
+                if model_id and input_price is not None and output_price is not None:
+                    # API returns per-token; multiply by 1M for per-million
+                    pricing[model_id] = (
+                        float(input_price) * 1_000_000,
+                        float(output_price) * 1_000_000,
+                    )
+    except Exception as exc:
+        logger.warning("Failed to fetch Requesty pricing, using defaults: %s", exc)
+
+    # Config.yaml pricing overrides take highest priority
+    config_pricing = _config.get("pricing", {})
+    for model_id, prices in config_pricing.items():
+        if isinstance(prices, dict):
+            inp = prices.get("input", prices.get("input_per_million"))
+            out = prices.get("output", prices.get("output_per_million"))
+            if inp is not None and out is not None:
+                pricing[model_id] = (float(inp), float(out))
+        elif isinstance(prices, (list, tuple)) and len(prices) == 2:
+            pricing[model_id] = (float(prices[0]), float(prices[1]))
+
+    return pricing
+
+
+MODEL_PRICING: dict[str, tuple[float, float]] = _fetch_requesty_pricing()
 
 
 def estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
@@ -333,7 +431,10 @@ async def run_reasoning_agent(
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": user_content})
 
-    raw = await _chat(messages, model=REQUESTY_REASONING_MODEL, response_format={"type": "json_object"}, usage_stats=usage_stats)
+    raw = await _chat(
+        messages, model=REQUESTY_REASONING_MODEL,
+        response_format={"type": "json_object"}, usage_stats=usage_stats,
+    )
     try:
         result: dict[str, Any] = json.loads(raw)
     except json.JSONDecodeError:
@@ -562,4 +663,4 @@ async def run_response_agent(
         {"role": "system", "content": RESPONSE_AGENT_SYSTEM},
         {"role": "user", "content": context},
     ]
-    return await _chat(messages, usage_stats=usage_stats)
+    return await _chat(messages, model=REQUESTY_RESPONSE_MODEL, usage_stats=usage_stats)

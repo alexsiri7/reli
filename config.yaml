@@ -1,0 +1,13 @@
+llm:
+  base_url: https://router.requesty.ai/v1
+  models:
+    context: google/gemini-2.5-flash-lite
+    reasoning: google/gemini-3-flash-preview
+    response: google/gemini-2.5-flash-lite
+
+ollama:
+  base_url: http://localhost:11434
+  model: ""
+
+embedding:
+  model: text-embedding-3-small
