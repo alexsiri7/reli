@@ -54,6 +54,19 @@ export function ThingCard({ thing }: Props) {
               {overdue ? '⚠ ' : ''}{dateLabel}
             </p>
           )}
+          {thing.type_hint === 'project' && thing.children_count != null && thing.children_count > 0 && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-all"
+                  style={{ width: `${Math.round(((thing.completed_count ?? 0) / thing.children_count) * 100)}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums whitespace-nowrap">
+                {thing.completed_count ?? 0}/{thing.children_count}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Expand indicator */}

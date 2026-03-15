@@ -96,17 +96,33 @@ def list_things(
     offset: int = Query(0, ge=0),
 ) -> list[Thing]:
     with db() as conn:
-        if active_only:
-            rows = conn.execute(
-                "SELECT * FROM things WHERE active = 1 ORDER BY checkin_date ASC, priority ASC LIMIT ? OFFSET ?",
-                (limit, offset),
+        where = "WHERE active = 1" if active_only else ""
+        rows = conn.execute(
+            f"SELECT * FROM things {where} ORDER BY checkin_date ASC, priority ASC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+        things = [_row_to_thing(r) for r in rows]
+
+        # Compute child stats for project-type things
+        project_ids = [t.id for t in things if t.type_hint == "project"]
+        if project_ids:
+            placeholders = ",".join("?" * len(project_ids))
+            child_rows = conn.execute(
+                f"SELECT parent_id,"
+                f" COUNT(*) as children_count,"
+                f" SUM(CASE WHEN active = 0 THEN 1 ELSE 0 END) as completed_count"
+                f" FROM things WHERE parent_id IN ({placeholders})"
+                f" GROUP BY parent_id",
+                project_ids,
             ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM things ORDER BY checkin_date ASC, priority ASC LIMIT ? OFFSET ?",
-                (limit, offset),
-            ).fetchall()
-    return [_row_to_thing(r) for r in rows]
+            stats = {r["parent_id"]: (r["children_count"], r["completed_count"]) for r in child_rows}
+            for t in things:
+                if t.type_hint == "project":
+                    counts = stats.get(t.id, (0, 0))
+                    t.children_count = counts[0]
+                    t.completed_count = counts[1]
+
+    return things
 
 
 @router.post("", response_model=Thing, status_code=status.HTTP_201_CREATED, summary="Create a Thing")

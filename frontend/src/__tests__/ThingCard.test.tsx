@@ -17,9 +17,13 @@ const baseThing = {
   checkin_date: null,
   priority: 1,
   active: true,
+  surface: true,
   data: null,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
+  last_referenced: null,
+  children_count: null,
+  completed_count: null,
 }
 
 const things = [
@@ -32,9 +36,13 @@ const things = [
     checkin_date: null,
     priority: 3,
     active: true,
+    surface: true,
     data: null,
     created_at: '2026-01-02T00:00:00Z',
     updated_at: '2026-01-02T00:00:00Z',
+    last_referenced: null,
+    children_count: null,
+    completed_count: null,
   },
 ]
 

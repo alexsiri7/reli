@@ -10,9 +10,13 @@ type Thing = {
   checkin_date: string | null
   priority: number
   active: boolean
+  surface: boolean
   data: null
   created_at: string
   updated_at: string
+  last_referenced: string | null
+  children_count: number | null
+  completed_count: number | null
 }
 
 let mockState: Record<string, unknown> = {
@@ -44,9 +48,13 @@ const makeThing = (overrides: Partial<Thing> = {}): Thing => ({
   checkin_date: null,
   priority: 2,
   active: true,
+  surface: true,
   data: null,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
+  last_referenced: null,
+  children_count: null,
+  completed_count: null,
   ...overrides,
 })
 
@@ -89,7 +97,7 @@ const searchDefaults = {
 
 const calendarDefaults = {
   calendarStatus: { configured: false, connected: false },
-  calendarEvents: [] as unknown[],
+  calendarEvents: [] as never[],
   fetchCalendarStatus: vi.fn(),
   fetchCalendarEvents: vi.fn(),
   connectCalendar: vi.fn(),

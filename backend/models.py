@@ -43,6 +43,8 @@ class Thing(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_referenced: datetime | None = None
+    children_count: int | None = None
+    completed_count: int | None = None
 
     model_config = {"from_attributes": True}
 

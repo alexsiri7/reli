@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
+import type { Thing } from '../store'
+import { typeIcon } from '../utils'
 import { CalendarSection } from './CalendarSection'
 import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
@@ -47,6 +49,45 @@ export function Sidebar() {
     })
 
   const active = things.filter(t => t.checkin_date == null)
+
+  // Group active things by type, excluding children of projects (shown under parent)
+  const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal'] as const
+  const TYPE_LABELS: Record<string, string> = {
+    project: 'Projects',
+    goal: 'Goals',
+    task: 'Tasks',
+    note: 'Notes',
+    idea: 'Ideas',
+    journal: 'Journal',
+  }
+
+  const activeGroups = useMemo(() => {
+    const projectIds = new Set(active.filter(t => t.type_hint === 'project').map(t => t.id))
+    // Don't show children of projects as standalone items
+    const standalone = active.filter(t => !t.parent_id || !projectIds.has(t.parent_id))
+    const groups: { type: string; label: string; icon: string; items: Thing[] }[] = []
+    const byType = new Map<string, Thing[]>()
+    for (const t of standalone) {
+      const key = t.type_hint ?? 'other'
+      if (!byType.has(key)) byType.set(key, [])
+      byType.get(key)!.push(t)
+    }
+    // Ordered types first, then remaining
+    for (const type of TYPE_ORDER) {
+      const items = byType.get(type)
+      if (items && items.length > 0) {
+        groups.push({ type, label: TYPE_LABELS[type] ?? type, icon: typeIcon(type), items })
+        byType.delete(type)
+      }
+    }
+    // Remaining types
+    for (const [type, items] of byType) {
+      if (items.length > 0) {
+        groups.push({ type, label: type.charAt(0).toUpperCase() + type.slice(1), icon: typeIcon(type), items })
+      }
+    }
+    return groups
+  }, [active])
 
   return (
     <>
@@ -168,6 +209,18 @@ export function Sidebar() {
                 {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
               </section>
             )}
+
+        {/* Active Things grouped by type */}
+        {activeGroups.map(group => (
+          <section key={group.type} className="py-2 border-t border-gray-100 dark:border-gray-800">
+            <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+              <span>{group.icon}</span>
+              <span>{group.label}</span>
+              <span className="ml-auto text-[10px] font-normal tabular-nums">{group.items.length}</span>
+            </h2>
+            {group.items.map(t => <ThingCard key={t.id} thing={t} />)}
+          </section>
+        ))}
 
             {/* Upcoming Check-ins */}
             {upcoming.length > 0 && (
