@@ -20,9 +20,11 @@ from fastapi import Depends, FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
+from starlette.responses import Response as StarletteResponse  # noqa: E402
 
 from .auth import require_user  # noqa: E402
 from .database import init_db  # noqa: E402
+from .metrics import MetricsMiddleware, metrics_response  # noqa: E402
 from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
 from .response_metrics import ResponseMetricsMiddleware, metrics_store  # noqa: E402
 from .routers import auth, briefing, calendar, chat, gmail, proactive, settings, sweep, thing_types, things  # noqa: E402
@@ -112,6 +114,7 @@ app.add_middleware(
 _rl_config = get_rate_limit_config()
 app.add_middleware(RateLimitMiddleware, **_rl_config)
 app.add_middleware(ResponseMetricsMiddleware)
+app.add_middleware(MetricsMiddleware)
 
 # Auth routes are public (login/callback/logout)
 app.include_router(auth.router, prefix="/api")
@@ -173,6 +176,11 @@ def health_detailed() -> dict:
         "avg_response_time_ms": round(avg_ms, 2) if avg_ms is not None else None,
         "recent_request_count": metrics_store.request_count(),
     }
+
+
+@app.get("/metrics", tags=["monitoring"], include_in_schema=False)
+def metrics() -> StarletteResponse:
+    return metrics_response()
 
 
 # Serve React SPA (only when the built dist directory exists)

@@ -87,7 +87,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # Skip rate limiting for health checks and static assets
-        if path == "/healthz" or path.startswith("/assets") or not path.startswith("/api"):
+        if path in ("/healthz", "/metrics") or path.startswith("/assets") or not path.startswith("/api"):
             return await call_next(request)
 
         client_ip = self._get_client_ip(request)
