@@ -1,6 +1,6 @@
 """Tests for the daily briefing endpoint."""
 
-from datetime import date
+from datetime import date, datetime, timedelta
 
 
 def _create_thing(client, title: str, checkin_date: str | None = None, active: bool = True) -> dict:
@@ -72,3 +72,62 @@ class TestBriefing:
         data = resp.json()
         assert data["total"] == len(data["things"])
         assert data["total"] == 2
+
+
+def _create_finding(client, message: str = "test finding", thing_id: str | None = None) -> dict:
+    payload = {"finding_type": "test", "message": message, "priority": 2}
+    if thing_id:
+        payload["thing_id"] = thing_id
+    resp = client.post("/api/briefing/findings", json=payload)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+class TestSnoozeFinding:
+    def test_snooze_sets_snoozed_until(self, client):
+        finding = _create_finding(client)
+        until = (datetime.utcnow() + timedelta(days=3)).isoformat()
+        resp = client.post(
+            f"/api/briefing/findings/{finding['id']}/snooze",
+            json={"until": until},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["snoozed_until"] is not None
+
+    def test_snoozed_finding_hidden_from_briefing(self, client):
+        finding = _create_finding(client, message="snooze me")
+        # Verify it appears in briefing first
+        resp = client.get("/api/briefing")
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding["id"] in finding_ids
+
+        # Snooze to the future — hidden until snoozed_until passes
+        until = (datetime.utcnow() + timedelta(days=7)).isoformat()
+        client.post(
+            f"/api/briefing/findings/{finding['id']}/snooze",
+            json={"until": until},
+        )
+
+        resp = client.get("/api/briefing")
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding["id"] not in finding_ids
+
+    def test_snooze_not_found(self, client):
+        resp = client.post(
+            "/api/briefing/findings/nonexistent/snooze",
+            json={"until": "2099-01-01T00:00:00"},
+        )
+        assert resp.status_code == 404
+
+    def test_expired_snooze_reappears(self, client):
+        finding = _create_finding(client, message="will reappear")
+        # Snooze to the past — already expired, should reappear
+        until = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+        client.post(
+            f"/api/briefing/findings/{finding['id']}/snooze",
+            json={"until": until},
+        )
+        resp = client.get("/api/briefing")
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding["id"] in finding_ids

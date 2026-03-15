@@ -82,6 +82,13 @@ def _migrate_things_graph(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE things ADD COLUMN {col} {typedef}")
 
 
+def _migrate_sweep_findings_snooze(conn: sqlite3.Connection) -> None:
+    """Add snoozed_until column to sweep_findings if missing."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(sweep_findings)").fetchall()}
+    if "snoozed_until" not in cols:
+        conn.execute("ALTER TABLE sweep_findings ADD COLUMN snoozed_until TIMESTAMP")
+
+
 def init_db() -> None:
     """Create tables if they don't exist."""
     with db() as conn:
@@ -183,4 +190,5 @@ def init_db() -> None:
         """)
         _migrate_chat_history_usage(conn)
         _migrate_things_graph(conn)
+        _migrate_sweep_findings_snooze(conn)
         _seed_thing_types(conn)

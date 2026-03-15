@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from ..database import db
-from ..models import BriefingResponse, SweepFinding, SweepFindingCreate, Thing
+from ..models import BriefingResponse, SweepFinding, SweepFindingCreate, SweepFindingSnooze, Thing
 from .things import _row_to_thing
 
 router = APIRouter(prefix="/briefing", tags=["briefing"])
@@ -23,6 +23,7 @@ def _row_to_finding(row: Any, thing: Thing | None = None) -> SweepFinding:
         dismissed=bool(row["dismissed"]),
         created_at=row["created_at"],
         expires_at=row["expires_at"],
+        snoozed_until=row["snoozed_until"],
         thing=thing,
     )
 
@@ -45,7 +46,7 @@ def get_briefing(as_of: date | None = None) -> BriefingResponse:
             (cutoff,),
         ).fetchall()
 
-        # Active (not dismissed, not expired) sweep findings
+        # Active (not dismissed, not expired, not snoozed) sweep findings
         finding_rows = conn.execute(
             """SELECT sf.*, t.id AS t_id, t.title AS t_title, t.type_hint AS t_type_hint,
                       t.parent_id AS t_parent_id, t.checkin_date AS t_checkin_date,
@@ -56,8 +57,9 @@ def get_briefing(as_of: date | None = None) -> BriefingResponse:
                LEFT JOIN things t ON sf.thing_id = t.id
                WHERE sf.dismissed = 0
                  AND (sf.expires_at IS NULL OR sf.expires_at > ?)
+                 AND (sf.snoozed_until IS NULL OR sf.snoozed_until <= ?)
                ORDER BY sf.priority ASC, sf.created_at DESC""",
-            (now,),
+            (now, now),
         ).fetchall()
 
     things: list[Thing] = [_row_to_thing(r) for r in thing_rows]
@@ -124,6 +126,23 @@ def dismiss_finding(finding_id: str) -> SweepFinding:
             raise HTTPException(status_code=404, detail="Finding not found")
 
         conn.execute("UPDATE sweep_findings SET dismissed = 1 WHERE id = ?", (finding_id,))
+        row = conn.execute("SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
+
+    return _row_to_finding(row)
+
+
+@router.post("/findings/{finding_id}/snooze", response_model=SweepFinding)
+def snooze_finding(finding_id: str, body: SweepFindingSnooze) -> SweepFinding:
+    """Snooze a sweep finding — hide it from the briefing until the given date."""
+    with db() as conn:
+        row = conn.execute("SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Finding not found")
+
+        conn.execute(
+            "UPDATE sweep_findings SET snoozed_until = ? WHERE id = ?",
+            (body.until.isoformat(), finding_id),
+        )
         row = conn.execute("SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
 
     return _row_to_finding(row)

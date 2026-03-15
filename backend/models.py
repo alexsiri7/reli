@@ -183,6 +183,7 @@ class SweepFinding(BaseModel):
     dismissed: bool
     created_at: datetime
     expires_at: datetime | None
+    snoozed_until: datetime | None = None
     thing: Thing | None = None
 
     model_config = {"from_attributes": True}
@@ -194,6 +195,10 @@ class SweepFindingCreate(BaseModel):
     message: str = Field(..., min_length=1)
     priority: int = Field(default=2, ge=0, le=4)
     expires_at: datetime | None = None
+
+
+class SweepFindingSnooze(BaseModel):
+    until: datetime
 
 
 class BriefingResponse(BaseModel):
