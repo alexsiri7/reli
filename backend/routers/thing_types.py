@@ -32,9 +32,10 @@ def _row_to_thing_type(row: Any) -> ThingType:
 
 @router.get("", response_model=list[ThingType], summary="List all Thing Types")
 def list_thing_types(
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of results"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
 ) -> list[ThingType]:
+    """List all Thing Types, sorted alphabetically by name."""
     with db() as conn:
         rows = conn.execute(
             "SELECT * FROM thing_types ORDER BY name ASC LIMIT ? OFFSET ?",
@@ -45,6 +46,7 @@ def list_thing_types(
 
 @router.get("/{type_id}", response_model=ThingType, summary="Get a Thing Type")
 def get_thing_type(type_id: str) -> ThingType:
+    """Retrieve a single Thing Type by ID."""
     with db() as conn:
         row = conn.execute("SELECT * FROM thing_types WHERE id = ?", (type_id,)).fetchone()
     if not row:
@@ -54,6 +56,7 @@ def get_thing_type(type_id: str) -> ThingType:
 
 @router.post("", response_model=ThingType, status_code=status.HTTP_201_CREATED, summary="Create a Thing Type")
 def create_thing_type(body: ThingTypeCreate) -> ThingType:
+    """Create a new Thing Type. Names must be unique."""
     type_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     with db() as conn:
@@ -74,6 +77,7 @@ def create_thing_type(body: ThingTypeCreate) -> ThingType:
 
 @router.patch("/{type_id}", response_model=ThingType, summary="Update a Thing Type")
 def update_thing_type(type_id: str, body: ThingTypeUpdate) -> ThingType:
+    """Partially update a Thing Type. Names must remain unique."""
     with db() as conn:
         row = conn.execute("SELECT * FROM thing_types WHERE id = ?", (type_id,)).fetchone()
         if not row:
@@ -109,6 +113,7 @@ def update_thing_type(type_id: str, body: ThingTypeUpdate) -> ThingType:
 
 @router.delete("/{type_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a Thing Type")
 def delete_thing_type(type_id: str) -> None:
+    """Delete a Thing Type by ID."""
     with db() as conn:
         row = conn.execute("SELECT id FROM thing_types WHERE id = ?", (type_id,)).fetchone()
         if not row:

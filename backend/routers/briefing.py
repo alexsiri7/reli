@@ -96,9 +96,9 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
     )
 
 
-@router.post("/findings", response_model=SweepFinding, status_code=201)
+@router.post("/findings", response_model=SweepFinding, status_code=201, summary="Create a sweep finding")
 def create_finding(body: SweepFindingCreate, user_id: str = Depends(require_user)) -> SweepFinding:
-    """Create a new sweep finding."""
+    """Create a new sweep finding, optionally linked to a Thing."""
     finding_id = f"sf-{uuid.uuid4().hex[:8]}"
     now = datetime.utcnow().isoformat()
 
@@ -131,9 +131,9 @@ def create_finding(body: SweepFindingCreate, user_id: str = Depends(require_user
     return _row_to_finding(row)
 
 
-@router.patch("/findings/{finding_id}/dismiss", response_model=SweepFinding)
+@router.patch("/findings/{finding_id}/dismiss", response_model=SweepFinding, summary="Dismiss a sweep finding")
 def dismiss_finding(finding_id: str, user_id: str = Depends(require_user)) -> SweepFinding:
-    """Dismiss a sweep finding."""
+    """Dismiss a sweep finding so it no longer appears in the daily briefing."""
     uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
         row = conn.execute(f"SELECT * FROM sweep_findings WHERE id = ?{uf_sql}", [finding_id, *uf_params]).fetchone()
@@ -146,9 +146,9 @@ def dismiss_finding(finding_id: str, user_id: str = Depends(require_user)) -> Sw
     return _row_to_finding(row)
 
 
-@router.post("/findings/{finding_id}/snooze", response_model=SweepFinding)
+@router.post("/findings/{finding_id}/snooze", response_model=SweepFinding, summary="Snooze a sweep finding")
 def snooze_finding(finding_id: str, body: SweepFindingSnooze, user_id: str = Depends(require_user)) -> SweepFinding:
-    """Snooze a sweep finding — hide it from the briefing until the given date."""
+    """Snooze a sweep finding — hide it from the daily briefing until the given date."""
     uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
         row = conn.execute(f"SELECT * FROM sweep_findings WHERE id = ?{uf_sql}", [finding_id, *uf_params]).fetchone()

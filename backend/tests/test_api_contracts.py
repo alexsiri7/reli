@@ -409,6 +409,61 @@ class TestHealthContract:
 
 
 # ===========================================================================
+# Contract tests — OpenAPI schema
+# ===========================================================================
+
+
+class TestOpenAPIContract:
+    """Verify OpenAPI schema is accessible and properly structured."""
+
+    def test_openapi_json_accessible(self, client):
+        resp = client.get("/openapi.json")
+        assert resp.status_code == 200
+        schema = resp.json()
+        assert schema["info"]["title"] == "Reli API"
+        assert schema["info"]["version"] == "0.1.0"
+
+    def test_openapi_has_tag_metadata(self, client):
+        schema = client.get("/openapi.json").json()
+        tag_names = [t["name"] for t in schema.get("tags", [])]
+        expected = [
+            "auth",
+            "things",
+            "thing-types",
+            "chat",
+            "briefing",
+            "gmail",
+            "calendar",
+            "proactive",
+            "settings",
+            "sweep",
+            "health",
+        ]
+        for name in expected:
+            assert name in tag_names, f"Tag '{name}' missing from OpenAPI schema"
+
+    def test_openapi_tags_have_descriptions(self, client):
+        schema = client.get("/openapi.json").json()
+        for tag in schema.get("tags", []):
+            assert tag.get("description"), f"Tag '{tag['name']}' has no description"
+
+    def test_openapi_endpoints_have_summaries(self, client):
+        schema = client.get("/openapi.json").json()
+        paths_without_summary = []
+        for path, methods in schema.get("paths", {}).items():
+            for method, details in methods.items():
+                if method in ("get", "post", "put", "patch", "delete"):
+                    if not details.get("summary") and details.get("include_in_schema", True):
+                        paths_without_summary.append(f"{method.upper()} {path}")
+        assert not paths_without_summary, f"Endpoints missing summary: {paths_without_summary}"
+
+    def test_docs_endpoint_accessible(self, client):
+        resp = client.get("/docs")
+        assert resp.status_code == 200
+        assert "swagger-ui" in resp.text.lower() or "openapi" in resp.text.lower()
+
+
+# ===========================================================================
 # Security tests — SPA fallback directory traversal (re-tam)
 # ===========================================================================
 

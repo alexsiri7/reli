@@ -9,9 +9,11 @@ from pydantic import BaseModel, Field
 
 
 class ThingTypeCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    icon: str = Field(default="📌", max_length=10)
-    color: str | None = Field(default=None, max_length=50)
+    """Create a new Thing Type with a name, icon, and optional color."""
+
+    name: str = Field(..., min_length=1, max_length=100, examples=["person"])
+    icon: str = Field(default="📌", max_length=10, examples=["👤"])
+    color: str | None = Field(default=None, max_length=50, examples=["blue"])
 
 
 class ThingTypeUpdate(BaseModel):
@@ -34,27 +36,35 @@ class ThingType(BaseModel):
 
 
 class ThingCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=500)
-    type_hint: str | None = None
-    parent_id: str | None = None
-    checkin_date: datetime | None = None
-    priority: int = Field(default=3, ge=1, le=5)
-    active: bool = True
-    surface: bool = True
-    data: dict[str, Any] | None = None
-    open_questions: list[str] | None = None
+    """Create a new Thing (task, note, project, idea, goal, person, etc.)."""
+
+    title: str = Field(..., min_length=1, max_length=500, examples=["Buy groceries"])
+    type_hint: str | None = Field(default=None, examples=["task"])
+    parent_id: str | None = Field(default=None, description="Parent Thing ID for hierarchical nesting")
+    checkin_date: datetime | None = Field(
+        default=None, description="Date when this Thing should surface in the briefing"
+    )
+    priority: int = Field(default=3, ge=1, le=5, description="1 (highest) to 5 (lowest)")
+    active: bool = Field(default=True, description="Inactive = completed/archived")
+    surface: bool = Field(default=True, description="Whether to show in default views")
+    data: dict[str, Any] | None = Field(default=None, description="Arbitrary JSON data (e.g. birthday, email, notes)")
+    open_questions: list[str] | None = Field(default=None, description="Unresolved questions about this Thing")
 
 
 class ThingUpdate(BaseModel):
+    """Partial update for a Thing. Only provided fields are changed."""
+
     title: str | None = Field(default=None, min_length=1, max_length=500)
     type_hint: str | None = None
-    parent_id: str | None = None
-    checkin_date: datetime | None = None
-    priority: int | None = Field(default=None, ge=1, le=5)
-    active: bool | None = None
-    surface: bool | None = None
-    data: dict[str, Any] | None = None
-    open_questions: list[str] | None = None
+    parent_id: str | None = Field(default=None, description="Parent Thing ID for hierarchical nesting")
+    checkin_date: datetime | None = Field(
+        default=None, description="Date when this Thing should surface in the briefing"
+    )
+    priority: int | None = Field(default=None, ge=1, le=5, description="1 (highest) to 5 (lowest)")
+    active: bool | None = Field(default=None, description="Inactive = completed/archived")
+    surface: bool | None = Field(default=None, description="Whether to show in default views")
+    data: dict[str, Any] | None = Field(default=None, description="Arbitrary JSON data")
+    open_questions: list[str] | None = Field(default=None, description="Unresolved questions about this Thing")
 
 
 class Thing(BaseModel):
@@ -81,10 +91,14 @@ class Thing(BaseModel):
 
 
 class RelationshipCreate(BaseModel):
-    from_thing_id: str
-    to_thing_id: str
-    relationship_type: str = Field(..., min_length=1, max_length=100)
-    metadata: dict[str, Any] | None = None
+    """Create a typed relationship between two Things."""
+
+    from_thing_id: str = Field(..., description="Source Thing ID")
+    to_thing_id: str = Field(..., description="Target Thing ID")
+    relationship_type: str = Field(
+        ..., min_length=1, max_length=100, examples=["works_with"], description="Relationship label"
+    )
+    metadata: dict[str, Any] | None = Field(default=None, description="Optional metadata for this relationship")
 
 
 class Relationship(BaseModel):
@@ -127,8 +141,10 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    session_id: str = Field(..., min_length=1)
-    message: str = Field(..., min_length=1)
+    """Send a message through the multi-agent chat pipeline."""
+
+    session_id: str = Field(..., min_length=1, description="Chat session identifier", examples=["session-abc123"])
+    message: str = Field(..., min_length=1, description="User message text", examples=["What tasks are due this week?"])
 
 
 class UsageInfo(BaseModel):
@@ -190,15 +206,21 @@ class SweepFinding(BaseModel):
 
 
 class SweepFindingCreate(BaseModel):
-    thing_id: str | None = None
-    finding_type: str = Field(..., min_length=1, max_length=100)
-    message: str = Field(..., min_length=1)
-    priority: int = Field(default=2, ge=0, le=4)
-    expires_at: datetime | None = None
+    """Create a sweep finding (insight from the nightly sweep)."""
+
+    thing_id: str | None = Field(default=None, description="Related Thing ID, if applicable")
+    finding_type: str = Field(
+        ..., min_length=1, max_length=100, examples=["stale_task"], description="Category of finding"
+    )
+    message: str = Field(..., min_length=1, description="Human-readable finding message")
+    priority: int = Field(default=2, ge=0, le=4, description="0 (critical) to 4 (backlog)")
+    expires_at: datetime | None = Field(default=None, description="Auto-dismiss after this time")
 
 
 class SweepFindingSnooze(BaseModel):
-    until: datetime
+    """Snooze a finding until a given date."""
+
+    until: datetime = Field(..., description="Hide the finding from the briefing until this time")
 
 
 class BriefingResponse(BaseModel):

@@ -57,10 +57,11 @@ def _row_to_msg(row: sqlite3.Row) -> ChatMessage:
 @router.get("/history/{session_id}", response_model=list[ChatMessage], summary="Get chat history for a session")
 def get_history(
     session_id: str,
-    limit: int = Query(50, ge=1, le=500),
+    limit: int = Query(50, ge=1, le=500, description="Maximum number of messages to return"),
     before: int | None = Query(None, description="Return messages with id < before (for loading older messages)"),
     user_id: str = Depends(require_user),
 ) -> list[ChatMessage]:
+    """Retrieve chat messages for a session, ordered chronologically. Supports cursor-based pagination via `before`."""
     uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
         if before is not None:
@@ -82,6 +83,7 @@ def get_history(
     "/history", response_model=ChatMessage, status_code=status.HTTP_201_CREATED, summary="Append a chat message"
 )
 def append_message(body: ChatMessageCreate, user_id: str = Depends(require_user)) -> ChatMessage:
+    """Append a single chat message to a session's history."""
     changes_json = json.dumps(body.applied_changes) if body.applied_changes is not None else None
     with db() as conn:
         cursor = conn.execute(
@@ -96,6 +98,7 @@ def append_message(body: ChatMessageCreate, user_id: str = Depends(require_user)
     "/history/{session_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a session's chat history"
 )
 def delete_history(session_id: str, user_id: str = Depends(require_user)) -> None:
+    """Delete all messages in a chat session."""
     uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
         result = conn.execute(f"DELETE FROM chat_history WHERE session_id = ?{uf_sql}", [session_id, *uf_params])
