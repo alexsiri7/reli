@@ -139,3 +139,13 @@ class BriefingResponse(BaseModel):
     date: str
     things: list[Thing]
     total: int
+
+
+# ── Proactive Surfaces ───────────────────────────────────────────────────────
+
+
+class ProactiveSurface(BaseModel):
+    thing: Thing
+    reason: str
+    date_key: str
+    days_away: int

@@ -32,6 +32,13 @@ export interface AppliedChanges {
   web_results?: WebSearchResult[]
 }
 
+export interface ProactiveSurface {
+  thing: Thing
+  reason: string
+  date_key: string
+  days_away: number
+}
+
 export interface CalendarEvent {
   id: string
   summary: string
@@ -85,12 +92,14 @@ interface ReliState {
   calendarStatus: CalendarStatus
   calendarEvents: CalendarEvent[]
 
+  proactiveSurfaces: ProactiveSurface[]
   searchResults: Thing[]
   searchLoading: boolean
   searchThings: (query: string) => Promise<void>
   clearSearch: () => void
   fetchThings: () => Promise<void>
   fetchBriefing: () => Promise<void>
+  fetchProactiveSurfaces: () => Promise<void>
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
   fetchHistory: () => Promise<void>
   fetchOlderMessages: () => Promise<void>
@@ -130,6 +139,7 @@ export const useStore = create<ReliState>((set, get) => ({
   error: null,
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [],
+  proactiveSurfaces: [],
   searchResults: [],
   searchLoading: false,
 
@@ -175,6 +185,17 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ briefing: data })
     } catch {
       // ignore — briefing is best-effort
+    }
+  },
+
+  fetchProactiveSurfaces: async () => {
+    try {
+      const res = await fetch(`${BASE}/proactive?days=7`)
+      if (!res.ok) return
+      const data: ProactiveSurface[] = await res.json()
+      set({ proactiveSurfaces: data })
+    } catch {
+      // best-effort
     }
   },
 
@@ -298,6 +319,7 @@ export const useStore = create<ReliState>((set, get) => ({
       // Refresh things in case the pipeline made changes
       get().fetchThings()
       get().fetchBriefing()
+      get().fetchProactiveSurfaces()
     } catch (e) {
       set(state => ({
         messages: state.messages.map(m =>

@@ -8,7 +8,7 @@ import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
 
 export function Sidebar() {
-  const { things, briefing, loading, searchResults, searchLoading, searchThings, clearSearch } = useStore(useShallow(s => ({ things: s.things, briefing: s.briefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch })))
+  const { things, briefing, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch } = useStore(useShallow(s => ({ things: s.things, briefing: s.briefing, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch })))
   const [searchQuery, setSearchQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -207,6 +207,32 @@ export function Sidebar() {
                   📅 Daily Briefing
                 </h2>
                 {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
+              </section>
+            )}
+
+            {/* Proactive Surfaces */}
+            {proactiveSurfaces.length > 0 && (
+              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                  ✨ Coming Up
+                </h2>
+                {proactiveSurfaces.map(s => (
+                  <div key={`${s.thing.id}-${s.date_key}`} className="px-3 py-1">
+                    <div className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors px-1">
+                      <span className="text-lg leading-none mt-0.5 select-none" title={s.thing.type_hint ?? 'thing'}>
+                        {typeIcon(s.thing.type_hint)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
+                          {s.thing.title}
+                        </p>
+                        <p className={`text-xs mt-0.5 ${s.days_away === 0 ? 'text-amber-500 font-semibold' : 'text-gray-400 dark:text-gray-500'}`}>
+                          {s.reason}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </section>
             )}
 

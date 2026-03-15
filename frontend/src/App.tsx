@@ -5,11 +5,12 @@ import { Sidebar } from './components/Sidebar'
 import { ChatPanel } from './components/ChatPanel'
 
 function App() {
-  const { fetchThings, fetchHistory, fetchCalendarStatus, error } = useStore(
+  const { fetchThings, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
     useShallow(s => ({
       fetchThings: s.fetchThings,
       fetchHistory: s.fetchHistory,
       fetchCalendarStatus: s.fetchCalendarStatus,
+      fetchProactiveSurfaces: s.fetchProactiveSurfaces,
       error: s.error,
     }))
   )
@@ -17,7 +18,8 @@ function App() {
   useEffect(() => {
     fetchThings()
     fetchHistory()
-    const interval = setInterval(fetchThings, 30_000)
+    fetchProactiveSurfaces()
+    const interval = setInterval(() => { fetchThings(); fetchProactiveSurfaces() }, 30_000)
 
     // Handle OAuth callback redirect
     const params = new URLSearchParams(window.location.search)
@@ -28,7 +30,7 @@ function App() {
     }
 
     return () => clearInterval(interval)
-  }, [fetchThings, fetchHistory, fetchCalendarStatus])
+  }, [fetchThings, fetchHistory, fetchCalendarStatus, fetchProactiveSurfaces])
 
   return (
     <div className="flex w-full h-full overflow-hidden bg-white dark:bg-gray-900">

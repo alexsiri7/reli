@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 from .database import init_db  # noqa: E402
-from .routers import briefing, calendar, chat, gmail, things  # noqa: E402
+from .routers import briefing, calendar, chat, gmail, proactive, things  # noqa: E402
 
 _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
 
@@ -49,6 +49,7 @@ app.include_router(briefing.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(gmail.router, prefix="/api")
 app.include_router(calendar.router, prefix="/api")
+app.include_router(proactive.router, prefix="/api")
 
 
 @app.get("/healthz", tags=["health"])
