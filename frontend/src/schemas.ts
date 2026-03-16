@@ -211,6 +211,7 @@ export const UserSettingsSchema = z.object({
   reasoning_model: z.string(),
   response_model: z.string(),
   chat_context_window: z.number().nullable(),
+  theme: z.string(),
 })
 
 export const RequestyModelSchema = z.object({

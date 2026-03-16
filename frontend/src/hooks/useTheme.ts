@@ -1,8 +1,13 @@
 import { useEffect, useSyncExternalStore } from 'react'
+import { apiFetch } from '../api'
 
 type Theme = 'light' | 'dark' | 'system'
 
 const STORAGE_KEY = 'reli-theme'
+
+function isValidTheme(v: unknown): v is Theme {
+  return v === 'light' || v === 'dark' || v === 'system'
+}
 
 function prefersColorSchemeDark(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
@@ -13,7 +18,7 @@ function prefersColorSchemeDark(): boolean {
 function getStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
+    if (isValidTheme(stored)) return stored
   } catch { /* SSR / test env */ }
   return 'system'
 }
@@ -46,10 +51,33 @@ function getSnapshot(): Theme {
   return currentTheme
 }
 
+function persistToServer(theme: Theme) {
+  apiFetch('/api/settings/user', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ theme }),
+  }).catch(() => { /* best-effort */ })
+}
+
 export function setTheme(theme: Theme) {
   currentTheme = theme
   try { localStorage.setItem(STORAGE_KEY, theme) } catch { /* test env */ }
   applyTheme(theme)
+  notify()
+  persistToServer(theme)
+}
+
+/**
+ * Apply theme from server-stored user settings.
+ * Called after fetching user settings to sync cross-device preference.
+ */
+export function applyServerTheme(serverTheme: string | undefined | null) {
+  if (!serverTheme || !isValidTheme(serverTheme)) return
+  // Only apply if different from current local theme
+  if (serverTheme === currentTheme) return
+  currentTheme = serverTheme
+  try { localStorage.setItem(STORAGE_KEY, serverTheme) } catch { /* test env */ }
+  applyTheme(serverTheme)
   notify()
 }
 

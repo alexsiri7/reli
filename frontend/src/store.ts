@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiFetch } from './api'
+import { applyServerTheme } from './hooks/useTheme'
 import { cacheThings, getCachedThings } from './offline/cache-things'
 import { cacheThingTypes, getCachedThingTypes } from './offline/cache-thing-types'
 import { cacheRelationships, getCachedRelationships } from './offline/cache-relationships'
@@ -941,6 +942,7 @@ export const useStore = create<ReliState>((set, get) => ({
       if (!res.ok) return
       const data = validateResponse(UserSettingsSchema, await res.json(), '/settings/user')
       set({ userSettings: data })
+      applyServerTheme(data.theme)
     } catch {
       // ignore
     }
