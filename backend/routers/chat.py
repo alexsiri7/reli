@@ -217,6 +217,73 @@ def _fetch_with_family(conn: sqlite3.Connection, seed_ids: list[str]) -> list[di
     return results
 
 
+def _fetch_user_relationships(
+    conn: sqlite3.Connection,
+    user_thing_id: str,
+    search_queries: list[str],
+    user_id: str = "",
+) -> list[dict[str, Any]]:
+    """Fetch 1-hop relationships from the user Thing, filtered by search query relevance.
+
+    Only returns related Things whose title or data match at least one search
+    query (case-insensitive LIKE).  Results are ordered by last_referenced DESC
+    (recently-mentioned first) so the most relevant connections surface first.
+    This prevents context bloat for power users with hundreds of relationships.
+    """
+    if not user_thing_id or not search_queries:
+        return []
+
+    # Fetch all relationship edges touching the user Thing
+    rels = conn.execute(
+        "SELECT * FROM thing_relationships WHERE from_thing_id = ? OR to_thing_id = ?",
+        (user_thing_id, user_thing_id),
+    ).fetchall()
+    if not rels:
+        return []
+
+    # Collect the IDs of the "other" side of each relationship
+    other_ids: list[str] = []
+    for rel in rels:
+        other_id = rel["to_thing_id"] if rel["from_thing_id"] == user_thing_id else rel["from_thing_id"]
+        other_ids.append(other_id)
+
+    if not other_ids:
+        return []
+
+    # Fetch the related Things that match any search query
+    placeholders = ",".join("?" for _ in other_ids)
+    uf_sql, uf_params = user_filter(user_id)
+
+    # Build LIKE clauses for each query
+    like_clauses: list[str] = []
+    like_params: list[str] = []
+    for query in search_queries[:3]:
+        pattern = f"%{query}%"
+        like_clauses.append("(title LIKE ? OR data LIKE ?)")
+        like_params.extend([pattern, pattern])
+
+    query_filter = " OR ".join(like_clauses)
+    sql = (
+        f"SELECT * FROM things WHERE id IN ({placeholders})"
+        f"{uf_sql}"
+        f" AND ({query_filter})"
+        " ORDER BY"
+        " CASE WHEN last_referenced IS NOT NULL THEN 0 ELSE 1 END,"
+        " last_referenced DESC,"
+        " updated_at DESC"
+        " LIMIT 10"
+    )
+    params: list = [*other_ids, *uf_params, *like_params]
+    rows = conn.execute(sql, params).fetchall()
+    logger.info(
+        "User relationship search: %d edges, %d query-matched (queries=%r)",
+        len(other_ids),
+        len(rows),
+        search_queries[:3],
+    )
+    return [dict(r) for r in rows]
+
+
 def _fetch_user_thing(conn: sqlite3.Connection, user_id: str) -> dict[str, Any] | None:
     """Fetch the user's own Thing (type_hint='person', matching user_id).
 
@@ -255,6 +322,17 @@ def _fetch_relevant_things(
     if user_thing:
         seen_ids.add(user_thing["id"])
         results.append(user_thing)
+
+        # Load 1-hop relationships that match the search queries, ordered by
+        # last_referenced recency.  This keeps relevant connections accessible
+        # without preloading all relationships (which could be hundreds).
+        user_rels = _fetch_user_relationships(
+            conn, user_thing["id"], search_queries, user_id
+        )
+        for rel_thing in user_rels:
+            if rel_thing["id"] not in seen_ids:
+                seen_ids.add(rel_thing["id"])
+                results.append(rel_thing)
 
     # Choose retrieval strategy based on indexed count
     vc = vector_count()
