@@ -761,6 +761,19 @@ def apply_storage_changes(
     # Map from create-array index to resolved Thing ID (for NEW:<index> placeholders)
     create_index_to_id: dict[int, str] = {}
 
+    # Pre-index relationships by NEW:<index> target for possessive dedup.
+    # This lets us check if a create has a companion relationship from the user
+    # and whether the user already has that relationship type to an existing entity.
+    _rels_by_new_target: dict[int, list[dict[str, Any]]] = {}
+    for rel in storage_changes.get("relationships", []):
+        to_id = rel.get("to_thing_id", "")
+        if to_id.startswith("NEW:"):
+            try:
+                idx = int(to_id.split(":")[1])
+                _rels_by_new_target.setdefault(idx, []).append(rel)
+            except (ValueError, IndexError):
+                pass
+
     # ── Creates ──────────────────────────────────────────────────────────────
     for create_idx, item in enumerate(storage_changes.get("create", [])):
         title = item.get("title", "").strip()
@@ -771,6 +784,43 @@ def apply_storage_changes(
         existing = conn.execute(
             "SELECT * FROM things WHERE LOWER(title) = LOWER(?) AND active = 1 LIMIT 1", (title,)
         ).fetchone()
+
+        # Possessive dedup: if no exact title match, check whether the user already
+        # has a relationship of the same type (e.g. "sister") to an existing entity.
+        # This catches cases like: user has Thing "Sister", now LLM creates "Sarah"
+        # with relationship_type="sister" — we should reuse the existing entity.
+        if not existing:
+            type_hint = item.get("type_hint")
+            if type_hint in ENTITY_TYPES:
+                companion_rels = _rels_by_new_target.get(create_idx, [])
+                for crel in companion_rels:
+                    rel_type = crel.get("relationship_type", "").strip()
+                    from_id = crel.get("from_thing_id", "").strip()
+                    if not rel_type or not from_id or from_id.startswith("NEW:"):
+                        continue
+                    # Check if from_id already has a relationship of this type
+                    match = conn.execute(
+                        "SELECT t.* FROM things t"
+                        " JOIN thing_relationships r ON r.to_thing_id = t.id"
+                        " WHERE r.from_thing_id = ? AND r.relationship_type = ?"
+                        " AND t.active = 1 LIMIT 1",
+                        (from_id, rel_type),
+                    ).fetchone()
+                    if match:
+                        logger.info(
+                            "Possessive dedup: reusing existing '%s' (id=%s) for relationship '%s'"
+                            " instead of creating '%s'",
+                            match["title"], match["id"], rel_type, title,
+                        )
+                        existing = match
+                        # Update the title if the new one is more specific (a name vs a role)
+                        if title.lower() != match["title"].lower():
+                            conn.execute(
+                                "UPDATE things SET title = ?, updated_at = ? WHERE id = ?",
+                                (title, now, match["id"]),
+                            )
+                        break
+
         if existing:
             logger.info("Dedup: converting create for '%s' into update on %s", title, existing["id"])
             # Merge any new data from the create intent into the existing Thing
@@ -992,6 +1042,17 @@ def apply_storage_changes(
         from_id = created_id_map.get(from_id, from_id)
         to_id = created_id_map.get(to_id, to_id)
         if from_id == to_id:
+            continue
+        # Skip duplicate relationships (same from, to, and type already exists)
+        dup = conn.execute(
+            "SELECT id FROM thing_relationships"
+            " WHERE from_thing_id = ? AND to_thing_id = ? AND relationship_type = ? LIMIT 1",
+            (from_id, to_id, rel_type),
+        ).fetchone()
+        if dup:
+            logger.info(
+                "Skipping duplicate relationship: %s -> %s (%s)", from_id, to_id, rel_type,
+            )
             continue
         # Verify both things exist
         from_row = conn.execute("SELECT id FROM things WHERE id = ?", (from_id,)).fetchone()
