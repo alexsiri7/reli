@@ -196,3 +196,70 @@ class TestDeleteThing:
         mock_vector_store["delete"].reset_mock()
         client.delete(f"/api/things/{thing['id']}")
         mock_vector_store["delete"].assert_called_once_with(thing["id"])
+
+
+# ---------------------------------------------------------------------------
+# Graph
+# ---------------------------------------------------------------------------
+
+
+class TestGetGraph:
+    def test_graph_empty(self, client):
+        resp = client.get("/api/things/graph")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["nodes"] == []
+        assert data["edges"] == []
+
+    def test_graph_returns_active_nodes(self, client):
+        t1 = create_thing(client, title="Active Node", type_hint="task")
+        t2 = create_thing(client, title="Inactive Node")
+        client.patch(f"/api/things/{t2['id']}", json={"active": False})
+
+        resp = client.get("/api/things/graph")
+        assert resp.status_code == 200
+        data = resp.json()
+        node_ids = [n["id"] for n in data["nodes"]]
+        assert t1["id"] in node_ids
+        assert t2["id"] not in node_ids
+
+    def test_graph_returns_edges(self, client):
+        t1 = create_thing(client, title="Node A")
+        t2 = create_thing(client, title="Node B")
+        rel = client.post(
+            "/api/things/relationships",
+            json={"from_thing_id": t1["id"], "to_thing_id": t2["id"], "relationship_type": "related_to"},
+        )
+        assert rel.status_code == 201
+
+        resp = client.get("/api/things/graph")
+        data = resp.json()
+        assert len(data["edges"]) == 1
+        edge = data["edges"][0]
+        assert edge["source"] == t1["id"]
+        assert edge["target"] == t2["id"]
+        assert edge["relationship_type"] == "related_to"
+
+    def test_graph_excludes_edges_to_inactive_nodes(self, client):
+        t1 = create_thing(client, title="Active")
+        t2 = create_thing(client, title="Will Deactivate")
+        client.post(
+            "/api/things/relationships",
+            json={"from_thing_id": t1["id"], "to_thing_id": t2["id"], "relationship_type": "knows"},
+        )
+        client.patch(f"/api/things/{t2['id']}", json={"active": False})
+
+        resp = client.get("/api/things/graph")
+        data = resp.json()
+        assert len(data["edges"]) == 0
+
+    def test_graph_node_has_icon_from_thing_type(self, client):
+        # Create a thing type first
+        client.post("/api/thing-types", json={"name": "person", "icon": "👤"})
+        t = create_thing(client, title="Alice", type_hint="person")
+
+        resp = client.get("/api/things/graph")
+        data = resp.json()
+        node = next(n for n in data["nodes"] if n["id"] == t["id"])
+        assert node["icon"] == "👤"
+        assert node["type_hint"] == "person"
