@@ -439,6 +439,9 @@ Rules:
   "Draft Q1 budget spreadsheet" is better than "Work on budget".
 - If a task seems broad (multiple distinct steps), suggest breaking it down via
   questions_for_user rather than creating one large item.
+- Before generating questions_for_user, check the conversation history AND the
+  open_questions on relevant Things. Do NOT re-ask questions that appear in
+  history or that are already tracked as open_questions on existing Things.
 - Include relevant context in data.notes when the user provides background info.
 - When the user completes a task (marks done, says "finished X"), set active=false
   on the matching Thing. Note what was accomplished in reasoning_summary.
@@ -796,15 +799,9 @@ Rules:
 - When calendar events are provided, naturally weave them into your response.
   Mention upcoming meetings, conflicts, or free blocks when relevant to the
   user's request. Format times in a human-friendly way (e.g. "2pm" not ISO-8601).
-- PROACTIVE CURIOSITY: When open_questions are provided for Things, naturally
-  weave 1-2 of the most relevant questions into your response. Don't list them
-  like a form — ask them conversationally, as a genuinely curious assistant would.
-  For example: "By the way, do you have a deadline in mind for this?" or "Oh, one
-  thing — who else is involved in this project?" Pick questions that would make the
-  Thing most actionable right now. Even when you CAN proceed without the info,
-  asking shows you care about getting it right.
-- Be genuinely curious, not just reactive. If the user shares something interesting,
-  ask a follow-up that shows you're engaged — not just processing commands.
+- NEVER ask questions that are not in questions_for_user. You are a renderer —
+  the reasoning agent decides what to ask. Your job is to present those questions
+  conversationally, not to invent your own.
 """
 
 
