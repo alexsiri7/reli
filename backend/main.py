@@ -3,7 +3,7 @@
 import logging
 import os
 import pathlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -16,10 +16,11 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 
-from fastapi import Depends, FastAPI  # noqa: E402
+from fastapi import Depends, FastAPI, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
+from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
 from starlette.responses import Response as StarletteResponse  # noqa: E402
 
 from .auth import require_user  # noqa: E402
@@ -40,6 +41,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     start_scheduler()
     yield
     stop_scheduler()
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add standard security headers to every response."""
+
+    async def dispatch(  # type: ignore[override]
+        self, request: Request, call_next: Callable[[Request], Awaitable[StarletteResponse]]
+    ) -> StarletteResponse:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "connect-src 'self'; "
+            "font-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        return response
 
 
 _TAG_METADATA = [
@@ -112,6 +137,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(SecurityHeadersMiddleware)
 _rl_config = get_rate_limit_config()
 app.add_middleware(RateLimitMiddleware, **_rl_config)
 app.add_middleware(ResponseMetricsMiddleware)
@@ -188,11 +214,19 @@ def metrics() -> StarletteResponse:
 if _FRONTEND_DIST.is_dir():
     app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
 
+    _RESOLVED_DIST = _FRONTEND_DIST.resolve()
+
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str) -> FileResponse:
-        # Resolve to prevent directory traversal (e.g. ../../etc/passwd)
         if full_path:
-            static_file = (_FRONTEND_DIST / full_path).resolve()
-            if static_file.is_relative_to(_FRONTEND_DIST.resolve()) and static_file.is_file():
+            # Reject null bytes and absolute paths (pathlib treats /foo as root)
+            if "\x00" in full_path or full_path.startswith("/"):
+                return FileResponse(_RESOLVED_DIST / "index.html")
+            # Strip path traversal segments before joining
+            clean = pathlib.PurePosixPath(full_path)
+            if ".." in clean.parts:
+                return FileResponse(_RESOLVED_DIST / "index.html")
+            static_file = (_RESOLVED_DIST / full_path).resolve()
+            if static_file.is_relative_to(_RESOLVED_DIST) and static_file.is_file():
                 return FileResponse(static_file)
-        return FileResponse(_FRONTEND_DIST / "index.html")
+        return FileResponse(_RESOLVED_DIST / "index.html")

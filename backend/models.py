@@ -183,7 +183,11 @@ class ChatRequest(BaseModel):
     """Send a message through the multi-agent chat pipeline."""
 
     session_id: str = Field(..., min_length=1, description="Chat session identifier", examples=["session-abc123"])
-    message: str = Field(..., min_length=1, description="User message text", examples=["What tasks are due this week?"])
+    message: str = Field(
+        ..., min_length=1, max_length=10_000,
+        description="User message text (max 10 000 chars)",
+        examples=["What tasks are due this week?"],
+    )
 
 
 class MigrateSessionRequest(BaseModel):
