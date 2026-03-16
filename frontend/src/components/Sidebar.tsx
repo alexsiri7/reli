@@ -33,7 +33,7 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
         <div className="flex-1 min-w-0">
           <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{finding.message}</p>
           {finding.thing && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
+            <p className="text-xs text-gray-400 dark:text-gray-400 mt-0.5 truncate">
               {typeIcon(finding.thing.type_hint)} {finding.thing.title}
             </p>
           )}
@@ -50,14 +50,14 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
             )}
             <button
               onClick={() => onSnooze(finding.id)}
-              className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+              className="text-xs text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               title="Snooze for 1 day"
             >
               Snooze
             </button>
             <button
               onClick={() => onDismiss(finding.id)}
-              className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
+              className="text-xs text-gray-400 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400"
               title="Dismiss"
             >
               Dismiss
@@ -284,7 +284,7 @@ export function Sidebar() {
         <button
           onClick={() => setIsOpen(true)}
           aria-label="Open sidebar"
-          className="hidden md:block md:static md:m-0 md:border-0 md:shadow-none md:rounded-none md:bg-gray-50 md:dark:bg-gray-950 md:border-r md:border-gray-200 md:dark:border-gray-800 md:px-2 md:py-3 p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          className="hidden md:block md:static md:m-0 md:border-0 md:shadow-none md:rounded-none md:bg-gray-50 md:dark:bg-gray-950 md:border-r md:border-gray-200 md:dark:border-gray-700 md:px-2 md:py-3 p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -296,20 +296,20 @@ export function Sidebar() {
       <aside
         style={{ width: window.innerWidth >= 768 ? sidebarWidth : undefined }}
         className={`
-          flex flex-col border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 overflow-y-auto
+          flex flex-col border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 overflow-y-auto
           w-full pb-14
           md:pb-0 md:w-auto md:shrink-0 md:relative
           ${isOpen ? '' : 'md:hidden'}
         `}
       >
         {/* Header */}
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
               <img src="/logo.svg" alt="Reli" className="h-7 w-7 rounded-md" />
               <h1 className="text-lg font-bold text-gray-900 dark:text-white tracking-tight">Reli</h1>
             </div>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+            <p className="text-xs text-gray-400 dark:text-gray-400 mt-0.5">
               {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
             </p>
           </div>
@@ -321,7 +321,7 @@ export function Sidebar() {
               className={`p-1.5 rounded-lg transition-colors ${
                 mainView === 'graph'
                   ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
-                  : 'text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'
+                  : 'text-gray-400 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'
               }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -349,7 +349,7 @@ export function Sidebar() {
                 <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                   <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{currentUser.name}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{currentUser.email}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-400 truncate">{currentUser.email}</p>
                   </div>
                   <button
                     onClick={() => useStore.getState().openSettings()}
@@ -375,7 +375,7 @@ export function Sidebar() {
             <button
               onClick={() => setIsOpen(false)}
               aria-label="Close sidebar"
-              className="hidden md:block p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              className="hidden md:block p-1.5 rounded-lg text-gray-400 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -385,9 +385,9 @@ export function Sidebar() {
         </div>
 
         {/* Search bar */}
-        <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-800">
+        <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
           <div className="relative">
-            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
@@ -395,12 +395,12 @@ export function Sidebar() {
               placeholder="Search everything…"
               value={searchQuery}
               onChange={e => handleSearchChange(e.target.value)}
-              className="w-full pl-8 pr-7 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
+              className="w-full pl-8 pr-7 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
             />
             {searchQuery && (
               <button
                 onClick={() => handleSearchChange('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 aria-label="Clear search"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -414,7 +414,7 @@ export function Sidebar() {
         {/* Search results */}
         {isSearching ? (
           <section className="py-2 flex-1">
-            <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+            <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
               Search Results {!searchLoading && `(${searchResults.length})`}
             </h2>
             {searchLoading ? (
@@ -423,7 +423,7 @@ export function Sidebar() {
                 <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
               </div>
             ) : searchResults.length === 0 ? (
-              <div className="px-4 py-4 text-sm text-gray-400 dark:text-gray-500 text-center">
+              <div className="px-4 py-4 text-sm text-gray-400 dark:text-gray-400 text-center">
                 No results found
               </div>
             ) : (
@@ -445,8 +445,8 @@ export function Sidebar() {
 
             {/* Daily Briefing — sweep findings + checkin-due things */}
             {(findings.length > 0 || briefing.length > 0) && (
-              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+              <section className="py-2 border-b border-gray-100 dark:border-gray-700">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
                   Daily Briefing
                 </h2>
 
@@ -465,8 +465,8 @@ export function Sidebar() {
 
             {/* Proactive Surfaces */}
             {proactiveSurfaces && proactiveSurfaces.length > 0 && (
-              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+              <section className="py-2 border-b border-gray-100 dark:border-gray-700">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
                   ✨ Coming Up
                 </h2>
                 {proactiveSurfaces.map(s => (
@@ -483,7 +483,7 @@ export function Sidebar() {
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
                           {s.thing.title}
                         </p>
-                        <p className={`text-xs mt-0.5 ${s.days_away === 0 ? 'text-amber-500 font-semibold' : 'text-gray-400 dark:text-gray-500'}`}>
+                        <p className={`text-xs mt-0.5 ${s.days_away === 0 ? 'text-amber-500 font-semibold' : 'text-gray-400 dark:text-gray-400'}`}>
                           {s.reason}
                         </p>
                       </div>
@@ -495,8 +495,8 @@ export function Sidebar() {
 
             {/* Recently Discussed */}
             {recentlyDiscussed.length > 0 && (
-              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+              <section className="py-2 border-b border-gray-100 dark:border-gray-700">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
                   Recently Discussed
                 </h2>
                 {recentlyDiscussed.map(t => {
@@ -513,10 +513,10 @@ export function Sidebar() {
 
         {/* Things filter bar */}
         {active.length > 0 && (
-          <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800">
+          <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-1.5">
               <div className="relative flex-1">
-                <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <input
@@ -524,7 +524,7 @@ export function Sidebar() {
                   placeholder="Filter things…"
                   value={thingFilterQuery}
                   onChange={e => setThingFilterQuery(e.target.value)}
-                  className="w-full pl-7 pr-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500"
+                  className="w-full pl-7 pr-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500"
                 />
               </div>
               <div className="relative" ref={filterDropdownRef}>
@@ -533,7 +533,7 @@ export function Sidebar() {
                   className={`p-1 rounded transition-colors relative ${
                     thingFilterTypes.length > 0
                       ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
-                      : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      : 'text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                   }`}
                   aria-label="Filter by type"
                   title="Filter by type"
@@ -569,7 +569,7 @@ export function Sidebar() {
                       </button>
                     ))}
                     {availableTypes.length === 0 && (
-                      <p className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">No types available</p>
+                      <p className="px-3 py-2 text-xs text-gray-400 dark:text-gray-400">No types available</p>
                     )}
                   </div>
                 )}
@@ -577,7 +577,7 @@ export function Sidebar() {
               {isThingFilterActive && (
                 <button
                   onClick={clearThingFilters}
-                  className="text-[10px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 whitespace-nowrap"
+                  className="text-[10px] text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 whitespace-nowrap"
                   title="Clear all filters"
                 >
                   Clear
@@ -589,15 +589,15 @@ export function Sidebar() {
 
         {/* No results state for filtered things */}
         {isThingFilterActive && activeGroups.length === 0 && (
-          <div className="px-4 py-4 text-sm text-gray-400 dark:text-gray-500 text-center">
+          <div className="px-4 py-4 text-sm text-gray-400 dark:text-gray-400 text-center">
             No things match your filters
           </div>
         )}
 
         {/* Active Things grouped by type */}
         {activeGroups.map(group => (
-          <section key={group.type} className="py-2 border-t border-gray-100 dark:border-gray-800">
-            <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+          <section key={group.type} className="py-2 border-t border-gray-100 dark:border-gray-700">
+            <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
               <span>{group.icon}</span>
               <span>{group.label}</span>
               <span className="ml-auto text-[10px] font-normal tabular-nums">{group.items.length}</span>
@@ -609,7 +609,7 @@ export function Sidebar() {
             {/* Upcoming Check-ins */}
             {upcoming.length > 0 && (
               <section className="py-2">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
                   Upcoming Check-ins
                 </h2>
                 {upcoming.map(t => <ThingCard key={t.id} thing={t} />)}
@@ -620,7 +620,7 @@ export function Sidebar() {
             <GmailPanel />
 
             {!loading && things.length === 0 && (
-              <div className="px-4 py-6 text-sm text-gray-400 dark:text-gray-500 text-center">
+              <div className="px-4 py-6 text-sm text-gray-400 dark:text-gray-400 text-center">
                 Start by typing in the chat…
               </div>
             )}

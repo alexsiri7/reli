@@ -158,7 +158,7 @@ function SettingsForm({
       {/* API Key Section */}
       <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">API Key</h3>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+        <p className="text-xs text-gray-400 dark:text-gray-400 mb-4">
           Your personal API key for LLM access via Requesty. This key is stored securely per-user.
         </p>
         <div>
@@ -179,7 +179,7 @@ function SettingsForm({
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+          <p className="text-xs text-gray-400 dark:text-gray-400 mt-1">
             Get your key at{' '}
             <a href="https://requesty.ai" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:text-indigo-600">
               requesty.ai
@@ -191,7 +191,7 @@ function SettingsForm({
       {/* Model Selection */}
       <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">AI Models</h3>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+        <p className="text-xs text-gray-400 dark:text-gray-400 mb-4">
           Select which models to use for each stage of the chat pipeline.
         </p>
         <div className="space-y-4">
@@ -225,7 +225,7 @@ function SettingsForm({
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Context Window Size
           </label>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">
+          <p className="text-xs text-gray-400 dark:text-gray-400 mb-1.5">
             Number of recent messages included as context for AI responses (1-50)
           </p>
           <input
@@ -295,7 +295,7 @@ function MyProfileSection() {
     return (
       <div>
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">My Profile</h3>
-        <p className="text-xs text-gray-400 dark:text-gray-500">Profile not available.</p>
+        <p className="text-xs text-gray-400 dark:text-gray-400">Profile not available.</p>
       </div>
     )
   }
@@ -432,7 +432,7 @@ function ProfileForm({
           <span className="text-xs text-green-600 dark:text-green-400">Saved</span>
         )}
       </div>
-      <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+      <p className="text-xs text-gray-400 dark:text-gray-400 mb-4">
         What Reli knows about you. Edit your name and personal details.
       </p>
 
@@ -513,14 +513,14 @@ function ProfileForm({
               placeholder="Field name"
               value={newFieldKey}
               onChange={e => setNewFieldKey(e.target.value)}
-              className="w-24 flex-shrink-0 px-3 py-1.5 text-sm rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 placeholder:text-gray-300 dark:placeholder:text-gray-600"
+              className="w-24 flex-shrink-0 px-3 py-1.5 text-sm rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 placeholder:text-gray-300 dark:placeholder:text-gray-500"
             />
             <input
               type="text"
               placeholder="Value"
               value={newFieldValue}
               onChange={e => setNewFieldValue(e.target.value)}
-              className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 placeholder:text-gray-300 dark:placeholder:text-gray-600"
+              className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 placeholder:text-gray-300 dark:placeholder:text-gray-500"
             />
           </div>
         </div>
@@ -540,15 +540,15 @@ function ProfileForm({
 
         {/* Relationships (read-only) */}
         {relationships.length > 0 && (
-          <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+          <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
             <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Learned Relationships</h4>
             <div className="space-y-1.5">
               {relationships.map((rel: UserProfileRelationship) => (
                 <div key={rel.id} className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-400 dark:text-gray-500 capitalize">{formatRelType(rel.relationship_type)}:</span>
+                  <span className="text-gray-400 dark:text-gray-400 capitalize">{formatRelType(rel.relationship_type)}:</span>
                   <span className="text-gray-700 dark:text-gray-300">{rel.related_thing_title}</span>
                   {rel.direction === 'incoming' && (
-                    <span className="text-gray-300 dark:text-gray-600 text-[10px]">(incoming)</span>
+                    <span className="text-gray-300 dark:text-gray-500 text-[10px]">(incoming)</span>
                   )}
                 </div>
               ))}
@@ -612,7 +612,7 @@ function ModelSelect({
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
         {label}
       </label>
-      <p className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">{description}</p>
+      <p className="text-xs text-gray-400 dark:text-gray-400 mb-1.5">{description}</p>
       <select
         value={value}
         onChange={e => onChange(e.target.value)}

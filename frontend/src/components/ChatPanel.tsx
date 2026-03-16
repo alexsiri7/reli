@@ -53,7 +53,7 @@ function WebSources({ results }: { results: WebSearchResult[] }) {
               className="block text-xs text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
             >
               <span className="font-medium">{r.title}</span>
-              <span className="block text-gray-400 dark:text-gray-500 truncate">{r.snippet}</span>
+              <span className="block text-gray-400 dark:text-gray-400 truncate">{r.snippet}</span>
             </a>
           ))}
         </div>
@@ -92,8 +92,8 @@ function GmailSources({ messages }: { messages: GmailMessage[] }) {
               className="text-xs text-gray-600 dark:text-gray-300"
             >
               <span className="font-medium">{m.subject}</span>
-              <span className="text-gray-400 dark:text-gray-500"> — {m.from}</span>
-              <span className="block text-gray-400 dark:text-gray-500 truncate">{m.snippet}</span>
+              <span className="text-gray-400 dark:text-gray-400"> — {m.from}</span>
+              <span className="block text-gray-400 dark:text-gray-400 truncate">{m.snippet}</span>
             </div>
           ))}
         </div>
@@ -132,9 +132,9 @@ function CalendarSources({ events }: { events: CalendarEvent[] }) {
               className="text-xs text-gray-600 dark:text-gray-300"
             >
               <span className="font-medium">{ev.summary}</span>
-              <span className="text-gray-400 dark:text-gray-500"> — {new Date(ev.start).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+              <span className="text-gray-400 dark:text-gray-400"> — {new Date(ev.start).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
               {ev.location && (
-                <span className="block text-gray-400 dark:text-gray-500 truncate">{ev.location}</span>
+                <span className="block text-gray-400 dark:text-gray-400 truncate">{ev.location}</span>
               )}
             </div>
           ))}
@@ -176,14 +176,14 @@ function ContextDropdown({ changes }: { changes: AppliedChanges }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
         </svg>
         Context &amp; changes
-        <span className="text-gray-400 dark:text-gray-500 font-normal">({totalCount})</span>
+        <span className="text-gray-400 dark:text-gray-400 font-normal">({totalCount})</span>
       </button>
       {expanded && (
         <div className="mt-1.5 space-y-2">
           {/* Context section — Things that informed the response */}
           {hasContext ? (
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold mb-1">Context</p>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-400 font-semibold mb-1">Context</p>
               <div className="space-y-0.5">
                 {contextThings.map((t: ContextThing) => (
                   <button
@@ -194,20 +194,20 @@ function ContextDropdown({ changes }: { changes: AppliedChanges }) {
                     <span>{typeIcon(t.type_hint, thingTypes)}</span>
                     <span className="truncate">{t.title}</span>
                     {t.type_hint && (
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500 capitalize ml-auto shrink-0">{t.type_hint}</span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-400 capitalize ml-auto shrink-0">{t.type_hint}</span>
                     )}
                   </button>
                 ))}
               </div>
             </div>
           ) : (
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">No database context used</p>
+            <p className="text-[10px] text-gray-400 dark:text-gray-400 italic">No database context used</p>
           )}
 
           {/* Effects section — Things that were created/updated/deleted */}
           {hasEffects && (
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold mb-1">Effects</p>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-400 font-semibold mb-1">Effects</p>
               <div className="space-y-0.5">
                 {created.map(c => (
                   <button
@@ -275,7 +275,7 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="text-[10px] text-gray-400 dark:text-gray-500 font-mono hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
+        className="text-[10px] text-gray-400 dark:text-gray-400 font-mono hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
       >
         {modelLabel && <>{modelLabel} · </>}{formatTokens(totalTokens)} tokens{msg.cost_usd != null && msg.cost_usd > 0 ? ` · ${formatCost(msg.cost_usd)}` : ''}
       </button>
@@ -283,7 +283,7 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
         <div className="absolute left-0 bottom-full mb-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2.5 min-w-[200px] font-mono text-[11px] text-gray-500 dark:text-gray-400">
           {calls.length > 1 ? (
             <>
-              <p className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">Per-call breakdown</p>
+              <p className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-400 mb-1">Per-call breakdown</p>
               <div className="space-y-2">
                 {calls.map((call, i) => (
                   <div key={i}>
@@ -365,7 +365,7 @@ function SpeakButton({ msg, speakingId, speak }: { msg: ChatMessage; speakingId:
     <button
       onClick={() => speak(msg.content, String(msg.id))}
       className={`p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${
-        isSpeaking ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500'
+        isSpeaking ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-400'
       }`}
       title={isSpeaking ? 'Stop speaking' : 'Read aloud'}
       aria-label={isSpeaking ? 'Stop speaking' : 'Read aloud'}
@@ -448,7 +448,7 @@ function StreamingIndicator({ stage }: { stage: StreamingStage }) {
   const label = STAGE_LABELS[stage] ?? stage
 
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 py-1">
+    <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-400 py-1">
       <span className="flex gap-0.5">
         {['context', 'reasoning', 'response'].map(s => (
           <span
@@ -521,7 +521,7 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
         </div>
         <div className={`flex items-center gap-2 mt-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
           {ts && (
-            <span className="text-[10px] text-gray-400 dark:text-gray-500">
+            <span className="text-[10px] text-gray-400 dark:text-gray-400">
               {ts}
             </span>
           )}
@@ -594,7 +594,7 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
           {stats.per_model.length > 0 ? (
             <table className="w-full text-[11px]">
               <thead>
-                <tr className="text-gray-400 dark:text-gray-500">
+                <tr className="text-gray-400 dark:text-gray-400">
                   <th className="text-left font-normal pr-3 pb-1">Model</th>
                   <th className="text-right font-normal px-3 pb-1">Prompt</th>
                   <th className="text-right font-normal px-3 pb-1">Compl.</th>
@@ -609,7 +609,7 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
               </tbody>
             </table>
           ) : (
-            <p className="text-center text-gray-400 dark:text-gray-500 py-2">No usage yet</p>
+            <p className="text-center text-gray-400 dark:text-gray-400 py-2">No usage yet</p>
           )}
         </div>
       )}
@@ -696,10 +696,10 @@ export function ChatPanel() {
   return (
     <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 min-w-0 pb-14 md:pb-0">
       {/* Title bar */}
-      <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0 flex items-start justify-between">
+      <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 shrink-0 flex items-start justify-between">
         <div>
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Chat</h2>
-          <p className="text-xs text-gray-400 dark:text-gray-500">Talk to Reli — create, update, and query your Things</p>
+          <p className="text-xs text-gray-400 dark:text-gray-400">Talk to Reli — create, update, and query your Things</p>
         </div>
         <div className="flex items-center gap-1">
           <VoiceSettings />
@@ -722,7 +722,7 @@ export function ChatPanel() {
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="text-5xl mb-4">✨</div>
             <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">What's on your mind?</h3>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1 max-w-xs">
+            <p className="text-sm text-gray-400 dark:text-gray-400 mt-1 max-w-xs">
               Try: "Remind me to check the server logs tomorrow" or "I had an idea about the new API design"
             </p>
           </div>
@@ -734,7 +734,7 @@ export function ChatPanel() {
       </div>
 
       {/* Input */}
-      <div className="px-4 pb-4 pt-2 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 shrink-0">
+      <div className="px-4 pb-4 pt-2 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-700 shrink-0">
         {!isOnline && (
           <div className="mb-2 px-3 py-2 text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-xl text-center">
             Chat requires an internet connection
@@ -750,7 +750,7 @@ export function ChatPanel() {
             onKeyDown={onKeyDown}
             placeholder={isOnline ? "Message Reli\u2026" : "Chat unavailable offline"}
             disabled={!isOnline}
-            className="flex-1 bg-transparent resize-none outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 max-h-32 py-1 leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 bg-transparent resize-none outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 max-h-32 py-1 leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ height: 'auto' }}
             onInput={e => {
               const t = e.currentTarget
@@ -764,7 +764,7 @@ export function ChatPanel() {
               className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
                 listening
                   ? 'bg-red-500 text-white animate-pulse'
-                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  : 'text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
               }`}
               title={listening ? 'Stop recording' : 'Voice input'}
               aria-label={listening ? 'Stop recording' : 'Voice input'}
@@ -789,7 +789,7 @@ export function ChatPanel() {
             )}
           </button>
         </div>
-        <p className="text-xs text-gray-400 dark:text-gray-600 text-center mt-1.5">
+        <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-1.5">
           Enter to send · Shift+Enter for new line{speechRecognitionSupported ? ' · 🎤 for voice' : ''}
         </p>
       </div>

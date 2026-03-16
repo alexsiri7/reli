@@ -89,13 +89,13 @@ export function DetailPanel() {
       />
 
       {/* Panel — desktop: inline flex child on left; mobile: fixed overlay from left */}
-      <div className="fixed left-0 top-0 bottom-0 z-50 w-full max-w-md bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-xl flex flex-col overflow-hidden animate-slide-in-left md:relative md:z-auto md:w-80 md:max-w-none md:shrink-0 md:shadow-none md:animate-none md:border-r">
+      <div className="fixed left-0 top-0 bottom-0 z-50 w-full max-w-md bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 shadow-xl flex flex-col overflow-hidden animate-slide-in-left md:relative md:z-auto md:w-80 md:max-w-none md:shrink-0 md:shadow-none md:animate-none md:border-r">
         {/* Header */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
           {canGoBack && (
             <button
               onClick={goBackThingDetail}
-              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
               aria-label="Go back"
               title="Go back"
             >
@@ -118,7 +118,7 @@ export function DetailPanel() {
           </div>
           <button
             onClick={closeThingDetail}
-            className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="p-1.5 rounded-lg text-gray-400 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             aria-label="Close detail panel"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -165,7 +165,7 @@ export function DetailPanel() {
               {/* Data fields */}
               {dataEntries.length > 0 && (
                 <div className="space-y-2">
-                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Details</h3>
+                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">Details</h3>
                   <div className="space-y-1.5">
                     {dataEntries.map(([key, value]) => (
                       <div key={key} className="text-sm">
@@ -197,7 +197,7 @@ export function DetailPanel() {
               {/* Parent */}
               {parent && (
                 <div className="space-y-1.5">
-                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Parent</h3>
+                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">Parent</h3>
                   <ThingLink
                     id={parent.id}
                     title={parent.title}
@@ -211,7 +211,7 @@ export function DetailPanel() {
               {/* Children */}
               {children.length > 0 && (
                 <div className="space-y-1.5">
-                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">
                     Children ({children.length})
                   </h3>
                   <div className="space-y-0.5">
@@ -232,7 +232,7 @@ export function DetailPanel() {
               {/* Relationships grouped by type */}
               {groupedRels.size > 0 && (
                 <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Relationships</h3>
+                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">Relationships</h3>
                   {Array.from(groupedRels.entries()).map(([type, items]) => (
                     <div key={type} className="space-y-0.5">
                       <p className="text-xs font-medium text-gray-500 dark:text-gray-400 italic">
@@ -242,7 +242,7 @@ export function DetailPanel() {
                         const other = resolveThing(otherId)
                         return (
                           <div key={rel.id} className="flex items-center gap-1.5 text-sm">
-                            <span className="text-gray-400 dark:text-gray-500 text-xs shrink-0">{direction}</span>
+                            <span className="text-gray-400 dark:text-gray-400 text-xs shrink-0">{direction}</span>
                             {other ? (
                               <ThingLink
                                 id={other.id}
@@ -268,24 +268,24 @@ export function DetailPanel() {
               )}
 
               {/* Timestamps */}
-              <div className="space-y-1 pt-2 border-t border-gray-100 dark:border-gray-800">
-                <p className="text-xs text-gray-400 dark:text-gray-500">
+              <div className="space-y-1 pt-2 border-t border-gray-100 dark:border-gray-700">
+                <p className="text-xs text-gray-400 dark:text-gray-400">
                   Created {formatTimestamp(thing.created_at)}
                 </p>
                 {thing.updated_at !== thing.created_at && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                  <p className="text-xs text-gray-400 dark:text-gray-400">
                     Updated {formatTimestamp(thing.updated_at)}
                   </p>
                 )}
                 {thing.last_referenced && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                  <p className="text-xs text-gray-400 dark:text-gray-400">
                     Last discussed {formatTimestamp(thing.last_referenced)}
                   </p>
                 )}
               </div>
             </div>
           ) : (
-            <div className="p-4 text-sm text-gray-400 dark:text-gray-500 text-center">
+            <div className="p-4 text-sm text-gray-400 dark:text-gray-400 text-center">
               Thing not found
             </div>
           )}
@@ -314,7 +314,7 @@ function ThingLink({
         {title}
       </span>
       {typeHint && (
-        <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500 capitalize shrink-0">
+        <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-400 capitalize shrink-0">
           {typeHint}
         </span>
       )}

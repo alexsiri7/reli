@@ -43,7 +43,7 @@ export function ThingCard({ thing }: Props) {
             {thing.title}
           </p>
           {dateLabel && (
-            <p className={`text-xs mt-0.5 ${overdue ? 'text-red-500 font-semibold' : 'text-gray-400 dark:text-gray-500'}`}>
+            <p className={`text-xs mt-0.5 ${overdue ? 'text-red-500 font-semibold' : 'text-gray-400 dark:text-gray-400'}`}>
               {overdue ? '\u{26A0} ' : ''}{dateLabel}
             </p>
           )}
@@ -55,7 +55,7 @@ export function ThingCard({ thing }: Props) {
                   style={{ width: `${Math.round(((thing.completed_count ?? 0) / thing.children_count) * 100)}%` }}
                 />
               </div>
-              <span className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums whitespace-nowrap">
+              <span className="text-[10px] text-gray-400 dark:text-gray-400 tabular-nums whitespace-nowrap">
                 {thing.completed_count ?? 0}/{thing.children_count}
               </span>
             </div>
