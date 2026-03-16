@@ -8,10 +8,11 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
+from ..auth import require_user
 from ..database import db
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
@@ -61,17 +62,18 @@ class GmailThread(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _save_token(creds: Any) -> None:
+def _save_token(creds: Any, user_id: str = "") -> None:
     """Persist OAuth2 credentials to the google_tokens table."""
     expiry_str = creds.expiry.isoformat() if creds.expiry else None
     scopes_str = json.dumps(list(creds.scopes)) if creds.scopes else None
     now = datetime.now(timezone.utc).isoformat()
+    uid = user_id or None  # Store NULL when auth is disabled (empty string)
 
     with db() as conn:
         conn.execute(
             """INSERT INTO google_tokens (user_id, service, access_token, refresh_token,
                token_uri, client_id, client_secret, expiry, scopes, updated_at)
-               VALUES (NULL, 'gmail', ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, 'gmail', ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(user_id, service) DO UPDATE SET
                access_token=excluded.access_token,
                refresh_token=COALESCE(excluded.refresh_token, google_tokens.refresh_token),
@@ -82,6 +84,7 @@ def _save_token(creds: Any) -> None:
                scopes=excluded.scopes,
                updated_at=excluded.updated_at""",
             (
+                uid,
                 creds.token,
                 creds.refresh_token,
                 creds.token_uri,
@@ -94,7 +97,7 @@ def _save_token(creds: Any) -> None:
         )
 
 
-def _load_creds() -> Any:
+def _load_creds(user_id: str = "") -> Any:
     """Load and refresh credentials. Returns None if not connected.
 
     Checks the google_tokens table first, falls back to legacy gmail_token.json
@@ -103,9 +106,14 @@ def _load_creds() -> Any:
     from google.auth.transport.requests import Request as GoogleRequest
     from google.oauth2.credentials import Credentials
 
-    # Try DB first
+    uid = user_id or None
+
+    # Try DB first — match by user_id (NULL when auth disabled)
     with db() as conn:
-        row = conn.execute("SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'").fetchone()
+        if uid is None:
+            row = conn.execute("SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'").fetchone()
+        else:
+            row = conn.execute("SELECT * FROM google_tokens WHERE user_id = ? AND service = 'gmail'", (uid,)).fetchone()
 
     if row:
         creds = Credentials(
@@ -120,22 +128,22 @@ def _load_creds() -> Any:
     elif TOKEN_PATH.exists():
         # Migrate legacy file-based token to DB
         creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), GMAIL_SCOPES)
-        _save_token(creds)
+        _save_token(creds, user_id=user_id)
         TOKEN_PATH.unlink()  # Remove legacy file after migration
     else:
         return None
 
     if creds.expired and creds.refresh_token:
         creds.refresh(GoogleRequest())
-        _save_token(creds)
+        _save_token(creds, user_id=user_id)
     if not creds.valid:
         return None
     return creds
 
 
-def _get_service() -> Any:
+def _get_service(user_id: str = "") -> Any:
     """Build Gmail API service. Raises 401 if not connected."""
-    creds = _load_creds()
+    creds = _load_creds(user_id=user_id)
     if creds is None:
         raise HTTPException(status_code=401, detail="Gmail not connected. Please authorize first.")
     from googleapiclient.discovery import build
@@ -187,11 +195,11 @@ def _extract_body(payload: dict[str, Any]) -> str | None:
 
 
 @router.get("/status", response_model=GmailStatus, summary="Check Gmail connection status")
-def gmail_status() -> GmailStatus:
+def gmail_status(user_id: str = Depends(require_user)) -> GmailStatus:
     if not GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=501, detail="Gmail integration not configured (missing GOOGLE_CLIENT_ID)")
 
-    creds = _load_creds()
+    creds = _load_creds(user_id=user_id)
     if creds is None:
         return GmailStatus(connected=False)
 
@@ -206,7 +214,7 @@ def gmail_status() -> GmailStatus:
 
 
 @router.get("/auth-url", summary="Get Gmail OAuth2 authorization URL")
-def gmail_auth_url(request: Request) -> dict[str, str]:
+def gmail_auth_url(request: Request, user_id: str = Depends(require_user)) -> dict[str, str]:
     """Generate the Google OAuth2 consent URL."""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=501, detail="Gmail integration not configured")
@@ -237,7 +245,12 @@ def gmail_auth_url(request: Request) -> dict[str, str]:
 
 
 @router.get("/callback", summary="Handle OAuth2 callback from Google")
-def gmail_callback(request: Request, code: str = Query(...), error: str | None = Query(None)) -> RedirectResponse:
+def gmail_callback(
+    request: Request,
+    code: str = Query(...),
+    error: str | None = Query(None),
+    user_id: str = Depends(require_user),
+) -> RedirectResponse:
     """Exchange authorization code for tokens and store them."""
     if error:
         raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
@@ -262,17 +275,21 @@ def gmail_callback(request: Request, code: str = Query(...), error: str | None =
         redirect_uri=redirect_uri,
     )
     flow.fetch_token(code=code)
-    _save_token(flow.credentials)
+    _save_token(flow.credentials, user_id=user_id)
 
     # Redirect to the app root after successful auth
     return RedirectResponse(url="/")
 
 
 @router.delete("/disconnect", status_code=204, summary="Disconnect Gmail")
-def gmail_disconnect() -> None:
-    """Remove stored Gmail credentials."""
+def gmail_disconnect(user_id: str = Depends(require_user)) -> None:
+    """Remove stored Gmail credentials for the current user."""
+    uid = user_id or None
     with db() as conn:
-        conn.execute("DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'")
+        if uid is None:
+            conn.execute("DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'")
+        else:
+            conn.execute("DELETE FROM google_tokens WHERE user_id = ? AND service = 'gmail'", (uid,))
     # Also clean up legacy file if it exists
     if TOKEN_PATH.exists():
         TOKEN_PATH.unlink()
@@ -287,9 +304,10 @@ def gmail_disconnect() -> None:
 def list_messages(
     q: str | None = Query(None, description="Gmail search query (e.g. 'from:boss subject:report')"),
     max_results: int = Query(20, ge=1, le=100),
+    user_id: str = Depends(require_user),
 ) -> list[GmailMessage]:
     """List recent emails, optionally filtered by Gmail search query."""
-    service = _get_service()
+    service = _get_service(user_id=user_id)
 
     kwargs: dict[str, Any] = {"userId": "me", "maxResults": max_results}
     if q:
@@ -310,9 +328,9 @@ def list_messages(
 
 
 @router.get("/messages/{message_id}", response_model=GmailMessage, summary="Read a specific email")
-def get_message(message_id: str) -> GmailMessage:
+def get_message(message_id: str, user_id: str = Depends(require_user)) -> GmailMessage:
     """Fetch a single email by ID with full body."""
-    service = _get_service()
+    service = _get_service(user_id=user_id)
     try:
         msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
     except Exception as e:
@@ -321,9 +339,9 @@ def get_message(message_id: str) -> GmailMessage:
 
 
 @router.get("/threads/{thread_id}", response_model=GmailThread, summary="Read a Gmail thread")
-def get_thread(thread_id: str) -> GmailThread:
+def get_thread(thread_id: str, user_id: str = Depends(require_user)) -> GmailThread:
     """Fetch all messages in a thread."""
-    service = _get_service()
+    service = _get_service(user_id=user_id)
     try:
         thread = service.users().threads().get(userId="me", id=thread_id, format="full").execute()
     except Exception as e:

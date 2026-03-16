@@ -298,12 +298,12 @@ def _fetch_relevant_things(
     return results
 
 
-def _fetch_gmail_context(query: str) -> list[dict[str, Any]]:
+def _fetch_gmail_context(query: str, user_id: str = "") -> list[dict[str, Any]]:
     """Fetch Gmail messages matching query for injection into the reasoning agent."""
     try:
         from .gmail import _get_service, _parse_message
 
-        service = _get_service()
+        service = _get_service(user_id=user_id)
         result = service.users().messages().list(userId="me", q=query, maxResults=10).execute()
         msg_refs = result.get("messages", [])
         messages = []
@@ -435,13 +435,13 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
             web_results = [r.to_dict() for r in results]
 
     # Optionally fetch Gmail context
-    gmail_context = _fetch_gmail_context(gmail_query) if gmail_query else []
+    gmail_context = _fetch_gmail_context(gmail_query, user_id=user_id) if gmail_query else []
 
     # Fetch calendar events if requested by Context Agent and connected
     calendar_events: list[dict] | None = None
-    if context_result.get("include_calendar") and gcal_connected():
+    if context_result.get("include_calendar") and gcal_connected(user_id=user_id):
         try:
-            calendar_events = fetch_upcoming_events(max_results=15, days_ahead=7)
+            calendar_events = fetch_upcoming_events(max_results=15, days_ahead=7, user_id=user_id)
         except Exception:
             calendar_events = None
 
