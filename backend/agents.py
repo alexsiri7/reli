@@ -559,7 +559,9 @@ Output schema:
     }]
   },
   "questions_for_user": [],
-  "reasoning_summary": "Brief internal note explaining intent."
+  "priority_question": "The single most important question to ask this turn (or empty string).",
+  "reasoning_summary": "Brief internal note explaining intent.",
+  "briefing_mode": false
 }
 
 Rules:
@@ -593,6 +595,53 @@ Rules:
 - Include relevant context in data.notes when the user provides background info.
 - When the user completes a task (marks done, says "finished X"), set active=false
   on the matching Thing. Note what was accomplished in reasoning_summary.
+
+Task Granularity:
+When a user creates a broad or vague task (e.g. "plan my vacation", "get healthier",
+"learn Spanish"), detect this and respond with questions_for_user that guide breakdown.
+Use language like: "That's a great goal! What's the very first small piece we can bite
+off?" Store the suggested breakdown as open_questions on the Thing (e.g.
+["What's the first concrete step?", "What does 'done' look like for this?"]).
+
+Knowledge Gap Detection:
+When processing a user message, actively identify what information is MISSING for
+Things to be actionable. For example, if user says "book flights for vacation" but
+there's no destination Thing, no dates, no budget — generate open_questions for those
+gaps and store them on the relevant Thing. Prioritize: which gap matters most RIGHT
+NOW for the user to make progress? Put the most critical gap in priority_question.
+
+Contradiction Detection:
+If the user says something that conflicts with existing Thing data (e.g. "my sister
+lives in London" but sister's Thing has data.location = "Barcelona"), flag it in
+questions_for_user: "I had Barcelona for Sarah — did she move to London?" Do NOT
+silently overwrite — let the user confirm. Set priority_question to the contradiction
+question since contradictions need immediate resolution.
+
+questions_for_user Priority:
+Return questions_for_user as an ordered list, most important first. Set
+priority_question to THE single most important question to ask this turn. The response
+agent renders ONLY the priority_question. If there are no questions, set
+priority_question to an empty string.
+
+Kaizen / Pattern Detection:
+If you notice recurring patterns in the conversation history or Thing data (user always
+defers the same task, user creates tasks without deadlines, user has many stale
+open_questions), note this in reasoning_summary and optionally add a gentle
+meta-question to questions_for_user. Example: "I notice [Task X] keeps getting
+pushed back — want to rethink the approach or drop it?"
+
+open_questions Lifecycle:
+When a user's message answers an open_question on a Thing, detect this and REMOVE
+that question from the Thing's open_questions list via an update. Don't re-ask
+answered questions. For example, if a Thing has open_question "What's the budget?"
+and the user says "budget is $5000", update the Thing to remove that question and
+store the answer in data.
+
+Briefing Mode:
+When the user asks "how are things", "what's on my plate", "give me a rundown",
+"what should I focus on", or similar status/overview requests, set briefing_mode to
+true. This tells the response agent to use an energetic, action-oriented briefing
+tone. Also set briefing_mode when presenting daily/weekly summaries.
 
 Merging:
 When you recognize that two Things in the relevant Things list refer to the same
@@ -731,7 +780,12 @@ async def run_reasoning_agent(
     result["storage_changes"].setdefault("delete", [])
     result["storage_changes"].setdefault("merge", [])
     result.setdefault("questions_for_user", [])
+    result.setdefault("priority_question", "")
     result.setdefault("reasoning_summary", "")
+    result.setdefault("briefing_mode", False)
+    # If priority_question not set by model but questions exist, use the first one
+    if not result["priority_question"] and result["questions_for_user"]:
+        result["priority_question"] = result["questions_for_user"][0]
     return result
 
 
@@ -1122,9 +1176,11 @@ genuinely, use humor to keep things light, and always keep the user motivated.
 Never be generic, neutral, or overly formal.
 
 Rules:
-- If there are questions_for_user, ask them ONE at a time. Frame clarifying
-  questions supportively: "Love that goal! To make it really actionable, what's
-  the specific deliverable we're aiming for?" — not dry interrogation.
+- If priority_question is set, ask ONLY that question — it is the single most
+  important question this turn. Frame it supportively: "Love that goal! To make it
+  really actionable, what's the specific deliverable we're aiming for?" — not dry
+  interrogation. Ignore the rest of questions_for_user for display purposes.
+- If priority_question is empty but questions_for_user has items, ask the FIRST one.
 - Only mention changes that ACTUALLY occurred (from applied_changes).
   Do not hallucinate changes that didn't happen.
 - Keep responses brief (1-3 sentences) but with personality.
@@ -1152,6 +1208,11 @@ Rules:
 - NEVER ask questions that are not in questions_for_user. You are a renderer —
   the reasoning agent decides what to ask. Your job is to present those questions
   conversationally, not to invent your own.
+- Briefing mode: When briefing_mode is true, use an energetic, action-oriented tone.
+  Frame items as opportunities, not obligations. Lead with what's exciting or urgent.
+  Example: "Alright, here's what's on your radar! [Project X] deadline is calling —
+  [Task Y] looks like the power move. We've also got [Task Z] waiting patiently.
+  What's speaking to you today?"
 """
 
 
@@ -1165,27 +1226,15 @@ async def run_response_agent(
     open_questions_by_thing: dict[str, list[str]] | None = None,
     api_key: str | None = None,
     model: str | None = None,
+    priority_question: str = "",
+    briefing_mode: bool = False,
 ) -> str:
     """Stage 4: generate friendly user-facing response."""
-    context = (
-        f"<user_message>\n{message}\n</user_message>\n\n"
-        f"<reasoning_summary>\n{reasoning_summary}\n</reasoning_summary>\n\n"
-        f"Applied changes: {json.dumps(applied_changes, default=str)}\n\n"
-        f"Questions for user (if any): {json.dumps(questions_for_user)}"
+    messages = _build_response_messages(
+        message, reasoning_summary, questions_for_user,
+        applied_changes, web_results, open_questions_by_thing,
+        priority_question=priority_question, briefing_mode=briefing_mode,
     )
-    if open_questions_by_thing:
-        context += (
-            f"\n\nOpen questions on Things (knowledge gaps to ask about conversationally):\n"
-            f"{json.dumps(open_questions_by_thing, default=str)}"
-        )
-    if web_results:
-        context += (
-            f"\n\nWeb search results (cite relevant sources in your response):\n{json.dumps(web_results, default=str)}"
-        )
-    messages = [
-        {"role": "system", "content": RESPONSE_AGENT_SYSTEM},
-        {"role": "user", "content": context},
-    ]
     return await _chat(messages, model=model or REQUESTY_RESPONSE_MODEL, usage_stats=usage_stats, api_key=api_key)
 
 
@@ -1196,13 +1245,17 @@ def _build_response_messages(
     applied_changes: dict[str, Any],
     web_results: list[dict[str, Any]] | None = None,
     open_questions_by_thing: dict[str, list[str]] | None = None,
+    priority_question: str = "",
+    briefing_mode: bool = False,
 ) -> list[dict[str, Any]]:
     """Build the message list for the response agent (shared by streaming and non-streaming)."""
     context = (
         f"<user_message>\n{message}\n</user_message>\n\n"
         f"<reasoning_summary>\n{reasoning_summary}\n</reasoning_summary>\n\n"
         f"Applied changes: {json.dumps(applied_changes, default=str)}\n\n"
-        f"Questions for user (if any): {json.dumps(questions_for_user)}"
+        f"Questions for user (if any): {json.dumps(questions_for_user)}\n\n"
+        f"Priority question (ask THIS one): {json.dumps(priority_question)}\n\n"
+        f"Briefing mode: {json.dumps(briefing_mode)}"
     )
     if open_questions_by_thing:
         context += (
@@ -1229,11 +1282,14 @@ async def run_response_agent_stream(
     open_questions_by_thing: dict[str, list[str]] | None = None,
     api_key: str | None = None,
     model: str | None = None,
+    priority_question: str = "",
+    briefing_mode: bool = False,
 ) -> AsyncIterator[str]:
     """Stage 4 (streaming): yield response tokens as they arrive."""
     messages = _build_response_messages(
         message, reasoning_summary, questions_for_user,
         applied_changes, web_results, open_questions_by_thing,
+        priority_question=priority_question, briefing_mode=briefing_mode,
     )
     async for token in _chat_stream(
         messages, model=model or REQUESTY_RESPONSE_MODEL,
