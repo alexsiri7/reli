@@ -52,6 +52,14 @@ class Settings(BaseSettings):
 
     # --- Auth ---
     SECRET_KEY: str = ""
+    ALLOWED_EMAILS: str = ""  # Comma-separated allowlist; empty = allow all
+
+    @property
+    def allowed_emails_set(self) -> set[str]:
+        """Parse ALLOWED_EMAILS into a lowercase set. Empty string means allow all."""
+        if not self.ALLOWED_EMAILS.strip():
+            return set()
+        return {e.strip().lower() for e in self.ALLOWED_EMAILS.split(",") if e.strip()}
 
     # --- Token encryption ---
     TOKEN_ENCRYPTION_KEY: str = ""

@@ -2,7 +2,12 @@ import { useState } from 'react'
 
 export function LoginPage() {
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const params = new URLSearchParams(window.location.search)
+  const [error, setError] = useState<string | null>(
+    params.get('error') === 'invite_only'
+      ? 'This app is invite-only. Your Google account is not on the access list.'
+      : null
+  )
 
   const handleLogin = async () => {
     setLoading(true)
