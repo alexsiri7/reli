@@ -511,13 +511,15 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         api_key=user_api_key, model=user_models["context"],
     )
     search_queries = context_result.get("search_queries", [message])
+    fetch_ids = context_result.get("fetch_ids", [])
     filter_params = context_result.get("filter_params", {})
     gmail_query = context_result.get("gmail_query")
 
     logger.info(
-        "Context agent result — search_queries=%r, filter_params=%r, gmail_query=%r, "
+        "Context agent result — search_queries=%r, fetch_ids=%r, filter_params=%r, gmail_query=%r, "
         "needs_web_search=%r, include_calendar=%r",
         search_queries,
+        fetch_ids,
         filter_params,
         gmail_query,
         context_result.get("needs_web_search"),
@@ -529,13 +531,23 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     seen_thing_ids: set[str] = set()
     relevant_things: list[dict[str, Any]] = []
 
-    # Initial fetch
+    # Initial fetch — text queries + direct ID lookups
     with db() as conn:
         initial_things = _fetch_relevant_things(conn, search_queries, filter_params, user_id=user_id)
         for t in initial_things:
             if t["id"] not in seen_thing_ids:
                 seen_thing_ids.add(t["id"])
                 relevant_things.append(t)
+
+        # Direct Thing ID lookups from context agent
+        if fetch_ids:
+            id_things = _fetch_with_family(conn, [
+                tid for tid in fetch_ids if tid not in seen_thing_ids
+            ])
+            for t in id_things:
+                if t["id"] not in seen_thing_ids:
+                    seen_thing_ids.add(t["id"])
+                    relevant_things.append(t)
 
     logger.info(
         "Initial retrieval: %d Things for queries %r",
