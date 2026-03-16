@@ -56,7 +56,7 @@ def get_auth_url() -> str:
     return str(auth_url)
 
 
-def exchange_code(code: str, state: str = "") -> Credentials:
+def exchange_code(code: str, state: str = "", user_id: str = "") -> Credentials:
     """Exchange authorization code for credentials and store them."""
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI
@@ -71,15 +71,16 @@ def exchange_code(code: str, state: str = "") -> Credentials:
 
     flow.fetch_token(code=code)
     creds: Credentials = flow.credentials
-    _save_credentials(creds)
+    _save_credentials(creds, user_id=user_id)
     return creds
 
 
-def _save_credentials(creds: Credentials) -> None:
+def _save_credentials(creds: Credentials, user_id: str = "") -> None:
     """Store credentials in SQLite with sensitive fields encrypted."""
     expiry_str = creds.expiry.isoformat() if creds.expiry else None
     scopes_str = json.dumps(list(creds.scopes)) if creds.scopes else None
     now = datetime.now(timezone.utc).isoformat()
+    uid = user_id or None  # Store NULL when auth is disabled (empty string)
 
     # Encrypt sensitive token fields
     enc_access = encrypt(creds.token) if creds.token else None
@@ -90,7 +91,7 @@ def _save_credentials(creds: Credentials) -> None:
         conn.execute(
             """INSERT INTO google_tokens (user_id, service, access_token, refresh_token,
                token_uri, client_id, client_secret, expiry, scopes, updated_at)
-               VALUES (NULL, 'calendar', ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, 'calendar', ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(user_id, service) DO UPDATE SET
                access_token=excluded.access_token,
                refresh_token=COALESCE(excluded.refresh_token, google_tokens.refresh_token),
@@ -101,6 +102,7 @@ def _save_credentials(creds: Credentials) -> None:
                scopes=excluded.scopes,
                updated_at=excluded.updated_at""",
             (
+                uid,
                 enc_access,
                 enc_refresh,
                 creds.token_uri,
@@ -113,15 +115,20 @@ def _save_credentials(creds: Credentials) -> None:
         )
 
 
-def _load_credentials() -> Credentials | None:
+def _load_credentials(user_id: str = "") -> Credentials | None:
     """Load stored credentials from SQLite, decrypting sensitive fields.
 
     Transparently migrates plaintext tokens written before encryption was
     enabled: if decryption fails the value is treated as plaintext and
     re-encrypted on next save.
     """
+    uid = user_id or None
+
     with db() as conn:
-        row = conn.execute("SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'").fetchone()
+        if uid is None:
+            row = conn.execute("SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'").fetchone()
+        else:
+            row = conn.execute("SELECT * FROM google_tokens WHERE user_id = ? AND service = 'calendar'", (uid,)).fetchone()
     if not row:
         return None
 
@@ -142,21 +149,21 @@ def _load_credentials() -> Credentials | None:
 
     # Migrate: if any field was stored as plaintext, re-save encrypted
     if not (access_enc and refresh_enc and secret_enc):
-        _save_credentials(creds)
+        _save_credentials(creds, user_id=user_id)
 
     return creds
 
 
-def get_credentials() -> Credentials | None:
+def get_credentials(user_id: str = "") -> Credentials | None:
     """Load credentials and refresh if expired. Returns None if not connected."""
-    creds = _load_credentials()
+    creds = _load_credentials(user_id=user_id)
     if not creds:
         return None
 
     if creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
-            _save_credentials(creds)
+            _save_credentials(creds, user_id=user_id)
         except Exception:
             # Token refresh failed — user needs to re-authorize
             return None
@@ -167,23 +174,28 @@ def get_credentials() -> Credentials | None:
     return creds
 
 
-def disconnect() -> None:
-    """Remove stored credentials."""
+def disconnect(user_id: str = "") -> None:
+    """Remove stored credentials for the given user."""
+    uid = user_id or None
     with db() as conn:
-        conn.execute("DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'")
+        if uid is None:
+            conn.execute("DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'")
+        else:
+            conn.execute("DELETE FROM google_tokens WHERE user_id = ? AND service = 'calendar'", (uid,))
 
 
-def is_connected() -> bool:
+def is_connected(user_id: str = "") -> bool:
     """Check if we have valid Google Calendar credentials."""
-    return get_credentials() is not None
+    return get_credentials(user_id=user_id) is not None
 
 
 def fetch_upcoming_events(
     max_results: int = 20,
     days_ahead: int = 7,
+    user_id: str = "",
 ) -> list[dict[str, Any]]:
     """Fetch upcoming calendar events. Returns empty list if not connected."""
-    creds = get_credentials()
+    creds = get_credentials(user_id=user_id)
     if not creds:
         return []
 
