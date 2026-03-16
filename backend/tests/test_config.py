@@ -32,12 +32,12 @@ def test_config_yaml_structure():
 
 
 def test_load_config_defaults(tmp_path):
-    """_load_config falls back to defaults when config.yaml is missing."""
-    from backend.agents import _load_config
+    """_load_yaml_config falls back to defaults when config.yaml is missing."""
+    from backend.config import _load_yaml_config
 
     missing_path = tmp_path / "nonexistent.yaml"
-    with patch("backend.agents._CONFIG_PATH", missing_path):
-        cfg = _load_config()
+    with patch("backend.config._CONFIG_PATH", missing_path):
+        cfg = _load_yaml_config()
 
     assert cfg["llm"]["models"]["reasoning"] == "google/gemini-3-flash-preview"
     assert cfg["llm"]["models"]["context"] == "google/gemini-2.5-flash-lite"
@@ -45,7 +45,7 @@ def test_load_config_defaults(tmp_path):
 
 
 def test_load_config_custom(tmp_path):
-    """_load_config reads values from a custom config file."""
+    """_load_yaml_config reads values from a custom config file."""
     custom = tmp_path / "config.yaml"
     custom.write_text(
         textwrap.dedent("""\
@@ -57,10 +57,10 @@ def test_load_config_custom(tmp_path):
             response: custom/response-model
         """)
     )
-    from backend.agents import _load_config
+    from backend.config import _load_yaml_config
 
-    with patch("backend.agents._CONFIG_PATH", custom):
-        cfg = _load_config()
+    with patch("backend.config._CONFIG_PATH", custom):
+        cfg = _load_yaml_config()
 
     assert cfg["llm"]["models"]["reasoning"] == "custom/reasoning-model"
     assert cfg["llm"]["models"]["response"] == "custom/response-model"

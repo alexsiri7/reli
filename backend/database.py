@@ -1,13 +1,13 @@
 """SQLite database setup and connection management."""
 
-import os
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-_data_dir = os.environ.get("DATA_DIR", str(Path(__file__).parent))
-DB_PATH = Path(_data_dir) / "reli.db"
+from .config import settings
+
+DB_PATH = Path(settings.data_dir) / "reli.db"
 
 
 def get_connection() -> sqlite3.Connection:

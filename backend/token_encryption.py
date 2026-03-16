@@ -14,15 +14,15 @@ plaintext, re-encrypted, and written back.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .config import settings
+
 logger = logging.getLogger(__name__)
 
-_data_dir = os.environ.get("DATA_DIR", str(Path(__file__).parent))
-_KEY_FILE = Path(_data_dir) / ".token_key"
+_KEY_FILE = Path(settings.data_dir) / ".token_key"
 
 _fernet: Fernet | None = None
 
@@ -33,7 +33,7 @@ def _get_fernet() -> Fernet:
     if _fernet is not None:
         return _fernet
 
-    key = os.environ.get("TOKEN_ENCRYPTION_KEY")
+    key = settings.token_encryption_key or None
 
     if key:
         # Validate that it's a proper Fernet key (url-safe base64, 32 bytes)

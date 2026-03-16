@@ -1,18 +1,15 @@
 """Reli FastAPI application entry point."""
 
 import logging
-import os
 import pathlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
-
-load_dotenv()
+from .config import settings as app_settings
 
 # Configure logging — LOG_LEVEL env var controls verbosity (default: INFO)
 logging.basicConfig(
-    level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    level=getattr(logging, app_settings.log_level.upper(), logging.INFO),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 
@@ -27,7 +24,18 @@ from .database import clean_orphan_relationships, init_db  # noqa: E402
 from .metrics import MetricsMiddleware, metrics_response  # noqa: E402
 from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
 from .response_metrics import ResponseMetricsMiddleware, metrics_store  # noqa: E402
-from .routers import auth, briefing, calendar, chat, gmail, proactive, settings, sweep, thing_types, things  # noqa: E402
+from .routers import (  # noqa: E402
+    auth,
+    briefing,
+    calendar,
+    chat,
+    gmail,
+    proactive,
+    settings,
+    sweep,
+    thing_types,
+    things,
+)
 from .sweep_scheduler import start_scheduler, stop_scheduler  # noqa: E402
 
 _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"

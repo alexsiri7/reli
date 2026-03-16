@@ -19,7 +19,6 @@ from ..agents import (
 )
 from ..auth import require_user, user_filter
 from ..database import db
-from .settings import get_chat_context_window
 from ..google_calendar import fetch_upcoming_events
 from ..google_calendar import is_connected as gcal_connected
 from ..models import (
@@ -35,6 +34,7 @@ from ..models import (
 )
 from ..vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 from ..web_search import google_search, is_search_configured
+from .settings import get_chat_context_window
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -55,7 +55,12 @@ def _row_to_msg(row: sqlite3.Row, usage_rows: list[sqlite3.Row] | None = None) -
     per_call_usage: list[CallUsage] = []
     if usage_rows:
         per_call_usage = [
-            CallUsage(model=u["model"], prompt_tokens=u["prompt_tokens"], completion_tokens=u["completion_tokens"], cost_usd=u["cost_usd"])
+            CallUsage(
+                model=u["model"],
+                prompt_tokens=u["prompt_tokens"],
+                completion_tokens=u["completion_tokens"],
+                cost_usd=u["cost_usd"],
+            )
             for u in usage_rows
         ]
     elif isinstance(changes, dict) and "per_call_usage" in changes:
@@ -209,7 +214,9 @@ def _fetch_with_family(conn: sqlite3.Connection, seed_ids: list[str]) -> list[di
 
 
 def _fetch_relevant_things(
-    conn: sqlite3.Connection, search_queries: list[str], filter_params: dict[str, Any],
+    conn: sqlite3.Connection,
+    search_queries: list[str],
+    filter_params: dict[str, Any],
     user_id: str = "",
 ) -> list[dict[str, Any]]:
     """Retrieve relevant Things using vector search (≥500 Things) or SQL LIKE fallback (<500).

@@ -1,16 +1,17 @@
 """Google Custom Search integration for web search capability."""
 
 import logging
-import os
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
+from .config import settings
+
 logger = logging.getLogger(__name__)
 
-GOOGLE_SEARCH_API_KEY = os.environ.get("GOOGLE_SEARCH_API_KEY", "")
-GOOGLE_SEARCH_CX = os.environ.get("GOOGLE_SEARCH_CX", "")
+GOOGLE_SEARCH_API_KEY = settings.google_search_api_key
+GOOGLE_SEARCH_CX = settings.google_search_cx
 
 GOOGLE_SEARCH_URL = "https://www.googleapis.com/customsearch/v1"
 

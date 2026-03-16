@@ -2,12 +2,13 @@
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
 import chromadb
 from chromadb import EmbeddingFunction
+
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +19,12 @@ logger = logging.getLogger(__name__)
 CHROMA_PATH = Path(__file__).parent / "chroma_db"
 COLLECTION_NAME = "things"
 
-REQUESTY_BASE_URL = os.environ.get("REQUESTY_BASE_URL", "https://router.requesty.ai/v1")
-REQUESTY_API_KEY = os.environ.get("REQUESTY_API_KEY", "")
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "text-embedding-3-large")
+REQUESTY_BASE_URL = settings.requesty_base_url
+REQUESTY_API_KEY = settings.requesty_api_key
+EMBEDDING_MODEL = settings.embedding_model
 
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+OLLAMA_BASE_URL = settings.ollama_base_url
+OLLAMA_EMBED_MODEL = settings.ollama_embed_model
 
 # Threshold: use vector search when Things count >= this value
 VECTOR_SEARCH_THRESHOLD = 0
