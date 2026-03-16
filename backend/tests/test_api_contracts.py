@@ -256,6 +256,7 @@ def _agent_patches(context=None, reasoning=None, reply="OK"):
         patch("backend.routers.chat.run_context_agent", new=AsyncMock(return_value=context or MOCK_CONTEXT)),
         patch("backend.routers.chat.run_reasoning_agent", new=AsyncMock(return_value=reasoning or MOCK_REASONING)),
         patch("backend.routers.chat.run_response_agent", new=AsyncMock(return_value=reply)),
+        patch("backend.routers.chat.run_context_refinement", new=AsyncMock(return_value={"done": True})),
     ]
 
 
@@ -265,7 +266,7 @@ class TestChatPipelineContract:
     @pytest.mark.anyio
     async def test_chat_response_shape(self, async_client):
         patches = _agent_patches(reply="Hello back!")
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             resp = await async_client.post(
                 "/api/chat",
                 json={
@@ -289,7 +290,7 @@ class TestChatPipelineContract:
             "reasoning_summary": "Created a task.",
         }
         patches = _agent_patches(reasoning=reasoning, reply="Created a task")
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             resp = await async_client.post(
                 "/api/chat",
                 json={

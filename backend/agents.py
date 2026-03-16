@@ -378,6 +378,113 @@ async def run_context_agent(
 
 
 # ---------------------------------------------------------------------------
+# Stage 1b: Context Agent Refinement (iterative loop)
+# ---------------------------------------------------------------------------
+
+CONTEXT_REFINEMENT_SYSTEM = """\
+You are the Librarian for Reli, continuing a context search.
+You previously searched for information and got some results. Review them and
+decide if you have enough context to fully understand the user's request, or if
+you need to search for more.
+
+Respond with ONLY valid JSON (no markdown, no explanation):
+{
+  "done": false,
+  "search_queries": ["additional query 1"],
+  "thing_ids": ["uuid-to-fetch-directly"],
+  "filter_params": {
+    "active_only": true,
+    "type_hint": null
+  }
+}
+
+Rules:
+- Set "done": true if the results already contain enough context. When done,
+  search_queries and thing_ids can be empty.
+- Set "done": false if you need more information, and provide new search_queries
+  and/or thing_ids to fetch.
+- "search_queries": new text queries to search for (do NOT repeat previous queries).
+- "thing_ids": specific Thing UUIDs to fetch directly. Use this to follow
+  relationships — if a found Thing references another Thing by ID (in its data,
+  relationships, or parent_id), include that ID here to pull in the full context.
+- Look at relationship data in the results: if a Thing has relationships pointing
+  to other Things you haven't seen yet, request those IDs.
+- If the user's request involves chaining lookups (e.g. "book near my sister's
+  flat" → find sister → find her address → search near there), keep searching
+  until you have the final answer context.
+- Do NOT repeat searches that already returned results.
+"""
+
+
+async def run_context_refinement(
+    message: str,
+    history: list[dict[str, Any]],
+    found_things: list[dict[str, Any]],
+    previous_queries: list[str],
+    relationships: list[dict[str, Any]] | None = None,
+    usage_stats: UsageStats | None = None,
+    context_window: int = 10,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict[str, Any]:
+    """Ask the context agent if it needs more searches given what was found."""
+    things_summary = json.dumps(
+        [
+            {
+                "id": t.get("id"),
+                "title": t.get("title"),
+                "type_hint": t.get("type_hint"),
+                "data": t.get("data"),
+                "parent_id": t.get("parent_id"),
+                "active": t.get("active"),
+            }
+            for t in found_things
+        ],
+        default=str,
+    )
+
+    rels_section = ""
+    if relationships:
+        rels_section = f"\n\nRelationships between Things:\n{json.dumps(relationships, default=str)}\n"
+
+    refinement_prompt = (
+        f"User's message: {message}\n\n"
+        f"Previous search queries: {json.dumps(previous_queries)}\n\n"
+        f"Things found so far ({len(found_things)} results):\n{things_summary}"
+        f"{rels_section}\n\n"
+        f"Do you have enough context to understand the user's request, "
+        f"or do you need to search for more?"
+    )
+
+    messages = [{"role": "system", "content": CONTEXT_REFINEMENT_SYSTEM}]
+    for h in history[-context_window:]:
+        messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": refinement_prompt})
+
+    raw = None
+
+    if OLLAMA_MODEL:
+        try:
+            raw = await _chat_ollama(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
+        except Exception:
+            pass
+
+    if raw is None:
+        raw = await _chat(
+            messages, model=model, response_format={"type": "json_object"},
+            usage_stats=usage_stats, api_key=api_key,
+        )
+
+    logger.info("Context refinement raw response: %s", raw[:500] if raw else raw)
+
+    try:
+        result: dict[str, Any] = json.loads(raw)
+        return result
+    except json.JSONDecodeError:
+        return {"done": True}
+
+
+# ---------------------------------------------------------------------------
 # Stage 2: Reasoning Agent (uses thinking model via REQUESTY_REASONING_MODEL)
 # ---------------------------------------------------------------------------
 
