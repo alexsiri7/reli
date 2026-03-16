@@ -16,12 +16,15 @@ import { SettingsPanel } from '../components/SettingsPanel'
 beforeEach(() => {
   storeState = {
     modelSettings: null,
+    userSettings: null,
     availableModels: [],
     settingsLoading: false,
     modelsLoading: false,
     fetchModelSettings: vi.fn(),
     fetchAvailableModels: vi.fn(),
+    fetchUserSettings: vi.fn(),
     updateModelSettings: vi.fn().mockResolvedValue(undefined),
+    updateUserSettings: vi.fn().mockResolvedValue(undefined),
     closeSettings: vi.fn(),
   }
 })
@@ -64,7 +67,7 @@ describe('SettingsPanel', () => {
   })
 
   it('renders model selects when settings are loaded', () => {
-    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4' }
+    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
     storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
     render(<SettingsPanel />)
     expect(screen.getByText('Context Model')).toBeInTheDocument()
@@ -73,7 +76,7 @@ describe('SettingsPanel', () => {
   })
 
   it('save button is disabled when no changes', () => {
-    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4' }
+    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
     storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
     render(<SettingsPanel />)
     const saveBtn = screen.getByText('Save')
@@ -81,7 +84,7 @@ describe('SettingsPanel', () => {
   })
 
   it('save button is enabled after changing a model', () => {
-    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4' }
+    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
     storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
     render(<SettingsPanel />)
 
@@ -93,7 +96,7 @@ describe('SettingsPanel', () => {
   })
 
   it('calls updateModelSettings on save', async () => {
-    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4' }
+    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
     storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
     render(<SettingsPanel />)
 
@@ -102,16 +105,18 @@ describe('SettingsPanel', () => {
     fireEvent.click(screen.getByText('Save'))
 
     await waitFor(() => {
-      expect(storeState.updateModelSettings).toHaveBeenCalledWith({
-        context: 'gpt-3.5',
-        reasoning: 'gpt-4',
-        response: 'gpt-4',
-      })
+      expect(storeState.updateModelSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: 'gpt-3.5',
+          reasoning: 'gpt-4',
+          response: 'gpt-4',
+        })
+      )
     })
   })
 
   it('shows Saved confirmation after save', async () => {
-    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4' }
+    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
     storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
     render(<SettingsPanel />)
 
@@ -125,7 +130,7 @@ describe('SettingsPanel', () => {
   })
 
   it('shows cancel button that calls closeSettings', () => {
-    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4' }
+    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
     storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
     render(<SettingsPanel />)
 
@@ -134,7 +139,7 @@ describe('SettingsPanel', () => {
   })
 
   it('shows current model in dropdown even if not in available options', () => {
-    storeState.modelSettings = { context: 'custom-model', reasoning: 'gpt-4', response: 'gpt-4' }
+    storeState.modelSettings = { context: 'custom-model', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
     storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
     render(<SettingsPanel />)
 
