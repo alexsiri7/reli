@@ -10,7 +10,16 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 
 from ..auth import require_user, user_filter
 from ..database import db
-from ..models import Relationship, RelationshipCreate, Thing, ThingCreate, ThingUpdate
+from ..models import (
+    GraphEdge,
+    GraphNode,
+    GraphResponse,
+    Relationship,
+    RelationshipCreate,
+    Thing,
+    ThingCreate,
+    ThingUpdate,
+)
 from ..vector_store import delete_thing as vs_delete
 from ..vector_store import reindex_all, upsert_thing
 
@@ -196,6 +205,38 @@ def list_things(
                     t.completed_count = counts[1]
 
     return things
+
+
+@router.get("/graph", response_model=GraphResponse, summary="Get Things as a graph of nodes and edges")
+def get_graph(user_id: str = Depends(require_user)) -> GraphResponse:
+    """Return all active Things and relationships as nodes and edges, avoiding N+1 queries."""
+    with db() as conn:
+        uf_sql, uf_params = user_filter(user_id, "t")
+        node_rows = conn.execute(
+            "SELECT t.id, t.title, t.type_hint, tt.icon"
+            " FROM things t"
+            " LEFT JOIN thing_types tt ON t.type_hint = tt.name"
+            " WHERE t.active = 1" + uf_sql,
+            uf_params,
+        ).fetchall()
+        edge_rows = conn.execute(
+            "SELECT r.id, r.from_thing_id, r.to_thing_id, r.relationship_type"
+            " FROM thing_relationships r"
+            " JOIN things t ON r.from_thing_id = t.id"
+            " WHERE t.active = 1" + uf_sql,
+            uf_params,
+        ).fetchall()
+
+    nodes = [GraphNode(id=r["id"], title=r["title"], type_hint=r["type_hint"], icon=r["icon"]) for r in node_rows]
+    active_ids = {n.id for n in nodes}
+    edges = [
+        GraphEdge(
+            id=r["id"], source=r["from_thing_id"], target=r["to_thing_id"], relationship_type=r["relationship_type"]
+        )
+        for r in edge_rows
+        if r["to_thing_id"] in active_ids
+    ]
+    return GraphResponse(nodes=nodes, edges=edges)
 
 
 @router.post("", response_model=Thing, status_code=status.HTTP_201_CREATED, summary="Create a Thing")

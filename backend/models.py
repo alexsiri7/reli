@@ -87,6 +87,28 @@ class Thing(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Graph ────────────────────────────────────────────────────────────────────
+
+
+class GraphNode(BaseModel):
+    id: str
+    title: str
+    type_hint: str | None
+    icon: str | None
+
+
+class GraphEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+    relationship_type: str
+
+
+class GraphResponse(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+
+
 # ── Relationships ────────────────────────────────────────────────────────────
 
 
