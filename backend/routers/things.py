@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-
 from pydantic import BaseModel
 
 from ..auth import require_user, user_filter
@@ -98,8 +97,7 @@ class UserProfileResponse(BaseModel):
     thing: Thing
     relationships: list[Relationship]
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class UserProfileRelationship(BaseModel):
