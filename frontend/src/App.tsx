@@ -4,17 +4,19 @@ import { useStore } from './store'
 import { Sidebar } from './components/Sidebar'
 import { ChatPanel } from './components/ChatPanel'
 import { DetailPanel } from './components/DetailPanel'
+import GraphView from './components/GraphView'
 import { LoginPage } from './components/LoginPage'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { SettingsPanel } from './components/SettingsPanel'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
       settingsOpen: s.settingsOpen,
+      mainView: s.mainView,
       mobileView: s.mobileView,
       setMobileView: s.setMobileView,
       fetchCurrentUser: s.fetchCurrentUser,
@@ -101,8 +103,14 @@ function App() {
       {/* Desktop: side-by-side layout */}
       <div className="hidden md:contents">
         <Sidebar />
-        <DetailPanel />
-        <ChatPanel />
+        {mainView === 'graph' ? (
+          <GraphView />
+        ) : (
+          <>
+            <DetailPanel />
+            <ChatPanel />
+          </>
+        )}
       </div>
       {/* Mobile: show one panel at a time based on mobileView */}
       <div className="contents md:hidden">
