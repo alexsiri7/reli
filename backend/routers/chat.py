@@ -625,7 +625,8 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
             logger.info("Context refinement found nothing new, stopping")
             break
 
-    # Update last_referenced on all retrieved Things
+    # Fetch relationships for all relevant things and update last_referenced
+    context_relationships: list[dict[str, Any]] = []
     if relevant_things:
         with db() as conn:
             from datetime import timezone
@@ -637,10 +638,18 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
                 f"UPDATE things SET last_referenced = ? WHERE id IN ({placeholders})",
                 [now] + ids,
             )
+            # Fetch relationships touching any relevant thing
+            rel_rows = conn.execute(
+                f"SELECT from_thing_id, to_thing_id, relationship_type "
+                f"FROM thing_relationships "
+                f"WHERE from_thing_id IN ({placeholders}) OR to_thing_id IN ({placeholders})",
+                ids + ids,
+            ).fetchall()
+            context_relationships = [dict(r) for r in rel_rows]
 
     logger.info(
-        "Final context: %d Things after up to %d iterations",
-        len(relevant_things), MAX_CONTEXT_ITERATIONS,
+        "Final context: %d Things, %d relationships after up to %d iterations",
+        len(relevant_things), len(context_relationships), MAX_CONTEXT_ITERATIONS,
     )
 
     # Web search (if Context Agent requested it and API is configured)
@@ -670,6 +679,7 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         web_results,
         gmail_context,
         calendar_events,
+        relationships=context_relationships,
         usage_stats=usage,
         context_window=context_window,
         api_key=user_api_key,
@@ -914,9 +924,11 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
                 if len(relevant_things) - prev_count == 0:
                     break
 
-            # Update last_referenced
+            # Fetch relationships for all relevant things
+            context_relationships: list[dict[str, Any]] = []
             if relevant_things:
                 with db() as conn:
+                    # Update last_referenced
                     from datetime import timezone
                     now = datetime.now(timezone.utc).isoformat()
                     ids = [t["id"] for t in relevant_things]
@@ -925,6 +937,14 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
                         f"UPDATE things SET last_referenced = ? WHERE id IN ({placeholders})",
                         [now] + ids,
                     )
+                    # Fetch relationships touching any relevant thing
+                    rel_rows = conn.execute(
+                        f"SELECT from_thing_id, to_thing_id, relationship_type "
+                        f"FROM thing_relationships "
+                        f"WHERE from_thing_id IN ({placeholders}) OR to_thing_id IN ({placeholders})",
+                        ids + ids,
+                    ).fetchall()
+                    context_relationships = [dict(r) for r in rel_rows]
 
             yield _sse("stage", {"stage": "context", "status": "complete"})
 
@@ -950,6 +970,7 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
 
             reasoning_result = await run_reasoning_agent(
                 message, history, relevant_things, web_results, gmail_context, calendar_events,
+                relationships=context_relationships,
                 usage_stats=usage, context_window=context_window,
                 api_key=user_api_key, model=user_models["reasoning"],
             )

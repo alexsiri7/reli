@@ -739,6 +739,7 @@ async def run_reasoning_agent(
     web_results: list[dict[str, Any]] | None = None,
     gmail_context: list[dict[str, Any]] | None = None,
     calendar_events: list[dict[str, Any]] | None = None,
+    relationships: list[dict[str, Any]] | None = None,
     usage_stats: UsageStats | None = None,
     context_window: int = 10,
     api_key: str | None = None,
@@ -754,6 +755,8 @@ async def run_reasoning_agent(
         f"<user_message>\n{message}\n</user_message>\n\n"
         f"Relevant Things from database:\n{things_json}"
     )
+    if relationships:
+        user_content += f"\n\nRelationships between Things:\n{json.dumps(relationships, default=str)}"
     if web_results:
         user_content += f"\n\nWeb search results:\n{json.dumps(web_results, default=str)}"
     if gmail_context:
