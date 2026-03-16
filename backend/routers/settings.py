@@ -19,15 +19,17 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 _CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config.yaml"
 
 # Valid setting keys that can be stored per-user
-_VALID_KEYS = frozenset({
-    "requesty_api_key",
-    "openai_api_key",
-    "context_model",
-    "reasoning_model",
-    "response_model",
-    "embedding_model",
-    "chat_context_window",
-})
+_VALID_KEYS = frozenset(
+    {
+        "requesty_api_key",
+        "openai_api_key",
+        "context_model",
+        "reasoning_model",
+        "response_model",
+        "embedding_model",
+        "chat_context_window",
+    }
+)
 
 
 # ── Request/Response models ──────────────────────────────────────────────────
@@ -99,7 +101,8 @@ def _set_user_setting(user_id: str, key: str, value: str | None, conn: Any = Non
         conn.execute(
             "INSERT INTO user_settings (user_id, setting_key, setting_value, updated_at) "
             "VALUES (?, ?, ?, CURRENT_TIMESTAMP) "
-            "ON CONFLICT(user_id, setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = CURRENT_TIMESTAMP",
+            "ON CONFLICT(user_id, setting_key) DO UPDATE "
+            "SET setting_value = excluded.setting_value, updated_at = CURRENT_TIMESTAMP",
             (user_id, key, value),
         )
     else:
@@ -107,7 +110,8 @@ def _set_user_setting(user_id: str, key: str, value: str | None, conn: Any = Non
             c.execute(
                 "INSERT INTO user_settings (user_id, setting_key, setting_value, updated_at) "
                 "VALUES (?, ?, ?, CURRENT_TIMESTAMP) "
-                "ON CONFLICT(user_id, setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = CURRENT_TIMESTAMP",
+                "ON CONFLICT(user_id, setting_key) DO UPDATE "
+            "SET setting_value = excluded.setting_value, updated_at = CURRENT_TIMESTAMP",
                 (user_id, key, value),
             )
 
@@ -125,10 +129,16 @@ def get_user_llm_config(user_id: str) -> dict[str, str]:
     # Defaults from config.yaml / env
     result = {
         "api_key": os.environ.get("REQUESTY_API_KEY", ""),
-        "base_url": os.environ.get("REQUESTY_BASE_URL", cfg.get("llm", {}).get("base_url", "https://router.requesty.ai/v1")),
+        "base_url": os.environ.get(
+            "REQUESTY_BASE_URL", cfg.get("llm", {}).get("base_url", "https://router.requesty.ai/v1")
+        ),
         "context_model": os.environ.get("REQUESTY_MODEL", models.get("context", "google/gemini-2.5-flash-lite")),
-        "reasoning_model": os.environ.get("REQUESTY_REASONING_MODEL", models.get("reasoning", "google/gemini-3-flash-preview")),
-        "response_model": os.environ.get("REQUESTY_RESPONSE_MODEL", models.get("response", "google/gemini-2.5-flash-lite")),
+        "reasoning_model": os.environ.get(
+            "REQUESTY_REASONING_MODEL", models.get("reasoning", "google/gemini-3-flash-preview")
+        ),
+        "response_model": os.environ.get(
+            "REQUESTY_RESPONSE_MODEL", models.get("response", "google/gemini-2.5-flash-lite")
+        ),
         "chat_context_window": str(cfg.get("chat", {}).get("context_window", 3)),
     }
 

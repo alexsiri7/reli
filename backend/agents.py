@@ -366,7 +366,14 @@ async def run_context_agent(
 
     # Fall back to Requesty
     if raw is None:
-        raw = await _chat(messages, model=model_to_use, response_format={"type": "json_object"}, usage_stats=usage_stats, api_key=api_key, base_url=base_url)
+        raw = await _chat(
+            messages,
+            model=model_to_use,
+            response_format={"type": "json_object"},
+            usage_stats=usage_stats,
+            api_key=api_key,
+            base_url=base_url,
+        )
         logger.info("Context agent (Requesty/%s) raw response: %s", model_to_use, raw[:500] if raw else raw)
 
     try:
@@ -849,4 +856,10 @@ async def run_response_agent(
         {"role": "system", "content": RESPONSE_AGENT_SYSTEM},
         {"role": "user", "content": context},
     ]
-    return await _chat(messages, model=response_model or REQUESTY_RESPONSE_MODEL, usage_stats=usage_stats, api_key=api_key, base_url=base_url)
+    return await _chat(
+        messages,
+        model=response_model or REQUESTY_RESPONSE_MODEL,
+        usage_stats=usage_stats,
+        api_key=api_key,
+        base_url=base_url,
+    )

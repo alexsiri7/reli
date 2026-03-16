@@ -19,7 +19,6 @@ from ..agents import (
 )
 from ..auth import require_user, user_filter
 from ..database import db
-from .settings import get_chat_context_window, get_user_llm_config
 from ..google_calendar import fetch_upcoming_events
 from ..google_calendar import is_connected as gcal_connected
 from ..models import (
@@ -35,6 +34,7 @@ from ..models import (
 )
 from ..vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 from ..web_search import google_search, is_search_configured
+from .settings import get_chat_context_window, get_user_llm_config
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -389,7 +389,8 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     history_limit = context_window * 2
     with db() as conn:
         rows = conn.execute(
-            "SELECT role, content, applied_changes FROM chat_history WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
+            "SELECT role, content, applied_changes FROM chat_history"
+            " WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
             (session_id, history_limit),
         ).fetchall()
     history = [{"role": r["role"], "content": _enrich_history_content(r)} for r in rows]
@@ -399,8 +400,13 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
 
     # Stage 1: Context Agent
     context_result = await run_context_agent(
-        message, history, usage_stats=usage, context_window=context_window,
-        api_key=user_api_key, base_url=user_base_url, context_model=user_context_model,
+        message,
+        history,
+        usage_stats=usage,
+        context_window=context_window,
+        api_key=user_api_key,
+        base_url=user_base_url,
+        context_model=user_context_model,
     )
     search_queries = context_result.get("search_queries", [message])
     filter_params = context_result.get("filter_params", {})
