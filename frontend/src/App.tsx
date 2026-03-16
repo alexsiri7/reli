@@ -9,13 +9,15 @@ import { LoginPage } from './components/LoginPage'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { SettingsPanel } from './components/SettingsPanel'
+import { FeedbackDialog } from './components/FeedbackDialog'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
       settingsOpen: s.settingsOpen,
+      feedbackOpen: s.feedbackOpen,
       mainView: s.mainView,
       mobileView: s.mobileView,
       setMobileView: s.setMobileView,
@@ -152,6 +154,7 @@ function App() {
         </button>
       </nav>
       {settingsOpen && <SettingsPanel />}
+      {feedbackOpen && <FeedbackDialog />}
     </div>
   )
 }
