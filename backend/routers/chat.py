@@ -665,7 +665,9 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     )
     storage_changes = reasoning_result.get("storage_changes", {})
     questions_for_user = reasoning_result.get("questions_for_user", [])
+    priority_question = reasoning_result.get("priority_question", "")
     reasoning_summary = reasoning_result.get("reasoning_summary", "")
+    briefing_mode = reasoning_result.get("briefing_mode", False)
 
     # Stage 3: Validator — apply changes
     with db() as conn:
@@ -697,6 +699,8 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         open_questions_by_thing=open_questions_by_thing or None,
         api_key=user_api_key,
         model=user_models["response"],
+        priority_question=priority_question,
+        briefing_mode=briefing_mode,
     )
 
     # Build context_things list from the Things that informed this response
@@ -939,7 +943,9 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
             )
             storage_changes = reasoning_result.get("storage_changes", {})
             questions_for_user = reasoning_result.get("questions_for_user", [])
+            priority_question = reasoning_result.get("priority_question", "")
             reasoning_summary = reasoning_result.get("reasoning_summary", "")
+            briefing_mode = reasoning_result.get("briefing_mode", False)
 
             # Stage 3: Validator
             with db() as conn:
@@ -970,6 +976,7 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
                 web_results, usage_stats=usage,
                 open_questions_by_thing=open_questions_by_thing or None,
                 api_key=user_api_key, model=user_models["response"],
+                priority_question=priority_question, briefing_mode=briefing_mode,
             ):
                 reply_parts.append(token)
                 yield _sse("token", {"text": token})
