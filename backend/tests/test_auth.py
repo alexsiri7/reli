@@ -1,5 +1,6 @@
 """Tests for JWT session authentication."""
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -14,6 +15,45 @@ def authed_client(patched_db):
 
         with TestClient(app) as c:
             yield c
+
+
+class TestUserThingCreation:
+    """Test that a Thing is auto-created for new OAuth users."""
+
+    def test_upsert_user_creates_thing_for_new_user(self, patched_db):
+        from backend.database import db
+        from backend.routers.auth import _upsert_user
+
+        user_id = _upsert_user("google-123", "alice@example.com", "Alice", None)
+
+        with db() as conn:
+            thing = conn.execute(
+                "SELECT * FROM things WHERE user_id = ? AND type_hint = 'person'",
+                (user_id,),
+            ).fetchone()
+
+        assert thing is not None
+        assert thing["title"] == "Alice"
+        assert thing["surface"] == 0
+        data = json.loads(thing["data"])
+        assert data["email"] == "alice@example.com"
+        assert data["google_id"] == "google-123"
+
+    def test_upsert_user_no_duplicate_thing_on_repeat_login(self, patched_db):
+        from backend.database import db
+        from backend.routers.auth import _upsert_user
+
+        user_id = _upsert_user("google-123", "alice@example.com", "Alice", None)
+        _upsert_user("google-123", "alice@example.com", "Alice", None)
+
+        with db() as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) as c FROM things"
+                " WHERE user_id = ? AND type_hint = 'person'",
+                (user_id,),
+            ).fetchone()["c"]
+
+        assert count == 1
 
 
 class TestJWTAuth:

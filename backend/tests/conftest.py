@@ -51,6 +51,7 @@ def mock_vector_store():
         patch("backend.vector_store.delete_thing", return_value=None),
         patch("backend.vector_store.vector_count", return_value=0),
         patch("backend.vector_store.vector_search", return_value=[]),
+        patch("backend.routers.auth.upsert_thing", return_value=None),
         patch("backend.routers.things.upsert_thing", return_value=None) as mock_upsert,
         patch("backend.routers.things.vs_delete", return_value=None) as mock_delete,
         patch("backend.routers.chat.vector_count", return_value=0) as mock_count,
