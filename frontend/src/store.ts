@@ -166,6 +166,8 @@ export interface CallUsage {
   cost_usd: number
 }
 
+export type StreamingStage = 'context' | 'reasoning' | 'response' | null
+
 export interface ChatMessage {
   id: number | string
   session_id: string
@@ -180,6 +182,7 @@ export interface ChatMessage {
   per_call_usage?: CallUsage[]
   timestamp: string
   streaming?: boolean
+  streamingStage?: StreamingStage
 }
 
 export interface Relationship {
@@ -650,6 +653,7 @@ export const useStore = create<ReliState>((set, get) => ({
       questions_for_user: [],
       timestamp: new Date().toISOString(),
       streaming: true,
+      streamingStage: 'context',
     }
 
     set(state => ({
@@ -658,36 +662,82 @@ export const useStore = create<ReliState>((set, get) => ({
     }))
 
     try {
-      const res = await apiFetch(`${BASE}/chat`, {
+      const res = await apiFetch(`${BASE}/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: get().sessionId, message: text }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = validateResponse(ChatResponseSchema, await res.json(), '/chat')
 
-      const assistantMsg: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        session_id: get().sessionId,
-        role: 'assistant',
-        content: data.reply,
-        applied_changes: data.applied_changes ?? null,
-        questions_for_user: data.questions_for_user ?? [],
-        prompt_tokens: data.usage?.prompt_tokens ?? 0,
-        completion_tokens: data.usage?.completion_tokens ?? 0,
-        cost_usd: data.usage?.cost_usd ?? 0,
-        model: data.usage?.model ?? null,
-        per_call_usage: data.usage?.per_call_usage ?? [],
-        timestamp: new Date().toISOString(),
-      }
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('No response body')
 
-      const updates: Partial<ReliState> = {
-        messages: get().messages.map(m => m.streaming ? assistantMsg : m),
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        // Keep the last potentially incomplete line in the buffer
+        buffer = lines.pop() ?? ''
+
+        let eventType = ''
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim()
+          } else if (line.startsWith('data: ') && eventType) {
+            const data = JSON.parse(line.slice(6))
+
+            if (eventType === 'stage') {
+              const stage = data.stage as 'context' | 'reasoning' | 'response'
+              const status = data.status as 'started' | 'complete'
+              if (status === 'started') {
+                set(state => ({
+                  messages: state.messages.map(m =>
+                    m.streaming ? { ...m, streamingStage: stage } : m,
+                  ),
+                }))
+              }
+            } else if (eventType === 'token') {
+              set(state => ({
+                messages: state.messages.map(m =>
+                  m.streaming ? { ...m, content: m.content + data.text } : m,
+                ),
+              }))
+            } else if (eventType === 'complete') {
+              const chatData = validateResponse(ChatResponseSchema, data, '/chat/stream')
+              const assistantMsg: ChatMessage = {
+                id: `assistant-${Date.now()}`,
+                session_id: get().sessionId,
+                role: 'assistant',
+                content: chatData.reply,
+                applied_changes: chatData.applied_changes ?? null,
+                questions_for_user: chatData.questions_for_user ?? [],
+                prompt_tokens: chatData.usage?.prompt_tokens ?? 0,
+                completion_tokens: chatData.usage?.completion_tokens ?? 0,
+                cost_usd: chatData.usage?.cost_usd ?? 0,
+                model: chatData.usage?.model ?? null,
+                per_call_usage: chatData.usage?.per_call_usage ?? [],
+                timestamp: new Date().toISOString(),
+              }
+              const updates: Partial<ReliState> = {
+                messages: get().messages.map(m => m.streaming ? assistantMsg : m),
+              }
+              if (chatData.session_usage) {
+                updates.sessionStats = chatData.session_usage
+              }
+              set(updates as ReliState)
+            } else if (eventType === 'error') {
+              throw new Error(data.message || 'Pipeline error')
+            }
+
+            eventType = ''
+          }
+        }
       }
-      if (data.session_usage) {
-        updates.sessionStats = data.session_usage
-      }
-      set(updates as ReliState)
 
       // Refresh things in case the pipeline made changes
       get().fetchThings()
@@ -697,7 +747,7 @@ export const useStore = create<ReliState>((set, get) => ({
       set(state => ({
         messages: state.messages.map(m =>
           m.streaming
-            ? { ...m, content: 'Error communicating with server.', streaming: false }
+            ? { ...m, content: m.content || 'Error communicating with server.', streaming: false, streamingStage: null }
             : m,
         ),
         error: String(e),

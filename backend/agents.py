@@ -5,6 +5,7 @@ import logging
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import AsyncIterator
 from typing import Any
 
 import yaml
@@ -257,6 +258,40 @@ async def _chat(
             model=response.model or used_model,
         )
     return response.choices[0].message.content or ""
+
+
+async def _chat_stream(
+    messages: list[dict[str, Any]],
+    model: str | None = None,
+    usage_stats: UsageStats | None = None,
+    api_key: str | None = None,
+    **kwargs: Any,
+) -> AsyncIterator[str]:
+    """Stream LLM response tokens as an async iterator of text chunks."""
+    client = _client(api_key=api_key)
+    used_model = model or REQUESTY_MODEL
+    stream = await client.chat.completions.create(  # type: ignore[call-overload]
+        model=used_model,
+        messages=messages,  # type: ignore[arg-type]
+        stream=True,
+        stream_options={"include_usage": True},
+        **kwargs,
+    )
+    async for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
+        # The final chunk with usage info has empty choices
+        if usage_stats is not None and chunk.usage:
+            cost = 0.0
+            if hasattr(chunk, "x_request_cost"):
+                cost = float(getattr(chunk, "x_request_cost", 0))
+            usage_stats.accumulate(
+                prompt=chunk.usage.prompt_tokens or 0,
+                completion=chunk.usage.completion_tokens or 0,
+                total=chunk.usage.total_tokens or 0,
+                cost=cost,
+                model=used_model,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1054,3 +1089,56 @@ async def run_response_agent(
         {"role": "user", "content": context},
     ]
     return await _chat(messages, model=model or REQUESTY_RESPONSE_MODEL, usage_stats=usage_stats, api_key=api_key)
+
+
+def _build_response_messages(
+    message: str,
+    reasoning_summary: str,
+    questions_for_user: list[str],
+    applied_changes: dict[str, Any],
+    web_results: list[dict[str, Any]] | None = None,
+    open_questions_by_thing: dict[str, list[str]] | None = None,
+) -> list[dict[str, Any]]:
+    """Build the message list for the response agent (shared by streaming and non-streaming)."""
+    context = (
+        f"<user_message>\n{message}\n</user_message>\n\n"
+        f"<reasoning_summary>\n{reasoning_summary}\n</reasoning_summary>\n\n"
+        f"Applied changes: {json.dumps(applied_changes, default=str)}\n\n"
+        f"Questions for user (if any): {json.dumps(questions_for_user)}"
+    )
+    if open_questions_by_thing:
+        context += (
+            f"\n\nOpen questions on Things (knowledge gaps to ask about conversationally):\n"
+            f"{json.dumps(open_questions_by_thing, default=str)}"
+        )
+    if web_results:
+        context += (
+            f"\n\nWeb search results (cite relevant sources in your response):\n{json.dumps(web_results, default=str)}"
+        )
+    return [
+        {"role": "system", "content": RESPONSE_AGENT_SYSTEM},
+        {"role": "user", "content": context},
+    ]
+
+
+async def run_response_agent_stream(
+    message: str,
+    reasoning_summary: str,
+    questions_for_user: list[str],
+    applied_changes: dict[str, Any],
+    web_results: list[dict[str, Any]] | None = None,
+    usage_stats: UsageStats | None = None,
+    open_questions_by_thing: dict[str, list[str]] | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> AsyncIterator[str]:
+    """Stage 4 (streaming): yield response tokens as they arrive."""
+    messages = _build_response_messages(
+        message, reasoning_summary, questions_for_user,
+        applied_changes, web_results, open_questions_by_thing,
+    )
+    async for token in _chat_stream(
+        messages, model=model or REQUESTY_RESPONSE_MODEL,
+        usage_stats=usage_stats, api_key=api_key,
+    ):
+        yield token

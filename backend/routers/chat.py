@@ -4,9 +4,11 @@ import json
 import logging
 import sqlite3
 from datetime import date, datetime
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,7 @@ from ..agents import (
     run_context_refinement,
     run_reasoning_agent,
     run_response_agent,
+    run_response_agent_stream,
 )
 from ..auth import require_user, user_filter
 from ..database import db
@@ -712,6 +715,292 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         usage=UsageInfo(**usage.to_dict()),
         session_usage=daily_usage,
     )
+
+
+@router.post("/stream", summary="Stream a chat response via SSE")
+async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -> StreamingResponse:
+    """SSE streaming version of the chat pipeline.
+
+    Emits events:
+      - stage: {"stage": "<name>", "status": "started"|"complete"}
+      - token: {"text": "<chunk>"}
+      - complete: full ChatResponse JSON (same schema as POST /chat)
+      - error: {"message": "<error>"}
+    """
+
+    async def event_generator() -> AsyncIterator[str]:  # noqa: C901
+        try:
+            session_id = body.session_id
+            message = body.message
+
+            user_api_key = get_user_api_key(user_id)
+            user_models = get_user_models(user_id)
+            context_window = get_user_chat_context_window(user_id)
+
+            history_limit = context_window * 2
+            with db() as conn:
+                rows = conn.execute(
+                    "SELECT role, content, applied_changes FROM chat_history WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
+                    (session_id, history_limit),
+                ).fetchall()
+            history = [{"role": r["role"], "content": _enrich_history_content(r)} for r in rows]
+
+            usage = UsageStats()
+
+            # Stage 1: Context Agent
+            yield _sse("stage", {"stage": "context", "status": "started"})
+
+            MAX_CONTEXT_ITERATIONS = 4
+            context_result = await run_context_agent(
+                message, history, usage_stats=usage, context_window=context_window,
+                api_key=user_api_key, model=user_models["context"],
+            )
+            search_queries = context_result.get("search_queries", [message])
+            filter_params = context_result.get("filter_params", {})
+            gmail_query = context_result.get("gmail_query")
+
+            # Iterative context gathering
+            all_queries: list[str] = list(search_queries)
+            seen_thing_ids: set[str] = set()
+            relevant_things: list[dict[str, Any]] = []
+
+            with db() as conn:
+                initial_things = _fetch_relevant_things(conn, search_queries, filter_params, user_id=user_id)
+                for t in initial_things:
+                    if t["id"] not in seen_thing_ids:
+                        seen_thing_ids.add(t["id"])
+                        relevant_things.append(t)
+
+            for iteration in range(1, MAX_CONTEXT_ITERATIONS):
+                if not relevant_things:
+                    break
+                thing_relationships: list[dict[str, Any]] = []
+                with db() as conn:
+                    thing_id_list = list(seen_thing_ids)
+                    if thing_id_list:
+                        ph = ",".join("?" for _ in thing_id_list)
+                        rel_rows = conn.execute(
+                            f"SELECT from_thing_id, to_thing_id, relationship_type FROM thing_relationships "
+                            f"WHERE from_thing_id IN ({ph}) OR to_thing_id IN ({ph})",
+                            thing_id_list + thing_id_list,
+                        ).fetchall()
+                        thing_relationships = [dict(r) for r in rel_rows]
+
+                refinement = await run_context_refinement(
+                    message, history, relevant_things, all_queries,
+                    relationships=thing_relationships,
+                    usage_stats=usage, context_window=context_window,
+                    api_key=user_api_key, model=user_models["context"],
+                )
+                if refinement.get("done", True):
+                    break
+                new_queries = refinement.get("search_queries", [])
+                thing_ids_to_fetch = refinement.get("thing_ids", [])
+                refinement_filter = refinement.get("filter_params", filter_params)
+                if not new_queries and not thing_ids_to_fetch:
+                    break
+                prev_count = len(relevant_things)
+                if new_queries:
+                    all_queries.extend(new_queries)
+                    with db() as conn:
+                        new_things = _fetch_relevant_things(conn, new_queries, refinement_filter, user_id=user_id)
+                        for t in new_things:
+                            if t["id"] not in seen_thing_ids:
+                                seen_thing_ids.add(t["id"])
+                                relevant_things.append(t)
+                if thing_ids_to_fetch:
+                    with db() as conn:
+                        new_from_ids = _fetch_with_family(conn, [
+                            tid for tid in thing_ids_to_fetch if tid not in seen_thing_ids
+                        ])
+                        for t in new_from_ids:
+                            if t["id"] not in seen_thing_ids:
+                                seen_thing_ids.add(t["id"])
+                                relevant_things.append(t)
+                if len(relevant_things) - prev_count == 0:
+                    break
+
+            # Update last_referenced
+            if relevant_things:
+                with db() as conn:
+                    from datetime import timezone
+                    now = datetime.now(timezone.utc).isoformat()
+                    ids = [t["id"] for t in relevant_things]
+                    placeholders = ",".join("?" for _ in ids)
+                    conn.execute(
+                        f"UPDATE things SET last_referenced = ? WHERE id IN ({placeholders})",
+                        [now] + ids,
+                    )
+
+            yield _sse("stage", {"stage": "context", "status": "complete"})
+
+            # Web search
+            web_results: list[dict] | None = None
+            if context_result.get("needs_web_search") and is_search_configured():
+                web_query = context_result.get("web_search_query") or message
+                results = await google_search(web_query)
+                if results:
+                    web_results = [r.to_dict() for r in results]
+
+            gmail_context = _fetch_gmail_context(gmail_query, user_id=user_id) if gmail_query else []
+
+            calendar_events: list[dict] | None = None
+            if context_result.get("include_calendar") and gcal_connected(user_id=user_id):
+                try:
+                    calendar_events = fetch_upcoming_events(max_results=15, days_ahead=7, user_id=user_id)
+                except Exception:
+                    calendar_events = None
+
+            # Stage 2: Reasoning Agent
+            yield _sse("stage", {"stage": "reasoning", "status": "started"})
+
+            reasoning_result = await run_reasoning_agent(
+                message, history, relevant_things, web_results, gmail_context, calendar_events,
+                usage_stats=usage, context_window=context_window,
+                api_key=user_api_key, model=user_models["reasoning"],
+            )
+            storage_changes = reasoning_result.get("storage_changes", {})
+            questions_for_user = reasoning_result.get("questions_for_user", [])
+            reasoning_summary = reasoning_result.get("reasoning_summary", "")
+
+            # Stage 3: Validator
+            with db() as conn:
+                applied_changes = apply_storage_changes(storage_changes, conn, user_id=user_id)
+
+            open_questions_by_thing: dict[str, list[str]] = {}
+            for thing in relevant_things:
+                oq = thing.get("open_questions")
+                if oq:
+                    parsed = json.loads(oq) if isinstance(oq, str) else oq
+                    if parsed:
+                        open_questions_by_thing[thing.get("title", thing["id"])] = parsed
+            for thing in applied_changes.get("created", []) + applied_changes.get("updated", []):
+                oq = thing.get("open_questions")
+                if oq:
+                    parsed = json.loads(oq) if isinstance(oq, str) else oq
+                    if parsed:
+                        open_questions_by_thing[thing.get("title", thing.get("id", ""))] = parsed
+
+            yield _sse("stage", {"stage": "reasoning", "status": "complete"})
+
+            # Stage 4: Response Agent (streaming)
+            yield _sse("stage", {"stage": "response", "status": "started"})
+
+            reply_parts: list[str] = []
+            async for token in run_response_agent_stream(
+                message, reasoning_summary, questions_for_user, applied_changes,
+                web_results, usage_stats=usage,
+                open_questions_by_thing=open_questions_by_thing or None,
+                api_key=user_api_key, model=user_models["response"],
+            ):
+                reply_parts.append(token)
+                yield _sse("token", {"text": token})
+
+            reply = "".join(reply_parts)
+
+            yield _sse("stage", {"stage": "response", "status": "complete"})
+
+            # Persist to DB (same as non-streaming endpoint)
+            context_things = [
+                {"id": t["id"], "title": t.get("title", ""), "type_hint": t.get("type_hint")}
+                for t in relevant_things
+            ]
+            applied_with_sources = applied_changes.copy()
+            applied_with_sources["context_things"] = context_things
+            if web_results:
+                applied_with_sources["web_results"] = web_results
+            if usage.calls:
+                applied_with_sources["per_call_usage"] = [
+                    {
+                        "model": c.model,
+                        "prompt_tokens": c.prompt_tokens,
+                        "completion_tokens": c.completion_tokens,
+                        "cost_usd": round(c.cost_usd, 6),
+                    }
+                    for c in usage.calls
+                ]
+            if gmail_context:
+                applied_with_sources["gmail_context"] = gmail_context
+            if calendar_events:
+                applied_with_sources["calendar_events"] = calendar_events
+            changes_json = json.dumps(applied_with_sources)
+
+            with db() as conn:
+                conn.execute(
+                    "INSERT INTO chat_history (session_id, role, content, applied_changes, user_id) VALUES (?, ?, ?, ?, ?)",
+                    (session_id, "user", message, None, user_id or None),
+                )
+                cursor = conn.execute(
+                    "INSERT INTO chat_history"
+                    " (session_id, role, content, applied_changes,"
+                    " prompt_tokens, completion_tokens, cost_usd, api_calls, model, user_id)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        session_id, "assistant", reply, changes_json,
+                        usage.prompt_tokens, usage.completion_tokens,
+                        usage.cost_usd, usage.api_calls, usage.model, user_id or None,
+                    ),
+                )
+                assistant_msg_id = cursor.lastrowid
+
+                num_calls = len(usage.calls)
+                stage_labels: list[str | None] = []
+                if num_calls >= 1:
+                    stage_labels.append("context")
+                for _ in range(max(0, num_calls - 3)):
+                    stage_labels.append("context_refinement")
+                if num_calls >= 2:
+                    stage_labels.append("reasoning")
+                if num_calls >= 3:
+                    stage_labels.append("response")
+                while len(stage_labels) < num_calls:
+                    stage_labels.append(None)
+                for i, call in enumerate(usage.calls):
+                    stage = stage_labels[i] if i < len(stage_labels) else None
+                    conn.execute(
+                        "INSERT INTO chat_message_usage"
+                        " (chat_message_id, stage, model, prompt_tokens, completion_tokens, cost_usd)"
+                        " VALUES (?, ?, ?, ?, ?, ?)",
+                        (assistant_msg_id, stage, call.model, call.prompt_tokens, call.completion_tokens, call.cost_usd),
+                    )
+
+                for call in usage.calls:
+                    conn.execute(
+                        "INSERT INTO usage_log (session_id, model, prompt_tokens, completion_tokens, cost_usd, user_id)"
+                        " VALUES (?, ?, ?, ?, ?, ?)",
+                        (session_id, call.model, call.prompt_tokens, call.completion_tokens, call.cost_usd, user_id or None),
+                    )
+
+            daily_usage = _compute_daily_usage(user_id)
+
+            complete_data = ChatResponse(
+                session_id=session_id,
+                reply=reply,
+                applied_changes=applied_with_sources,
+                questions_for_user=questions_for_user,
+                usage=UsageInfo(**usage.to_dict()),
+                session_usage=daily_usage,
+            )
+            yield _sse("complete", complete_data.model_dump())
+
+        except Exception as e:
+            logger.exception("Streaming chat pipeline error")
+            yield _sse("error", {"message": str(e)})
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _sse(event: str, data: Any) -> str:  # noqa: ANN401
+    """Format a Server-Sent Event."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
 def _compute_daily_usage(user_id: str = "") -> SessionUsage:
