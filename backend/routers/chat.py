@@ -213,6 +213,21 @@ def _fetch_with_family(conn: sqlite3.Connection, seed_ids: list[str]) -> list[di
     return results
 
 
+def _fetch_user_thing(conn: sqlite3.Connection, user_id: str) -> dict[str, Any] | None:
+    """Fetch the user's own Thing (type_hint='person', matching user_id).
+
+    Returns None if no user Thing exists (e.g. legacy accounts created before
+    the auto-create feature).
+    """
+    if not user_id:
+        return None
+    row = conn.execute(
+        "SELECT * FROM things WHERE user_id = ? AND type_hint = 'person' LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def _fetch_relevant_things(
     conn: sqlite3.Connection,
     search_queries: list[str],
@@ -222,10 +237,20 @@ def _fetch_relevant_things(
     """Retrieve relevant Things using vector search (≥500 Things) or SQL LIKE fallback (<500).
 
     Always augments results with parent and children of every matched Thing.
+    Always prepends the user's own Thing (type_hint='person') so every
+    interaction is grounded in who the user is.
     """
     active_only = filter_params.get("active_only", True)
     type_hint = filter_params.get("type_hint")
     uf_sql, uf_params = user_filter(user_id)
+
+    # Always inject the user's own Thing first (cheap single-row lookup)
+    user_thing = _fetch_user_thing(conn, user_id)
+    seen_ids: set[str] = set()
+    results: list[dict[str, Any]] = []
+    if user_thing:
+        seen_ids.add(user_thing["id"])
+        results.append(user_thing)
 
     # Choose retrieval strategy based on indexed count
     vc = vector_count()
@@ -283,12 +308,17 @@ def _fetch_relevant_things(
     logger.info("Total seed IDs before hydration: %d", len(seed_ids))
 
     # Hydrate seed IDs with parent/children expansion
-    results = _fetch_with_family(conn, seed_ids)
-    logger.info("After family expansion: %d Things", len(results))
+    family_results = _fetch_with_family(conn, seed_ids)
+    logger.info("After family expansion: %d Things", len(family_results))
+
+    # Merge family results, skipping the user Thing if already present
+    for thing in family_results:
+        if thing["id"] not in seen_ids:
+            seen_ids.add(thing["id"])
+            results.append(thing)
 
     # Always include recent active things when there aren't enough results
     if len(results) < 5:
-        seen_ids = {r["id"] for r in results}
         recent_sql = "SELECT * FROM things WHERE active = 1" + uf_sql + " ORDER BY updated_at DESC LIMIT 10"
         for row in conn.execute(recent_sql, uf_params).fetchall():
             if row["id"] not in seen_ids:
