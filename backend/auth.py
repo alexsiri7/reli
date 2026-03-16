@@ -4,12 +4,12 @@ Provides require_user() dependency that decodes the JWT from the session cookie
 and returns the user_id. Used as a FastAPI dependency on all protected routes.
 """
 
-import os
-
 import jwt
 from fastapi import HTTPException, Request, status
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "")
+from .settings import settings
+
+SECRET_KEY = settings.secret_key
 JWT_ALGORITHM = "HS256"
 COOKIE_NAME = "reli_session"
 

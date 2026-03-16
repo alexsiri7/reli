@@ -19,34 +19,44 @@ from backend.sweep_scheduler import (
 
 class TestGetConfig:
     def test_defaults(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("SWEEP_ENABLED", raising=False)
-        monkeypatch.delenv("SWEEP_HOUR", raising=False)
-        monkeypatch.delenv("SWEEP_MINUTE", raising=False)
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "sweep_enabled", "true")
+        monkeypatch.setattr(settings, "sweep_hour", 3)
+        monkeypatch.setattr(settings, "sweep_minute", 0)
         enabled, hour, minute = _get_config()
         assert enabled is True
         assert hour == 3
         assert minute == 0
 
     def test_disabled(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("SWEEP_ENABLED", "false")
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "sweep_enabled", "false")
         enabled, _, _ = _get_config()
         assert enabled is False
 
     def test_disabled_zero(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("SWEEP_ENABLED", "0")
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "sweep_enabled", "0")
         enabled, _, _ = _get_config()
         assert enabled is False
 
     def test_custom_time(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("SWEEP_HOUR", "14")
-        monkeypatch.setenv("SWEEP_MINUTE", "30")
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "sweep_hour", 14)
+        monkeypatch.setattr(settings, "sweep_minute", 30)
         _, hour, minute = _get_config()
         assert hour == 14
         assert minute == 30
 
     def test_clamped_values(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("SWEEP_HOUR", "99")
-        monkeypatch.setenv("SWEEP_MINUTE", "-5")
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "sweep_hour", 99)
+        monkeypatch.setattr(settings, "sweep_minute", -5)
         _, hour, minute = _get_config()
         assert hour == 23
         assert minute == 0
@@ -141,7 +151,9 @@ class TestRunSweep:
 class TestStartStop:
     @pytest.mark.asyncio
     async def test_start_creates_task(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("SWEEP_ENABLED", "false")
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "sweep_enabled", "false")
         import backend.sweep_scheduler as mod
 
         mod._task = None

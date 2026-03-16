@@ -44,22 +44,28 @@ class TestBucket:
 
 class TestGetConfig:
     def test_defaults(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("RATE_LIMIT_ENABLED", raising=False)
-        monkeypatch.delenv("RATE_LIMIT_LLM_RPM", raising=False)
-        monkeypatch.delenv("RATE_LIMIT_API_RPM", raising=False)
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "rate_limit_enabled", "true")
+        monkeypatch.setattr(settings, "rate_limit_llm_rpm", 10)
+        monkeypatch.setattr(settings, "rate_limit_api_rpm", 60)
         config = get_rate_limit_config()
         assert config["enabled"] is True
         assert config["llm_rpm"] == 10
         assert config["api_rpm"] == 60
 
     def test_disabled(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "rate_limit_enabled", "false")
         config = get_rate_limit_config()
         assert config["enabled"] is False
 
     def test_custom_limits(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("RATE_LIMIT_LLM_RPM", "5")
-        monkeypatch.setenv("RATE_LIMIT_API_RPM", "30")
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "rate_limit_llm_rpm", 5)
+        monkeypatch.setattr(settings, "rate_limit_api_rpm", 30)
         config = get_rate_limit_config()
         assert config["llm_rpm"] == 5
         assert config["api_rpm"] == 30

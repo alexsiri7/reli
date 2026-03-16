@@ -11,14 +11,15 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 from .database import db
+from .settings import settings
 from .token_encryption import decrypt_or_plaintext, encrypt
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
-# OAuth client credentials — set via environment variables
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/calendar/callback")
+# OAuth client credentials — loaded from centralized settings
+GOOGLE_CLIENT_ID = settings.google_client_id
+GOOGLE_CLIENT_SECRET = settings.google_client_secret
+GOOGLE_REDIRECT_URI = settings.google_redirect_uri
 
 # PKCE state storage: state -> code_verifier (single-process, in-memory)
 _pending_flows: dict[str, str] = {}

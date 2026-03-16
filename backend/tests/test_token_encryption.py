@@ -19,10 +19,12 @@ from backend.token_encryption import (
 @pytest.fixture(autouse=True)
 def _fresh_key(tmp_path, monkeypatch):
     """Use a fresh encryption key for each test."""
+    from backend.settings import settings
+
     reset_for_testing()
     key_file = tmp_path / ".token_key"
     monkeypatch.setattr("backend.token_encryption._KEY_FILE", key_file)
-    monkeypatch.delenv("TOKEN_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setattr(settings, "token_encryption_key", "")
     yield
     reset_for_testing()
 
@@ -102,8 +104,10 @@ class TestKeyPersistence:
     def test_env_var_overrides_file(self, tmp_path, monkeypatch):
         from cryptography.fernet import Fernet
 
+        from backend.settings import settings
+
         custom_key = Fernet.generate_key().decode()
-        monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", custom_key)
+        monkeypatch.setattr(settings, "token_encryption_key", custom_key)
         reset_for_testing()
 
         encrypted = encrypt("env-key-test")

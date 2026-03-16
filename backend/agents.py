@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +9,8 @@ from typing import Any
 
 import yaml
 from openai import AsyncOpenAI
+
+from .settings import settings as _settings
 
 logger = logging.getLogger(__name__)
 
@@ -59,23 +60,23 @@ _config = _load_config()
 # LLM client — Requesty OpenAI-compatible gateway
 # ---------------------------------------------------------------------------
 
-REQUESTY_BASE_URL = os.environ.get("REQUESTY_BASE_URL", _config["llm"]["base_url"])
-REQUESTY_API_KEY = os.environ.get("REQUESTY_API_KEY", "")
+REQUESTY_BASE_URL = _settings.requesty_base_url or _config["llm"]["base_url"]
+REQUESTY_API_KEY = _settings.requesty_api_key
 _models = _config["llm"]["models"]
-REQUESTY_MODEL = os.environ.get("REQUESTY_MODEL", _models.get("context", "google/gemini-2.5-flash-lite"))
-REQUESTY_REASONING_MODEL = os.environ.get(
-    "REQUESTY_REASONING_MODEL", _models.get("reasoning", "google/gemini-3-flash-preview")
+REQUESTY_MODEL = _settings.requesty_model or _models.get("context", "google/gemini-2.5-flash-lite")
+REQUESTY_REASONING_MODEL = (
+    _settings.requesty_reasoning_model or _models.get("reasoning", "google/gemini-3-flash-preview")
 )
-REQUESTY_RESPONSE_MODEL = os.environ.get(
-    "REQUESTY_RESPONSE_MODEL", _models.get("response", "google/gemini-2.5-flash-lite")
+REQUESTY_RESPONSE_MODEL = (
+    _settings.requesty_response_model or _models.get("response", "google/gemini-2.5-flash-lite")
 )
 
 # ---------------------------------------------------------------------------
 # Ollama — optional local LLM for context agent
 # ---------------------------------------------------------------------------
 
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", _config["ollama"]["base_url"])
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", _config["ollama"].get("model", ""))
+OLLAMA_BASE_URL = _settings.ollama_base_url or _config["ollama"]["base_url"]
+OLLAMA_MODEL = _settings.ollama_model or _config["ollama"].get("model", "")
 
 
 def _client() -> AsyncOpenAI:

@@ -12,7 +12,6 @@ Configurable via environment variables:
 
 from __future__ import annotations
 
-import os
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -20,6 +19,8 @@ from dataclasses import dataclass, field
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse
+
+from .settings import settings
 
 # LLM-calling paths that need strict rate limiting
 _LLM_PATHS = {"/api/chat", "/api/sweep/run"}
@@ -115,8 +116,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 def get_rate_limit_config() -> dict:
-    """Read rate limit configuration from environment."""
-    enabled = os.environ.get("RATE_LIMIT_ENABLED", "true").lower() not in ("false", "0", "no")
-    llm_rpm = int(os.environ.get("RATE_LIMIT_LLM_RPM", "10"))
-    api_rpm = int(os.environ.get("RATE_LIMIT_API_RPM", "60"))
-    return {"enabled": enabled, "llm_rpm": max(1, llm_rpm), "api_rpm": max(1, api_rpm)}
+    """Read rate limit configuration from settings."""
+    return {
+        "enabled": settings.rate_limit_is_enabled,
+        "llm_rpm": max(1, settings.rate_limit_llm_rpm),
+        "api_rpm": max(1, settings.rate_limit_api_rpm),
+    }

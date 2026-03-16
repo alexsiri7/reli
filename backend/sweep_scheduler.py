@@ -13,18 +13,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from datetime import datetime, timedelta
+
+from .settings import settings
 
 logger = logging.getLogger(__name__)
 
 
 def _get_config() -> tuple[bool, int, int]:
-    """Return (enabled, hour, minute) from environment."""
-    enabled = os.environ.get("SWEEP_ENABLED", "true").lower() not in ("false", "0", "no")
-    hour = int(os.environ.get("SWEEP_HOUR", "3"))
-    minute = int(os.environ.get("SWEEP_MINUTE", "0"))
-    return enabled, max(0, min(23, hour)), max(0, min(59, minute))
+    """Return (enabled, hour, minute) from settings."""
+    return (
+        settings.sweep_is_enabled,
+        max(0, min(23, settings.sweep_hour)),
+        max(0, min(59, settings.sweep_minute)),
+    )
 
 
 def _seconds_until(hour: int, minute: int) -> float:
