@@ -111,19 +111,29 @@ export default defineConfig({
       manifest: {
         name: 'Reli',
         short_name: 'Reli',
-        description: 'Reli — your personal relationship manager',
+        description: 'Your personal AI that learns about you',
         theme_color: '#4F46E5',
         background_color: '#ffffff',
         display: 'standalone',
         icons: [
+          {
+            src: '/favicon-32.png',
+            sizes: '32x32',
+            type: 'image/png',
+          },
           {
             src: '/apple-touch-icon.png',
             sizes: '180x180',
             type: 'image/png',
           },
           {
-            src: '/favicon-32.png',
-            sizes: '32x32',
+            src: '/android-chrome-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: '/android-chrome-512.png',
+            sizes: '512x512',
             type: 'image/png',
           },
         ],
