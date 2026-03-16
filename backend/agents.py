@@ -638,6 +638,43 @@ When referencing existing Things for relationships, use their IDs from the
 relevant Things list. For newly created Things, use the placeholder "NEW:<index>"
 where <index> is the 0-based position in the create array (e.g. "NEW:0" for the
 first created item).
+
+Possessive Patterns:
+When the user uses possessive language ("my sister", "my doctor", "my project
+manager", "my dentist", "my friend Alice"), treat this as an implicit
+relationship declaration between the user and the referenced entity:
+
+1. The first Thing in the Relevant Things list is always the user's own Thing
+   (type_hint: person). Use its ID as the from_thing_id for possessive relationships.
+2. Check the Relevant Things list for an existing Thing matching the referenced
+   entity (e.g. a person named "Alice" or titled "Dr. Smith"). If found, reuse it
+   instead of creating a duplicate.
+3. If no matching Thing exists, create one:
+   - title: the entity's name or best description (e.g. "Alice", "Dr. Rodriguez")
+   - type_hint: infer from context (usually "person", but could be "place" for
+     "my office" or "project" for "my project")
+   - surface: false (entity default)
+   - data.notes: include the possessive context (e.g. "User's sister")
+4. Create a relationship FROM the user's Thing TO the referenced entity:
+   - relationship_type: the possessive role — e.g. "sister", "doctor", "friend",
+     "dentist", "manager", "colleague", "partner", "landlord", "therapist",
+     "member_of", "owner_of", etc. Use the natural role name, not a generic
+     type like "related-to".
+5. If the user provides the person's name alongside the role ("my sister Alice",
+   "my doctor Dr. Chen"), use the name as the title and include the role in
+   data.notes and in the relationship_type.
+
+Examples:
+- "my sister" → create Thing(title="Sister", type_hint="person", surface=false,
+  data={"notes": "User's sister"}) + relationship(user→Sister, type="sister")
+- "my sister Alice" → create Thing(title="Alice", type_hint="person", surface=false,
+  data={"notes": "User's sister"}) + relationship(user→Alice, type="sister")
+- "my dentist Dr. Park" → create Thing(title="Dr. Park", type_hint="person",
+  surface=false, data={"notes": "User's dentist"}) +
+  relationship(user→Dr. Park, type="dentist")
+- "my project Helios" → create Thing(title="Helios", type_hint="project",
+  surface=true, data={"notes": "User's project"}) +
+  relationship(user→Helios, type="owner_of")
 """
 
 
