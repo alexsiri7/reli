@@ -46,6 +46,19 @@ Reli stores user data in two places — both contain production data that must b
 - `docker compose build` is safe — it rebuilds the image without affecting the mounted `data/` volume.
 - `init_db()` in `database.py` uses `IF NOT EXISTS` — safe to call repeatedly.
 
+## GitHub Issue Linking
+
+PRs MUST reference the GitHub issue they contribute to. This is how we track feature progress.
+
+When creating a PR (or when `gt done` creates one), include in the PR body:
+- `Fixes #N` — if the PR fully completes the feature/issue
+- `Part of #N` — if the PR is partial progress toward the feature
+
+Current feature issues: https://github.com/alexsiri7/reli/issues
+
+If your bead description mentions a GitHub issue number, use it. If not, check the
+issues list to see if your work maps to an existing feature issue.
+
 ## Key paths
 
 - Backend: `backend/` (FastAPI, Python)
