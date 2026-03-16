@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     GITHUB_FEEDBACK_TOKEN: str = ""
     GITHUB_FEEDBACK_REPO: str = ""  # e.g. "owner/repo"
 
+    # --- Sentry ---
+    SENTRY_DSN: str = ""
+    SENTRY_ENVIRONMENT: str = "production"
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.2
+
     # --- Sweep scheduler ---
     SWEEP_ENABLED: str = "true"
     SWEEP_HOUR: int = 3
