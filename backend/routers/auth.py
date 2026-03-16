@@ -68,6 +68,8 @@ def _decode_jwt(token: str) -> dict[str, str]:
 
 def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> str:
     """Create or update a user from Google profile info. Returns user_id."""
+    import json
+
     now = datetime.now(timezone.utc).isoformat()
     user_id: str
     with db() as conn:
@@ -85,6 +87,16 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (user_id, email, google_id, name, picture, now, now),
             )
+            # Auto-create the User Thing — anchor node for all user context
+            thing_id = str(uuid.uuid4())
+            data_json = json.dumps({"email": email, "google_id": google_id})
+            conn.execute(
+                """INSERT INTO things
+                   (id, title, type_hint, surface, data, created_at, updated_at, user_id)
+                   VALUES (?, ?, 'person', 0, ?, ?, ?, ?)""",
+                (thing_id, name, data_json, now, now, user_id),
+            )
+            logger.info("Created User Thing %s for new user %s", thing_id, user_id)
     return user_id
 
 

@@ -1,5 +1,6 @@
 """Tests for JWT session authentication."""
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -14,6 +15,44 @@ def authed_client(patched_db):
 
         with TestClient(app) as c:
             yield c
+
+
+class TestUpsertUser:
+    def test_first_login_creates_user_thing(self, patched_db):
+        """On first OAuth login, a Thing with type_hint='person' is auto-created."""
+        from backend.database import db
+        from backend.routers.auth import _upsert_user
+
+        user_id = _upsert_user("google-123", "alice@example.com", "Alice", None)
+
+        with db() as conn:
+            thing = conn.execute(
+                "SELECT * FROM things WHERE user_id = ? AND type_hint = 'person'",
+                (user_id,),
+            ).fetchone()
+
+        assert thing is not None
+        assert thing["title"] == "Alice"
+        assert thing["surface"] == 0
+        data = json.loads(thing["data"])
+        assert data["email"] == "alice@example.com"
+        assert data["google_id"] == "google-123"
+
+    def test_second_login_does_not_duplicate_thing(self, patched_db):
+        """Subsequent logins should NOT create additional User Things."""
+        from backend.database import db
+        from backend.routers.auth import _upsert_user
+
+        _upsert_user("google-456", "bob@example.com", "Bob", None)
+        _upsert_user("google-456", "bob@example.com", "Bob Updated", None)
+
+        with db() as conn:
+            things = conn.execute(
+                "SELECT * FROM things WHERE type_hint = 'person'",
+            ).fetchall()
+
+        assert len(things) == 1
+        assert things[0]["title"] == "Bob"
 
 
 class TestJWTAuth:
