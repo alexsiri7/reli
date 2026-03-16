@@ -1,18 +1,15 @@
 """Reli FastAPI application entry point."""
 
 import logging
-import os
 import pathlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
-
-load_dotenv()
+from .config import settings as _app_settings  # noqa: E402 — must load before other backend imports
 
 # Configure logging — LOG_LEVEL env var controls verbosity (default: INFO)
 logging.basicConfig(
-    level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    level=getattr(logging, _app_settings.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 

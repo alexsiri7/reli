@@ -2,7 +2,6 @@
 
 import base64
 import json
-import os
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -13,6 +12,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from ..auth import require_user
+from ..config import settings
 from ..database import db
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
@@ -21,12 +21,11 @@ router = APIRouter(prefix="/gmail", tags=["gmail"])
 # Configuration
 # ---------------------------------------------------------------------------
 
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_CLIENT_ID = settings.GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET = settings.GOOGLE_CLIENT_SECRET
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 # Legacy token file path — used only for migration fallback
-_DATA_DIR = Path(os.environ.get("DATA_DIR", str(Path(__file__).parent.parent)))
-TOKEN_PATH = _DATA_DIR / "gmail_token.json"
+TOKEN_PATH = Path(settings.DATA_DIR) / "gmail_token.json"
 
 
 # ---------------------------------------------------------------------------

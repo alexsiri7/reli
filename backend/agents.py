@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +9,8 @@ from typing import Any
 
 import yaml
 from openai import AsyncOpenAI
+
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -59,23 +60,21 @@ _config = _load_config()
 # LLM client — Requesty OpenAI-compatible gateway
 # ---------------------------------------------------------------------------
 
-REQUESTY_BASE_URL = os.environ.get("REQUESTY_BASE_URL", _config["llm"]["base_url"])
-REQUESTY_API_KEY = os.environ.get("REQUESTY_API_KEY", "")
+REQUESTY_BASE_URL = settings.REQUESTY_BASE_URL or _config["llm"]["base_url"]
+REQUESTY_API_KEY = settings.REQUESTY_API_KEY
 _models = _config["llm"]["models"]
-REQUESTY_MODEL = os.environ.get("REQUESTY_MODEL", _models.get("context", "google/gemini-2.5-flash-lite"))
-REQUESTY_REASONING_MODEL = os.environ.get(
-    "REQUESTY_REASONING_MODEL", _models.get("reasoning", "google/gemini-3-flash-preview")
+REQUESTY_MODEL = settings.REQUESTY_MODEL or _models.get("context", "google/gemini-2.5-flash-lite")
+REQUESTY_REASONING_MODEL = settings.REQUESTY_REASONING_MODEL or _models.get(
+    "reasoning", "google/gemini-3-flash-preview"
 )
-REQUESTY_RESPONSE_MODEL = os.environ.get(
-    "REQUESTY_RESPONSE_MODEL", _models.get("response", "google/gemini-2.5-flash-lite")
-)
+REQUESTY_RESPONSE_MODEL = settings.REQUESTY_RESPONSE_MODEL or _models.get("response", "google/gemini-2.5-flash-lite")
 
 # ---------------------------------------------------------------------------
 # Ollama — optional local LLM for context agent
 # ---------------------------------------------------------------------------
 
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", _config["ollama"]["base_url"])
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", _config["ollama"].get("model", ""))
+OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL or _config["ollama"]["base_url"]
+OLLAMA_MODEL = settings.OLLAMA_MODEL or _config["ollama"].get("model", "")
 
 
 def _client(api_key: str | None = None) -> AsyncOpenAI:

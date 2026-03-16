@@ -12,7 +12,6 @@ Configurable via environment variables:
 
 from __future__ import annotations
 
-import os
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -115,8 +114,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 def get_rate_limit_config() -> dict:
-    """Read rate limit configuration from environment."""
-    enabled = os.environ.get("RATE_LIMIT_ENABLED", "true").lower() not in ("false", "0", "no")
-    llm_rpm = int(os.environ.get("RATE_LIMIT_LLM_RPM", "10"))
-    api_rpm = int(os.environ.get("RATE_LIMIT_API_RPM", "60"))
-    return {"enabled": enabled, "llm_rpm": max(1, llm_rpm), "api_rpm": max(1, api_rpm)}
+    """Read rate limit configuration from settings.
+
+    Constructs a fresh Settings instance so that tests can override env vars
+    per test case via monkeypatch.
+    """
+    from .config import Settings
+
+    s = Settings()
+    return {
+        "enabled": s.rate_limit_enabled_bool,
+        "llm_rpm": max(1, s.RATE_LIMIT_LLM_RPM),
+        "api_rpm": max(1, s.RATE_LIMIT_API_RPM),
+    }
