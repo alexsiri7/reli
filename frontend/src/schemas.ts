@@ -208,6 +208,31 @@ export const RequestyModelSchema = z.object({
   name: z.string().nullable(),
 })
 
+export const UsageDashboardSchema = z.object({
+  period: z.string(),
+  prompt_tokens: z.number(),
+  completion_tokens: z.number(),
+  total_tokens: z.number(),
+  api_calls: z.number(),
+  cost_usd: z.number(),
+  per_model: z.array(z.object({
+    model: z.string(),
+    prompt_tokens: z.number(),
+    completion_tokens: z.number(),
+    total_tokens: z.number(),
+    api_calls: z.number(),
+    cost_usd: z.number(),
+  })),
+  daily: z.array(z.object({
+    date: z.string(),
+    prompt_tokens: z.number(),
+    completion_tokens: z.number(),
+    total_tokens: z.number(),
+    api_calls: z.number(),
+    cost_usd: z.number(),
+  })),
+})
+
 // --- Validation helper ---
 
 /**

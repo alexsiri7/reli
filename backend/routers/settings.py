@@ -1,15 +1,18 @@
-"""Settings endpoints: model configuration via Requesty."""
+"""Settings endpoints: model configuration and usage dashboard via Requesty."""
 
 import logging
+from datetime import date, datetime, timedelta
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import httpx
 import yaml
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from ..auth import require_user
+from ..auth import require_user, user_filter
+from ..database import db
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,42 @@ class ModelSettingsUpdate(BaseModel):
 class RequestyModel(BaseModel):
     id: str
     name: str | None = None
+
+
+class UsagePeriod(str, Enum):
+    today = "today"
+    week = "7d"
+    month = "30d"
+    all = "all"
+
+
+class DailyUsage(BaseModel):
+    date: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_calls: int = 0
+    cost_usd: float = 0.0
+
+
+class ModelBreakdown(BaseModel):
+    model: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_calls: int = 0
+    cost_usd: float = 0.0
+
+
+class UsageDashboard(BaseModel):
+    period: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_calls: int = 0
+    cost_usd: float = 0.0
+    per_model: list[ModelBreakdown] = []
+    daily: list[DailyUsage] = []
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -145,4 +184,91 @@ def update_settings(
         reasoning=models.get("reasoning", "google/gemini-3-flash-preview"),
         response=models.get("response", "google/gemini-2.5-flash-lite"),
         chat_context_window=cfg.get("chat", {}).get("context_window", 3),
+    )
+
+
+@router.get("/usage", response_model=UsageDashboard, summary="Get usage dashboard data")
+def get_usage(
+    period: UsagePeriod = Query(UsagePeriod.month),
+    user_id: str = Depends(require_user),
+) -> UsageDashboard:
+    """Return token usage, cost, and model breakdown for the given period."""
+    now = date.today()
+    if period == UsagePeriod.today:
+        start = datetime.combine(now, datetime.min.time()).isoformat()
+    elif period == UsagePeriod.week:
+        start = datetime.combine(now - timedelta(days=6), datetime.min.time()).isoformat()
+    elif period == UsagePeriod.month:
+        start = datetime.combine(now - timedelta(days=29), datetime.min.time()).isoformat()
+    else:
+        start = None
+
+    uf_sql, uf_params = user_filter(user_id)
+    time_filter = " AND timestamp >= ?" if start else ""
+    time_params: list[str] = [start] if start else []
+
+    with db() as conn:
+        base_where = f"WHERE 1=1{time_filter}{uf_sql}"
+        params = [*time_params, *uf_params]
+
+        totals = conn.execute(
+            "SELECT COALESCE(SUM(prompt_tokens), 0) as pt, "
+            "COALESCE(SUM(completion_tokens), 0) as ct, "
+            "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
+            f"FROM usage_log {base_where}",
+            params,
+        ).fetchone()
+
+        model_rows = conn.execute(
+            "SELECT model, COALESCE(SUM(prompt_tokens), 0) as pt, "
+            "COALESCE(SUM(completion_tokens), 0) as ct, "
+            "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
+            f"FROM usage_log {base_where} "
+            "GROUP BY model ORDER BY cost DESC",
+            params,
+        ).fetchall()
+
+        daily_rows = conn.execute(
+            "SELECT DATE(timestamp) as day, "
+            "COALESCE(SUM(prompt_tokens), 0) as pt, "
+            "COALESCE(SUM(completion_tokens), 0) as ct, "
+            "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
+            f"FROM usage_log {base_where} "
+            "GROUP BY DATE(timestamp) ORDER BY day",
+            params,
+        ).fetchall()
+
+    per_model = [
+        ModelBreakdown(
+            model=r["model"],
+            prompt_tokens=r["pt"],
+            completion_tokens=r["ct"],
+            total_tokens=r["pt"] + r["ct"],
+            api_calls=r["calls"],
+            cost_usd=round(r["cost"], 6),
+        )
+        for r in model_rows
+    ]
+
+    daily = [
+        DailyUsage(
+            date=r["day"],
+            prompt_tokens=r["pt"],
+            completion_tokens=r["ct"],
+            total_tokens=r["pt"] + r["ct"],
+            api_calls=r["calls"],
+            cost_usd=round(r["cost"], 6),
+        )
+        for r in daily_rows
+    ]
+
+    return UsageDashboard(
+        period=period.value,
+        prompt_tokens=totals["pt"],
+        completion_tokens=totals["ct"],
+        total_tokens=totals["pt"] + totals["ct"],
+        api_calls=totals["calls"],
+        cost_usd=round(totals["cost"], 6),
+        per_model=per_model,
+        daily=daily,
     )

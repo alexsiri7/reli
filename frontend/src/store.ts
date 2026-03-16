@@ -22,6 +22,7 @@ import {
   CalendarEventSchema,
   ModelSettingsSchema,
   RequestyModelSchema,
+  UsageDashboardSchema,
 } from './schemas'
 import { z } from 'zod'
 
@@ -128,6 +129,26 @@ export interface ModelSettings {
 export interface RequestyModel {
   id: string
   name: string | null
+}
+
+export interface DailyUsage {
+  date: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  api_calls: number
+  cost_usd: number
+}
+
+export interface UsageDashboard {
+  period: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  api_calls: number
+  cost_usd: number
+  per_model: ModelUsage[]
+  daily: DailyUsage[]
 }
 
 export interface ModelUsage {
@@ -267,6 +288,13 @@ interface ReliState {
   fetchModelSettings: () => Promise<void>
   fetchAvailableModels: () => Promise<void>
   updateModelSettings: (settings: Partial<ModelSettings>) => Promise<void>
+
+  // Usage dashboard
+  usageDashboard: UsageDashboard | null
+  usageLoading: boolean
+  usagePeriod: string
+  fetchUsageDashboard: (period?: string) => Promise<void>
+  setUsagePeriod: (period: string) => void
 }
 
 const HISTORY_PAGE_SIZE = 20
@@ -815,5 +843,30 @@ export const useStore = create<ReliState>((set, get) => ({
     } catch (e) {
       set({ error: String(e) })
     }
+  },
+
+  // Usage dashboard
+  usageDashboard: null,
+  usageLoading: false,
+  usagePeriod: '30d',
+
+  fetchUsageDashboard: async (period?: string) => {
+    const p = period ?? get().usagePeriod
+    set({ usageLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/settings/usage?period=${encodeURIComponent(p)}`)
+      if (!res.ok) return
+      const data: UsageDashboard = validateResponse(UsageDashboardSchema, await res.json(), '/settings/usage')
+      set({ usageDashboard: data })
+    } catch {
+      // best-effort
+    } finally {
+      set({ usageLoading: false })
+    }
+  },
+
+  setUsagePeriod: (period: string) => {
+    set({ usagePeriod: period })
+    get().fetchUsageDashboard(period)
   },
 }))
