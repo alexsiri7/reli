@@ -63,24 +63,17 @@ export function SetupWizard() {
     }
   }, [step, apiKey, fetchAvailableModels])
 
-  // Set default model choices when models load
-  useEffect(() => {
-    if (availableModels.length > 0) {
-      const modelIds = availableModels.map(m => m.id)
-      if (!contextModel || !modelIds.includes(contextModel)) {
-        const defaultCtx = modelIds.find(id => id.includes('gemini-2.5-flash-lite')) || modelIds[0] || ''
-        setContextModel(defaultCtx)
-      }
-      if (!reasoningModel || !modelIds.includes(reasoningModel)) {
-        const defaultReason = modelIds.find(id => id.includes('gemini-3-flash-preview')) || modelIds.find(id => id.includes('gemini-2.5-flash')) || modelIds[0] || ''
-        setReasoningModel(defaultReason)
-      }
-      if (!responseModel || !modelIds.includes(responseModel)) {
-        const defaultResp = modelIds.find(id => id.includes('gemini-2.5-flash-lite')) || modelIds[0] || ''
-        setResponseModel(defaultResp)
-      }
-    }
-  }, [availableModels, contextModel, reasoningModel, responseModel])
+  // Compute default model choices from available models
+  const modelIds = availableModels.map(m => m.id)
+  const effectiveContextModel = contextModel && modelIds.includes(contextModel)
+    ? contextModel
+    : modelIds.find(id => id.includes('gemini-2.5-flash-lite')) || modelIds[0] || ''
+  const effectiveReasoningModel = reasoningModel && modelIds.includes(reasoningModel)
+    ? reasoningModel
+    : modelIds.find(id => id.includes('gemini-3-flash-preview')) || modelIds.find(id => id.includes('gemini-2.5-flash')) || modelIds[0] || ''
+  const effectiveResponseModel = responseModel && modelIds.includes(responseModel)
+    ? responseModel
+    : modelIds.find(id => id.includes('gemini-2.5-flash-lite')) || modelIds[0] || ''
 
   const handleComplete = async () => {
     if (!apiKey.trim()) {
@@ -92,9 +85,9 @@ export function SetupWizard() {
     await completeSetup({
       display_name: displayName.trim(),
       requesty_api_key: apiKey.trim(),
-      context_model: contextModel || undefined,
-      reasoning_model: reasoningModel || undefined,
-      response_model: responseModel || undefined,
+      context_model: effectiveContextModel || undefined,
+      reasoning_model: effectiveReasoningModel || undefined,
+      response_model: effectiveResponseModel || undefined,
     })
     setSaving(false)
   }
@@ -255,21 +248,21 @@ export function SetupWizard() {
                   <ModelSelectField
                     label="Context Model"
                     description="Gathers context from your data"
-                    value={contextModel}
+                    value={effectiveContextModel}
                     options={modelOptions}
                     onChange={setContextModel}
                   />
                   <ModelSelectField
                     label="Reasoning Model"
                     description="Plans actions and makes decisions"
-                    value={reasoningModel}
+                    value={effectiveReasoningModel}
                     options={modelOptions}
                     onChange={setReasoningModel}
                   />
                   <ModelSelectField
                     label="Response Model"
                     description="Generates the final reply"
-                    value={responseModel}
+                    value={effectiveResponseModel}
                     options={modelOptions}
                     onChange={setResponseModel}
                   />

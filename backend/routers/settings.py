@@ -378,7 +378,10 @@ def complete_setup(
         if body.display_name:
             _set_user_setting(conn, user_id, "display_name", body.display_name)
             # Also update the users table name
-            conn.execute("UPDATE users SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (body.display_name, user_id))
+            conn.execute(
+                "UPDATE users SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (body.display_name, user_id),
+            )
         if body.requesty_api_key:
             _set_user_setting(conn, user_id, "requesty_api_key", body.requesty_api_key)
         if body.context_model:
