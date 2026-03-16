@@ -13,6 +13,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 
+from .sentry import init_sentry  # noqa: E402
+
+init_sentry()
+
 from fastapi import Depends, FastAPI, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
@@ -20,12 +24,13 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
 from starlette.responses import Response as StarletteResponse  # noqa: E402
 
-from .auth import require_user  # noqa: E402
+from .auth import COOKIE_NAME, JWT_ALGORITHM, SECRET_KEY, require_user  # noqa: E402
 from .database import clean_orphan_relationships, init_db  # noqa: E402
 from .metrics import MetricsMiddleware, metrics_response  # noqa: E402
 from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
 from .response_metrics import ResponseMetricsMiddleware, metrics_store  # noqa: E402
 from .routers import auth, briefing, calendar, chat, feedback, gmail, proactive, settings, sweep, thing_types, things  # noqa: E402
+from .sentry import set_sentry_user  # noqa: E402
 from .sweep_scheduler import start_scheduler, stop_scheduler  # noqa: E402
 
 _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
@@ -62,6 +67,24 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         return response
+
+
+class SentryUserContextMiddleware(BaseHTTPMiddleware):
+    """Set Sentry user context from JWT session cookie on each request."""
+
+    async def dispatch(  # type: ignore[override]
+        self, request: Request, call_next: Callable[[Request], Awaitable[StarletteResponse]]
+    ) -> StarletteResponse:
+        token = request.cookies.get(COOKIE_NAME)
+        if token and SECRET_KEY:
+            try:
+                import jwt as pyjwt
+
+                payload = pyjwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+                set_sentry_user(payload.get("sub", ""), payload.get("email"))
+            except Exception:
+                pass  # Don't block requests if JWT decode fails
+        return await call_next(request)
 
 
 _TAG_METADATA = [
@@ -143,6 +166,7 @@ _rl_config = get_rate_limit_config()
 app.add_middleware(RateLimitMiddleware, **_rl_config)
 app.add_middleware(ResponseMetricsMiddleware)
 app.add_middleware(MetricsMiddleware)
+app.add_middleware(SentryUserContextMiddleware)
 
 # Auth routes are public (login/callback/logout)
 app.include_router(auth.router, prefix="/api")
