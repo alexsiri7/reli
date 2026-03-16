@@ -12,7 +12,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { FeedbackDialog } from './components/FeedbackDialog'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchMergeSuggestions, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
@@ -29,6 +29,7 @@ function App() {
       fetchDailyStats: s.fetchDailyStats,
       fetchCalendarStatus: s.fetchCalendarStatus,
       fetchProactiveSurfaces: s.fetchProactiveSurfaces,
+      fetchMergeSuggestions: s.fetchMergeSuggestions,
       error: s.error,
     }))
   )
@@ -50,6 +51,7 @@ function App() {
     fetchHistory()
     fetchDailyStats()
     fetchProactiveSurfaces()
+    fetchMergeSuggestions()
     const interval = setInterval(() => { fetchThings(); fetchBriefing(); fetchProactiveSurfaces() }, 30_000)
 
     // Handle OAuth callback redirect
@@ -60,7 +62,7 @@ function App() {
     }
 
     return () => clearInterval(interval)
-  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces])
+  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchMergeSuggestions])
 
   // Show nothing while checking auth
   if (!authChecked) {

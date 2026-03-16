@@ -15,6 +15,10 @@ from ..models import (
     GraphEdge,
     GraphNode,
     GraphResponse,
+    MergeRequest,
+    MergeResult,
+    MergeSuggestion,
+    MergeSuggestionThing,
     OrphanCleanupResult,
     Relationship,
     RelationshipCreate,
@@ -423,6 +427,193 @@ def reindex_things(user_id: str = Depends(require_user)) -> dict[str, int]:
     """Rebuild the vector search index for all Things. Returns the count of re-indexed items."""
     count = reindex_all()
     return {"reindexed": count}
+
+
+# ── Merge suggestions & execution ───────────────────────────────────────────
+
+
+def _normalize(title: str) -> str:
+    """Lowercase, strip articles and possessives for comparison."""
+    t = title.lower().strip()
+    for prefix in ("my ", "the ", "a ", "an "):
+        if t.startswith(prefix):
+            t = t[len(prefix):]
+    return t
+
+
+def _titles_similar(a: str, b: str) -> str | None:
+    """Return a reason string if two titles look like duplicates, else None."""
+    na, nb = _normalize(a), _normalize(b)
+    if not na or not nb:
+        return None
+    # Exact match after normalization
+    if na == nb:
+        return f'Same name: "{a}" and "{b}"'
+    # One is a prefix/substring of the other (for short names)
+    shorter, longer = (na, nb) if len(na) <= len(nb) else (nb, na)
+    if len(shorter) >= 3 and shorter in longer:
+        return f'Similar names: "{a}" and "{b}"'
+    return None
+
+
+@router.get(
+    "/merge-suggestions",
+    response_model=list[MergeSuggestion],
+    summary="Detect potential duplicate Things",
+)
+def get_merge_suggestions(
+    limit: int = Query(10, ge=1, le=50, description="Maximum suggestions to return"),
+    user_id: str = Depends(require_user),
+) -> list[MergeSuggestion]:
+    """Find pairs of active Things with similar titles that may be duplicates."""
+    with db() as conn:
+        uf_sql, uf_params = user_filter(user_id)
+        rows = conn.execute(
+            "SELECT id, title, type_hint FROM things WHERE active = 1" + uf_sql
+            + " ORDER BY title",
+            uf_params,
+        ).fetchall()
+
+    # Also check shared relationships between pairs
+    suggestions: list[MergeSuggestion] = []
+    seen_pairs: set[tuple[str, str]] = set()
+
+    things_list = [(r["id"], r["title"], r["type_hint"]) for r in rows]
+
+    for i, (id_a, title_a, type_a) in enumerate(things_list):
+        for j in range(i + 1, len(things_list)):
+            id_b, title_b, type_b = things_list[j]
+            reason = _titles_similar(title_a, title_b)
+            if reason is None:
+                continue
+            pair = (min(id_a, id_b), max(id_a, id_b))
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            # Boost reason if same type
+            if type_a and type_a == type_b:
+                reason += f" (both {type_a})"
+            suggestions.append(MergeSuggestion(
+                thing_a=MergeSuggestionThing(id=id_a, title=title_a, type_hint=type_a),
+                thing_b=MergeSuggestionThing(id=id_b, title=title_b, type_hint=type_b),
+                reason=reason,
+            ))
+            if len(suggestions) >= limit:
+                break
+        if len(suggestions) >= limit:
+            break
+
+    return suggestions
+
+
+@router.post(
+    "/merge",
+    response_model=MergeResult,
+    summary="Merge two Things",
+)
+def merge_things(
+    body: MergeRequest,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(require_user),
+) -> MergeResult:
+    """Merge remove_id into keep_id: transfer relationships, merge data, delete duplicate."""
+    uf_sql, uf_params = user_filter(user_id)
+    with db() as conn:
+        keep_row = conn.execute(
+            f"SELECT * FROM things WHERE id = ?{uf_sql}", [body.keep_id, *uf_params]
+        ).fetchone()
+        remove_row = conn.execute(
+            f"SELECT * FROM things WHERE id = ?{uf_sql}", [body.remove_id, *uf_params]
+        ).fetchone()
+        if not keep_row:
+            raise HTTPException(status_code=404, detail=f"Thing '{body.keep_id}' not found")
+        if not remove_row:
+            raise HTTPException(status_code=404, detail=f"Thing '{body.remove_id}' not found")
+        if body.keep_id == body.remove_id:
+            raise HTTPException(status_code=422, detail="Cannot merge a Thing with itself")
+
+        now = datetime.now(timezone.utc).isoformat()
+
+        # 1. Merge data dicts
+        existing_data = keep_row["data"]
+        try:
+            old_data = json.loads(existing_data) if isinstance(existing_data, str) and existing_data else {}
+        except (json.JSONDecodeError, ValueError):
+            old_data = {}
+        remove_data_raw = remove_row["data"]
+        try:
+            remove_data = json.loads(remove_data_raw) if isinstance(remove_data_raw, str) and remove_data_raw else {}
+        except (json.JSONDecodeError, ValueError):
+            remove_data = {}
+        if remove_data:
+            combined = {**remove_data, **old_data}  # keep_row data takes priority
+            conn.execute(
+                "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(combined), now, body.keep_id),
+            )
+
+        # 2. Transfer open_questions
+        keep_oq_raw = keep_row["open_questions"]
+        remove_oq_raw = remove_row["open_questions"]
+        try:
+            keep_oq = json.loads(keep_oq_raw) if isinstance(keep_oq_raw, str) and keep_oq_raw else []
+        except (json.JSONDecodeError, ValueError):
+            keep_oq = []
+        try:
+            remove_oq = json.loads(remove_oq_raw) if isinstance(remove_oq_raw, str) and remove_oq_raw else []
+        except (json.JSONDecodeError, ValueError):
+            remove_oq = []
+        if remove_oq:
+            existing_set = set(keep_oq)
+            for q in remove_oq:
+                if q not in existing_set:
+                    keep_oq.append(q)
+                    existing_set.add(q)
+            conn.execute(
+                "UPDATE things SET open_questions = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(keep_oq), now, body.keep_id),
+            )
+
+        # 3. Re-point relationships
+        conn.execute(
+            "UPDATE thing_relationships SET from_thing_id = ? WHERE from_thing_id = ?",
+            (body.keep_id, body.remove_id),
+        )
+        conn.execute(
+            "UPDATE thing_relationships SET to_thing_id = ? WHERE to_thing_id = ?",
+            (body.keep_id, body.remove_id),
+        )
+        # Clean up self-referential relationships
+        conn.execute(
+            "DELETE FROM thing_relationships WHERE from_thing_id = ? AND to_thing_id = ?",
+            (body.keep_id, body.keep_id),
+        )
+
+        # 4. Re-parent children of the removed thing
+        conn.execute(
+            "UPDATE things SET parent_id = ? WHERE parent_id = ?",
+            (body.keep_id, body.remove_id),
+        )
+
+        # 5. Delete the duplicate
+        conn.execute("DELETE FROM things WHERE id = ?", (body.remove_id,))
+
+        keep_title = keep_row["title"]
+        remove_title = remove_row["title"]
+
+        # 6. Re-embed the kept thing
+        updated = conn.execute("SELECT * FROM things WHERE id = ?", (body.keep_id,)).fetchone()
+
+    background_tasks.add_task(vs_delete, body.remove_id)
+    if updated:
+        background_tasks.add_task(upsert_thing, dict(updated))
+
+    return MergeResult(
+        keep_id=body.keep_id,
+        remove_id=body.remove_id,
+        keep_title=keep_title,
+        remove_title=remove_title,
+    )
 
 
 # ── Orphan relationship management ──────────────────────────────────────────
