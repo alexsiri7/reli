@@ -55,7 +55,12 @@ def _row_to_msg(row: sqlite3.Row, usage_rows: list[sqlite3.Row] | None = None) -
     per_call_usage: list[CallUsage] = []
     if usage_rows:
         per_call_usage = [
-            CallUsage(model=u["model"], prompt_tokens=u["prompt_tokens"], completion_tokens=u["completion_tokens"], cost_usd=u["cost_usd"])
+            CallUsage(
+                model=u["model"],
+                prompt_tokens=u["prompt_tokens"],
+                completion_tokens=u["completion_tokens"],
+                cost_usd=u["cost_usd"],
+            )
             for u in usage_rows
         ]
     elif isinstance(changes, dict) and "per_call_usage" in changes:
@@ -209,7 +214,9 @@ def _fetch_with_family(conn: sqlite3.Connection, seed_ids: list[str]) -> list[di
 
 
 def _fetch_relevant_things(
-    conn: sqlite3.Connection, search_queries: list[str], filter_params: dict[str, Any],
+    conn: sqlite3.Connection,
+    search_queries: list[str],
+    filter_params: dict[str, Any],
     user_id: str = "",
 ) -> list[dict[str, Any]]:
     """Retrieve relevant Things using vector search (≥500 Things) or SQL LIKE fallback (<500).
@@ -244,6 +251,7 @@ def _fetch_relevant_things(
             n_results=20,
             active_only=active_only,
             type_hint=type_hint,
+            user_id=user_id,
         )
         logger.info("Vector search returned %d seed IDs", len(seed_ids))
         # If vector search returns nothing (embedding failure), fall through to SQL
@@ -454,7 +462,7 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
 
     # Stage 3: Validator — apply changes
     with db() as conn:
-        applied_changes = apply_storage_changes(storage_changes, conn)
+        applied_changes = apply_storage_changes(storage_changes, conn, user_id=user_id)
 
     # Collect open_questions from relevant Things and newly created/updated Things
     open_questions_by_thing: dict[str, list[str]] = {}

@@ -532,7 +532,9 @@ async def run_reasoning_agent(
 # ---------------------------------------------------------------------------
 
 
-def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connection) -> dict[str, list[Any]]:
+def apply_storage_changes(
+    storage_changes: dict[str, Any], conn: sqlite3.Connection, user_id: str = ""
+) -> dict[str, list[Any]]:
     """Stage 3: validate and apply changes; return what was actually applied."""
     import json as _json
     import uuid
@@ -609,8 +611,8 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
         conn.execute(
             """INSERT INTO things
                (id, title, type_hint, parent_id, checkin_date, priority, active, surface, data,
-                open_questions, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)""",
+                open_questions, created_at, updated_at, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""",
             (
                 thing_id,
                 title,
@@ -623,6 +625,7 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
                 oq_json,
                 now,
                 now,
+                user_id or None,
             ),
         )
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
@@ -723,7 +726,10 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
         if not verify:
             logger.error(
                 "Relationship INSERT succeeded but row not found: id=%s, %s -> %s (%s)",
-                rel_id, from_id, to_id, rel_type,
+                rel_id,
+                from_id,
+                to_id,
+                rel_type,
             )
             continue
         applied["relationships_created"].append(

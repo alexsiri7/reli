@@ -157,6 +157,7 @@ def upsert_thing(thing: dict[str, Any]) -> None:
                 {
                     "type_hint": thing.get("type_hint") or "",
                     "active": 1 if thing.get("active", True) else 0,
+                    "user_id": thing.get("user_id") or "",
                 }
             ],
         )
@@ -215,6 +216,7 @@ def reindex_all() -> int:
                 {
                     "type_hint": thing.get("type_hint") or "",
                     "active": 1 if thing.get("active", True) else 0,
+                    "user_id": thing.get("user_id") or "",
                 }
             )
 
@@ -230,9 +232,12 @@ def vector_search(
     n_results: int = 20,
     active_only: bool = True,
     type_hint: str | None = None,
+    user_id: str = "",
 ) -> list[str]:
     """Return Thing IDs ordered by semantic relevance across all queries.
 
+    When user_id is provided, only returns Things belonging to that user
+    (or Things with no user_id for backward compatibility).
     Returns an empty list on any error so callers can fall back to SQL.
     """
     try:
@@ -247,6 +252,8 @@ def vector_search(
             filters.append({"active": {"$eq": 1}})
         if type_hint:
             filters.append({"type_hint": {"$eq": type_hint}})
+        if user_id:
+            filters.append({"$or": [{"user_id": {"$eq": user_id}}, {"user_id": {"$eq": ""}}]})
 
         where: dict | None = None
         if len(filters) == 1:
