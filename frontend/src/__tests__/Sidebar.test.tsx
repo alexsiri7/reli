@@ -118,6 +118,15 @@ const filterDefaults = {
   clearThingFilters: vi.fn(),
 }
 
+const mergeDefaults = {
+  mergeSuggestions: [],
+  mergeSuggestionsLoading: false,
+  mergeInProgress: false,
+  executeMerge: vi.fn(),
+  dismissMergeSuggestion: vi.fn(),
+  fetchMergeSuggestions: vi.fn(),
+}
+
 const calendarDefaults = {
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [] as never[],
@@ -131,6 +140,7 @@ const calendarDefaults = {
   proactiveSurfaces: [],
   ...searchDefaults,
   ...filterDefaults,
+  ...mergeDefaults,
 }
 
 beforeEach(() => {

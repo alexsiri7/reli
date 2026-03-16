@@ -6,6 +6,7 @@ import { typeIcon } from '../utils'
 import { CalendarSection } from './CalendarSection'
 import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
+import { MergeSuggestions } from './MergeSuggestions'
 
 const FINDING_TYPE_ICONS: Record<string, string> = {
   approaching_date: '\u23F0',
@@ -458,6 +459,9 @@ export function Sidebar() {
                 {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
               </section>
             )}
+
+            {/* Merge Suggestions */}
+            <MergeSuggestions />
 
             {/* Proactive Surfaces */}
             {proactiveSurfaces && proactiveSurfaces.length > 0 && (

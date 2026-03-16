@@ -233,6 +233,27 @@ export const UserProfileSchema = z.object({
   relationships: z.array(UserProfileRelationshipSchema),
 })
 
+// --- Merge Suggestions ---
+
+export const MergeSuggestionThingSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  type_hint: z.string().nullable(),
+})
+
+export const MergeSuggestionSchema = z.object({
+  thing_a: MergeSuggestionThingSchema,
+  thing_b: MergeSuggestionThingSchema,
+  reason: z.string(),
+})
+
+export const MergeResultSchema = z.object({
+  keep_id: z.string(),
+  remove_id: z.string(),
+  keep_title: z.string(),
+  remove_title: z.string(),
+})
+
 // --- Validation helper ---
 
 /**

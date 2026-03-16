@@ -289,3 +289,38 @@ class ProactiveSurface(BaseModel):
     reason: str
     date_key: str
     days_away: int
+
+
+# ── Merge Suggestions ────────────────────────────────────────────────────────
+
+
+class MergeSuggestionThing(BaseModel):
+    """Minimal Thing representation for merge suggestions."""
+
+    id: str
+    title: str
+    type_hint: str | None
+
+
+class MergeSuggestion(BaseModel):
+    """A pair of Things that may be duplicates."""
+
+    thing_a: MergeSuggestionThing
+    thing_b: MergeSuggestionThing
+    reason: str
+
+
+class MergeRequest(BaseModel):
+    """Request to merge two Things."""
+
+    keep_id: str = Field(..., description="ID of the Thing to keep")
+    remove_id: str = Field(..., description="ID of the Thing to merge into keep_id and delete")
+
+
+class MergeResult(BaseModel):
+    """Result of a merge operation."""
+
+    keep_id: str
+    remove_id: str
+    keep_title: str
+    remove_title: str

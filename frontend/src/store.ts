@@ -24,6 +24,8 @@ import {
   UserSettingsSchema,
   RequestyModelSchema,
   UserProfileSchema,
+  MergeSuggestionSchema,
+  MergeResultSchema,
 } from './schemas'
 import { z } from 'zod'
 
@@ -153,6 +155,18 @@ export interface UserProfileRelationship {
 export interface UserProfile {
   thing: Thing
   relationships: UserProfileRelationship[]
+}
+
+export interface MergeSuggestionThing {
+  id: string
+  title: string
+  type_hint: string | null
+}
+
+export interface MergeSuggestion {
+  thing_a: MergeSuggestionThing
+  thing_b: MergeSuggestionThing
+  reason: string
 }
 
 export interface ModelUsage {
@@ -304,6 +318,14 @@ interface ReliState {
   userProfileLoading: boolean
   fetchUserProfile: () => Promise<void>
   updateUserThing: (updates: { title?: string; data?: Record<string, unknown> }) => Promise<void>
+
+  // Merge suggestions
+  mergeSuggestions: MergeSuggestion[]
+  mergeSuggestionsLoading: boolean
+  mergeInProgress: boolean
+  fetchMergeSuggestions: () => Promise<void>
+  executeMerge: (keepId: string, removeId: string) => Promise<void>
+  dismissMergeSuggestion: (thingAId: string, thingBId: string) => void
 
   // Feedback
   feedbackOpen: boolean
@@ -975,6 +997,59 @@ export const useStore = create<ReliState>((set, get) => ({
     } catch (e) {
       set({ error: String(e) })
     }
+  },
+
+  // Merge suggestions
+  mergeSuggestions: [],
+  mergeSuggestionsLoading: false,
+  mergeInProgress: false,
+
+  fetchMergeSuggestions: async () => {
+    set({ mergeSuggestionsLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/things/merge-suggestions?limit=10`)
+      if (!res.ok) return
+      const data: MergeSuggestion[] = validateResponse(z.array(MergeSuggestionSchema), await res.json(), '/things/merge-suggestions')
+      set({ mergeSuggestions: data })
+    } catch {
+      // best-effort
+    } finally {
+      set({ mergeSuggestionsLoading: false })
+    }
+  },
+
+  executeMerge: async (keepId: string, removeId: string) => {
+    set({ mergeInProgress: true })
+    try {
+      const res = await apiFetch(`${BASE}/things/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keep_id: keepId, remove_id: removeId }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      validateResponse(MergeResultSchema, await res.json(), '/things/merge')
+      // Remove the suggestion from the list and refresh things
+      set(state => ({
+        mergeSuggestions: state.mergeSuggestions.filter(
+          s => !(s.thing_a.id === keepId && s.thing_b.id === removeId) &&
+               !(s.thing_a.id === removeId && s.thing_b.id === keepId)
+        ),
+      }))
+      get().fetchThings()
+      get().fetchMergeSuggestions()
+    } catch (e) {
+      set({ error: String(e) })
+    } finally {
+      set({ mergeInProgress: false })
+    }
+  },
+
+  dismissMergeSuggestion: (thingAId: string, thingBId: string) => {
+    set(state => ({
+      mergeSuggestions: state.mergeSuggestions.filter(
+        s => !(s.thing_a.id === thingAId && s.thing_b.id === thingBId)
+      ),
+    }))
   },
 
   // Feedback
