@@ -1,25 +1,29 @@
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { ModelSettings } from '../store'
+import type { ModelSettings, UserSettings } from '../store'
 
 export function SettingsPanel() {
   const {
     modelSettings,
+    userSettings,
     availableModels,
     settingsLoading,
     modelsLoading,
     fetchModelSettings,
     fetchAvailableModels,
+    fetchUserSettings,
     closeSettings,
   } = useStore(
     useShallow(s => ({
       modelSettings: s.modelSettings,
+      userSettings: s.userSettings,
       availableModels: s.availableModels,
       settingsLoading: s.settingsLoading,
       modelsLoading: s.modelsLoading,
       fetchModelSettings: s.fetchModelSettings,
       fetchAvailableModels: s.fetchAvailableModels,
+      fetchUserSettings: s.fetchUserSettings,
       closeSettings: s.closeSettings,
     })),
   )
@@ -27,7 +31,8 @@ export function SettingsPanel() {
   useEffect(() => {
     fetchModelSettings()
     fetchAvailableModels()
-  }, [fetchModelSettings, fetchAvailableModels])
+    fetchUserSettings()
+  }, [fetchModelSettings, fetchAvailableModels, fetchUserSettings])
 
   const modelOptions = availableModels.map(m => m.id).sort()
   const isLoading = settingsLoading || modelsLoading
@@ -52,11 +57,6 @@ export function SettingsPanel() {
         {/* Content */}
         <div className="px-6 py-5 space-y-5">
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">AI Models</h3>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
-              Select which models to use for each stage of the chat pipeline.
-            </p>
-
             {isLoading ? (
               <div className="space-y-3 animate-pulse">
                 <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded" />
@@ -65,8 +65,9 @@ export function SettingsPanel() {
               </div>
             ) : modelSettings ? (
               <SettingsForm
-                key={`${modelSettings.context}|${modelSettings.reasoning}|${modelSettings.response}|${modelSettings.chat_context_window}`}
+                key={`${modelSettings.context}|${modelSettings.reasoning}|${modelSettings.response}|${modelSettings.chat_context_window}|${userSettings?.requesty_api_key}`}
                 initial={modelSettings}
+                initialUserSettings={userSettings}
                 modelOptions={modelOptions}
                 onClose={closeSettings}
               />
@@ -94,31 +95,52 @@ export function SettingsPanel() {
 
 function SettingsForm({
   initial,
+  initialUserSettings,
   modelOptions,
   onClose,
 }: {
   initial: ModelSettings
+  initialUserSettings: UserSettings | null
   modelOptions: string[]
   onClose: () => void
 }) {
   const updateModelSettings = useStore(s => s.updateModelSettings)
+  const updateUserSettings = useStore(s => s.updateUserSettings)
   const [context, setContext] = useState(initial.context)
   const [reasoning, setReasoning] = useState(initial.reasoning)
   const [response, setResponse] = useState(initial.response)
   const [chatContextWindow, setChatContextWindow] = useState(initial.chat_context_window)
+  const [reqApiKey, setReqApiKey] = useState('')
+  const [reqApiKeyDisplay, setReqApiKeyDisplay] = useState(initialUserSettings?.requesty_api_key || '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const hasChanges =
+  const hasModelChanges =
     context !== initial.context ||
     reasoning !== initial.reasoning ||
     response !== initial.response ||
     chatContextWindow !== initial.chat_context_window
 
+  const hasApiKeyChange = reqApiKey.length > 0
+
+  const hasChanges = hasModelChanges || hasApiKeyChange
+
   const handleSave = async () => {
     setSaving(true)
     setSaved(false)
-    await updateModelSettings({ context, reasoning, response, chat_context_window: chatContextWindow })
+
+    // Save model settings (these go to per-user DB when auth is active)
+    if (hasModelChanges) {
+      await updateModelSettings({ context, reasoning, response, chat_context_window: chatContextWindow })
+    }
+
+    // Save API key if changed
+    if (hasApiKeyChange) {
+      await updateUserSettings({ requesty_api_key: reqApiKey })
+      setReqApiKeyDisplay(reqApiKey.length <= 4 ? '****' : '*'.repeat(reqApiKey.length - 4) + reqApiKey.slice(-4))
+      setReqApiKey('')
+    }
+
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -126,28 +148,68 @@ function SettingsForm({
 
   return (
     <>
-      <div className="space-y-4">
-        <ModelSelect
-          label="Context Model"
-          description="Gathers context from your data"
-          value={context}
-          options={modelOptions}
-          onChange={setContext}
-        />
-        <ModelSelect
-          label="Reasoning Model"
-          description="Plans actions and makes decisions"
-          value={reasoning}
-          options={modelOptions}
-          onChange={setReasoning}
-        />
-        <ModelSelect
-          label="Response Model"
-          description="Generates the final reply"
-          value={response}
-          options={modelOptions}
-          onChange={setResponse}
-        />
+      {/* API Key Section */}
+      <div>
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">API Key</h3>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+          Your personal API key for LLM access via Requesty. This key is stored securely per-user.
+        </p>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Requesty API Key
+          </label>
+          <div className="relative">
+            <input
+              type="password"
+              value={reqApiKey}
+              onChange={e => setReqApiKey(e.target.value)}
+              placeholder={reqApiKeyDisplay || 'Enter your API key'}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
+            />
+            {reqApiKeyDisplay && !reqApiKey && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-green-600 dark:text-green-400">
+                configured
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            Get your key at{' '}
+            <a href="https://requesty.ai" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:text-indigo-600">
+              requesty.ai
+            </a>
+          </p>
+        </div>
+      </div>
+
+      {/* Model Selection */}
+      <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">AI Models</h3>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+          Select which models to use for each stage of the chat pipeline.
+        </p>
+        <div className="space-y-4">
+          <ModelSelect
+            label="Context Model"
+            description="Gathers context from your data"
+            value={context}
+            options={modelOptions}
+            onChange={setContext}
+          />
+          <ModelSelect
+            label="Reasoning Model"
+            description="Plans actions and makes decisions"
+            value={reasoning}
+            options={modelOptions}
+            onChange={setReasoning}
+          />
+          <ModelSelect
+            label="Response Model"
+            description="Generates the final reply"
+            value={response}
+            options={modelOptions}
+            onChange={setResponse}
+          />
+        </div>
       </div>
 
       <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
@@ -157,7 +219,7 @@ function SettingsForm({
             Context Window Size
           </label>
           <p className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">
-            Number of recent messages included as context for AI responses (1–50)
+            Number of recent messages included as context for AI responses (1-50)
           </p>
           <input
             type="number"

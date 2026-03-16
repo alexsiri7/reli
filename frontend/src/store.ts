@@ -21,6 +21,7 @@ import {
   CalendarStatusSchema,
   CalendarEventSchema,
   ModelSettingsSchema,
+  UserSettingsSchema,
   RequestyModelSchema,
 } from './schemas'
 import { z } from 'zod'
@@ -128,6 +129,16 @@ export interface ModelSettings {
 export interface RequestyModel {
   id: string
   name: string | null
+}
+
+export interface UserSettings {
+  requesty_api_key: string
+  openai_api_key: string
+  embedding_model: string
+  context_model: string
+  reasoning_model: string
+  response_model: string
+  chat_context_window: number | null
 }
 
 export interface ModelUsage {
@@ -259,6 +270,7 @@ interface ReliState {
   // Settings
   settingsOpen: boolean
   modelSettings: ModelSettings | null
+  userSettings: UserSettings | null
   availableModels: RequestyModel[]
   settingsLoading: boolean
   modelsLoading: boolean
@@ -267,6 +279,8 @@ interface ReliState {
   fetchModelSettings: () => Promise<void>
   fetchAvailableModels: () => Promise<void>
   updateModelSettings: (settings: Partial<ModelSettings>) => Promise<void>
+  fetchUserSettings: () => Promise<void>
+  updateUserSettings: (settings: Partial<UserSettings>) => Promise<void>
 }
 
 const HISTORY_PAGE_SIZE = 20
@@ -767,6 +781,7 @@ export const useStore = create<ReliState>((set, get) => ({
   // Settings
   settingsOpen: false,
   modelSettings: null,
+  userSettings: null,
   availableModels: [],
   settingsLoading: false,
   modelsLoading: false,
@@ -812,6 +827,32 @@ export const useStore = create<ReliState>((set, get) => ({
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = validateResponse(ModelSettingsSchema, await res.json(), '/settings')
       set({ modelSettings: data })
+    } catch (e) {
+      set({ error: String(e) })
+    }
+  },
+
+  fetchUserSettings: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/settings/user`)
+      if (!res.ok) return
+      const data = validateResponse(UserSettingsSchema, await res.json(), '/settings/user')
+      set({ userSettings: data })
+    } catch {
+      // ignore
+    }
+  },
+
+  updateUserSettings: async (settings: Partial<UserSettings>) => {
+    try {
+      const res = await apiFetch(`${BASE}/settings/user`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = validateResponse(UserSettingsSchema, await res.json(), '/settings/user')
+      set({ userSettings: data })
     } catch (e) {
       set({ error: String(e) })
     }

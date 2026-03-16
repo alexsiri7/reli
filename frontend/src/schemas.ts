@@ -203,6 +203,16 @@ export const ModelSettingsSchema = z.object({
   chat_context_window: z.number(),
 })
 
+export const UserSettingsSchema = z.object({
+  requesty_api_key: z.string(),
+  openai_api_key: z.string(),
+  embedding_model: z.string(),
+  context_model: z.string(),
+  reasoning_model: z.string(),
+  response_model: z.string(),
+  chat_context_window: z.number().nullable(),
+})
+
 export const RequestyModelSchema = z.object({
   id: z.string(),
   name: z.string().nullable(),

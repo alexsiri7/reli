@@ -178,6 +178,21 @@ def _migrate_google_tokens_multi_user(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_user_settings(conn: sqlite3.Connection) -> None:
+    """Create user_settings table for per-user configuration (API keys, models)."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            key TEXT NOT NULL,
+            value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, key)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id)")
+
+
 def _migrate_backfill_null_user_ids(conn: sqlite3.Connection) -> None:
     """Backfill NULL user_id in things/chat_history/sweep_findings to the first user.
 
@@ -345,4 +360,5 @@ def init_db() -> None:
         _migrate_add_users(conn)
         _migrate_google_tokens_multi_user(conn)
         _migrate_backfill_null_user_ids(conn)
+        _migrate_user_settings(conn)
         _seed_thing_types(conn)
