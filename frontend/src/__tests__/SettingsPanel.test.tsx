@@ -23,9 +23,13 @@ beforeEach(() => {
     fetchModelSettings: vi.fn(),
     fetchAvailableModels: vi.fn(),
     fetchUserSettings: vi.fn(),
+    fetchUserProfile: vi.fn(),
     updateModelSettings: vi.fn().mockResolvedValue(undefined),
     updateUserSettings: vi.fn().mockResolvedValue(undefined),
+    updateUserThing: vi.fn().mockResolvedValue(undefined),
     closeSettings: vi.fn(),
+    userProfile: null,
+    userProfileLoading: false,
   }
 })
 

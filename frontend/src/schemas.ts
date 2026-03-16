@@ -218,6 +218,21 @@ export const RequestyModelSchema = z.object({
   name: z.string().nullable(),
 })
 
+// --- User Profile ---
+
+export const UserProfileRelationshipSchema = z.object({
+  id: z.string(),
+  relationship_type: z.string(),
+  direction: z.enum(['outgoing', 'incoming']),
+  related_thing_id: z.string(),
+  related_thing_title: z.string(),
+})
+
+export const UserProfileSchema = z.object({
+  thing: ThingSchema,
+  relationships: z.array(UserProfileRelationshipSchema),
+})
+
 // --- Validation helper ---
 
 /**

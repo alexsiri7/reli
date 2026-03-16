@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { ModelSettings, UserSettings } from '../store'
+import type { ModelSettings, UserSettings, UserProfileRelationship } from '../store'
 import { useTheme, setTheme } from '../hooks/useTheme'
 
 export function SettingsPanel() {
@@ -14,6 +14,7 @@ export function SettingsPanel() {
     fetchModelSettings,
     fetchAvailableModels,
     fetchUserSettings,
+    fetchUserProfile,
     closeSettings,
   } = useStore(
     useShallow(s => ({
@@ -25,6 +26,7 @@ export function SettingsPanel() {
       fetchModelSettings: s.fetchModelSettings,
       fetchAvailableModels: s.fetchAvailableModels,
       fetchUserSettings: s.fetchUserSettings,
+      fetchUserProfile: s.fetchUserProfile,
       closeSettings: s.closeSettings,
     })),
   )
@@ -33,7 +35,8 @@ export function SettingsPanel() {
     fetchModelSettings()
     fetchAvailableModels()
     fetchUserSettings()
-  }, [fetchModelSettings, fetchAvailableModels, fetchUserSettings])
+    fetchUserProfile()
+  }, [fetchModelSettings, fetchAvailableModels, fetchUserSettings, fetchUserProfile])
 
   const modelOptions = availableModels.map(m => m.id).sort()
   const isLoading = settingsLoading || modelsLoading
@@ -149,8 +152,11 @@ function SettingsForm({
 
   return (
     <>
+      {/* My Profile Section */}
+      <MyProfileSection />
+
       {/* API Key Section */}
-      <div>
+      <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">API Key</h3>
         <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
           Your personal API key for LLM access via Requesty. This key is stored securely per-user.
@@ -255,6 +261,250 @@ function SettingsForm({
         </button>
       </div>
     </>
+  )
+}
+
+function MyProfileSection() {
+  const { userProfile, userProfileLoading, updateUserThing, fetchUserProfile } = useStore(
+    useShallow(s => ({
+      userProfile: s.userProfile,
+      userProfileLoading: s.userProfileLoading,
+      updateUserThing: s.updateUserThing,
+      fetchUserProfile: s.fetchUserProfile,
+    })),
+  )
+
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editData, setEditData] = useState<Record<string, string>>({})
+  const [newFieldKey, setNewFieldKey] = useState('')
+  const [newFieldValue, setNewFieldValue] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
+
+  // Non-editable system keys that shouldn't be shown in the editable fields
+  const systemKeys = new Set(['google_id'])
+
+  const startEditing = () => {
+    if (!userProfile) return
+    setEditName(userProfile.thing.title)
+    const data: Record<string, string> = {}
+    if (userProfile.thing.data) {
+      for (const [k, v] of Object.entries(userProfile.thing.data)) {
+        if (!systemKeys.has(k)) {
+          data[k] = String(v ?? '')
+        }
+      }
+    }
+    setEditData(data)
+    setNewFieldKey('')
+    setNewFieldValue('')
+    setEditing(true)
+  }
+
+  const handleSaveProfile = async () => {
+    if (!userProfile) return
+    setProfileSaving(true)
+    setProfileSaved(false)
+
+    // Rebuild data preserving system keys
+    const newData: Record<string, unknown> = {}
+    if (userProfile.thing.data) {
+      for (const key of systemKeys) {
+        if (key in userProfile.thing.data) {
+          newData[key] = userProfile.thing.data[key]
+        }
+      }
+    }
+    for (const [k, v] of Object.entries(editData)) {
+      newData[k] = v
+    }
+    // Add the new field if both key and value are provided
+    if (newFieldKey.trim() && newFieldValue.trim()) {
+      newData[newFieldKey.trim()] = newFieldValue.trim()
+    }
+
+    await updateUserThing({ title: editName, data: newData })
+    await fetchUserProfile()
+    setProfileSaving(false)
+    setProfileSaved(true)
+    setEditing(false)
+    setTimeout(() => setProfileSaved(false), 2000)
+  }
+
+  const removeField = (key: string) => {
+    const updated = { ...editData }
+    delete updated[key]
+    setEditData(updated)
+  }
+
+  if (userProfileLoading) {
+    return (
+      <div>
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">My Profile</h3>
+        <div className="space-y-2 animate-pulse">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!userProfile) {
+    return (
+      <div>
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">My Profile</h3>
+        <p className="text-xs text-gray-400 dark:text-gray-500">Profile not available.</p>
+      </div>
+    )
+  }
+
+  const { thing, relationships } = userProfile
+  const displayData = thing.data
+    ? Object.entries(thing.data).filter(([k]) => !systemKeys.has(k))
+    : []
+
+  // Format relationship type for display: replace underscores/hyphens with spaces
+  const formatRelType = (type: string) => type.replace(/[_-]/g, ' ')
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">My Profile</h3>
+        {profileSaved && (
+          <span className="text-xs text-green-600 dark:text-green-400">Saved</span>
+        )}
+      </div>
+      <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+        What Reli knows about you. Edit your name and personal details.
+      </p>
+
+      {editing ? (
+        <div className="space-y-3">
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            />
+          </div>
+
+          {/* Editable data fields */}
+          {Object.entries(editData).map(([key, value]) => (
+            <div key={key} className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 w-24 flex-shrink-0 capitalize">{key}</label>
+              <input
+                type="text"
+                value={value}
+                onChange={e => setEditData({ ...editData, [key]: e.target.value })}
+                className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              />
+              <button
+                onClick={() => removeField(key)}
+                className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                title="Remove field"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+
+          {/* Add new field */}
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="text"
+              placeholder="Field name"
+              value={newFieldKey}
+              onChange={e => setNewFieldKey(e.target.value)}
+              className="w-24 flex-shrink-0 px-3 py-1.5 text-sm rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 placeholder:text-gray-300 dark:placeholder:text-gray-600"
+            />
+            <input
+              type="text"
+              placeholder="Value"
+              value={newFieldValue}
+              onChange={e => setNewFieldValue(e.target.value)}
+              className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 placeholder:text-gray-300 dark:placeholder:text-gray-600"
+            />
+            <div className="w-6" /> {/* spacer to align with remove buttons */}
+          </div>
+
+          {/* Edit actions */}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              onClick={() => setEditing(false)}
+              className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveProfile}
+              disabled={profileSaving || !editName.trim()}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
+              {profileSaving ? 'Saving...' : 'Save Profile'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* Display name */}
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-medium text-sm">
+              {thing.title.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">{thing.title}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">{thing.type_hint}</p>
+            </div>
+          </div>
+
+          {/* Data fields */}
+          {displayData.length > 0 && (
+            <div className="space-y-1.5 pl-[52px]">
+              {displayData.map(([key, value]) => (
+                <div key={key} className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-400 dark:text-gray-500 capitalize">{key}:</span>
+                  <span className="text-gray-700 dark:text-gray-300">{String(value)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Edit button */}
+          <div className="pl-[52px]">
+            <button
+              onClick={startEditing}
+              className="text-xs text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
+            >
+              Edit profile
+            </button>
+          </div>
+
+          {/* Relationships (read-only) */}
+          {relationships.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+              <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Learned Relationships</h4>
+              <div className="space-y-1.5">
+                {relationships.map((rel: UserProfileRelationship) => (
+                  <div key={rel.id} className="flex items-center gap-2 text-xs">
+                    <span className="text-gray-400 dark:text-gray-500 capitalize">{formatRelType(rel.relationship_type)}:</span>
+                    <span className="text-gray-700 dark:text-gray-300">{rel.related_thing_title}</span>
+                    {rel.direction === 'incoming' && (
+                      <span className="text-gray-300 dark:text-gray-600 text-[10px]">(incoming)</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

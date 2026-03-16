@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 
 from ..auth import require_user, user_filter
 from ..database import clean_orphan_relationships, db
@@ -89,6 +90,71 @@ def _row_to_thing(row: sqlite3.Row) -> Thing:
         last_referenced=last_referenced,
         open_questions=open_questions,
     )
+
+
+class UserProfileResponse(BaseModel):
+    """The user's anchor Thing with its relationships."""
+    thing: Thing
+    relationships: list[Relationship]
+
+    model_config = {"from_attributes": True}
+
+
+class UserProfileRelationship(BaseModel):
+    """A relationship resolved with the related Thing's title."""
+    id: str
+    relationship_type: str
+    direction: str  # "outgoing" or "incoming"
+    related_thing_id: str
+    related_thing_title: str
+
+
+class UserProfileDetail(BaseModel):
+    """The user's anchor Thing with resolved relationships."""
+    thing: Thing
+    relationships: list[UserProfileRelationship]
+
+
+@router.get("/me", response_model=UserProfileDetail, summary="Get the current user's profile Thing")
+def get_user_thing(user_id: str = Depends(require_user)) -> UserProfileDetail:
+    """Return the user's anchor Thing (created at sign-up) with resolved relationships."""
+    with db() as conn:
+        uf_sql, uf_params = user_filter(user_id)
+        row = conn.execute(
+            "SELECT * FROM things WHERE surface = 0 AND type_hint = 'person'" + uf_sql,
+            uf_params,
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User profile Thing not found")
+
+        thing = _row_to_thing(row)
+        thing_id = thing.id
+
+        # Fetch relationships with resolved titles
+        rel_rows = conn.execute(
+            "SELECT r.*, "
+            "  CASE WHEN r.from_thing_id = ? THEN t_to.title ELSE t_from.title END AS related_title,"
+            "  CASE WHEN r.from_thing_id = ? THEN t_to.id ELSE t_from.id END AS related_id,"
+            "  CASE WHEN r.from_thing_id = ? THEN 'outgoing' ELSE 'incoming' END AS direction"
+            " FROM thing_relationships r"
+            " LEFT JOIN things t_from ON r.from_thing_id = t_from.id"
+            " LEFT JOIN things t_to ON r.to_thing_id = t_to.id"
+            " WHERE r.from_thing_id = ? OR r.to_thing_id = ?",
+            (thing_id, thing_id, thing_id, thing_id, thing_id),
+        ).fetchall()
+
+        relationships = [
+            UserProfileRelationship(
+                id=r["id"],
+                relationship_type=r["relationship_type"],
+                direction=r["direction"],
+                related_thing_id=r["related_id"] or "",
+                related_thing_title=r["related_title"] or "Unknown",
+            )
+            for r in rel_rows
+        ]
+
+    return UserProfileDetail(thing=thing, relationships=relationships)
 
 
 @router.get("/search", response_model=list[Thing], summary="Search Things across the full graph")

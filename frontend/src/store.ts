@@ -23,6 +23,7 @@ import {
   ModelSettingsSchema,
   UserSettingsSchema,
   RequestyModelSchema,
+  UserProfileSchema,
 } from './schemas'
 import { z } from 'zod'
 
@@ -139,6 +140,19 @@ export interface UserSettings {
   reasoning_model: string
   response_model: string
   chat_context_window: number | null
+}
+
+export interface UserProfileRelationship {
+  id: string
+  relationship_type: string
+  direction: 'outgoing' | 'incoming'
+  related_thing_id: string
+  related_thing_title: string
+}
+
+export interface UserProfile {
+  thing: Thing
+  relationships: UserProfileRelationship[]
 }
 
 export interface ModelUsage {
@@ -284,6 +298,12 @@ interface ReliState {
   updateModelSettings: (settings: Partial<ModelSettings>) => Promise<void>
   fetchUserSettings: () => Promise<void>
   updateUserSettings: (settings: Partial<UserSettings>) => Promise<void>
+
+  // User profile
+  userProfile: UserProfile | null
+  userProfileLoading: boolean
+  fetchUserProfile: () => Promise<void>
+  updateUserThing: (updates: { title?: string; data?: Record<string, unknown> }) => Promise<void>
 }
 
 const HISTORY_PAGE_SIZE = 20
@@ -903,6 +923,44 @@ export const useStore = create<ReliState>((set, get) => ({
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = validateResponse(UserSettingsSchema, await res.json(), '/settings/user')
       set({ userSettings: data })
+    } catch (e) {
+      set({ error: String(e) })
+    }
+  },
+
+  // User profile
+  userProfile: null,
+  userProfileLoading: false,
+
+  fetchUserProfile: async () => {
+    set({ userProfileLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/things/me`)
+      if (!res.ok) {
+        set({ userProfile: null })
+        return
+      }
+      const data = validateResponse(UserProfileSchema, await res.json(), '/things/me')
+      set({ userProfile: data as UserProfile })
+    } catch {
+      set({ userProfile: null })
+    } finally {
+      set({ userProfileLoading: false })
+    }
+  },
+
+  updateUserThing: async (updates: { title?: string; data?: Record<string, unknown> }) => {
+    const profile = get().userProfile
+    if (!profile) return
+    try {
+      const res = await apiFetch(`${BASE}/things/${profile.thing.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const updated: Thing = validateResponse(ThingSchema, await res.json(), `/things/${profile.thing.id}`)
+      set({ userProfile: { ...profile, thing: updated } })
     } catch (e) {
       set({ error: String(e) })
     }
