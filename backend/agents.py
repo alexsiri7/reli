@@ -406,6 +406,11 @@ Output schema:
       }
     }],
     "delete": ["id1"],
+    "merge": [{
+      "keep_id": "uuid-of-primary",
+      "remove_id": "uuid-of-duplicate",
+      "merged_data": {}
+    }],
     "relationships": [{
       "from_thing_id": "...", "to_thing_id": "...",
       "relationship_type": "..."
@@ -419,6 +424,7 @@ Rules:
 - "create" items: title required; type_hint optional; checkin_date ISO-8601 or null
 - "update" items: id required; changes = only the fields to change
 - "delete" items: list of UUIDs to hard-delete
+- "merge" items: unify duplicate Things (see Merging below)
 - "relationships": create typed links between Things (see below)
 - "open_questions": when creating or updating a Thing, proactively generate 1-3
   open questions that would help deepen understanding of that Thing. These are
@@ -445,6 +451,20 @@ Rules:
 - Include relevant context in data.notes when the user provides background info.
 - When the user completes a task (marks done, says "finished X"), set active=false
   on the matching Thing. Note what was accomplished in reasoning_summary.
+
+Merging:
+When you recognize that two Things in the relevant Things list refer to the same
+real-world entity, use "merge" to unify them. For example, if "Bob" and "my cousin"
+are the same person, merge them into one. Rules:
+- keep_id: the Thing with more data, history, or relationships (the primary)
+- remove_id: the duplicate Thing to be absorbed
+- merged_data: combined data dict with the best information from both Things
+  (e.g. merge names, notes, tags). Fields from merged_data overwrite keep_id's data.
+- The merge will: update the primary Thing's data, re-point all relationships from
+  the duplicate to the primary, transfer open_questions (skipping duplicates),
+  and delete the duplicate Thing.
+- Only merge Things you are confident refer to the same real-world entity.
+  If uncertain, add a question to questions_for_user instead.
 
 Entity Types:
 When the user mentions people, places, events, concepts, or references, create
@@ -530,6 +550,7 @@ async def run_reasoning_agent(
     result["storage_changes"].setdefault("create", [])
     result["storage_changes"].setdefault("update", [])
     result["storage_changes"].setdefault("delete", [])
+    result["storage_changes"].setdefault("merge", [])
     result.setdefault("questions_for_user", [])
     result.setdefault("reasoning_summary", "")
     return result
@@ -551,7 +572,7 @@ def apply_storage_changes(
     from .vector_store import delete_thing as vs_delete
     from .vector_store import upsert_thing
 
-    applied: dict[str, list] = {"created": [], "updated": [], "deleted": [], "relationships_created": []}
+    applied: dict[str, list] = {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []}
 
     now = datetime.now(timezone.utc).isoformat()
 
@@ -688,6 +709,93 @@ def apply_storage_changes(
         applied["deleted"].append(thing_id)
         vs_delete(thing_id)
 
+    # ── Merges ────────────────────────────────────────────────────────────
+    for merge_item in storage_changes.get("merge", []):
+        keep_id = str(merge_item.get("keep_id", "")).strip()
+        remove_id = str(merge_item.get("remove_id", "")).strip()
+        merged_data = merge_item.get("merged_data") or {}
+        if not keep_id or not remove_id or keep_id == remove_id:
+            continue
+
+        keep_row = conn.execute("SELECT * FROM things WHERE id = ?", (keep_id,)).fetchone()
+        remove_row = conn.execute("SELECT * FROM things WHERE id = ?", (remove_id,)).fetchone()
+        if not keep_row or not remove_row:
+            logger.warning(
+                "Skipping merge: keep_id=%s exists=%s, remove_id=%s exists=%s",
+                keep_id, bool(keep_row), remove_id, bool(remove_row),
+            )
+            continue
+
+        # 1. Merge data into the primary Thing
+        mf: dict[str, Any] = {}
+        existing_data = keep_row["data"]
+        try:
+            old_data = _json.loads(existing_data) if isinstance(existing_data, str) and existing_data else {}
+        except (ValueError, TypeError):
+            old_data = {}
+        new_data = merged_data if isinstance(merged_data, dict) else {}
+        if new_data or old_data:
+            combined = {**old_data, **new_data}
+            mf["data"] = _json.dumps(combined)
+
+        # 2. Transfer open_questions from removed Thing (skip duplicates)
+        keep_oq_raw = keep_row["open_questions"]
+        remove_oq_raw = remove_row["open_questions"]
+        try:
+            keep_oq = _json.loads(keep_oq_raw) if isinstance(keep_oq_raw, str) and keep_oq_raw else []
+        except (ValueError, TypeError):
+            keep_oq = []
+        try:
+            remove_oq = _json.loads(remove_oq_raw) if isinstance(remove_oq_raw, str) and remove_oq_raw else []
+        except (ValueError, TypeError):
+            remove_oq = []
+        if remove_oq:
+            existing_set = set(keep_oq)
+            for q in remove_oq:
+                if q not in existing_set:
+                    keep_oq.append(q)
+                    existing_set.add(q)
+            mf["open_questions"] = _json.dumps(keep_oq)
+
+        # Update the primary Thing
+        if mf:
+            mf["updated_at"] = now
+            set_clause = ", ".join(f"{k} = ?" for k in mf)
+            values = list(mf.values()) + [keep_id]
+            conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
+
+        # 3. Re-point all relationships from remove_id → keep_id
+        conn.execute(
+            "UPDATE thing_relationships SET from_thing_id = ? WHERE from_thing_id = ?",
+            (keep_id, remove_id),
+        )
+        conn.execute(
+            "UPDATE thing_relationships SET to_thing_id = ? WHERE to_thing_id = ?",
+            (keep_id, remove_id),
+        )
+        # Clean up any self-referential relationships created by the re-pointing
+        conn.execute(
+            "DELETE FROM thing_relationships WHERE from_thing_id = ? AND to_thing_id = ?",
+            (keep_id, keep_id),
+        )
+
+        # 4. Delete the duplicate Thing
+        conn.execute("DELETE FROM things WHERE id = ?", (remove_id,))
+        vs_delete(remove_id)
+
+        # 5. Re-embed the updated primary Thing
+        updated_keep = conn.execute("SELECT * FROM things WHERE id = ?", (keep_id,)).fetchone()
+        if updated_keep:
+            upsert_thing(dict(updated_keep))
+            applied["merged"].append(
+                {
+                    "keep_id": keep_id,
+                    "remove_id": remove_id,
+                    "keep_title": updated_keep["title"],
+                    "remove_title": remove_row["title"],
+                }
+            )
+
     # Build lookup for NEW:<index> placeholders — covers both genuinely created
     # Things and deduped creates that were converted to updates.
     created_id_map: dict[str, str] = {}
@@ -784,6 +892,8 @@ Rules:
   "Got it! '[Thing]' is tracked with a check-in on [date]. You're all set."
   or "Done! I've locked in '[Thing]' for you. Anything else?"
 - When something was UPDATED, briefly confirm what changed.
+- When Things were MERGED, confirm the unification naturally: "I noticed 'X' and
+  'Y' were the same — merged them into one." Keep it brief.
 - When a task is COMPLETED (marked inactive / deleted), CELEBRATE big:
   "YES! '[Thing]' is DONE! You're on fire. What's next?"
   or "Consider '[Thing]' handled. Seriously impressive. What are we tackling now?"
