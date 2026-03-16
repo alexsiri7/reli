@@ -267,16 +267,11 @@ interface ReliState {
 
 const HISTORY_PAGE_SIZE = 20
 
-function getOrCreateSessionId(): string {
-  const key = 'reli-session-id'
-  const stored = localStorage.getItem(key)
-  if (stored) return stored
-  const id = `reli-${Math.random().toString(36).slice(2)}`
-  localStorage.setItem(key, id)
-  return id
-}
+const LEGACY_SESSION_KEY = 'reli-session-id'
 
-const SESSION_ID = getOrCreateSessionId()
+function getLegacySessionId(): string | null {
+  return localStorage.getItem(LEGACY_SESSION_KEY)
+}
 
 const BASE = '/api'
 
@@ -311,7 +306,21 @@ export const useStore = create<ReliState>((set, get) => ({
       const res = await apiFetch(`${BASE}/auth/me`)
       if (res.ok) {
         const user: AuthUser = validateResponse(AuthUserSchema, await res.json(), '/auth/me')
-        set({ currentUser: user, authChecked: true })
+        set({ currentUser: user, authChecked: true, sessionId: user.id })
+
+        // Migrate legacy random session ID to user-based session ID
+        const legacyId = getLegacySessionId()
+        if (legacyId && legacyId !== user.id) {
+          apiFetch(`${BASE}/chat/migrate-session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ old_session_id: legacyId, new_session_id: user.id }),
+          }).then(() => {
+            localStorage.removeItem(LEGACY_SESSION_KEY)
+          }).catch(() => {
+            // Migration is best-effort; old history may be orphaned
+          })
+        }
       } else {
         set({ currentUser: null, authChecked: true })
       }
@@ -335,7 +344,7 @@ export const useStore = create<ReliState>((set, get) => ({
   briefing: [],
   findings: [],
   messages: [],
-  sessionId: SESSION_ID,
+  sessionId: '',
   sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, cost_usd: 0, per_model: [] },
   loading: false,
   chatLoading: false,
@@ -563,7 +572,8 @@ export const useStore = create<ReliState>((set, get) => ({
   fetchHistory: async () => {
     set({ historyLoading: true })
     try {
-      const res = await apiFetch(`${BASE}/chat/history/${SESSION_ID}?limit=${HISTORY_PAGE_SIZE}`)
+      const sessionId = get().sessionId
+      const res = await apiFetch(`${BASE}/chat/history/${sessionId}?limit=${HISTORY_PAGE_SIZE}`)
       if (!res.ok) return
       const data: ChatMessage[] = validateResponse(z.array(ChatMessageSchema), await res.json(), '/chat/history')
       set({
@@ -586,8 +596,9 @@ export const useStore = create<ReliState>((set, get) => ({
 
     set({ historyLoading: true })
     try {
+      const sessionId = get().sessionId
       const res = await apiFetch(
-        `${BASE}/chat/history/${SESSION_ID}?limit=${HISTORY_PAGE_SIZE}&before=${oldestMsg.id}`
+        `${BASE}/chat/history/${sessionId}?limit=${HISTORY_PAGE_SIZE}&before=${oldestMsg.id}`
       )
       if (!res.ok) return
       const data: ChatMessage[] = validateResponse(z.array(ChatMessageSchema), await res.json(), '/chat/history')
@@ -605,7 +616,7 @@ export const useStore = create<ReliState>((set, get) => ({
   sendMessage: async (text: string) => {
     const userMsg: ChatMessage = {
       id: `local-${Date.now()}`,
-      session_id: SESSION_ID,
+      session_id: get().sessionId,
       role: 'user',
       content: text,
       applied_changes: null,
@@ -614,7 +625,7 @@ export const useStore = create<ReliState>((set, get) => ({
     }
     const placeholderMsg: ChatMessage = {
       id: `pending-${Date.now()}`,
-      session_id: SESSION_ID,
+      session_id: get().sessionId,
       role: 'assistant',
       content: '',
       applied_changes: null,
@@ -632,14 +643,14 @@ export const useStore = create<ReliState>((set, get) => ({
       const res = await apiFetch(`${BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: SESSION_ID, message: text }),
+        body: JSON.stringify({ session_id: get().sessionId, message: text }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = validateResponse(ChatResponseSchema, await res.json(), '/chat')
 
       const assistantMsg: ChatMessage = {
         id: `assistant-${Date.now()}`,
-        session_id: SESSION_ID,
+        session_id: get().sessionId,
         role: 'assistant',
         content: data.reply,
         applied_changes: data.applied_changes ?? null,

@@ -22,7 +22,16 @@ from ..database import db
 from .settings import get_chat_context_window
 from ..google_calendar import fetch_upcoming_events
 from ..google_calendar import is_connected as gcal_connected
-from ..models import ChatMessage, ChatMessageCreate, ChatRequest, ChatResponse, ModelUsage, SessionUsage, UsageInfo
+from ..models import (
+    ChatMessage,
+    ChatMessageCreate,
+    ChatRequest,
+    ChatResponse,
+    MigrateSessionRequest,
+    ModelUsage,
+    SessionUsage,
+    UsageInfo,
+)
 from ..vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 from ..web_search import google_search, is_search_configured
 
@@ -110,6 +119,24 @@ def delete_history(session_id: str, user_id: str = Depends(require_user)) -> Non
         result = conn.execute(f"DELETE FROM chat_history WHERE session_id = ?{uf_sql}", [session_id, *uf_params])
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail=f"No chat history found for session '{session_id}'")
+
+
+@router.post("/migrate-session", status_code=status.HTTP_200_OK, summary="Migrate chat history to a new session ID")
+def migrate_session(body: MigrateSessionRequest, user_id: str = Depends(require_user)) -> dict:
+    """Migrate all chat history and usage records from old_session_id to new_session_id for the current user."""
+    if body.old_session_id == body.new_session_id:
+        return {"migrated": 0}
+    uf_sql, uf_params = user_filter(user_id)
+    with db() as conn:
+        chat_result = conn.execute(
+            f"UPDATE chat_history SET session_id = ? WHERE session_id = ?{uf_sql}",
+            [body.new_session_id, body.old_session_id, *uf_params],
+        )
+        usage_result = conn.execute(
+            f"UPDATE usage_log SET session_id = ? WHERE session_id = ?{uf_sql}",
+            [body.new_session_id, body.old_session_id, *uf_params],
+        )
+    return {"migrated": chat_result.rowcount + usage_result.rowcount}
 
 
 # ---------------------------------------------------------------------------
