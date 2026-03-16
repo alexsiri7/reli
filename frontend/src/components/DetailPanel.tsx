@@ -46,10 +46,13 @@ export function DetailPanel() {
       'spawned-from': 'spawned',
       'spawned': 'spawned-from',
     }
+    const thingIds = new Set(things.map(t => t.id))
     const groups = new Map<string, { rel: Relationship; otherId: string; direction: string }[]>()
     for (const rel of detailRelationships) {
       const isFrom = rel.from_thing_id === detailThingId
       const otherId = isFrom ? rel.to_thing_id : rel.from_thing_id
+      // Filter out relationships pointing to non-existent Things (orphans)
+      if (!thingIds.has(otherId)) continue
       const rawType = rel.relationship_type
       const displayType = isFrom ? rawType : (opposites[rawType] ?? rawType)
       const direction = '\u2192'
@@ -57,7 +60,7 @@ export function DetailPanel() {
       groups.get(displayType)!.push({ rel, otherId, direction })
     }
     return groups
-  }, [detailRelationships, detailThingId])
+  }, [detailRelationships, detailThingId, things])
 
   if (!detailThingId) return null
 

@@ -2,6 +2,8 @@
 
 from fastapi.testclient import TestClient
 
+from backend.database import db
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -263,3 +265,100 @@ class TestGetGraph:
         node = next(n for n in data["nodes"] if n["id"] == t["id"])
         assert node["icon"] == "👤"
         assert node["type_hint"] == "person"
+
+
+# ---------------------------------------------------------------------------
+# Orphan Relationships
+# ---------------------------------------------------------------------------
+
+
+def _insert_orphan_relationship(from_id: str, to_id: str, rel_type: str = "orphan_link") -> str:
+    """Directly insert a relationship bypassing FK validation (simulates orphan)."""
+    import uuid
+
+    rel_id = str(uuid.uuid4())
+    with db() as conn:
+        # Temporarily disable FK constraints to insert an orphan
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute(
+            "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type)"
+            " VALUES (?, ?, ?, ?)",
+            (rel_id, from_id, to_id, rel_type),
+        )
+        conn.execute("PRAGMA foreign_keys=ON")
+    return rel_id
+
+
+class TestOrphanRelationships:
+    def test_orphans_empty(self, client):
+        resp = client.get("/api/things/relationships/orphans")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_orphans_detects_missing_to_thing(self, client):
+        t1 = create_thing(client, title="Existing")
+        _insert_orphan_relationship(t1["id"], "nonexistent-id")
+
+        resp = client.get("/api/things/relationships/orphans")
+        assert resp.status_code == 200
+        orphans = resp.json()
+        assert len(orphans) == 1
+        assert orphans[0]["to_thing_id"] == "nonexistent-id"
+
+    def test_orphans_detects_missing_from_thing(self, client):
+        t1 = create_thing(client, title="Existing")
+        _insert_orphan_relationship("nonexistent-id", t1["id"])
+
+        resp = client.get("/api/things/relationships/orphans")
+        orphans = resp.json()
+        assert len(orphans) == 1
+        assert orphans[0]["from_thing_id"] == "nonexistent-id"
+
+    def test_valid_relationship_not_reported_as_orphan(self, client):
+        t1 = create_thing(client, title="A")
+        t2 = create_thing(client, title="B")
+        client.post(
+            "/api/things/relationships",
+            json={"from_thing_id": t1["id"], "to_thing_id": t2["id"], "relationship_type": "related_to"},
+        )
+
+        resp = client.get("/api/things/relationships/orphans")
+        assert resp.json() == []
+
+    def test_cleanup_deletes_orphans(self, client):
+        t1 = create_thing(client, title="Keeper")
+        orphan_id = _insert_orphan_relationship(t1["id"], "ghost-thing")
+
+        resp = client.post("/api/things/relationships/cleanup")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["deleted_count"] == 1
+        assert orphan_id in data["deleted_ids"]
+
+        # Verify orphan is gone
+        resp2 = client.get("/api/things/relationships/orphans")
+        assert resp2.json() == []
+
+    def test_cleanup_preserves_valid_relationships(self, client):
+        t1 = create_thing(client, title="A")
+        t2 = create_thing(client, title="B")
+        rel = client.post(
+            "/api/things/relationships",
+            json={"from_thing_id": t1["id"], "to_thing_id": t2["id"], "relationship_type": "valid"},
+        )
+        assert rel.status_code == 201
+
+        _insert_orphan_relationship("ghost1", "ghost2")
+
+        resp = client.post("/api/things/relationships/cleanup")
+        assert resp.json()["deleted_count"] == 1
+
+        # Valid relationship still exists
+        rels = client.get(f"/api/things/{t1['id']}/relationships")
+        assert len(rels.json()) == 1
+
+    def test_cleanup_noop_when_no_orphans(self, client):
+        resp = client.post("/api/things/relationships/cleanup")
+        assert resp.status_code == 200
+        assert resp.json()["deleted_count"] == 0
+        assert resp.json()["deleted_ids"] == []

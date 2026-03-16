@@ -9,11 +9,12 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 
 from ..auth import require_user, user_filter
-from ..database import db
+from ..database import clean_orphan_relationships, db
 from ..models import (
     GraphEdge,
     GraphNode,
     GraphResponse,
+    OrphanCleanupResult,
     Relationship,
     RelationshipCreate,
     Thing,
@@ -356,6 +357,36 @@ def reindex_things(user_id: str = Depends(require_user)) -> dict[str, int]:
     """Rebuild the vector search index for all Things. Returns the count of re-indexed items."""
     count = reindex_all()
     return {"reindexed": count}
+
+
+# ── Orphan relationship management ──────────────────────────────────────────
+
+
+@router.get(
+    "/relationships/orphans",
+    response_model=list[Relationship],
+    summary="Find orphan relationships",
+)
+def get_orphan_relationships(user_id: str = Depends(require_user)) -> list[Relationship]:
+    """Return relationships where from_thing_id or to_thing_id doesn't exist in the things table."""
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT r.* FROM thing_relationships r"
+            " WHERE r.from_thing_id NOT IN (SELECT id FROM things)"
+            "    OR r.to_thing_id NOT IN (SELECT id FROM things)"
+        ).fetchall()
+    return [_parse_rel_row(r) for r in rows]
+
+
+@router.post(
+    "/relationships/cleanup",
+    response_model=OrphanCleanupResult,
+    summary="Delete orphan relationships",
+)
+def cleanup_orphan_relationships(user_id: str = Depends(require_user)) -> OrphanCleanupResult:
+    """Delete all relationships where from_thing_id or to_thing_id doesn't exist."""
+    deleted_count, deleted_ids = clean_orphan_relationships()
+    return OrphanCleanupResult(deleted_count=deleted_count, deleted_ids=deleted_ids)
 
 
 # ── Relationships ────────────────────────────────────────────────────────────
