@@ -78,8 +78,8 @@ OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", _config["ollama"]["base_url"
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", _config["ollama"].get("model", ""))
 
 
-def _client() -> AsyncOpenAI:
-    return AsyncOpenAI(api_key=REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
+def _client(api_key: str | None = None) -> AsyncOpenAI:
+    return AsyncOpenAI(api_key=api_key or REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
 
 
 def _ollama_client() -> AsyncOpenAI:
@@ -231,10 +231,11 @@ async def _chat(
     messages: list[dict[str, Any]],
     model: str | None = None,
     usage_stats: UsageStats | None = None,
+    api_key: str | None = None,
     **kwargs: Any,
 ) -> str:
     """Call the LLM and return the response text."""
-    client = _client()
+    client = _client(api_key=api_key)
     used_model = model or REQUESTY_MODEL
     response = await client.chat.completions.create(
         model=used_model,
@@ -334,6 +335,7 @@ async def run_context_agent(
     history: list[dict[str, Any]],
     usage_stats: UsageStats | None = None,
     context_window: int = 10,
+    api_key: str | None = None,
 ) -> dict[str, Any]:
     """Stage 1: decide what to search for.
 
@@ -357,7 +359,7 @@ async def run_context_agent(
 
     # Fall back to Requesty
     if raw is None:
-        raw = await _chat(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
+        raw = await _chat(messages, response_format={"type": "json_object"}, usage_stats=usage_stats, api_key=api_key)
         logger.info("Context agent (Requesty/%s) raw response: %s", REQUESTY_MODEL, raw[:500] if raw else raw)
 
     try:
@@ -483,6 +485,7 @@ async def run_reasoning_agent(
     calendar_events: list[dict[str, Any]] | None = None,
     usage_stats: UsageStats | None = None,
     context_window: int = 10,
+    api_key: str | None = None,
 ) -> dict[str, Any]:
     """Stage 2: decide what changes to make."""
     from datetime import datetime, timezone
@@ -511,6 +514,7 @@ async def run_reasoning_agent(
         model=REQUESTY_REASONING_MODEL,
         response_format={"type": "json_object"},
         usage_stats=usage_stats,
+        api_key=api_key,
     )
     try:
         result: dict[str, Any] = json.loads(raw)
@@ -811,6 +815,7 @@ async def run_response_agent(
     web_results: list[dict[str, Any]] | None = None,
     usage_stats: UsageStats | None = None,
     open_questions_by_thing: dict[str, list[str]] | None = None,
+    api_key: str | None = None,
 ) -> str:
     """Stage 4: generate friendly user-facing response."""
     context = (
@@ -832,4 +837,4 @@ async def run_response_agent(
         {"role": "system", "content": RESPONSE_AGENT_SYSTEM},
         {"role": "user", "content": context},
     ]
-    return await _chat(messages, model=REQUESTY_RESPONSE_MODEL, usage_stats=usage_stats)
+    return await _chat(messages, model=REQUESTY_RESPONSE_MODEL, usage_stats=usage_stats, api_key=api_key)

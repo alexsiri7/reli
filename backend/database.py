@@ -338,6 +338,17 @@ def init_db() -> None:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(user_id, service)
             );
+
+            CREATE TABLE IF NOT EXISTS user_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL REFERENCES users(id),
+                key TEXT NOT NULL,
+                value TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, key)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id);
         """)
         _migrate_chat_history_usage(conn)
         _migrate_things_graph(conn)

@@ -192,6 +192,28 @@ export const AuthUserSchema = z.object({
   email: z.string(),
   name: z.string(),
   picture: z.string().nullable(),
+  needs_setup: z.boolean().optional(),
+})
+
+export const SetupStatusSchema = z.object({
+  needs_setup: z.boolean(),
+  has_api_key: z.boolean(),
+  has_display_name: z.boolean(),
+})
+
+export const UserSettingsSchema = z.object({
+  display_name: z.string(),
+  api_key: z.string(),
+  context_model: z.string(),
+  reasoning_model: z.string(),
+  response_model: z.string(),
+})
+
+export const ModelCostSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  cost_per_conversation: z.number(),
+  tier: z.string(),
 })
 
 // --- Settings ---

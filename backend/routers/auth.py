@@ -185,11 +185,14 @@ def get_current_user(request: Request) -> dict:
     if not row:
         raise HTTPException(status_code=401, detail="User not found")
 
+    from .settings import check_setup_complete
+
     return {
         "id": row["id"],
         "email": row["email"],
         "name": row["name"],
         "picture": row["picture"],
+        "needs_setup": not check_setup_complete(user_id),
     }
 
 

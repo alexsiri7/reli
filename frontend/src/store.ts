@@ -185,6 +185,28 @@ export interface AuthUser {
   email: string
   name: string
   picture: string | null
+  needs_setup?: boolean
+}
+
+export interface SetupStatus {
+  needs_setup: boolean
+  has_api_key: boolean
+  has_display_name: boolean
+}
+
+export interface UserSettings {
+  display_name: string
+  api_key: string
+  context_model: string
+  reasoning_model: string
+  response_model: string
+}
+
+export interface ModelCost {
+  id: string
+  name: string
+  cost_per_conversation: number
+  tier: string
 }
 
 interface ReliState {
@@ -267,6 +289,13 @@ interface ReliState {
   fetchModelSettings: () => Promise<void>
   fetchAvailableModels: () => Promise<void>
   updateModelSettings: (settings: Partial<ModelSettings>) => Promise<void>
+
+  // Setup wizard
+  needsSetup: boolean
+  setupLoading: boolean
+  modelCosts: ModelCost[]
+  completeSetup: (settings: { display_name: string; api_key: string; context_model?: string; reasoning_model?: string; response_model?: string }) => Promise<boolean>
+  fetchModelCosts: () => Promise<void>
 }
 
 const HISTORY_PAGE_SIZE = 20
@@ -310,7 +339,7 @@ export const useStore = create<ReliState>((set, get) => ({
       const res = await apiFetch(`${BASE}/auth/me`)
       if (res.ok) {
         const user: AuthUser = validateResponse(AuthUserSchema, await res.json(), '/auth/me')
-        set({ currentUser: user, authChecked: true, sessionId: user.id })
+        set({ currentUser: user, authChecked: true, sessionId: user.id, needsSetup: user.needs_setup ?? false })
 
         // Migrate legacy random session ID to user-based session ID
         const legacyId = getLegacySessionId()
@@ -814,6 +843,47 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ modelSettings: data })
     } catch (e) {
       set({ error: String(e) })
+    }
+  },
+
+  // Setup wizard
+  needsSetup: false,
+  setupLoading: false,
+  modelCosts: [],
+
+  completeSetup: async (settings) => {
+    set({ setupLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/settings/user`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ detail: 'Setup failed' }))
+        set({ error: data.detail || 'Setup failed' })
+        return false
+      }
+      set({ needsSetup: false })
+      // Refresh user data
+      get().fetchCurrentUser()
+      return true
+    } catch (e) {
+      set({ error: String(e) })
+      return false
+    } finally {
+      set({ setupLoading: false })
+    }
+  },
+
+  fetchModelCosts: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/settings/model-costs`)
+      if (!res.ok) return
+      const data = await res.json()
+      set({ modelCosts: data })
+    } catch {
+      // best-effort
     }
   },
 }))

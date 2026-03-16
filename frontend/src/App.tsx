@@ -6,15 +6,17 @@ import { ChatPanel } from './components/ChatPanel'
 import { DetailPanel } from './components/DetailPanel'
 import GraphView from './components/GraphView'
 import { LoginPage } from './components/LoginPage'
+import { SetupWizard } from './components/SetupWizard'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { SettingsPanel } from './components/SettingsPanel'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
+  const { currentUser, authChecked, needsSetup, settingsOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
+      needsSetup: s.needsSetup,
       settingsOpen: s.settingsOpen,
       mainView: s.mainView,
       mobileView: s.mobileView,
@@ -72,6 +74,11 @@ function App() {
   // Show login page if not authenticated
   if (!currentUser) {
     return <LoginPage />
+  }
+
+  // Show setup wizard if first-run setup is needed
+  if (needsSetup) {
+    return <SetupWizard />
   }
 
   return (
