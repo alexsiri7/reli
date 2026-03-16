@@ -23,6 +23,7 @@ import {
   ModelSettingsSchema,
   UserSettingsSchema,
   RequestyModelSchema,
+  SetupStatusSchema,
 } from './schemas'
 import { z } from 'zod'
 
@@ -198,6 +199,11 @@ export interface AuthUser {
   picture: string | null
 }
 
+export interface SetupStatus {
+  needs_setup: boolean
+  display_name: string
+}
+
 interface ReliState {
   currentUser: AuthUser | null
   authChecked: boolean
@@ -266,6 +272,13 @@ interface ReliState {
   // Mobile navigation
   mobileView: 'things' | 'chat'
   setMobileView: (view: 'things' | 'chat') => void
+
+  // Setup wizard
+  needsSetup: boolean
+  setupChecked: boolean
+  setupDisplayName: string
+  checkSetupStatus: () => Promise<void>
+  completeSetup: (data: { display_name: string; requesty_api_key: string; context_model?: string; reasoning_model?: string; response_model?: string }) => Promise<void>
 
   // Settings
   settingsOpen: boolean
@@ -777,6 +790,41 @@ export const useStore = create<ReliState>((set, get) => ({
   // Mobile navigation
   mobileView: 'things',
   setMobileView: (view) => set({ mobileView: view }),
+
+  // Setup wizard
+  needsSetup: false,
+  setupChecked: false,
+  setupDisplayName: '',
+
+  checkSetupStatus: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/settings/setup-status`)
+      if (!res.ok) {
+        set({ setupChecked: true, needsSetup: false })
+        return
+      }
+      const data = validateResponse(SetupStatusSchema, await res.json(), '/settings/setup-status')
+      set({ needsSetup: data.needs_setup, setupChecked: true, setupDisplayName: data.display_name })
+    } catch {
+      set({ setupChecked: true, needsSetup: false })
+    }
+  },
+
+  completeSetup: async (data) => {
+    try {
+      const res = await apiFetch(`${BASE}/settings/complete-setup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      set({ needsSetup: false })
+      // Re-fetch user to update display name
+      get().fetchCurrentUser()
+    } catch (e) {
+      set({ error: String(e) })
+    }
+  },
 
   // Settings
   settingsOpen: false,

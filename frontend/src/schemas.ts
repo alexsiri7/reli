@@ -218,6 +218,11 @@ export const RequestyModelSchema = z.object({
   name: z.string().nullable(),
 })
 
+export const SetupStatusSchema = z.object({
+  needs_setup: z.boolean(),
+  display_name: z.string(),
+})
+
 // --- Validation helper ---
 
 /**

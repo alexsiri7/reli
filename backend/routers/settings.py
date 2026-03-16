@@ -27,6 +27,8 @@ _VALID_KEYS = {
     "reasoning_model",
     "response_model",
     "chat_context_window",
+    "display_name",
+    "setup_completed",
 }
 
 
@@ -318,3 +320,73 @@ def update_user_settings(
                 _set_user_setting(conn, user_id, field_name, str(val))
 
     return get_user_settings_endpoint(user_id)
+
+
+# ── Setup wizard endpoints ────────────────────────────────────────────────────
+
+
+class SetupStatus(BaseModel):
+    needs_setup: bool
+    display_name: str
+
+
+class SetupComplete(BaseModel):
+    display_name: str
+    requesty_api_key: str
+    context_model: str | None = None
+    reasoning_model: str | None = None
+    response_model: str | None = None
+
+
+@router.get("/setup-status", response_model=SetupStatus, summary="Check if first-run setup is needed")
+def get_setup_status(user_id: str = Depends(require_user)) -> SetupStatus:
+    """Return whether the user needs to complete first-run setup."""
+    if not user_id:
+        return SetupStatus(needs_setup=True, display_name="")
+
+    user_settings = get_user_settings_dict(user_id)
+
+    # Setup is complete if the user has explicitly completed it
+    setup_done = user_settings.get("setup_completed") == "true"
+
+    # Also check if they already have an API key (env or per-user) — skip wizard
+    if not setup_done:
+        has_key = bool(get_user_api_key(user_id))
+        if has_key:
+            setup_done = True
+
+    # Get display name from settings, fallback to user profile name
+    display_name = user_settings.get("display_name", "")
+    if not display_name:
+        with db() as conn:
+            row = conn.execute("SELECT name FROM users WHERE id = ?", (user_id,)).fetchone()
+        display_name = row["name"] if row else ""
+
+    return SetupStatus(needs_setup=not setup_done, display_name=display_name)
+
+
+@router.post("/complete-setup", response_model=SetupStatus, summary="Complete first-run setup")
+def complete_setup(
+    body: SetupComplete,
+    user_id: str = Depends(require_user),
+) -> SetupStatus:
+    """Save all setup wizard data and mark setup as complete."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    with db() as conn:
+        if body.display_name:
+            _set_user_setting(conn, user_id, "display_name", body.display_name)
+            # Also update the users table name
+            conn.execute("UPDATE users SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (body.display_name, user_id))
+        if body.requesty_api_key:
+            _set_user_setting(conn, user_id, "requesty_api_key", body.requesty_api_key)
+        if body.context_model:
+            _set_user_setting(conn, user_id, "context_model", body.context_model)
+        if body.reasoning_model:
+            _set_user_setting(conn, user_id, "reasoning_model", body.reasoning_model)
+        if body.response_model:
+            _set_user_setting(conn, user_id, "response_model", body.response_model)
+        _set_user_setting(conn, user_id, "setup_completed", "true")
+
+    return SetupStatus(needs_setup=False, display_name=body.display_name)

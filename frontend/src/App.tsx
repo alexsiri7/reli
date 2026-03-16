@@ -6,15 +6,19 @@ import { ChatPanel } from './components/ChatPanel'
 import { DetailPanel } from './components/DetailPanel'
 import GraphView from './components/GraphView'
 import { LoginPage } from './components/LoginPage'
+import { SetupWizard } from './components/SetupWizard'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { SettingsPanel } from './components/SettingsPanel'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
+  const { currentUser, authChecked, needsSetup, setupChecked, checkSetupStatus, settingsOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
+      needsSetup: s.needsSetup,
+      setupChecked: s.setupChecked,
+      checkSetupStatus: s.checkSetupStatus,
       settingsOpen: s.settingsOpen,
       mainView: s.mainView,
       mobileView: s.mobileView,
@@ -38,9 +42,14 @@ function App() {
     fetchCurrentUser()
   }, [fetchCurrentUser])
 
-  // Load app data once authenticated
+  // Check setup status once authenticated
   useEffect(() => {
-    if (!currentUser) return
+    if (currentUser) checkSetupStatus()
+  }, [currentUser, checkSetupStatus])
+
+  // Load app data once authenticated and setup complete
+  useEffect(() => {
+    if (!currentUser || needsSetup) return
 
     fetchThingTypes()
     fetchThings()
@@ -58,7 +67,7 @@ function App() {
     }
 
     return () => clearInterval(interval)
-  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces])
+  }, [currentUser, needsSetup, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces])
 
   // Show nothing while checking auth
   if (!authChecked) {
@@ -72,6 +81,19 @@ function App() {
   // Show login page if not authenticated
   if (!currentUser) {
     return <LoginPage />
+  }
+
+  // Show setup wizard if first-run setup needed
+  if (!setupChecked) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="h-8 w-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (needsSetup) {
+    return <SetupWizard />
   }
 
   return (
