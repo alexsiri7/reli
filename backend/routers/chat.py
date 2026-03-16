@@ -209,7 +209,8 @@ def _fetch_with_family(conn: sqlite3.Connection, seed_ids: list[str]) -> list[di
 
 
 def _fetch_relevant_things(
-    conn: sqlite3.Connection, search_queries: list[str], filter_params: dict[str, Any]
+    conn: sqlite3.Connection, search_queries: list[str], filter_params: dict[str, Any],
+    user_id: str = "",
 ) -> list[dict[str, Any]]:
     """Retrieve relevant Things using vector search (≥500 Things) or SQL LIKE fallback (<500).
 
@@ -217,6 +218,7 @@ def _fetch_relevant_things(
     """
     active_only = filter_params.get("active_only", True)
     type_hint = filter_params.get("type_hint")
+    uf_sql, uf_params = user_filter(user_id)
 
     # Choose retrieval strategy based on indexed count
     vc = vector_count()
@@ -255,6 +257,8 @@ def _fetch_relevant_things(
             pattern = f"%{query}%"
             sql = "SELECT id FROM things WHERE (title LIKE ? OR data LIKE ?)"
             params: list = [pattern, pattern]
+            sql += uf_sql
+            params.extend(uf_params)
             if active_only:
                 sql += " AND active = 1"
             if type_hint:
@@ -277,8 +281,8 @@ def _fetch_relevant_things(
     # Always include recent active things when there aren't enough results
     if len(results) < 5:
         seen_ids = {r["id"] for r in results}
-        sql = "SELECT * FROM things WHERE active = 1 ORDER BY updated_at DESC LIMIT 10"
-        for row in conn.execute(sql).fetchall():
+        recent_sql = "SELECT * FROM things WHERE active = 1" + uf_sql + " ORDER BY updated_at DESC LIMIT 10"
+        for row in conn.execute(recent_sql, uf_params).fetchall():
             if row["id"] not in seen_ids:
                 seen_ids.add(row["id"])
                 results.append(dict(row))
@@ -351,7 +355,7 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
 
     # Retrieve relevant Things and update last_referenced
     with db() as conn:
-        relevant_things = _fetch_relevant_things(conn, search_queries, filter_params)
+        relevant_things = _fetch_relevant_things(conn, search_queries, filter_params, user_id=user_id)
         logger.info(
             "Retrieved %d relevant Things for queries %r (vector_count=%d, threshold=%d)",
             len(relevant_things),

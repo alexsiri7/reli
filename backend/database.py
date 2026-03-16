@@ -178,6 +178,20 @@ def _migrate_google_tokens_multi_user(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_backfill_null_user_ids(conn: sqlite3.Connection) -> None:
+    """Backfill NULL user_id in things/chat_history/sweep_findings to the first user.
+
+    Things created before multi-user auth have user_id=NULL, which causes
+    user_filter queries to miss them (404 on context thing links).
+    """
+    first_user = conn.execute("SELECT id FROM users LIMIT 1").fetchone()
+    if not first_user:
+        return  # No users yet — nothing to backfill
+    uid = first_user["id"]
+    for table in ("things", "chat_history", "sweep_findings"):
+        conn.execute(f"UPDATE {table} SET user_id = ? WHERE user_id IS NULL", (uid,))
+
+
 def clean_orphan_relationships() -> tuple[int, list[str]]:
     """Delete relationships where from_thing_id or to_thing_id doesn't exist.
 
@@ -330,4 +344,5 @@ def init_db() -> None:
         _migrate_sweep_findings_snooze(conn)
         _migrate_add_users(conn)
         _migrate_google_tokens_multi_user(conn)
+        _migrate_backfill_null_user_ids(conn)
         _seed_thing_types(conn)

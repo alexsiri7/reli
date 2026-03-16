@@ -64,4 +64,4 @@ def user_filter(user_id: str, table_alias: str = "") -> tuple[str, list[str]]:
     if not user_id:
         return "", []
     prefix = f"{table_alias}." if table_alias else ""
-    return f" AND {prefix}user_id = ?", [user_id]
+    return f" AND ({prefix}user_id = ? OR {prefix}user_id IS NULL)", [user_id]
