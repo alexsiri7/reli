@@ -286,6 +286,19 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_usage_log_timestamp ON usage_log(timestamp);
             CREATE INDEX IF NOT EXISTS idx_usage_log_session ON usage_log(session_id);
 
+            CREATE TABLE IF NOT EXISTS chat_message_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_message_id INTEGER NOT NULL,
+                stage TEXT,
+                model TEXT NOT NULL,
+                prompt_tokens INTEGER DEFAULT 0,
+                completion_tokens INTEGER DEFAULT 0,
+                cost_usd REAL DEFAULT 0.0,
+                FOREIGN KEY(chat_message_id) REFERENCES chat_history(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_chat_msg_usage_msg ON chat_message_usage(chat_message_id);
+
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
                 email TEXT UNIQUE NOT NULL,

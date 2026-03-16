@@ -23,6 +23,7 @@ from .settings import get_chat_context_window
 from ..google_calendar import fetch_upcoming_events
 from ..google_calendar import is_connected as gcal_connected
 from ..models import (
+    CallUsage,
     ChatMessage,
     ChatMessageCreate,
     ChatRequest,
@@ -46,14 +47,19 @@ def _parse_dt(val: str | None) -> datetime | None:
     return datetime.fromisoformat(val)
 
 
-def _row_to_msg(row: sqlite3.Row) -> ChatMessage:
+def _row_to_msg(row: sqlite3.Row, usage_rows: list[sqlite3.Row] | None = None) -> ChatMessage:
     changes = row["applied_changes"]
     if isinstance(changes, str):
         changes = json.loads(changes) if changes else None
-    # Extract per-call usage from applied_changes if present
-    per_call_usage = []
-    if isinstance(changes, dict) and "per_call_usage" in changes:
-        per_call_usage = changes["per_call_usage"]
+    # Prefer per-call usage from the dedicated table; fall back to applied_changes JSON
+    per_call_usage: list[CallUsage] = []
+    if usage_rows:
+        per_call_usage = [
+            CallUsage(model=u["model"], prompt_tokens=u["prompt_tokens"], completion_tokens=u["completion_tokens"], cost_usd=u["cost_usd"])
+            for u in usage_rows
+        ]
+    elif isinstance(changes, dict) and "per_call_usage" in changes:
+        per_call_usage = [CallUsage(**c) for c in changes["per_call_usage"]]
     return ChatMessage(
         id=row["id"],
         session_id=row["session_id"],
@@ -91,7 +97,20 @@ def get_history(
                 [session_id, *uf_params, limit],
             ).fetchall()
             rows = list(reversed(rows))
-    return [_row_to_msg(r) for r in rows]
+
+        # Fetch per-call usage from chat_message_usage table
+        msg_ids = [r["id"] for r in rows]
+        usage_by_msg: dict[int, list[sqlite3.Row]] = {}
+        if msg_ids:
+            placeholders = ",".join("?" for _ in msg_ids)
+            usage_rows = conn.execute(
+                f"SELECT * FROM chat_message_usage WHERE chat_message_id IN ({placeholders}) ORDER BY id",
+                msg_ids,
+            ).fetchall()
+            for u in usage_rows:
+                usage_by_msg.setdefault(u["chat_message_id"], []).append(u)
+
+    return [_row_to_msg(r, usage_by_msg.get(r["id"])) for r in rows]
 
 
 @router.post(
@@ -446,7 +465,7 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
             "INSERT INTO chat_history (session_id, role, content, applied_changes, user_id) VALUES (?, ?, ?, ?, ?)",
             (session_id, "user", message, None, user_id or None),
         )
-        conn.execute(
+        cursor = conn.execute(
             "INSERT INTO chat_history"
             " (session_id, role, content, applied_changes,"
             " prompt_tokens, completion_tokens, cost_usd, api_calls, model, user_id)"
@@ -464,8 +483,20 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
                 user_id or None,
             ),
         )
+        assistant_msg_id = cursor.lastrowid
 
-        # Insert per-call usage records for accurate per-model tracking
+        # Insert per-call usage into chat_message_usage for structured retrieval
+        stage_names = ["context", "reasoning", "response"]
+        for i, call in enumerate(usage.calls):
+            stage = stage_names[i] if i < len(stage_names) else None
+            conn.execute(
+                "INSERT INTO chat_message_usage"
+                " (chat_message_id, stage, model, prompt_tokens, completion_tokens, cost_usd)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (assistant_msg_id, stage, call.model, call.prompt_tokens, call.completion_tokens, call.cost_usd),
+            )
+
+        # Insert per-call usage records into usage_log for daily aggregation
         for call in usage.calls:
             conn.execute(
                 "INSERT INTO usage_log (session_id, model, prompt_tokens, completion_tokens, cost_usd, user_id)"
