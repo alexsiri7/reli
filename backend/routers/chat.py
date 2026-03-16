@@ -316,6 +316,50 @@ def _fetch_gmail_context(query: str) -> list[dict[str, Any]]:
         return []
 
 
+def _enrich_history_content(row: sqlite3.Row) -> str:
+    """Append Thing metadata summary to assistant messages that have applied_changes.
+
+    This gives the context/reasoning agents visibility into which Things were
+    involved in prior turns, improving pronoun/reference resolution.
+    """
+    content: str = row["content"] or ""
+    if row["role"] != "assistant":
+        return content
+
+    raw = row["applied_changes"]
+    if not raw:
+        return content
+
+    changes = json.loads(raw) if isinstance(raw, str) else raw
+    if not isinstance(changes, dict):
+        return content
+
+    parts: list[str] = []
+
+    # Context things: Things that informed the response
+    context_things = changes.get("context_things", [])
+    if context_things:
+        labels = [
+            f"{t.get('title', t.get('id', '?'))}" + (f" ({t['type_hint']})" if t.get("type_hint") else "")
+            for t in context_things
+        ]
+        parts.append(f"[Context: {', '.join(labels)}]")
+
+    # Created/updated things from storage changes
+    for key, verb in [("created", "Created"), ("updated", "Updated")]:
+        items = changes.get(key, [])
+        if items:
+            labels = [
+                f"{t.get('title', t.get('id', '?'))}" + (f" ({t.get('type_hint', '')})" if t.get("type_hint") else "")
+                for t in items
+            ]
+            parts.append(f"[{verb}: {', '.join(labels)}]")
+
+    if parts:
+        return content + "\n" + "\n".join(parts)
+    return content
+
+
 @router.post("", response_model=ChatResponse, summary="Send a message through the multi-agent pipeline")
 async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatResponse:
     """4-stage pipeline: Context → Retrieve → Reasoning → Validate → Respond."""
@@ -329,10 +373,10 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     history_limit = context_window * 2
     with db() as conn:
         rows = conn.execute(
-            "SELECT role, content FROM chat_history WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
+            "SELECT role, content, applied_changes FROM chat_history WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
             (session_id, history_limit),
         ).fetchall()
-    history = [{"role": r["role"], "content": r["content"]} for r in rows]
+    history = [{"role": r["role"], "content": _enrich_history_content(r)} for r in rows]
 
     # Track usage across all pipeline stages
     usage = UsageStats()

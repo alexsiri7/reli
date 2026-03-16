@@ -25,7 +25,7 @@ class ModelSettings(BaseModel):
     context: str
     reasoning: str
     response: str
-    chat_context_window: int = 10
+    chat_context_window: int = 3
 
 
 class ModelSettingsUpdate(BaseModel):
@@ -71,7 +71,7 @@ def _reload_agent_vars(models: dict[str, str]) -> None:
 def get_chat_context_window() -> int:
     """Return the configured chat context window size."""
     cfg = _read_config()
-    val: int = cfg.get("chat", {}).get("context_window", 10)
+    val: int = cfg.get("chat", {}).get("context_window", 3)
     return val
 
 
@@ -103,7 +103,7 @@ def get_settings(_user_id: str = Depends(require_user)) -> ModelSettings:
         context=models.get("context", "google/gemini-2.5-flash-lite"),
         reasoning=models.get("reasoning", "google/gemini-3-flash-preview"),
         response=models.get("response", "google/gemini-2.5-flash-lite"),
-        chat_context_window=cfg.get("chat", {}).get("context_window", 10),
+        chat_context_window=cfg.get("chat", {}).get("context_window", 3),
     )
 
 
@@ -144,5 +144,5 @@ def update_settings(
         context=models.get("context", "google/gemini-2.5-flash-lite"),
         reasoning=models.get("reasoning", "google/gemini-3-flash-preview"),
         response=models.get("response", "google/gemini-2.5-flash-lite"),
-        chat_context_window=cfg.get("chat", {}).get("context_window", 10),
+        chat_context_window=cfg.get("chat", {}).get("context_window", 3),
     )
