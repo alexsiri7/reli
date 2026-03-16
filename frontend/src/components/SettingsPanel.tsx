@@ -264,6 +264,11 @@ function SettingsForm({
   )
 }
 
+// Keys that are promoted to dedicated fields and hidden from the generic list
+const PROMOTED_KEYS = new Set(['preferences', 'notes'])
+// Keys managed by the system — never editable
+const SYSTEM_KEYS = new Set(['google_id'])
+
 function MyProfileSection() {
   const { userProfile, userProfileLoading, updateUserThing, fetchUserProfile } = useStore(
     useShallow(s => ({
@@ -273,70 +278,6 @@ function MyProfileSection() {
       fetchUserProfile: s.fetchUserProfile,
     })),
   )
-
-  const [editing, setEditing] = useState(false)
-  const [editName, setEditName] = useState('')
-  const [editData, setEditData] = useState<Record<string, string>>({})
-  const [newFieldKey, setNewFieldKey] = useState('')
-  const [newFieldValue, setNewFieldValue] = useState('')
-  const [profileSaving, setProfileSaving] = useState(false)
-  const [profileSaved, setProfileSaved] = useState(false)
-
-  // Non-editable system keys that shouldn't be shown in the editable fields
-  const systemKeys = new Set(['google_id'])
-
-  const startEditing = () => {
-    if (!userProfile) return
-    setEditName(userProfile.thing.title)
-    const data: Record<string, string> = {}
-    if (userProfile.thing.data) {
-      for (const [k, v] of Object.entries(userProfile.thing.data)) {
-        if (!systemKeys.has(k)) {
-          data[k] = String(v ?? '')
-        }
-      }
-    }
-    setEditData(data)
-    setNewFieldKey('')
-    setNewFieldValue('')
-    setEditing(true)
-  }
-
-  const handleSaveProfile = async () => {
-    if (!userProfile) return
-    setProfileSaving(true)
-    setProfileSaved(false)
-
-    // Rebuild data preserving system keys
-    const newData: Record<string, unknown> = {}
-    if (userProfile.thing.data) {
-      for (const key of systemKeys) {
-        if (key in userProfile.thing.data) {
-          newData[key] = userProfile.thing.data[key]
-        }
-      }
-    }
-    for (const [k, v] of Object.entries(editData)) {
-      newData[k] = v
-    }
-    // Add the new field if both key and value are provided
-    if (newFieldKey.trim() && newFieldValue.trim()) {
-      newData[newFieldKey.trim()] = newFieldValue.trim()
-    }
-
-    await updateUserThing({ title: editName, data: newData })
-    await fetchUserProfile()
-    setProfileSaving(false)
-    setProfileSaved(true)
-    setEditing(false)
-    setTimeout(() => setProfileSaved(false), 2000)
-  }
-
-  const removeField = (key: string) => {
-    const updated = { ...editData }
-    delete updated[key]
-    setEditData(updated)
-  }
 
   if (userProfileLoading) {
     return (
@@ -359,13 +300,129 @@ function MyProfileSection() {
     )
   }
 
-  const { thing, relationships } = userProfile
-  const displayData = thing.data
-    ? Object.entries(thing.data).filter(([k]) => !systemKeys.has(k))
-    : []
+  // Key on thing.updated_at so the form remounts (resetting state) after save
+  return (
+    <ProfileForm
+      key={userProfile.thing.updated_at}
+      userProfile={userProfile}
+      updateUserThing={updateUserThing}
+      fetchUserProfile={fetchUserProfile}
+    />
+  )
+}
+
+function ProfileForm({
+  userProfile,
+  updateUserThing,
+  fetchUserProfile,
+}: {
+  userProfile: { thing: { id: string; title: string; type_hint: string | null; data: Record<string, unknown> | null; updated_at: string }; relationships: UserProfileRelationship[] }
+  updateUserThing: (updates: { title?: string; data?: Record<string, unknown> }) => Promise<void>
+  fetchUserProfile: () => Promise<void>
+}) {
+  const thing = userProfile.thing
+
+  // Derive initial values from the profile (no useEffect needed — remount resets state)
+  const initPrefs = thing.data?.preferences != null ? String(thing.data.preferences) : ''
+  const initNotes = thing.data?.notes != null ? String(thing.data.notes) : ''
+  const initData: Record<string, string> = {}
+  if (thing.data) {
+    for (const [k, v] of Object.entries(thing.data)) {
+      if (!SYSTEM_KEYS.has(k) && !PROMOTED_KEYS.has(k)) {
+        initData[k] = String(v ?? '')
+      }
+    }
+  }
+
+  const [editName, setEditName] = useState(thing.title)
+  const [editPreferences, setEditPreferences] = useState(initPrefs)
+  const [editNotes, setEditNotes] = useState(initNotes)
+  const [editData, setEditData] = useState<Record<string, string>>(initData)
+  const [newFieldKey, setNewFieldKey] = useState('')
+  const [newFieldValue, setNewFieldValue] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
+
+  // Dirty detection — compare current edits to stored profile
+  const isDirty = (() => {
+    if (editName !== thing.title) return true
+    const storedPrefs = thing.data?.preferences != null ? String(thing.data.preferences) : ''
+    if (editPreferences !== storedPrefs) return true
+    const storedNotes = thing.data?.notes != null ? String(thing.data.notes) : ''
+    if (editNotes !== storedNotes) return true
+
+    // Check generic data fields
+    const storedData: Record<string, string> = {}
+    if (thing.data) {
+      for (const [k, v] of Object.entries(thing.data)) {
+        if (!SYSTEM_KEYS.has(k) && !PROMOTED_KEYS.has(k)) {
+          storedData[k] = String(v ?? '')
+        }
+      }
+    }
+    const editKeys = Object.keys(editData).sort()
+    const storedKeys = Object.keys(storedData).sort()
+    if (editKeys.length !== storedKeys.length) return true
+    for (let i = 0; i < editKeys.length; i++) {
+      if (editKeys[i] !== storedKeys[i]) return true
+      if (editData[editKeys[i]!] !== storedData[editKeys[i]!]) return true
+    }
+
+    // Pending new field counts as a change
+    if (newFieldKey.trim() && newFieldValue.trim()) return true
+
+    return false
+  })()
+
+  const handleSaveProfile = async () => {
+    setProfileSaving(true)
+    setProfileSaved(false)
+
+    // Rebuild data preserving system keys
+    const newData: Record<string, unknown> = {}
+    if (thing.data) {
+      for (const key of SYSTEM_KEYS) {
+        if (key in thing.data) {
+          newData[key] = thing.data[key]
+        }
+      }
+    }
+
+    // Promoted fields
+    if (editPreferences.trim()) newData.preferences = editPreferences.trim()
+    if (editNotes.trim()) newData.notes = editNotes.trim()
+
+    // Generic fields
+    for (const [k, v] of Object.entries(editData)) {
+      newData[k] = v
+    }
+    // Add the new field if both key and value are provided
+    if (newFieldKey.trim() && newFieldValue.trim()) {
+      newData[newFieldKey.trim()] = newFieldValue.trim()
+    }
+
+    await updateUserThing({ title: editName, data: newData })
+    await fetchUserProfile()
+    setNewFieldKey('')
+    setNewFieldValue('')
+    setProfileSaving(false)
+    setProfileSaved(true)
+    setTimeout(() => setProfileSaved(false), 2000)
+  }
+
+  const removeField = (key: string) => {
+    const updated = { ...editData }
+    delete updated[key]
+    setEditData(updated)
+  }
+
+  const { relationships } = userProfile
 
   // Format relationship type for display: replace underscores/hyphens with spaces
   const formatRelType = (type: string) => type.replace(/[_-]/g, ' ')
+
+  const inputClass =
+    'w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500'
 
   return (
     <div>
@@ -379,43 +436,78 @@ function MyProfileSection() {
         What Reli knows about you. Edit your name and personal details.
       </p>
 
-      {editing ? (
-        <div className="space-y-3">
-          {/* Name */}
-          <div>
+      <div className="space-y-4">
+        {/* Avatar + Name */}
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-medium text-sm flex-shrink-0">
+            {(editName || thing.title).charAt(0).toUpperCase()}
+          </div>
+          <div className="flex-1">
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
             <input
               type="text"
               value={editName}
               onChange={e => setEditName(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              className={inputClass}
             />
           </div>
+        </div>
 
-          {/* Editable data fields */}
-          {Object.entries(editData).map(([key, value]) => (
-            <div key={key} className="flex items-center gap-2">
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 w-24 flex-shrink-0 capitalize">{key}</label>
-              <input
-                type="text"
-                value={value}
-                onChange={e => setEditData({ ...editData, [key]: e.target.value })}
-                className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-              />
-              <button
-                onClick={() => removeField(key)}
-                className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                title="Remove field"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          ))}
+        {/* Preferences */}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Preferences</label>
+          <textarea
+            value={editPreferences}
+            onChange={e => setEditPreferences(e.target.value)}
+            placeholder="e.g. likes concise responses, prefers bullet points"
+            rows={2}
+            className={inputClass + ' resize-none'}
+          />
+        </div>
 
-          {/* Add new field */}
-          <div className="flex items-center gap-2 pt-1">
+        {/* Notes */}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Notes</label>
+          <textarea
+            value={editNotes}
+            onChange={e => setEditNotes(e.target.value)}
+            placeholder="Any notes for Reli to remember about you"
+            rows={2}
+            className={inputClass + ' resize-none'}
+          />
+        </div>
+
+        {/* Other data fields */}
+        {Object.entries(editData).length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400">Other Details</h4>
+            {Object.entries(editData).map(([key, value]) => (
+              <div key={key} className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400 w-24 flex-shrink-0 capitalize">{key}</label>
+                <input
+                  type="text"
+                  value={value}
+                  onChange={e => setEditData({ ...editData, [key]: e.target.value })}
+                  className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+                <button
+                  onClick={() => removeField(key)}
+                  className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Remove field"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add new field */}
+        <div>
+          <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Add Field</h4>
+          <div className="flex items-center gap-2">
             <input
               type="text"
               placeholder="Field name"
@@ -430,17 +522,12 @@ function MyProfileSection() {
               onChange={e => setNewFieldValue(e.target.value)}
               className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 placeholder:text-gray-300 dark:placeholder:text-gray-600"
             />
-            <div className="w-6" /> {/* spacer to align with remove buttons */}
           </div>
+        </div>
 
-          {/* Edit actions */}
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button
-              onClick={() => setEditing(false)}
-              className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
+        {/* Save button — appears when dirty */}
+        {isDirty && (
+          <div className="flex items-center justify-end gap-2 pt-1">
             <button
               onClick={handleSaveProfile}
               disabled={profileSaving || !editName.trim()}
@@ -449,61 +536,26 @@ function MyProfileSection() {
               {profileSaving ? 'Saving...' : 'Save Profile'}
             </button>
           </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {/* Display name */}
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-medium text-sm">
-              {thing.title.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">{thing.title}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500">{thing.type_hint}</p>
-            </div>
-          </div>
+        )}
 
-          {/* Data fields */}
-          {displayData.length > 0 && (
-            <div className="space-y-1.5 pl-[52px]">
-              {displayData.map(([key, value]) => (
-                <div key={key} className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-400 dark:text-gray-500 capitalize">{key}:</span>
-                  <span className="text-gray-700 dark:text-gray-300">{String(value)}</span>
+        {/* Relationships (read-only) */}
+        {relationships.length > 0 && (
+          <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+            <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Learned Relationships</h4>
+            <div className="space-y-1.5">
+              {relationships.map((rel: UserProfileRelationship) => (
+                <div key={rel.id} className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-400 dark:text-gray-500 capitalize">{formatRelType(rel.relationship_type)}:</span>
+                  <span className="text-gray-700 dark:text-gray-300">{rel.related_thing_title}</span>
+                  {rel.direction === 'incoming' && (
+                    <span className="text-gray-300 dark:text-gray-600 text-[10px]">(incoming)</span>
+                  )}
                 </div>
               ))}
             </div>
-          )}
-
-          {/* Edit button */}
-          <div className="pl-[52px]">
-            <button
-              onClick={startEditing}
-              className="text-xs text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
-            >
-              Edit profile
-            </button>
           </div>
-
-          {/* Relationships (read-only) */}
-          {relationships.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
-              <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Learned Relationships</h4>
-              <div className="space-y-1.5">
-                {relationships.map((rel: UserProfileRelationship) => (
-                  <div key={rel.id} className="flex items-center gap-2 text-xs">
-                    <span className="text-gray-400 dark:text-gray-500 capitalize">{formatRelType(rel.relationship_type)}:</span>
-                    <span className="text-gray-700 dark:text-gray-300">{rel.related_thing_title}</span>
-                    {rel.direction === 'incoming' && (
-                      <span className="text-gray-300 dark:text-gray-600 text-[10px]">(incoming)</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

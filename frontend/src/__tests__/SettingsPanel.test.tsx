@@ -152,3 +152,144 @@ describe('SettingsPanel', () => {
     expect(firstSelect).toHaveValue('custom-model')
   })
 })
+
+// Helper: default model settings so SettingsForm renders (required for profile section)
+const withModels = () => {
+  storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
+  storeState.availableModels = [{ id: 'gpt-4' }]
+}
+
+const makeProfile = (overrides: Record<string, unknown> = {}) => ({
+  thing: {
+    id: 't1',
+    title: 'Alice',
+    type_hint: 'person',
+    parent_id: null,
+    checkin_date: null,
+    priority: 3,
+    active: true,
+    surface: true,
+    data: { preferences: 'concise replies', notes: 'loves hiking', city: 'Portland' },
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    last_referenced: null,
+    open_questions: null,
+    children_count: null,
+    completed_count: null,
+    ...overrides,
+  },
+  relationships: [],
+})
+
+describe('MyProfileSection (inline editing)', () => {
+  it('shows profile fields inline when profile is loaded', () => {
+    withModels()
+    storeState.userProfile = makeProfile()
+    render(<SettingsPanel />)
+
+    expect(screen.getByDisplayValue('Alice')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('concise replies')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('loves hiking')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Portland')).toBeInTheDocument()
+  })
+
+  it('shows "Save Profile" button only when fields are dirty', () => {
+    withModels()
+    storeState.userProfile = makeProfile()
+    render(<SettingsPanel />)
+
+    // No save button initially (not dirty)
+    expect(screen.queryByText('Save Profile')).not.toBeInTheDocument()
+
+    // Change name → save button appears
+    fireEvent.change(screen.getByDisplayValue('Alice'), { target: { value: 'Bob' } })
+    expect(screen.getByText('Save Profile')).toBeInTheDocument()
+  })
+
+  it('calls updateUserThing with correct data on save', async () => {
+    withModels()
+    storeState.userProfile = makeProfile()
+    render(<SettingsPanel />)
+
+    // Edit the name
+    fireEvent.change(screen.getByDisplayValue('Alice'), { target: { value: 'Bob' } })
+    fireEvent.click(screen.getByText('Save Profile'))
+
+    await waitFor(() => {
+      expect(storeState.updateUserThing).toHaveBeenCalledWith({
+        title: 'Bob',
+        data: expect.objectContaining({
+          preferences: 'concise replies',
+          notes: 'loves hiking',
+          city: 'Portland',
+        }),
+      })
+    })
+  })
+
+  it('shows Saved confirmation after saving profile', async () => {
+    withModels()
+    storeState.userProfile = makeProfile()
+    render(<SettingsPanel />)
+
+    fireEvent.change(screen.getByDisplayValue('Alice'), { target: { value: 'Bob' } })
+    fireEvent.click(screen.getByText('Save Profile'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Saved')).toBeInTheDocument()
+    })
+  })
+
+  it('renders empty preferences/notes textareas when data is missing', () => {
+    withModels()
+    storeState.userProfile = makeProfile({ data: null })
+    render(<SettingsPanel />)
+
+    expect(screen.getByPlaceholderText(/likes concise/i)).toHaveValue('')
+    expect(screen.getByPlaceholderText(/notes for Reli/i)).toHaveValue('')
+  })
+
+  it('shows loading skeleton when profile is loading', () => {
+    withModels()
+    storeState.userProfileLoading = true
+    const { container } = render(<SettingsPanel />)
+
+    expect(container.querySelector('.animate-pulse')).toBeTruthy()
+    expect(screen.getByText('My Profile')).toBeInTheDocument()
+  })
+
+  it('shows relationships read-only', () => {
+    withModels()
+    storeState.userProfile = {
+      ...makeProfile(),
+      relationships: [
+        { id: 'r1', relationship_type: 'works_at', direction: 'outgoing', related_thing_id: 't2', related_thing_title: 'Acme' },
+      ],
+    }
+    render(<SettingsPanel />)
+
+    expect(screen.getByText('Learned Relationships')).toBeInTheDocument()
+    expect(screen.getByText('Acme')).toBeInTheDocument()
+    expect(screen.getByText('works at:')).toBeInTheDocument()
+  })
+
+  it('preserves system keys (google_id) during save', async () => {
+    withModels()
+    storeState.userProfile = makeProfile({ data: { google_id: 'g123', preferences: 'short' } })
+    render(<SettingsPanel />)
+
+    // Change preferences to trigger dirty state
+    fireEvent.change(screen.getByDisplayValue('short'), { target: { value: 'detailed' } })
+    fireEvent.click(screen.getByText('Save Profile'))
+
+    await waitFor(() => {
+      expect(storeState.updateUserThing).toHaveBeenCalledWith({
+        title: 'Alice',
+        data: expect.objectContaining({
+          google_id: 'g123',
+          preferences: 'detailed',
+        }),
+      })
+    })
+  })
+})
