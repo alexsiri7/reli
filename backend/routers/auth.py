@@ -1,6 +1,8 @@
 """Google OAuth2 login + JWT session authentication."""
 
+import json
 import logging
+import sqlite3
 import uuid
 from datetime import datetime, timezone
 
@@ -12,6 +14,7 @@ from google_auth_oauthlib.flow import Flow
 
 from ..config import settings
 from ..database import db
+from ..vector_store import upsert_thing
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +88,27 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (user_id, email, google_id, name, picture, now, now),
             )
+            _create_user_thing(conn, user_id, name, email, google_id, now)
     return user_id
+
+
+def _create_user_thing(conn: sqlite3.Connection, user_id: str, name: str, email: str, google_id: str, now: str) -> None:
+    """Create a Thing representing the user as their anchor node."""
+    thing_id = str(uuid.uuid4())
+    data_json = json.dumps({"email": email, "google_id": google_id})
+    conn.execute(
+        """INSERT INTO things
+           (id, title, type_hint, parent_id, checkin_date, priority, active, surface,
+            data, open_questions, created_at, updated_at, user_id)
+           VALUES (?, ?, 'person', NULL, NULL, 3, 1, 0, ?, NULL, ?, ?, ?)""",
+        (thing_id, name, data_json, now, now, user_id),
+    )
+    row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+    if row:
+        try:
+            upsert_thing(dict(row))
+        except Exception:
+            logger.warning("Failed to index user Thing %s in vector store", thing_id)
 
 
 @router.get("/google", summary="Start Google OAuth flow")
