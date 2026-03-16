@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { ModelSettings } from '../store'
+import { apiFetch } from '../api'
 
 export function SettingsPanel() {
   const {
@@ -74,6 +75,15 @@ export function SettingsPanel() {
               <p className="text-sm text-gray-400">Failed to load settings.</p>
             )}
           </div>
+        </div>
+
+        {/* Data Export */}
+        <div className="px-6 py-5 border-t border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data Export</h3>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+            Download a ZIP archive containing all your things, relationships, and chat history.
+          </p>
+          <ExportButton />
         </div>
 
         {/* Footer rendered inside SettingsForm when loaded, or simple close when not */}
@@ -227,6 +237,50 @@ function ModelSelect({
           </option>
         ))}
       </select>
+    </div>
+  )
+}
+
+function ExportButton() {
+  const [exporting, setExporting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleExport = useCallback(async () => {
+    setExporting(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/export/all')
+      if (!res.ok) {
+        throw new Error(`Export failed (${res.status})`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'reli-export.zip'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Export failed')
+    } finally {
+      setExporting(false)
+    }
+  }, [])
+
+  return (
+    <div>
+      <button
+        onClick={handleExport}
+        disabled={exporting}
+        className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+      >
+        {exporting ? 'Exporting...' : 'Export my data'}
+      </button>
+      {error && (
+        <p className="mt-2 text-xs text-red-500">{error}</p>
+      )}
     </div>
   )
 }
