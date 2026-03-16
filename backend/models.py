@@ -186,6 +186,13 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, description="User message text", examples=["What tasks are due this week?"])
 
 
+class MigrateSessionRequest(BaseModel):
+    """Migrate chat history from an old session ID to a new one."""
+
+    old_session_id: str = Field(..., min_length=1, description="The old session ID to migrate from")
+    new_session_id: str = Field(..., min_length=1, description="The new session ID to migrate to")
+
+
 class UsageInfo(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
