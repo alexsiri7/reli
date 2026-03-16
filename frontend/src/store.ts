@@ -304,6 +304,17 @@ interface ReliState {
   userProfileLoading: boolean
   fetchUserProfile: () => Promise<void>
   updateUserThing: (updates: { title?: string; data?: Record<string, unknown> }) => Promise<void>
+
+  // Feedback
+  feedbackOpen: boolean
+  openFeedback: () => void
+  closeFeedback: () => void
+  submitFeedback: (data: {
+    category: string
+    message: string
+    user_agent: string
+    url: string
+  }) => Promise<{ success: boolean; issueUrl?: string; error?: string }>
 }
 
 const HISTORY_PAGE_SIZE = 20
@@ -963,6 +974,28 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ userProfile: { ...profile, thing: updated } })
     } catch (e) {
       set({ error: String(e) })
+    }
+  },
+
+  // Feedback
+  feedbackOpen: false,
+  openFeedback: () => set({ feedbackOpen: true }),
+  closeFeedback: () => set({ feedbackOpen: false }),
+  submitFeedback: async (data) => {
+    try {
+      const res = await apiFetch(`${BASE}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        return { success: false, error: errData.detail || `HTTP ${res.status}` }
+      }
+      const result = await res.json()
+      return { success: true, issueUrl: result.issue_url }
+    } catch (e) {
+      return { success: false, error: String(e) }
     }
   },
 }))

@@ -357,6 +357,12 @@ export function Sidebar() {
                     Settings
                   </button>
                   <button
+                    onClick={() => useStore.getState().openFeedback()}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Send Feedback
+                  </button>
+                  <button
                     onClick={logout}
                     className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg transition-colors"
                   >

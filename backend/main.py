@@ -25,7 +25,7 @@ from .database import clean_orphan_relationships, init_db  # noqa: E402
 from .metrics import MetricsMiddleware, metrics_response  # noqa: E402
 from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
 from .response_metrics import ResponseMetricsMiddleware, metrics_store  # noqa: E402
-from .routers import auth, briefing, calendar, chat, gmail, proactive, settings, sweep, thing_types, things  # noqa: E402
+from .routers import auth, briefing, calendar, chat, feedback, gmail, proactive, settings, sweep, thing_types, things  # noqa: E402
 from .sweep_scheduler import start_scheduler, stop_scheduler  # noqa: E402
 
 _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
@@ -106,6 +106,10 @@ _TAG_METADATA = [
         "description": "Nightly sweep: SQL candidate collection and LLM-powered reflection.",
     },
     {
+        "name": "feedback",
+        "description": "User feedback submission via GitHub Issues.",
+    },
+    {
         "name": "health",
         "description": "Health check endpoint.",
     },
@@ -155,6 +159,7 @@ app.include_router(calendar.router, prefix="/api", dependencies=_api_deps)
 app.include_router(proactive.router, prefix="/api", dependencies=_api_deps)
 app.include_router(settings.router, prefix="/api", dependencies=_api_deps)
 app.include_router(sweep.router, prefix="/api", dependencies=_api_deps)
+app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
 
 
 @app.get("/healthz", tags=["health"], summary="Health check", description="Returns service health status.")

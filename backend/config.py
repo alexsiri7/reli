@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_LLM_RPM: int = 10
     RATE_LIMIT_API_RPM: int = 60
 
+    # --- GitHub Feedback ---
+    GITHUB_FEEDBACK_TOKEN: str = ""
+    GITHUB_FEEDBACK_REPO: str = ""  # e.g. "owner/repo"
+
     # --- Sweep scheduler ---
     SWEEP_ENABLED: str = "true"
     SWEEP_HOUR: int = 3
