@@ -266,13 +266,18 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
 
   if (totalTokens === 0) return null
 
+  const uniqueModels = calls.length > 0
+    ? [...new Set(calls.map(c => c.model.split('/').pop() ?? c.model))]
+    : msg.model ? [msg.model.split('/').pop() ?? msg.model] : []
+  const modelLabel = uniqueModels.length > 0 ? uniqueModels.join(', ') : null
+
   return (
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
         className="text-[10px] text-gray-400 dark:text-gray-500 font-mono hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
       >
-        {formatTokens(totalTokens)} tokens{msg.cost_usd != null && msg.cost_usd > 0 ? ` · ${formatCost(msg.cost_usd)}` : ''}
+        {modelLabel && <>{modelLabel} · </>}{formatTokens(totalTokens)} tokens{msg.cost_usd != null && msg.cost_usd > 0 ? ` · ${formatCost(msg.cost_usd)}` : ''}
       </button>
       {open && (
         <div className="absolute left-0 bottom-full mb-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2.5 min-w-[200px] font-mono text-[11px] text-gray-500 dark:text-gray-400">
