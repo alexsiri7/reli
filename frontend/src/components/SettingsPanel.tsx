@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { ModelSettings, UserSettings, UserProfileRelationship } from '../store'
 import { useTheme, setTheme } from '../hooks/useTheme'
+import { RelationshipMiniGraph } from './RelationshipMiniGraph'
 
 export function SettingsPanel() {
   const {
@@ -418,9 +419,6 @@ function ProfileForm({
 
   const { relationships } = userProfile
 
-  // Format relationship type for display: replace underscores/hyphens with spaces
-  const formatRelType = (type: string) => type.replace(/[_-]/g, ' ')
-
   const inputClass =
     'w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500'
 
@@ -538,23 +536,12 @@ function ProfileForm({
           </div>
         )}
 
-        {/* Relationships (read-only) */}
-        {relationships.length > 0 && (
-          <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
-            <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Learned Relationships</h4>
-            <div className="space-y-1.5">
-              {relationships.map((rel: UserProfileRelationship) => (
-                <div key={rel.id} className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-400 dark:text-gray-500 capitalize">{formatRelType(rel.relationship_type)}:</span>
-                  <span className="text-gray-700 dark:text-gray-300">{rel.related_thing_title}</span>
-                  {rel.direction === 'incoming' && (
-                    <span className="text-gray-300 dark:text-gray-600 text-[10px]">(incoming)</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Relationship Graph */}
+        <RelationshipMiniGraph
+          userThingId={thing.id}
+          userThingTitle={editName || thing.title}
+          relationships={relationships}
+        />
       </div>
     </div>
   )
