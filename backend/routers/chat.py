@@ -14,6 +14,7 @@ from ..agents import (
     UsageStats,
     apply_storage_changes,
     run_context_agent,
+    run_context_refinement,
     run_reasoning_agent,
     run_response_agent,
 )
@@ -421,7 +422,10 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     # Track usage across all pipeline stages
     usage = UsageStats()
 
-    # Stage 1: Context Agent
+    # Stage 1: Context Agent — iterative context gathering
+    # The context agent loops until it has enough context (max 4 iterations)
+    MAX_CONTEXT_ITERATIONS = 4
+
     context_result = await run_context_agent(
         message, history, usage_stats=usage, context_window=context_window,
         api_key=user_api_key, model=user_models["context"],
@@ -440,16 +444,80 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         context_result.get("include_calendar"),
     )
 
-    # Retrieve relevant Things and update last_referenced
+    # Initial retrieval
+    seen_thing_ids: set[str] = set()
+    relevant_things: list[dict[str, Any]] = []
+
     with db() as conn:
-        relevant_things = _fetch_relevant_things(conn, search_queries, filter_params, user_id=user_id)
+        initial_things = _fetch_relevant_things(conn, search_queries, filter_params, user_id=user_id)
+        for t in initial_things:
+            if t["id"] not in seen_thing_ids:
+                seen_thing_ids.add(t["id"])
+                relevant_things.append(t)
         logger.info(
-            "Retrieved %d relevant Things for queries %r (vector_count=%d, threshold=%d)",
+            "Iteration 1: retrieved %d Things for queries %r",
             len(relevant_things),
             search_queries,
-            vector_count(),
-            VECTOR_SEARCH_THRESHOLD,
         )
+
+    # Iterative refinement: ask context agent if it needs more
+    all_queries_used: set[str] = set(search_queries)
+    for iteration in range(2, MAX_CONTEXT_ITERATIONS + 1):
+        if not relevant_things:
+            break  # Nothing to refine on
+
+        refinement = await run_context_refinement(
+            message, history, relevant_things,
+            usage_stats=usage, context_window=context_window,
+            api_key=user_api_key, model=user_models["context"],
+        )
+
+        if refinement.get("done", True):
+            logger.info("Context agent satisfied after %d iterations", iteration - 1)
+            break
+
+        new_queries = [q for q in refinement.get("search_queries", []) if q not in all_queries_used]
+        direct_ids = refinement.get("thing_ids", [])
+
+        if not new_queries and not direct_ids:
+            logger.info("Context agent returned no new queries or IDs, stopping")
+            break
+
+        new_things_found = 0
+        with db() as conn:
+            # Fetch by new search queries
+            if new_queries:
+                all_queries_used.update(new_queries)
+                fetched = _fetch_relevant_things(conn, new_queries, filter_params, user_id=user_id)
+                for t in fetched:
+                    if t["id"] not in seen_thing_ids:
+                        seen_thing_ids.add(t["id"])
+                        relevant_things.append(t)
+                        new_things_found += 1
+
+            # Fetch by direct ID lookup (for following relationships)
+            for thing_id in direct_ids:
+                if thing_id in seen_thing_ids:
+                    continue
+                family = _fetch_with_family(conn, [thing_id])
+                for t in family:
+                    if t["id"] not in seen_thing_ids:
+                        seen_thing_ids.add(t["id"])
+                        relevant_things.append(t)
+                        new_things_found += 1
+
+        logger.info(
+            "Iteration %d: queries=%r, direct_ids=%r, new_things=%d, total=%d",
+            iteration, new_queries, direct_ids, new_things_found, len(relevant_things),
+        )
+
+        # Dead end: no new Things found despite new queries
+        if new_things_found == 0:
+            logger.info("No new Things found in iteration %d, stopping", iteration)
+            break
+
+    # Update last_referenced for all accumulated Things
+    with db() as conn:
         if relevant_things:
             from datetime import timezone
 
@@ -581,7 +649,11 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         assistant_msg_id = cursor.lastrowid
 
         # Insert per-call usage into chat_message_usage for structured retrieval
-        stage_names = ["context", "reasoning", "response"]
+        # Stage names: first call is "context", then refinement calls, then "reasoning", "response"
+        num_context_calls = max(usage.api_calls - 2, 1)  # at least 1 context call, minus reasoning+response
+        stage_names: list[str | None] = ["context"]
+        stage_names.extend(f"context_refinement_{i}" for i in range(1, num_context_calls))
+        stage_names.extend(["reasoning", "response"])
         for i, call in enumerate(usage.calls):
             stage = stage_names[i] if i < len(stage_names) else None
             conn.execute(

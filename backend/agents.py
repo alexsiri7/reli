@@ -306,6 +306,45 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
 """
 
 
+CONTEXT_REFINEMENT_SYSTEM = """\
+You are the Librarian for Reli, an AI personal information manager.
+You previously searched for relevant Things and got some results. Review them
+and decide whether you have enough context to fully understand the user's request.
+
+You will receive:
+- The user's original message
+- Conversation history
+- The Things found so far (with their relationships)
+
+Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
+{
+  "done": false,
+  "search_queries": ["new query 1"],
+  "thing_ids": ["uuid-to-fetch-directly"]
+}
+
+- done: true if the current results are sufficient to understand the user's request.
+  Set false if you need to look up more information.
+- search_queries: 1-3 NEW text queries to search for (only when done=false).
+  Use these to find Things you haven't found yet. Do NOT repeat previous queries.
+- thing_ids: specific Thing UUIDs to fetch directly (only when done=false).
+  Use these to follow relationships — if a found Thing references another Thing
+  by ID (in relationships or data), request that ID here.
+
+When to request more context:
+- A found Thing has relationships pointing to other Things not yet retrieved
+- The user's request references something indirectly (e.g. "my sister's address"
+  — if you found the sister but not her address/location, search for that)
+- A found Thing's data mentions other entities by name that could be in the database
+
+When to say done:
+- You have the direct Things the user asked about
+- You've followed relevant relationship chains
+- Additional searches would not meaningfully improve understanding
+- The found Things already contain the information needed
+"""
+
+
 async def _chat_ollama(
     messages: list[dict[str, Any]],
     usage_stats: UsageStats | None = None,
@@ -375,6 +414,75 @@ async def run_context_agent(
             "Context agent returned invalid JSON, falling back to message as query: %s", raw[:200] if raw else raw
         )
         return {"search_queries": [message], "filter_params": {"active_only": True, "type_hint": None}}
+
+
+async def run_context_refinement(
+    message: str,
+    history: list[dict[str, Any]],
+    found_things: list[dict[str, Any]],
+    usage_stats: UsageStats | None = None,
+    context_window: int = 10,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict[str, Any]:
+    """Ask the context agent whether more lookups are needed given current results.
+
+    Returns a dict with keys: done (bool), search_queries (list), thing_ids (list).
+    """
+    messages = [{"role": "system", "content": CONTEXT_REFINEMENT_SYSTEM}]
+    for h in history[-context_window:]:
+        messages.append({"role": h["role"], "content": h["content"]})
+
+    # Build a compact summary of found Things for the refinement prompt
+    things_summary = []
+    for t in found_things:
+        entry: dict[str, Any] = {"id": t["id"], "title": t.get("title", "")}
+        if t.get("type_hint"):
+            entry["type_hint"] = t["type_hint"]
+        if t.get("data"):
+            data = t["data"]
+            if isinstance(data, str):
+                try:
+                    data = json.loads(data)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            entry["data"] = data
+        things_summary.append(entry)
+
+    user_content = (
+        f"User's message: {message}\n\n"
+        f"Things found so far ({len(found_things)} results):\n"
+        f"{json.dumps(things_summary, default=str)}"
+    )
+    messages.append({"role": "user", "content": user_content})
+
+    raw = None
+
+    # Try Ollama first if configured
+    if OLLAMA_MODEL:
+        try:
+            raw = await _chat_ollama(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
+        except Exception as exc:
+            logger.warning("Ollama refinement failed, falling back to Requesty: %s", exc)
+
+    if raw is None:
+        raw = await _chat(
+            messages, model=model, response_format={"type": "json_object"},
+            usage_stats=usage_stats, api_key=api_key,
+        )
+
+    logger.info("Context refinement raw response: %s", raw[:500] if raw else raw)
+
+    try:
+        result: dict[str, Any] = json.loads(raw)
+        return {
+            "done": result.get("done", True),
+            "search_queries": result.get("search_queries", []),
+            "thing_ids": result.get("thing_ids", []),
+        }
+    except json.JSONDecodeError:
+        logger.warning("Context refinement returned invalid JSON, treating as done: %s", raw[:200] if raw else raw)
+        return {"done": True, "search_queries": [], "thing_ids": []}
 
 
 # ---------------------------------------------------------------------------
