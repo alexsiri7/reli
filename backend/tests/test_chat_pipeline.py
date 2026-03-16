@@ -320,3 +320,119 @@ class TestChatPipeline:
     async def test_chat_invalid_request_returns_422(self, async_client):
         resp = await async_client.post("/api/chat", json={"session_id": "", "message": ""})
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _fetch_user_relationships
+# ---------------------------------------------------------------------------
+
+
+class TestFetchUserRelationships:
+    """Test depth-limited relationship loading from the user Thing."""
+
+    def test_returns_matching_relationships(self, patched_db):
+        """Only relationships whose related Thing matches a search query are returned."""
+        from backend.database import db
+        from backend.routers.chat import _fetch_user_relationships
+
+        with db() as conn:
+            # Create user Thing
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("user-1", "Alice", "person", 3, 1, 1),
+            )
+            # Create related Things
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("sister-1", "Bob (sister)", "person", 3, 1, 1),
+            )
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("project-1", "Acme Project", "project", 3, 1, 1),
+            )
+            # Create relationships from user to both
+            conn.execute(
+                "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) "
+                "VALUES (?, ?, ?, ?)",
+                ("rel-1", "user-1", "sister-1", "sister"),
+            )
+            conn.execute(
+                "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) "
+                "VALUES (?, ?, ?, ?)",
+                ("rel-2", "user-1", "project-1", "works-on"),
+            )
+
+            # Search for "Bob" — should only return sister, not project
+            results = _fetch_user_relationships(conn, "user-1", ["Bob"])
+            assert len(results) == 1
+            assert results[0]["id"] == "sister-1"
+
+            # Search for "Acme" — should only return project
+            results = _fetch_user_relationships(conn, "user-1", ["Acme"])
+            assert len(results) == 1
+            assert results[0]["id"] == "project-1"
+
+    def test_empty_queries_returns_nothing(self, patched_db):
+        """No search queries means no relationship loading."""
+        from backend.database import db
+        from backend.routers.chat import _fetch_user_relationships
+
+        with db() as conn:
+            results = _fetch_user_relationships(conn, "user-1", [])
+            assert results == []
+
+    def test_no_relationships_returns_empty(self, patched_db):
+        """User with no relationships returns empty list."""
+        from backend.database import db
+        from backend.routers.chat import _fetch_user_relationships
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("user-1", "Alice", "person", 3, 1, 1),
+            )
+            results = _fetch_user_relationships(conn, "user-1", ["anything"])
+            assert results == []
+
+    def test_recently_referenced_sorted_first(self, patched_db):
+        """Things with recent last_referenced should appear before older ones."""
+        from backend.database import db
+        from backend.routers.chat import _fetch_user_relationships
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("user-1", "Alice", "person", 3, 1, 1),
+            )
+            # Two related Things both matching "Task"
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface, last_referenced) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("task-old", "Old Task", "task", 3, 1, 1, "2025-01-01T00:00:00"),
+            )
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface, last_referenced) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("task-new", "New Task", "task", 3, 1, 1, "2026-03-16T00:00:00"),
+            )
+            conn.execute(
+                "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) "
+                "VALUES (?, ?, ?, ?)",
+                ("rel-1", "user-1", "task-old", "assigned"),
+            )
+            conn.execute(
+                "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) "
+                "VALUES (?, ?, ?, ?)",
+                ("rel-2", "user-1", "task-new", "assigned"),
+            )
+
+            results = _fetch_user_relationships(conn, "user-1", ["Task"])
+            assert len(results) == 2
+            # Recently referenced should come first
+            assert results[0]["id"] == "task-new"
+            assert results[1]["id"] == "task-old"
