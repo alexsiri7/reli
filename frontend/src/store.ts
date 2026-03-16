@@ -248,6 +248,10 @@ interface ReliState {
   toggleThingFilterType: (type: string) => void
   clearThingFilters: () => void
 
+  // View mode
+  mainView: 'list' | 'graph'
+  setMainView: (view: 'list' | 'graph') => void
+
   // Mobile navigation
   mobileView: 'things' | 'chat'
   setMobileView: (view: 'things' | 'chat') => void
@@ -751,6 +755,10 @@ export const useStore = create<ReliState>((set, get) => ({
       : [...s.thingFilterTypes, type],
   })),
   clearThingFilters: () => set({ thingFilterQuery: '', thingFilterTypes: [] }),
+
+  // View mode
+  mainView: 'list',
+  setMainView: (view) => set({ mainView: view }),
 
   // Mobile navigation
   mobileView: 'things',

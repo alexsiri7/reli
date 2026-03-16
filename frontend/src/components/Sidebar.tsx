@@ -85,7 +85,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
   const [searchQuery, setSearchQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -313,6 +313,24 @@ export function Sidebar() {
             </p>
           </div>
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setMainView(mainView === 'list' ? 'graph' : 'list')}
+              aria-label={mainView === 'graph' ? 'Switch to list view' : 'Switch to graph view'}
+              title={mainView === 'graph' ? 'List view' : 'Graph view'}
+              className={`p-1.5 rounded-lg transition-colors ${
+                mainView === 'graph'
+                  ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
+                  : 'text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                {mainView === 'graph' ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zm9 0a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zm-4.5 9a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zM7.5 7.5h9M12 12.75v3" />
+                )}
+              </svg>
+            </button>
             {currentUser && (
               <div className="group relative">
                 {currentUser.picture ? (
