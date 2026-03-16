@@ -171,6 +171,12 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
     name = id_info.get("name", email)
     picture = id_info.get("picture")
 
+    # Enforce invite-only allowlist
+    allowed = settings.allowed_emails_set
+    if allowed and email.lower() not in allowed:
+        logger.warning("OAuth rejected: %s not in ALLOWED_EMAILS", email)
+        return RedirectResponse(url="/?error=invite_only")
+
     user_id = _upsert_user(google_id, email, name, picture)
     token = _create_jwt(user_id, email)
 
