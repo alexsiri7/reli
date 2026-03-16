@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from starlette.responses import Response as StarletteResponse  # noqa: E402
 
 from .auth import require_user  # noqa: E402
-from .database import init_db  # noqa: E402
+from .database import clean_orphan_relationships, init_db  # noqa: E402
 from .metrics import MetricsMiddleware, metrics_response  # noqa: E402
 from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
 from .response_metrics import ResponseMetricsMiddleware, metrics_store  # noqa: E402
@@ -36,6 +36,7 @@ _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_db()
+    clean_orphan_relationships()
     start_scheduler()
     yield
     stop_scheduler()

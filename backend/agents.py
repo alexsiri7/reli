@@ -699,6 +699,16 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
         from_row = conn.execute("SELECT id FROM things WHERE id = ?", (from_id,)).fetchone()
         to_row = conn.execute("SELECT id FROM things WHERE id = ?", (to_id,)).fetchone()
         if not from_row or not to_row:
+            missing = []
+            if not from_row:
+                missing.append(f"from_thing_id={from_id}")
+            if not to_row:
+                missing.append(f"to_thing_id={to_id}")
+            logger.warning(
+                "Skipping relationship '%s': referenced thing(s) not found (%s)",
+                rel_type,
+                ", ".join(missing),
+            )
             continue
         rel_id = str(uuid.uuid4())
         meta = rel.get("metadata")
@@ -708,6 +718,14 @@ def apply_storage_changes(storage_changes: dict[str, Any], conn: sqlite3.Connect
             " VALUES (?, ?, ?, ?, ?)",
             (rel_id, from_id, to_id, rel_type, meta_json),
         )
+        # Verify the row was actually created
+        verify = conn.execute("SELECT id FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()
+        if not verify:
+            logger.error(
+                "Relationship INSERT succeeded but row not found: id=%s, %s -> %s (%s)",
+                rel_id, from_id, to_id, rel_type,
+            )
+            continue
         applied["relationships_created"].append(
             {
                 "id": rel_id,

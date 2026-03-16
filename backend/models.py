@@ -109,6 +109,13 @@ class GraphResponse(BaseModel):
     edges: list[GraphEdge]
 
 
+class OrphanCleanupResult(BaseModel):
+    """Result of orphan relationship cleanup."""
+
+    deleted_count: int
+    deleted_ids: list[str]
+
+
 # ── Relationships ────────────────────────────────────────────────────────────
 
 

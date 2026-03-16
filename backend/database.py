@@ -178,6 +178,28 @@ def _migrate_google_tokens_multi_user(conn: sqlite3.Connection) -> None:
         )
 
 
+def clean_orphan_relationships() -> tuple[int, list[str]]:
+    """Delete relationships where from_thing_id or to_thing_id doesn't exist.
+
+    Returns (deleted_count, list_of_deleted_ids).
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    with db() as conn:
+        orphan_rows = conn.execute(
+            "SELECT r.id FROM thing_relationships r"
+            " WHERE r.from_thing_id NOT IN (SELECT id FROM things)"
+            "    OR r.to_thing_id NOT IN (SELECT id FROM things)"
+        ).fetchall()
+        orphan_ids = [row["id"] for row in orphan_rows]
+        if orphan_ids:
+            placeholders = ",".join("?" * len(orphan_ids))
+            conn.execute(f"DELETE FROM thing_relationships WHERE id IN ({placeholders})", orphan_ids)
+            logger.info("Cleaned %d orphan relationship(s): %s", len(orphan_ids), orphan_ids)
+    return len(orphan_ids), orphan_ids
+
+
 def init_db() -> None:
     """Create tables if they don't exist."""
     with db() as conn:
