@@ -13,18 +13,25 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
 
 def _get_config() -> tuple[bool, int, int]:
-    """Return (enabled, hour, minute) from environment."""
-    enabled = os.environ.get("SWEEP_ENABLED", "true").lower() not in ("false", "0", "no")
-    hour = int(os.environ.get("SWEEP_HOUR", "3"))
-    minute = int(os.environ.get("SWEEP_MINUTE", "0"))
-    return enabled, max(0, min(23, hour)), max(0, min(59, minute))
+    """Return (enabled, hour, minute) from settings.
+
+    Constructs a fresh Settings instance so that tests can override env vars
+    per test case via monkeypatch.
+    """
+    from .config import Settings
+
+    s = Settings()
+    return (
+        s.sweep_enabled_bool,
+        max(0, min(23, s.SWEEP_HOUR)),
+        max(0, min(59, s.SWEEP_MINUTE)),
+    )
 
 
 def _seconds_until(hour: int, minute: int) -> float:
