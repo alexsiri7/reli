@@ -19,7 +19,7 @@ from ..agents import (
 )
 from ..auth import require_user, user_filter
 from ..database import db
-from .settings import get_chat_context_window
+from .settings import get_chat_context_window, get_user_llm_config
 from ..google_calendar import fetch_upcoming_events
 from ..google_calendar import is_connected as gcal_connected
 from ..models import (
@@ -374,8 +374,16 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     session_id = body.session_id
     message = body.message
 
+    # Load per-user LLM configuration
+    llm_config = get_user_llm_config(user_id)
+    user_api_key = llm_config["api_key"]
+    user_base_url = llm_config["base_url"]
+    user_context_model = llm_config["context_model"]
+    user_reasoning_model = llm_config["reasoning_model"]
+    user_response_model = llm_config["response_model"]
+
     # Read configured context window size
-    context_window = get_chat_context_window()
+    context_window = get_chat_context_window(user_id)
 
     # Fetch conversation history (2x window as buffer, agents slice to window size)
     history_limit = context_window * 2
@@ -390,7 +398,10 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     usage = UsageStats()
 
     # Stage 1: Context Agent
-    context_result = await run_context_agent(message, history, usage_stats=usage, context_window=context_window)
+    context_result = await run_context_agent(
+        message, history, usage_stats=usage, context_window=context_window,
+        api_key=user_api_key, base_url=user_base_url, context_model=user_context_model,
+    )
     search_queries = context_result.get("search_queries", [message])
     filter_params = context_result.get("filter_params", {})
     gmail_query = context_result.get("gmail_query")
@@ -455,6 +466,9 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         calendar_events,
         usage_stats=usage,
         context_window=context_window,
+        api_key=user_api_key,
+        base_url=user_base_url,
+        reasoning_model=user_reasoning_model,
     )
     storage_changes = reasoning_result.get("storage_changes", {})
     questions_for_user = reasoning_result.get("questions_for_user", [])
@@ -488,6 +502,9 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         web_results,
         usage_stats=usage,
         open_questions_by_thing=open_questions_by_thing or None,
+        api_key=user_api_key,
+        base_url=user_base_url,
+        response_model=user_response_model,
     )
 
     # Build context_things list from the Things that informed this response

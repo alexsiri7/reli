@@ -52,11 +52,6 @@ export function SettingsPanel() {
         {/* Content */}
         <div className="px-6 py-5 space-y-5">
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">AI Models</h3>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
-              Select which models to use for each stage of the chat pipeline.
-            </p>
-
             {isLoading ? (
               <div className="space-y-3 animate-pulse">
                 <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded" />
@@ -65,7 +60,7 @@ export function SettingsPanel() {
               </div>
             ) : modelSettings ? (
               <SettingsForm
-                key={`${modelSettings.context}|${modelSettings.reasoning}|${modelSettings.response}|${modelSettings.chat_context_window}`}
+                key={`${modelSettings.context}|${modelSettings.reasoning}|${modelSettings.response}|${modelSettings.chat_context_window}|${modelSettings.has_api_key}`}
                 initial={modelSettings}
                 modelOptions={modelOptions}
                 onClose={closeSettings}
@@ -106,19 +101,42 @@ function SettingsForm({
   const [reasoning, setReasoning] = useState(initial.reasoning)
   const [response, setResponse] = useState(initial.response)
   const [chatContextWindow, setChatContextWindow] = useState(initial.chat_context_window)
+  const [apiKey, setApiKey] = useState('')
+  const [hasApiKey, setHasApiKey] = useState(initial.has_api_key ?? false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const hasChanges =
+  const hasModelChanges =
     context !== initial.context ||
     reasoning !== initial.reasoning ||
     response !== initial.response ||
     chatContextWindow !== initial.chat_context_window
 
+  const hasApiKeyChange = apiKey !== ''
+
+  const hasChanges = hasModelChanges || hasApiKeyChange
+
   const handleSave = async () => {
     setSaving(true)
     setSaved(false)
-    await updateModelSettings({ context, reasoning, response, chat_context_window: chatContextWindow })
+    const updates: Record<string, unknown> = { context, reasoning, response, chat_context_window: chatContextWindow }
+    if (apiKey !== '') {
+      updates.requesty_api_key = apiKey
+    }
+    await updateModelSettings(updates)
+    if (apiKey !== '') {
+      setHasApiKey(true)
+      setApiKey('')
+    }
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleClearApiKey = async () => {
+    setSaving(true)
+    await updateModelSettings({ requesty_api_key: '' } as Record<string, unknown>)
+    setHasApiKey(false)
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -126,28 +144,74 @@ function SettingsForm({
 
   return (
     <>
-      <div className="space-y-4">
-        <ModelSelect
-          label="Context Model"
-          description="Gathers context from your data"
-          value={context}
-          options={modelOptions}
-          onChange={setContext}
-        />
-        <ModelSelect
-          label="Reasoning Model"
-          description="Plans actions and makes decisions"
-          value={reasoning}
-          options={modelOptions}
-          onChange={setReasoning}
-        />
-        <ModelSelect
-          label="Response Model"
-          description="Generates the final reply"
-          value={response}
-          options={modelOptions}
-          onChange={setResponse}
-        />
+      {/* API Key Section */}
+      <div className="mb-6">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">API Key</h3>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+          Your personal Requesty or OpenAI-compatible API key. Stored securely per-user.
+        </p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              placeholder={hasApiKey ? 'Key configured (enter new to replace)' : 'Enter your API key'}
+              value={apiKey}
+              onChange={e => setApiKey(e.target.value)}
+              className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
+            />
+            {hasApiKey && (
+              <button
+                onClick={handleClearApiKey}
+                disabled={saving}
+                className="px-3 py-2 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+                title="Remove your API key and fall back to server default"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {hasApiKey && (
+            <p className="text-xs text-green-600 dark:text-green-400">
+              Using your personal API key
+            </p>
+          )}
+          {!hasApiKey && (
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Using server default key. Add your own for BYO billing.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Models Section */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-5">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">AI Models</h3>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+          Select which models to use for each stage of the chat pipeline.
+        </p>
+        <div className="space-y-4">
+          <ModelSelect
+            label="Context Model"
+            description="Gathers context from your data"
+            value={context}
+            options={modelOptions}
+            onChange={setContext}
+          />
+          <ModelSelect
+            label="Reasoning Model"
+            description="Plans actions and makes decisions"
+            value={reasoning}
+            options={modelOptions}
+            onChange={setReasoning}
+          />
+          <ModelSelect
+            label="Response Model"
+            description="Generates the final reply"
+            value={response}
+            options={modelOptions}
+            onChange={setResponse}
+          />
+        </div>
       </div>
 
       <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
@@ -157,7 +221,7 @@ function SettingsForm({
             Context Window Size
           </label>
           <p className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">
-            Number of recent messages included as context for AI responses (1–50)
+            Number of recent messages included as context for AI responses (1-50)
           </p>
           <input
             type="number"

@@ -201,6 +201,7 @@ export const ModelSettingsSchema = z.object({
   reasoning: z.string(),
   response: z.string(),
   chat_context_window: z.number(),
+  has_api_key: z.boolean().optional(),
 })
 
 export const RequestyModelSchema = z.object({

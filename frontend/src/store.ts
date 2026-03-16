@@ -123,6 +123,7 @@ export interface ModelSettings {
   reasoning: string
   response: string
   chat_context_window: number
+  has_api_key?: boolean
 }
 
 export interface RequestyModel {

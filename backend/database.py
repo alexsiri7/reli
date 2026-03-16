@@ -192,6 +192,21 @@ def _migrate_backfill_null_user_ids(conn: sqlite3.Connection) -> None:
         conn.execute(f"UPDATE {table} SET user_id = ? WHERE user_id IS NULL", (uid,))
 
 
+def _migrate_user_settings(conn: sqlite3.Connection) -> None:
+    """Create user_settings table for per-user LLM configuration and API keys."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            setting_key TEXT NOT NULL,
+            setting_value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, setting_key)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id)")
+
+
 def clean_orphan_relationships() -> tuple[int, list[str]]:
     """Delete relationships where from_thing_id or to_thing_id doesn't exist.
 
@@ -345,4 +360,5 @@ def init_db() -> None:
         _migrate_add_users(conn)
         _migrate_google_tokens_multi_user(conn)
         _migrate_backfill_null_user_ids(conn)
+        _migrate_user_settings(conn)
         _seed_thing_types(conn)
