@@ -1,7 +1,6 @@
 """Google OAuth2 login + JWT session authentication."""
 
 import logging
-import os
 import uuid
 from datetime import datetime, timezone
 
@@ -11,22 +10,20 @@ from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from google_auth_oauthlib.flow import Flow
 
-logger = logging.getLogger(__name__)
-
+from ..config import settings
 from ..database import db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-GOOGLE_REDIRECT_URI = os.environ.get(
-    "GOOGLE_AUTH_REDIRECT_URI",
-    "http://localhost:8000/api/auth/google/callback",
-)
+GOOGLE_CLIENT_ID = settings.GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET = settings.GOOGLE_CLIENT_SECRET
+GOOGLE_REDIRECT_URI = settings.GOOGLE_AUTH_REDIRECT_URI
 AUTH_SCOPES = ["openid", "email", "profile"]
 
 # JWT settings
-SECRET_KEY = os.environ.get("SECRET_KEY", "")
+SECRET_KEY = settings.SECRET_KEY
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_SECONDS = 60 * 60 * 24 * 7  # 7 days
 COOKIE_NAME = "reli_session"

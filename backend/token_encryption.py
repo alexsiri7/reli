@@ -19,10 +19,11 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .config import settings
+
 logger = logging.getLogger(__name__)
 
-_data_dir = os.environ.get("DATA_DIR", str(Path(__file__).parent))
-_KEY_FILE = Path(_data_dir) / ".token_key"
+_KEY_FILE = Path(settings.DATA_DIR) / ".token_key"
 
 _fernet: Fernet | None = None
 
@@ -33,6 +34,7 @@ def _get_fernet() -> Fernet:
     if _fernet is not None:
         return _fernet
 
+    # Read at call time so tests can override via monkeypatch
     key = os.environ.get("TOKEN_ENCRYPTION_KEY")
 
     if key:
