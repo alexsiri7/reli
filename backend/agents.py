@@ -310,6 +310,7 @@ so we can provide full context.
 Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
 {
   "search_queries": ["query 1", "query 2"],
+  "fetch_ids": [],
   "filter_params": {
     "active_only": true,
     "type_hint": null
@@ -320,6 +321,10 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
   "include_calendar": false
 }
 - search_queries: 1-3 short text fragments to match against Thing titles/data
+- fetch_ids: optional list of Thing UUIDs to fetch directly. Use this when the
+  conversation history contains specific Thing IDs that should be looked up
+  (e.g. following relationships, referencing previously mentioned Things by ID).
+  Empty array when not needed.
 - filter_params.active_only: true unless user asks about archived/all items
 - filter_params.type_hint: null or one of task|note|idea|project|goal|journal|person|place|event|concept|reference
 - needs_web_search: true if the user is asking about external/real-world info
