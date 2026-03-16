@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ContextThing, type GmailMessage, type ModelUsage, type SessionStats, type WebSearchResult } from '../store'
+import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ContextThing, type GmailMessage, type ModelUsage, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
 import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
@@ -437,6 +437,37 @@ function VoiceSettings() {
   )
 }
 
+const STAGE_LABELS: Record<string, string> = {
+  context: 'Searching memory\u2026',
+  reasoning: 'Thinking\u2026',
+  response: 'Writing response\u2026',
+}
+
+function StreamingIndicator({ stage }: { stage: StreamingStage }) {
+  if (!stage) return null
+  const label = STAGE_LABELS[stage] ?? stage
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 py-1">
+      <span className="flex gap-0.5">
+        {['context', 'reasoning', 'response'].map(s => (
+          <span
+            key={s}
+            className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
+              s === stage
+                ? 'bg-indigo-500 animate-pulse'
+                : ['context', 'reasoning', 'response'].indexOf(s) < ['context', 'reasoning', 'response'].indexOf(stage)
+                  ? 'bg-indigo-400'
+                  : 'bg-gray-300 dark:bg-gray-600'
+            }`}
+          />
+        ))}
+      </span>
+      <span>{label}</span>
+    </div>
+  )
+}
+
 function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingId: string | null; speak: (text: string, id: string) => void }) {
   const isUser = msg.role === 'user'
   const ts = formatTimestamp(msg.timestamp)
@@ -456,9 +487,15 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
               : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-sm'
           }`}
         >
-          {msg.content}
-          {msg.streaming && (
-            <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
+          {msg.streaming && !msg.content && msg.streamingStage ? (
+            <StreamingIndicator stage={msg.streamingStage} />
+          ) : (
+            <>
+              {msg.content}
+              {msg.streaming && msg.content && (
+                <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
+              )}
+            </>
           )}
           {!isUser && msg.applied_changes?.web_results && msg.applied_changes.web_results.length > 0 && (
             <WebSources results={msg.applied_changes.web_results} />
