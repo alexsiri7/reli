@@ -707,6 +707,7 @@ export function ChatPanel() {
           <textarea
             ref={inputRef}
             rows={1}
+            maxLength={10000}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={onKeyDown}
