@@ -4,9 +4,13 @@
       <stop offset="0%" stop-color="#6366F1"/>
       <stop offset="100%" stop-color="#4338CA"/>
     </linearGradient>
+    <linearGradient id="accent" x1="340" y1="100" x2="420" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#C7D2FE"/>
+      <stop offset="100%" stop-color="#A5B4FC"/>
+    </linearGradient>
   </defs>
   <rect width="512" height="512" rx="108" fill="url(#bg)"/>
-  <path d="M168 400V112h108c57.4 0 104 46.6 104 104 0 45.6-29.4 84.4-70.2 98.4L384 400h-76l-68-80h-12v80h-60zm60-132h48c24.3 0 44-19.7 44-44s-19.7-44-44-44h-48v88z" fill="#fff"/>
-  <circle cx="376" cy="152" r="14" fill="#fff" fill-opacity=".55"/>
-  <circle cx="356" cy="408" r="18" fill="#A5B4FC" fill-opacity=".6"/>
+  <path d="M152 392V120h108c57.4 0 104 46.6 104 104 0 45.6-29.4 84.4-70.2 98.4L368 392h-72l-64-76h-16v76h-64zm64-128h44c24.3 0 44-19.7 44-44s-19.7-44-44-44h-44v88z" fill="#fff"/>
+  <circle cx="388" cy="140" r="24" fill="url(#accent)" opacity="0.85"/>
+  <circle cx="364" cy="412" r="16" fill="#A5B4FC" opacity="0.5"/>
 </svg>
