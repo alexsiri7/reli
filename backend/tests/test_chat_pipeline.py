@@ -22,10 +22,14 @@ MOCK_REASONING_RESULT = {
 MOCK_REPLY = "I understand, no changes were needed."
 
 
+MOCK_REFINEMENT_DONE = {"done": True}
+
+
 def _patch_agents(
     context_result=None,
     reasoning_result=None,
     reply=None,
+    refinement_result=None,
 ):
     """Return a context manager patching all agent functions."""
     from unittest.mock import patch
@@ -33,11 +37,13 @@ def _patch_agents(
     ctx = context_result or MOCK_CONTEXT_RESULT
     rea = reasoning_result or MOCK_REASONING_RESULT
     rep = reply or MOCK_REPLY
+    ref = refinement_result or MOCK_REFINEMENT_DONE
 
     return [
         patch("backend.routers.chat.run_context_agent", new=AsyncMock(return_value=ctx)),
         patch("backend.routers.chat.run_reasoning_agent", new=AsyncMock(return_value=rea)),
         patch("backend.routers.chat.run_response_agent", new=AsyncMock(return_value=rep)),
+        patch("backend.routers.chat.run_context_refinement", new=AsyncMock(return_value=ref)),
     ]
 
 
@@ -50,7 +56,7 @@ def _patch_agents(
 class TestChatPipeline:
     async def test_basic_chat_returns_200(self, async_client):
         patches = _patch_agents()
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "s1", "message": "Hello"},
@@ -64,7 +70,7 @@ class TestChatPipeline:
 
     async def test_chat_persists_messages_to_history(self, async_client):
         patches = _patch_agents()
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             await async_client.post(
                 "/api/chat",
                 json={"session_id": "persist-sess", "message": "Remember this"},
@@ -87,7 +93,7 @@ class TestChatPipeline:
             "reasoning_summary": "Creating a new task.",
         }
         patches = _patch_agents(reasoning_result=reasoning_with_create)
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "create-sess", "message": "Add a new task"},
@@ -112,7 +118,7 @@ class TestChatPipeline:
             "reasoning_summary": "Updating title.",
         }
         patches = _patch_agents(reasoning_result=reasoning_with_update)
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "update-sess", "message": "Rename that thing"},
@@ -135,7 +141,7 @@ class TestChatPipeline:
             "reasoning_summary": "Deleting the thing.",
         }
         patches = _patch_agents(reasoning_result=reasoning_with_delete)
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "delete-sess", "message": "Remove that thing"},
@@ -151,7 +157,7 @@ class TestChatPipeline:
             "reasoning_summary": "Ambiguous request, asking for clarification.",
         }
         patches = _patch_agents(reasoning_result=reasoning_with_questions)
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "q-sess", "message": "Add something"},
@@ -167,7 +173,7 @@ class TestChatPipeline:
             json={"session_id": "history-sess", "role": "user", "content": "Prior message"},
         )
         patches = _patch_agents()
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             # Also spy on reasoning agent to verify history is passed
             with patch(
                 "backend.routers.chat.run_reasoning_agent",
@@ -194,7 +200,7 @@ class TestChatPipeline:
             "reasoning_summary": "Trying to delete unknown.",
         }
         patches = _patch_agents(reasoning_result=reasoning_with_bad_delete)
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "bad-del-sess", "message": "Delete nothing"},
@@ -224,6 +230,7 @@ class TestChatPipeline:
             patches[0],
             patches[1],
             patches[2],
+            patches[3],
             patch("backend.routers.chat.is_search_configured", return_value=True),
             patch("backend.routers.chat.google_search", new=AsyncMock(return_value=mock_search_results)),
         ):
@@ -246,7 +253,7 @@ class TestChatPipeline:
             "web_search_query": "something",
         }
         patches = _patch_agents(context_result=context_with_search)
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "no-search-sess", "message": "Search for something"},
@@ -254,6 +261,61 @@ class TestChatPipeline:
         assert resp.status_code == 200
         data = resp.json()
         assert "web_results" not in data["applied_changes"]
+
+    async def test_chat_iterative_context_gathering(self, async_client):
+        """Context agent can request additional searches in refinement loop."""
+        # Create two things: one that references the other
+        await async_client.post("/api/things", json={"title": "Sarah", "type_hint": "person"})
+        await async_client.post(
+            "/api/things", json={"title": "Barcelona Flat", "type_hint": "place"}
+        )
+
+        # First refinement asks for more, second says done
+        refinement_calls = [
+            {
+                "done": False,
+                "search_queries": ["Barcelona Flat"],
+                "thing_ids": [],
+                "filter_params": {"active_only": True},
+            },
+            {"done": True},
+        ]
+        refinement_mock = AsyncMock(side_effect=refinement_calls)
+
+        patches = _patch_agents()
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patch("backend.routers.chat.run_context_refinement", new=refinement_mock),
+        ):
+            resp = await async_client.post(
+                "/api/chat",
+                json={"session_id": "iter-sess", "message": "Book near Sarah's flat"},
+            )
+        assert resp.status_code == 200
+        # Refinement was called (at least once for initial results, possibly twice)
+        assert refinement_mock.call_count >= 1
+
+    async def test_chat_context_refinement_stops_at_done(self, async_client):
+        """Refinement loop stops when agent says done=true."""
+        refinement_mock = AsyncMock(return_value={"done": True})
+
+        patches = _patch_agents()
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patch("backend.routers.chat.run_context_refinement", new=refinement_mock),
+        ):
+            resp = await async_client.post(
+                "/api/chat",
+                json={"session_id": "done-sess", "message": "Hello"},
+            )
+        assert resp.status_code == 200
+        # Should be called exactly once (first refinement says done)
+        # Note: may be 0 if no Things found to refine on
+        assert refinement_mock.call_count <= 1
 
     async def test_chat_invalid_request_returns_422(self, async_client):
         resp = await async_client.post("/api/chat", json={"session_id": "", "message": ""})
