@@ -44,7 +44,8 @@ def _seconds_until(hour: int, minute: int) -> float:
 
 
 async def _run_sweep() -> None:
-    """Execute one sweep cycle: SQL candidates → optional LLM reflection."""
+    """Execute one sweep cycle: SQL candidates → optional LLM reflection → meta-learning."""
+    from .meta_learning import analyze_and_learn
     from .sweep import collect_candidates, reflect_on_candidates
 
     logger.info("Sweep started")
@@ -53,15 +54,23 @@ async def _run_sweep() -> None:
         candidates = collect_candidates()
         logger.info("Sweep SQL phase: %d candidates found", len(candidates))
 
-        if not candidates:
-            logger.info("Sweep complete — no candidates, skipping LLM phase")
-            return
+        if candidates:
+            result = await reflect_on_candidates(candidates)
+            logger.info(
+                "Sweep reflection: %d findings created (usage: %s)",
+                result.findings_created,
+                result.usage,
+            )
+        else:
+            logger.info("Sweep: no candidates, skipping LLM reflection phase")
 
-        result = await reflect_on_candidates(candidates)
+        # Meta-learning phase: analyze interaction patterns
+        ml_result = await analyze_and_learn()
         logger.info(
-            "Sweep complete — %d findings created (usage: %s)",
-            result.findings_created,
-            result.usage,
+            "Meta-learning: %d created, %d updated from %d candidates",
+            ml_result.learnings_created,
+            ml_result.learnings_updated,
+            ml_result.candidates_analyzed,
         )
     except Exception:
         logger.exception("Sweep failed")

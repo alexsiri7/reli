@@ -207,6 +207,29 @@ def _migrate_backfill_null_user_ids(conn: sqlite3.Connection) -> None:
         conn.execute(f"UPDATE {table} SET user_id = ? WHERE user_id IS NULL", (uid,))
 
 
+def _migrate_learnings(conn: sqlite3.Connection) -> None:
+    """Create learnings table for user behavior meta-learning."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS learnings (
+            id TEXT PRIMARY KEY,
+            user_id TEXT REFERENCES users(id),
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'behavior',
+            confidence REAL NOT NULL DEFAULT 0.0,
+            observation_count INTEGER NOT NULL DEFAULT 1,
+            evidence JSON,
+            active BOOLEAN DEFAULT 1,
+            last_observed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_learnings_user ON learnings(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_learnings_active ON learnings(active)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_learnings_category ON learnings(category)")
+
+
 def _migrate_merge_history(conn: sqlite3.Connection) -> None:
     """Create merge_history table to track Thing merges."""
     conn.execute("""
@@ -382,4 +405,5 @@ def init_db() -> None:
         _migrate_backfill_null_user_ids(conn)
         _migrate_user_settings(conn)
         _migrate_merge_history(conn)
+        _migrate_learnings(conn)
         _seed_thing_types(conn)

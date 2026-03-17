@@ -340,3 +340,32 @@ class MergeHistoryRecord(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── Learnings (Meta-Learning) ───────────────────────────────────────────────
+
+
+class Learning(BaseModel):
+    """A learned pattern about user behavior."""
+
+    id: str
+    title: str
+    description: str
+    category: str
+    confidence: float
+    observation_count: int
+    evidence: list[str] | None = None
+    active: bool
+    last_observed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class LearningUpdate(BaseModel):
+    """Partial update for a Learning."""
+
+    title: str | None = None
+    description: str | None = None
+    active: bool | None = None
