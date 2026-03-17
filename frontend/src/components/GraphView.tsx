@@ -197,7 +197,7 @@ export default function GraphView() {
         nodeCanvasObject={paintNode}
         nodeCanvasObjectMode={() => 'replace'}
         nodePointerAreaPaint={paintNodeArea}
-        linkColor={() => '#475569'}
+        linkColor={() => '#94a3b8'}
         linkWidth={1.5}
         linkDirectionalArrowLength={4}
         linkDirectionalArrowRelPos={1}

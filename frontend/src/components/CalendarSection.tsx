@@ -35,9 +35,9 @@ function EventItem({ event }: { event: CalendarEvent }) {
         <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
         <div className="min-w-0">
           <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{event.summary}</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500">{time}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-400">{time}</p>
           {event.location && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{event.location}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-400 truncate">{event.location}</p>
           )}
         </div>
       </div>
@@ -74,7 +74,7 @@ export function CalendarSection() {
   if (!calendarStatus.connected) {
     return (
       <section className="py-2 border-b border-gray-100 dark:border-gray-800">
-        <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+        <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
           Calendar
         </h2>
         <div className="px-4 py-2">
@@ -101,25 +101,25 @@ export function CalendarSection() {
   return (
     <section className="py-2 border-b border-gray-100 dark:border-gray-800">
       <div className="px-4 pb-1 flex items-center justify-between">
-        <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+        <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
           Calendar
         </h2>
         <button
           onClick={disconnectCalendar}
-          className="text-[10px] text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+          className="text-[10px] text-gray-400 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
           title="Disconnect Google Calendar"
         >
           Disconnect
         </button>
       </div>
       {calendarEvents.length === 0 ? (
-        <p className="px-4 py-2 text-xs text-gray-400 dark:text-gray-500">
+        <p className="px-4 py-2 text-xs text-gray-400 dark:text-gray-400">
           No upcoming events
         </p>
       ) : (
         Array.from(eventsByDate.entries()).map(([dateLabel, events]) => (
           <div key={dateLabel}>
-            <p className="px-4 pt-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase">
+            <p className="px-4 pt-1 text-[10px] font-medium text-gray-400 dark:text-gray-400 uppercase">
               {dateLabel}
             </p>
             {events.map(event => (
