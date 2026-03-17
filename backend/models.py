@@ -326,6 +326,28 @@ class MergeResult(BaseModel):
     remove_title: str
 
 
+# ── Focus Recommendations ───────────────────────────────────────────────────
+
+
+class FocusRecommendation(BaseModel):
+    """A single focus recommendation with scoring and reasoning."""
+
+    thing: Thing
+    score: float = Field(description="Computed priority score (higher = more urgent)")
+    reasons: list[str] = Field(description="Human-readable reasoning for the ranking")
+    rank: int = Field(description="Position in the ranked list (1-based)")
+    is_blocked: bool = Field(default=False, description="Whether this thing is blocked by dependencies")
+    deadline: str | None = Field(default=None, description="Extracted deadline date (ISO format) if any")
+
+
+class FocusResponse(BaseModel):
+    """Prioritized focus list with recommendations."""
+
+    recommendations: list[FocusRecommendation]
+    total_active: int = Field(description="Total number of active things analyzed")
+    generated_at: str = Field(description="Timestamp when recommendations were generated")
+
+
 class MergeHistoryRecord(BaseModel):
     """A recorded merge event for audit trail."""
 

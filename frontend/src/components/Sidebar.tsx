@@ -6,6 +6,7 @@ import { typeIcon } from '../utils'
 import { CalendarSection } from './CalendarSection'
 import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
+import { FocusSection } from './FocusSection'
 import { MergeSuggestions } from './MergeSuggestions'
 
 const FINDING_TYPE_ICONS: Record<string, string> = {
@@ -447,6 +448,9 @@ export function Sidebar() {
 
             {/* Google Calendar */}
             <CalendarSection />
+
+            {/* Focus Recommendations */}
+            <FocusSection />
 
             {/* Daily Briefing — sweep findings + checkin-due things */}
             {(findings.length > 0 || briefing.length > 0) && (

@@ -27,6 +27,7 @@ import {
   UserProfileSchema,
   MergeSuggestionSchema,
   MergeResultSchema,
+  FocusResponseSchema,
 } from './schemas'
 import { z } from 'zod'
 
@@ -169,6 +170,21 @@ export interface MergeSuggestion {
   thing_a: MergeSuggestionThing
   thing_b: MergeSuggestionThing
   reason: string
+}
+
+export interface FocusRecommendation {
+  thing: Thing
+  score: number
+  reasons: string[]
+  rank: number
+  is_blocked: boolean
+  deadline: string | null
+}
+
+export interface FocusResponse {
+  recommendations: FocusRecommendation[]
+  total_active: number
+  generated_at: string
 }
 
 export interface ModelUsage {
@@ -328,6 +344,11 @@ interface ReliState {
   fetchMergeSuggestions: () => Promise<void>
   executeMerge: (keepId: string, removeId: string) => Promise<void>
   dismissMergeSuggestion: (thingAId: string, thingBId: string) => void
+
+  // Focus recommendations
+  focusRecommendations: FocusRecommendation[]
+  focusLoading: boolean
+  fetchFocusRecommendations: () => Promise<void>
 
   // Feedback
   feedbackOpen: boolean
@@ -798,6 +819,7 @@ export const useStore = create<ReliState>((set, get) => ({
       get().fetchThings()
       get().fetchBriefing()
       get().fetchProactiveSurfaces()
+      get().fetchFocusRecommendations()
     } catch (e) {
       set(state => ({
         messages: state.messages.map(m =>
@@ -1055,6 +1077,24 @@ export const useStore = create<ReliState>((set, get) => ({
         s => !(s.thing_a.id === thingAId && s.thing_b.id === thingBId)
       ),
     }))
+  },
+
+  // Focus recommendations
+  focusRecommendations: [],
+  focusLoading: false,
+
+  fetchFocusRecommendations: async () => {
+    set({ focusLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/focus?limit=10`)
+      if (!res.ok) return
+      const data = validateResponse(FocusResponseSchema, await res.json(), '/focus')
+      set({ focusRecommendations: data.recommendations ?? [] })
+    } catch {
+      // best-effort
+    } finally {
+      set({ focusLoading: false })
+    }
   },
 
   // Feedback

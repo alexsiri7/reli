@@ -39,6 +39,7 @@ from .routers import (  # noqa: E402
     calendar,
     chat,
     feedback,
+    focus,
     gmail,
     proactive,
     settings,
@@ -140,6 +141,10 @@ _TAG_METADATA = [
         "description": "Proactive surfaces — Things with upcoming time-relevant dates.",
     },
     {
+        "name": "focus",
+        "description": "Focus recommendations — prioritized focus list based on graph analysis.",
+    },
+    {
         "name": "settings",
         "description": "Application settings: LLM model configuration via Requesty.",
     },
@@ -200,6 +205,7 @@ app.include_router(chat.router, prefix="/api", dependencies=_api_deps)
 app.include_router(gmail.router, prefix="/api", dependencies=_api_deps)
 app.include_router(calendar.router, prefix="/api", dependencies=_api_deps)
 app.include_router(proactive.router, prefix="/api", dependencies=_api_deps)
+app.include_router(focus.router, prefix="/api", dependencies=_api_deps)
 app.include_router(settings.router, prefix="/api", dependencies=_api_deps)
 app.include_router(sweep.router, prefix="/api", dependencies=_api_deps)
 app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
