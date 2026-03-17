@@ -69,8 +69,8 @@ def _detect_context_style(message: str, history: list[dict[str, Any]]) -> Intera
     """
     msg_lower = message.lower()
 
-    coaching_score = sum(1 for signal in _COACHING_SIGNALS if signal in msg_lower)
-    consultant_score = sum(1 for signal in _CONSULTANT_SIGNALS if signal in msg_lower)
+    coaching_score: float = sum(1 for signal in _COACHING_SIGNALS if signal in msg_lower)
+    consultant_score: float = sum(1 for signal in _CONSULTANT_SIGNALS if signal in msg_lower)
 
     # Check if this is a question (coaching-leaning)
     if msg_lower.rstrip().endswith("?"):

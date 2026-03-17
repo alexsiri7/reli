@@ -27,8 +27,8 @@ from .agents import (
     RESPONSE_AGENT_SYSTEM,
     UsageStats,
 )
-from .interaction_style import determine_style, get_reasoning_style_hint, get_style_prompt
 from .auth import user_filter
+from .interaction_style import determine_style, get_reasoning_style_hint, get_style_prompt
 from .context_agent import _make_litellm_model, run_context_agent, run_context_refinement
 from .database import db
 from .google_calendar import fetch_upcoming_events

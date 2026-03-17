@@ -1,7 +1,5 @@
 """Tests for the interaction style calibration module."""
 
-import pytest
-
 from backend.interaction_style import (
     InteractionStyle,
     determine_style,
