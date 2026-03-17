@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Config
 # ---------------------------------------------------------------------------
 
-CHROMA_PATH = Path(__file__).parent / "chroma_db"
+CHROMA_PATH = Path(settings.DATA_DIR) / "chroma_db"
 COLLECTION_NAME = "things"
 
 REQUESTY_BASE_URL = settings.REQUESTY_BASE_URL
