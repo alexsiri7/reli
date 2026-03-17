@@ -1,7 +1,9 @@
 """Learnings CRUD endpoints — user behavior patterns discovered by meta-learning."""
 
 import json
+import sqlite3
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -12,7 +14,7 @@ from ..models import Learning, LearningUpdate
 router = APIRouter(prefix="/learnings", tags=["learnings"])
 
 
-def _row_to_learning(row) -> Learning:
+def _row_to_learning(row: sqlite3.Row) -> Learning:
     evidence = None
     if row["evidence"]:
         try:
@@ -94,7 +96,7 @@ def update_learning(
         if not row:
             raise HTTPException(status_code=404, detail="Learning not found")
 
-        updates = {}
+        updates: dict[str, Any] = {}
         if body.title is not None:
             updates["title"] = body.title
         if body.description is not None:
