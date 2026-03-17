@@ -1,4 +1,7 @@
-"""Daily briefing endpoint — combines checkin-due Things with sweep findings."""
+"""Daily briefing endpoint — combines checkin-due Things with sweep findings.
+
+Also serves the pre-generated morning briefing (produced by the nightly sweep).
+"""
 
 import json
 import uuid
@@ -9,7 +12,16 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import require_user, user_filter
 from ..database import db
-from ..models import BriefingResponse, SweepFinding, SweepFindingCreate, SweepFindingSnooze, Thing
+from ..models import (
+    BriefingPreferencesUpdate,
+    BriefingResponse,
+    MorningBriefing,
+    MorningBriefingSection,
+    SweepFinding,
+    SweepFindingCreate,
+    SweepFindingSnooze,
+    Thing,
+)
 from .things import _row_to_thing
 
 router = APIRouter(prefix="/briefing", tags=["briefing"])
@@ -163,3 +175,162 @@ def snooze_finding(finding_id: str, body: SweepFindingSnooze, user_id: str = Dep
         row = conn.execute("SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
 
     return _row_to_finding(row)
+
+
+# ---------------------------------------------------------------------------
+# Morning briefing endpoints
+# ---------------------------------------------------------------------------
+
+
+def _row_to_morning_briefing(row: Any) -> MorningBriefing:
+    sections_raw = row["sections"]
+    sections: list[MorningBriefingSection] = []
+    if sections_raw:
+        try:
+            parsed = json.loads(sections_raw) if isinstance(sections_raw, str) else sections_raw
+            if isinstance(parsed, list):
+                for s in parsed:
+                    if isinstance(s, dict) and s.get("key") and s.get("title"):
+                        sections.append(MorningBriefingSection(
+                            key=s["key"],
+                            title=s["title"],
+                            items=s.get("items", []),
+                        ))
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return MorningBriefing(
+        id=row["id"],
+        briefing_date=row["briefing_date"],
+        summary=row["summary"],
+        sections=sections,
+        generated_at=row["generated_at"],
+        read_at=row["read_at"],
+        dismissed=bool(row["dismissed"]),
+    )
+
+
+@router.get("/morning", response_model=MorningBriefing | None, summary="Get latest morning briefing")
+def get_morning_briefing(user_id: str = Depends(require_user)) -> MorningBriefing | None:
+    """Return the latest unread/undismissed morning briefing for the user."""
+    uf_sql = ""
+    uf_params: list[Any] = []
+    if user_id:
+        uf_sql = " AND user_id = ?"
+        uf_params = [user_id]
+
+    with db() as conn:
+        row = conn.execute(
+            f"""SELECT * FROM morning_briefings
+               WHERE dismissed = 0{uf_sql}
+               ORDER BY briefing_date DESC
+               LIMIT 1""",
+            uf_params,
+        ).fetchone()
+
+    if not row:
+        return None
+    return _row_to_morning_briefing(row)
+
+
+@router.patch("/morning/{briefing_id}/read", response_model=MorningBriefing, summary="Mark briefing as read")
+def mark_briefing_read(briefing_id: str, user_id: str = Depends(require_user)) -> MorningBriefing:
+    """Mark a morning briefing as read."""
+    uf_sql = ""
+    uf_params: list[Any] = []
+    if user_id:
+        uf_sql = " AND user_id = ?"
+        uf_params = [user_id]
+
+    with db() as conn:
+        row = conn.execute(
+            f"SELECT * FROM morning_briefings WHERE id = ?{uf_sql}",
+            [briefing_id, *uf_params],
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Briefing not found")
+
+        now = datetime.utcnow().isoformat()
+        conn.execute(
+            f"UPDATE morning_briefings SET read_at = ? WHERE id = ?{uf_sql}",
+            [now, briefing_id, *uf_params],
+        )
+        row = conn.execute("SELECT * FROM morning_briefings WHERE id = ?", (briefing_id,)).fetchone()
+
+    return _row_to_morning_briefing(row)
+
+
+@router.patch("/morning/{briefing_id}/dismiss", response_model=MorningBriefing, summary="Dismiss morning briefing")
+def dismiss_morning_briefing(briefing_id: str, user_id: str = Depends(require_user)) -> MorningBriefing:
+    """Dismiss a morning briefing so it no longer appears."""
+    uf_sql = ""
+    uf_params: list[Any] = []
+    if user_id:
+        uf_sql = " AND user_id = ?"
+        uf_params = [user_id]
+
+    with db() as conn:
+        row = conn.execute(
+            f"SELECT * FROM morning_briefings WHERE id = ?{uf_sql}",
+            [briefing_id, *uf_params],
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Briefing not found")
+
+        conn.execute(
+            f"UPDATE morning_briefings SET dismissed = 1 WHERE id = ?{uf_sql}",
+            [briefing_id, *uf_params],
+        )
+        row = conn.execute("SELECT * FROM morning_briefings WHERE id = ?", (briefing_id,)).fetchone()
+
+    return _row_to_morning_briefing(row)
+
+
+@router.get("/morning/preferences", summary="Get briefing preferences")
+def get_briefing_preferences(user_id: str = Depends(require_user)) -> dict[str, bool]:
+    """Return the user's briefing preferences (which sections to include)."""
+    defaults = {
+        "include_priorities": True,
+        "include_overdue": True,
+        "include_blockers": True,
+        "include_findings": True,
+    }
+    if not user_id:
+        return defaults
+
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT key, value FROM user_settings WHERE user_id = ? AND key LIKE 'briefing_%'",
+            (user_id,),
+        ).fetchall()
+
+    for row in rows:
+        pref_key = row["key"].replace("briefing_", "include_")
+        if pref_key in defaults:
+            defaults[pref_key] = row["value"].lower() not in ("false", "0", "no")
+
+    return defaults
+
+
+@router.put("/morning/preferences", summary="Update briefing preferences")
+def update_briefing_preferences(
+    body: BriefingPreferencesUpdate,
+    user_id: str = Depends(require_user),
+) -> dict[str, bool]:
+    """Update the user's briefing preferences."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    with db() as conn:
+        for field_name in ("include_priorities", "include_overdue", "include_blockers", "include_findings"):
+            val = getattr(body, field_name, None)
+            if val is not None:
+                db_key = field_name.replace("include_", "briefing_")
+                conn.execute(
+                    """INSERT INTO user_settings (user_id, key, value, updated_at)
+                       VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                       ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP""",
+                    (user_id, db_key, str(val).lower()),
+                )
+
+    return get_briefing_preferences(user_id)

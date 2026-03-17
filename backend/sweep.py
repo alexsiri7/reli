@@ -22,6 +22,7 @@ import sqlite3
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from typing import Any
 
 from .database import db
 
@@ -527,3 +528,285 @@ async def reflect_on_candidates(
         findings=created,
         usage=usage_stats.to_dict(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Morning briefing generation
+# ---------------------------------------------------------------------------
+
+MORNING_BRIEFING_SYSTEM = """\
+You are the Morning Briefing Generator for Reli, an AI personal information manager.
+You receive the user's current state: active sweep findings, priorities, overdue items,
+and other relevant data. Your job is to compose a concise, warm morning briefing.
+
+Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
+{
+  "summary": "A 1-2 sentence overview of the day ahead",
+  "sections": [
+    {
+      "key": "priorities",
+      "title": "Top Priorities",
+      "items": ["Concise bullet point 1", "Concise bullet point 2"]
+    },
+    {
+      "key": "overdue",
+      "title": "Overdue",
+      "items": ["Item that needs attention"]
+    },
+    {
+      "key": "blockers",
+      "title": "Blockers",
+      "items": ["Something blocking progress"]
+    },
+    {
+      "key": "findings",
+      "title": "Insights",
+      "items": ["Sweep insight or observation"]
+    }
+  ]
+}
+
+Rules:
+- summary: 1-2 warm, direct sentences. Personal tone. Written for a human, not a system.
+- sections: Only include sections that have content. Omit empty sections.
+- items: Each item is a concise, actionable bullet (max ~80 chars).
+- priorities: High-priority tasks and upcoming deadlines.
+- overdue: Things past their due date or check-in date.
+- blockers: Open questions, stale items blocking progress, completed projects not closed.
+- findings: LLM insights from the sweep, interesting patterns.
+- Keep the entire briefing scannable — total items across all sections should be 3-10.
+- If there's genuinely nothing to report, return {"summary": "All clear — nothing urgent today.", "sections": []}
+"""
+
+
+def _collect_briefing_data(conn: sqlite3.Connection, user_id: str | None, today: date) -> dict[str, Any]:
+    """Gather raw data for the morning briefing from the database."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # User filter for multi-user
+    uf_sql = ""
+    uf_params: list[Any] = []
+    if user_id:
+        uf_sql = " AND user_id = ?"
+        uf_params = [user_id]
+
+    # High-priority active things (priority 1-2)
+    priorities = conn.execute(
+        f"""SELECT id, title, type_hint, priority, checkin_date FROM things
+           WHERE active = 1 AND priority <= 2{uf_sql}
+           ORDER BY priority ASC, checkin_date ASC
+           LIMIT 10""",
+        uf_params,
+    ).fetchall()
+
+    # Overdue items (checkin_date in the past)
+    overdue = conn.execute(
+        f"""SELECT id, title, type_hint, checkin_date FROM things
+           WHERE active = 1 AND checkin_date IS NOT NULL AND DATE(checkin_date) < ?{uf_sql}
+           ORDER BY checkin_date ASC
+           LIMIT 10""",
+        [today.isoformat(), *uf_params],
+    ).fetchall()
+
+    # Active sweep findings (not dismissed, not expired, not snoozed)
+    findings = conn.execute(
+        f"""SELECT id, finding_type, message, priority FROM sweep_findings
+           WHERE dismissed = 0
+             AND (expires_at IS NULL OR expires_at > ?)
+             AND (snoozed_until IS NULL OR snoozed_until <= ?){uf_sql.replace('user_id', 'sweep_findings.user_id')}
+           ORDER BY priority ASC
+           LIMIT 10""",
+        [now_iso, now_iso, *uf_params],
+    ).fetchall()
+
+    # Open questions / stale items as blockers
+    blockers = conn.execute(
+        f"""SELECT id, title, open_questions FROM things
+           WHERE active = 1
+             AND open_questions IS NOT NULL
+             AND open_questions != '[]'
+             AND open_questions != 'null'{uf_sql}
+           ORDER BY priority ASC
+           LIMIT 5""",
+        uf_params,
+    ).fetchall()
+
+    return {
+        "priorities": [dict(r) for r in priorities],
+        "overdue": [dict(r) for r in overdue],
+        "findings": [dict(r) for r in findings],
+        "blockers": [dict(r) for r in blockers],
+    }
+
+
+def _format_briefing_data_for_llm(data: dict[str, Any], today: date) -> str:
+    """Format briefing data into a compact prompt for the LLM."""
+    lines = [f"Today: {today.isoformat()}", ""]
+
+    if data["priorities"]:
+        lines.append(f"HIGH PRIORITY ({len(data['priorities'])} items):")
+        for r in data["priorities"]:
+            checkin = f" [due: {r['checkin_date']}]" if r.get("checkin_date") else ""
+            lines.append(f"  - P{r['priority']}: {r['title']} ({r['type_hint'] or 'thing'}){checkin}")
+    else:
+        lines.append("HIGH PRIORITY: none")
+
+    if data["overdue"]:
+        lines.append(f"\nOVERDUE ({len(data['overdue'])} items):")
+        for r in data["overdue"]:
+            lines.append(f"  - {r['title']} (was due: {r['checkin_date']})")
+    else:
+        lines.append("\nOVERDUE: none")
+
+    if data["blockers"]:
+        lines.append(f"\nOPEN QUESTIONS / BLOCKERS ({len(data['blockers'])} items):")
+        for r in data["blockers"]:
+            try:
+                qs = json.loads(r["open_questions"]) if isinstance(r["open_questions"], str) else r["open_questions"]
+                q_preview = qs[0][:60] + "..." if qs and len(qs[0]) > 60 else (qs[0] if qs else "")
+            except (json.JSONDecodeError, TypeError, IndexError):
+                q_preview = ""
+            lines.append(f"  - {r['title']}: {q_preview}")
+    else:
+        lines.append("\nBLOCKERS: none")
+
+    if data["findings"]:
+        lines.append(f"\nSWEEP FINDINGS ({len(data['findings'])} items):")
+        for r in data["findings"]:
+            lines.append(f"  - [{r['finding_type']}] {r['message']}")
+    else:
+        lines.append("\nSWEEP FINDINGS: none")
+
+    return "\n".join(lines)
+
+
+async def generate_morning_briefing(
+    user_id: str | None = None,
+    today: date | None = None,
+) -> dict[str, Any] | None:
+    """Generate a morning briefing for the given user and store it in the DB.
+
+    Returns the briefing dict on success, None if no data to brief on.
+    """
+    from .agents import UsageStats, _chat
+
+    today = today or date.today()
+
+    # Check user's briefing preferences
+    prefs = _get_briefing_preferences(user_id)
+
+    with db() as conn:
+        data = _collect_briefing_data(conn, user_id, today)
+
+    # Filter sections based on preferences
+    if not prefs.get("include_priorities", True):
+        data["priorities"] = []
+    if not prefs.get("include_overdue", True):
+        data["overdue"] = []
+    if not prefs.get("include_blockers", True):
+        data["blockers"] = []
+    if not prefs.get("include_findings", True):
+        data["findings"] = []
+
+    # If there's nothing to brief on, skip
+    total_items = sum(len(v) for v in data.values())
+    if total_items == 0:
+        logger.info("Morning briefing: no data to brief on, skipping")
+        return None
+
+    usage_stats = UsageStats()
+    prompt = _format_briefing_data_for_llm(data, today)
+
+    raw = await _chat(
+        messages=[
+            {"role": "system", "content": MORNING_BRIEFING_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        model=None,
+        response_format={"type": "json_object"},
+        usage_stats=usage_stats,
+    )
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("Morning briefing LLM returned invalid JSON: %s", raw[:200])
+        return None
+
+    summary = str(parsed.get("summary", "")).strip()
+    sections = parsed.get("sections", [])
+    if not isinstance(sections, list):
+        sections = []
+
+    # Validate sections
+    valid_sections = []
+    for s in sections:
+        if not isinstance(s, dict):
+            continue
+        key = str(s.get("key", "")).strip()
+        title = str(s.get("title", "")).strip()
+        items = s.get("items", [])
+        if key and title and isinstance(items, list) and items:
+            valid_sections.append({
+                "key": key,
+                "title": title,
+                "items": [str(i).strip() for i in items if str(i).strip()],
+            })
+
+    if not summary and not valid_sections:
+        logger.info("Morning briefing: LLM returned empty briefing")
+        return None
+
+    briefing_id = f"mb-{uuid.uuid4().hex[:8]}"
+    now = datetime.now(timezone.utc)
+
+    with db() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO morning_briefings
+               (id, user_id, briefing_date, summary, sections, generated_at, read_at, dismissed)
+               VALUES (?, ?, ?, ?, ?, ?, NULL, 0)""",
+            (
+                briefing_id,
+                user_id,
+                today.isoformat(),
+                summary,
+                json.dumps(valid_sections),
+                now.isoformat(),
+            ),
+        )
+
+    result = {
+        "id": briefing_id,
+        "briefing_date": today.isoformat(),
+        "summary": summary,
+        "sections": valid_sections,
+        "generated_at": now.isoformat(),
+        "read_at": None,
+        "dismissed": False,
+    }
+
+    logger.info(
+        "Morning briefing generated: %s (%d sections, usage: %s)",
+        briefing_id,
+        len(valid_sections),
+        usage_stats.to_dict(),
+    )
+    return result
+
+
+def _get_briefing_preferences(user_id: str | None) -> dict[str, bool]:
+    """Read briefing preferences from user_settings."""
+    if not user_id:
+        return {}
+    prefs: dict[str, bool] = {}
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT key, value FROM user_settings WHERE user_id = ? AND key LIKE 'briefing_%'",
+            (user_id,),
+        ).fetchall()
+    for row in rows:
+        key = row["key"]
+        val = row["value"]
+        if key.startswith("briefing_"):
+            prefs[key.replace("briefing_", "include_")] = val.lower() not in ("false", "0", "no")
+    return prefs

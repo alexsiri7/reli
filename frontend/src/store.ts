@@ -27,6 +27,8 @@ import {
   UserProfileSchema,
   MergeSuggestionSchema,
   MergeResultSchema,
+  MorningBriefingSchema,
+  BriefingPreferencesSchema,
 } from './schemas'
 import { z } from 'zod'
 
@@ -106,6 +108,29 @@ export interface SweepFinding {
   expires_at: string | null
   snoozed_until: string | null
   thing: Thing | null
+}
+
+export interface MorningBriefingSection {
+  key: string
+  title: string
+  items: string[]
+}
+
+export interface MorningBriefing {
+  id: string
+  briefing_date: string
+  summary: string
+  sections: MorningBriefingSection[]
+  generated_at: string
+  read_at: string | null
+  dismissed: boolean
+}
+
+export interface BriefingPreferences {
+  include_priorities: boolean
+  include_overdue: boolean
+  include_blockers: boolean
+  include_findings: boolean
 }
 
 export interface CalendarEvent {
@@ -320,6 +345,15 @@ interface ReliState {
   userProfileLoading: boolean
   fetchUserProfile: () => Promise<void>
   updateUserThing: (updates: { title?: string; data?: Record<string, unknown> }) => Promise<void>
+
+  // Morning briefing
+  morningBriefing: MorningBriefing | null
+  briefingPreferences: BriefingPreferences | null
+  fetchMorningBriefing: () => Promise<void>
+  markBriefingRead: (id: string) => Promise<void>
+  dismissMorningBriefing: (id: string) => Promise<void>
+  fetchBriefingPreferences: () => Promise<void>
+  updateBriefingPreferences: (prefs: Partial<BriefingPreferences>) => Promise<void>
 
   // Merge suggestions
   mergeSuggestions: MergeSuggestion[]
@@ -1001,6 +1035,73 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ userProfile: { ...profile, thing: updated } })
     } catch (e) {
       set({ error: String(e) })
+    }
+  },
+
+  // Morning briefing
+  morningBriefing: null,
+  briefingPreferences: null,
+
+  fetchMorningBriefing: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/briefing/morning`)
+      if (!res.ok) return
+      const data = await res.json()
+      if (data) {
+        const briefing: MorningBriefing = validateResponse(MorningBriefingSchema, data, '/briefing/morning')
+        set({ morningBriefing: briefing })
+      } else {
+        set({ morningBriefing: null })
+      }
+    } catch {
+      // best-effort
+    }
+  },
+
+  markBriefingRead: async (id: string) => {
+    try {
+      const res = await apiFetch(`${BASE}/briefing/morning/${id}/read`, { method: 'PATCH' })
+      if (!res.ok) return
+      const data: MorningBriefing = validateResponse(MorningBriefingSchema, await res.json(), `/briefing/morning/${id}/read`)
+      set({ morningBriefing: data })
+    } catch {
+      // ignore
+    }
+  },
+
+  dismissMorningBriefing: async (id: string) => {
+    try {
+      const res = await apiFetch(`${BASE}/briefing/morning/${id}/dismiss`, { method: 'PATCH' })
+      if (!res.ok) return
+      set({ morningBriefing: null })
+    } catch {
+      // ignore
+    }
+  },
+
+  fetchBriefingPreferences: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/briefing/morning/preferences`)
+      if (!res.ok) return
+      const data: BriefingPreferences = validateResponse(BriefingPreferencesSchema, await res.json(), '/briefing/morning/preferences')
+      set({ briefingPreferences: data })
+    } catch {
+      // ignore
+    }
+  },
+
+  updateBriefingPreferences: async (prefs: Partial<BriefingPreferences>) => {
+    try {
+      const res = await apiFetch(`${BASE}/briefing/morning/preferences`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(prefs),
+      })
+      if (!res.ok) return
+      const data: BriefingPreferences = validateResponse(BriefingPreferencesSchema, await res.json(), '/briefing/morning/preferences')
+      set({ briefingPreferences: data })
+    } catch {
+      // ignore
     }
   },
 

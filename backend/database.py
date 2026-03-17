@@ -227,6 +227,25 @@ def _migrate_merge_history(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_merge_history_user ON merge_history(user_id)")
 
 
+def _migrate_morning_briefings(conn: sqlite3.Connection) -> None:
+    """Create morning_briefings table for pre-generated daily briefings."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS morning_briefings (
+            id TEXT PRIMARY KEY,
+            user_id TEXT REFERENCES users(id),
+            briefing_date TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            sections JSON,
+            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            read_at TIMESTAMP,
+            dismissed BOOLEAN DEFAULT 0,
+            UNIQUE(user_id, briefing_date)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_morning_briefings_user ON morning_briefings(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_morning_briefings_date ON morning_briefings(briefing_date)")
+
+
 def clean_orphan_relationships() -> tuple[int, list[str]]:
     """Delete relationships where from_thing_id or to_thing_id doesn't exist.
 
@@ -382,4 +401,5 @@ def init_db() -> None:
         _migrate_backfill_null_user_ids(conn)
         _migrate_user_settings(conn)
         _migrate_merge_history(conn)
+        _migrate_morning_briefings(conn)
         _seed_thing_types(conn)

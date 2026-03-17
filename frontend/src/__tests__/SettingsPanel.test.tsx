@@ -49,6 +49,9 @@ beforeEach(() => {
     closeSettings: vi.fn(),
     userProfile: null,
     userProfileLoading: false,
+    briefingPreferences: null,
+    fetchBriefingPreferences: vi.fn(),
+    updateBriefingPreferences: vi.fn().mockResolvedValue(undefined),
   }
 })
 

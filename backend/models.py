@@ -281,6 +281,37 @@ class BriefingResponse(BaseModel):
     total: int
 
 
+class MorningBriefingSection(BaseModel):
+    """A section of the morning briefing (priorities, overdue, blockers, findings)."""
+
+    key: str
+    title: str
+    items: list[str]
+
+
+class MorningBriefing(BaseModel):
+    """Pre-generated morning briefing stored from the nightly sweep."""
+
+    id: str
+    briefing_date: str
+    summary: str
+    sections: list[MorningBriefingSection]
+    generated_at: datetime
+    read_at: datetime | None = None
+    dismissed: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class BriefingPreferencesUpdate(BaseModel):
+    """Update briefing preferences — which sections to include."""
+
+    include_priorities: bool | None = None
+    include_overdue: bool | None = None
+    include_blockers: bool | None = None
+    include_findings: bool | None = None
+
+
 # ── Proactive Surfaces ───────────────────────────────────────────────────────
 
 

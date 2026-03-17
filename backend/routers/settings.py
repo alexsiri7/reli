@@ -28,6 +28,10 @@ _VALID_KEYS = {
     "response_model",
     "chat_context_window",
     "theme",
+    "briefing_priorities",
+    "briefing_overdue",
+    "briefing_blockers",
+    "briefing_findings",
 }
 
 

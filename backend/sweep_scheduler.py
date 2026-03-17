@@ -44,8 +44,8 @@ def _seconds_until(hour: int, minute: int) -> float:
 
 
 async def _run_sweep() -> None:
-    """Execute one sweep cycle: SQL candidates → optional LLM reflection."""
-    from .sweep import collect_candidates, reflect_on_candidates
+    """Execute one sweep cycle: SQL candidates → optional LLM reflection → morning briefing."""
+    from .sweep import collect_candidates, generate_morning_briefing, reflect_on_candidates
 
     logger.info("Sweep started")
 
@@ -53,18 +53,49 @@ async def _run_sweep() -> None:
         candidates = collect_candidates()
         logger.info("Sweep SQL phase: %d candidates found", len(candidates))
 
-        if not candidates:
-            logger.info("Sweep complete — no candidates, skipping LLM phase")
-            return
+        if candidates:
+            result = await reflect_on_candidates(candidates)
+            logger.info(
+                "Sweep reflection complete — %d findings created (usage: %s)",
+                result.findings_created,
+                result.usage,
+            )
+        else:
+            logger.info("Sweep: no candidates, skipping LLM reflection phase")
 
-        result = await reflect_on_candidates(candidates)
-        logger.info(
-            "Sweep complete — %d findings created (usage: %s)",
-            result.findings_created,
-            result.usage,
-        )
+        # Generate morning briefings for all users
+        await _generate_briefings_for_all_users()
+
     except Exception:
         logger.exception("Sweep failed")
+
+
+async def _generate_briefings_for_all_users() -> None:
+    """Generate morning briefings for all registered users."""
+    from .database import db
+    from .sweep import generate_morning_briefing
+
+    try:
+        with db() as conn:
+            user_rows = conn.execute("SELECT id FROM users").fetchall()
+
+        if not user_rows:
+            # Single-user / no-auth mode: generate for user_id=None
+            briefing = await generate_morning_briefing(user_id=None)
+            if briefing:
+                logger.info("Morning briefing generated (no-auth mode)")
+            return
+
+        for row in user_rows:
+            try:
+                briefing = await generate_morning_briefing(user_id=row["id"])
+                if briefing:
+                    logger.info("Morning briefing generated for user %s", row["id"])
+            except Exception:
+                logger.exception("Failed to generate morning briefing for user %s", row["id"])
+
+    except Exception:
+        logger.exception("Failed to generate morning briefings")
 
 
 async def sweep_loop() -> None:

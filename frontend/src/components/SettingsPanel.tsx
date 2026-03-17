@@ -243,6 +243,7 @@ function SettingsForm({
           />
         </div>
       </div>
+      <BriefingPreferencesSection />
       <VoiceSection />
       <ThemeSection />
       <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -544,6 +545,56 @@ function ProfileForm({
           userThingTitle={editName || thing.title}
           relationships={relationships}
         />
+      </div>
+    </div>
+  )
+}
+
+function BriefingPreferencesSection() {
+  const { briefingPreferences, fetchBriefingPreferences, updateBriefingPreferences } = useStore(
+    useShallow(s => ({
+      briefingPreferences: s.briefingPreferences,
+      fetchBriefingPreferences: s.fetchBriefingPreferences,
+      updateBriefingPreferences: s.updateBriefingPreferences,
+    })),
+  )
+
+  useEffect(() => {
+    fetchBriefingPreferences()
+  }, [fetchBriefingPreferences])
+
+  if (!briefingPreferences) return null
+
+  const options: { key: keyof typeof briefingPreferences; label: string; description: string }[] = [
+    { key: 'include_priorities', label: 'Priorities', description: 'High-priority tasks and deadlines' },
+    { key: 'include_overdue', label: 'Overdue items', description: 'Tasks past their due date' },
+    { key: 'include_blockers', label: 'Blockers', description: 'Open questions and stale items' },
+    { key: 'include_findings', label: 'Sweep insights', description: 'AI-generated observations' },
+  ]
+
+  return (
+    <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Morning Briefing</h3>
+      <p className="text-xs text-gray-400 dark:text-gray-400 mb-4">
+        Choose which sections appear in your daily morning briefing.
+      </p>
+      <div className="space-y-2.5">
+        {options.map(opt => (
+          <label key={opt.key} className="flex items-start gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={briefingPreferences[opt.key]}
+              onChange={e => updateBriefingPreferences({ [opt.key]: e.target.checked })}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 dark:bg-gray-800"
+            />
+            <div>
+              <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">
+                {opt.label}
+              </span>
+              <p className="text-xs text-gray-400 dark:text-gray-400">{opt.description}</p>
+            </div>
+          </label>
+        ))}
       </div>
     </div>
   )

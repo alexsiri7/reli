@@ -122,6 +122,29 @@ export const BriefingResponseSchema = z.object({
   findings: z.array(SweepFindingSchema).optional(),
 })
 
+export const MorningBriefingSectionSchema = z.object({
+  key: z.string(),
+  title: z.string(),
+  items: z.array(z.string()),
+})
+
+export const MorningBriefingSchema = z.object({
+  id: z.string(),
+  briefing_date: z.string(),
+  summary: z.string(),
+  sections: z.array(MorningBriefingSectionSchema),
+  generated_at: z.string(),
+  read_at: z.string().nullable(),
+  dismissed: z.boolean(),
+})
+
+export const BriefingPreferencesSchema = z.object({
+  include_priorities: z.boolean(),
+  include_overdue: z.boolean(),
+  include_blockers: z.boolean(),
+  include_findings: z.boolean(),
+})
+
 // --- Proactive Surfaces ---
 
 export const ProactiveSurfaceSchema = z.object({
