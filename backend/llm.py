@@ -50,11 +50,12 @@ async def acomplete(
     *,
     api_key: str | None = None,
     **kwargs: Any,
-) -> "litellm.ModelResponse":
+) -> Any:
     """Non-streaming LLM completion via Requesty.
 
-    Returns the full ``litellm.ModelResponse`` so callers can inspect usage,
-    model name, etc.
+    Returns a ``litellm.ModelResponse`` (typed as Any to avoid mypy issues with
+    LiteLLM's dynamic return types).  Callers can access ``.choices``, ``.usage``,
+    and ``.model`` as usual.
     """
     return await litellm.acompletion(
         model=_litellm_model(model),
