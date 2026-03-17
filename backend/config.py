@@ -89,6 +89,15 @@ class Settings(BaseSettings):
     SWEEP_HOUR: int = 3
     SWEEP_MINUTE: int = 0
 
+    # --- Phoenix / OpenTelemetry ---
+    PHOENIX_ENABLED: str = "false"
+    PHOENIX_ENDPOINT: str = "http://localhost:6006/v1/traces"
+    OTEL_SERVICE_NAME: str = "reli"
+
+    @property
+    def phoenix_enabled_bool(self) -> bool:
+        return self.PHOENIX_ENABLED.lower() not in ("false", "0", "no")
+
     @property
     def rate_limit_enabled_bool(self) -> bool:
         return self.RATE_LIMIT_ENABLED.lower() not in ("false", "0", "no")
