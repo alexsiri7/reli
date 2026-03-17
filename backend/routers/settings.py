@@ -27,6 +27,7 @@ _VALID_KEYS = {
     "reasoning_model",
     "response_model",
     "chat_context_window",
+    "theme",
 }
 
 
@@ -57,6 +58,7 @@ class UserSettings(BaseModel):
     reasoning_model: str = ""
     response_model: str = ""
     chat_context_window: int | None = None
+    theme: str = ""
 
 
 class UserSettingsUpdate(BaseModel):
@@ -69,6 +71,7 @@ class UserSettingsUpdate(BaseModel):
     reasoning_model: str | None = None
     response_model: str | None = None
     chat_context_window: int | None = None
+    theme: str | None = None
 
 
 class RequestyModel(BaseModel):
@@ -297,6 +300,7 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         reasoning_model=user_settings.get("reasoning_model", ""),
         response_model=user_settings.get("response_model", ""),
         chat_context_window=int(user_settings["chat_context_window"]) if "chat_context_window" in user_settings else None,
+        theme=user_settings.get("theme", ""),
     )
 
 

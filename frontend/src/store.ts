@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiFetch } from './api'
+import { setTheme as applyTheme } from './hooks/useTheme'
 import { cacheThings, getCachedThings } from './offline/cache-things'
 import { cacheThingTypes, getCachedThingTypes } from './offline/cache-thing-types'
 import { cacheRelationships, getCachedRelationships } from './offline/cache-relationships'
@@ -142,6 +143,7 @@ export interface UserSettings {
   reasoning_model: string
   response_model: string
   chat_context_window: number | null
+  theme: string
 }
 
 export interface UserProfileRelationship {
@@ -941,6 +943,9 @@ export const useStore = create<ReliState>((set, get) => ({
       if (!res.ok) return
       const data = validateResponse(UserSettingsSchema, await res.json(), '/settings/user')
       set({ userSettings: data })
+      if (data.theme === 'light' || data.theme === 'dark' || data.theme === 'system') {
+        applyTheme(data.theme)
+      }
     } catch {
       // ignore
     }

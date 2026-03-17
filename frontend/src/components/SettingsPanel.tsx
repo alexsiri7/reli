@@ -555,6 +555,12 @@ const themeOptions = [
 
 function ThemeSection() {
   const { theme } = useTheme()
+  const updateUserSettings = useStore(s => s.updateUserSettings)
+
+  const handleThemeChange = (value: 'light' | 'dark' | 'system') => {
+    setTheme(value)
+    updateUserSettings({ theme: value })
+  }
 
   return (
     <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
@@ -563,7 +569,7 @@ function ThemeSection() {
         {themeOptions.map(opt => (
           <button
             key={opt.value}
-            onClick={() => setTheme(opt.value)}
+            onClick={() => handleThemeChange(opt.value)}
             className={`flex-1 flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
               theme === opt.value
                 ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
