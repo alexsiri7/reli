@@ -4,9 +4,9 @@ Default schedule: daily at 03:00 local time.  Configurable via the
 ``SWEEP_HOUR`` (0-23) and ``SWEEP_MINUTE`` (0-59) environment variables.
 Set ``SWEEP_ENABLED=false`` to disable entirely.
 
-The scheduler runs the SQL candidate phase first.  If candidates are found,
-it proceeds to the LLM reflection phase.  Errors are logged but never
-propagate to the main application.
+The scheduler processes each user separately, running the full sweep pipeline
+(SQL candidates → LLM reflection → reasoning) per user.  Errors are logged
+but never propagate to the main application.
 """
 
 from __future__ import annotations
@@ -43,26 +43,49 @@ def _seconds_until(hour: int, minute: int) -> float:
     return (target - now).total_seconds()
 
 
+def _get_all_user_ids() -> list[str]:
+    """Return all user IDs from the database."""
+    from .database import db
+
+    with db() as conn:
+        rows = conn.execute("SELECT id FROM users").fetchall()
+    return [row["id"] for row in rows]
+
+
 async def _run_sweep() -> None:
-    """Execute one sweep cycle: SQL candidates → optional LLM reflection."""
-    from .sweep import collect_candidates, reflect_on_candidates
+    """Execute one sweep cycle: per-user full sweep pipeline."""
+    from .sweep import run_full_sweep
 
     logger.info("Sweep started")
 
     try:
-        candidates = collect_candidates()
-        logger.info("Sweep SQL phase: %d candidates found", len(candidates))
+        user_ids = _get_all_user_ids()
 
-        if not candidates:
-            logger.info("Sweep complete — no candidates, skipping LLM phase")
+        if not user_ids:
+            # No users yet — run a single sweep without user filtering
+            logger.info("Sweep: no users found, running without user filter")
+            result = await run_full_sweep(user_id=None, trigger="scheduled")
+            logger.info(
+                "Sweep complete — %d candidates, %d findings, %d created, %d updated",
+                result.candidates_found, result.findings_created,
+                result.things_created, result.things_updated,
+            )
             return
 
-        result = await reflect_on_candidates(candidates)
-        logger.info(
-            "Sweep complete — %d findings created (usage: %s)",
-            result.findings_created,
-            result.usage,
-        )
+        logger.info("Sweep: processing %d users", len(user_ids))
+        for uid in user_ids:
+            try:
+                result = await run_full_sweep(user_id=uid, trigger="scheduled")
+                logger.info(
+                    "Sweep user=%s — %d candidates, %d findings, %d created, %d updated",
+                    uid, result.candidates_found, result.findings_created,
+                    result.things_created, result.things_updated,
+                )
+            except Exception:
+                logger.exception("Sweep failed for user=%s", uid)
+
+        logger.info("Sweep complete — all users processed")
+
     except Exception:
         logger.exception("Sweep failed")
 

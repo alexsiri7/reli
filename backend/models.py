@@ -340,3 +340,29 @@ class MergeHistoryRecord(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── Sweep Runs ──────────────────────────────────────────────────────────────
+
+
+class SweepRunRecord(BaseModel):
+    """A recorded sweep run for audit/logging."""
+
+    id: str
+    user_id: str | None
+    started_at: datetime
+    finished_at: datetime | None
+    status: str
+    candidates_found: int
+    findings_created: int
+    things_created: int
+    things_updated: int
+    relationships_created: int
+    model: str | None
+    prompt_tokens: int
+    completion_tokens: int
+    cost_usd: float
+    error: str | None
+    trigger: str
+
+    model_config = {"from_attributes": True}

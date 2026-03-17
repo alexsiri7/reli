@@ -287,6 +287,13 @@ class TestReflectOnCandidates:
 class TestSweepRouter:
     @pytest.mark.asyncio
     async def test_run_sweep_endpoint(self, async_client, patched_db):
+        # Insert a stale thing to trigger candidates
+        from datetime import timedelta
+
+        old_date = (date.today() - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Stale Item", updated_at=old_date)
+
         llm_response = json.dumps(
             {
                 "findings": [
@@ -301,12 +308,24 @@ class TestSweepRouter:
             }
         )
 
-        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
+        mock_reasoning = AsyncMock(return_value={
+            "applied_changes": {"created": [], "updated": [], "relationships_created": []},
+            "usage": {},
+        })
+
+        with (
+            patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response),
+            patch("backend.sweep.run_sweep_reasoning", mock_reasoning),
+        ):
             resp = await async_client.post("/api/sweep/run")
 
         assert resp.status_code == 200
         data = resp.json()
         assert "candidates_found" in data
+        assert data["candidates_found"] >= 1
         assert "findings_created" in data
         assert data["findings_created"] == 1
+        assert "run_id" in data
+        assert "things_created" in data
+        assert "things_updated" in data
         assert "usage" in data

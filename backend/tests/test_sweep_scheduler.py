@@ -79,60 +79,48 @@ class TestSecondsUntil:
 
 class TestRunSweep:
     @pytest.mark.asyncio
-    async def test_no_candidates_skips_llm(self, patched_db):
-        """When SQL phase finds nothing, LLM phase is not called."""
-        with (
-            patch("backend.sweep.collect_candidates", return_value=[]) as mock_collect,
-            patch("backend.sweep.reflect_on_candidates") as mock_reflect,
-        ):
+    async def test_no_candidates_produces_empty_run(self, patched_db):
+        """When SQL phase finds nothing, sweep completes with zero findings."""
+        mock_result = MagicMock(
+            candidates_found=0, findings_created=0,
+            things_created=0, things_updated=0,
+        )
+        with patch(
+            "backend.sweep.run_full_sweep",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ) as mock_sweep:
             await _run_sweep()
-            mock_collect.assert_called_once()
-            mock_reflect.assert_not_called()
+            mock_sweep.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_with_candidates_runs_llm(self, patched_db):
-        """When SQL phase finds candidates, LLM phase runs."""
-        fake_candidate = MagicMock()
-        mock_result = MagicMock(findings_created=2, usage={"total_tokens": 100})
-
+    async def test_with_users_runs_per_user(self, patched_db):
+        """When users exist, sweep runs once per user."""
+        mock_result = MagicMock(
+            candidates_found=1, findings_created=1,
+            things_created=0, things_updated=0,
+        )
         with (
             patch(
-                "backend.sweep.collect_candidates",
-                return_value=[fake_candidate],
+                "backend.sweep_scheduler._get_all_user_ids",
+                return_value=["user-1", "user-2"],
             ),
             patch(
-                "backend.sweep.reflect_on_candidates",
+                "backend.sweep.run_full_sweep",
                 new_callable=AsyncMock,
                 return_value=mock_result,
-            ) as mock_reflect,
+            ) as mock_sweep,
         ):
             await _run_sweep()
-            mock_reflect.assert_called_once_with([fake_candidate])
+            assert mock_sweep.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_sql_error_handled(self, patched_db):
-        """Errors in SQL phase are logged, not raised."""
+    async def test_error_handled(self, patched_db):
+        """Errors in sweep are logged, not raised."""
         with patch(
-            "backend.sweep.collect_candidates",
-            side_effect=RuntimeError("db boom"),
-        ):
-            # Should not raise
-            await _run_sweep()
-
-    @pytest.mark.asyncio
-    async def test_llm_error_handled(self, patched_db):
-        """Errors in LLM phase are logged, not raised."""
-        fake_candidate = MagicMock()
-        with (
-            patch(
-                "backend.sweep.collect_candidates",
-                return_value=[fake_candidate],
-            ),
-            patch(
-                "backend.sweep.reflect_on_candidates",
-                new_callable=AsyncMock,
-                side_effect=RuntimeError("llm boom"),
-            ),
+            "backend.sweep.run_full_sweep",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("boom"),
         ):
             # Should not raise
             await _run_sweep()
