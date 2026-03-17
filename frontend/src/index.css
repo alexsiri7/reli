@@ -15,7 +15,12 @@ body {
 
 #root {
   height: 100vh;
+  height: 100dvh;
   display: flex;
+}
+
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @keyframes slide-in-right {
