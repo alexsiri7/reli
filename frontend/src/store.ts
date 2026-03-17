@@ -78,6 +78,23 @@ export interface GmailMessage {
   snippet: string
 }
 
+export interface ProposedPlanTask {
+  title: string
+  type_hint?: string
+  area?: string
+  priority?: number
+  depends_on?: string[]
+}
+
+export interface ProposedPlan {
+  goal: string
+  goal_type_hint?: string
+  areas?: { name: string; description?: string }[]
+  tasks?: ProposedPlanTask[]
+  risks?: { description: string; mitigation?: string }[]
+  open_questions?: string[]
+}
+
 export interface AppliedChanges {
   created?: { id: string; title: string; type_hint?: string }[]
   updated?: { id: string; title: string; [key: string]: unknown }[]
@@ -86,6 +103,7 @@ export interface AppliedChanges {
   web_results?: WebSearchResult[]
   gmail_context?: GmailMessage[]
   calendar_events?: CalendarEvent[]
+  proposed_plan?: ProposedPlan | null
 }
 
 export interface ProactiveSurface {

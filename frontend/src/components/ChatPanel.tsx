@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ContextThing, type GmailMessage, type ModelUsage, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
+import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ContextThing, type GmailMessage, type ModelUsage, type ProposedPlan, type ProposedPlanTask, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
 import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported } from '../hooks/useTTS'
@@ -410,6 +410,128 @@ function StreamingIndicator({ stage }: { stage: StreamingStage }) {
   )
 }
 
+const priorityLabel = (p: number) => {
+  const labels: Record<number, string> = { 1: 'P1', 2: 'P2', 3: 'P3', 4: 'P4', 5: 'P5' }
+  const colors: Record<number, string> = {
+    1: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+    2: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+    3: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+    4: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+    5: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+  }
+  return <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${colors[p] || colors[3]}`}>{labels[p] || 'P3'}</span>
+}
+
+function DecompositionPlan({ plan }: { plan: ProposedPlan }) {
+  const areas = plan.areas || []
+  const tasks = plan.tasks || []
+  const risks = plan.risks || []
+  const questions = plan.open_questions || []
+
+  // Group tasks by area
+  const tasksByArea: Record<string, ProposedPlanTask[]> = {}
+  const ungrouped: ProposedPlanTask[] = []
+  for (const task of tasks) {
+    const areaName = task.area
+    if (areaName && areas.some(a => a.name === areaName)) {
+      const existing = tasksByArea[areaName] ?? []
+      existing.push(task)
+      tasksByArea[areaName] = existing
+    } else {
+      ungrouped.push(task)
+    }
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-indigo-200 dark:border-indigo-700/50">
+      <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">
+        Proposed Plan
+      </div>
+
+      {/* Areas with tasks */}
+      {areas.map((area) => (
+        <div key={area.name} className="mb-3">
+          <div className="font-semibold text-sm text-gray-800 dark:text-gray-100 mb-1">
+            {area.name}
+            {area.description && (
+              <span className="font-normal text-gray-500 dark:text-gray-400 ml-1.5 text-xs">— {area.description}</span>
+            )}
+          </div>
+          <ul className="ml-4 space-y-1">
+            {(tasksByArea[area.name] || []).map((task, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-sm text-gray-700 dark:text-gray-300">
+                <span className="text-gray-400 mt-0.5">•</span>
+                <span className="flex-1">
+                  {task.title}
+                  {task.priority && <span className="ml-1.5">{priorityLabel(task.priority)}</span>}
+                  {task.depends_on && task.depends_on.length > 0 && (
+                    <span className="text-xs text-gray-400 dark:text-gray-500 ml-1.5">
+                      → depends on: {task.depends_on.join(', ')}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+
+      {/* Ungrouped tasks */}
+      {ungrouped.length > 0 && (
+        <div className="mb-3">
+          <ul className="ml-4 space-y-1">
+            {ungrouped.map((task, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-sm text-gray-700 dark:text-gray-300">
+                <span className="text-gray-400 mt-0.5">•</span>
+                <span className="flex-1">
+                  {task.title}
+                  {task.priority && <span className="ml-1.5">{priorityLabel(task.priority)}</span>}
+                  {task.depends_on && task.depends_on.length > 0 && (
+                    <span className="text-xs text-gray-400 dark:text-gray-500 ml-1.5">
+                      → depends on: {task.depends_on.join(', ')}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Risks */}
+      {risks.length > 0 && (
+        <div className="mb-3">
+          <div className="font-semibold text-sm text-amber-700 dark:text-amber-400 mb-1">Risks</div>
+          <ul className="ml-4 space-y-1">
+            {risks.map((risk, i) => (
+              <li key={i} className="text-sm text-gray-700 dark:text-gray-300">
+                <span className="text-amber-500">⚠</span> {risk.description}
+                {risk.mitigation && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                    — Mitigation: {risk.mitigation}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Open Questions */}
+      {questions.length > 0 && (
+        <div className="mb-2">
+          <div className="font-semibold text-sm text-indigo-600 dark:text-indigo-400 mb-1">Open Questions</div>
+          <ul className="ml-4 space-y-0.5">
+            {questions.map((q, i) => (
+              <li key={i} className="text-sm text-indigo-600 dark:text-indigo-300">? {q}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingId: string | null; speak: (text: string, id: string) => void }) {
   const isUser = msg.role === 'user'
   const ts = formatTimestamp(msg.timestamp)
@@ -459,6 +581,9 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
           )}
           {!isUser && msg.applied_changes && (
             <ContextDropdown changes={msg.applied_changes} />
+          )}
+          {!isUser && msg.applied_changes?.proposed_plan && (
+            <DecompositionPlan plan={msg.applied_changes.proposed_plan} />
           )}
           {!isUser && msg.questions_for_user && msg.questions_for_user.length > 0 && (
             <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">

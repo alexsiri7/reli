@@ -198,6 +198,14 @@ def _enrich_history_content(row: sqlite3.Row) -> str:
             ]
             parts.append(f"[{verb}: {', '.join(labels)}]")
 
+    # Proposed decomposition plan (preserved for confirmation flow)
+    proposed_plan = changes.get("proposed_plan")
+    if proposed_plan and isinstance(proposed_plan, dict):
+        goal = proposed_plan.get("goal", "")
+        tasks = proposed_plan.get("tasks", [])
+        task_labels = [t.get("title", "?") for t in tasks[:10]]
+        parts.append(f"[Proposed Plan: {goal} — {len(tasks)} tasks: {', '.join(task_labels)}]")
+
     if parts:
         return content + "\n" + "\n".join(parts)
     return content
