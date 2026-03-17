@@ -1058,6 +1058,16 @@ Rules:
   Example: "Alright, here's what's on your radar! [Project X] deadline is calling —
   [Task Y] looks like the power move. We've also got [Task Z] waiting patiently.
   What's speaking to you today?"
+- Decomposition proposal mode: When proposed_plan is provided, present the
+  structured breakdown clearly and ask for confirmation. Format the plan as:
+  1. A brief intro acknowledging the goal
+  2. Areas grouped with their tasks, showing priority (P1-P5) and dependencies
+  3. Risks with mitigations
+  4. Open questions that need answering
+  5. A clear call to action: "Want me to create these as trackable items?"
+  Use an organized, scannable format. Bold area names. Use bullet points for tasks.
+  Show dependencies inline (e.g. "→ depends on: Design schema").
+  Keep it conversational but structured — this is a plan the user needs to review.
 """
 
 
@@ -1070,6 +1080,7 @@ def _build_response_messages(
     open_questions_by_thing: dict[str, list[str]] | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    proposed_plan: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Build the message list for the response agent (shared by streaming and non-streaming)."""
     context = (
@@ -1080,6 +1091,11 @@ def _build_response_messages(
         f"Priority question (ask THIS one): {json.dumps(priority_question)}\n\n"
         f"Briefing mode: {json.dumps(briefing_mode)}"
     )
+    if proposed_plan:
+        context += (
+            f"\n\nProposed decomposition plan (present for user confirmation):\n"
+            f"{json.dumps(proposed_plan, default=str)}"
+        )
     if open_questions_by_thing:
         context += (
             f"\n\nOpen questions on Things (knowledge gaps to ask about conversationally):\n"

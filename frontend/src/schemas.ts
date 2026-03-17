@@ -44,12 +44,30 @@ export const ContextThingSchema = z.object({
   type_hint: z.string().nullable().optional(),
 })
 
+export const ProposedPlanTaskSchema = z.object({
+  title: z.string(),
+  type_hint: z.string().optional(),
+  area: z.string().optional(),
+  priority: z.number().optional(),
+  depends_on: z.array(z.string()).optional(),
+})
+
+export const ProposedPlanSchema = z.object({
+  goal: z.string(),
+  goal_type_hint: z.string().optional(),
+  areas: z.array(z.object({ name: z.string(), description: z.string().optional() })).optional(),
+  tasks: z.array(ProposedPlanTaskSchema).optional(),
+  risks: z.array(z.object({ description: z.string(), mitigation: z.string().optional() })).optional(),
+  open_questions: z.array(z.string()).optional(),
+})
+
 export const AppliedChangesSchema = z.object({
   created: z.array(z.object({ id: z.string(), title: z.string(), type_hint: z.string().optional() })).optional(),
   updated: z.array(z.object({ id: z.string(), title: z.string() }).catchall(z.unknown())).optional(),
   deleted: z.array(z.string()).optional(),
   context_things: z.array(ContextThingSchema).optional(),
   web_results: z.array(WebSearchResultSchema).optional(),
+  proposed_plan: ProposedPlanSchema.nullable().optional(),
 })
 
 const CallUsageSchema = z.object({

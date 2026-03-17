@@ -66,6 +66,7 @@ class PipelineResult:
     gmail_context: list[dict[str, Any]]
     calendar_events: list[dict[str, Any]] | None
     open_questions_by_thing: dict[str, list[str]]
+    proposed_plan: dict[str, Any] | None
     usage: UsageStats
 
 
@@ -674,6 +675,7 @@ class ChatPipeline:
                         priority_question = reasoning_result.get("priority_question", "")
                         reasoning_summary = reasoning_result.get("reasoning_summary", "")
                         briefing_mode = reasoning_result.get("briefing_mode", False)
+                        proposed_plan = reasoning_result.get("proposed_plan")
                         applied_changes = reasoning_result.get("applied_changes", {
                             "created": [], "updated": [], "deleted": [], "merged": [],
                             "relationships_created": [],
@@ -687,6 +689,7 @@ class ChatPipeline:
                         reason_span.set_attribute("reli.reasoning.changes_deleted", n_deleted)
                         reason_span.set_attribute("reli.reasoning.questions_count", len(questions_for_user))
                         reason_span.set_attribute("reli.reasoning.briefing_mode", briefing_mode)
+                        reason_span.set_attribute("reli.reasoning.has_proposed_plan", proposed_plan is not None)
                         self._record_stage_usage(reason_span, "reasoning", usage, calls_before)
                     except Exception as exc:
                         set_span_error(reason_span, exc)
@@ -708,6 +711,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            proposed_plan=proposed_plan,
                         )
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
                         self._record_stage_usage(resp_span, "response", usage, calls_before)
@@ -739,6 +743,7 @@ class ChatPipeline:
             gmail_context=gmail_context,
             calendar_events=calendar_events,
             open_questions_by_thing=open_questions_by_thing,
+            proposed_plan=proposed_plan,
             usage=usage,
         )
 
@@ -813,6 +818,7 @@ class ChatPipeline:
                         priority_question = reasoning_result.get("priority_question", "")
                         reasoning_summary = reasoning_result.get("reasoning_summary", "")
                         briefing_mode = reasoning_result.get("briefing_mode", False)
+                        proposed_plan = reasoning_result.get("proposed_plan")
                         applied_changes = reasoning_result.get("applied_changes", {
                             "created": [], "updated": [], "deleted": [], "merged": [],
                             "relationships_created": [],
@@ -826,6 +832,7 @@ class ChatPipeline:
                         reason_span.set_attribute("reli.reasoning.changes_deleted", n_deleted)
                         reason_span.set_attribute("reli.reasoning.questions_count", len(questions_for_user))
                         reason_span.set_attribute("reli.reasoning.briefing_mode", briefing_mode)
+                        reason_span.set_attribute("reli.reasoning.has_proposed_plan", proposed_plan is not None)
                         self._record_stage_usage(reason_span, "reasoning", usage, calls_before)
                     except Exception as exc:
                         set_span_error(reason_span, exc)
@@ -852,6 +859,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            proposed_plan=proposed_plan,
                         ):
                             reply_parts.append(token)
                             yield PipelineEvent(type="token", data=token)
@@ -892,6 +900,7 @@ class ChatPipeline:
                 gmail_context=gmail_context,
                 calendar_events=calendar_events,
                 open_questions_by_thing=open_questions_by_thing,
+                proposed_plan=proposed_plan,
                 usage=usage,
             ),
         )

@@ -111,6 +111,7 @@ You have tools to modify the database. Call them as needed:
 - delete_thing — delete a Thing by ID
 - merge_things — merge a duplicate Thing into a primary Thing
 - create_relationship — create a typed link between two Things
+- propose_decomposition — propose a structured breakdown of a goal/project for user confirmation
 
 When creating a Thing and then linking it with a relationship, use the ID
 returned by create_thing in your subsequent create_relationship call.
@@ -147,10 +148,50 @@ Rules for tool calls:
 - When the user completes a task (marks done, says "finished X"), call
   update_thing with active=false on the matching Thing.
 
-Task Granularity:
-When a user creates a broad or vague task (e.g. "plan my vacation"), detect
-this and respond with questions_for_user that guide breakdown. Store the
-suggested breakdown as open_questions on the Thing.
+Domain-Aware Decomposition:
+When the user explicitly asks to PLAN, BREAK DOWN, or DECOMPOSE a project,
+goal, or complex task, use propose_decomposition to suggest a structured
+breakdown. This presents the plan for user confirmation BEFORE creating Things.
+
+Planning intent signals: "plan", "break down", "decompose", "help me organize",
+"what steps do I need", "how should I approach", "map out", "outline",
+"structure this", "create a plan for".
+
+The decomposition should be DOMAIN-AWARE — tailor areas and tasks to the
+specific domain. For example:
+- "Plan a wedding" → areas: Venue, Guest Management, Budget, Catering, Attire
+- "Launch a product" → areas: Development, Marketing, Legal, Operations
+- "Move to a new city" → areas: Housing, Logistics, Employment, Social
+
+Use existing Things (Learnings) to inform the decomposition. If the user
+already has related Things, reference them and adjust the plan accordingly.
+For example, if they have a "Budget: $5000" Thing, factor that into the plan.
+
+Risks should be domain-specific and actionable, with concrete mitigations.
+Dependencies should reflect real-world sequencing (can't send invitations
+before having a guest list).
+
+After proposing, set reasoning_summary to explain the decomposition rationale.
+
+Decomposition Confirmation:
+When the user confirms a previously proposed plan (responds with "yes", "go
+ahead", "looks good", "do it", "create them", "approved", or similar
+affirmative responses), execute the plan by calling create_thing for each
+task and the top-level goal, then create_relationship to link them:
+1. Create the top-level goal Thing (type_hint from the plan)
+2. Create each task Thing with parent_id pointing to the goal
+3. Create "depends-on" relationships for task dependencies
+4. Include risks and open_questions on the goal Thing's data and open_questions
+
+If the user modifies the plan before confirming ("but add X", "remove Y",
+"change Z"), adjust accordingly and either re-propose or create the modified
+version.
+
+Task Granularity (for non-planning requests):
+When a user creates a broad or vague task WITHOUT explicitly asking for
+planning (e.g. "remind me to plan my vacation"), create the Thing normally
+and add breakdown suggestions to open_questions. Only use
+propose_decomposition when the user is explicitly asking for planning help.
 
 Knowledge Gap Detection:
 When processing a user message, actively identify what information is MISSING
@@ -264,12 +305,13 @@ def _make_reasoning_tools(
     mutated by the tools during execution and contains the final state after
     the agent finishes running.
     """
-    applied: dict[str, list[Any]] = {
+    applied: dict[str, Any] = {
         "created": [],
         "updated": [],
         "deleted": [],
         "merged": [],
         "relationships_created": [],
+        "proposed_plan": None,
     }
 
     # ------------------------------------------------------------------
@@ -739,6 +781,73 @@ def _make_reasoning_tools(
             applied["relationships_created"].append(rel_info)
             return rel_info
 
+    # ------------------------------------------------------------------
+    def propose_decomposition(
+        goal_title: str,
+        goal_type_hint: str = "project",
+        areas_json: str = "[]",
+        tasks_json: str = "[]",
+        risks_json: str = "[]",
+        open_questions_json: str = "[]",
+    ) -> dict[str, Any]:
+        """Propose a domain-aware decomposition of a goal/project WITHOUT creating Things.
+
+        Use this when the user asks to plan, break down, or decompose something.
+        The proposal is presented for user confirmation before any Things are created.
+        When the user confirms, use create_thing and create_relationship to create
+        all items from the proposal.
+
+        Args:
+            goal_title: The main goal or project title (required).
+            goal_type_hint: Type for the top-level item — typically "project" or "goal".
+            areas_json: JSON array of area objects with "name" and "description" keys.
+                        Areas group related tasks. Example:
+                        '[{"name": "Backend", "description": "API and data layer work"}]'
+            tasks_json: JSON array of task objects. Each has:
+                        "title" (required), "type_hint" (default "task"),
+                        "area" (area name), "priority" (1-5), "depends_on" (list of
+                        other task titles from this plan).
+                        Example: '[{"title": "Design schema", "area": "Backend", "priority": 1, "depends_on": []}]'
+            risks_json: JSON array of risk objects with "description" and "mitigation" keys.
+                        Example: '[{"description": "API rate limits", "mitigation": "Implement caching"}]'
+            open_questions_json: JSON array of open question strings about the overall plan.
+                                Example: '["What is the timeline?", "Who are the stakeholders?"]'
+
+        Returns:
+            The proposed plan dict (not yet persisted as Things).
+        """
+        goal_title = goal_title.strip()
+        if not goal_title:
+            return {"error": "goal_title is required"}
+
+        try:
+            areas = json.loads(areas_json) if areas_json else []
+        except json.JSONDecodeError:
+            areas = []
+        try:
+            tasks = json.loads(tasks_json) if tasks_json else []
+        except json.JSONDecodeError:
+            tasks = []
+        try:
+            risks = json.loads(risks_json) if risks_json else []
+        except json.JSONDecodeError:
+            risks = []
+        try:
+            open_questions = json.loads(open_questions_json) if open_questions_json else []
+        except json.JSONDecodeError:
+            open_questions = []
+
+        plan = {
+            "goal": goal_title,
+            "goal_type_hint": goal_type_hint,
+            "areas": areas,
+            "tasks": tasks,
+            "risks": risks,
+            "open_questions": open_questions,
+        }
+        applied["proposed_plan"] = plan
+        return {"status": "proposed", "plan": plan}
+
     # Wrap each tool with OTEL span instrumentation
     traced_tools = [
         _traced_tool(create_thing),
@@ -746,6 +855,7 @@ def _make_reasoning_tools(
         _traced_tool(delete_thing),
         _traced_tool(merge_things),
         _traced_tool(create_relationship),
+        _traced_tool(propose_decomposition),
     ]
     return traced_tools, applied
 
@@ -883,7 +993,7 @@ async def run_reasoning_agent(
 
 def _build_result(
     metadata: dict[str, Any],
-    applied_changes: dict[str, list[Any]],
+    applied_changes: dict[str, Any],
 ) -> dict[str, Any]:
     """Combine metadata and applied changes into the standard result format."""
     questions = metadata.get("questions_for_user", [])
@@ -897,4 +1007,5 @@ def _build_result(
         "priority_question": priority_q,
         "reasoning_summary": metadata.get("reasoning_summary", ""),
         "briefing_mode": metadata.get("briefing_mode", False),
+        "proposed_plan": applied_changes.get("proposed_plan"),
     }

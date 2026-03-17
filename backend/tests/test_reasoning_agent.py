@@ -59,15 +59,16 @@ class TestMakeReasoningTools:
             tools, applied = _make_reasoning_tools(user_id)
             return tools, applied, mock_db
 
-    def test_returns_five_tools(self):
+    def test_returns_six_tools(self):
         tools, applied, _ = self._get_tools()
-        assert len(tools) == 5
+        assert len(tools) == 6
         names = [t.__name__ for t in tools]
         assert "create_thing" in names
         assert "update_thing" in names
         assert "delete_thing" in names
         assert "merge_things" in names
         assert "create_relationship" in names
+        assert "propose_decomposition" in names
 
     def test_applied_starts_empty(self):
         _, applied, _ = self._get_tools()
@@ -77,6 +78,7 @@ class TestMakeReasoningTools:
             "deleted": [],
             "merged": [],
             "relationships_created": [],
+            "proposed_plan": None,
         }
 
 
@@ -381,10 +383,11 @@ async def test_reasoning_agent_returns_metadata_from_adk():
         mock_run.return_value = json.dumps(metadata)
 
         # Mock _make_reasoning_tools to avoid DB access
-        mock_tools = [MagicMock() for _ in range(5)]
+        mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [], "updated": [], "deleted": [],
             "merged": [], "relationships_created": [],
+            "proposed_plan": None,
         }
 
         with patch("backend.reasoning_agent._make_reasoning_tools",
@@ -447,10 +450,11 @@ async def test_reasoning_agent_tracks_usage():
     with patch("backend.reasoning_agent._run_agent_for_text") as mock_run:
         mock_run.return_value = json.dumps(metadata)
 
-        mock_tools = [MagicMock() for _ in range(5)]
+        mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [], "updated": [], "deleted": [],
             "merged": [], "relationships_created": [],
+            "proposed_plan": None,
         }
 
         with patch("backend.reasoning_agent._make_reasoning_tools",
@@ -487,10 +491,11 @@ async def test_reasoning_agent_ollama_fallback():
         patch("backend.reasoning_agent._make_reasoning_tools") as mock_make_tools,
     ):
         mock_run.return_value = json.dumps(metadata)
-        mock_tools = [MagicMock() for _ in range(5)]
+        mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [], "updated": [], "deleted": [],
             "merged": [], "relationships_created": [],
+            "proposed_plan": None,
         }
         mock_make_tools.return_value = (mock_tools, mock_applied)
 
@@ -589,6 +594,7 @@ def test_tool_system_prompt_mentions_tools():
     assert "delete_thing" in REASONING_AGENT_TOOL_SYSTEM
     assert "merge_things" in REASONING_AGENT_TOOL_SYSTEM
     assert "create_relationship" in REASONING_AGENT_TOOL_SYSTEM
+    assert "propose_decomposition" in REASONING_AGENT_TOOL_SYSTEM
 
 
 def test_tool_system_prompt_no_json_output_schema():
@@ -596,3 +602,109 @@ def test_tool_system_prompt_no_json_output_schema():
     from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
 
     assert '"storage_changes"' not in REASONING_AGENT_TOOL_SYSTEM
+
+
+# ---------------------------------------------------------------------------
+# propose_decomposition tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestProposeDecompositionTool:
+    """Tests for the propose_decomposition tool."""
+
+    def _get_propose_fn(self):
+        with patch("backend.reasoning_agent.db"), \
+             patch("backend.reasoning_agent.upsert_thing"), \
+             patch("backend.reasoning_agent.vs_delete"):
+            from backend.reasoning_agent import _make_reasoning_tools
+            tools, applied = _make_reasoning_tools("test-user")
+            propose_fn = tools[5]  # propose_decomposition is the 6th tool
+            return propose_fn, applied
+
+    def test_empty_title_returns_error(self):
+        propose_fn, _ = self._get_propose_fn()
+        result = propose_fn(goal_title="  ")
+        assert "error" in result
+
+    def test_basic_proposal(self):
+        propose_fn, applied = self._get_propose_fn()
+        areas = json.dumps([{"name": "Backend", "description": "API work"}])
+        tasks = json.dumps([
+            {"title": "Design API", "area": "Backend", "priority": 1, "depends_on": []},
+            {"title": "Implement endpoints", "area": "Backend", "priority": 2, "depends_on": ["Design API"]},
+        ])
+        risks = json.dumps([{"description": "Tight timeline", "mitigation": "Prioritize MVP"}])
+        questions = json.dumps(["What's the deadline?"])
+
+        result = propose_fn(
+            goal_title="Launch Product",
+            goal_type_hint="project",
+            areas_json=areas,
+            tasks_json=tasks,
+            risks_json=risks,
+            open_questions_json=questions,
+        )
+
+        assert result["status"] == "proposed"
+        assert result["plan"]["goal"] == "Launch Product"
+        assert len(result["plan"]["tasks"]) == 2
+        assert len(result["plan"]["areas"]) == 1
+        assert len(result["plan"]["risks"]) == 1
+        assert len(result["plan"]["open_questions"]) == 1
+
+        # Verify it's stored in applied_changes
+        assert applied["proposed_plan"] is not None
+        assert applied["proposed_plan"]["goal"] == "Launch Product"
+
+    def test_proposal_does_not_create_things(self):
+        propose_fn, applied = self._get_propose_fn()
+        propose_fn(
+            goal_title="Test Goal",
+            tasks_json=json.dumps([{"title": "Task 1"}]),
+        )
+        # No Things should be created
+        assert applied["created"] == []
+        assert applied["updated"] == []
+        assert applied["deleted"] == []
+
+    def test_invalid_json_uses_defaults(self):
+        propose_fn, applied = self._get_propose_fn()
+        result = propose_fn(
+            goal_title="Test Goal",
+            areas_json="not json",
+            tasks_json="also not json",
+        )
+        assert result["status"] == "proposed"
+        assert result["plan"]["areas"] == []
+        assert result["plan"]["tasks"] == []
+
+
+@pytest.mark.asyncio
+async def test_build_result_includes_proposed_plan():
+    """_build_result includes proposed_plan from applied_changes."""
+    from backend.reasoning_agent import _build_result
+
+    metadata = {"reasoning_summary": "proposed breakdown"}
+    applied = {
+        "created": [], "updated": [], "deleted": [],
+        "merged": [], "relationships_created": [],
+        "proposed_plan": {"goal": "Test", "tasks": [{"title": "T1"}]},
+    }
+    result = _build_result(metadata, applied)
+    assert result["proposed_plan"] is not None
+    assert result["proposed_plan"]["goal"] == "Test"
+
+
+@pytest.mark.asyncio
+async def test_build_result_none_when_no_plan():
+    """_build_result returns None for proposed_plan when no plan was proposed."""
+    from backend.reasoning_agent import _build_result
+
+    metadata = {"reasoning_summary": "normal flow"}
+    applied = {
+        "created": [], "updated": [], "deleted": [],
+        "merged": [], "relationships_created": [],
+        "proposed_plan": None,
+    }
+    result = _build_result(metadata, applied)
+    assert result["proposed_plan"] is None
