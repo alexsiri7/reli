@@ -69,13 +69,16 @@ def shutdown_tracing() -> None:
         _initialized = False
 
 
-def get_tracer() -> Tracer:
-    """Return the pipeline tracer.
+def get_tracer(name: str = _TRACER_NAME) -> Tracer:
+    """Return an OTEL tracer.
 
-    Returns the no-op tracer when tracing is disabled, so callers never
-    need to check whether tracing is active.
+    When tracing is enabled, returns a real tracer from the configured provider.
+    When disabled, returns a no-op tracer (spans are created but discarded).
+
+    Args:
+        name: Tracer name for span attribution. Defaults to "reli.pipeline".
     """
-    return trace.get_tracer(_TRACER_NAME)
+    return trace.get_tracer(name)
 
 
 def set_span_error(span: trace.Span, exc: BaseException) -> None:

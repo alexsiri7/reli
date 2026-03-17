@@ -7,6 +7,7 @@ function signatures.  Preserves the same public interface so callers in
 chat.py need only update their import path.
 """
 
+import functools
 import json
 import logging
 import uuid
@@ -15,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from google.adk.agents import LlmAgent
+from opentelemetry import trace
 
 from .agents import (
     OLLAMA_MODEL,
@@ -26,10 +28,66 @@ from .agents import (
 )
 from .context_agent import _make_litellm_model, _run_agent_for_text
 from .database import db
+from .tracing import get_tracer
 from .vector_store import delete_thing as vs_delete
 from .vector_store import upsert_thing
 
 logger = logging.getLogger(__name__)
+
+_tracer = get_tracer("reli.reasoning_agent")
+
+# Max length for span attribute values to avoid oversized payloads
+_ATTR_VALUE_LIMIT = 4096
+
+
+def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
+    """Wrap a tool function with an OTEL span recording inputs and outputs."""
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        with _tracer.start_as_current_span(
+            f"tool.{func.__name__}",
+            kind=trace.SpanKind.INTERNAL,
+        ) as span:
+            # Record input arguments
+            import inspect
+
+            sig = inspect.signature(func)
+            bound = sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+            for param_name, value in bound.arguments.items():
+                attr_val = str(value) if not isinstance(value, str) else value
+                if len(attr_val) > _ATTR_VALUE_LIMIT:
+                    attr_val = attr_val[:_ATTR_VALUE_LIMIT] + "..."
+                span.set_attribute(f"tool.input.{param_name}", attr_val)
+
+            try:
+                result = func(*args, **kwargs)
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
+
+            # Record output
+            if isinstance(result, dict):
+                if "error" in result:
+                    span.set_status(trace.StatusCode.ERROR, result["error"])
+                    span.set_attribute("tool.error", result["error"])
+                else:
+                    span.set_status(trace.StatusCode.OK)
+                result_str = json.dumps(result, default=str)
+                if len(result_str) > _ATTR_VALUE_LIMIT:
+                    result_str = result_str[:_ATTR_VALUE_LIMIT] + "..."
+                span.set_attribute("tool.output", result_str)
+
+                # Set key identifiers as top-level attributes for easy filtering
+                for key in ("id", "deleted", "keep_id"):
+                    if key in result:
+                        span.set_attribute(f"tool.result.{key}", str(result[key]))
+
+            return result
+
+    return wrapper
 
 
 # ---------------------------------------------------------------------------
@@ -681,7 +739,15 @@ def _make_reasoning_tools(
             applied["relationships_created"].append(rel_info)
             return rel_info
 
-    return [create_thing, update_thing, delete_thing, merge_things, create_relationship], applied
+    # Wrap each tool with OTEL span instrumentation
+    traced_tools = [
+        _traced_tool(create_thing),
+        _traced_tool(update_thing),
+        _traced_tool(delete_thing),
+        _traced_tool(merge_things),
+        _traced_tool(create_relationship),
+    ]
+    return traced_tools, applied
 
 
 # ---------------------------------------------------------------------------
