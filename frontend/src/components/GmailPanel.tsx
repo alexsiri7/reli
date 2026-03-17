@@ -56,7 +56,7 @@ function MessageDetail({ message, onBack }: { message: GmailMessage; onBack: () 
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           From: {message.sender}
         </p>
-        <p className="text-xs text-gray-400 dark:text-gray-500">
+        <p className="text-xs text-gray-400 dark:text-gray-400">
           {new Date(message.date).toLocaleString()}
         </p>
       </div>
@@ -165,7 +165,7 @@ export function GmailPanel() {
 
   if (!status) {
     return (
-      <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-500">
+      <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-400">
         Checking Gmail...
       </div>
     )
@@ -174,7 +174,7 @@ export function GmailPanel() {
   if (!status.connected) {
     return (
       <section className="py-3 border-t border-gray-100 dark:border-gray-800">
-        <h2 className="px-4 pb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+        <h2 className="px-4 pb-2 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
           Gmail
         </h2>
         <div className="px-4">
@@ -203,11 +203,11 @@ export function GmailPanel() {
   return (
     <section className="py-2 border-t border-gray-100 dark:border-gray-800">
       <div className="px-4 pb-1 flex items-center justify-between">
-        <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+        <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
           Gmail
         </h2>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[120px]">
+          <span className="text-[10px] text-gray-400 dark:text-gray-400 truncate max-w-[120px]">
             {status.email}
           </span>
           <button
@@ -228,7 +228,7 @@ export function GmailPanel() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search emails..."
-            className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:ring-1 focus:ring-indigo-500"
+            className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-400 outline-none focus:ring-1 focus:ring-indigo-500"
           />
           <button
             type="submit"
@@ -250,7 +250,7 @@ export function GmailPanel() {
           <span className="w-4 h-4 border-2 border-gray-300 border-t-indigo-600 rounded-full animate-spin" />
         </div>
       ) : messages.length === 0 ? (
-        <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-500 text-center">
+        <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-400 text-center">
           No emails found
         </div>
       ) : (
@@ -265,14 +265,14 @@ export function GmailPanel() {
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
                   {formatSender(msg.sender)}
                 </span>
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">
+                <span className="text-[10px] text-gray-400 dark:text-gray-400 shrink-0">
                   {formatDate(msg.date)}
                 </span>
               </div>
               <div className="text-xs text-gray-600 dark:text-gray-400 truncate mt-0.5">
                 {msg.subject}
               </div>
-              <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
+              <div className="text-[11px] text-gray-400 dark:text-gray-400 truncate mt-0.5">
                 {msg.snippet}
               </div>
             </button>

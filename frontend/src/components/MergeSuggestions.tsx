@@ -22,7 +22,7 @@ function MergeCard({ suggestion, onMerge, onDismiss, merging }: {
 
   return (
     <div className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors">
-      <p className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">{suggestion.reason}</p>
+      <p className="text-xs text-gray-400 dark:text-gray-400 mb-1.5">{suggestion.reason}</p>
       <div className="flex flex-col gap-1">
         <label className="flex items-center gap-2 cursor-pointer group">
           <input
@@ -61,7 +61,7 @@ function MergeCard({ suggestion, onMerge, onDismiss, merging }: {
         </button>
         <button
           onClick={() => onDismiss(suggestion.thing_a.id, suggestion.thing_b.id)}
-          className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+          className="text-xs text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
         >
           Dismiss
         </button>
@@ -86,7 +86,7 @@ export function MergeSuggestions() {
     <section className="py-2 border-b border-gray-100 dark:border-gray-800">
       <h2 className="px-4 pb-1 text-xs font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
         <span>Merge Suggestions</span>
-        <span className="ml-auto text-[10px] font-normal tabular-nums text-gray-400 dark:text-gray-500">
+        <span className="ml-auto text-[10px] font-normal tabular-nums text-gray-400 dark:text-gray-400">
           {mergeSuggestions.length}
         </span>
       </h2>

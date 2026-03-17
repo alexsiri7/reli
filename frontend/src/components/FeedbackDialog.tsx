@@ -93,7 +93,7 @@ export function FeedbackDialog() {
             </div>
           ) : (
             <>
-              <p className="text-xs text-gray-400 dark:text-gray-500">
+              <p className="text-xs text-gray-400 dark:text-gray-400">
                 Report a bug, request a feature, or share your thoughts. Your feedback helps us improve Reli.
               </p>
 
@@ -136,9 +136,9 @@ export function FeedbackDialog() {
                   }
                   rows={5}
                   maxLength={5000}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500 resize-none"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500 resize-none"
                 />
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                <p className="text-[10px] text-gray-400 dark:text-gray-400 mt-1">
                   Browser and app info will be included automatically.
                 </p>
               </div>
