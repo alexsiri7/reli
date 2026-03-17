@@ -28,8 +28,8 @@ from .agents import (
     UsageStats,
 )
 from .auth import user_filter
-from .interaction_style import determine_style, get_reasoning_style_hint, get_style_prompt
 from .context_agent import _make_litellm_model, run_context_agent, run_context_refinement
+from .interaction_style import determine_style, get_reasoning_style_hint, get_style_prompt
 from .database import db
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
