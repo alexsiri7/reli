@@ -292,14 +292,19 @@ export function Sidebar() {
         </button>
       )}
 
-      {/* Sidebar panel */}
-      <aside
+      {/* Sidebar panel + resize handle wrapper */}
+      <div
         style={{ width: window.innerWidth >= 768 ? sidebarWidth : undefined }}
         className={`
-          flex flex-col border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 overflow-y-auto
-          w-full pb-14
-          md:pb-0 md:w-auto md:shrink-0 md:relative
+          relative md:shrink-0
           ${isOpen ? '' : 'md:hidden'}
+        `}
+      >
+      <aside
+        className={`
+          flex flex-col border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 overflow-y-auto
+          w-full h-full pb-14
+          md:pb-0
         `}
       >
         {/* Header */}
@@ -626,7 +631,8 @@ export function Sidebar() {
             )}
           </>
         )}
-        {/* Drag handle — desktop only */}
+      </aside>
+        {/* Drag handle — desktop only, outside aside to avoid overflow clipping */}
         <div
           onPointerDown={handleDragStart}
           className="hidden md:flex absolute top-0 right-0 w-2 h-full cursor-col-resize group/handle z-10 items-center justify-center"
@@ -639,7 +645,7 @@ export function Sidebar() {
             <div className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 group-hover/handle:bg-indigo-300 dark:group-hover/handle:bg-indigo-400 transition-colors" />
           </div>
         </div>
-      </aside>
+      </div>
     </>
   )
 }
