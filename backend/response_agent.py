@@ -49,6 +49,7 @@ def _build_user_prompt(
     open_questions_by_thing: dict[str, list[str]] | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    blocker_alerts: list[dict[str, Any]] | None = None,
 ) -> str:
     """Build the user prompt content for the ADK agent.
 
@@ -62,6 +63,15 @@ def _build_user_prompt(
     )
     # The second message (index 1) is the user message with all context
     content: str = messages[1]["content"]
+
+    # Inject blocker alerts into the prompt
+    if blocker_alerts:
+        import json as _json
+        content += (
+            f"\n\nBlocker/conflict alerts (proactively mention relevant ones):\n"
+            f"{_json.dumps(blocker_alerts, default=str)}"
+        )
+
     return content
 
 
@@ -229,12 +239,14 @@ async def run_response_agent(
     model: str | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    blocker_alerts: list[dict[str, Any]] | None = None,
 ) -> str:
     """Stage 4: generate friendly user-facing response via ADK LlmAgent."""
     user_prompt = _build_user_prompt(
         message, reasoning_summary, questions_for_user,
         applied_changes, web_results, open_questions_by_thing,
         priority_question=priority_question, briefing_mode=briefing_mode,
+        blocker_alerts=blocker_alerts,
     )
 
     litellm_model = _make_litellm_model(
@@ -264,12 +276,14 @@ async def run_response_agent_stream(
     model: str | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    blocker_alerts: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[str]:
     """Stage 4 (streaming): yield response tokens as they arrive via ADK LlmAgent."""
     user_prompt = _build_user_prompt(
         message, reasoning_summary, questions_for_user,
         applied_changes, web_results, open_questions_by_thing,
         priority_question=priority_question, briefing_mode=briefing_mode,
+        blocker_alerts=blocker_alerts,
     )
 
     litellm_model = _make_litellm_model(

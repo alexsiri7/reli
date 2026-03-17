@@ -86,7 +86,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, blockerAlerts, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, openThingDetail } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, blockerAlerts: s.blockerAlerts, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, openThingDetail: s.openThingDetail })))
   const [searchQuery, setSearchQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -467,6 +467,49 @@ export function Sidebar() {
 
             {/* Merge Suggestions */}
             <MergeSuggestions />
+
+            {/* Blocker Alerts */}
+            {blockerAlerts && blockerAlerts.length > 0 && (
+              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-widest">
+                  Blockers & Conflicts
+                </h2>
+                {blockerAlerts.slice(0, 5).map((alert, i) => {
+                  const severityColors: Record<string, string> = {
+                    critical: 'text-red-600 dark:text-red-400',
+                    warning: 'text-amber-600 dark:text-amber-400',
+                    info: 'text-blue-600 dark:text-blue-400',
+                  }
+                  const severityIcons: Record<string, string> = {
+                    critical: '\u{1F6A8}',
+                    warning: '\u26A0\uFE0F',
+                    info: '\u2139\uFE0F',
+                    blocked_thing: '\u{1F6D1}',
+                    deadline_conflict: '\u23F0',
+                    downstream_impact: '\u{1F4A5}',
+                    schedule_overlap: '\u{1F4C5}',
+                    circular_dependency: '\u{1F504}',
+                  }
+                  const icon = severityIcons[alert.alert_type] ?? severityIcons[alert.severity] ?? '\u26A0\uFE0F'
+                  const colorClass = severityColors[alert.severity] ?? severityColors.warning
+                  return (
+                    <div
+                      key={`blocker-${i}-${alert.thing_id}`}
+                      className="px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors cursor-pointer"
+                      onClick={() => openThingDetail(alert.thing_id)}
+                      role="button"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-sm mt-0.5 shrink-0">{icon}</span>
+                        <p className={`text-sm leading-snug ${colorClass}`}>
+                          {alert.message}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </section>
+            )}
 
             {/* Proactive Surfaces */}
             {proactiveSurfaces && proactiveSurfaces.length > 0 && (

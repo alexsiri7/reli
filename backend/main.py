@@ -35,6 +35,7 @@ from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
 from .response_metrics import ResponseMetricsMiddleware, metrics_store  # noqa: E402
 from .routers import (  # noqa: E402
     auth,
+    blockers,
     briefing,
     calendar,
     chat,
@@ -203,6 +204,7 @@ app.include_router(proactive.router, prefix="/api", dependencies=_api_deps)
 app.include_router(settings.router, prefix="/api", dependencies=_api_deps)
 app.include_router(sweep.router, prefix="/api", dependencies=_api_deps)
 app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
+app.include_router(blockers.router, prefix="/api", dependencies=_api_deps)
 
 
 @app.get("/healthz", tags=["health"], summary="Health check", description="Returns service health status.")

@@ -28,6 +28,7 @@ from .agents import (
     UsageStats,
 )
 from .auth import user_filter
+from .blocker_detection import detect_blockers_for_context
 from .context_agent import _make_litellm_model, run_context_agent, run_context_refinement
 from .database import db
 from .google_calendar import fetch_upcoming_events
@@ -66,6 +67,7 @@ class PipelineResult:
     gmail_context: list[dict[str, Any]]
     calendar_events: list[dict[str, Any]] | None
     open_questions_by_thing: dict[str, list[str]]
+    blocker_alerts: list[dict[str, Any]]
     usage: UsageStats
 
 
@@ -320,11 +322,13 @@ class ChatPipeline:
         user_api_key: str | None = None,
         user_models: Mapping[str, str | None] | None = None,
         context_window: int = 10,
+        proactivity_level: str = "medium",
     ):
         self.user_id = user_id
         self.user_api_key = user_api_key
         self.user_models: Mapping[str, str | None] = user_models or {}
         self.context_window = context_window
+        self.proactivity_level = proactivity_level
 
         # Create ADK LlmAgent instances for each pipeline stage
         context_model = _make_litellm_model(
@@ -654,6 +658,14 @@ class ChatPipeline:
                     await self._fetch_external_data(message, context_result)
                 )
 
+                # Blocker detection (real-time, between context and reasoning)
+                thing_ids = [t["id"] for t in relevant_things]
+                blocker_alerts = detect_blockers_for_context(
+                    thing_ids, proactivity_level=self.proactivity_level,
+                )
+                if blocker_alerts:
+                    logger.info("Blocker detection found %d alerts", len(blocker_alerts))
+
                 # Stage 2: Reasoning Agent
                 calls_before = len(usage.calls)
                 with _tracer.start_as_current_span("reli.stage.reasoning") as reason_span:
@@ -662,10 +674,12 @@ class ChatPipeline:
                         self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
                     )
                     reason_span.set_attribute("reli.reasoning.things_input", len(relevant_things))
+                    reason_span.set_attribute("reli.reasoning.blocker_alerts", len(blocker_alerts))
                     try:
                         reasoning_result = await run_reasoning_agent(
                             message, history, relevant_things, web_results, gmail_context,
                             calendar_events, relationships=context_relationships,
+                            blocker_alerts=blocker_alerts,
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id,
@@ -708,6 +722,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            blocker_alerts=blocker_alerts,
                         )
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
                         self._record_stage_usage(resp_span, "response", usage, calls_before)
@@ -739,6 +754,7 @@ class ChatPipeline:
             gmail_context=gmail_context,
             calendar_events=calendar_events,
             open_questions_by_thing=open_questions_by_thing,
+            blocker_alerts=blocker_alerts,
             usage=usage,
         )
 
@@ -789,6 +805,14 @@ class ChatPipeline:
                     await self._fetch_external_data(message, context_result)
                 )
 
+                # Blocker detection (real-time, between context and reasoning)
+                thing_ids = [t["id"] for t in relevant_things]
+                blocker_alerts = detect_blockers_for_context(
+                    thing_ids, proactivity_level=self.proactivity_level,
+                )
+                if blocker_alerts:
+                    logger.info("Blocker detection found %d alerts (stream)", len(blocker_alerts))
+
                 yield PipelineEvent(type="stage_complete", stage="context")
 
                 # Stage 2: Reasoning Agent
@@ -801,10 +825,12 @@ class ChatPipeline:
                         self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
                     )
                     reason_span.set_attribute("reli.reasoning.things_input", len(relevant_things))
+                    reason_span.set_attribute("reli.reasoning.blocker_alerts", len(blocker_alerts))
                     try:
                         reasoning_result = await run_reasoning_agent(
                             message, history, relevant_things, web_results, gmail_context,
                             calendar_events, relationships=context_relationships,
+                            blocker_alerts=blocker_alerts,
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id,
@@ -852,6 +878,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            blocker_alerts=blocker_alerts,
                         ):
                             reply_parts.append(token)
                             yield PipelineEvent(type="token", data=token)
@@ -892,6 +919,7 @@ class ChatPipeline:
                 gmail_context=gmail_context,
                 calendar_events=calendar_events,
                 open_questions_by_thing=open_questions_by_thing,
+                blocker_alerts=blocker_alerts,
                 usage=usage,
             ),
         )

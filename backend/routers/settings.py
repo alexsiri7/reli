@@ -28,6 +28,7 @@ _VALID_KEYS = {
     "response_model",
     "chat_context_window",
     "theme",
+    "proactivity_level",
 }
 
 
@@ -59,6 +60,7 @@ class UserSettings(BaseModel):
     response_model: str = ""
     chat_context_window: int | None = None
     theme: str = ""
+    proactivity_level: str = "medium"
 
 
 class UserSettingsUpdate(BaseModel):
@@ -72,6 +74,7 @@ class UserSettingsUpdate(BaseModel):
     response_model: str | None = None
     chat_context_window: int | None = None
     theme: str | None = None
+    proactivity_level: str | None = None
 
 
 class RequestyModel(BaseModel):
@@ -157,6 +160,14 @@ def get_user_chat_context_window(user_id: str) -> int:
         except (ValueError, TypeError):
             pass
     return get_chat_context_window()
+
+
+def get_user_proactivity_level(user_id: str) -> str:
+    """Return the user's proactivity level for blocker detection."""
+    val = get_user_setting(user_id, "proactivity_level")
+    if val and val in ("off", "low", "medium", "high"):
+        return val
+    return "medium"
 
 
 def get_user_api_key(user_id: str) -> str:
@@ -301,6 +312,7 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         response_model=user_settings.get("response_model", ""),
         chat_context_window=int(user_settings["chat_context_window"]) if "chat_context_window" in user_settings else None,
         theme=user_settings.get("theme", ""),
+        proactivity_level=user_settings.get("proactivity_level", "medium"),
     )
 
 
@@ -319,6 +331,9 @@ def update_user_settings(
             if val is not None:
                 if field_name == "chat_context_window":
                     val = str(max(1, min(int(val), 50)))
+                elif field_name == "proactivity_level":
+                    if val not in ("off", "low", "medium", "high"):
+                        val = "medium"
                 _set_user_setting(conn, user_id, field_name, str(val))
 
     return get_user_settings_endpoint(user_id)

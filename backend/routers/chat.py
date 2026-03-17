@@ -24,7 +24,7 @@ from ..models import (
     UsageInfo,
 )
 from ..pipeline import ChatPipeline
-from .settings import get_user_api_key, get_user_chat_context_window, get_user_models
+from .settings import get_user_api_key, get_user_chat_context_window, get_user_models, get_user_proactivity_level
 
 logger = logging.getLogger(__name__)
 
@@ -213,12 +213,14 @@ def _build_pipeline(user_id: str) -> ChatPipeline:
     user_api_key = get_user_api_key(user_id)
     user_models = get_user_models(user_id)
     context_window = get_user_chat_context_window(user_id)
+    proactivity_level = get_user_proactivity_level(user_id)
 
     pipeline = ChatPipeline(
         user_id=user_id,
         user_api_key=user_api_key,
         user_models=user_models,
         context_window=context_window,
+        proactivity_level=proactivity_level,
     )
     return pipeline
 
@@ -270,6 +272,8 @@ def _persist_exchange(
         applied_with_sources["gmail_context"] = result.gmail_context
     if result.calendar_events:
         applied_with_sources["calendar_events"] = result.calendar_events
+    if result.blocker_alerts:
+        applied_with_sources["blocker_alerts"] = result.blocker_alerts
     changes_json = json.dumps(applied_with_sources)
 
     with db() as conn:

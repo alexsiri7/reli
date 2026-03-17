@@ -118,6 +118,7 @@ function SettingsForm({
   const [chatContextWindow, setChatContextWindow] = useState(initial.chat_context_window)
   const [reqApiKey, setReqApiKey] = useState('')
   const [reqApiKeyDisplay, setReqApiKeyDisplay] = useState(initialUserSettings?.requesty_api_key || '')
+  const [proactivityLevel, setProactivityLevel] = useState(initialUserSettings?.proactivity_level || 'medium')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -128,8 +129,9 @@ function SettingsForm({
     chatContextWindow !== initial.chat_context_window
 
   const hasApiKeyChange = reqApiKey.length > 0
+  const hasProactivityChange = proactivityLevel !== (initialUserSettings?.proactivity_level || 'medium')
 
-  const hasChanges = hasModelChanges || hasApiKeyChange
+  const hasChanges = hasModelChanges || hasApiKeyChange || hasProactivityChange
 
   const handleSave = async () => {
     setSaving(true)
@@ -145,6 +147,11 @@ function SettingsForm({
       await updateUserSettings({ requesty_api_key: reqApiKey })
       setReqApiKeyDisplay(reqApiKey.length <= 4 ? '****' : '*'.repeat(reqApiKey.length - 4) + reqApiKey.slice(-4))
       setReqApiKey('')
+    }
+
+    // Save proactivity level if changed
+    if (hasProactivityChange) {
+      await updateUserSettings({ proactivity_level: proactivityLevel })
     }
 
     setSaving(false)
@@ -241,6 +248,39 @@ function SettingsForm({
             }}
             className="w-24 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
           />
+        </div>
+      </div>
+
+      {/* Proactivity Level */}
+      <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Blocker Detection</h3>
+        <p className="text-xs text-gray-400 dark:text-gray-400 mb-4">
+          Controls how proactively Reli flags blockers, conflicts, and dependency issues during conversations.
+        </p>
+        <div className="flex gap-2">
+          {(['off', 'low', 'medium', 'high'] as const).map(level => {
+            const labels: Record<string, string> = { off: 'Off', low: 'Low', medium: 'Medium', high: 'High' }
+            const descriptions: Record<string, string> = {
+              off: 'No alerts',
+              low: 'Blocked items only',
+              medium: 'Blockers + deadlines',
+              high: 'All detection types',
+            }
+            return (
+              <button
+                key={level}
+                onClick={() => setProactivityLevel(level)}
+                className={`flex-1 flex flex-col items-center gap-0.5 px-2 py-2 rounded-lg border text-xs transition-colors ${
+                  proactivityLevel === level
+                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                }`}
+              >
+                <span className="font-medium">{labels[level]}</span>
+                <span className="text-[10px] text-gray-400 dark:text-gray-500">{descriptions[level]}</span>
+              </button>
+            )
+          })}
         </div>
       </div>
       <VoiceSection />

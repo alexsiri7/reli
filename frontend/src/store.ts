@@ -16,6 +16,7 @@ import {
   AuthUserSchema,
   BriefingResponseSchema,
   ProactiveSurfaceSchema,
+  BlockerAlertSchema,
   ChatMessageSchema,
   ChatResponseSchema,
   SessionStatsSchema,
@@ -144,6 +145,16 @@ export interface UserSettings {
   response_model: string
   chat_context_window: number | null
   theme: string
+  proactivity_level: string
+}
+
+export interface BlockerAlert {
+  alert_type: string
+  thing_id: string
+  thing_title: string
+  message: string
+  severity: string
+  related_thing_ids: string[]
 }
 
 export interface UserProfileRelationship {
@@ -252,6 +263,8 @@ interface ReliState {
   calendarEvents: CalendarEvent[]
 
   proactiveSurfaces: ProactiveSurface[]
+  blockerAlerts: BlockerAlert[]
+  fetchBlockerAlerts: () => Promise<void>
   searchResults: Thing[]
   searchLoading: boolean
   searchThings: (query: string) => Promise<void>
@@ -430,6 +443,7 @@ export const useStore = create<ReliState>((set, get) => ({
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [],
   proactiveSurfaces: [],
+  blockerAlerts: [],
   searchResults: [],
   searchLoading: false,
 
@@ -568,6 +582,17 @@ export const useStore = create<ReliState>((set, get) => ({
       if (!res.ok) return
       const data: ProactiveSurface[] = validateResponse(z.array(ProactiveSurfaceSchema), await res.json(), '/proactive')
       set({ proactiveSurfaces: data })
+    } catch {
+      // best-effort
+    }
+  },
+
+  fetchBlockerAlerts: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/blockers`)
+      if (!res.ok) return
+      const data: BlockerAlert[] = validateResponse(z.array(BlockerAlertSchema), await res.json(), '/blockers')
+      set({ blockerAlerts: data })
     } catch {
       // best-effort
     }
@@ -798,6 +823,7 @@ export const useStore = create<ReliState>((set, get) => ({
       get().fetchThings()
       get().fetchBriefing()
       get().fetchProactiveSurfaces()
+      get().fetchBlockerAlerts()
     } catch (e) {
       set(state => ({
         messages: state.messages.map(m =>

@@ -212,6 +212,7 @@ export const UserSettingsSchema = z.object({
   response_model: z.string(),
   chat_context_window: z.number().nullable(),
   theme: z.string(),
+  proactivity_level: z.string(),
 })
 
 export const RequestyModelSchema = z.object({
@@ -232,6 +233,17 @@ export const UserProfileRelationshipSchema = z.object({
 export const UserProfileSchema = z.object({
   thing: ThingSchema,
   relationships: z.array(UserProfileRelationshipSchema),
+})
+
+// --- Blocker Alerts ---
+
+export const BlockerAlertSchema = z.object({
+  alert_type: z.string(),
+  thing_id: z.string(),
+  thing_title: z.string(),
+  message: z.string(),
+  severity: z.string(),
+  related_thing_ids: z.array(z.string()),
 })
 
 // --- Merge Suggestions ---

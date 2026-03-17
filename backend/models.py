@@ -281,6 +281,20 @@ class BriefingResponse(BaseModel):
     total: int
 
 
+# ── Blocker Alerts ────────────────────────────────────────────────────────────
+
+
+class BlockerAlertResponse(BaseModel):
+    """A detected blocker or conflict alert."""
+
+    alert_type: str = Field(..., description="Type: blocked_thing, deadline_conflict, schedule_overlap, circular_dependency, downstream_impact")
+    thing_id: str
+    thing_title: str
+    message: str
+    severity: str = Field(default="warning", description="info, warning, critical")
+    related_thing_ids: list[str] = Field(default_factory=list)
+
+
 # ── Proactive Surfaces ───────────────────────────────────────────────────────
 
 
