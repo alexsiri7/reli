@@ -41,10 +41,10 @@ def _patch_agents(context_result=None, reasoning_result=None, refinement_result=
     ref = refinement_result or MOCK_REFINEMENT_DONE
 
     return [
-        patch("backend.routers.chat.run_context_agent", new=AsyncMock(return_value=ctx)),
-        patch("backend.routers.chat.run_reasoning_agent", new=AsyncMock(return_value=rea)),
-        patch("backend.routers.chat.run_response_agent_stream", return_value=_mock_response_stream()),
-        patch("backend.routers.chat.run_context_refinement", new=AsyncMock(return_value=ref)),
+        patch("backend.pipeline.run_context_agent", new=AsyncMock(return_value=ctx)),
+        patch("backend.pipeline.run_reasoning_agent", new=AsyncMock(return_value=rea)),
+        patch("backend.pipeline.run_response_agent_stream", return_value=_mock_response_stream()),
+        patch("backend.pipeline.run_context_refinement", new=AsyncMock(return_value=ref)),
     ]
 
 
@@ -181,7 +181,7 @@ class TestChatStream:
         """When an agent raises an exception, the stream emits an error event."""
         patches = _patch_agents()
         error_context = patch(
-            "backend.routers.chat.run_context_agent",
+            "backend.pipeline.run_context_agent",
             new=AsyncMock(side_effect=RuntimeError("LLM API failed")),
         )
         with error_context, patches[1], patches[2], patches[3]:

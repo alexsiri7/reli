@@ -253,10 +253,10 @@ MOCK_REASONING = {
 def _agent_patches(context=None, reasoning=None, reply="OK"):
     """Return a list of patch context managers for all chat pipeline agents."""
     return [
-        patch("backend.routers.chat.run_context_agent", new=AsyncMock(return_value=context or MOCK_CONTEXT)),
-        patch("backend.routers.chat.run_reasoning_agent", new=AsyncMock(return_value=reasoning or MOCK_REASONING)),
-        patch("backend.routers.chat.run_response_agent", new=AsyncMock(return_value=reply)),
-        patch("backend.routers.chat.run_context_refinement", new=AsyncMock(return_value={"done": True})),
+        patch("backend.pipeline.run_context_agent", new=AsyncMock(return_value=context or MOCK_CONTEXT)),
+        patch("backend.pipeline.run_reasoning_agent", new=AsyncMock(return_value=reasoning or MOCK_REASONING)),
+        patch("backend.pipeline.run_response_agent", new=AsyncMock(return_value=reply)),
+        patch("backend.pipeline.run_context_refinement", new=AsyncMock(return_value={"done": True})),
     ]
 
 

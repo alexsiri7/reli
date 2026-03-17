@@ -45,10 +45,10 @@ def _patch_agents(
     ref = refinement_result or MOCK_REFINEMENT_DONE
 
     return [
-        patch("backend.routers.chat.run_context_agent", new=AsyncMock(return_value=ctx)),
-        patch("backend.routers.chat.run_reasoning_agent", new=AsyncMock(return_value=rea)),
-        patch("backend.routers.chat.run_response_agent", new=AsyncMock(return_value=rep)),
-        patch("backend.routers.chat.run_context_refinement", new=AsyncMock(return_value=ref)),
+        patch("backend.pipeline.run_context_agent", new=AsyncMock(return_value=ctx)),
+        patch("backend.pipeline.run_reasoning_agent", new=AsyncMock(return_value=rea)),
+        patch("backend.pipeline.run_response_agent", new=AsyncMock(return_value=rep)),
+        patch("backend.pipeline.run_context_refinement", new=AsyncMock(return_value=ref)),
     ]
 
 
@@ -191,7 +191,7 @@ class TestChatPipeline:
         with patches[0], patches[1], patches[2], patches[3]:
             # Also spy on reasoning agent to verify history is passed
             with patch(
-                "backend.routers.chat.run_reasoning_agent",
+                "backend.pipeline.run_reasoning_agent",
                 new=AsyncMock(return_value=MOCK_REASONING_RESULT),
             ) as mock_reason:
                 await async_client.post(
@@ -248,8 +248,8 @@ class TestChatPipeline:
             patches[1],
             patches[2],
             patches[3],
-            patch("backend.routers.chat.is_search_configured", return_value=True),
-            patch("backend.routers.chat.google_search", new=AsyncMock(return_value=mock_search_results)),
+            patch("backend.pipeline.is_search_configured", return_value=True),
+            patch("backend.pipeline.google_search", new=AsyncMock(return_value=mock_search_results)),
         ):
             resp = await async_client.post(
                 "/api/chat",
@@ -304,7 +304,7 @@ class TestChatPipeline:
             patches[0],
             patches[1],
             patches[2],
-            patch("backend.routers.chat.run_context_refinement", new=refinement_mock),
+            patch("backend.pipeline.run_context_refinement", new=refinement_mock),
         ):
             resp = await async_client.post(
                 "/api/chat",
@@ -323,7 +323,7 @@ class TestChatPipeline:
             patches[0],
             patches[1],
             patches[2],
-            patch("backend.routers.chat.run_context_refinement", new=refinement_mock),
+            patch("backend.pipeline.run_context_refinement", new=refinement_mock),
         ):
             resp = await async_client.post(
                 "/api/chat",
@@ -350,7 +350,7 @@ class TestFetchUserRelationships:
     def test_returns_matching_relationships(self, patched_db):
         """Only relationships whose related Thing matches a search query are returned."""
         from backend.database import db
-        from backend.routers.chat import _fetch_user_relationships
+        from backend.pipeline import _fetch_user_relationships
 
         with db() as conn:
             # Create user Thing
@@ -395,7 +395,7 @@ class TestFetchUserRelationships:
     def test_empty_queries_returns_nothing(self, patched_db):
         """No search queries means no relationship loading."""
         from backend.database import db
-        from backend.routers.chat import _fetch_user_relationships
+        from backend.pipeline import _fetch_user_relationships
 
         with db() as conn:
             results = _fetch_user_relationships(conn, "user-1", [])
@@ -404,7 +404,7 @@ class TestFetchUserRelationships:
     def test_no_relationships_returns_empty(self, patched_db):
         """User with no relationships returns empty list."""
         from backend.database import db
-        from backend.routers.chat import _fetch_user_relationships
+        from backend.pipeline import _fetch_user_relationships
 
         with db() as conn:
             conn.execute(
@@ -418,7 +418,7 @@ class TestFetchUserRelationships:
     def test_recently_referenced_sorted_first(self, patched_db):
         """Things with recent last_referenced should appear before older ones."""
         from backend.database import db
-        from backend.routers.chat import _fetch_user_relationships
+        from backend.pipeline import _fetch_user_relationships
 
         with db() as conn:
             conn.execute(
