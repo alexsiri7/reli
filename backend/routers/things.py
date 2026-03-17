@@ -15,6 +15,7 @@ from ..models import (
     GraphEdge,
     GraphNode,
     GraphResponse,
+    MergeHistoryRecord,
     MergeRequest,
     MergeResult,
     MergeSuggestion,
@@ -352,6 +353,54 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks, user_id: 
     return _row_to_thing(row)
 
 
+# ── Merge history ────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/merge-history",
+    response_model=list[MergeHistoryRecord],
+    summary="List merge history",
+)
+def list_merge_history(
+    thing_id: str | None = Query(None, description="Filter by kept Thing ID"),
+    limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
+    user_id: str = Depends(require_user),
+) -> list[MergeHistoryRecord]:
+    """Return merge history records, newest first. Optionally filter by the kept Thing."""
+    uf_sql, uf_params = user_filter(user_id, "mh")
+    where = "WHERE 1=1" + uf_sql
+    params: list[str | int] = list(uf_params)
+    if thing_id:
+        where += " AND mh.keep_id = ?"
+        params.append(thing_id)
+    params.append(limit)
+    with db() as conn:
+        rows = conn.execute(
+            f"SELECT mh.* FROM merge_history mh {where} ORDER BY mh.created_at DESC LIMIT ?",
+            params,
+        ).fetchall()
+    results = []
+    for r in rows:
+        md = r["merged_data"]
+        if isinstance(md, str) and md:
+            try:
+                md = json.loads(md)
+            except (json.JSONDecodeError, ValueError):
+                md = None
+        results.append(MergeHistoryRecord(
+            id=r["id"],
+            keep_id=r["keep_id"],
+            remove_id=r["remove_id"],
+            keep_title=r["keep_title"],
+            remove_title=r["remove_title"],
+            merged_data=md,
+            triggered_by=r["triggered_by"],
+            user_id=r["user_id"],
+            created_at=_parse_dt(r["created_at"]) or datetime.min,
+        ))
+    return results
+
+
 @router.get("/{thing_id}", response_model=Thing, summary="Get a Thing")
 def get_thing(thing_id: str, user_id: str = Depends(require_user)) -> Thing:
     """Retrieve a single Thing by ID."""
@@ -601,7 +650,38 @@ def merge_things(
         keep_title = keep_row["title"]
         remove_title = remove_row["title"]
 
-        # 6. Re-embed the kept thing
+        # 6. Record merge history
+        existing_data_raw = keep_row["data"]
+        try:
+            keep_data = (
+                json.loads(existing_data_raw) if isinstance(existing_data_raw, str) and existing_data_raw else {}
+            )
+        except (json.JSONDecodeError, ValueError):
+            keep_data = {}
+        remove_data_raw = remove_row["data"]
+        try:
+            rem_data = json.loads(remove_data_raw) if isinstance(remove_data_raw, str) and remove_data_raw else {}
+        except (json.JSONDecodeError, ValueError):
+            rem_data = {}
+        merged_snapshot = {**rem_data, **keep_data}
+        conn.execute(
+            "INSERT INTO merge_history (id, keep_id, remove_id, keep_title, remove_title,"
+            " merged_data, triggered_by, user_id, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                str(uuid.uuid4()),
+                body.keep_id,
+                body.remove_id,
+                keep_title,
+                remove_title,
+                json.dumps(merged_snapshot) if merged_snapshot else None,
+                "api",
+                user_id or None,
+                now,
+            ),
+        )
+
+        # 7. Re-embed the kept thing
         updated = conn.execute("SELECT * FROM things WHERE id = ?", (body.keep_id,)).fetchone()
 
     background_tasks.add_task(vs_delete, body.remove_id)

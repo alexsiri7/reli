@@ -207,6 +207,26 @@ def _migrate_backfill_null_user_ids(conn: sqlite3.Connection) -> None:
         conn.execute(f"UPDATE {table} SET user_id = ? WHERE user_id IS NULL", (uid,))
 
 
+def _migrate_merge_history(conn: sqlite3.Connection) -> None:
+    """Create merge_history table to track Thing merges."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS merge_history (
+            id TEXT PRIMARY KEY,
+            keep_id TEXT NOT NULL,
+            remove_id TEXT NOT NULL,
+            keep_title TEXT NOT NULL,
+            remove_title TEXT NOT NULL,
+            merged_data JSON,
+            triggered_by TEXT NOT NULL DEFAULT 'api',
+            user_id TEXT REFERENCES users(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_merge_history_keep ON merge_history(keep_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_merge_history_created ON merge_history(created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_merge_history_user ON merge_history(user_id)")
+
+
 def clean_orphan_relationships() -> tuple[int, list[str]]:
     """Delete relationships where from_thing_id or to_thing_id doesn't exist.
 
@@ -361,4 +381,5 @@ def init_db() -> None:
         _migrate_google_tokens_multi_user(conn)
         _migrate_backfill_null_user_ids(conn)
         _migrate_user_settings(conn)
+        _migrate_merge_history(conn)
         _seed_thing_types(conn)
