@@ -228,6 +228,27 @@ def reindex_all() -> int:
         raise
 
 
+def _build_where_filter(
+    active_only: bool = True,
+    type_hint: str | None = None,
+    user_id: str = "",
+) -> dict | None:
+    """Build a ChromaDB ``where`` filter dict from common parameters."""
+    filters: list[dict] = []
+    if active_only:
+        filters.append({"active": {"$eq": 1}})
+    if type_hint:
+        filters.append({"type_hint": {"$eq": type_hint}})
+    if user_id:
+        filters.append({"$or": [{"user_id": {"$eq": user_id}}, {"user_id": {"$eq": ""}}]})
+
+    if len(filters) == 1:
+        return filters[0]
+    elif len(filters) > 1:
+        return {"$and": filters}
+    return None
+
+
 def vector_search(
     queries: list[str],
     n_results: int = 20,
@@ -247,21 +268,7 @@ def vector_search(
         if total == 0:
             return []
 
-        # Build ChromaDB `where` filter
-        filters: list[dict] = []
-        if active_only:
-            filters.append({"active": {"$eq": 1}})
-        if type_hint:
-            filters.append({"type_hint": {"$eq": type_hint}})
-        if user_id:
-            filters.append({"$or": [{"user_id": {"$eq": user_id}}, {"user_id": {"$eq": ""}}]})
-
-        where: dict | None = None
-        if len(filters) == 1:
-            where = filters[0]
-        elif len(filters) > 1:
-            where = {"$and": filters}
-
+        where = _build_where_filter(active_only, type_hint, user_id)
         per_query = min(n_results, total)
         seen_ids: list[str] = []
         seen_set: set[str] = set()
@@ -281,3 +288,48 @@ def vector_search(
     except Exception as exc:
         logger.error("ChromaDB vector_search failed: %s", exc)
         return []
+
+
+def vector_search_with_scores(
+    queries: list[str],
+    n_results: int = 20,
+    active_only: bool = True,
+    type_hint: str | None = None,
+    user_id: str = "",
+) -> dict[str, float]:
+    """Return Thing IDs mapped to their best semantic similarity score.
+
+    ChromaDB returns cosine *distances* (0 = identical, 2 = opposite).
+    We convert to similarity: ``1 - distance`` so higher = more relevant.
+
+    Returns an empty dict on any error so callers can fall back gracefully.
+    """
+    try:
+        collection = _get_collection()
+        total = collection.count()
+        if total == 0:
+            return {}
+
+        where = _build_where_filter(active_only, type_hint, user_id)
+        per_query = min(n_results, total)
+        scores: dict[str, float] = {}
+
+        for query in queries[:3]:
+            results = collection.query(
+                query_texts=[query],
+                n_results=per_query,
+                where=where,
+                include=["distances"],
+            )
+            ids = results["ids"][0]
+            distances = results["distances"][0]  # type: ignore[index]
+            for id_, dist in zip(ids, distances):
+                similarity = 1.0 - dist
+                # Keep the best (highest) similarity across queries
+                if id_ not in scores or similarity > scores[id_]:
+                    scores[id_] = similarity
+
+        return scores
+    except Exception as exc:
+        logger.error("ChromaDB vector_search_with_scores failed: %s", exc)
+        return {}

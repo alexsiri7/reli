@@ -34,8 +34,13 @@ from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
 from .reasoning_agent import REASONING_AGENT_TOOL_SYSTEM, run_reasoning_agent
 from .response_agent import run_response_agent, run_response_agent_stream
+from .relevance import rank_and_trim
 from .tracing import get_tracer, set_span_error
-from .vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
+from .vector_store import (
+    VECTOR_SEARCH_THRESHOLD,
+    vector_count,
+    vector_search_with_scores,
+)
 from .web_search import google_search, is_search_configured
 
 logger = logging.getLogger(__name__)
@@ -192,13 +197,27 @@ def _fetch_user_thing(conn: sqlite3.Connection, user_id: str) -> dict[str, Any] 
     return dict(row) if row else None
 
 
+@dataclass
+class RetrievalResult:
+    """Bundle of retrieval outputs including ranking metadata."""
+
+    things: list[dict[str, Any]]
+    semantic_scores: dict[str, float]
+    seed_ids: set[str]
+
+
 def _fetch_relevant_things(
     conn: sqlite3.Connection,
     search_queries: list[str],
     filter_params: dict[str, Any],
     user_id: str = "",
-) -> list[dict[str, Any]]:
-    """Retrieve relevant Things using vector search (>=500 Things) or SQL LIKE fallback (<500)."""
+) -> RetrievalResult:
+    """Retrieve relevant Things using vector search or SQL LIKE fallback.
+
+    Returns a ``RetrievalResult`` containing Things, semantic similarity
+    scores (when vector search is used), and the original seed IDs before
+    family expansion.
+    """
     active_only = filter_params.get("active_only", True)
     type_hint = filter_params.get("type_hint")
     uf_sql, uf_params = user_filter(user_id)
@@ -225,15 +244,17 @@ def _fetch_relevant_things(
         vc, sql_thing_count, VECTOR_SEARCH_THRESHOLD, use_vector, active_only, type_hint,
     )
 
-    seed_ids: list[str] = []
+    seed_ids_list: list[str] = []
+    semantic_scores: dict[str, float] = {}
 
     if use_vector:
-        seed_ids = vector_search(
+        semantic_scores = vector_search_with_scores(
             queries=search_queries, n_results=20, active_only=active_only,
             type_hint=type_hint, user_id=user_id,
         )
-        logger.info("Vector search returned %d seed IDs", len(seed_ids))
-        if not seed_ids:
+        seed_ids_list = list(semantic_scores.keys())
+        logger.info("Vector search returned %d seed IDs with scores", len(seed_ids_list))
+        if not seed_ids_list:
             use_vector = False
 
     if not use_vector:
@@ -255,11 +276,12 @@ def _fetch_relevant_things(
             for row in matches:
                 if row["id"] not in seen_sql:
                     seen_sql.add(row["id"])
-                    seed_ids.append(row["id"])
+                    seed_ids_list.append(row["id"])
 
-    logger.info("Total seed IDs before hydration: %d", len(seed_ids))
+    seed_ids_set = set(seed_ids_list)
+    logger.info("Total seed IDs before hydration: %d", len(seed_ids_list))
 
-    family_results = _fetch_with_family(conn, seed_ids)
+    family_results = _fetch_with_family(conn, seed_ids_list)
     logger.info("After family expansion: %d Things", len(family_results))
 
     for thing in family_results:
@@ -274,7 +296,11 @@ def _fetch_relevant_things(
                 seen_ids.add(row["id"])
                 results.append(dict(row))
 
-    return results
+    return RetrievalResult(
+        things=results,
+        semantic_scores=semantic_scores,
+        seed_ids=seed_ids_set,
+    )
 
 
 def _fetch_gmail_context(query: str, user_id: str = "") -> list[dict[str, Any]]:
@@ -409,10 +435,16 @@ class ChatPipeline:
         seen_thing_ids: set[str] = set()
         relevant_things: list[dict[str, Any]] = []
 
+        # Track ranking metadata across iterations
+        all_semantic_scores: dict[str, float] = {}
+        all_seed_ids: set[str] = set()
+
         # Initial fetch
         with db() as conn:
-            initial_things = _fetch_relevant_things(conn, search_queries, filter_params, user_id=self.user_id)
-            for t in initial_things:
+            retrieval = _fetch_relevant_things(conn, search_queries, filter_params, user_id=self.user_id)
+            all_semantic_scores.update(retrieval.semantic_scores)
+            all_seed_ids.update(retrieval.seed_ids)
+            for t in retrieval.things:
                 if t["id"] not in seen_thing_ids:
                     seen_thing_ids.add(t["id"])
                     relevant_things.append(t)
@@ -472,8 +504,10 @@ class ChatPipeline:
             if new_queries:
                 all_queries.extend(new_queries)
                 with db() as conn:
-                    new_things = _fetch_relevant_things(conn, new_queries, refinement_filter, user_id=self.user_id)
-                    for t in new_things:
+                    new_retrieval = _fetch_relevant_things(conn, new_queries, refinement_filter, user_id=self.user_id)
+                    all_semantic_scores.update(new_retrieval.semantic_scores)
+                    all_seed_ids.update(new_retrieval.seed_ids)
+                    for t in new_retrieval.things:
                         if t["id"] not in seen_thing_ids:
                             seen_thing_ids.add(t["id"])
                             relevant_things.append(t)
@@ -497,6 +531,34 @@ class ChatPipeline:
             if new_count == 0:
                 logger.info("Context refinement found nothing new, stopping")
                 break
+
+        # Rank and trim to context budget before passing to reasoning agent
+        pre_rank_count = len(relevant_things)
+        if relevant_things:
+            # Fetch relationships for ranking (graph proximity signal)
+            pre_rank_rels: list[dict[str, Any]] = []
+            with db() as conn:
+                ids = [t["id"] for t in relevant_things]
+                ph = ",".join("?" for _ in ids)
+                rel_rows = conn.execute(
+                    f"SELECT from_thing_id, to_thing_id, relationship_type "
+                    f"FROM thing_relationships "
+                    f"WHERE from_thing_id IN ({ph}) OR to_thing_id IN ({ph})",
+                    ids + ids,
+                ).fetchall()
+                pre_rank_rels = [dict(r) for r in rel_rows]
+
+            relevant_things = rank_and_trim(
+                relevant_things,
+                semantic_scores=all_semantic_scores or None,
+                seed_ids=all_seed_ids or None,
+                relationships=pre_rank_rels,
+                requested_type=filter_params.get("type_hint"),
+            )
+            logger.info(
+                "Relevance ranking: %d → %d Things",
+                pre_rank_count, len(relevant_things),
+            )
 
         # Fetch relationships for all relevant things and update last_referenced
         context_relationships: list[dict[str, Any]] = []
