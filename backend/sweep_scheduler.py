@@ -44,7 +44,7 @@ def _seconds_until(hour: int, minute: int) -> float:
 
 
 async def _run_sweep() -> None:
-    """Execute one sweep cycle: SQL candidates → optional LLM reflection."""
+    """Execute one sweep cycle: SQL candidates → optional LLM reflection → connection sweep."""
     from .sweep import collect_candidates, reflect_on_candidates
 
     logger.info("Sweep started")
@@ -53,18 +53,30 @@ async def _run_sweep() -> None:
         candidates = collect_candidates()
         logger.info("Sweep SQL phase: %d candidates found", len(candidates))
 
-        if not candidates:
-            logger.info("Sweep complete — no candidates, skipping LLM phase")
-            return
+        if candidates:
+            result = await reflect_on_candidates(candidates)
+            logger.info(
+                "Sweep reflection: %d findings created (usage: %s)",
+                result.findings_created,
+                result.usage,
+            )
+        else:
+            logger.info("Sweep: no candidates, skipping LLM reflection")
+    except Exception:
+        logger.exception("Sweep reflection phase failed")
 
-        result = await reflect_on_candidates(candidates)
+    # Connection sweep: find semantically similar but unconnected Things
+    try:
+        from .connection_sweep import run_connection_sweep
+
+        conn_result = await run_connection_sweep()
         logger.info(
-            "Sweep complete — %d findings created (usage: %s)",
-            result.findings_created,
-            result.usage,
+            "Connection sweep: %d candidates, %d suggestions created",
+            conn_result.candidates_found,
+            conn_result.suggestions_created,
         )
     except Exception:
-        logger.exception("Sweep failed")
+        logger.exception("Connection sweep failed")
 
 
 async def sweep_loop() -> None:

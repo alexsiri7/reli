@@ -27,6 +27,7 @@ import {
   UserProfileSchema,
   MergeSuggestionSchema,
   MergeResultSchema,
+  ConnectionSuggestionSchema,
 } from './schemas'
 import { z } from 'zod'
 
@@ -169,6 +170,23 @@ export interface MergeSuggestion {
   thing_a: MergeSuggestionThing
   thing_b: MergeSuggestionThing
   reason: string
+}
+
+export interface ConnectionSuggestionThing {
+  id: string
+  title: string
+  type_hint: string | null
+}
+
+export interface ConnectionSuggestion {
+  id: string
+  from_thing: ConnectionSuggestionThing
+  to_thing: ConnectionSuggestionThing
+  suggested_relationship_type: string
+  reason: string
+  confidence: number
+  status: string
+  created_at: string
 }
 
 export interface ModelUsage {
@@ -328,6 +346,15 @@ interface ReliState {
   fetchMergeSuggestions: () => Promise<void>
   executeMerge: (keepId: string, removeId: string) => Promise<void>
   dismissMergeSuggestion: (thingAId: string, thingBId: string) => void
+
+  // Connection suggestions
+  connectionSuggestions: ConnectionSuggestion[]
+  connectionSuggestionsLoading: boolean
+  connectionAcceptInProgress: boolean
+  fetchConnectionSuggestions: () => Promise<void>
+  acceptConnectionSuggestion: (id: string, relationshipType?: string) => Promise<void>
+  dismissConnectionSuggestion: (id: string) => Promise<void>
+  deferConnectionSuggestion: (id: string) => Promise<void>
 
   // Feedback
   feedbackOpen: boolean
@@ -1055,6 +1082,71 @@ export const useStore = create<ReliState>((set, get) => ({
         s => !(s.thing_a.id === thingAId && s.thing_b.id === thingBId)
       ),
     }))
+  },
+
+  // Connection suggestions
+  connectionSuggestions: [],
+  connectionSuggestionsLoading: false,
+  connectionAcceptInProgress: false,
+
+  fetchConnectionSuggestions: async () => {
+    set({ connectionSuggestionsLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/connections/suggestions?status=pending&limit=10`)
+      if (!res.ok) return
+      const data: ConnectionSuggestion[] = validateResponse(z.array(ConnectionSuggestionSchema), await res.json(), '/connections/suggestions')
+      set({ connectionSuggestions: data })
+    } catch {
+      // best-effort
+    } finally {
+      set({ connectionSuggestionsLoading: false })
+    }
+  },
+
+  acceptConnectionSuggestion: async (id: string, relationshipType?: string) => {
+    set({ connectionAcceptInProgress: true })
+    try {
+      const body = relationshipType ? { relationship_type: relationshipType } : {}
+      const res = await apiFetch(`${BASE}/connections/suggestions/${id}/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      set(state => ({
+        connectionSuggestions: state.connectionSuggestions.filter(s => s.id !== id),
+      }))
+      // Refresh things since a new relationship was created
+      get().fetchThings()
+    } catch (e) {
+      set({ error: String(e) })
+    } finally {
+      set({ connectionAcceptInProgress: false })
+    }
+  },
+
+  dismissConnectionSuggestion: async (id: string) => {
+    try {
+      const res = await apiFetch(`${BASE}/connections/suggestions/${id}/dismiss`, { method: 'POST' })
+      if (!res.ok) return
+      set(state => ({
+        connectionSuggestions: state.connectionSuggestions.filter(s => s.id !== id),
+      }))
+    } catch {
+      // ignore
+    }
+  },
+
+  deferConnectionSuggestion: async (id: string) => {
+    try {
+      const res = await apiFetch(`${BASE}/connections/suggestions/${id}/defer`, { method: 'POST' })
+      if (!res.ok) return
+      set(state => ({
+        connectionSuggestions: state.connectionSuggestions.filter(s => s.id !== id),
+      }))
+    } catch {
+      // ignore
+    }
   },
 
   // Feedback

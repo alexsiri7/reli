@@ -227,6 +227,30 @@ def _migrate_merge_history(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_merge_history_user ON merge_history(user_id)")
 
 
+def _migrate_connection_suggestions(conn: sqlite3.Connection) -> None:
+    """Create connection_suggestions table for auto-connect feature."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS connection_suggestions (
+            id TEXT PRIMARY KEY,
+            from_thing_id TEXT NOT NULL,
+            to_thing_id TEXT NOT NULL,
+            suggested_relationship_type TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            confidence REAL DEFAULT 0.5,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TIMESTAMP,
+            user_id TEXT REFERENCES users(id),
+            FOREIGN KEY(from_thing_id) REFERENCES things(id) ON DELETE CASCADE,
+            FOREIGN KEY(to_thing_id) REFERENCES things(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_conn_sugg_status ON connection_suggestions(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_conn_sugg_from ON connection_suggestions(from_thing_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_conn_sugg_to ON connection_suggestions(to_thing_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_conn_sugg_user ON connection_suggestions(user_id)")
+
+
 def clean_orphan_relationships() -> tuple[int, list[str]]:
     """Delete relationships where from_thing_id or to_thing_id doesn't exist.
 
@@ -382,4 +406,5 @@ def init_db() -> None:
         _migrate_backfill_null_user_ids(conn)
         _migrate_user_settings(conn)
         _migrate_merge_history(conn)
+        _migrate_connection_suggestions(conn)
         _seed_thing_types(conn)

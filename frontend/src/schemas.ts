@@ -255,6 +255,25 @@ export const MergeResultSchema = z.object({
   remove_title: z.string(),
 })
 
+// --- Connection Suggestions ---
+
+export const ConnectionSuggestionThingSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  type_hint: z.string().nullable(),
+})
+
+export const ConnectionSuggestionSchema = z.object({
+  id: z.string(),
+  from_thing: ConnectionSuggestionThingSchema,
+  to_thing: ConnectionSuggestionThingSchema,
+  suggested_relationship_type: z.string(),
+  reason: z.string(),
+  confidence: z.number(),
+  status: z.string(),
+  created_at: z.string(),
+})
+
 // --- Validation helper ---
 
 /**

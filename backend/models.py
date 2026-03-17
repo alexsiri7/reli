@@ -340,3 +340,35 @@ class MergeHistoryRecord(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── Connection Suggestions ──────────────────────────────────────────────────
+
+
+class ConnectionSuggestionThing(BaseModel):
+    """Minimal Thing representation for connection suggestions."""
+
+    id: str
+    title: str
+    type_hint: str | None
+
+
+class ConnectionSuggestion(BaseModel):
+    """A suggested connection between two Things."""
+
+    id: str
+    from_thing: ConnectionSuggestionThing
+    to_thing: ConnectionSuggestionThing
+    suggested_relationship_type: str
+    reason: str
+    confidence: float
+    status: str
+    created_at: datetime
+
+
+class ConnectionSuggestionAccept(BaseModel):
+    """Accept a connection suggestion, optionally overriding the relationship type."""
+
+    relationship_type: str | None = Field(
+        default=None, description="Override the suggested relationship type"
+    )

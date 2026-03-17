@@ -29,3 +29,20 @@ async def run_sweep() -> dict[str, Any]:
         "findings": result.findings,
         "usage": result.usage,
     }
+
+
+@router.post("/connections", summary="Run connection sweep")
+async def run_connection_sweep() -> dict[str, Any]:
+    """Run the connection sweep: find semantically similar but unconnected Things.
+
+    Returns the candidate pairs found and the suggestions created by LLM validation.
+    """
+    from ..connection_sweep import run_connection_sweep as _run
+
+    result = await _run()
+    return {
+        "candidates_found": result.candidates_found,
+        "suggestions_created": result.suggestions_created,
+        "suggestions": result.suggestions,
+        "usage": result.usage,
+    }
