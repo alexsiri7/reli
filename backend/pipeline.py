@@ -36,6 +36,7 @@ from .reasoning_agent import REASONING_AGENT_TOOL_SYSTEM, run_reasoning_agent
 from .response_agent import run_response_agent, run_response_agent_stream
 from .tracing import get_tracer, set_span_error
 from .vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
+from .conflict_detection import detect_conflicts_for_context
 from .web_search import google_search, is_search_configured
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,7 @@ class PipelineResult:
     gmail_context: list[dict[str, Any]]
     calendar_events: list[dict[str, Any]] | None
     open_questions_by_thing: dict[str, list[str]]
+    detected_conflicts: list[dict[str, Any]]
     usage: UsageStats
 
 
@@ -320,11 +322,13 @@ class ChatPipeline:
         user_api_key: str | None = None,
         user_models: Mapping[str, str | None] | None = None,
         context_window: int = 10,
+        proactivity_level: str = "medium",
     ):
         self.user_id = user_id
         self.user_api_key = user_api_key
         self.user_models: Mapping[str, str | None] = user_models or {}
         self.context_window = context_window
+        self.proactivity_level = proactivity_level
 
         # Create ADK LlmAgent instances for each pipeline stage
         context_model = _make_litellm_model(
@@ -654,6 +658,14 @@ class ChatPipeline:
                     await self._fetch_external_data(message, context_result)
                 )
 
+                # Conflict detection (real-time)
+                thing_ids = [t["id"] for t in relevant_things]
+                detected_conflicts = detect_conflicts_for_context(
+                    thing_ids,
+                    user_id=self.user_id,
+                    proactivity=self.proactivity_level,
+                )
+
                 # Stage 2: Reasoning Agent
                 calls_before = len(usage.calls)
                 with _tracer.start_as_current_span("reli.stage.reasoning") as reason_span:
@@ -662,10 +674,12 @@ class ChatPipeline:
                         self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
                     )
                     reason_span.set_attribute("reli.reasoning.things_input", len(relevant_things))
+                    reason_span.set_attribute("reli.reasoning.conflicts_detected", len(detected_conflicts))
                     try:
                         reasoning_result = await run_reasoning_agent(
                             message, history, relevant_things, web_results, gmail_context,
                             calendar_events, relationships=context_relationships,
+                            detected_conflicts=detected_conflicts,
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id,
@@ -739,6 +753,7 @@ class ChatPipeline:
             gmail_context=gmail_context,
             calendar_events=calendar_events,
             open_questions_by_thing=open_questions_by_thing,
+            detected_conflicts=detected_conflicts,
             usage=usage,
         )
 
@@ -789,6 +804,14 @@ class ChatPipeline:
                     await self._fetch_external_data(message, context_result)
                 )
 
+                # Conflict detection (real-time)
+                thing_ids = [t["id"] for t in relevant_things]
+                detected_conflicts = detect_conflicts_for_context(
+                    thing_ids,
+                    user_id=self.user_id,
+                    proactivity=self.proactivity_level,
+                )
+
                 yield PipelineEvent(type="stage_complete", stage="context")
 
                 # Stage 2: Reasoning Agent
@@ -801,10 +824,12 @@ class ChatPipeline:
                         self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
                     )
                     reason_span.set_attribute("reli.reasoning.things_input", len(relevant_things))
+                    reason_span.set_attribute("reli.reasoning.conflicts_detected", len(detected_conflicts))
                     try:
                         reasoning_result = await run_reasoning_agent(
                             message, history, relevant_things, web_results, gmail_context,
                             calendar_events, relationships=context_relationships,
+                            detected_conflicts=detected_conflicts,
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id,
@@ -892,6 +917,7 @@ class ChatPipeline:
                 gmail_context=gmail_context,
                 calendar_events=calendar_events,
                 open_questions_by_thing=open_questions_by_thing,
+                detected_conflicts=detected_conflicts,
                 usage=usage,
             ),
         )

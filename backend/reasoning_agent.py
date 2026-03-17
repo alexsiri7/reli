@@ -763,6 +763,7 @@ async def run_reasoning_agent(
     gmail_context: list[dict[str, Any]] | None = None,
     calendar_events: list[dict[str, Any]] | None = None,
     relationships: list[dict[str, Any]] | None = None,
+    detected_conflicts: list[dict[str, Any]] | None = None,
     usage_stats: UsageStats | None = None,
     context_window: int = 10,
     api_key: str | None = None,
@@ -803,6 +804,11 @@ async def run_reasoning_agent(
         user_content += (
             f"\n\nUpcoming Google Calendar events:\n"
             f"{json.dumps(calendar_events, default=str)}"
+        )
+    if detected_conflicts:
+        user_content += (
+            f"\n\nDetected blockers & conflicts (proactively flag these to the user):\n"
+            f"{json.dumps(detected_conflicts, default=str)}"
         )
 
     # -- Ollama fallback (unchanged — uses JSON blob + apply_storage_changes) --

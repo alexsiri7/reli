@@ -245,6 +245,7 @@ function SettingsForm({
       </div>
       <VoiceSection />
       <ThemeSection />
+      <ProactivitySection />
       <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
         {saved && (
           <span className="text-sm text-green-600 dark:text-green-400">Saved</span>
@@ -625,6 +626,41 @@ function ThemeSection() {
               <path strokeLinecap="round" strokeLinejoin="round" d={opt.icon} />
             </svg>
             {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const proactivityOptions = [
+  { value: 'low' as const, label: 'Low', desc: 'Critical blockers only' },
+  { value: 'medium' as const, label: 'Medium', desc: 'Blockers + deadline conflicts' },
+  { value: 'high' as const, label: 'High', desc: 'All detections' },
+]
+
+function ProactivitySection() {
+  const userSettings = useStore(s => s.userSettings)
+  const updateUserSettings = useStore(s => s.updateUserSettings)
+  const current = userSettings?.proactivity_level || 'medium'
+
+  return (
+    <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proactivity Level</h3>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">How aggressively to flag blockers and conflicts</p>
+      <div className="flex gap-2">
+        {proactivityOptions.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => updateUserSettings({ proactivity_level: opt.value })}
+            className={`flex-1 flex flex-col items-center gap-0.5 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+              current === opt.value
+                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}
+          >
+            <span className="font-medium">{opt.label}</span>
+            <span className="text-[10px] opacity-70">{opt.desc}</span>
           </button>
         ))}
       </div>

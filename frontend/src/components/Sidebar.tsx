@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { Thing, SweepFinding } from '../store'
+import type { Thing, SweepFinding, DetectedConflict } from '../store'
 import { typeIcon } from '../utils'
 import { CalendarSection } from './CalendarSection'
 import { ThingCard } from './ThingCard'
@@ -69,6 +69,43 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
   )
 }
 
+const CONFLICT_TYPE_ICONS: Record<string, string> = {
+  blocked_thing: '\u{1F6D1}',
+  downstream_impact: '\u{1F4A5}',
+  schedule_overlap: '\u{1F4C5}',
+  deadline_conflict: '\u23F3',
+}
+
+const CONFLICT_TYPE_COLORS: Record<string, string> = {
+  blocked_thing: 'text-red-600 dark:text-red-400',
+  downstream_impact: 'text-orange-600 dark:text-orange-400',
+  schedule_overlap: 'text-yellow-600 dark:text-yellow-400',
+  deadline_conflict: 'text-red-600 dark:text-red-400',
+}
+
+function ConflictCard({ conflict }: { conflict: DetectedConflict }) {
+  const icon = CONFLICT_TYPE_ICONS[conflict.conflict_type] ?? '\u26A0\uFE0F'
+  const colorClass = CONFLICT_TYPE_COLORS[conflict.conflict_type] ?? 'text-gray-700 dark:text-gray-300'
+  return (
+    <div className="px-4 py-2 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors">
+      <div className="flex items-start gap-2">
+        <span className="text-sm mt-0.5 shrink-0">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm leading-snug ${colorClass}`}>{conflict.message}</p>
+          {conflict.thing_id && (
+            <button
+              onClick={() => useStore.getState().openThingDetail(conflict.thing_id!)}
+              className="text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium mt-1"
+            >
+              View
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const SIDEBAR_MIN_WIDTH = 200
 const SIDEBAR_MAX_WIDTH = 500
 const SIDEBAR_DEFAULT_WIDTH = 288 // w-72
@@ -86,7 +123,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, detectedConflicts, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, detectedConflicts: s.detectedConflicts, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
   const [searchQuery, setSearchQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -447,6 +484,18 @@ export function Sidebar() {
 
             {/* Google Calendar */}
             <CalendarSection />
+
+            {/* Blockers & Conflicts */}
+            {detectedConflicts && detectedConflicts.length > 0 && (
+              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-red-500 dark:text-red-400 uppercase tracking-widest">
+                  Blockers & Conflicts
+                </h2>
+                {detectedConflicts.map((c, i) => (
+                  <ConflictCard key={`${c.conflict_type}-${c.thing_id}-${i}`} conflict={c} />
+                ))}
+              </section>
+            )}
 
             {/* Daily Briefing — sweep findings + checkin-due things */}
             {(findings.length > 0 || briefing.length > 0) && (

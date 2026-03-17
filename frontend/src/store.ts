@@ -95,6 +95,17 @@ export interface ProactiveSurface {
   days_away: number
 }
 
+export interface DetectedConflict {
+  conflict_type: string
+  message: string
+  priority: number
+  thing_id: string | null
+  thing_title: string | null
+  blocker_id: string | null
+  blocker_title: string | null
+  details: Record<string, unknown>
+}
+
 export interface SweepFinding {
   id: string
   thing_id: string | null
@@ -144,6 +155,7 @@ export interface UserSettings {
   response_model: string
   chat_context_window: number | null
   theme: string
+  proactivity_level: string
 }
 
 export interface UserProfileRelationship {
@@ -252,6 +264,8 @@ interface ReliState {
   calendarEvents: CalendarEvent[]
 
   proactiveSurfaces: ProactiveSurface[]
+  detectedConflicts: DetectedConflict[]
+  fetchConflicts: () => Promise<void>
   searchResults: Thing[]
   searchLoading: boolean
   searchThings: (query: string) => Promise<void>
@@ -430,6 +444,7 @@ export const useStore = create<ReliState>((set, get) => ({
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [],
   proactiveSurfaces: [],
+  detectedConflicts: [],
   searchResults: [],
   searchLoading: false,
 
@@ -568,6 +583,17 @@ export const useStore = create<ReliState>((set, get) => ({
       if (!res.ok) return
       const data: ProactiveSurface[] = validateResponse(z.array(ProactiveSurfaceSchema), await res.json(), '/proactive')
       set({ proactiveSurfaces: data })
+    } catch {
+      // best-effort
+    }
+  },
+
+  fetchConflicts: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/conflicts`)
+      if (!res.ok) return
+      const data: DetectedConflict[] = await res.json()
+      set({ detectedConflicts: data })
     } catch {
       // best-effort
     }
@@ -798,6 +824,7 @@ export const useStore = create<ReliState>((set, get) => ({
       get().fetchThings()
       get().fetchBriefing()
       get().fetchProactiveSurfaces()
+      get().fetchConflicts()
     } catch (e) {
       set(state => ({
         messages: state.messages.map(m =>

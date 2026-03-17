@@ -38,6 +38,7 @@ from .routers import (  # noqa: E402
     briefing,
     calendar,
     chat,
+    conflicts,
     feedback,
     gmail,
     proactive,
@@ -202,6 +203,7 @@ app.include_router(calendar.router, prefix="/api", dependencies=_api_deps)
 app.include_router(proactive.router, prefix="/api", dependencies=_api_deps)
 app.include_router(settings.router, prefix="/api", dependencies=_api_deps)
 app.include_router(sweep.router, prefix="/api", dependencies=_api_deps)
+app.include_router(conflicts.router, prefix="/api", dependencies=_api_deps)
 app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
 
 
