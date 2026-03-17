@@ -33,8 +33,8 @@ from .database import db
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
 from .reasoning_agent import REASONING_AGENT_TOOL_SYSTEM, run_reasoning_agent
-from .response_agent import run_response_agent, run_response_agent_stream
 from .relevance import rank_and_trim
+from .response_agent import run_response_agent, run_response_agent_stream
 from .tracing import get_tracer, set_span_error
 from .vector_store import (
     VECTOR_SEARCH_THRESHOLD,
