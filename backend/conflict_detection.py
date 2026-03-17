@@ -160,12 +160,16 @@ def detect_conflicts(
     # --- Detection 1: Blocked Things ---
     blocked_things: set[str] = set()
     for thing_id, dep_ids in depends_on.items():
-        thing = things_by_id.get(thing_id)
-        if not thing or not thing.get("active"):
+        if thing_id not in things_by_id:
+            continue
+        thing = things_by_id[thing_id]
+        if not thing.get("active"):
             continue
         for dep_id in dep_ids:
-            dep = things_by_id.get(dep_id)
-            if dep and dep.get("active"):
+            if dep_id not in things_by_id:
+                continue
+            dep = things_by_id[dep_id]
+            if dep.get("active"):
                 # This thing depends on something that's still active (not done)
                 blocked_things.add(thing_id)
                 thing_priority = thing.get("priority", 3)
@@ -223,16 +227,20 @@ def detect_conflicts(
     # --- Detection 3: Deadline Conflicts (medium+ proactivity) ---
     if proactivity in ("medium", "high"):
         for thing_id, dep_ids in depends_on.items():
-            thing = things_by_id.get(thing_id)
-            if not thing or not thing.get("active"):
+            if thing_id not in things_by_id:
+                continue
+            thing = things_by_id[thing_id]
+            if not thing.get("active"):
                 continue
             thing_deadline = _get_deadline(thing.get("data"))
             if not thing_deadline:
                 continue
 
             for dep_id in dep_ids:
-                dep = things_by_id.get(dep_id)
-                if not dep or not dep.get("active"):
+                if dep_id not in things_by_id:
+                    continue
+                dep = things_by_id[dep_id]
+                if not dep.get("active"):
                     continue
                 dep_deadline = _get_deadline(dep.get("data"))
                 if dep_deadline and dep_deadline > thing_deadline:
