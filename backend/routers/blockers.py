@@ -1,11 +1,9 @@
 """Blocker and conflict detection API endpoint."""
 
-from dataclasses import asdict
-
 from fastapi import APIRouter, Depends, Query
 
 from ..auth import require_user
-from ..blocker_detection import BlockerAlert, detect_blockers
+from ..blocker_detection import detect_blockers
 from ..models import BlockerAlertResponse
 
 router = APIRouter(prefix="/blockers", tags=["blockers"])

@@ -66,10 +66,9 @@ def _build_user_prompt(
 
     # Inject blocker alerts into the prompt
     if blocker_alerts:
-        import json as _json
         content += (
             f"\n\nBlocker/conflict alerts (proactively mention relevant ones):\n"
-            f"{_json.dumps(blocker_alerts, default=str)}"
+            f"{json.dumps(blocker_alerts, default=str)}"
         )
 
     return content

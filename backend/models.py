@@ -287,7 +287,10 @@ class BriefingResponse(BaseModel):
 class BlockerAlertResponse(BaseModel):
     """A detected blocker or conflict alert."""
 
-    alert_type: str = Field(..., description="Type: blocked_thing, deadline_conflict, schedule_overlap, circular_dependency, downstream_impact")
+    alert_type: str = Field(
+        ...,
+        description="blocked_thing, deadline_conflict, schedule_overlap, circular_dependency, downstream_impact",
+    )
     thing_id: str
     thing_title: str
     message: str
