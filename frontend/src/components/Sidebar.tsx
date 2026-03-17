@@ -7,6 +7,7 @@ import { CalendarSection } from './CalendarSection'
 import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
 import { MergeSuggestions } from './MergeSuggestions'
+import { FocusRecommendations } from './FocusRecommendations'
 
 const FINDING_TYPE_ICONS: Record<string, string> = {
   approaching_date: '\u23F0',
@@ -464,6 +465,9 @@ export function Sidebar() {
                 {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
               </section>
             )}
+
+            {/* Focus Recommendations */}
+            <FocusRecommendations />
 
             {/* Merge Suggestions */}
             <MergeSuggestions />

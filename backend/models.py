@@ -326,6 +326,25 @@ class MergeResult(BaseModel):
     remove_title: str
 
 
+# ── Focus Recommendations ───────────────────────────────────────────────────
+
+
+class FocusRecommendation(BaseModel):
+    """A single focus recommendation with reasoning."""
+
+    thing: Thing
+    score: float = Field(description="Composite priority score (higher = more urgent)")
+    reasons: list[str] = Field(description="Human-readable reasoning for this recommendation")
+
+
+class FocusRecommendationsResponse(BaseModel):
+    """Ranked list of things to focus on, with explanations."""
+
+    recommendations: list[FocusRecommendation]
+    total: int = Field(description="Total number of scored items (before limit)")
+    generated_at: str
+
+
 class MergeHistoryRecord(BaseModel):
     """A recorded merge event for audit trail."""
 

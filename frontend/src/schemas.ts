@@ -255,6 +255,20 @@ export const MergeResultSchema = z.object({
   remove_title: z.string(),
 })
 
+// --- Focus Recommendations ---
+
+export const FocusRecommendationSchema = z.object({
+  thing: ThingSchema,
+  score: z.number(),
+  reasons: z.array(z.string()),
+})
+
+export const FocusRecommendationsResponseSchema = z.object({
+  recommendations: z.array(FocusRecommendationSchema),
+  total: z.number(),
+  generated_at: z.string(),
+})
+
 // --- Validation helper ---
 
 /**
