@@ -11,6 +11,18 @@ vi.mock('zustand/react/shallow', () => ({
   useShallow: (fn: unknown) => fn,
 }))
 
+vi.mock('../components/RelationshipMiniGraph', () => ({
+  RelationshipMiniGraph: ({ relationships }: { relationships: Array<{ id: string; relationship_type: string; related_thing_title: string }> }) => (
+    <div data-testid="relationship-mini-graph">
+      {relationships.map(r => (
+        <span key={r.id} data-testid={`rel-${r.id}`}>
+          {r.relationship_type}: {r.related_thing_title}
+        </span>
+      ))}
+    </div>
+  ),
+}))
+
 import { SettingsPanel } from '../components/SettingsPanel'
 
 beforeEach(() => {
@@ -258,7 +270,7 @@ describe('MyProfileSection (inline editing)', () => {
     expect(screen.getByText('My Profile')).toBeInTheDocument()
   })
 
-  it('shows relationships read-only', () => {
+  it('shows relationship graph when relationships exist', () => {
     withModels()
     storeState.userProfile = {
       ...makeProfile(),
@@ -268,9 +280,8 @@ describe('MyProfileSection (inline editing)', () => {
     }
     render(<SettingsPanel />)
 
-    expect(screen.getByText('Learned Relationships')).toBeInTheDocument()
-    expect(screen.getByText('Acme')).toBeInTheDocument()
-    expect(screen.getByText('works at:')).toBeInTheDocument()
+    expect(screen.getByTestId('relationship-mini-graph')).toBeInTheDocument()
+    expect(screen.getByText('works_at: Acme')).toBeInTheDocument()
   })
 
   it('preserves system keys (google_id) during save', async () => {
