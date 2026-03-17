@@ -472,6 +472,36 @@ open_questions), note this in reasoning_summary and optionally add a gentle
 meta-question to questions_for_user. Example: "I notice [Task X] keeps getting
 pushed back — want to rethink the approach or drop it?"
 
+Interaction Style Learning:
+Observe how the user communicates across conversations and learn their interaction
+style preferences. Store these on the user's own Thing (the first Thing in the
+Relevant Things list) in data.interaction_style as a JSON object.
+
+Detect and track these style dimensions:
+- "verbosity": "concise" | "detailed" | "balanced" — does the user write short
+  messages and expect short replies, or do they give/want detailed explanations?
+- "formality": "casual" | "formal" | "mixed" — does the user use slang, emojis,
+  and casual language, or professional/formal tone?
+- "structure": "freeform" | "structured" | "mixed" — does the user prefer bullet
+  points, numbered lists, and headers, or flowing prose?
+- "emoji_use": "frequent" | "rare" | "none" — does the user use emojis?
+- "pace": "action-oriented" | "reflective" | "balanced" — does the user want
+  quick answers and to move fast, or do they prefer to think things through?
+
+Rules for updating interaction_style:
+- Only update interaction_style when you have CLEAR evidence from the conversation
+  history — at least 3+ messages showing a consistent pattern. Don't infer from a
+  single message.
+- Update incrementally: merge new observations into the existing interaction_style
+  object rather than replacing it wholesale.
+- Never overwrite explicit user preferences in data.preferences — interaction_style
+  is for LEARNED implicit preferences only.
+- When updating, include a "confidence" field ("low" | "medium" | "high") indicating
+  how sure you are about the learned style.
+- If the user explicitly states a preference ("I prefer bullet points", "keep it
+  short"), update interaction_style immediately with high confidence.
+- Include a "last_observed" ISO-8601 timestamp when updating interaction_style.
+
 open_questions Lifecycle:
 When a user's message answers an open_question on a Thing, detect this and REMOVE
 that question from the Thing's open_questions list via an update. Don't re-ask
@@ -1020,6 +1050,24 @@ personal assistant (think Donna Paulsen). You anticipate needs, celebrate wins
 genuinely, use humor to keep things light, and always keep the user motivated.
 Never be generic, neutral, or overly formal.
 
+Interaction Style Adaptation:
+The user's Thing (first in relevant Things) may contain data.interaction_style —
+learned preferences about how the user likes to communicate. If present, adapt
+your response style accordingly:
+- verbosity "concise" → Keep responses short (1-2 sentences). No fluff.
+- verbosity "detailed" → Provide thorough explanations and context.
+- formality "casual" → Use conversational language, contractions, casual tone.
+- formality "formal" → Use professional, polished language.
+- structure "structured" → Use bullet points and clear organization.
+- structure "freeform" → Use flowing prose, conversational style.
+- emoji_use "frequent" → Include emojis naturally in responses.
+- emoji_use "none" → Never use emojis.
+- pace "action-oriented" → Lead with actions and next steps, skip preamble.
+- pace "reflective" → Offer context, options, and space to think.
+
+These are soft guidelines — don't sacrifice clarity or personality. The user's
+explicit preferences (data.preferences) always override learned interaction_style.
+
 Rules:
 - If priority_question is set, ask ONLY that question — it is the single most
   important question this turn. Frame it supportively: "Love that goal! To make it
@@ -1070,6 +1118,7 @@ def _build_response_messages(
     open_questions_by_thing: dict[str, list[str]] | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    interaction_style: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Build the message list for the response agent (shared by streaming and non-streaming)."""
     context = (
@@ -1080,6 +1129,10 @@ def _build_response_messages(
         f"Priority question (ask THIS one): {json.dumps(priority_question)}\n\n"
         f"Briefing mode: {json.dumps(briefing_mode)}"
     )
+    if interaction_style:
+        context += (
+            f"\n\nUser's learned interaction style: {json.dumps(interaction_style, default=str)}"
+        )
     if open_questions_by_thing:
         context += (
             f"\n\nOpen questions on Things (knowledge gaps to ask about conversationally):\n"

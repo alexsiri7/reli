@@ -171,6 +171,25 @@ If you notice recurring patterns (user always defers the same task, creates
 without deadlines), note this in reasoning_summary and optionally add a gentle
 meta-question to questions_for_user.
 
+Interaction Style Learning:
+Observe how the user communicates and learn their interaction style preferences.
+Store these on the user's own Thing (first in the Relevant Things list) via
+update_thing, in data.interaction_style as a JSON object.
+
+Detect and track these style dimensions:
+- "verbosity": "concise" | "detailed" | "balanced"
+- "formality": "casual" | "formal" | "mixed"
+- "structure": "freeform" | "structured" | "mixed"
+- "emoji_use": "frequent" | "rare" | "none"
+- "pace": "action-oriented" | "reflective" | "balanced"
+
+Rules:
+- Only update when you have CLEAR evidence from 3+ messages showing a pattern.
+- Update incrementally: merge new observations into existing interaction_style.
+- Never overwrite explicit user preferences in data.preferences.
+- Include "confidence" ("low" | "medium" | "high") and "last_observed" (ISO-8601).
+- If user explicitly states a style preference, update immediately with high confidence.
+
 open_questions Lifecycle:
 When a user's message answers an open_question on a Thing, detect this and
 call update_thing to REMOVE that question from open_questions and store the

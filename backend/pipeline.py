@@ -564,6 +564,26 @@ class ChatPipeline:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _extract_interaction_style(
+        relevant_things: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        """Extract interaction_style from the user's anchor Thing (first in list)."""
+        if not relevant_things:
+            return None
+        user_thing = relevant_things[0]
+        raw_data = user_thing.get("data")
+        if not raw_data:
+            return None
+        try:
+            data = json.loads(raw_data) if isinstance(raw_data, str) else raw_data
+        except (ValueError, TypeError):
+            return None
+        style = data.get("interaction_style")
+        if isinstance(style, dict) and style:
+            return style
+        return None
+
+    @staticmethod
     def _collect_open_questions(
         relevant_things: list[dict[str, Any]],
         applied_changes: dict[str, Any],
@@ -693,6 +713,7 @@ class ChatPipeline:
                         raise
 
                 open_questions_by_thing = self._collect_open_questions(relevant_things, applied_changes)
+                interaction_style = self._extract_interaction_style(relevant_things)
 
                 # Stage 3: Response Agent
                 calls_before = len(usage.calls)
@@ -708,6 +729,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            interaction_style=interaction_style,
                         )
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
                         self._record_stage_usage(resp_span, "response", usage, calls_before)
@@ -832,6 +854,7 @@ class ChatPipeline:
                         raise
 
                 open_questions_by_thing = self._collect_open_questions(relevant_things, applied_changes)
+                interaction_style = self._extract_interaction_style(relevant_things)
 
                 yield PipelineEvent(type="stage_complete", stage="reasoning")
 
@@ -852,6 +875,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            interaction_style=interaction_style,
                         ):
                             reply_parts.append(token)
                             yield PipelineEvent(type="token", data=token)

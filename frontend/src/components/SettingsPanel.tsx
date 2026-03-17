@@ -270,7 +270,7 @@ function SettingsForm({
 // Keys that are promoted to dedicated fields and hidden from the generic list
 const PROMOTED_KEYS = new Set(['preferences', 'notes'])
 // Keys managed by the system — never editable
-const SYSTEM_KEYS = new Set(['google_id'])
+const SYSTEM_KEYS = new Set(['google_id', 'interaction_style'])
 
 function MyProfileSection() {
   const { userProfile, userProfileLoading, updateUserThing, fetchUserProfile } = useStore(
@@ -476,6 +476,36 @@ function ProfileForm({
             className={inputClass + ' resize-none'}
           />
         </div>
+
+        {/* Learned Interaction Style */}
+        {thing.data?.interaction_style && typeof thing.data.interaction_style === 'object' && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+              Learned Interaction Style
+            </label>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">
+              Patterns Reli has learned from your conversations
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(thing.data.interaction_style as Record<string, unknown>)
+                .filter(([k]) => k !== 'confidence' && k !== 'last_observed')
+                .map(([key, value]) => (
+                  <span
+                    key={key}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                  >
+                    <span className="font-medium capitalize">{key.replace(/_/g, ' ')}:</span>
+                    <span>{String(value)}</span>
+                  </span>
+                ))}
+              {(thing.data.interaction_style as Record<string, unknown>).confidence && (
+                <span className="inline-flex items-center px-2 py-1 text-xs rounded-full bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+                  {String((thing.data.interaction_style as Record<string, unknown>).confidence)} confidence
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Other data fields */}
         {Object.entries(editData).length > 0 && (
