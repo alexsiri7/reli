@@ -54,9 +54,9 @@ def mock_vector_store():
         patch("backend.routers.auth.upsert_thing", return_value=None),
         patch("backend.routers.things.upsert_thing", return_value=None) as mock_upsert,
         patch("backend.routers.things.vs_delete", return_value=None) as mock_delete,
-        patch("backend.routers.chat.vector_count", return_value=0) as mock_count,
-        patch("backend.routers.chat.vector_search", return_value=[]) as mock_search,
-        patch("backend.routers.chat.is_search_configured", return_value=False),
+        patch("backend.pipeline.vector_count", return_value=0) as mock_count,
+        patch("backend.pipeline.vector_search", return_value=[]) as mock_search,
+        patch("backend.pipeline.is_search_configured", return_value=False),
     ):
         yield {
             "upsert": mock_upsert,
