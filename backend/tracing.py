@@ -1,68 +1,84 @@
-"""OpenTelemetry tracing setup with Phoenix exporter.
+"""OpenTelemetry tracing for the Reli agent pipeline.
 
-Configures the OTEL tracer provider to export spans to an Arize Phoenix
-instance via OTLP/HTTP. Controlled by PHOENIX_ENABLED env var.
+Configures a tracer provider that exports spans to Phoenix (or any
+OTLP-compatible collector).  Disabled by default — set PHOENIX_ENABLED=true
+to activate.
 
 Usage:
-    from backend.tracing import init_tracing, shutdown_tracing
+    from .tracing import get_tracer
 
-    # In lifespan:
-    init_tracing()
-    yield
-    shutdown_tracing()
+    tracer = get_tracer()
+    with tracer.start_as_current_span("my_operation") as span:
+        span.set_attribute("key", "value")
 """
 
 import logging
+
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode, Tracer
 
 from .config import settings
 
 logger = logging.getLogger(__name__)
 
-_tracer_provider = None
+_TRACER_NAME = "reli.pipeline"
+_initialized = False
 
 
 def init_tracing() -> None:
-    """Initialize OTEL tracing with Phoenix OTLP exporter.
+    """Initialize the OTEL tracer provider and OTLP exporter.
 
-    No-op if PHOENIX_ENABLED is not set to true.
+    Safe to call multiple times — only the first call configures the provider.
+    Does nothing when PHOENIX_ENABLED is false.
     """
-    global _tracer_provider
-
-    if not settings.phoenix_enabled_bool:
-        logger.info("Phoenix tracing disabled (PHOENIX_ENABLED=%s)", settings.PHOENIX_ENABLED)
+    global _initialized
+    if _initialized or not settings.phoenix_enabled_bool:
         return
 
     try:
-        from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         resource = Resource.create({"service.name": settings.OTEL_SERVICE_NAME})
-        _tracer_provider = TracerProvider(resource=resource)
-
+        provider = TracerProvider(resource=resource)
         exporter = OTLPSpanExporter(endpoint=settings.PHOENIX_ENDPOINT)
-        _tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
-
-        trace.set_tracer_provider(_tracer_provider)
+        provider.add_span_processor(BatchSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+        _initialized = True
         logger.info(
-            "Phoenix tracing enabled — exporting to %s (service: %s)",
+            "OTEL tracing initialized — exporting to %s (service: %s)",
             settings.PHOENIX_ENDPOINT,
             settings.OTEL_SERVICE_NAME,
         )
     except Exception:
-        logger.exception("Failed to initialize Phoenix tracing")
+        logger.exception("Failed to initialize OTEL tracing")
 
 
 def shutdown_tracing() -> None:
     """Flush and shut down the tracer provider."""
-    global _tracer_provider
-
-    if _tracer_provider is not None:
+    global _initialized
+    provider = trace.get_tracer_provider()
+    if _initialized and hasattr(provider, 'shutdown'):
         try:
-            _tracer_provider.shutdown()
-            logger.info("Phoenix tracer provider shut down")
+            provider.shutdown()
+            logger.info("Tracer provider shut down")
         except Exception:
             logger.exception("Error shutting down tracer provider")
-        _tracer_provider = None
+        _initialized = False
+
+
+def get_tracer() -> Tracer:
+    """Return the pipeline tracer.
+
+    Returns the no-op tracer when tracing is disabled, so callers never
+    need to check whether tracing is active.
+    """
+    return trace.get_tracer(_TRACER_NAME)
+
+
+def set_span_error(span: trace.Span, exc: BaseException) -> None:
+    """Record an exception on a span and set ERROR status."""
+    span.set_status(StatusCode.ERROR, str(exc))
+    span.record_exception(exc)

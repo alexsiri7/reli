@@ -34,10 +34,12 @@ from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
 from .reasoning_agent import REASONING_AGENT_TOOL_SYSTEM, run_reasoning_agent
 from .response_agent import run_response_agent, run_response_agent_stream
+from .tracing import get_tracer, set_span_error
 from .vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 from .web_search import google_search, is_search_configured
 
 logger = logging.getLogger(__name__)
+_tracer = get_tracer()
 
 # Maximum iterations for the context refinement loop
 MAX_CONTEXT_ITERATIONS = 4
@@ -586,6 +588,28 @@ class ChatPipeline:
     # Full pipeline execution
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _record_stage_usage(
+        span: Any,
+        stage: str,
+        usage: UsageStats,
+        calls_before: int,
+    ) -> None:
+        """Set span attributes for token counts from API calls made during a stage."""
+        new_calls = usage.calls[calls_before:]
+        stage_prompt = sum(c.prompt_tokens for c in new_calls)
+        stage_completion = sum(c.completion_tokens for c in new_calls)
+        stage_cost = sum(c.cost_usd for c in new_calls)
+        models_used = list({c.model for c in new_calls}) if new_calls else []
+
+        span.set_attribute(f"reli.{stage}.prompt_tokens", stage_prompt)
+        span.set_attribute(f"reli.{stage}.completion_tokens", stage_completion)
+        span.set_attribute(f"reli.{stage}.total_tokens", stage_prompt + stage_completion)
+        span.set_attribute(f"reli.{stage}.cost_usd", round(stage_cost, 6))
+        span.set_attribute(f"reli.{stage}.api_calls", len(new_calls))
+        if models_used:
+            span.set_attribute(f"reli.{stage}.model", models_used[0])
+
     async def run(
         self,
         message: str,
@@ -599,42 +623,108 @@ class ChatPipeline:
         """
         usage = UsageStats()
 
-        # Stage 1: Context Agent (iterative loop)
-        context_result, relevant_things, context_relationships = (
-            await self._run_context_stage(message, history, usage)
-        )
+        with _tracer.start_as_current_span("reli.pipeline") as pipeline_span:
+            pipeline_span.set_attribute("reli.user_id", self.user_id)
+            pipeline_span.set_attribute("reli.message_length", len(message))
+            pipeline_span.set_attribute("reli.history_length", len(history))
 
-        # External data
-        web_results, gmail_context, calendar_events = (
-            await self._fetch_external_data(message, context_result)
-        )
+            try:
+                # Stage 1: Context Agent (iterative loop)
+                calls_before = len(usage.calls)
+                with _tracer.start_as_current_span("reli.stage.context") as ctx_span:
+                    ctx_span.set_attribute("reli.context.model", self.user_models.get("context") or "default")
+                    ctx_span.set_attribute("reli.context.max_iterations", MAX_CONTEXT_ITERATIONS)
+                    try:
+                        context_result, relevant_things, context_relationships = (
+                            await self._run_context_stage(message, history, usage)
+                        )
+                        ctx_span.set_attribute("reli.context.things_found", len(relevant_things))
+                        ctx_span.set_attribute("reli.context.relationships_found", len(context_relationships))
+                        ctx_span.set_attribute(
+                            "reli.context.search_queries",
+                            json.dumps(context_result.get("search_queries", [])),
+                        )
+                        self._record_stage_usage(ctx_span, "context", usage, calls_before)
+                    except Exception as exc:
+                        set_span_error(ctx_span, exc)
+                        raise
 
-        # Stage 2: Reasoning Agent
-        reasoning_result = await run_reasoning_agent(
-            message, history, relevant_things, web_results, gmail_context,
-            calendar_events, relationships=context_relationships,
-            usage_stats=usage, context_window=self.context_window,
-            api_key=self.user_api_key, model=self.user_models.get("reasoning"),
-            user_id=self.user_id,
-        )
-        questions_for_user = reasoning_result.get("questions_for_user", [])
-        priority_question = reasoning_result.get("priority_question", "")
-        reasoning_summary = reasoning_result.get("reasoning_summary", "")
-        briefing_mode = reasoning_result.get("briefing_mode", False)
-        applied_changes = reasoning_result.get("applied_changes", {
-            "created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": [],
-        })
+                # External data
+                web_results, gmail_context, calendar_events = (
+                    await self._fetch_external_data(message, context_result)
+                )
 
-        open_questions_by_thing = self._collect_open_questions(relevant_things, applied_changes)
+                # Stage 2: Reasoning Agent
+                calls_before = len(usage.calls)
+                with _tracer.start_as_current_span("reli.stage.reasoning") as reason_span:
+                    reason_span.set_attribute(
+                        "reli.reasoning.model",
+                        self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
+                    )
+                    reason_span.set_attribute("reli.reasoning.things_input", len(relevant_things))
+                    try:
+                        reasoning_result = await run_reasoning_agent(
+                            message, history, relevant_things, web_results, gmail_context,
+                            calendar_events, relationships=context_relationships,
+                            usage_stats=usage, context_window=self.context_window,
+                            api_key=self.user_api_key, model=self.user_models.get("reasoning"),
+                            user_id=self.user_id,
+                        )
+                        questions_for_user = reasoning_result.get("questions_for_user", [])
+                        priority_question = reasoning_result.get("priority_question", "")
+                        reasoning_summary = reasoning_result.get("reasoning_summary", "")
+                        briefing_mode = reasoning_result.get("briefing_mode", False)
+                        applied_changes = reasoning_result.get("applied_changes", {
+                            "created": [], "updated": [], "deleted": [], "merged": [],
+                            "relationships_created": [],
+                        })
 
-        # Stage 3: Response Agent
-        reply = await run_response_agent(
-            message, reasoning_summary, questions_for_user, applied_changes,
-            web_results, usage_stats=usage,
-            open_questions_by_thing=open_questions_by_thing or None,
-            api_key=self.user_api_key, model=self.user_models.get("response"),
-            priority_question=priority_question, briefing_mode=briefing_mode,
-        )
+                        n_created = len(applied_changes.get("created", []))
+                        n_updated = len(applied_changes.get("updated", []))
+                        n_deleted = len(applied_changes.get("deleted", []))
+                        reason_span.set_attribute("reli.reasoning.changes_created", n_created)
+                        reason_span.set_attribute("reli.reasoning.changes_updated", n_updated)
+                        reason_span.set_attribute("reli.reasoning.changes_deleted", n_deleted)
+                        reason_span.set_attribute("reli.reasoning.questions_count", len(questions_for_user))
+                        reason_span.set_attribute("reli.reasoning.briefing_mode", briefing_mode)
+                        self._record_stage_usage(reason_span, "reasoning", usage, calls_before)
+                    except Exception as exc:
+                        set_span_error(reason_span, exc)
+                        raise
+
+                open_questions_by_thing = self._collect_open_questions(relevant_things, applied_changes)
+
+                # Stage 3: Response Agent
+                calls_before = len(usage.calls)
+                with _tracer.start_as_current_span("reli.stage.response") as resp_span:
+                    resp_span.set_attribute(
+                        "reli.response.model",
+                        self.user_models.get("response") or REQUESTY_RESPONSE_MODEL,
+                    )
+                    try:
+                        reply = await run_response_agent(
+                            message, reasoning_summary, questions_for_user, applied_changes,
+                            web_results, usage_stats=usage,
+                            open_questions_by_thing=open_questions_by_thing or None,
+                            api_key=self.user_api_key, model=self.user_models.get("response"),
+                            priority_question=priority_question, briefing_mode=briefing_mode,
+                        )
+                        resp_span.set_attribute("reli.response.reply_length", len(reply))
+                        self._record_stage_usage(resp_span, "response", usage, calls_before)
+                    except Exception as exc:
+                        set_span_error(resp_span, exc)
+                        raise
+
+                # Record totals on the pipeline span
+                pipeline_span.set_attribute("reli.total_prompt_tokens", usage.prompt_tokens)
+                pipeline_span.set_attribute("reli.total_completion_tokens", usage.completion_tokens)
+                pipeline_span.set_attribute("reli.total_tokens", usage.total_tokens)
+                pipeline_span.set_attribute("reli.total_cost_usd", round(usage.cost_usd, 6))
+                pipeline_span.set_attribute("reli.total_api_calls", usage.api_calls)
+
+            except Exception as exc:
+                set_span_error(pipeline_span, exc)
+                raise
 
         return PipelineResult(
             reply=reply,
@@ -665,59 +755,126 @@ class ChatPipeline:
         """
         usage = UsageStats()
 
-        # Stage 1: Context Agent
-        yield PipelineEvent(type="stage_start", stage="context")
+        with _tracer.start_as_current_span("reli.pipeline.stream") as pipeline_span:
+            pipeline_span.set_attribute("reli.user_id", self.user_id)
+            pipeline_span.set_attribute("reli.message_length", len(message))
+            pipeline_span.set_attribute("reli.history_length", len(history))
+            pipeline_span.set_attribute("reli.streaming", True)
 
-        context_result, relevant_things, context_relationships = (
-            await self._run_context_stage(message, history, usage)
-        )
+            try:
+                # Stage 1: Context Agent
+                yield PipelineEvent(type="stage_start", stage="context")
 
-        # External data
-        web_results, gmail_context, calendar_events = (
-            await self._fetch_external_data(message, context_result)
-        )
+                calls_before = len(usage.calls)
+                with _tracer.start_as_current_span("reli.stage.context") as ctx_span:
+                    ctx_span.set_attribute("reli.context.model", self.user_models.get("context") or "default")
+                    ctx_span.set_attribute("reli.context.max_iterations", MAX_CONTEXT_ITERATIONS)
+                    try:
+                        context_result, relevant_things, context_relationships = (
+                            await self._run_context_stage(message, history, usage)
+                        )
+                        ctx_span.set_attribute("reli.context.things_found", len(relevant_things))
+                        ctx_span.set_attribute("reli.context.relationships_found", len(context_relationships))
+                        ctx_span.set_attribute(
+                            "reli.context.search_queries",
+                            json.dumps(context_result.get("search_queries", [])),
+                        )
+                        self._record_stage_usage(ctx_span, "context", usage, calls_before)
+                    except Exception as exc:
+                        set_span_error(ctx_span, exc)
+                        raise
 
-        yield PipelineEvent(type="stage_complete", stage="context")
+                # External data
+                web_results, gmail_context, calendar_events = (
+                    await self._fetch_external_data(message, context_result)
+                )
 
-        # Stage 2: Reasoning Agent
-        yield PipelineEvent(type="stage_start", stage="reasoning")
+                yield PipelineEvent(type="stage_complete", stage="context")
 
-        reasoning_result = await run_reasoning_agent(
-            message, history, relevant_things, web_results, gmail_context,
-            calendar_events, relationships=context_relationships,
-            usage_stats=usage, context_window=self.context_window,
-            api_key=self.user_api_key, model=self.user_models.get("reasoning"),
-            user_id=self.user_id,
-        )
-        questions_for_user = reasoning_result.get("questions_for_user", [])
-        priority_question = reasoning_result.get("priority_question", "")
-        reasoning_summary = reasoning_result.get("reasoning_summary", "")
-        briefing_mode = reasoning_result.get("briefing_mode", False)
-        applied_changes = reasoning_result.get("applied_changes", {
-            "created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": [],
-        })
+                # Stage 2: Reasoning Agent
+                yield PipelineEvent(type="stage_start", stage="reasoning")
 
-        open_questions_by_thing = self._collect_open_questions(relevant_things, applied_changes)
+                calls_before = len(usage.calls)
+                with _tracer.start_as_current_span("reli.stage.reasoning") as reason_span:
+                    reason_span.set_attribute(
+                        "reli.reasoning.model",
+                        self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
+                    )
+                    reason_span.set_attribute("reli.reasoning.things_input", len(relevant_things))
+                    try:
+                        reasoning_result = await run_reasoning_agent(
+                            message, history, relevant_things, web_results, gmail_context,
+                            calendar_events, relationships=context_relationships,
+                            usage_stats=usage, context_window=self.context_window,
+                            api_key=self.user_api_key, model=self.user_models.get("reasoning"),
+                            user_id=self.user_id,
+                        )
+                        questions_for_user = reasoning_result.get("questions_for_user", [])
+                        priority_question = reasoning_result.get("priority_question", "")
+                        reasoning_summary = reasoning_result.get("reasoning_summary", "")
+                        briefing_mode = reasoning_result.get("briefing_mode", False)
+                        applied_changes = reasoning_result.get("applied_changes", {
+                            "created": [], "updated": [], "deleted": [], "merged": [],
+                            "relationships_created": [],
+                        })
 
-        yield PipelineEvent(type="stage_complete", stage="reasoning")
+                        n_created = len(applied_changes.get("created", []))
+                        n_updated = len(applied_changes.get("updated", []))
+                        n_deleted = len(applied_changes.get("deleted", []))
+                        reason_span.set_attribute("reli.reasoning.changes_created", n_created)
+                        reason_span.set_attribute("reli.reasoning.changes_updated", n_updated)
+                        reason_span.set_attribute("reli.reasoning.changes_deleted", n_deleted)
+                        reason_span.set_attribute("reli.reasoning.questions_count", len(questions_for_user))
+                        reason_span.set_attribute("reli.reasoning.briefing_mode", briefing_mode)
+                        self._record_stage_usage(reason_span, "reasoning", usage, calls_before)
+                    except Exception as exc:
+                        set_span_error(reason_span, exc)
+                        raise
 
-        # Stage 3: Response Agent (streaming)
-        yield PipelineEvent(type="stage_start", stage="response")
+                open_questions_by_thing = self._collect_open_questions(relevant_things, applied_changes)
 
-        reply_parts: list[str] = []
-        async for token in run_response_agent_stream(
-            message, reasoning_summary, questions_for_user, applied_changes,
-            web_results, usage_stats=usage,
-            open_questions_by_thing=open_questions_by_thing or None,
-            api_key=self.user_api_key, model=self.user_models.get("response"),
-            priority_question=priority_question, briefing_mode=briefing_mode,
-        ):
-            reply_parts.append(token)
-            yield PipelineEvent(type="token", data=token)
+                yield PipelineEvent(type="stage_complete", stage="reasoning")
 
-        reply = "".join(reply_parts)
+                # Stage 3: Response Agent (streaming)
+                yield PipelineEvent(type="stage_start", stage="response")
 
-        yield PipelineEvent(type="stage_complete", stage="response")
+                calls_before = len(usage.calls)
+                reply_parts: list[str] = []
+                with _tracer.start_as_current_span("reli.stage.response") as resp_span:
+                    resp_span.set_attribute(
+                        "reli.response.model",
+                        self.user_models.get("response") or REQUESTY_RESPONSE_MODEL,
+                    )
+                    try:
+                        async for token in run_response_agent_stream(
+                            message, reasoning_summary, questions_for_user, applied_changes,
+                            web_results, usage_stats=usage,
+                            open_questions_by_thing=open_questions_by_thing or None,
+                            api_key=self.user_api_key, model=self.user_models.get("response"),
+                            priority_question=priority_question, briefing_mode=briefing_mode,
+                        ):
+                            reply_parts.append(token)
+                            yield PipelineEvent(type="token", data=token)
+
+                        reply = "".join(reply_parts)
+                        resp_span.set_attribute("reli.response.reply_length", len(reply))
+                        self._record_stage_usage(resp_span, "response", usage, calls_before)
+                    except Exception as exc:
+                        set_span_error(resp_span, exc)
+                        raise
+
+                yield PipelineEvent(type="stage_complete", stage="response")
+
+                # Record totals on the pipeline span
+                pipeline_span.set_attribute("reli.total_prompt_tokens", usage.prompt_tokens)
+                pipeline_span.set_attribute("reli.total_completion_tokens", usage.completion_tokens)
+                pipeline_span.set_attribute("reli.total_tokens", usage.total_tokens)
+                pipeline_span.set_attribute("reli.total_cost_usd", round(usage.cost_usd, 6))
+                pipeline_span.set_attribute("reli.total_api_calls", usage.api_calls)
+
+            except Exception as exc:
+                set_span_error(pipeline_span, exc)
+                raise
 
         # Yield final result
         yield PipelineEvent(

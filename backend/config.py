@@ -84,11 +84,6 @@ class Settings(BaseSettings):
     SENTRY_ENVIRONMENT: str = "production"
     SENTRY_TRACES_SAMPLE_RATE: float = 0.2
 
-    # --- Sweep scheduler ---
-    SWEEP_ENABLED: str = "true"
-    SWEEP_HOUR: int = 3
-    SWEEP_MINUTE: int = 0
-
     # --- Phoenix / OpenTelemetry ---
     PHOENIX_ENABLED: str = "false"
     PHOENIX_ENDPOINT: str = "http://localhost:6006/v1/traces"
@@ -97,6 +92,11 @@ class Settings(BaseSettings):
     @property
     def phoenix_enabled_bool(self) -> bool:
         return self.PHOENIX_ENABLED.lower() not in ("false", "0", "no")
+
+    # --- Sweep scheduler ---
+    SWEEP_ENABLED: str = "true"
+    SWEEP_HOUR: int = 3
+    SWEEP_MINUTE: int = 0
 
     @property
     def rate_limit_enabled_bool(self) -> bool:
