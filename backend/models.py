@@ -281,6 +281,36 @@ class BriefingResponse(BaseModel):
     total: int
 
 
+class SweepRun(BaseModel):
+    """A logged sweep reasoning run."""
+
+    id: str
+    user_id: str | None
+    status: str
+    trigger: str
+    started_at: datetime
+    completed_at: datetime | None
+    things_processed: int = 0
+    findings_created: int = 0
+    changes_created: int = 0
+    changes_updated: int = 0
+    relationships_created: int = 0
+    model: str | None = None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost_usd: float = 0.0
+    error_message: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class SweepRunsResponse(BaseModel):
+    """List of sweep runs."""
+
+    runs: list[SweepRun]
+    total: int
+
+
 # ── Proactive Surfaces ───────────────────────────────────────────────────────
 
 

@@ -227,6 +227,32 @@ def _migrate_merge_history(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_merge_history_user ON merge_history(user_id)")
 
 
+def _migrate_sweep_runs(conn: sqlite3.Connection) -> None:
+    """Create sweep_runs table for logging sweep reasoning runs."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sweep_runs (
+            id TEXT PRIMARY KEY,
+            user_id TEXT REFERENCES users(id),
+            status TEXT NOT NULL DEFAULT 'running',
+            trigger TEXT NOT NULL DEFAULT 'scheduled',
+            started_at TIMESTAMP NOT NULL,
+            completed_at TIMESTAMP,
+            things_processed INTEGER DEFAULT 0,
+            findings_created INTEGER DEFAULT 0,
+            changes_created INTEGER DEFAULT 0,
+            changes_updated INTEGER DEFAULT 0,
+            relationships_created INTEGER DEFAULT 0,
+            model TEXT,
+            prompt_tokens INTEGER DEFAULT 0,
+            completion_tokens INTEGER DEFAULT 0,
+            cost_usd REAL DEFAULT 0.0,
+            error_message TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sweep_runs_user ON sweep_runs(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sweep_runs_started ON sweep_runs(started_at)")
+
+
 def clean_orphan_relationships() -> tuple[int, list[str]]:
     """Delete relationships where from_thing_id or to_thing_id doesn't exist.
 
@@ -382,4 +408,5 @@ def init_db() -> None:
         _migrate_backfill_null_user_ids(conn)
         _migrate_user_settings(conn)
         _migrate_merge_history(conn)
+        _migrate_sweep_runs(conn)
         _seed_thing_types(conn)

@@ -750,6 +750,20 @@ def _make_reasoning_tools(
     return traced_tools, applied
 
 
+def _make_sweep_tools(
+    user_id: str,
+) -> tuple[list[Callable[..., Any]], dict[str, list[Any]]]:
+    """Create a restricted tool set for sweep reasoning (no delete, no merge).
+
+    Guard rails: sweep can only create, update, and link Things.
+    """
+    all_tools, applied = _make_reasoning_tools(user_id)
+    # Filter to only create_thing, update_thing, create_relationship
+    allowed = {"create_thing", "update_thing", "create_relationship"}
+    sweep_tools = [t for t in all_tools if t.__wrapped__.__name__ in allowed]
+    return sweep_tools, applied
+
+
 # ---------------------------------------------------------------------------
 # Public API — drop-in replacement for agents.run_reasoning_agent
 # ---------------------------------------------------------------------------

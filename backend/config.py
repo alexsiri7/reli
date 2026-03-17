@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     SWEEP_HOUR: int = 3
     SWEEP_MINUTE: int = 0
 
+    # --- Sweep reasoning (runs reasoning pipeline against full graph) ---
+    SWEEP_REASONING_ENABLED: str = "true"
+    SWEEP_REASONING_MODEL: str = ""  # Override model; empty = use REQUESTY_REASONING_MODEL
+
     @property
     def rate_limit_enabled_bool(self) -> bool:
         return self.RATE_LIMIT_ENABLED.lower() not in ("false", "0", "no")
@@ -105,6 +109,10 @@ class Settings(BaseSettings):
     @property
     def sweep_enabled_bool(self) -> bool:
         return self.SWEEP_ENABLED.lower() not in ("false", "0", "no")
+
+    @property
+    def sweep_reasoning_enabled_bool(self) -> bool:
+        return self.SWEEP_REASONING_ENABLED.lower() not in ("false", "0", "no")
 
 
 settings = Settings()
