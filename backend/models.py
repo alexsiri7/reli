@@ -274,6 +274,29 @@ class SweepFindingSnooze(BaseModel):
     until: datetime = Field(..., description="Hide the finding from the briefing until this time")
 
 
+class SweepRun(BaseModel):
+    """A logged sweep execution."""
+
+    id: str
+    user_id: str | None
+    started_at: datetime
+    completed_at: datetime | None
+    status: str
+    candidates_found: int = 0
+    findings_created: int = 0
+    things_created: int = 0
+    things_updated: int = 0
+    relationships_created: int = 0
+    thing_count: int = 0
+    model: str | None = None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost_usd: float = 0.0
+    error: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class BriefingResponse(BaseModel):
     date: str
     things: list[Thing]

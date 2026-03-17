@@ -97,6 +97,7 @@ class Settings(BaseSettings):
     SWEEP_ENABLED: str = "true"
     SWEEP_HOUR: int = 3
     SWEEP_MINUTE: int = 0
+    SWEEP_MODEL: str = ""  # Model for sweep reasoning agent; empty = use reasoning model
 
     @property
     def rate_limit_enabled_bool(self) -> bool:
