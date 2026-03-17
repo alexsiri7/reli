@@ -14,12 +14,11 @@ logger = logging.getLogger(__name__)
 
 from ..agents import (
     UsageStats,
-    apply_storage_changes,
-    run_reasoning_agent,
     run_response_agent,
     run_response_agent_stream,
 )
 from ..context_agent import run_context_agent, run_context_refinement
+from ..reasoning_agent import run_reasoning_agent
 from ..auth import require_user, user_filter
 from ..database import db
 from .settings import get_user_api_key, get_user_chat_context_window, get_user_models
@@ -670,7 +669,7 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         except Exception:
             calendar_events = None
 
-    # Stage 2: Reasoning Agent
+    # Stage 2: Reasoning Agent (tool calling applies changes during execution)
     reasoning_result = await run_reasoning_agent(
         message,
         history,
@@ -683,16 +682,15 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         context_window=context_window,
         api_key=user_api_key,
         model=user_models["reasoning"],
+        user_id=user_id,
     )
-    storage_changes = reasoning_result.get("storage_changes", {})
     questions_for_user = reasoning_result.get("questions_for_user", [])
     priority_question = reasoning_result.get("priority_question", "")
     reasoning_summary = reasoning_result.get("reasoning_summary", "")
     briefing_mode = reasoning_result.get("briefing_mode", False)
-
-    # Stage 3: Validator — apply changes
-    with db() as conn:
-        applied_changes = apply_storage_changes(storage_changes, conn, user_id=user_id)
+    applied_changes = reasoning_result.get("applied_changes", {
+        "created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": [],
+    })
 
     # Collect open_questions from relevant Things and newly created/updated Things
     open_questions_by_thing: dict[str, list[str]] = {}
@@ -964,7 +962,7 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
                 except Exception:
                     calendar_events = None
 
-            # Stage 2: Reasoning Agent
+            # Stage 2: Reasoning Agent (tool calling applies changes during execution)
             yield _sse("stage", {"stage": "reasoning", "status": "started"})
 
             reasoning_result = await run_reasoning_agent(
@@ -972,16 +970,15 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
                 relationships=context_relationships,
                 usage_stats=usage, context_window=context_window,
                 api_key=user_api_key, model=user_models["reasoning"],
+                user_id=user_id,
             )
-            storage_changes = reasoning_result.get("storage_changes", {})
             questions_for_user = reasoning_result.get("questions_for_user", [])
             priority_question = reasoning_result.get("priority_question", "")
             reasoning_summary = reasoning_result.get("reasoning_summary", "")
             briefing_mode = reasoning_result.get("briefing_mode", False)
-
-            # Stage 3: Validator
-            with db() as conn:
-                applied_changes = apply_storage_changes(storage_changes, conn, user_id=user_id)
+            applied_changes = reasoning_result.get("applied_changes", {
+                "created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": [],
+            })
 
             open_questions_by_thing: dict[str, list[str]] = {}
             for thing in relevant_things:

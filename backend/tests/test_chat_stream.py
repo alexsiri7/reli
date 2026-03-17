@@ -15,9 +15,14 @@ MOCK_CONTEXT_RESULT = {
 }
 
 MOCK_REASONING_RESULT = {
-    "storage_changes": {"create": [], "update": [], "delete": []},
+    "applied_changes": {
+        "created": [], "updated": [], "deleted": [],
+        "merged": [], "relationships_created": [],
+    },
     "questions_for_user": [],
+    "priority_question": "",
     "reasoning_summary": "No changes needed.",
+    "briefing_mode": False,
 }
 
 MOCK_REFINEMENT_DONE = {"done": True}
