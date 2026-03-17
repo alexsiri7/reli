@@ -14,9 +14,14 @@ MOCK_CONTEXT_RESULT = {
 }
 
 MOCK_REASONING_RESULT = {
-    "storage_changes": {"create": [], "update": [], "delete": []},
+    "applied_changes": {
+        "created": [], "updated": [], "deleted": [],
+        "merged": [], "relationships_created": [],
+    },
     "questions_for_user": [],
+    "priority_question": "",
     "reasoning_summary": "No changes needed.",
+    "briefing_mode": False,
 }
 
 MOCK_REPLY = "I understand, no changes were needed."
@@ -84,13 +89,14 @@ class TestChatPipeline:
 
     async def test_chat_with_storage_changes_create(self, async_client):
         reasoning_with_create = {
-            "storage_changes": {
-                "create": [{"title": "New Pipeline Task", "type_hint": "task", "priority": 2}],
-                "update": [],
-                "delete": [],
+            "applied_changes": {
+                "created": [{"id": "new-uuid", "title": "New Pipeline Task", "type_hint": "task", "priority": 2}],
+                "updated": [], "deleted": [], "merged": [], "relationships_created": [],
             },
             "questions_for_user": [],
+            "priority_question": "",
             "reasoning_summary": "Creating a new task.",
+            "briefing_mode": False,
         }
         patches = _patch_agents(reasoning_result=reasoning_with_create)
         with patches[0], patches[1], patches[2], patches[3]:
@@ -109,13 +115,15 @@ class TestChatPipeline:
         thing_id = create_resp.json()["id"]
 
         reasoning_with_update = {
-            "storage_changes": {
-                "create": [],
-                "update": [{"id": thing_id, "changes": {"title": "Updated Title"}}],
-                "delete": [],
+            "applied_changes": {
+                "created": [],
+                "updated": [{"id": thing_id, "title": "Updated Title"}],
+                "deleted": [], "merged": [], "relationships_created": [],
             },
             "questions_for_user": [],
+            "priority_question": "",
             "reasoning_summary": "Updating title.",
+            "briefing_mode": False,
         }
         patches = _patch_agents(reasoning_result=reasoning_with_update)
         with patches[0], patches[1], patches[2], patches[3]:
@@ -132,13 +140,15 @@ class TestChatPipeline:
         thing_id = create_resp.json()["id"]
 
         reasoning_with_delete = {
-            "storage_changes": {
-                "create": [],
-                "update": [],
-                "delete": [thing_id],
+            "applied_changes": {
+                "created": [], "updated": [],
+                "deleted": [thing_id],
+                "merged": [], "relationships_created": [],
             },
             "questions_for_user": [],
+            "priority_question": "",
             "reasoning_summary": "Deleting the thing.",
+            "briefing_mode": False,
         }
         patches = _patch_agents(reasoning_result=reasoning_with_delete)
         with patches[0], patches[1], patches[2], patches[3]:
@@ -152,9 +162,14 @@ class TestChatPipeline:
 
     async def test_chat_with_questions_for_user(self, async_client):
         reasoning_with_questions = {
-            "storage_changes": {"create": [], "update": [], "delete": []},
+            "applied_changes": {
+                "created": [], "updated": [], "deleted": [],
+                "merged": [], "relationships_created": [],
+            },
             "questions_for_user": ["What priority should this be?"],
+            "priority_question": "What priority should this be?",
             "reasoning_summary": "Ambiguous request, asking for clarification.",
+            "briefing_mode": False,
         }
         patches = _patch_agents(reasoning_result=reasoning_with_questions)
         with patches[0], patches[1], patches[2], patches[3]:
@@ -191,13 +206,15 @@ class TestChatPipeline:
     async def test_chat_ignores_unknown_delete_ids(self, async_client):
         """Deleting a non-existent ID should not raise an error."""
         reasoning_with_bad_delete = {
-            "storage_changes": {
-                "create": [],
-                "update": [],
-                "delete": ["nonexistent-id-xyz"],
+            "applied_changes": {
+                "created": [], "updated": [],
+                "deleted": [],  # tools would have returned error, nothing applied
+                "merged": [], "relationships_created": [],
             },
             "questions_for_user": [],
+            "priority_question": "",
             "reasoning_summary": "Trying to delete unknown.",
+            "briefing_mode": False,
         }
         patches = _patch_agents(reasoning_result=reasoning_with_bad_delete)
         with patches[0], patches[1], patches[2], patches[3]:
