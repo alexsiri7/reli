@@ -39,7 +39,7 @@ def test_load_config_defaults(tmp_path):
     with patch("backend.agents._CONFIG_PATH", missing_path):
         cfg = _load_config()
 
-    assert cfg["llm"]["models"]["reasoning"] == "google/gemini-3-flash-preview"
+    assert cfg["llm"]["models"]["reasoning"] == "google/gemini-2.5-flash"
     assert cfg["llm"]["models"]["context"] == "google/gemini-2.5-flash-lite"
     assert cfg["llm"]["models"]["response"] == "google/gemini-2.5-flash-lite"
 
@@ -86,7 +86,7 @@ def test_model_pricing_populated():
     assert len(agents.MODEL_PRICING) > 0
     # At minimum, the defaults should be present
     assert "google/gemini-2.5-flash-lite" in agents.MODEL_PRICING
-    assert "google/gemini-3-flash-preview" in agents.MODEL_PRICING
+    assert "google/gemini-2.5-flash" in agents.MODEL_PRICING
 
 
 def test_fetch_requesty_pricing_api_failure():

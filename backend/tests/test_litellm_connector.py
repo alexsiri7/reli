@@ -79,7 +79,7 @@ async def test_acomplete_routes_through_requesty():
     "model",
     [
         "google/gemini-2.5-flash-lite",
-        "google/gemini-3-flash-preview",
+        "google/gemini-2.5-flash",
     ],
 )
 async def test_acomplete_all_model_configs(model: str):

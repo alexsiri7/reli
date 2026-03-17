@@ -29,7 +29,7 @@ def _load_config() -> dict[str, Any]:
             "base_url": "https://router.requesty.ai/v1",
             "models": {
                 "context": "google/gemini-2.5-flash-lite",
-                "reasoning": "google/gemini-3-flash-preview",
+                "reasoning": "google/gemini-2.5-flash",
                 "response": "google/gemini-2.5-flash-lite",
             },
         },
@@ -66,7 +66,7 @@ REQUESTY_API_KEY = settings.REQUESTY_API_KEY
 _models = _config["llm"]["models"]
 REQUESTY_MODEL = settings.REQUESTY_MODEL or _models.get("context", "google/gemini-2.5-flash-lite")
 REQUESTY_REASONING_MODEL = settings.REQUESTY_REASONING_MODEL or _models.get(
-    "reasoning", "google/gemini-3-flash-preview"
+    "reasoning", "google/gemini-2.5-flash"
 )
 REQUESTY_RESPONSE_MODEL = settings.REQUESTY_RESPONSE_MODEL or _models.get("response", "google/gemini-2.5-flash-lite")
 
@@ -90,7 +90,7 @@ _DEFAULT_PRICING: dict[str, tuple[float, float]] = {
     "google/gemini-2.0-flash-001": (0.10, 0.40),
     "google/gemini-2.5-flash-preview-05-20": (0.15, 0.60),
     "google/gemini-2.5-flash-lite": (0.10, 0.40),
-    "google/gemini-3-flash-preview": (0.50, 3.00),
+    "google/gemini-2.5-flash": (0.15, 0.60),
 }
 
 
