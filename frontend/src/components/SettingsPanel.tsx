@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { ModelSettings, UserSettings, UserProfileRelationship } from '../store'
 import { useTheme, setTheme } from '../hooks/useTheme'
+import { ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
 import { RelationshipMiniGraph } from './RelationshipMiniGraph'
 
 export function SettingsPanel() {
@@ -242,6 +243,7 @@ function SettingsForm({
           />
         </div>
       </div>
+      <VoiceSection />
       <ThemeSection />
       <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
         {saved && (
@@ -542,6 +544,49 @@ function ProfileForm({
           userThingTitle={editName || thing.title}
           relationships={relationships}
         />
+      </div>
+    </div>
+  )
+}
+
+function VoiceSection() {
+  const voices = useAvailableVoices()
+  const [selectedURI, setSelectedURI] = useState(getStoredVoiceURI)
+
+  if (!ttsSupported) return null
+
+  return (
+    <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Text-to-Speech</h3>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Voice
+        </label>
+        <p className="text-xs text-gray-400 dark:text-gray-400 mb-1.5">
+          Choose the voice used when reading messages aloud
+        </p>
+        {voices.length > 1 ? (
+          <select
+            value={selectedURI ?? ''}
+            onChange={e => {
+              const uri = e.target.value || null
+              setSelectedURI(uri)
+              setStoredVoiceURI(uri)
+            }}
+            className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
+          >
+            <option value="">Default</option>
+            {voices.map(v => (
+              <option key={v.voiceURI} value={v.voiceURI}>
+                {v.name} ({v.lang})
+              </option>
+            ))}
+          </select>
+        ) : (
+          <p className="text-xs text-gray-400 dark:text-gray-400 italic">
+            Only one voice available on this device
+          </p>
+        )}
       </div>
     </div>
   )
