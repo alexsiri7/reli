@@ -229,6 +229,7 @@ async def run_response_agent(
     model: str | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    style_prompt: str = "",
 ) -> str:
     """Stage 4: generate friendly user-facing response via ADK LlmAgent."""
     user_prompt = _build_user_prompt(
@@ -242,11 +243,16 @@ async def run_response_agent(
         api_key=api_key,
     )
 
+    # Inject interaction style into the system prompt
+    instruction = RESPONSE_AGENT_SYSTEM
+    if style_prompt:
+        instruction = instruction + "\n\n" + style_prompt
+
     response_agent = LlmAgent(
         name="response_agent",
         description="Generates friendly, conversational responses to the user.",
         model=litellm_model,
-        instruction=RESPONSE_AGENT_SYSTEM,
+        instruction=instruction,
     )
 
     return await _run_agent_for_text(response_agent, user_prompt, usage_stats)
@@ -264,6 +270,7 @@ async def run_response_agent_stream(
     model: str | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    style_prompt: str = "",
 ) -> AsyncIterator[str]:
     """Stage 4 (streaming): yield response tokens as they arrive via ADK LlmAgent."""
     user_prompt = _build_user_prompt(
@@ -277,11 +284,16 @@ async def run_response_agent_stream(
         api_key=api_key,
     )
 
+    # Inject interaction style into the system prompt
+    instruction = RESPONSE_AGENT_SYSTEM
+    if style_prompt:
+        instruction = instruction + "\n\n" + style_prompt
+
     response_agent = LlmAgent(
         name="response_agent",
         description="Generates friendly, conversational responses to the user.",
         model=litellm_model,
-        instruction=RESPONSE_AGENT_SYSTEM,
+        instruction=instruction,
     )
 
     async for token in _run_agent_for_stream(response_agent, user_prompt, usage_stats):

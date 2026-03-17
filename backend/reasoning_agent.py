@@ -768,6 +768,7 @@ async def run_reasoning_agent(
     api_key: str | None = None,
     model: str | None = None,
     user_id: str = "",
+    reasoning_style_hint: str = "",
 ) -> dict[str, Any]:
     """Stage 2: decide and apply storage changes.
 
@@ -844,11 +845,16 @@ async def run_reasoning_agent(
         model=model or REQUESTY_REASONING_MODEL, api_key=api_key
     )
 
+    # Inject interaction style hint into the system prompt
+    instruction = REASONING_AGENT_TOOL_SYSTEM
+    if reasoning_style_hint:
+        instruction = instruction + "\n\n" + reasoning_style_hint
+
     reasoning_agent = LlmAgent(
         name="reasoning_agent",
         description="Reasons about user requests and executes storage changes via tools.",
         model=litellm_model,
-        instruction=REASONING_AGENT_TOOL_SYSTEM,
+        instruction=instruction,
         tools=tools,  # type: ignore[arg-type]  # list invariance
     )
 

@@ -144,6 +144,7 @@ export interface UserSettings {
   response_model: string
   chat_context_window: number | null
   theme: string
+  interaction_style: string
 }
 
 export interface UserProfileRelationship {

@@ -27,6 +27,7 @@ from .agents import (
     RESPONSE_AGENT_SYSTEM,
     UsageStats,
 )
+from .interaction_style import determine_style, get_reasoning_style_hint, get_style_prompt
 from .auth import user_filter
 from .context_agent import _make_litellm_model, run_context_agent, run_context_refinement
 from .database import db
@@ -320,11 +321,13 @@ class ChatPipeline:
         user_api_key: str | None = None,
         user_models: Mapping[str, str | None] | None = None,
         context_window: int = 10,
+        interaction_style: str = "adaptive",
     ):
         self.user_id = user_id
         self.user_api_key = user_api_key
         self.user_models: Mapping[str, str | None] = user_models or {}
         self.context_window = context_window
+        self.interaction_style = interaction_style
 
         # Create ADK LlmAgent instances for each pipeline stage
         context_model = _make_litellm_model(
@@ -654,6 +657,11 @@ class ChatPipeline:
                     await self._fetch_external_data(message, context_result)
                 )
 
+                # Determine interaction style for this turn
+                effective_style = determine_style(
+                    self.interaction_style, message, history,
+                )
+
                 # Stage 2: Reasoning Agent
                 calls_before = len(usage.calls)
                 with _tracer.start_as_current_span("reli.stage.reasoning") as reason_span:
@@ -662,6 +670,7 @@ class ChatPipeline:
                         self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
                     )
                     reason_span.set_attribute("reli.reasoning.things_input", len(relevant_things))
+                    reason_span.set_attribute("reli.reasoning.interaction_style", effective_style.value)
                     try:
                         reasoning_result = await run_reasoning_agent(
                             message, history, relevant_things, web_results, gmail_context,
@@ -669,6 +678,7 @@ class ChatPipeline:
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id,
+                            reasoning_style_hint=get_reasoning_style_hint(effective_style),
                         )
                         questions_for_user = reasoning_result.get("questions_for_user", [])
                         priority_question = reasoning_result.get("priority_question", "")
@@ -678,6 +688,13 @@ class ChatPipeline:
                             "created": [], "updated": [], "deleted": [], "merged": [],
                             "relationships_created": [],
                         })
+
+                        # Re-determine style if briefing_mode was detected by reasoning
+                        if briefing_mode:
+                            effective_style = determine_style(
+                                self.interaction_style, message, history,
+                                briefing_mode=True,
+                            )
 
                         n_created = len(applied_changes.get("created", []))
                         n_updated = len(applied_changes.get("updated", []))
@@ -701,6 +718,7 @@ class ChatPipeline:
                         "reli.response.model",
                         self.user_models.get("response") or REQUESTY_RESPONSE_MODEL,
                     )
+                    resp_span.set_attribute("reli.response.interaction_style", effective_style.value)
                     try:
                         reply = await run_response_agent(
                             message, reasoning_summary, questions_for_user, applied_changes,
@@ -708,6 +726,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            style_prompt=get_style_prompt(effective_style),
                         )
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
                         self._record_stage_usage(resp_span, "response", usage, calls_before)
@@ -791,6 +810,11 @@ class ChatPipeline:
 
                 yield PipelineEvent(type="stage_complete", stage="context")
 
+                # Determine interaction style for this turn
+                effective_style = determine_style(
+                    self.interaction_style, message, history,
+                )
+
                 # Stage 2: Reasoning Agent
                 yield PipelineEvent(type="stage_start", stage="reasoning")
 
@@ -801,6 +825,7 @@ class ChatPipeline:
                         self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
                     )
                     reason_span.set_attribute("reli.reasoning.things_input", len(relevant_things))
+                    reason_span.set_attribute("reli.reasoning.interaction_style", effective_style.value)
                     try:
                         reasoning_result = await run_reasoning_agent(
                             message, history, relevant_things, web_results, gmail_context,
@@ -808,6 +833,7 @@ class ChatPipeline:
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id,
+                            reasoning_style_hint=get_reasoning_style_hint(effective_style),
                         )
                         questions_for_user = reasoning_result.get("questions_for_user", [])
                         priority_question = reasoning_result.get("priority_question", "")
@@ -817,6 +843,13 @@ class ChatPipeline:
                             "created": [], "updated": [], "deleted": [], "merged": [],
                             "relationships_created": [],
                         })
+
+                        # Re-determine style if briefing_mode was detected
+                        if briefing_mode:
+                            effective_style = determine_style(
+                                self.interaction_style, message, history,
+                                briefing_mode=True,
+                            )
 
                         n_created = len(applied_changes.get("created", []))
                         n_updated = len(applied_changes.get("updated", []))
@@ -845,6 +878,7 @@ class ChatPipeline:
                         "reli.response.model",
                         self.user_models.get("response") or REQUESTY_RESPONSE_MODEL,
                     )
+                    resp_span.set_attribute("reli.response.interaction_style", effective_style.value)
                     try:
                         async for token in run_response_agent_stream(
                             message, reasoning_summary, questions_for_user, applied_changes,
@@ -852,6 +886,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            style_prompt=get_style_prompt(effective_style),
                         ):
                             reply_parts.append(token)
                             yield PipelineEvent(type="token", data=token)

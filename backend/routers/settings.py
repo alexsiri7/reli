@@ -28,6 +28,7 @@ _VALID_KEYS = {
     "response_model",
     "chat_context_window",
     "theme",
+    "interaction_style",
 }
 
 
@@ -59,6 +60,7 @@ class UserSettings(BaseModel):
     response_model: str = ""
     chat_context_window: int | None = None
     theme: str = ""
+    interaction_style: str = "adaptive"
 
 
 class UserSettingsUpdate(BaseModel):
@@ -72,6 +74,7 @@ class UserSettingsUpdate(BaseModel):
     response_model: str | None = None
     chat_context_window: int | None = None
     theme: str | None = None
+    interaction_style: str | None = None
 
 
 class RequestyModel(BaseModel):
@@ -157,6 +160,14 @@ def get_user_chat_context_window(user_id: str) -> int:
         except (ValueError, TypeError):
             pass
     return get_chat_context_window()
+
+
+def get_user_interaction_style(user_id: str) -> str:
+    """Return user's interaction style preference, defaulting to 'adaptive'."""
+    val = get_user_setting(user_id, "interaction_style")
+    if val and val in ("coaching", "consultant", "adaptive"):
+        return val
+    return "adaptive"
 
 
 def get_user_api_key(user_id: str) -> str:
@@ -301,6 +312,7 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         response_model=user_settings.get("response_model", ""),
         chat_context_window=int(user_settings["chat_context_window"]) if "chat_context_window" in user_settings else None,
         theme=user_settings.get("theme", ""),
+        interaction_style=user_settings.get("interaction_style", "adaptive"),
     )
 
 

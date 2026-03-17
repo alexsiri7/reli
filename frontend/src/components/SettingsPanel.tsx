@@ -118,6 +118,7 @@ function SettingsForm({
   const [chatContextWindow, setChatContextWindow] = useState(initial.chat_context_window)
   const [reqApiKey, setReqApiKey] = useState('')
   const [reqApiKeyDisplay, setReqApiKeyDisplay] = useState(initialUserSettings?.requesty_api_key || '')
+  const [interactionStyle, setInteractionStyle] = useState(initialUserSettings?.interaction_style || 'adaptive')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -128,8 +129,9 @@ function SettingsForm({
     chatContextWindow !== initial.chat_context_window
 
   const hasApiKeyChange = reqApiKey.length > 0
+  const hasInteractionStyleChange = interactionStyle !== (initialUserSettings?.interaction_style || 'adaptive')
 
-  const hasChanges = hasModelChanges || hasApiKeyChange
+  const hasChanges = hasModelChanges || hasApiKeyChange || hasInteractionStyleChange
 
   const handleSave = async () => {
     setSaving(true)
@@ -145,6 +147,11 @@ function SettingsForm({
       await updateUserSettings({ requesty_api_key: reqApiKey })
       setReqApiKeyDisplay(reqApiKey.length <= 4 ? '****' : '*'.repeat(reqApiKey.length - 4) + reqApiKey.slice(-4))
       setReqApiKey('')
+    }
+
+    // Save interaction style if changed
+    if (hasInteractionStyleChange) {
+      await updateUserSettings({ interaction_style: interactionStyle })
     }
 
     setSaving(false)
@@ -243,6 +250,43 @@ function SettingsForm({
           />
         </div>
       </div>
+      {/* Interaction Style */}
+      <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Interaction Style</h3>
+        <p className="text-xs text-gray-400 dark:text-gray-400 mb-4">
+          Choose how Reli communicates with you. Adaptive mode dynamically adjusts based on context.
+        </p>
+        <div className="space-y-2">
+          {[
+            { value: 'adaptive', label: 'Adaptive', desc: 'Automatically switches between coaching and consultant based on context' },
+            { value: 'coaching', label: 'Coach', desc: 'Guides you with questions and helps you discover solutions' },
+            { value: 'consultant', label: 'Consultant', desc: 'Gives direct answers, recommendations, and action items' },
+          ].map(opt => (
+            <label
+              key={opt.value}
+              className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                interactionStyle === opt.value
+                  ? 'border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+              }`}
+            >
+              <input
+                type="radio"
+                name="interaction-style"
+                value={opt.value}
+                checked={interactionStyle === opt.value}
+                onChange={e => setInteractionStyle(e.target.value)}
+                className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{opt.label}</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{opt.desc}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
       <VoiceSection />
       <ThemeSection />
       <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
