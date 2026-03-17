@@ -44,7 +44,8 @@ def _seconds_until(hour: int, minute: int) -> float:
 
 
 async def _run_sweep() -> None:
-    """Execute one sweep cycle: SQL candidates → optional LLM reflection."""
+    """Execute one sweep cycle: SQL candidates → optional LLM reflection → cross-project."""
+    from .cross_project_sweep import run_cross_project_sweep
     from .sweep import collect_candidates, reflect_on_candidates
 
     logger.info("Sweep started")
@@ -53,15 +54,21 @@ async def _run_sweep() -> None:
         candidates = collect_candidates()
         logger.info("Sweep SQL phase: %d candidates found", len(candidates))
 
-        if not candidates:
-            logger.info("Sweep complete — no candidates, skipping LLM phase")
-            return
+        if candidates:
+            result = await reflect_on_candidates(candidates)
+            logger.info(
+                "Sweep reflection phase: %d findings created (usage: %s)",
+                result.findings_created,
+                result.usage,
+            )
+        else:
+            logger.info("No candidates, skipping LLM phase")
 
-        result = await reflect_on_candidates(candidates)
+        # Cross-project pattern detection
+        cp_result = await run_cross_project_sweep()
         logger.info(
-            "Sweep complete — %d findings created (usage: %s)",
-            result.findings_created,
-            result.usage,
+            "Sweep cross-project phase: %d patterns detected",
+            cp_result["findings_detected"],
         )
     except Exception:
         logger.exception("Sweep failed")
