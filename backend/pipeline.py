@@ -192,6 +192,34 @@ def _fetch_user_thing(conn: sqlite3.Connection, user_id: str) -> dict[str, Any] 
     return dict(row) if row else None
 
 
+def _fetch_user_connections(
+    conn: sqlite3.Connection,
+    user_thing_id: str,
+    user_id: str = "",
+) -> list[dict[str, Any]]:
+    """Fetch ALL 1-hop connections from the User Thing (unfiltered by search).
+
+    Returns relationship rows with resolved Thing titles for context injection.
+    """
+    if not user_thing_id:
+        return []
+
+    rows = conn.execute(
+        "SELECT r.relationship_type,"
+        "  CASE WHEN r.from_thing_id = ? THEN 'outgoing' ELSE 'incoming' END AS direction,"
+        "  CASE WHEN r.from_thing_id = ? THEN t_to.title ELSE t_from.title END AS related_title,"
+        "  CASE WHEN r.from_thing_id = ? THEN t_to.type_hint ELSE t_from.type_hint END AS related_type"
+        " FROM thing_relationships r"
+        " LEFT JOIN things t_from ON r.from_thing_id = t_from.id"
+        " LEFT JOIN things t_to ON r.to_thing_id = t_to.id"
+        " WHERE r.from_thing_id = ? OR r.to_thing_id = ?"
+        " ORDER BY r.created_at DESC"
+        " LIMIT 50",
+        (user_thing_id, user_thing_id, user_thing_id, user_thing_id, user_thing_id),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def _fetch_relevant_things(
     conn: sqlite3.Connection,
     search_queries: list[str],
@@ -382,10 +410,10 @@ class ChatPipeline:
         message: str,
         history: list[dict[str, Any]],
         usage: UsageStats,
-    ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
+    ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
         """Run context agent with iterative refinement and data gathering.
 
-        Returns (context_result, relevant_things, context_relationships).
+        Returns (context_result, relevant_things, context_relationships, user_connections).
         """
         context_result = await run_context_agent(
             message, history, usage_stats=usage, context_window=self.context_window,
@@ -500,6 +528,7 @@ class ChatPipeline:
 
         # Fetch relationships for all relevant things and update last_referenced
         context_relationships: list[dict[str, Any]] = []
+        user_connections: list[dict[str, Any]] = []
         if relevant_things:
             with db() as conn:
                 now = datetime.now(timezone.utc).isoformat()
@@ -517,12 +546,20 @@ class ChatPipeline:
                 ).fetchall()
                 context_relationships = [dict(r) for r in rel_rows]
 
+                # Fetch all User Thing connections (unfiltered) for always-in-context
+                user_thing = _fetch_user_thing(conn, self.user_id)
+                if user_thing:
+                    user_connections = _fetch_user_connections(
+                        conn, user_thing["id"], self.user_id,
+                    )
+
         logger.info(
-            "Final context: %d Things, %d relationships after up to %d iterations",
-            len(relevant_things), len(context_relationships), MAX_CONTEXT_ITERATIONS,
+            "Final context: %d Things, %d relationships, %d user connections after up to %d iterations",
+            len(relevant_things), len(context_relationships), len(user_connections),
+            MAX_CONTEXT_ITERATIONS,
         )
 
-        return context_result, relevant_things, context_relationships
+        return context_result, relevant_things, context_relationships, user_connections
 
     # ------------------------------------------------------------------
     # External data fetching
@@ -635,7 +672,7 @@ class ChatPipeline:
                     ctx_span.set_attribute("reli.context.model", self.user_models.get("context") or "default")
                     ctx_span.set_attribute("reli.context.max_iterations", MAX_CONTEXT_ITERATIONS)
                     try:
-                        context_result, relevant_things, context_relationships = (
+                        context_result, relevant_things, context_relationships, user_connections = (
                             await self._run_context_stage(message, history, usage)
                         )
                         ctx_span.set_attribute("reli.context.things_found", len(relevant_things))
@@ -666,6 +703,7 @@ class ChatPipeline:
                         reasoning_result = await run_reasoning_agent(
                             message, history, relevant_things, web_results, gmail_context,
                             calendar_events, relationships=context_relationships,
+                            user_connections=user_connections,
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id,
@@ -770,7 +808,7 @@ class ChatPipeline:
                     ctx_span.set_attribute("reli.context.model", self.user_models.get("context") or "default")
                     ctx_span.set_attribute("reli.context.max_iterations", MAX_CONTEXT_ITERATIONS)
                     try:
-                        context_result, relevant_things, context_relationships = (
+                        context_result, relevant_things, context_relationships, user_connections = (
                             await self._run_context_stage(message, history, usage)
                         )
                         ctx_span.set_attribute("reli.context.things_found", len(relevant_things))
@@ -805,6 +843,7 @@ class ChatPipeline:
                         reasoning_result = await run_reasoning_agent(
                             message, history, relevant_things, web_results, gmail_context,
                             calendar_events, relationships=context_relationships,
+                            user_connections=user_connections,
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id,

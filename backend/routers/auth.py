@@ -88,14 +88,25 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (user_id, email, google_id, name, picture, now, now),
             )
-            _create_user_thing(conn, user_id, name, email, google_id, now)
+            _create_user_thing(conn, user_id, name, email, google_id, now, picture=picture)
     return user_id
 
 
-def _create_user_thing(conn: sqlite3.Connection, user_id: str, name: str, email: str, google_id: str, now: str) -> None:
+def _create_user_thing(
+    conn: sqlite3.Connection,
+    user_id: str,
+    name: str,
+    email: str,
+    google_id: str,
+    now: str,
+    picture: str | None = None,
+) -> None:
     """Create a Thing representing the user as their anchor node."""
     thing_id = str(uuid.uuid4())
-    data_json = json.dumps({"email": email, "google_id": google_id})
+    data: dict[str, str] = {"email": email, "google_id": google_id}
+    if picture:
+        data["picture"] = picture
+    data_json = json.dumps(data)
     conn.execute(
         """INSERT INTO things
            (id, title, type_hint, parent_id, checkin_date, priority, active, surface,

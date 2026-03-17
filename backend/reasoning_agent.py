@@ -219,11 +219,23 @@ When referencing existing Things for relationships, use their IDs from the
 relevant Things list. For newly created Things, use the ID returned by
 create_thing.
 
+User Thing (Always in Context):
+The user's own Thing is provided in <user_thing> tags at the top of every
+message. It contains the user's profile, preferences, notes, and connections.
+- Use its ID as from_thing_id for relationships involving the user.
+- When the user shares personal preferences ("I prefer bullet points",
+  "I like morning reminders"), update the User Thing's data via update_thing
+  with the preferences in the data_json field.
+- When the user shares personal information ("I work at Acme", "my birthday
+  is March 5"), update the User Thing's data accordingly.
+- The User Thing's preferences and notes should inform your responses (e.g.
+  if the user noted "prefers concise responses", keep summaries short).
+
 Possessive Patterns:
 When the user uses possessive language ("my sister", "my doctor"), treat this
 as an implicit relationship declaration between the user and the entity:
 
-1. The first Thing in the Relevant Things list is always the user's own Thing.
+1. The user's own Thing is in the <user_thing> block above the Relevant Things.
    Use its ID as the from_thing_id for possessive relationships.
 2. Check the Relevant Things list for an existing Thing matching the entity.
    If found, reuse it instead of creating a duplicate.
@@ -755,6 +767,70 @@ def _make_reasoning_tools(
 # ---------------------------------------------------------------------------
 
 
+def _format_user_thing_context(
+    relevant_things: list[dict[str, Any]],
+    user_connections: list[dict[str, Any]] | None = None,
+) -> tuple[str, list[dict[str, Any]]]:
+    """Extract the User Thing from relevant_things and format it as a dedicated context section.
+
+    Returns (user_context_block, remaining_things).
+    """
+    if not relevant_things:
+        return "", relevant_things
+
+    # The first Thing with type_hint='person' and surface=0 is the User Thing
+    user_thing = None
+    remaining: list[dict[str, Any]] = []
+    for t in relevant_things:
+        if user_thing is None and t.get("type_hint") == "person" and not t.get("surface"):
+            user_thing = t
+        else:
+            remaining.append(t)
+
+    if not user_thing:
+        return "", relevant_things
+
+    # Parse the User Thing's data for rich context
+    data = user_thing.get("data")
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, TypeError):
+            data = {}
+    elif data is None:
+        data = {}
+
+    lines = [
+        "<user_thing>",
+        f"ID: {user_thing['id']}",
+        f"Name: {user_thing.get('title', 'Unknown')}",
+    ]
+    # Include user profile fields (preferences, notes, custom data)
+    for key, value in data.items():
+        if key in ("google_id",):
+            continue  # skip internal fields
+        lines.append(f"{key}: {value}")
+
+    if user_connections:
+        conn_lines = []
+        for c in user_connections:
+            direction = c.get("direction", "outgoing")
+            rel_type = c.get("relationship_type", "related-to")
+            title = c.get("related_title", "Unknown")
+            thing_type = c.get("related_type", "")
+            type_str = f" ({thing_type})" if thing_type else ""
+            if direction == "outgoing":
+                conn_lines.append(f"  - {rel_type}: {title}{type_str}")
+            else:
+                conn_lines.append(f"  - {title}{type_str} [{rel_type}]")
+        if conn_lines:
+            lines.append("Connections:")
+            lines.extend(conn_lines)
+
+    lines.append("</user_thing>")
+    return "\n".join(lines), remaining
+
+
 async def run_reasoning_agent(
     message: str,
     history: list[dict[str, Any]],
@@ -763,6 +839,7 @@ async def run_reasoning_agent(
     gmail_context: list[dict[str, Any]] | None = None,
     calendar_events: list[dict[str, Any]] | None = None,
     relationships: list[dict[str, Any]] | None = None,
+    user_connections: list[dict[str, Any]] | None = None,
     usage_stats: UsageStats | None = None,
     context_window: int = 10,
     api_key: str | None = None,
@@ -779,9 +856,17 @@ async def run_reasoning_agent(
       - questions_for_user, priority_question, reasoning_summary, briefing_mode
     """
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d (%A)")
-    things_json = json.dumps(relevant_things, default=str)
-    user_content = (
-        f"Today's date: {today}\n\n"
+
+    # Extract User Thing and format it as a dedicated context section
+    user_thing_block, other_things = _format_user_thing_context(
+        relevant_things, user_connections,
+    )
+
+    things_json = json.dumps(other_things, default=str)
+    user_content = f"Today's date: {today}\n\n"
+    if user_thing_block:
+        user_content += f"{user_thing_block}\n\n"
+    user_content += (
         f"<user_message>\n{message}\n</user_message>\n\n"
         f"Relevant Things from database:\n{things_json}"
     )
