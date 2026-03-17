@@ -8,6 +8,7 @@ in chat.py need only update their import path.
 
 import json
 import logging
+import re
 import uuid
 from typing import Any
 
@@ -29,6 +30,17 @@ from .agents import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Pattern to match markdown code fences wrapping JSON:  ```json\n...\n```
+_MARKDOWN_FENCE_RE = re.compile(
+    r"^\s*```(?:json)?\s*\n(.*?)\n\s*```\s*$", re.DOTALL
+)
+
+
+def _strip_markdown_fences(text: str) -> str:
+    """Remove markdown code fences if the model wrapped its JSON output in them."""
+    m = _MARKDOWN_FENCE_RE.match(text.strip())
+    return m.group(1) if m else text
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +219,7 @@ async def run_context_agent(
         )
 
     try:
-        result: dict[str, Any] = json.loads(raw)
+        result: dict[str, Any] = json.loads(_strip_markdown_fences(raw))
         logger.info(
             "Context agent parsed — search_queries=%r, filter_params=%r",
             result.get("search_queries"),
@@ -314,7 +326,7 @@ async def run_context_refinement(
     )
 
     try:
-        result: dict[str, Any] = json.loads(raw)
+        result: dict[str, Any] = json.loads(_strip_markdown_fences(raw))
         return result
     except json.JSONDecodeError:
         return {"done": True}
