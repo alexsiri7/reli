@@ -38,6 +38,7 @@ from .routers import (  # noqa: E402
     briefing,
     calendar,
     chat,
+    connections,
     feedback,
     focus,
     gmail,
@@ -153,6 +154,10 @@ _TAG_METADATA = [
         "description": "Focus recommendations: prioritized Things with reasoning explanations.",
     },
     {
+        "name": "connections",
+        "description": "Auto-connect: suggested relationships between semantically similar Things.",
+    },
+    {
         "name": "feedback",
         "description": "User feedback submission via GitHub Issues.",
     },
@@ -209,6 +214,7 @@ app.include_router(settings.router, prefix="/api", dependencies=_api_deps)
 app.include_router(sweep.router, prefix="/api", dependencies=_api_deps)
 app.include_router(focus.router, prefix="/api", dependencies=_api_deps)
 app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
+app.include_router(connections.router, prefix="/api", dependencies=_api_deps)
 
 
 @app.get("/healthz", tags=["health"], summary="Health check", description="Returns service health status.")
