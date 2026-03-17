@@ -11,6 +11,13 @@ vi.mock('zustand/react/shallow', () => ({
   useShallow: (fn: unknown) => fn,
 }))
 
+vi.mock('../hooks/useTTS', () => ({
+  ttsSupported: false,
+  useAvailableVoices: () => [],
+  getStoredVoiceURI: () => null,
+  setStoredVoiceURI: vi.fn(),
+}))
+
 vi.mock('../components/RelationshipMiniGraph', () => ({
   RelationshipMiniGraph: ({ relationships }: { relationships: Array<{ id: string; relationship_type: string; related_thing_title: string }> }) => (
     <div data-testid="relationship-mini-graph">
