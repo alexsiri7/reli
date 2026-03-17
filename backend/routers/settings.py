@@ -216,7 +216,7 @@ def get_settings(user_id: str = Depends(require_user)) -> ModelSettings:
 
     return ModelSettings(
         context=user_settings.get("context_model") or global_models.get("context", "google/gemini-2.5-flash-lite"),
-        reasoning=user_settings.get("reasoning_model") or global_models.get("reasoning", "google/gemini-3-flash-preview"),
+        reasoning=user_settings.get("reasoning_model") or global_models.get("reasoning", "google/gemini-2.5-flash"),
         response=user_settings.get("response_model") or global_models.get("response", "google/gemini-2.5-flash-lite"),
         chat_context_window=int(user_settings["chat_context_window"]) if "chat_context_window" in user_settings else global_context_window,
     )
@@ -273,7 +273,7 @@ def update_settings(
     models = cfg["llm"]["models"]
     return ModelSettings(
         context=models.get("context", "google/gemini-2.5-flash-lite"),
-        reasoning=models.get("reasoning", "google/gemini-3-flash-preview"),
+        reasoning=models.get("reasoning", "google/gemini-2.5-flash"),
         response=models.get("response", "google/gemini-2.5-flash-lite"),
         chat_context_window=cfg.get("chat", {}).get("context_window", 3),
     )
