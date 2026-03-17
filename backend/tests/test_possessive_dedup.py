@@ -290,3 +290,165 @@ class TestPossessiveDedup:
         with db() as conn:
             row = conn.execute("SELECT title FROM things WHERE id = ?", (friend_id,)).fetchone()
             assert row["title"] == "Alex"
+
+
+class TestCompoundPossessives:
+    """Tests for compound/chained possessives like 'my sister's husband Bob'."""
+
+    def test_compound_possessive_creates_chain(self, patched_db):
+        """'my sister's husband Bob' creates sister, Bob, and both relationships."""
+        from backend.agents import apply_storage_changes
+
+        with db() as conn:
+            user_id = _insert_thing(conn, "Me")
+            conn.commit()
+
+        with db() as conn:
+            result = apply_storage_changes(
+                {
+                    "create": [
+                        {
+                            "title": "Sister",
+                            "type_hint": "person",
+                            "data": {"notes": "User's sister"},
+                        },
+                        {
+                            "title": "Bob",
+                            "type_hint": "person",
+                            "data": {"notes": "User's sister's husband"},
+                        },
+                    ],
+                    "relationships": [
+                        {
+                            "from_thing_id": user_id,
+                            "to_thing_id": "NEW:0",
+                            "relationship_type": "sister",
+                        },
+                        {
+                            "from_thing_id": "NEW:0",
+                            "to_thing_id": "NEW:1",
+                            "relationship_type": "husband",
+                        },
+                    ],
+                },
+                conn,
+            )
+            conn.commit()
+
+        # Both entities should be created
+        assert len(result["created"]) == 2
+        assert result["created"][0]["title"] == "Sister"
+        assert result["created"][1]["title"] == "Bob"
+        # Both relationships should be created
+        assert len(result["relationships_created"]) == 2
+        rel_types = {r["relationship_type"] for r in result["relationships_created"]}
+        assert rel_types == {"sister", "husband"}
+
+    def test_compound_possessive_reuses_existing_first_link(self, patched_db):
+        """'my sister's husband Bob' reuses existing sister entity."""
+        from backend.agents import apply_storage_changes
+
+        with db() as conn:
+            user_id = _insert_thing(conn, "Me")
+            sister_id = _insert_thing(conn, "Sarah", data={"notes": "User's sister"})
+            _insert_relationship(conn, user_id, sister_id, "sister")
+            conn.commit()
+
+        with db() as conn:
+            result = apply_storage_changes(
+                {
+                    "create": [
+                        {
+                            "title": "Sister",
+                            "type_hint": "person",
+                            "data": {"notes": "User's sister"},
+                        },
+                        {
+                            "title": "Bob",
+                            "type_hint": "person",
+                            "data": {"notes": "User's sister's husband"},
+                        },
+                    ],
+                    "relationships": [
+                        {
+                            "from_thing_id": user_id,
+                            "to_thing_id": "NEW:0",
+                            "relationship_type": "sister",
+                        },
+                        {
+                            "from_thing_id": "NEW:0",
+                            "to_thing_id": "NEW:1",
+                            "relationship_type": "husband",
+                        },
+                    ],
+                },
+                conn,
+            )
+            conn.commit()
+
+        # Sister should be deduped (reused), Bob should be created
+        assert len(result["created"]) == 1
+        assert result["created"][0]["title"] == "Bob"
+        assert len(result["updated"]) == 1
+        assert result["updated"][0]["id"] == sister_id
+
+        # The husband relationship should link sister → Bob
+        husband_rels = [r for r in result["relationships_created"] if r["relationship_type"] == "husband"]
+        assert len(husband_rels) == 1
+        assert husband_rels[0]["from_thing_id"] == sister_id
+
+    def test_compound_possessive_dedup_second_link(self, patched_db):
+        """If sister already has a husband entity, reuse it via possessive dedup."""
+        from backend.agents import apply_storage_changes
+
+        with db() as conn:
+            user_id = _insert_thing(conn, "Me")
+            sister_id = _insert_thing(conn, "Sarah", data={"notes": "User's sister"})
+            husband_id = _insert_thing(conn, "Husband", data={"notes": "Sarah's husband"})
+            _insert_relationship(conn, user_id, sister_id, "sister")
+            _insert_relationship(conn, sister_id, husband_id, "husband")
+            conn.commit()
+
+        with db() as conn:
+            result = apply_storage_changes(
+                {
+                    "create": [
+                        {
+                            "title": "Sister",
+                            "type_hint": "person",
+                            "data": {"notes": "User's sister"},
+                        },
+                        {
+                            "title": "Bob",
+                            "type_hint": "person",
+                            "data": {"notes": "User's sister's husband"},
+                        },
+                    ],
+                    "relationships": [
+                        {
+                            "from_thing_id": user_id,
+                            "to_thing_id": "NEW:0",
+                            "relationship_type": "sister",
+                        },
+                        {
+                            "from_thing_id": "NEW:0",
+                            "to_thing_id": "NEW:1",
+                            "relationship_type": "husband",
+                        },
+                    ],
+                },
+                conn,
+            )
+            conn.commit()
+
+        # Both should be deduped
+        assert len(result["created"]) == 0
+        assert len(result["updated"]) == 2
+
+        # Husband title should be updated to "Bob"
+        with db() as conn:
+            row = conn.execute("SELECT title FROM things WHERE id = ?", (husband_id,)).fetchone()
+            assert row["title"] == "Bob"
+
+        # No new relationships created (both already exist)
+        assert len(result["relationships_created"]) == 0

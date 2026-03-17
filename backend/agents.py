@@ -729,6 +729,28 @@ Examples:
 - "my project Helios" → create Thing(title="Helios", type_hint="project",
   surface=true, data={"notes": "User's project"}) +
   relationship(user→Helios, type="owner_of")
+
+Compound Possessives:
+When the user chains possessives ("my sister's husband Bob", "my boss's wife"),
+create each entity in the chain and link them with relationships:
+- "my sister's husband Bob" →
+  create[0] Thing(title="Sister", type_hint="person", surface=false,
+    data={"notes": "User's sister"})
+  create[1] Thing(title="Bob", type_hint="person", surface=false,
+    data={"notes": "User's sister's husband"})
+  relationship(user→NEW:0, type="sister")
+  relationship(NEW:0→NEW:1, type="husband")
+- "my boss's assistant" →
+  create[0] Thing(title="Boss", type_hint="person", surface=false,
+    data={"notes": "User's boss"})
+  create[1] Thing(title="Assistant", type_hint="person", surface=false,
+    data={"notes": "User's boss's assistant"})
+  relationship(user→NEW:0, type="boss")
+  relationship(NEW:0→NEW:1, type="assistant")
+
+If an entity in the chain already exists (e.g. the user already has a "sister"),
+reuse the existing one (dedup will handle this automatically). Always order
+create entries so that earlier links in the chain come first (lower indices).
 """
 
 
@@ -858,8 +880,20 @@ def apply_storage_changes(
                 for crel in companion_rels:
                     rel_type = crel.get("relationship_type", "").strip()
                     from_id = crel.get("from_thing_id", "").strip()
-                    if not rel_type or not from_id or from_id.startswith("NEW:"):
+                    if not rel_type or not from_id:
                         continue
+                    # Resolve NEW:<index> placeholders for compound possessives
+                    # (e.g. "my sister's husband" — sister is NEW:0, already resolved)
+                    if from_id.startswith("NEW:"):
+                        try:
+                            from_idx = int(from_id.split(":")[1])
+                            resolved = create_index_to_id.get(from_idx)
+                            if resolved:
+                                from_id = resolved
+                            else:
+                                continue  # not yet resolved, skip
+                        except (ValueError, IndexError):
+                            continue
                     # Check if from_id already has a relationship of this type
                     match = conn.execute(
                         "SELECT t.* FROM things t"
