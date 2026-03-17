@@ -10,6 +10,7 @@ from backend.sweep import (
     find_completed_projects,
     find_open_questions,
     find_orphan_things,
+    find_overdue_checkins,
     find_stale_things,
 )
 
@@ -144,6 +145,7 @@ class TestApproachingDates:
 
 class TestStaleThings:
     def test_stale_thing_detected(self, patched_db):
+        """A standalone stale Thing with no children is classified as neglected."""
         today = date.today()
         old_date = (today - timedelta(days=20)).isoformat()
         with db() as conn:
@@ -151,7 +153,7 @@ class TestStaleThings:
         with db() as conn:
             results = find_stale_things(conn, today, stale_days=14)
         assert len(results) == 1
-        assert results[0].finding_type == "stale"
+        assert results[0].finding_type == "neglected"
         assert "20d" in results[0].message
 
     def test_recently_updated_excluded(self, patched_db):
@@ -171,6 +173,122 @@ class TestStaleThings:
         with db() as conn:
             results = find_stale_things(conn, today, stale_days=14)
         assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# Overdue check-ins
+# ---------------------------------------------------------------------------
+
+
+class TestOverdueCheckins:
+    def test_overdue_detected(self, patched_db):
+        today = date.today()
+        past = (today - timedelta(days=3)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Late Task", checkin_date=f"{past}T09:00:00")
+        with db() as conn:
+            results = find_overdue_checkins(conn, today)
+        assert len(results) == 1
+        assert results[0].finding_type == "overdue"
+        assert results[0].extra["days_overdue"] == 3
+        assert "3d" in results[0].message
+
+    def test_today_not_overdue(self, patched_db):
+        today = date.today()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Due Today", checkin_date=f"{today.isoformat()}T09:00:00")
+        with db() as conn:
+            results = find_overdue_checkins(conn, today)
+        assert len(results) == 0
+
+    def test_future_not_overdue(self, patched_db):
+        today = date.today()
+        future = (today + timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Future Task", checkin_date=f"{future}T09:00:00")
+        with db() as conn:
+            results = find_overdue_checkins(conn, today)
+        assert len(results) == 0
+
+    def test_inactive_excluded(self, patched_db):
+        today = date.today()
+        past = (today - timedelta(days=3)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Inactive Late", checkin_date=f"{past}T09:00:00", active=False)
+        with db() as conn:
+            results = find_overdue_checkins(conn, today)
+        assert len(results) == 0
+
+    def test_high_priority_for_long_overdue(self, patched_db):
+        today = date.today()
+        past = (today - timedelta(days=10)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Very Late", checkin_date=f"{past}T09:00:00")
+        with db() as conn:
+            results = find_overdue_checkins(conn, today)
+        assert results[0].priority == 1  # high priority for >= 7 days overdue
+
+
+# ---------------------------------------------------------------------------
+# Neglect detection (stale vs neglected)
+# ---------------------------------------------------------------------------
+
+
+class TestNeglectDetection:
+    def test_stale_with_active_children_is_stale_not_neglected(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "parent", "Parent Project", type_hint="project", updated_at=old)
+            _insert_thing(conn, "child", "Active Child", parent_id="parent", active=True)
+        with db() as conn:
+            results = find_stale_things(conn, today, stale_days=14)
+        parent_results = [r for r in results if r.thing_id == "parent"]
+        assert len(parent_results) == 1
+        assert parent_results[0].finding_type == "stale"
+        assert parent_results[0].extra["active_children"] == 1
+
+    def test_stale_without_children_is_neglected(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Lonely Task", updated_at=old)
+        with db() as conn:
+            results = find_stale_things(conn, today, stale_days=14)
+        assert len(results) == 1
+        assert results[0].finding_type == "neglected"
+        assert "Neglected" in results[0].message
+
+    def test_recently_referenced_is_stale_not_neglected(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=20)).isoformat()
+        recent_ref = (today - timedelta(days=3)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Referenced", updated_at=old)
+            conn.execute(
+                "UPDATE things SET last_referenced = ? WHERE id = ?",
+                (recent_ref, "t1"),
+            )
+        with db() as conn:
+            results = find_stale_things(conn, today, stale_days=14)
+        assert len(results) == 1
+        assert results[0].finding_type == "stale"
+        assert results[0].extra["recently_referenced"] is True
+
+    def test_neglected_has_higher_priority_than_stale(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            # Neglected (no children, no references)
+            _insert_thing(conn, "neglected", "Forgotten", updated_at=old)
+            # Stale (has active children)
+            _insert_thing(conn, "stale_parent", "Parent", updated_at=old)
+            _insert_thing(conn, "child", "Child", parent_id="stale_parent", active=True)
+        with db() as conn:
+            results = find_stale_things(conn, today, stale_days=14)
+        neglected = [r for r in results if r.thing_id == "neglected"]
+        stale = [r for r in results if r.thing_id == "stale_parent"]
+        assert neglected[0].priority < stale[0].priority  # lower number = higher priority
 
 
 # ---------------------------------------------------------------------------
@@ -326,13 +444,16 @@ class TestCollectCandidates:
         today = date.today()
         old = (today - timedelta(days=20)).isoformat()
         tomorrow = (today + timedelta(days=1)).isoformat()
+        past = (today - timedelta(days=3)).isoformat()
 
         with db() as conn:
             # approaching date
             _insert_thing(conn, "t1", "Upcoming", checkin_date=f"{tomorrow}T09:00:00")
-            # stale
+            # overdue checkin
+            _insert_thing(conn, "t4", "Overdue", checkin_date=f"{past}T09:00:00")
+            # neglected (stale without children)
             _insert_thing(conn, "t2", "Stale", updated_at=old)
-            # orphan (t1 and t2 are also orphans — they'll appear there too)
+            # orphan (t1, t2, t4 are also orphans — they'll appear there too)
             # completed project
             _insert_thing(conn, "proj", "Done Project", type_hint="project")
             _insert_thing(conn, "c1", "Child", parent_id="proj", active=False)
@@ -342,7 +463,8 @@ class TestCollectCandidates:
         results = collect_candidates(today=today)
         types = {c.finding_type for c in results}
         assert "approaching_date" in types
-        assert "stale" in types
+        assert "overdue" in types
+        assert "neglected" in types
         assert "orphan" in types
         assert "completed_project" in types
         assert "open_question" in types

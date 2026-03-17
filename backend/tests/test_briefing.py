@@ -131,3 +131,83 @@ class TestSnoozeFinding:
         resp = client.get("/api/briefing")
         finding_ids = [f["id"] for f in resp.json()["findings"]]
         assert finding["id"] in finding_ids
+
+
+class TestStalenessReport:
+    def test_empty_report(self, client):
+        resp = client.get("/api/briefing/staleness")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["overdue"] == []
+        assert data["neglected"] == []
+        assert data["stale"] == []
+        assert data["total"] == 0
+        assert data["stale_days"] == 14  # default
+
+    def test_overdue_findings_appear(self, client):
+        finding = _create_finding_of_type(client, "overdue", "Overdue by 3d: Test")
+        resp = client.get("/api/briefing/staleness")
+        data = resp.json()
+        assert len(data["overdue"]) == 1
+        assert data["overdue"][0]["id"] == finding["id"]
+
+    def test_neglected_findings_appear(self, client):
+        finding = _create_finding_of_type(client, "neglected", "Neglected for 20d: Test")
+        resp = client.get("/api/briefing/staleness")
+        data = resp.json()
+        assert len(data["neglected"]) == 1
+        assert data["neglected"][0]["id"] == finding["id"]
+
+    def test_stale_findings_appear(self, client):
+        finding = _create_finding_of_type(client, "stale", "Untouched for 20d: Test")
+        resp = client.get("/api/briefing/staleness")
+        data = resp.json()
+        assert len(data["stale"]) == 1
+        assert data["stale"][0]["id"] == finding["id"]
+
+    def test_dismissed_findings_excluded(self, client):
+        finding = _create_finding_of_type(client, "overdue", "Dismissed overdue")
+        client.patch(f"/api/briefing/findings/{finding['id']}/dismiss")
+        resp = client.get("/api/briefing/staleness")
+        assert resp.json()["total"] == 0
+
+
+class TestBatchNotification:
+    def test_empty_notification(self, client):
+        resp = client.get("/api/briefing/notifications")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["overdue_count"] == 0
+        assert data["neglected_count"] == 0
+        assert data["stale_count"] == 0
+        assert "All clear" in data["summary"]
+
+    def test_notification_counts(self, client):
+        _create_finding_of_type(client, "overdue", "Overdue item")
+        _create_finding_of_type(client, "neglected", "Neglected item")
+        _create_finding_of_type(client, "stale", "Stale item")
+        _create_finding_of_type(client, "approaching_date", "Coming up")
+
+        resp = client.get("/api/briefing/notifications")
+        data = resp.json()
+        assert data["overdue_count"] == 1
+        assert data["neglected_count"] == 1
+        assert data["stale_count"] == 1
+        assert data["finding_count"] == 1  # the approaching_date one
+        assert len(data["items"]) == 4
+        assert "overdue" in data["summary"]
+        assert "neglected" in data["summary"]
+
+    def test_dismissed_excluded(self, client):
+        finding = _create_finding_of_type(client, "overdue", "Dismissed")
+        client.patch(f"/api/briefing/findings/{finding['id']}/dismiss")
+        resp = client.get("/api/briefing/notifications")
+        assert resp.json()["overdue_count"] == 0
+
+
+def _create_finding_of_type(client, finding_type: str, message: str) -> dict:
+    """Helper to create a finding with a specific type."""
+    payload = {"finding_type": finding_type, "message": message, "priority": 2}
+    resp = client.post("/api/briefing/findings", json=payload)
+    assert resp.status_code == 201, resp.text
+    return resp.json()

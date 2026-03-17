@@ -281,6 +281,29 @@ class BriefingResponse(BaseModel):
     total: int
 
 
+class StalenessReport(BaseModel):
+    """Dedicated staleness & neglect report for daily planning."""
+
+    date: str
+    stale_days: int
+    overdue: list[SweepFinding]
+    neglected: list[SweepFinding]
+    stale: list[SweepFinding]
+    total: int
+
+
+class BatchNotification(BaseModel):
+    """Summary of items needing attention, suitable for email or push."""
+
+    date: str
+    overdue_count: int
+    neglected_count: int
+    stale_count: int
+    finding_count: int
+    summary: str
+    items: list[SweepFinding]
+
+
 # ── Proactive Surfaces ───────────────────────────────────────────────────────
 
 

@@ -9,7 +9,16 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import require_user, user_filter
 from ..database import db
-from ..models import BriefingResponse, SweepFinding, SweepFindingCreate, SweepFindingSnooze, Thing
+from ..models import (
+    BatchNotification,
+    BriefingResponse,
+    StalenessReport,
+    SweepFinding,
+    SweepFindingCreate,
+    SweepFindingSnooze,
+    Thing,
+)
+from .settings import get_user_stale_days
 from .things import _row_to_thing
 
 router = APIRouter(prefix="/briefing", tags=["briefing"])
@@ -163,3 +172,164 @@ def snooze_finding(finding_id: str, body: SweepFindingSnooze, user_id: str = Dep
         row = conn.execute("SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
 
     return _row_to_finding(row)
+
+
+@router.get("/staleness", response_model=StalenessReport, summary="Staleness & neglect report")
+def get_staleness_report(as_of: date | None = None, user_id: str = Depends(require_user)) -> StalenessReport:
+    """Return a dedicated staleness report for daily planning/review.
+
+    Groups findings into overdue (past checkin_date), neglected (truly forgotten),
+    and stale (inactive but not neglected). Uses the user's configured stale_days.
+    """
+    target = as_of or date.today()
+    now = datetime.utcnow().isoformat()
+    stale_days = get_user_stale_days(user_id)
+
+    sf_uf_sql, sf_uf_params = user_filter(user_id, "sf")
+
+    with db() as conn:
+        finding_rows = conn.execute(
+            f"""SELECT sf.*, t.id AS t_id, t.title AS t_title, t.type_hint AS t_type_hint,
+                      t.parent_id AS t_parent_id, t.checkin_date AS t_checkin_date,
+                      t.priority AS t_priority, t.active AS t_active, t.surface AS t_surface,
+                      t.data AS t_data, t.created_at AS t_created_at,
+                      t.updated_at AS t_updated_at, t.last_referenced AS t_last_referenced
+               FROM sweep_findings sf
+               LEFT JOIN things t ON sf.thing_id = t.id
+               WHERE sf.dismissed = 0
+                 AND sf.finding_type IN ('overdue', 'neglected', 'stale')
+                 AND (sf.expires_at IS NULL OR sf.expires_at > ?)
+                 AND (sf.snoozed_until IS NULL OR sf.snoozed_until <= ?){sf_uf_sql}
+               ORDER BY sf.priority ASC, sf.created_at DESC""",
+            [now, now, *sf_uf_params],
+        ).fetchall()
+
+    overdue: list[SweepFinding] = []
+    neglected: list[SweepFinding] = []
+    stale: list[SweepFinding] = []
+
+    for r in finding_rows:
+        linked_thing = None
+        if r["t_id"]:
+            linked_thing = Thing(
+                id=r["t_id"],
+                title=r["t_title"],
+                type_hint=r["t_type_hint"],
+                parent_id=r["t_parent_id"],
+                checkin_date=r["t_checkin_date"],
+                priority=r["t_priority"],
+                active=bool(r["t_active"]),
+                surface=bool(r["t_surface"]),
+                data=json.loads(r["t_data"]) if isinstance(r["t_data"], str) and r["t_data"] else r["t_data"],
+                created_at=r["t_created_at"],
+                updated_at=r["t_updated_at"],
+                last_referenced=r["t_last_referenced"],
+            )
+        finding = _row_to_finding(r, linked_thing)
+        if finding.finding_type == "overdue":
+            overdue.append(finding)
+        elif finding.finding_type == "neglected":
+            neglected.append(finding)
+        else:
+            stale.append(finding)
+
+    total = len(overdue) + len(neglected) + len(stale)
+    return StalenessReport(
+        date=target.isoformat(),
+        stale_days=stale_days,
+        overdue=overdue,
+        neglected=neglected,
+        stale=stale,
+        total=total,
+    )
+
+
+@router.get("/notifications", response_model=BatchNotification, summary="Batch notification summary")
+def get_batch_notification(as_of: date | None = None, user_id: str = Depends(require_user)) -> BatchNotification:
+    """Generate a batch notification summary of all items needing attention.
+
+    Suitable for email digests, push notifications, or any batch alerting system.
+    Returns counts and a human-readable summary of overdue, neglected, stale, and
+    other active findings.
+    """
+    target = as_of or date.today()
+    now = datetime.utcnow().isoformat()
+
+    sf_uf_sql, sf_uf_params = user_filter(user_id, "sf")
+
+    with db() as conn:
+        finding_rows = conn.execute(
+            f"""SELECT sf.*, t.id AS t_id, t.title AS t_title, t.type_hint AS t_type_hint,
+                      t.parent_id AS t_parent_id, t.checkin_date AS t_checkin_date,
+                      t.priority AS t_priority, t.active AS t_active, t.surface AS t_surface,
+                      t.data AS t_data, t.created_at AS t_created_at,
+                      t.updated_at AS t_updated_at, t.last_referenced AS t_last_referenced
+               FROM sweep_findings sf
+               LEFT JOIN things t ON sf.thing_id = t.id
+               WHERE sf.dismissed = 0
+                 AND (sf.expires_at IS NULL OR sf.expires_at > ?)
+                 AND (sf.snoozed_until IS NULL OR sf.snoozed_until <= ?){sf_uf_sql}
+               ORDER BY sf.priority ASC, sf.created_at DESC""",
+            [now, now, *sf_uf_params],
+        ).fetchall()
+
+    items: list[SweepFinding] = []
+    overdue_count = 0
+    neglected_count = 0
+    stale_count = 0
+    other_count = 0
+
+    for r in finding_rows:
+        linked_thing = None
+        if r["t_id"]:
+            linked_thing = Thing(
+                id=r["t_id"],
+                title=r["t_title"],
+                type_hint=r["t_type_hint"],
+                parent_id=r["t_parent_id"],
+                checkin_date=r["t_checkin_date"],
+                priority=r["t_priority"],
+                active=bool(r["t_active"]),
+                surface=bool(r["t_surface"]),
+                data=json.loads(r["t_data"]) if isinstance(r["t_data"], str) and r["t_data"] else r["t_data"],
+                created_at=r["t_created_at"],
+                updated_at=r["t_updated_at"],
+                last_referenced=r["t_last_referenced"],
+            )
+        finding = _row_to_finding(r, linked_thing)
+        items.append(finding)
+
+        if finding.finding_type == "overdue":
+            overdue_count += 1
+        elif finding.finding_type == "neglected":
+            neglected_count += 1
+        elif finding.finding_type == "stale":
+            stale_count += 1
+        else:
+            other_count += 1
+
+    # Build human-readable summary
+    parts: list[str] = []
+    if overdue_count:
+        parts.append(f"{overdue_count} overdue")
+    if neglected_count:
+        parts.append(f"{neglected_count} neglected")
+    if stale_count:
+        parts.append(f"{stale_count} stale")
+    if other_count:
+        parts.append(f"{other_count} other")
+
+    if parts:
+        summary = f"You have {', '.join(parts)} item{'s' if len(items) != 1 else ''} needing attention."
+    else:
+        summary = "All clear — nothing needs your attention right now."
+
+    return BatchNotification(
+        date=target.isoformat(),
+        overdue_count=overdue_count,
+        neglected_count=neglected_count,
+        stale_count=stale_count,
+        finding_count=other_count,
+        summary=summary,
+        items=items,
+    )

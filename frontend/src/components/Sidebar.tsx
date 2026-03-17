@@ -10,7 +10,9 @@ import { MergeSuggestions } from './MergeSuggestions'
 
 const FINDING_TYPE_ICONS: Record<string, string> = {
   approaching_date: '\u23F0',
+  overdue: '\u{1F6A8}',
   stale: '\u{1F4A4}',
+  neglected: '\u26A0\uFE0F',
   orphan: '\u{1F50D}',
   inconsistency: '\u26A0\uFE0F',
   open_question: '\u2753',

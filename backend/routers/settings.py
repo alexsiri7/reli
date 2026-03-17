@@ -28,6 +28,7 @@ _VALID_KEYS = {
     "response_model",
     "chat_context_window",
     "theme",
+    "stale_days",
 }
 
 
@@ -59,6 +60,7 @@ class UserSettings(BaseModel):
     response_model: str = ""
     chat_context_window: int | None = None
     theme: str = ""
+    stale_days: int | None = None
 
 
 class UserSettingsUpdate(BaseModel):
@@ -72,6 +74,7 @@ class UserSettingsUpdate(BaseModel):
     response_model: str | None = None
     chat_context_window: int | None = None
     theme: str | None = None
+    stale_days: int | None = None
 
 
 class RequestyModel(BaseModel):
@@ -157,6 +160,17 @@ def get_user_chat_context_window(user_id: str) -> int:
         except (ValueError, TypeError):
             pass
     return get_chat_context_window()
+
+
+def get_user_stale_days(user_id: str) -> int:
+    """Return per-user stale_days threshold, defaulting to 14."""
+    val = get_user_setting(user_id, "stale_days")
+    if val is not None:
+        try:
+            return max(1, min(int(val), 365))
+        except (ValueError, TypeError):
+            pass
+    return 14
 
 
 def get_user_api_key(user_id: str) -> str:
@@ -301,6 +315,7 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         response_model=user_settings.get("response_model", ""),
         chat_context_window=int(user_settings["chat_context_window"]) if "chat_context_window" in user_settings else None,
         theme=user_settings.get("theme", ""),
+        stale_days=int(user_settings["stale_days"]) if "stale_days" in user_settings else None,
     )
 
 
@@ -319,6 +334,8 @@ def update_user_settings(
             if val is not None:
                 if field_name == "chat_context_window":
                     val = str(max(1, min(int(val), 50)))
+                elif field_name == "stale_days":
+                    val = str(max(1, min(int(val), 365)))
                 _set_user_setting(conn, user_id, field_name, str(val))
 
     return get_user_settings_endpoint(user_id)

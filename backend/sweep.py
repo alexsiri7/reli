@@ -6,7 +6,9 @@ reflection, producing sweep_findings with priority and expiry.
 
 Finding types:
   - approaching_date: Thing with a date (checkin, birthday, deadline, etc.) within 7 days
-  - stale: Active Thing not updated in 14+ days
+  - overdue: Thing with a checkin_date in the past
+  - stale: Active Thing not updated in configurable days, but has children or recent references
+  - neglected: Active Thing not updated and truly forgotten (no children activity, no references)
   - orphan: Active Thing with no relationships (no parent, no children, no graph edges)
   - completed_project: Project where all children are inactive but project is still active
   - open_question: Active Thing with unanswered open_questions
@@ -202,19 +204,59 @@ def find_approaching_dates(
     return candidates
 
 
+def find_overdue_checkins(
+    conn: sqlite3.Connection,
+    today: date | None = None,
+) -> list[SweepCandidate]:
+    """Find active Things with a checkin_date in the past (overdue)."""
+    today = today or date.today()
+    rows = conn.execute(
+        """SELECT id, title, type_hint, checkin_date FROM things
+           WHERE active = 1
+             AND checkin_date IS NOT NULL
+             AND DATE(checkin_date) < ?
+           ORDER BY checkin_date ASC""",
+        (today.isoformat(),),
+    ).fetchall()
+
+    candidates: list[SweepCandidate] = []
+    for row in rows:
+        parsed = _parse_date_value(row["checkin_date"])
+        days_overdue = (today - parsed).days if parsed else 1
+        candidates.append(
+            SweepCandidate(
+                thing_id=row["id"],
+                thing_title=row["title"],
+                finding_type="overdue",
+                message=f"Overdue by {days_overdue}d: {row['title']}",
+                priority=1 if days_overdue >= 7 else 2,
+                extra={"days_overdue": days_overdue, "type_hint": row["type_hint"] or "Thing"},
+            )
+        )
+    return candidates
+
+
 def find_stale_things(
     conn: sqlite3.Connection,
     today: date | None = None,
     stale_days: int = 14,
 ) -> list[SweepCandidate]:
-    """Find active Things not updated in *stale_days* or more."""
+    """Find active Things not updated in *stale_days* or more.
+
+    Distinguishes between **neglected** items (truly forgotten — no recent
+    child activity, not referenced recently) and merely **stale** items
+    (inactive but children may still be progressing).
+    """
     today = today or date.today()
     cutoff = (today - timedelta(days=stale_days)).isoformat()
     rows = conn.execute(
-        """SELECT id, title, type_hint, updated_at FROM things
-           WHERE active = 1
-             AND updated_at < ?
-           ORDER BY updated_at ASC""",
+        """SELECT t.id, t.title, t.type_hint, t.updated_at, t.last_referenced,
+                  (SELECT COUNT(*) FROM things c
+                   WHERE c.parent_id = t.id AND c.active = 1) AS active_children
+           FROM things t
+           WHERE t.active = 1
+             AND t.updated_at < ?
+           ORDER BY t.updated_at ASC""",
         (cutoff,),
     ).fetchall()
 
@@ -223,14 +265,36 @@ def find_stale_things(
         parsed_dt = _parse_date_value(row["updated_at"])
         days_stale = (today - parsed_dt).days if parsed_dt else stale_days
         type_label = row["type_hint"] or "Thing"
+
+        # Determine if neglected: no active children AND not referenced recently
+        active_children = row["active_children"] or 0
+        last_ref = _parse_date_value(row["last_referenced"]) if row["last_referenced"] else None
+        recently_referenced = last_ref and (today - last_ref).days < stale_days
+
+        if active_children > 0 or recently_referenced:
+            # Has active children or was referenced — stale but not neglected
+            finding_type = "stale"
+            message = f"Untouched for {days_stale}d: {row['title']}"
+            priority = 3
+        else:
+            # No children activity, not referenced — truly neglected
+            finding_type = "neglected"
+            message = f"Neglected for {days_stale}d: {row['title']}"
+            priority = 2
+
         candidates.append(
             SweepCandidate(
                 thing_id=row["id"],
                 thing_title=row["title"],
-                finding_type="stale",
-                message=f"Untouched for {days_stale}d: {row['title']}",
-                priority=3,
-                extra={"days_stale": days_stale, "type_hint": type_label},
+                finding_type=finding_type,
+                message=message,
+                priority=priority,
+                extra={
+                    "days_stale": days_stale,
+                    "type_hint": type_label,
+                    "active_children": active_children,
+                    "recently_referenced": bool(recently_referenced),
+                },
             )
         )
     return candidates
@@ -354,6 +418,7 @@ def collect_candidates(
     with db() as conn:
         candidates = (
             find_approaching_dates(conn, today, window_days)
+            + find_overdue_checkins(conn, today)
             + find_stale_things(conn, today, stale_days)
             + find_orphan_things(conn)
             + find_completed_projects(conn)
