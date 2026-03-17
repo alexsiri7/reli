@@ -1,5 +1,6 @@
 """Daily briefing endpoint — combines checkin-due Things with sweep findings."""
 
+import json
 import uuid
 from datetime import date, datetime
 from typing import Any
@@ -81,7 +82,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                 priority=r["t_priority"],
                 active=bool(r["t_active"]),
                 surface=bool(r["t_surface"]),
-                data=r["t_data"],
+                data=json.loads(r["t_data"]) if isinstance(r["t_data"], str) and r["t_data"] else r["t_data"],
                 created_at=r["t_created_at"],
                 updated_at=r["t_updated_at"],
                 last_referenced=r["t_last_referenced"],
