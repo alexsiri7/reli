@@ -3,7 +3,6 @@
 import json
 import logging
 import sqlite3
-from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -12,7 +11,7 @@ import yaml
 from openai import AsyncOpenAI
 
 from .config import settings
-from .llm import acomplete, acomplete_stream
+from .llm import acomplete
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +76,6 @@ REQUESTY_RESPONSE_MODEL = settings.REQUESTY_RESPONSE_MODEL or _models.get("respo
 
 OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL or _config["ollama"]["base_url"]
 OLLAMA_MODEL = settings.OLLAMA_MODEL or _config["ollama"].get("model", "")
-
-
-def _client(api_key: str | None = None) -> AsyncOpenAI:
-    """Legacy OpenAI client — still used for Ollama fallback."""
-    return AsyncOpenAI(api_key=api_key or REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
 
 
 def _ollama_client() -> AsyncOpenAI:
@@ -253,32 +247,6 @@ async def _chat(
     return response.choices[0].message.content or ""
 
 
-async def _chat_stream(
-    messages: list[dict[str, Any]],
-    model: str | None = None,
-    usage_stats: UsageStats | None = None,
-    api_key: str | None = None,
-    **kwargs: Any,
-) -> AsyncIterator[str]:
-    """Stream LLM response tokens via LiteLLM as an async iterator of text chunks."""
-    used_model = model or REQUESTY_MODEL
-    async for chunk in acomplete_stream(messages, used_model, api_key=api_key, **kwargs):
-        if chunk.choices and chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
-        # The final chunk with usage info has empty choices
-        if usage_stats is not None and chunk.usage:
-            cost = 0.0
-            if hasattr(chunk, "x_request_cost"):
-                cost = float(getattr(chunk, "x_request_cost", 0))
-            usage_stats.accumulate(
-                prompt=chunk.usage.prompt_tokens or 0,
-                completion=chunk.usage.completion_tokens or 0,
-                total=chunk.usage.total_tokens or 0,
-                cost=cost,
-                model=used_model,
-            )
-
-
 # ---------------------------------------------------------------------------
 # Stage 1: Context Agent
 # ---------------------------------------------------------------------------
@@ -354,54 +322,6 @@ async def _chat_ollama(
     return response.choices[0].message.content or ""
 
 
-async def run_context_agent(
-    message: str,
-    history: list[dict[str, Any]],
-    usage_stats: UsageStats | None = None,
-    context_window: int = 10,
-    api_key: str | None = None,
-    model: str | None = None,
-) -> dict[str, Any]:
-    """Stage 1: decide what to search for.
-
-    Uses local Ollama when OLLAMA_MODEL is configured, with graceful fallback
-    to Requesty if Ollama is unavailable.
-    """
-    messages = [{"role": "system", "content": CONTEXT_AGENT_SYSTEM}]
-    for h in history[-context_window:]:
-        messages.append({"role": h["role"], "content": h["content"]})
-    messages.append({"role": "user", "content": message})
-
-    raw = None
-
-    # Try Ollama first if configured
-    if OLLAMA_MODEL:
-        try:
-            raw = await _chat_ollama(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
-            logger.info("Context agent (Ollama/%s) raw response: %s", OLLAMA_MODEL, raw[:500] if raw else raw)
-        except Exception as exc:
-            logger.warning("Ollama context agent failed, falling back to Requesty: %s", exc)
-
-    # Fall back to Requesty
-    if raw is None:
-        raw = await _chat(messages, model=model, response_format={"type": "json_object"}, usage_stats=usage_stats, api_key=api_key)
-        logger.info("Context agent (Requesty/%s) raw response: %s", model or REQUESTY_MODEL, raw[:500] if raw else raw)
-
-    try:
-        result: dict[str, Any] = json.loads(raw)
-        logger.info(
-            "Context agent parsed — search_queries=%r, filter_params=%r",
-            result.get("search_queries"),
-            result.get("filter_params"),
-        )
-        return result
-    except json.JSONDecodeError:
-        logger.warning(
-            "Context agent returned invalid JSON, falling back to message as query: %s", raw[:200] if raw else raw
-        )
-        return {"search_queries": [message], "filter_params": {"active_only": True, "type_hint": None}}
-
-
 # ---------------------------------------------------------------------------
 # Stage 1b: Context Agent Refinement (iterative loop)
 # ---------------------------------------------------------------------------
@@ -439,74 +359,6 @@ Rules:
   until you have the final answer context.
 - Do NOT repeat searches that already returned results.
 """
-
-
-async def run_context_refinement(
-    message: str,
-    history: list[dict[str, Any]],
-    found_things: list[dict[str, Any]],
-    previous_queries: list[str],
-    relationships: list[dict[str, Any]] | None = None,
-    usage_stats: UsageStats | None = None,
-    context_window: int = 10,
-    api_key: str | None = None,
-    model: str | None = None,
-) -> dict[str, Any]:
-    """Ask the context agent if it needs more searches given what was found."""
-    things_summary = json.dumps(
-        [
-            {
-                "id": t.get("id"),
-                "title": t.get("title"),
-                "type_hint": t.get("type_hint"),
-                "data": t.get("data"),
-                "parent_id": t.get("parent_id"),
-                "active": t.get("active"),
-            }
-            for t in found_things
-        ],
-        default=str,
-    )
-
-    rels_section = ""
-    if relationships:
-        rels_section = f"\n\nRelationships between Things:\n{json.dumps(relationships, default=str)}\n"
-
-    refinement_prompt = (
-        f"User's message: {message}\n\n"
-        f"Previous search queries: {json.dumps(previous_queries)}\n\n"
-        f"Things found so far ({len(found_things)} results):\n{things_summary}"
-        f"{rels_section}\n\n"
-        f"Do you have enough context to understand the user's request, "
-        f"or do you need to search for more?"
-    )
-
-    messages = [{"role": "system", "content": CONTEXT_REFINEMENT_SYSTEM}]
-    for h in history[-context_window:]:
-        messages.append({"role": h["role"], "content": h["content"]})
-    messages.append({"role": "user", "content": refinement_prompt})
-
-    raw = None
-
-    if OLLAMA_MODEL:
-        try:
-            raw = await _chat_ollama(messages, response_format={"type": "json_object"}, usage_stats=usage_stats)
-        except Exception:
-            pass
-
-    if raw is None:
-        raw = await _chat(
-            messages, model=model, response_format={"type": "json_object"},
-            usage_stats=usage_stats, api_key=api_key,
-        )
-
-    logger.info("Context refinement raw response: %s", raw[:500] if raw else raw)
-
-    try:
-        result: dict[str, Any] = json.loads(raw)
-        return result
-    except json.JSONDecodeError:
-        return {"done": True}
 
 
 # ---------------------------------------------------------------------------
@@ -737,71 +589,6 @@ If an entity in the chain already exists (e.g. the user already has a "sister"),
 reuse the existing one (dedup will handle this automatically). Always order
 create entries so that earlier links in the chain come first (lower indices).
 """
-
-
-async def run_reasoning_agent(
-    message: str,
-    history: list[dict[str, Any]],
-    relevant_things: list[dict[str, Any]],
-    web_results: list[dict[str, Any]] | None = None,
-    gmail_context: list[dict[str, Any]] | None = None,
-    calendar_events: list[dict[str, Any]] | None = None,
-    relationships: list[dict[str, Any]] | None = None,
-    usage_stats: UsageStats | None = None,
-    context_window: int = 10,
-    api_key: str | None = None,
-    model: str | None = None,
-) -> dict[str, Any]:
-    """Stage 2: decide what changes to make."""
-    from datetime import datetime, timezone
-
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d (%A)")
-    things_json = json.dumps(relevant_things, default=str)
-    user_content = (
-        f"Today's date: {today}\n\n"
-        f"<user_message>\n{message}\n</user_message>\n\n"
-        f"Relevant Things from database:\n{things_json}"
-    )
-    if relationships:
-        user_content += f"\n\nRelationships between Things:\n{json.dumps(relationships, default=str)}"
-    if web_results:
-        user_content += f"\n\nWeb search results:\n{json.dumps(web_results, default=str)}"
-    if gmail_context:
-        user_content += f"\n\nRecent Gmail messages matching user's query:\n{json.dumps(gmail_context, default=str)}"
-    if calendar_events:
-        cal_json = json.dumps(calendar_events, default=str)
-        user_content += f"\n\nUpcoming Google Calendar events:\n{cal_json}"
-    messages = [{"role": "system", "content": REASONING_AGENT_SYSTEM}]
-    for h in history[-context_window:]:
-        messages.append({"role": h["role"], "content": h["content"]})
-    messages.append({"role": "user", "content": user_content})
-
-    raw = await _chat(
-        messages,
-        model=model or REQUESTY_REASONING_MODEL,
-        response_format={"type": "json_object"},
-        usage_stats=usage_stats,
-        api_key=api_key,
-    )
-    try:
-        result: dict[str, Any] = json.loads(raw)
-    except json.JSONDecodeError:
-        result = {}
-
-    # Ensure required keys are present
-    result.setdefault("storage_changes", {"create": [], "update": [], "delete": []})
-    result["storage_changes"].setdefault("create", [])
-    result["storage_changes"].setdefault("update", [])
-    result["storage_changes"].setdefault("delete", [])
-    result["storage_changes"].setdefault("merge", [])
-    result.setdefault("questions_for_user", [])
-    result.setdefault("priority_question", "")
-    result.setdefault("reasoning_summary", "")
-    result.setdefault("briefing_mode", False)
-    # If priority_question not set by model but questions exist, use the first one
-    if not result["priority_question"] and result["questions_for_user"]:
-        result["priority_question"] = result["questions_for_user"][0]
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1274,28 +1061,6 @@ Rules:
 """
 
 
-async def run_response_agent(
-    message: str,
-    reasoning_summary: str,
-    questions_for_user: list[str],
-    applied_changes: dict[str, Any],
-    web_results: list[dict[str, Any]] | None = None,
-    usage_stats: UsageStats | None = None,
-    open_questions_by_thing: dict[str, list[str]] | None = None,
-    api_key: str | None = None,
-    model: str | None = None,
-    priority_question: str = "",
-    briefing_mode: bool = False,
-) -> str:
-    """Stage 4: generate friendly user-facing response."""
-    messages = _build_response_messages(
-        message, reasoning_summary, questions_for_user,
-        applied_changes, web_results, open_questions_by_thing,
-        priority_question=priority_question, briefing_mode=briefing_mode,
-    )
-    return await _chat(messages, model=model or REQUESTY_RESPONSE_MODEL, usage_stats=usage_stats, api_key=api_key)
-
-
 def _build_response_messages(
     message: str,
     reasoning_summary: str,
@@ -1330,27 +1095,3 @@ def _build_response_messages(
     ]
 
 
-async def run_response_agent_stream(
-    message: str,
-    reasoning_summary: str,
-    questions_for_user: list[str],
-    applied_changes: dict[str, Any],
-    web_results: list[dict[str, Any]] | None = None,
-    usage_stats: UsageStats | None = None,
-    open_questions_by_thing: dict[str, list[str]] | None = None,
-    api_key: str | None = None,
-    model: str | None = None,
-    priority_question: str = "",
-    briefing_mode: bool = False,
-) -> AsyncIterator[str]:
-    """Stage 4 (streaming): yield response tokens as they arrive."""
-    messages = _build_response_messages(
-        message, reasoning_summary, questions_for_user,
-        applied_changes, web_results, open_questions_by_thing,
-        priority_question=priority_question, briefing_mode=briefing_mode,
-    )
-    async for token in _chat_stream(
-        messages, model=model or REQUESTY_RESPONSE_MODEL,
-        usage_stats=usage_stats, api_key=api_key,
-    ):
-        yield token
