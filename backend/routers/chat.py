@@ -12,11 +12,8 @@ from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
 
-from ..agents import (
-    UsageStats,
-    run_response_agent,
-    run_response_agent_stream,
-)
+from ..agents import UsageStats
+from ..response_agent import run_response_agent, run_response_agent_stream
 from ..context_agent import run_context_agent, run_context_refinement
 from ..reasoning_agent import run_reasoning_agent
 from ..auth import require_user, user_filter
