@@ -234,6 +234,21 @@ export const UserProfileSchema = z.object({
   relationships: z.array(UserProfileRelationshipSchema),
 })
 
+// --- Focus Recommendations ---
+
+export const FocusRecommendationSchema = z.object({
+  thing: ThingSchema,
+  score: z.number(),
+  reasons: z.array(z.string()),
+  is_blocked: z.boolean(),
+})
+
+export const FocusResponseSchema = z.object({
+  recommendations: z.array(FocusRecommendationSchema),
+  total: z.number(),
+  calendar_active: z.boolean(),
+})
+
 // --- Merge Suggestions ---
 
 export const MergeSuggestionThingSchema = z.object({

@@ -16,6 +16,7 @@ import {
   AuthUserSchema,
   BriefingResponseSchema,
   ProactiveSurfaceSchema,
+  FocusResponseSchema,
   ChatMessageSchema,
   ChatResponseSchema,
   SessionStatsSchema,
@@ -93,6 +94,13 @@ export interface ProactiveSurface {
   reason: string
   date_key: string
   days_away: number
+}
+
+export interface FocusRecommendation {
+  thing: Thing
+  score: number
+  reasons: string[]
+  is_blocked: boolean
 }
 
 export interface SweepFinding {
@@ -252,6 +260,10 @@ interface ReliState {
   calendarEvents: CalendarEvent[]
 
   proactiveSurfaces: ProactiveSurface[]
+  focusRecommendations: FocusRecommendation[]
+  focusLoading: boolean
+  focusCalendarActive: boolean
+  fetchFocusRecommendations: () => Promise<void>
   searchResults: Thing[]
   searchLoading: boolean
   searchThings: (query: string) => Promise<void>
@@ -430,6 +442,9 @@ export const useStore = create<ReliState>((set, get) => ({
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [],
   proactiveSurfaces: [],
+  focusRecommendations: [],
+  focusLoading: false,
+  focusCalendarActive: false,
   searchResults: [],
   searchLoading: false,
 
@@ -570,6 +585,23 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ proactiveSurfaces: data })
     } catch {
       // best-effort
+    }
+  },
+
+  fetchFocusRecommendations: async () => {
+    set({ focusLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/focus?limit=10`)
+      if (!res.ok) return
+      const data = validateResponse(FocusResponseSchema, await res.json(), '/focus')
+      set({
+        focusRecommendations: data.recommendations ?? [],
+        focusCalendarActive: data.calendar_active ?? false,
+      })
+    } catch {
+      // best-effort
+    } finally {
+      set({ focusLoading: false })
     }
   },
 
@@ -798,6 +830,7 @@ export const useStore = create<ReliState>((set, get) => ({
       get().fetchThings()
       get().fetchBriefing()
       get().fetchProactiveSurfaces()
+      get().fetchFocusRecommendations()
     } catch (e) {
       set(state => ({
         messages: state.messages.map(m =>
