@@ -111,7 +111,7 @@ llm:
   base_url: https://router.requesty.ai/v1
   models:
     context: google/gemini-2.5-flash-lite    # Fast query generation
-    reasoning: google/gemini-3-flash-preview  # Structured decision-making
+    reasoning: google/gemini-2.5-flash  # Structured decision-making
     response: google/gemini-2.5-flash-lite    # Natural language replies
 
 embedding:

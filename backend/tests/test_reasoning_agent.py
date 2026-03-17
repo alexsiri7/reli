@@ -22,7 +22,7 @@ def _make_mock_event(text: str, *, partial: bool = False, usage: bool = False):
     event = MagicMock()
     event.content = content
     event.partial = partial
-    event.model_version = "google/gemini-3-flash-preview"
+    event.model_version = "google/gemini-2.5-flash"
 
     if usage:
         um = MagicMock()
@@ -396,7 +396,7 @@ async def test_reasoning_agent_returns_metadata_from_adk():
                 [],
                 [],
                 api_key="test-key",
-                model="google/gemini-3-flash-preview",
+                model="google/gemini-2.5-flash",
                 user_id="test-user",
             )
 
