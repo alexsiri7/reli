@@ -162,6 +162,27 @@ def get_user_thing(user_id: str = Depends(require_user)) -> UserProfileDetail:
     return UserProfileDetail(thing=thing, relationships=relationships)
 
 
+@router.get("/learnings", response_model=list[Thing], summary="List user's learnings")
+def list_learnings(
+    active_only: bool = Query(True, description="Filter to active learnings only"),
+    limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
+    user_id: str = Depends(require_user),
+) -> list[Thing]:
+    """Return Learning Things for the current user, ordered by recency."""
+    uf_sql, uf_params = user_filter(user_id)
+    sql = "SELECT * FROM things WHERE type_hint = 'learning'"
+    params: list = []
+    sql += uf_sql
+    params.extend(uf_params)
+    if active_only:
+        sql += " AND active = 1"
+    sql += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
+    with db() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [_row_to_thing(r) for r in rows]
+
+
 @router.get("/search", response_model=list[Thing], summary="Search Things across the full graph")
 def search_things(
     q: str = Query("", description="Free-text search query matched against title, data, type_hint, and relationships"),

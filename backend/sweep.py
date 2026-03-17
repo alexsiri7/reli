@@ -527,3 +527,270 @@ async def reflect_on_candidates(
         findings=created,
         usage=usage_stats.to_dict(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Learning generation (FR-102)
+# ---------------------------------------------------------------------------
+
+LEARNING_GENERATION_SYSTEM = """\
+You are the Learning Analyst for Reli, an AI personal information manager.
+You review recent conversation history and existing Things to identify patterns,
+preferences, habits, and observations about the user.
+
+Your job: distill the user's conversations into concise learnings — things Reli
+has observed about how the user thinks, works, or lives. These become permanent
+knowledge that helps Reli serve the user better over time.
+
+Examples of good learnings:
+- "Alex prefers to break down work projects into small tasks before starting"
+- "Alex's approach to party planning is detail-oriented and starts weeks early"
+- "Alex tends to defer health-related tasks repeatedly"
+- "Alex values morning routines and plans around early meetings"
+
+Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
+{
+  "learnings": [
+    {
+      "title": "Short, descriptive title of the learning",
+      "notes": "Detailed observation with supporting evidence from conversations",
+      "tags": ["learning"],
+      "related_thing_titles": ["Existing Thing titles this learning relates to"]
+    }
+  ]
+}
+
+Rules:
+- Each learning MUST be about the USER — their behavior, preferences, or patterns
+- tags: always include "learning". Add "user-pattern" for behavioral patterns
+- title: concise, reads as an observation (e.g. "Alex prefers morning meetings")
+- notes: 1-3 sentences explaining what was observed and why it matters
+- related_thing_titles: titles of existing Things this learning connects to
+  (people, projects, concepts, etc.). Empty list if none.
+- Return 0-5 learnings per sweep. Quality over quantity.
+- Do NOT repeat learnings that already exist (check the existing learnings list).
+- Do NOT fabricate — only create learnings supported by conversation evidence.
+- If there's nothing new to learn, return {"learnings": []}
+"""
+
+
+@dataclass
+class LearningResult:
+    """Result of the learning generation phase."""
+
+    learnings_created: int = 0
+    learnings: list[dict] = field(default_factory=list)
+    usage: dict = field(default_factory=dict)
+
+
+def _fetch_recent_conversations(
+    conn: sqlite3.Connection,
+    days: int = 7,
+    user_id: str = "",
+) -> list[dict]:
+    """Fetch recent user messages from chat_history for learning extraction."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    params: list = [cutoff]
+    uf = ""
+    if user_id:
+        uf = " AND user_id = ?"
+        params.append(user_id)
+    rows = conn.execute(
+        f"""SELECT role, content, timestamp FROM chat_history
+           WHERE role = 'user' AND timestamp > ?{uf}
+           ORDER BY timestamp DESC LIMIT 50""",
+        params,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _fetch_existing_learnings(
+    conn: sqlite3.Connection,
+    user_id: str = "",
+) -> list[dict]:
+    """Fetch existing learning Things to avoid duplicates."""
+    params: list = []
+    uf = ""
+    if user_id:
+        uf = " AND user_id = ?"
+        params.append(user_id)
+    rows = conn.execute(
+        f"""SELECT id, title, data FROM things
+           WHERE type_hint = 'learning' AND active = 1{uf}""",
+        params,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _format_learning_prompt(
+    conversations: list[dict],
+    existing_learnings: list[dict],
+    things: list[dict],
+) -> str:
+    """Format conversation history and context for the learning LLM."""
+    lines = [f"Today: {date.today().isoformat()}", ""]
+
+    if existing_learnings:
+        lines.append(f"Existing learnings ({len(existing_learnings)}):")
+        for lg in existing_learnings:
+            lines.append(f"  - {lg['title']}")
+        lines.append("")
+
+    if things:
+        lines.append(f"User's Things ({len(things)}):")
+        for t in things[:30]:
+            lines.append(f"  - [{t.get('type_hint', 'thing')}] {t['title']}")
+        lines.append("")
+
+    if conversations:
+        lines.append(f"Recent conversations ({len(conversations)} messages):")
+        for c in conversations:
+            content = c["content"][:300]
+            lines.append(f"  [{c.get('timestamp', '')}] {content}")
+    else:
+        lines.append("No recent conversations.")
+
+    return "\n".join(lines)
+
+
+async def generate_learnings(
+    user_id: str = "",
+    days: int = 7,
+) -> LearningResult:
+    """Phase 3: Analyze conversations to generate Learning Things.
+
+    Reads recent chat history, identifies user patterns and preferences,
+    creates Learning Things tagged with #learning, and connects them to
+    the User Thing via LearnedAbout relationships and to relevant domain Things.
+
+    This should ONLY be called from the nightly sweep, not during real-time chat.
+    """
+    from .agents import UsageStats, _chat
+
+    usage_stats = UsageStats()
+
+    with db() as conn:
+        conversations = _fetch_recent_conversations(conn, days, user_id)
+        existing_learnings = _fetch_existing_learnings(conn, user_id)
+        things = conn.execute(
+            "SELECT id, title, type_hint, data FROM things WHERE active = 1"
+            + (" AND user_id = ?" if user_id else ""),
+            ([user_id] if user_id else []),
+        ).fetchall()
+        things_list = [dict(r) for r in things]
+
+    if not conversations:
+        logger.info("No recent conversations for learning generation")
+        return LearningResult(usage=usage_stats.to_dict())
+
+    prompt = _format_learning_prompt(conversations, existing_learnings, things_list)
+
+    raw = await _chat(
+        messages=[
+            {"role": "system", "content": LEARNING_GENERATION_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        model=None,
+        response_format={"type": "json_object"},
+        usage_stats=usage_stats,
+    )
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("Learning generation returned invalid JSON: %s", raw[:200])
+        return LearningResult(usage=usage_stats.to_dict())
+
+    raw_learnings = parsed.get("learnings", [])
+    if not isinstance(raw_learnings, list):
+        raw_learnings = []
+
+    now = datetime.now(timezone.utc).isoformat()
+    created: list[dict] = []
+
+    with db() as conn:
+        # Find user Thing for LearnedAbout relationships
+        user_thing_row = conn.execute(
+            "SELECT id FROM things WHERE type_hint = 'person' AND surface = 0"
+            + (" AND user_id = ?" if user_id else "")
+            + " LIMIT 1",
+            ([user_id] if user_id else []),
+        ).fetchone()
+        user_thing_id = user_thing_row["id"] if user_thing_row else None
+
+        # Build title→id lookup for linking related Things
+        title_lookup: dict[str, str] = {}
+        for t in things_list:
+            title_lookup[t["title"].lower()] = t["id"]
+
+        for learning in raw_learnings:
+            if not isinstance(learning, dict):
+                continue
+            title = str(learning.get("title", "")).strip()
+            if not title:
+                continue
+
+            # Skip duplicates by title
+            existing_titles = {lg["title"].lower() for lg in existing_learnings}
+            if title.lower() in existing_titles:
+                logger.info("Skipping duplicate learning: %s", title)
+                continue
+
+            notes = str(learning.get("notes", "")).strip()
+            tags = learning.get("tags", ["learning"])
+            if not isinstance(tags, list):
+                tags = ["learning"]
+            if "learning" not in tags:
+                tags.insert(0, "learning")
+
+            data = {"notes": notes, "tags": tags}
+
+            learning_id = str(uuid.uuid4())
+            conn.execute(
+                """INSERT INTO things
+                   (id, title, type_hint, priority, active, surface, data,
+                    created_at, updated_at, user_id)
+                   VALUES (?, ?, 'learning', 3, 1, 0, ?, ?, ?, ?)""",
+                (learning_id, title, json.dumps(data), now, now, user_id or None),
+            )
+
+            # Create LearnedAbout relationship: User Thing → Learning
+            if user_thing_id:
+                rel_id = str(uuid.uuid4())
+                conn.execute(
+                    """INSERT INTO thing_relationships
+                       (id, from_thing_id, to_thing_id, relationship_type, created_at)
+                       VALUES (?, ?, ?, 'LearnedAbout', ?)""",
+                    (rel_id, user_thing_id, learning_id, now),
+                )
+
+            # Connect to related domain Things
+            related_titles = learning.get("related_thing_titles", [])
+            if isinstance(related_titles, list):
+                for rt in related_titles[:5]:
+                    rt_lower = str(rt).lower().strip()
+                    related_id = title_lookup.get(rt_lower)
+                    if related_id and related_id != learning_id:
+                        conn.execute(
+                            """INSERT INTO thing_relationships
+                               (id, from_thing_id, to_thing_id, relationship_type,
+                                created_at)
+                               VALUES (?, ?, ?, 'related-to', ?)""",
+                            (str(uuid.uuid4()), learning_id, related_id, now),
+                        )
+
+            created.append({
+                "id": learning_id,
+                "title": title,
+                "tags": tags,
+                "notes": notes,
+            })
+            # Track to avoid creating more duplicates within same batch
+            existing_learnings.append({"title": title})
+
+    logger.info("Generated %d learnings from conversations", len(created))
+    return LearningResult(
+        learnings_created=len(created),
+        learnings=created,
+        usage=usage_stats.to_dict(),
+    )

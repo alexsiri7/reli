@@ -189,6 +189,13 @@ merge_things. Rules:
 - Only merge Things you are confident refer to the same entity. If uncertain,
   add a question to questions_for_user instead.
 
+Learning Things:
+NEVER create Things with type_hint "learning" during real-time conversation.
+Learning Things are ONLY created by the nightly sweep process. If you notice
+a pattern or preference about the user, note it in reasoning_summary — the
+sweep will pick it up later. Do NOT use the "LearnedAbout" relationship type
+during real-time chat either.
+
 Entity Types:
 When the user mentions people, places, events, concepts, or references, create
 entity Things to build a knowledge graph:
@@ -252,7 +259,7 @@ REASONING_AGENT_TOOL_SYSTEM = _TOOL_PREAMBLE + _TOOL_RULES
 # ---------------------------------------------------------------------------
 
 # Entity type_hints that default to surface=false
-_ENTITY_TYPES = {"person", "place", "event", "concept", "reference"}
+_ENTITY_TYPES = {"person", "place", "event", "concept", "reference", "learning"}
 
 
 def _make_reasoning_tools(

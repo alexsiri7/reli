@@ -279,7 +279,8 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
   (e.g. following relationships, referencing previously mentioned Things by ID).
   Empty array when not needed.
 - filter_params.active_only: true unless user asks about archived/all items
-- filter_params.type_hint: null or one of task|note|idea|project|goal|journal|person|place|event|concept|reference
+- filter_params.type_hint: null or one of task|note|idea|project|goal|journal|
+  person|place|event|concept|reference|learning
 - needs_web_search: true if the user is asking about external/real-world info
   that would benefit from a web search (current events, facts, how-to questions,
   product info, documentation, etc.). false for personal task management requests
@@ -296,6 +297,12 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
 - include_calendar: true if the user asks about their schedule, calendar, meetings,
   events, availability, free time, what's coming up today/this week, or anything
   time/schedule related. Default false.
+
+Learnings: The database contains "learning" type Things — observations about the
+user's patterns and preferences. When the user asks about what Reli knows about
+them, their habits, preferences, or patterns, set type_hint to "learning" to
+retrieve relevant learnings. Also include learnings as additional search_queries
+when contextually relevant (e.g. user asks about a topic where a learning exists).
 """
 
 

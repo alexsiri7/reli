@@ -57,6 +57,7 @@ _DEFAULT_THING_TYPES = [
     ("event", "📅", None),
     ("concept", "🧠", None),
     ("reference", "🔗", None),
+    ("learning", "🔍", None),
 ]
 
 
