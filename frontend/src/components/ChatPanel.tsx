@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ContextThing, type GmailMessage, type ModelUsage, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
 import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
-import { useTTS, ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
+import { useTTS, ttsSupported } from '../hooks/useTTS'
 import { useNetworkStatus } from '../hooks/useNetworkStatus'
 
 function formatTimestamp(iso: string): string {
@@ -378,60 +378,6 @@ function SpeakButton({ msg, speakingId, speak }: { msg: ChatMessage; speakingId:
   )
 }
 
-function VoiceSettings() {
-  const [open, setOpen] = useState(false)
-  const voices = useAvailableVoices()
-  const [selectedURI, setSelectedURI] = useState(getStoredVoiceURI)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  if (!ttsSupported || voices.length <= 1) return null
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
-        title="Voice settings"
-        aria-label="Voice settings"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25h2.24z" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[220px]">
-          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">TTS Voice</label>
-          <select
-            value={selectedURI ?? ''}
-            onChange={e => {
-              const uri = e.target.value || null
-              setSelectedURI(uri)
-              setStoredVoiceURI(uri)
-            }}
-            className="w-full text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1.5"
-          >
-            <option value="">Default</option>
-            {voices.map(v => (
-              <option key={v.voiceURI} value={v.voiceURI}>
-                {v.name} ({v.lang})
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-    </div>
-  )
-}
-
 const STAGE_LABELS: Record<string, string> = {
   context: 'Searching memory\u2026',
   reasoning: 'Thinking\u2026',
@@ -697,7 +643,6 @@ export function ChatPanel() {
           <p className="text-xs text-gray-400 dark:text-gray-400">Talk to Reli — create, update, and query your Things</p>
         </div>
         <div className="flex items-center gap-1">
-          <VoiceSettings />
           <NerdStatsIcon stats={sessionStats} />
         </div>
       </div>
