@@ -120,10 +120,10 @@ function App() {
       </div>
       {/* Mobile: show one panel at a time based on mobileView */}
       <div className="contents md:hidden">
-        <div className={`flex-1 flex flex-col min-w-0 ${mobileView === 'things' ? '' : 'hidden'}`}>
+        <div className={`flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden ${mobileView === 'things' ? '' : 'hidden'}`}>
           <Sidebar />
         </div>
-        <div className={`flex-1 flex flex-col min-w-0 ${mobileView === 'chat' ? '' : 'hidden'}`}>
+        <div className={`flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden ${mobileView === 'chat' ? '' : 'hidden'}`}>
           <ChatPanel />
         </div>
         <DetailPanel />

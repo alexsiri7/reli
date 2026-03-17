@@ -694,7 +694,7 @@ export function ChatPanel() {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 min-w-0 pb-14 md:pb-0">
+    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 min-w-0 min-h-0 mobile-chat-pb md:pb-0">
       {/* Title bar */}
       <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0 flex items-start justify-between">
         <div>

@@ -23,6 +23,13 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Bottom padding for chat panel on mobile: tab bar height + safe area */
+@media (max-width: 767px) {
+  .mobile-chat-pb {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 @keyframes slide-in-right {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
