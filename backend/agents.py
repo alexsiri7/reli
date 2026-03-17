@@ -1,4 +1,4 @@
-"""Multi-agent chat pipeline using Requesty as LLM gateway."""
+"""Multi-agent chat pipeline using Requesty as LLM gateway (via LiteLLM)."""
 
 import json
 import logging
@@ -12,6 +12,7 @@ import yaml
 from openai import AsyncOpenAI
 
 from .config import settings
+from .llm import acomplete, acomplete_stream
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ OLLAMA_MODEL = settings.OLLAMA_MODEL or _config["ollama"].get("model", "")
 
 
 def _client(api_key: str | None = None) -> AsyncOpenAI:
+    """Legacy OpenAI client — still used for Ollama fallback."""
     return AsyncOpenAI(api_key=api_key or REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
 
 
@@ -234,20 +236,11 @@ async def _chat(
     api_key: str | None = None,
     **kwargs: Any,
 ) -> str:
-    """Call the LLM and return the response text."""
-    client = _client(api_key=api_key)
+    """Call the LLM via LiteLLM and return the response text."""
     used_model = model or REQUESTY_MODEL
-    response = await client.chat.completions.create(
-        model=used_model,
-        messages=messages,  # type: ignore[arg-type]
-        **kwargs,
-    )
+    response = await acomplete(messages, used_model, api_key=api_key, **kwargs)
     if usage_stats is not None and response.usage:
-        # Requesty returns cost in x-request-cost header, but the OpenAI SDK
-        # doesn't expose headers. We can check for cost in the response model
-        # or compute from usage. For now, use 0 and let the frontend show tokens.
         cost = 0.0
-        # Some Requesty responses include cost info in the response object
         if hasattr(response, "x_request_cost"):
             cost = float(getattr(response, "x_request_cost", 0))
         usage_stats.accumulate(
@@ -255,7 +248,7 @@ async def _chat(
             completion=response.usage.completion_tokens or 0,
             total=response.usage.total_tokens or 0,
             cost=cost,
-            model=response.model or used_model,
+            model=getattr(response, "model", None) or used_model,
         )
     return response.choices[0].message.content or ""
 
@@ -267,17 +260,9 @@ async def _chat_stream(
     api_key: str | None = None,
     **kwargs: Any,
 ) -> AsyncIterator[str]:
-    """Stream LLM response tokens as an async iterator of text chunks."""
-    client = _client(api_key=api_key)
+    """Stream LLM response tokens via LiteLLM as an async iterator of text chunks."""
     used_model = model or REQUESTY_MODEL
-    stream = await client.chat.completions.create(  # type: ignore[call-overload]
-        model=used_model,
-        messages=messages,  # type: ignore[arg-type]
-        stream=True,
-        stream_options={"include_usage": True},
-        **kwargs,
-    )
-    async for chunk in stream:
+    async for chunk in acomplete_stream(messages, used_model, api_key=api_key, **kwargs):
         if chunk.choices and chunk.choices[0].delta.content:
             yield chunk.choices[0].delta.content
         # The final chunk with usage info has empty choices
