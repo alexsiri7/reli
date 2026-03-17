@@ -92,8 +92,9 @@ def _get_collection() -> chromadb.Collection:
 def _thing_to_text(thing: dict[str, Any]) -> str:
     """Flatten a Thing dict into a rich searchable string.
 
-    Includes title (repeated for weight), type, formatted data fields,
-    and titles of related Things for relationship context.
+    Includes title (repeated for weight), type, priority, status, dates,
+    open questions, parent context, formatted data fields, and titles of
+    related Things for relationship context.
     """
     from .database import db
 
@@ -105,6 +106,31 @@ def _thing_to_text(thing: dict[str, Any]) -> str:
         parts.append(title)
     if thing.get("type_hint"):
         parts.append(f"type: {thing['type_hint']}")
+
+    # Priority and status
+    priority = thing.get("priority")
+    if priority is not None:
+        labels = {1: "highest", 2: "high", 3: "medium", 4: "low", 5: "lowest"}
+        parts.append(f"priority: {labels.get(priority, str(priority))}")
+
+    active = thing.get("active")
+    if active is not None:
+        parts.append("status: active" if active else "status: completed")
+
+    # Dates
+    if thing.get("checkin_date"):
+        parts.append(f"check-in: {thing['checkin_date']}")
+
+    # Open questions
+    raw_oq = thing.get("open_questions")
+    if raw_oq:
+        if isinstance(raw_oq, str):
+            try:
+                raw_oq = json.loads(raw_oq)
+            except (json.JSONDecodeError, ValueError):
+                raw_oq = None
+        if isinstance(raw_oq, list) and raw_oq:
+            parts.append("open questions: " + "; ".join(str(q) for q in raw_oq))
 
     # Format data fields with human-readable labels
     raw_data = thing.get("data")
@@ -123,11 +149,21 @@ def _thing_to_text(thing: dict[str, Any]) -> str:
                     v = json.dumps(v)
                 parts.append(f"{label}: {v}")
 
-    # Relationship context: fetch related Things' titles
+    # Parent context and relationship context
     thing_id = thing.get("id")
     if thing_id:
         try:
             with db() as conn:
+                # Parent title for hierarchical context
+                parent_id = thing.get("parent_id")
+                if parent_id:
+                    parent_row = conn.execute(
+                        "SELECT title FROM things WHERE id = ?", (parent_id,)
+                    ).fetchone()
+                    if parent_row:
+                        parts.append(f"parent: {parent_row['title']}")
+
+                # Relationship context: fetch related Things' titles
                 rows = conn.execute(
                     "SELECT t.title, r.relationship_type"
                     " FROM thing_relationships r"
@@ -228,6 +264,38 @@ def reindex_all() -> int:
         raise
 
 
+def reembed_related(thing_id: str) -> None:
+    """Re-embed a Thing and its directly related Things.
+
+    Call this after relationship changes to keep embeddings consistent
+    with updated relationship context.
+    """
+    from .database import db
+
+    try:
+        with db() as conn:
+            # Fetch the Thing itself
+            row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+            if row:
+                upsert_thing(dict(row))
+
+            # Fetch directly related Things and re-embed them
+            rel_rows = conn.execute(
+                "SELECT CASE WHEN from_thing_id = ? THEN to_thing_id ELSE from_thing_id END AS other_id"
+                " FROM thing_relationships"
+                " WHERE from_thing_id = ? OR to_thing_id = ?",
+                (thing_id, thing_id, thing_id),
+            ).fetchall()
+            for rel_row in rel_rows:
+                other = conn.execute(
+                    "SELECT * FROM things WHERE id = ?", (rel_row["other_id"],)
+                ).fetchone()
+                if other:
+                    upsert_thing(dict(other))
+    except Exception as exc:
+        logger.error("reembed_related failed for thing %s: %s", thing_id, exc)
+
+
 def vector_search(
     queries: list[str],
     n_results: int = 20,
@@ -266,7 +334,7 @@ def vector_search(
         seen_ids: list[str] = []
         seen_set: set[str] = set()
 
-        for query in queries[:3]:
+        for query in queries[:5]:
             results = collection.query(
                 query_texts=[query],
                 n_results=per_query,

@@ -28,7 +28,7 @@ from ..models import (
     ThingUpdate,
 )
 from ..vector_store import delete_thing as vs_delete
-from ..vector_store import reindex_all, upsert_thing
+from ..vector_store import reembed_related, reindex_all, upsert_thing
 
 router = APIRouter(prefix="/things", tags=["things"])
 
@@ -766,7 +766,9 @@ def list_relationships(thing_id: str, user_id: str = Depends(require_user)) -> l
 @router.post(
     "/relationships", response_model=Relationship, status_code=status.HTTP_201_CREATED, summary="Create a relationship"
 )
-def create_relationship(body: RelationshipCreate, user_id: str = Depends(require_user)) -> Relationship:
+def create_relationship(
+    body: RelationshipCreate, background_tasks: BackgroundTasks, user_id: str = Depends(require_user)
+) -> Relationship:
     """Create a typed relationship between two Things."""
     rel_id = str(uuid.uuid4())
     meta_json = json.dumps(body.metadata) if body.metadata is not None else None
@@ -784,14 +786,22 @@ def create_relationship(body: RelationshipCreate, user_id: str = Depends(require
             (rel_id, body.from_thing_id, body.to_thing_id, body.relationship_type, meta_json),
         )
         row = conn.execute("SELECT * FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()
+    # Re-embed both Things so their embeddings reflect the new relationship
+    background_tasks.add_task(reembed_related, body.from_thing_id)
+    background_tasks.add_task(reembed_related, body.to_thing_id)
     return _parse_rel_row(row)
 
 
 @router.delete("/relationships/{rel_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a relationship")
-def delete_relationship(rel_id: str) -> None:
-    """Delete a relationship by ID."""
+def delete_relationship(rel_id: str, background_tasks: BackgroundTasks) -> None:
+    """Delete a relationship by ID and re-embed affected Things."""
     with db() as conn:
-        row = conn.execute("SELECT id FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()
+        row = conn.execute("SELECT * FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
+        from_id = row["from_thing_id"]
+        to_id = row["to_thing_id"]
         conn.execute("DELETE FROM thing_relationships WHERE id = ?", (rel_id,))
+    # Re-embed both Things so their embeddings no longer reference the deleted relationship
+    background_tasks.add_task(reembed_related, from_id)
+    background_tasks.add_task(reembed_related, to_id)

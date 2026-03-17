@@ -30,7 +30,7 @@ from .context_agent import _make_litellm_model, _run_agent_for_text
 from .database import db
 from .tracing import get_tracer
 from .vector_store import delete_thing as vs_delete
-from .vector_store import upsert_thing
+from .vector_store import reembed_related, upsert_thing
 
 logger = logging.getLogger(__name__)
 
@@ -737,7 +737,11 @@ def _make_reasoning_tools(
                 "relationship_type": rel_type,
             }
             applied["relationships_created"].append(rel_info)
-            return rel_info
+
+        # Re-embed both Things so embeddings reflect the new relationship
+        reembed_related(from_id)
+        reembed_related(to_id)
+        return rel_info
 
     # Wrap each tool with OTEL span instrumentation
     traced_tools = [

@@ -154,7 +154,7 @@ def _fetch_user_relationships(
 
     like_clauses: list[str] = []
     like_params: list[str] = []
-    for query in search_queries[:3]:
+    for query in search_queries[:5]:
         pattern = f"%{query}%"
         like_clauses.append("(title LIKE ? OR data LIKE ?)")
         like_params.extend([pattern, pattern])
@@ -176,7 +176,7 @@ def _fetch_user_relationships(
         "User relationship search: %d edges, %d query-matched (queries=%r)",
         len(other_ids),
         len(rows),
-        search_queries[:3],
+        search_queries[:5],
     )
     return [dict(r) for r in rows]
 
@@ -238,7 +238,7 @@ def _fetch_relevant_things(
 
     if not use_vector:
         seen_sql: set[str] = set()
-        for query in search_queries[:3]:
+        for query in search_queries[:5]:
             pattern = f"%{query}%"
             sql = "SELECT id FROM things WHERE (title LIKE ? OR data LIKE ?)"
             params: list = [pattern, pattern]
@@ -518,8 +518,10 @@ class ChatPipeline:
                 context_relationships = [dict(r) for r in rel_rows]
 
         logger.info(
-            "Final context: %d Things, %d relationships after up to %d iterations",
+            "Final context: %d Things, %d relationships after up to %d iterations, "
+            "total queries=%d (%r)",
             len(relevant_things), len(context_relationships), MAX_CONTEXT_ITERATIONS,
+            len(all_queries), all_queries,
         )
 
         return context_result, relevant_things, context_relationships
@@ -640,10 +642,12 @@ class ChatPipeline:
                         )
                         ctx_span.set_attribute("reli.context.things_found", len(relevant_things))
                         ctx_span.set_attribute("reli.context.relationships_found", len(context_relationships))
+                        all_search_queries = context_result.get("search_queries", [])
                         ctx_span.set_attribute(
                             "reli.context.search_queries",
-                            json.dumps(context_result.get("search_queries", [])),
+                            json.dumps(all_search_queries),
                         )
+                        ctx_span.set_attribute("reli.context.query_count", len(all_search_queries))
                         self._record_stage_usage(ctx_span, "context", usage, calls_before)
                     except Exception as exc:
                         set_span_error(ctx_span, exc)
@@ -775,10 +779,12 @@ class ChatPipeline:
                         )
                         ctx_span.set_attribute("reli.context.things_found", len(relevant_things))
                         ctx_span.set_attribute("reli.context.relationships_found", len(context_relationships))
+                        all_search_queries_s = context_result.get("search_queries", [])
                         ctx_span.set_attribute(
                             "reli.context.search_queries",
-                            json.dumps(context_result.get("search_queries", [])),
+                            json.dumps(all_search_queries_s),
                         )
+                        ctx_span.set_attribute("reli.context.query_count", len(all_search_queries_s))
                         self._record_stage_usage(ctx_span, "context", usage, calls_before)
                     except Exception as exc:
                         set_span_error(ctx_span, exc)

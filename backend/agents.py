@@ -262,7 +262,7 @@ so we can provide full context.
 
 Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
 {
-  "search_queries": ["query 1", "query 2"],
+  "search_queries": ["query 1", "query 2", "query 3"],
   "fetch_ids": [],
   "filter_params": {
     "active_only": true,
@@ -273,7 +273,15 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
   "gmail_query": null,
   "include_calendar": false
 }
-- search_queries: 1-3 short text fragments to match against Thing titles/data
+- search_queries: 2-5 short text fragments to search against Thing titles, data,
+  type, and relationships. Generate DIVERSE queries to maximize recall:
+  1. The user's exact terms or entity names (e.g. "Project Alpha")
+  2. Synonyms or alternative phrasings (e.g. "Alpha initiative")
+  3. Related concepts the user likely cares about (e.g. "Alpha tasks", "Alpha deadlines")
+  4. Broader category if specific search might miss (e.g. "projects")
+  5. Key details from the data fields (e.g. a person's role, a task's description)
+  Generate at least 2 queries, up to 5. More queries = better recall for complex
+  requests. For simple greetings or small talk, 2 queries suffice.
 - fetch_ids: optional list of Thing UUIDs to fetch directly. Use this when the
   conversation history contains specific Thing IDs that should be looked up
   (e.g. following relationships, referencing previously mentioned Things by ID).
