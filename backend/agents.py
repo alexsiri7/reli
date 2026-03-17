@@ -3,9 +3,9 @@
 import json
 import logging
 import sqlite3
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from collections.abc import AsyncIterator
 from typing import Any
 
 import yaml

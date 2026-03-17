@@ -8,7 +8,6 @@ import pytest
 
 from backend.llm import REQUESTY_BASE_URL, acomplete, acomplete_stream
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
