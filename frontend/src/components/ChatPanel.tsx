@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ContextThing, type GmailMessage, type ModelUsage, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
 import { typeIcon } from '../utils'
@@ -484,9 +485,18 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
         >
           {msg.streaming && !msg.content && msg.streamingStage ? (
             <StreamingIndicator stage={msg.streamingStage} />
-          ) : (
+          ) : isUser ? (
             <>
               {msg.content}
+              {msg.streaming && msg.content && (
+                <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
+              )}
+            </>
+          ) : (
+            <>
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-blockquote:my-1">
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              </div>
               {msg.streaming && msg.content && (
                 <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
               )}
