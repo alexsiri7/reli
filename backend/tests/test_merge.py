@@ -216,3 +216,100 @@ class TestMergeThings:
             row = conn.execute("SELECT * FROM things WHERE id = ?", (keep_id,)).fetchone()
             data = json.loads(row["data"])
             assert data["name"] == "Bob"
+
+    def test_merge_records_history(self, patched_db):
+        """Merge via apply_storage_changes creates a merge_history record."""
+        from backend.agents import apply_storage_changes
+
+        with db() as conn:
+            keep_id = _insert_thing(conn, "Bob", data={"age": 30})
+            remove_id = _insert_thing(conn, "My cousin", data={"hobby": "chess"})
+            conn.commit()
+
+        with db() as conn:
+            apply_storage_changes(
+                {
+                    "merge": [
+                        {
+                            "keep_id": keep_id,
+                            "remove_id": remove_id,
+                            "merged_data": {"age": 30, "hobby": "chess"},
+                        }
+                    ]
+                },
+                conn,
+            )
+
+        with db() as conn:
+            rows = conn.execute("SELECT * FROM merge_history").fetchall()
+            assert len(rows) == 1
+            rec = rows[0]
+            assert rec["keep_id"] == keep_id
+            assert rec["remove_id"] == remove_id
+            assert rec["keep_title"] == "Bob"
+            assert rec["remove_title"] == "My cousin"
+            assert rec["triggered_by"] == "agent"
+            merged = json.loads(rec["merged_data"])
+            assert merged["hobby"] == "chess"
+
+    def test_merge_skipped_no_history(self, patched_db):
+        """When merge is skipped (nonexistent ID), no history record is created."""
+        from backend.agents import apply_storage_changes
+
+        with db() as conn:
+            keep_id = _insert_thing(conn, "Bob")
+            conn.commit()
+
+        with db() as conn:
+            apply_storage_changes(
+                {"merge": [{"keep_id": keep_id, "remove_id": "nonexistent", "merged_data": {}}]},
+                conn,
+            )
+
+        with db() as conn:
+            rows = conn.execute("SELECT * FROM merge_history").fetchall()
+            assert len(rows) == 0
+
+
+class TestMergeHistoryAPI:
+    def test_merge_endpoint_records_history(self, client):
+        """POST /api/things/merge creates a merge_history record."""
+        # Create two things
+        a = client.post("/api/things", json={"title": "Alice", "type_hint": "person"})
+        b = client.post("/api/things", json={"title": "Alicia", "type_hint": "person"})
+        keep_id = a.json()["id"]
+        remove_id = b.json()["id"]
+
+        resp = client.post("/api/things/merge", json={"keep_id": keep_id, "remove_id": remove_id})
+        assert resp.status_code == 200
+
+        history = client.get("/api/things/merge-history")
+        assert history.status_code == 200
+        records = history.json()
+        assert len(records) >= 1
+        rec = records[0]
+        assert rec["keep_id"] == keep_id
+        assert rec["remove_id"] == remove_id
+        assert rec["keep_title"] == "Alice"
+        assert rec["remove_title"] == "Alicia"
+        assert rec["triggered_by"] == "api"
+
+    def test_merge_history_filter_by_thing(self, client):
+        """GET /api/things/merge-history?thing_id= filters by kept Thing."""
+        a = client.post("/api/things", json={"title": "X"})
+        b = client.post("/api/things", json={"title": "Y"})
+        c = client.post("/api/things", json={"title": "Z"})
+        keep_id = a.json()["id"]
+        other_keep = c.json()["id"]
+
+        client.post("/api/things/merge", json={"keep_id": keep_id, "remove_id": b.json()["id"]})
+
+        # Create another thing to merge into c (need a 4th thing)
+        d = client.post("/api/things", json={"title": "W"})
+        client.post("/api/things/merge", json={"keep_id": other_keep, "remove_id": d.json()["id"]})
+
+        # Filter by keep_id
+        history = client.get(f"/api/things/merge-history?thing_id={keep_id}")
+        records = history.json()
+        assert len(records) == 1
+        assert records[0]["keep_id"] == keep_id

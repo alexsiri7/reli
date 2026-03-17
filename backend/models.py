@@ -324,3 +324,19 @@ class MergeResult(BaseModel):
     remove_id: str
     keep_title: str
     remove_title: str
+
+
+class MergeHistoryRecord(BaseModel):
+    """A recorded merge event for audit trail."""
+
+    id: str
+    keep_id: str
+    remove_id: str
+    keep_title: str
+    remove_title: str
+    merged_data: dict[str, Any] | None
+    triggered_by: str
+    user_id: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

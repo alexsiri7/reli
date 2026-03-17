@@ -1108,7 +1108,38 @@ def apply_storage_changes(
         conn.execute("DELETE FROM things WHERE id = ?", (remove_id,))
         vs_delete(remove_id)
 
-        # 5. Re-embed the updated primary Thing
+        # 5. Record merge history
+        existing_data_raw = keep_row["data"]
+        try:
+            _keep_data = (
+                _json.loads(existing_data_raw) if isinstance(existing_data_raw, str) and existing_data_raw else {}
+            )
+        except (ValueError, TypeError):
+            _keep_data = {}
+        _remove_data_raw = remove_row["data"]
+        try:
+            _rem_data = _json.loads(_remove_data_raw) if isinstance(_remove_data_raw, str) and _remove_data_raw else {}
+        except (ValueError, TypeError):
+            _rem_data = {}
+        _merged_snapshot = {**_rem_data, **new_data} if (new_data or _rem_data) else None
+        conn.execute(
+            "INSERT INTO merge_history (id, keep_id, remove_id, keep_title, remove_title,"
+            " merged_data, triggered_by, user_id, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                str(uuid.uuid4()),
+                keep_id,
+                remove_id,
+                keep_row["title"],
+                remove_row["title"],
+                _json.dumps(_merged_snapshot) if _merged_snapshot else None,
+                "agent",
+                user_id or None,
+                now,
+            ),
+        )
+
+        # 6. Re-embed the updated primary Thing
         updated_keep = conn.execute("SELECT * FROM things WHERE id = ?", (keep_id,)).fetchone()
         if updated_keep:
             upsert_thing(dict(updated_keep))
