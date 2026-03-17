@@ -17,6 +17,10 @@ from .sentry import init_sentry  # noqa: E402
 
 init_sentry()
 
+from .tracing import init_tracing  # noqa: E402
+
+init_tracing()
+
 from fastapi import Depends, FastAPI, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402

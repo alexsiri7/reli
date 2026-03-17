@@ -84,6 +84,15 @@ class Settings(BaseSettings):
     SENTRY_ENVIRONMENT: str = "production"
     SENTRY_TRACES_SAMPLE_RATE: float = 0.2
 
+    # --- OpenTelemetry / Phoenix ---
+    OTEL_ENABLED: str = "false"
+    OTEL_EXPORTER_ENDPOINT: str = "http://localhost:6006/v1/traces"
+    OTEL_SERVICE_NAME: str = "reli"
+
+    @property
+    def otel_enabled_bool(self) -> bool:
+        return self.OTEL_ENABLED.lower() not in ("false", "0", "no")
+
     # --- Sweep scheduler ---
     SWEEP_ENABLED: str = "true"
     SWEEP_HOUR: int = 3
