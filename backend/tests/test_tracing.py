@@ -91,6 +91,16 @@ def test_get_tracer_returns_tracer():
     assert tracer is not None
 
 
+def test_get_tracer_with_custom_name():
+    """get_tracer with a custom name should return a tracer."""
+    from opentelemetry import trace
+
+    from backend.tracing import get_tracer
+
+    tracer = get_tracer("test-module")
+    assert isinstance(tracer, trace.Tracer)
+
+
 def test_set_span_error_records_exception():
     """set_span_error should set ERROR status and record the exception."""
     from backend.tracing import set_span_error
@@ -102,3 +112,130 @@ def test_set_span_error_records_exception():
 
     mock_span.set_status.assert_called_once()
     mock_span.record_exception.assert_called_once_with(exc)
+
+
+# ---------------------------------------------------------------------------
+# _traced_tool decorator tests
+# ---------------------------------------------------------------------------
+
+
+class TestTracedToolDecorator:
+    """Tests for the _traced_tool span instrumentation decorator."""
+
+    def test_traced_tool_preserves_function_name(self):
+        """Wrapped function should preserve __name__ for ADK schema generation."""
+        from backend.reasoning_agent import _traced_tool
+
+        def my_tool(title: str) -> dict:
+            """My tool docstring."""
+            return {"id": "123", "title": title}
+
+        wrapped = _traced_tool(my_tool)
+        assert wrapped.__name__ == "my_tool"
+        assert wrapped.__doc__ == "My tool docstring."
+
+    def test_traced_tool_passes_through_result(self):
+        """Wrapped tool should return the same result as the original."""
+        from backend.reasoning_agent import _traced_tool
+
+        def my_tool(title: str, priority: int = 3) -> dict:
+            return {"id": "abc", "title": title, "priority": priority}
+
+        wrapped = _traced_tool(my_tool)
+        result = wrapped(title="Test", priority=1)
+        assert result == {"id": "abc", "title": "Test", "priority": 1}
+
+    def test_traced_tool_propagates_exceptions(self):
+        """Wrapped tool should re-raise exceptions from the original."""
+        from backend.reasoning_agent import _traced_tool
+
+        def failing_tool(x: str) -> dict:
+            raise ValueError("boom")
+
+        wrapped = _traced_tool(failing_tool)
+        with pytest.raises(ValueError, match="boom"):
+            wrapped(x="test")
+
+    def test_traced_tool_records_span_attributes(self):
+        """Wrapped tool should set span attributes for inputs and outputs."""
+        from backend.reasoning_agent import _traced_tool
+
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=mock_span
+        )
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        with patch("backend.reasoning_agent._tracer", mock_tracer):
+            def create_thing(title: str, priority: int = 3) -> dict:
+                return {"id": "new-uuid", "title": title}
+
+            wrapped = _traced_tool(create_thing)
+            result = wrapped(title="Buy groceries", priority=1)
+
+        assert result == {"id": "new-uuid", "title": "Buy groceries"}
+
+        # Verify span was started with correct name
+        mock_tracer.start_as_current_span.assert_called_once()
+        call_args = mock_tracer.start_as_current_span.call_args
+        assert call_args[0][0] == "tool.create_thing"
+
+        # Verify input attributes were set
+        set_attr_calls = {
+            call[0][0]: call[0][1]
+            for call in mock_span.set_attribute.call_args_list
+        }
+        assert set_attr_calls["tool.input.title"] == "Buy groceries"
+        assert set_attr_calls["tool.input.priority"] == "1"
+        assert "new-uuid" in set_attr_calls["tool.output"]
+        assert set_attr_calls["tool.result.id"] == "new-uuid"
+
+    def test_traced_tool_records_error_status_on_error_result(self):
+        """Wrapped tool should set ERROR status when result contains 'error' key."""
+        from backend.reasoning_agent import _traced_tool
+
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=mock_span
+        )
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        with patch("backend.reasoning_agent._tracer", mock_tracer):
+            def bad_tool(thing_id: str) -> dict:
+                return {"error": "Thing not found"}
+
+            wrapped = _traced_tool(bad_tool)
+            result = wrapped(thing_id="missing")
+
+        assert result == {"error": "Thing not found"}
+
+        set_attr_calls = {
+            call[0][0]: call[0][1]
+            for call in mock_span.set_attribute.call_args_list
+        }
+        assert set_attr_calls["tool.error"] == "Thing not found"
+
+    def test_tools_from_factory_are_traced(self):
+        """Tools returned by _make_reasoning_tools should be wrapped with tracing."""
+        with patch("backend.reasoning_agent.db"), \
+             patch("backend.reasoning_agent.upsert_thing"), \
+             patch("backend.reasoning_agent.vs_delete"):
+            from backend.reasoning_agent import _make_reasoning_tools
+
+            tools, _ = _make_reasoning_tools("test-user")
+
+        # All tools should still have their original names (via functools.wraps)
+        names = [t.__name__ for t in tools]
+        assert names == [
+            "create_thing",
+            "update_thing",
+            "delete_thing",
+            "merge_things",
+            "create_relationship",
+        ]
