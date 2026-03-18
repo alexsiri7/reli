@@ -163,7 +163,8 @@ def find_connection_candidates(
                 continue
 
             # Check distance threshold
-            distance = results["distances"][0][i] if results.get("distances") else 1.0
+            distances = results.get("distances")
+            distance = distances[0][i] if distances else 1.0
             if distance > MAX_DISTANCE:
                 continue
 

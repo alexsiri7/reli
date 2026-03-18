@@ -127,6 +127,17 @@ const mergeDefaults = {
   fetchMergeSuggestions: vi.fn(),
 }
 
+const connectionDefaults = {
+  connectionSuggestions: [],
+  connectionSuggestionsLoading: false,
+  connectionAcceptInProgress: false,
+  fetchConnectionSuggestions: vi.fn(),
+  acceptConnectionSuggestion: vi.fn(),
+  dismissConnectionSuggestion: vi.fn(),
+  deferConnectionSuggestion: vi.fn(),
+  openThingDetail: vi.fn(),
+}
+
 const calendarDefaults = {
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [] as never[],
@@ -142,6 +153,7 @@ const calendarDefaults = {
   ...searchDefaults,
   ...filterDefaults,
   ...mergeDefaults,
+  ...connectionDefaults,
 }
 
 beforeEach(() => {
