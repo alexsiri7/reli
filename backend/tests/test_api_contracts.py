@@ -238,25 +238,19 @@ class TestChatHistoryContract:
 # Contract tests — Chat Pipeline endpoint
 # ===========================================================================
 
-MOCK_CONTEXT = {
-    "search_queries": ["test"],
-    "filter_params": {"active_only": True, "type_hint": None},
-}
-
 MOCK_REASONING = {
-    "storage_changes": {"create": [], "update": [], "delete": []},
+    "applied_changes": {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+    "fetched_context": {"things": [], "relationships": []},
     "questions_for_user": [],
     "reasoning_summary": "No changes needed.",
 }
 
 
-def _agent_patches(context=None, reasoning=None, reply="OK"):
+def _agent_patches(reasoning=None, reply="OK"):
     """Return a list of patch context managers for all chat pipeline agents."""
     return [
-        patch("backend.pipeline.run_context_agent", new=AsyncMock(return_value=context or MOCK_CONTEXT)),
         patch("backend.pipeline.run_reasoning_agent", new=AsyncMock(return_value=reasoning or MOCK_REASONING)),
         patch("backend.pipeline.run_response_agent", new=AsyncMock(return_value=reply)),
-        patch("backend.pipeline.run_context_refinement", new=AsyncMock(return_value={"done": True})),
     ]
 
 
@@ -266,7 +260,7 @@ class TestChatPipelineContract:
     @pytest.mark.anyio
     async def test_chat_response_shape(self, async_client):
         patches = _agent_patches(reply="Hello back!")
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1]:
             resp = await async_client.post(
                 "/api/chat",
                 json={
@@ -290,7 +284,7 @@ class TestChatPipelineContract:
             "reasoning_summary": "Created a task.",
         }
         patches = _agent_patches(reasoning=reasoning, reply="Created a task")
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1]:
             resp = await async_client.post(
                 "/api/chat",
                 json={
