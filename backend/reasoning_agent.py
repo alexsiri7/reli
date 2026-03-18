@@ -840,8 +840,14 @@ async def run_reasoning_agent(
     # -- ADK path with tool calling --
     tools, applied_changes = _make_reasoning_tools(user_id)
 
+    # Disable thinking to avoid thought_signature errors.  Gemini 2.5 Flash
+    # attaches thought_signatures to function-call parts when thinking is on;
+    # these signatures are lost when routing through OpenAI-compatible
+    # providers (Requesty), causing "missing thought_signature" rejections.
     litellm_model = _make_litellm_model(
-        model=model or REQUESTY_REASONING_MODEL, api_key=api_key
+        model=model or REQUESTY_REASONING_MODEL,
+        api_key=api_key,
+        extra_body={"thinking_config": {"thinking_budget": 0}},
     )
 
     reasoning_agent = LlmAgent(
