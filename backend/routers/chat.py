@@ -294,15 +294,15 @@ def _persist_exchange(
         assistant_msg_id = cursor.lastrowid
 
         # Insert per-call usage into chat_message_usage for structured retrieval
+        # Stage labelling: reasoning agent (with its fetch_context tool) is the
+        # first stage, response agent is the last call.
         num_calls = len(usage.calls)
         stage_labels: list[str | None] = []
         if num_calls >= 1:
-            stage_labels.append("context")
-        for _ in range(max(0, num_calls - 3)):
-            stage_labels.append("context_refinement")
-        if num_calls >= 2:
             stage_labels.append("reasoning")
-        if num_calls >= 3:
+        for _ in range(max(0, num_calls - 2)):
+            stage_labels.append("reasoning")
+        if num_calls >= 2:
             stage_labels.append("response")
         while len(stage_labels) < num_calls:
             stage_labels.append(None)

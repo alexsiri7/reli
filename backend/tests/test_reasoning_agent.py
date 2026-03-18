@@ -59,10 +59,11 @@ class TestMakeReasoningTools:
             tools, applied = _make_reasoning_tools(user_id)
             return tools, applied, mock_db
 
-    def test_returns_five_tools(self):
+    def test_returns_six_tools(self):
         tools, applied, _ = self._get_tools()
-        assert len(tools) == 5
+        assert len(tools) == 6
         names = [t.__name__ for t in tools]
+        assert "fetch_context" in names
         assert "create_thing" in names
         assert "update_thing" in names
         assert "delete_thing" in names
@@ -77,6 +78,8 @@ class TestMakeReasoningTools:
             "deleted": [],
             "merged": [],
             "relationships_created": [],
+            "context_things": [],
+            "context_relationships": [],
         }
 
 
@@ -90,7 +93,7 @@ class TestCreateThingTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied = _make_reasoning_tools("test-user")
-        create_fn = tools[0]
+        create_fn = tools[1]
         result = create_fn(title="   ")
         assert "error" in result
         assert applied["created"] == []
@@ -106,7 +109,7 @@ class TestCreateThingTool:
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
             tools, applied = _make_reasoning_tools("test-user")
-            create_fn = tools[0]
+            create_fn = tools[1]
 
             # Simulate existing Thing with same title
             existing_row = {
@@ -148,7 +151,7 @@ class TestCreateThingTool:
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
             tools, applied = _make_reasoning_tools("test-user")
-            create_fn = tools[0]
+            create_fn = tools[1]
 
             new_row = {
                 "id": "new-uuid",
@@ -183,7 +186,7 @@ class TestCreateThingTool:
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
             tools, applied = _make_reasoning_tools("test-user")
-            create_fn = tools[0]
+            create_fn = tools[1]
 
             new_row = {
                 "id": "person-uuid",
@@ -233,7 +236,7 @@ class TestDeleteThingTool:
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
             tools, applied = _make_reasoning_tools("test-user")
-            delete_fn = tools[2]
+            delete_fn = tools[3]
 
             mock_conn.execute.return_value.fetchone = MagicMock(return_value=None)
             result = delete_fn(thing_id="nonexistent")
@@ -251,7 +254,7 @@ class TestDeleteThingTool:
              patch("backend.reasoning_agent.vs_delete") as mock_vs_delete:
             from backend.reasoning_agent import _make_reasoning_tools
             tools, applied = _make_reasoning_tools("test-user")
-            delete_fn = tools[2]
+            delete_fn = tools[3]
 
             row = {"id": "del-uuid", "title": "Delete Me"}
             mock_row = MagicMock()
@@ -274,7 +277,7 @@ class TestCreateRelationshipTool:
     def test_self_referential_rejected(self):
         from backend.reasoning_agent import _make_reasoning_tools
         tools, applied = _make_reasoning_tools("test-user")
-        rel_fn = tools[4]
+        rel_fn = tools[5]
         result = rel_fn(
             from_thing_id="same-id",
             to_thing_id="same-id",
@@ -293,7 +296,7 @@ class TestCreateRelationshipTool:
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
             tools, applied = _make_reasoning_tools("test-user")
-            rel_fn = tools[4]
+            rel_fn = tools[5]
 
             mock_conn.execute.return_value.fetchone = MagicMock(
                 side_effect=[None, None, None]
@@ -317,7 +320,7 @@ class TestCreateRelationshipTool:
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
             tools, applied = _make_reasoning_tools("test-user")
-            rel_fn = tools[4]
+            rel_fn = tools[5]
 
             dup_row = MagicMock()
             dup_row.__getitem__ = lambda self, key: "dup-id"
@@ -342,7 +345,7 @@ class TestCreateRelationshipTool:
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
             tools, applied = _make_reasoning_tools("test-user")
-            rel_fn = tools[4]
+            rel_fn = tools[5]
 
             from_row = MagicMock()
             from_row.__getitem__ = lambda self, key: "from-uuid"
@@ -381,10 +384,11 @@ async def test_reasoning_agent_returns_metadata_from_adk():
         mock_run.return_value = json.dumps(metadata)
 
         # Mock _make_reasoning_tools to avoid DB access
-        mock_tools = [MagicMock() for _ in range(5)]
+        mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [], "updated": [], "deleted": [],
             "merged": [], "relationships_created": [],
+            "context_things": [], "context_relationships": [],
         }
 
         with patch("backend.reasoning_agent._make_reasoning_tools",
@@ -413,11 +417,12 @@ async def test_reasoning_agent_invalid_json_returns_defaults():
     with patch("backend.reasoning_agent._run_agent_for_text") as mock_run:
         mock_run.return_value = "not valid json {{"
 
-        mock_tools = [MagicMock() for _ in range(5)]
+        mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [{"id": "new-uuid", "title": "Test"}],
             "updated": [], "deleted": [],
             "merged": [], "relationships_created": [],
+            "context_things": [], "context_relationships": [],
         }
 
         with patch("backend.reasoning_agent._make_reasoning_tools",
@@ -447,10 +452,11 @@ async def test_reasoning_agent_tracks_usage():
     with patch("backend.reasoning_agent._run_agent_for_text") as mock_run:
         mock_run.return_value = json.dumps(metadata)
 
-        mock_tools = [MagicMock() for _ in range(5)]
+        mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [], "updated": [], "deleted": [],
             "merged": [], "relationships_created": [],
+            "context_things": [], "context_relationships": [],
         }
 
         with patch("backend.reasoning_agent._make_reasoning_tools",
@@ -487,10 +493,11 @@ async def test_reasoning_agent_ollama_fallback():
         patch("backend.reasoning_agent._make_reasoning_tools") as mock_make_tools,
     ):
         mock_run.return_value = json.dumps(metadata)
-        mock_tools = [MagicMock() for _ in range(5)]
+        mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [], "updated": [], "deleted": [],
             "merged": [], "relationships_created": [],
+            "context_things": [], "context_relationships": [],
         }
         mock_make_tools.return_value = (mock_tools, mock_applied)
 
@@ -535,6 +542,7 @@ async def test_reasoning_agent_ollama_success():
             "created": [{"id": "new-uuid", "title": "Groceries"}],
             "updated": [], "deleted": [], "merged": [],
             "relationships_created": [],
+            "context_things": [], "context_relationships": [],
         }
 
         from backend.reasoning_agent import run_reasoning_agent
@@ -576,14 +584,109 @@ async def test_reasoning_agent_priority_question_fallback():
 
 
 # ---------------------------------------------------------------------------
+# fetch_context tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestFetchContextTool:
+    """Tests for the fetch_context tool function."""
+
+    def test_fetch_context_no_fetcher_returns_error(self):
+        """fetch_context returns error when no context_fetcher is provided."""
+        from backend.reasoning_agent import _make_reasoning_tools
+
+        tools, applied = _make_reasoning_tools("test-user", context_fetcher=None)
+        fetch_fn = tools[0]
+        result = fetch_fn(query="test")
+        assert "error" in result
+
+    def test_fetch_context_empty_query_returns_error(self):
+        """fetch_context returns error for empty query."""
+        from backend.reasoning_agent import _make_reasoning_tools
+
+        def mock_fetcher(queries, filter_params):
+            return [], []
+
+        tools, applied = _make_reasoning_tools("test-user", context_fetcher=mock_fetcher)
+        fetch_fn = tools[0]
+        result = fetch_fn(query="   ")
+        assert "error" in result
+
+    def test_fetch_context_returns_things(self):
+        """fetch_context returns things from the fetcher."""
+        from backend.reasoning_agent import _make_reasoning_tools
+
+        mock_things = [
+            {"id": "t1", "title": "Task 1", "type_hint": "task", "data": "{}", "active": 1, "priority": 2},
+            {"id": "t2", "title": "Task 2", "type_hint": "task", "data": "{}", "active": 1, "priority": 3},
+        ]
+        mock_rels = [{"from_thing_id": "t1", "to_thing_id": "t2", "relationship_type": "related-to"}]
+
+        def mock_fetcher(queries, filter_params):
+            return mock_things, mock_rels
+
+        tools, applied = _make_reasoning_tools("test-user", context_fetcher=mock_fetcher)
+        fetch_fn = tools[0]
+        result = fetch_fn(query="task")
+
+        assert result["things_found"] == 2
+        assert len(result["things"]) == 2
+        assert result["things"][0]["id"] == "t1"
+        assert len(result["relationships"]) == 1
+        # Applied should track context things
+        assert len(applied["context_things"]) == 2
+        assert len(applied["context_relationships"]) == 1
+
+    def test_fetch_context_deduplicates_across_calls(self):
+        """Multiple fetch_context calls don't duplicate tracked things."""
+        from backend.reasoning_agent import _make_reasoning_tools
+
+        call_count = 0
+
+        def mock_fetcher(queries, filter_params):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [{"id": "t1", "title": "Task 1"}], []
+            return [{"id": "t1", "title": "Task 1"}, {"id": "t2", "title": "Task 2"}], []
+
+        tools, applied = _make_reasoning_tools("test-user", context_fetcher=mock_fetcher)
+        fetch_fn = tools[0]
+
+        fetch_fn(query="first")
+        assert len(applied["context_things"]) == 1
+
+        fetch_fn(query="second")
+        assert len(applied["context_things"]) == 2  # t1 not duplicated
+
+    def test_fetch_context_passes_filter_params(self):
+        """fetch_context passes filter params to the fetcher."""
+        from backend.reasoning_agent import _make_reasoning_tools
+
+        received_params = {}
+
+        def mock_fetcher(queries, filter_params):
+            received_params.update(filter_params)
+            return [], []
+
+        tools, applied = _make_reasoning_tools("test-user", context_fetcher=mock_fetcher)
+        fetch_fn = tools[0]
+        fetch_fn(query="test", active_only=False, type_hint="person")
+
+        assert received_params["active_only"] is False
+        assert received_params["type_hint"] == "person"
+
+
+# ---------------------------------------------------------------------------
 # System prompt tests
 # ---------------------------------------------------------------------------
 
 
 def test_tool_system_prompt_mentions_tools():
-    """The tool-calling system prompt references all five tools."""
+    """The tool-calling system prompt references all six tools."""
     from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
 
+    assert "fetch_context" in REASONING_AGENT_TOOL_SYSTEM
     assert "create_thing" in REASONING_AGENT_TOOL_SYSTEM
     assert "update_thing" in REASONING_AGENT_TOOL_SYSTEM
     assert "delete_thing" in REASONING_AGENT_TOOL_SYSTEM
@@ -653,7 +756,7 @@ class TestDataJsonStringRegression:
         """create_thing returns error when data_json is a JSON string."""
         from backend.reasoning_agent import _make_reasoning_tools
         tools, applied = _make_reasoning_tools("test-user")
-        create_fn = tools[0]
+        create_fn = tools[1]
 
         result = create_fn(title="Test", data_json='"just a string"')
         assert "error" in result
@@ -672,7 +775,7 @@ class TestDataJsonStringRegression:
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
             tools, applied = _make_reasoning_tools("test-user")
-            update_fn = tools[1]
+            update_fn = tools[2]
 
             existing_row = {"id": "ex-uuid", "title": "Existing", "data": '{}'}
             mock_existing = MagicMock()
@@ -697,7 +800,7 @@ class TestDataJsonStringRegression:
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
             tools, applied = _make_reasoning_tools("test-user")
-            update_fn = tools[1]
+            update_fn = tools[2]
 
             existing_row = {"id": "ex-uuid", "title": "Existing", "data": '{}'}
             mock_existing = MagicMock()
@@ -714,7 +817,7 @@ class TestDataJsonStringRegression:
         """merge_things returns error when merged_data_json is a JSON string."""
         from backend.reasoning_agent import _make_reasoning_tools
         tools, applied = _make_reasoning_tools("test-user")
-        merge_fn = tools[3]
+        merge_fn = tools[4]
 
         result = merge_fn(keep_id="keep-uuid",
                           remove_id="remove-uuid",
