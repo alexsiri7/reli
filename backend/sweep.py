@@ -23,6 +23,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
+from .auth import user_filter
 from .database import db
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,7 @@ def find_approaching_dates(
     conn: sqlite3.Connection,
     today: date | None = None,
     window_days: int = 7,
+    user_id: str = "",
 ) -> list[SweepCandidate]:
     """Find Things with dates (checkin_date or data JSON dates) within *window_days*.
 
@@ -124,14 +126,15 @@ def find_approaching_dates(
     today = today or date.today()
     cutoff = today + timedelta(days=window_days)
     candidates: list[SweepCandidate] = []
+    uf_sql, uf_params = user_filter(user_id)
 
     # 1. checkin_date column (already in ISO format)
     rows = conn.execute(
-        """SELECT id, title, checkin_date FROM things
+        f"""SELECT id, title, checkin_date FROM things
            WHERE active = 1
              AND checkin_date IS NOT NULL
-             AND DATE(checkin_date) BETWEEN ? AND ?""",
-        (today.isoformat(), cutoff.isoformat()),
+             AND DATE(checkin_date) BETWEEN ? AND ?{uf_sql}""",
+        (today.isoformat(), cutoff.isoformat(), *uf_params),
     ).fetchall()
     for row in rows:
         parsed = _parse_date_value(row["checkin_date"])
@@ -156,9 +159,10 @@ def find_approaching_dates(
 
     # 2. Date fields in the data JSON
     data_rows = conn.execute(
-        """SELECT id, title, data FROM things
+        f"""SELECT id, title, data FROM things
            WHERE active = 1
-             AND data IS NOT NULL AND data != '{}' AND data != 'null'"""
+             AND data IS NOT NULL AND data != '{{}}' AND data != 'null'{uf_sql}""",
+        uf_params,
     ).fetchall()
     for row in data_rows:
         try:
@@ -206,16 +210,18 @@ def find_stale_things(
     conn: sqlite3.Connection,
     today: date | None = None,
     stale_days: int = 14,
+    user_id: str = "",
 ) -> list[SweepCandidate]:
     """Find active Things not updated in *stale_days* or more."""
     today = today or date.today()
     cutoff = (today - timedelta(days=stale_days)).isoformat()
+    uf_sql, uf_params = user_filter(user_id)
     rows = conn.execute(
-        """SELECT id, title, type_hint, updated_at FROM things
+        f"""SELECT id, title, type_hint, updated_at FROM things
            WHERE active = 1
-             AND updated_at < ?
+             AND updated_at < ?{uf_sql}
            ORDER BY updated_at ASC""",
-        (cutoff,),
+        (cutoff, *uf_params),
     ).fetchall()
 
     candidates: list[SweepCandidate] = []
@@ -236,16 +242,18 @@ def find_stale_things(
     return candidates
 
 
-def find_orphan_things(conn: sqlite3.Connection) -> list[SweepCandidate]:
+def find_orphan_things(conn: sqlite3.Connection, user_id: str = "") -> list[SweepCandidate]:
     """Find active Things with no relationships (no parent, no children, no graph edges)."""
+    uf_sql, uf_params = user_filter(user_id, "t")
     rows = conn.execute(
-        """SELECT t.id, t.title, t.type_hint FROM things t
+        f"""SELECT t.id, t.title, t.type_hint FROM things t
            LEFT JOIN thing_relationships r
              ON t.id = r.from_thing_id OR t.id = r.to_thing_id
            WHERE t.active = 1
              AND t.parent_id IS NULL
-             AND r.id IS NULL
-           ORDER BY t.created_at DESC"""
+             AND r.id IS NULL{uf_sql}
+           ORDER BY t.created_at DESC""",
+        uf_params,
     ).fetchall()
 
     candidates: list[SweepCandidate] = []
@@ -263,7 +271,7 @@ def find_orphan_things(conn: sqlite3.Connection) -> list[SweepCandidate]:
     return candidates
 
 
-def find_completed_projects(conn: sqlite3.Connection) -> list[SweepCandidate]:
+def find_completed_projects(conn: sqlite3.Connection, user_id: str = "") -> list[SweepCandidate]:
     """Find active projects where all children are inactive (completed).
 
     A project qualifies if:
@@ -271,16 +279,18 @@ def find_completed_projects(conn: sqlite3.Connection) -> list[SweepCandidate]:
     - It has at least one child (via parent_id)
     - ALL of its children are inactive
     """
+    uf_sql, uf_params = user_filter(user_id, "p")
     rows = conn.execute(
-        """SELECT p.id, p.title,
+        f"""SELECT p.id, p.title,
                   COUNT(c.id) AS total_children,
                   SUM(CASE WHEN c.active = 0 THEN 1 ELSE 0 END) AS inactive_children
            FROM things p
            JOIN things c ON c.parent_id = p.id
            WHERE p.active = 1
-             AND p.type_hint = 'project'
+             AND p.type_hint = 'project'{uf_sql}
            GROUP BY p.id
-           HAVING total_children > 0 AND total_children = inactive_children"""
+           HAVING total_children > 0 AND total_children = inactive_children""",
+        uf_params,
     ).fetchall()
 
     candidates: list[SweepCandidate] = []
@@ -299,14 +309,16 @@ def find_completed_projects(conn: sqlite3.Connection) -> list[SweepCandidate]:
     return candidates
 
 
-def find_open_questions(conn: sqlite3.Connection) -> list[SweepCandidate]:
+def find_open_questions(conn: sqlite3.Connection, user_id: str = "") -> list[SweepCandidate]:
     """Find active Things that have unanswered open_questions."""
+    uf_sql, uf_params = user_filter(user_id)
     rows = conn.execute(
-        """SELECT id, title, open_questions FROM things
+        f"""SELECT id, title, open_questions FROM things
            WHERE active = 1
              AND open_questions IS NOT NULL
              AND open_questions != '[]'
-             AND open_questions != 'null'"""
+             AND open_questions != 'null'{uf_sql}""",
+        uf_params,
     ).fetchall()
 
     candidates: list[SweepCandidate] = []
@@ -343,6 +355,7 @@ def collect_candidates(
     today: date | None = None,
     window_days: int = 7,
     stale_days: int = 14,
+    user_id: str = "",
 ) -> list[SweepCandidate]:
     """Run all SQL candidate queries and return a combined, deduplicated list.
 
@@ -353,11 +366,11 @@ def collect_candidates(
 
     with db() as conn:
         candidates = (
-            find_approaching_dates(conn, today, window_days)
-            + find_stale_things(conn, today, stale_days)
-            + find_orphan_things(conn)
-            + find_completed_projects(conn)
-            + find_open_questions(conn)
+            find_approaching_dates(conn, today, window_days, user_id=user_id)
+            + find_stale_things(conn, today, stale_days, user_id=user_id)
+            + find_orphan_things(conn, user_id=user_id)
+            + find_completed_projects(conn, user_id=user_id)
+            + find_open_questions(conn, user_id=user_id)
         )
 
     # Deduplicate: keep the highest-priority (lowest number) candidate per (thing_id, finding_type)
@@ -414,6 +427,11 @@ Rules:
 - Keep findings to 3-8 items. Quality over quantity.
 - Don't just repeat what the SQL queries found — add insight and connections.
 - If candidates are empty or trivial, return {"findings": []} — don't fabricate.
+
+GUARD RAILS — you MUST follow these:
+- NEVER suggest deleting any Thing. You may only propose creating, updating, or reviewing.
+- Your output is advisory — you create findings (observations), never modify data directly.
+- When in doubt, surface information rather than recommend destructive action.
 """
 
 
@@ -443,16 +461,17 @@ def _format_candidates_for_llm(candidates: list[SweepCandidate]) -> str:
 
 async def reflect_on_candidates(
     candidates: list[SweepCandidate] | None = None,
+    user_id: str = "",
 ) -> ReflectionResult:
     """Phase 2: Send SQL candidates to LLM for nuanced reflection.
 
     If *candidates* is None, runs collect_candidates() first.
     Returns a ReflectionResult with the findings created in sweep_findings.
     """
-    from .agents import UsageStats, _chat
+    from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
 
     if candidates is None:
-        candidates = collect_candidates()
+        candidates = collect_candidates(user_id=user_id)
 
     usage_stats = UsageStats()
     prompt = _format_candidates_for_llm(candidates)
@@ -462,7 +481,7 @@ async def reflect_on_candidates(
             {"role": "system", "content": SWEEP_REFLECTION_SYSTEM},
             {"role": "user", "content": prompt},
         ],
-        model=None,  # uses default context model (cheapest)
+        model=REQUESTY_REASONING_MODEL,
         response_format={"type": "json_object"},
         usage_stats=usage_stats,
     )
@@ -507,9 +526,9 @@ async def reflect_on_candidates(
             finding_id = f"sf-{uuid.uuid4().hex[:8]}"
             conn.execute(
                 """INSERT INTO sweep_findings
-                   (id, thing_id, finding_type, message, priority, dismissed, created_at, expires_at)
-                   VALUES (?, ?, ?, ?, ?, 0, ?, ?)""",
-                (finding_id, thing_id, "llm_insight", message, priority, now.isoformat(), expires_at),
+                   (id, thing_id, finding_type, message, priority, dismissed, created_at, expires_at, user_id)
+                   VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)""",
+                (finding_id, thing_id, "llm_insight", message, priority, now.isoformat(), expires_at, user_id or None),
             )
             created.append(
                 {

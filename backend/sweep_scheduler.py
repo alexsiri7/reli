@@ -4,16 +4,17 @@ Default schedule: daily at 03:00 local time.  Configurable via the
 ``SWEEP_HOUR`` (0-23) and ``SWEEP_MINUTE`` (0-59) environment variables.
 Set ``SWEEP_ENABLED=false`` to disable entirely.
 
-The scheduler runs the SQL candidate phase first.  If candidates are found,
-it proceeds to the LLM reflection phase.  Errors are logged but never
-propagate to the main application.
+The scheduler iterates over all users, running the SQL candidate phase and
+LLM reflection phase per-user.  Each run is logged in the sweep_runs table.
+Errors are logged but never propagate to the main application.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -43,28 +44,127 @@ def _seconds_until(hour: int, minute: int) -> float:
     return (target - now).total_seconds()
 
 
-async def _run_sweep() -> None:
-    """Execute one sweep cycle: SQL candidates → optional LLM reflection."""
+def _get_all_user_ids() -> list[str]:
+    """Return all user IDs from the database. Returns [''] if no users exist."""
+    from .database import db
+
+    with db() as conn:
+        rows = conn.execute("SELECT id FROM users ORDER BY created_at").fetchall()
+    if not rows:
+        return [""]  # No users — run in legacy single-user mode
+    return [row["id"] for row in rows]
+
+
+def _log_run(
+    run_id: str,
+    user_id: str,
+    status: str,
+    candidates_found: int = 0,
+    findings_created: int = 0,
+    model: str | None = None,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    cost_usd: float = 0.0,
+    error: str | None = None,
+    started_at: str = "",
+    completed_at: str | None = None,
+) -> None:
+    """Insert or update a sweep run record."""
+    from .database import db
+
+    with db() as conn:
+        conn.execute(
+            """INSERT INTO sweep_runs
+               (id, user_id, status, candidates_found, findings_created,
+                model, prompt_tokens, completion_tokens, cost_usd,
+                error, started_at, completed_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 status=excluded.status,
+                 candidates_found=excluded.candidates_found,
+                 findings_created=excluded.findings_created,
+                 model=excluded.model,
+                 prompt_tokens=excluded.prompt_tokens,
+                 completion_tokens=excluded.completion_tokens,
+                 cost_usd=excluded.cost_usd,
+                 error=excluded.error,
+                 completed_at=excluded.completed_at""",
+            (
+                run_id,
+                user_id or None,
+                status,
+                candidates_found,
+                findings_created,
+                model,
+                prompt_tokens,
+                completion_tokens,
+                cost_usd,
+                error,
+                started_at,
+                completed_at,
+            ),
+        )
+
+
+async def _run_sweep_for_user(user_id: str) -> None:
+    """Execute one sweep cycle for a single user."""
     from .sweep import collect_candidates, reflect_on_candidates
 
-    logger.info("Sweep started")
+    run_id = f"sr-{uuid.uuid4().hex[:8]}"
+    now = datetime.now(timezone.utc).isoformat()
+
+    _log_run(run_id, user_id, status="running", started_at=now)
 
     try:
-        candidates = collect_candidates()
-        logger.info("Sweep SQL phase: %d candidates found", len(candidates))
+        candidates = collect_candidates(user_id=user_id)
+        user_label = user_id[:8] if user_id else "legacy"
+        logger.info("Sweep [%s] SQL phase: %d candidates found", user_label, len(candidates))
 
         if not candidates:
-            logger.info("Sweep complete — no candidates, skipping LLM phase")
+            _log_run(
+                run_id, user_id, status="completed",
+                candidates_found=0, findings_created=0,
+                started_at=now, completed_at=datetime.now(timezone.utc).isoformat(),
+            )
             return
 
-        result = await reflect_on_candidates(candidates)
-        logger.info(
-            "Sweep complete — %d findings created (usage: %s)",
-            result.findings_created,
-            result.usage,
+        result = await reflect_on_candidates(candidates, user_id=user_id)
+        _log_run(
+            run_id, user_id, status="completed",
+            candidates_found=len(candidates),
+            findings_created=result.findings_created,
+            model=result.usage.get("model"),
+            prompt_tokens=result.usage.get("prompt_tokens", 0),
+            completion_tokens=result.usage.get("completion_tokens", 0),
+            cost_usd=result.usage.get("cost_usd", 0.0),
+            started_at=now, completed_at=datetime.now(timezone.utc).isoformat(),
         )
-    except Exception:
-        logger.exception("Sweep failed")
+        logger.info(
+            "Sweep [%s] complete — %d findings created (usage: %s)",
+            user_label, result.findings_created, result.usage,
+        )
+    except Exception as exc:
+        logger.exception("Sweep failed for user %s", user_id)
+        _log_run(
+            run_id, user_id, status="failed",
+            error=str(exc),
+            started_at=now, completed_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+
+async def _run_sweep() -> None:
+    """Execute one sweep cycle: iterate over all users."""
+    logger.info("Sweep started")
+    user_ids = _get_all_user_ids()
+    logger.info("Sweep processing %d user(s)", len(user_ids))
+
+    for user_id in user_ids:
+        try:
+            await _run_sweep_for_user(user_id)
+        except Exception:
+            logger.exception("Sweep failed for user %s", user_id)
+
+    logger.info("Sweep cycle complete")
 
 
 async def sweep_loop() -> None:

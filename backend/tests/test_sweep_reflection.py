@@ -310,3 +310,9 @@ class TestSweepRouter:
         assert "findings_created" in data
         assert data["findings_created"] == 1
         assert "usage" in data
+
+    @pytest.mark.asyncio
+    async def test_run_sweep_endpoint_returns_run_history(self, async_client, patched_db):
+        resp = await async_client.get("/api/sweep/runs")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
