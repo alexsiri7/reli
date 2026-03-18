@@ -31,7 +31,11 @@ _VALID_KEYS = {
     "chat_mode",
     "stale_threshold_days",
     "proactivity_level",
+    "interaction_style",
 }
+
+# Valid interaction styles for coach/consultant calibration
+VALID_INTERACTION_STYLES = {"auto", "coach", "consultant"}
 
 
 # ── Request/Response models ──────────────────────────────────────────────────
@@ -65,6 +69,7 @@ class UserSettings(BaseModel):
     chat_mode: str = "normal"
     stale_threshold_days: int = 14
     proactivity_level: str = "medium"
+    interaction_style: str = "auto"
 
 
 class UserSettingsUpdate(BaseModel):
@@ -81,6 +86,7 @@ class UserSettingsUpdate(BaseModel):
     chat_mode: str | None = None
     stale_threshold_days: int | None = None
     proactivity_level: str | None = None
+    interaction_style: str | None = None
 
 
 class RequestyModel(BaseModel):
@@ -195,6 +201,14 @@ def get_user_api_key(user_id: str) -> str:
     if key:
         return key
     return os.environ.get("REQUESTY_API_KEY", "")
+
+
+def get_user_interaction_style(user_id: str) -> str:
+    """Return the user's interaction style preference ('auto', 'coach', or 'consultant')."""
+    val = get_user_setting(user_id, "interaction_style")
+    if val and val in VALID_INTERACTION_STYLES:
+        return val
+    return "auto"
 
 
 def get_user_models(user_id: str) -> dict[str, str]:
@@ -335,6 +349,7 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         chat_mode=user_settings.get("chat_mode", "normal"),
         stale_threshold_days=stale_threshold,
         proactivity_level=user_settings.get("proactivity_level", "medium"),
+        interaction_style=user_settings.get("interaction_style", "auto"),
     )
 
 
@@ -361,6 +376,9 @@ def update_user_settings(
                     val = str(max(1, min(int(val), 365)))
                 elif field_name == "proactivity_level":
                     if str(val) not in _VALID_PROACTIVITY:
+                        continue
+                elif field_name == "interaction_style":
+                    if val not in VALID_INTERACTION_STYLES:
                         continue
                 _set_user_setting(conn, user_id, field_name, str(val))
 

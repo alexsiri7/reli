@@ -226,6 +226,7 @@ export const UserSettingsSchema = z.object({
   chat_mode: z.string().optional().default('normal'),
   stale_threshold_days: z.number().default(14),
   proactivity_level: z.string().default('medium'),
+  interaction_style: z.string().optional().default('auto'),
 })
 
 export const RequestyModelSchema = z.object({

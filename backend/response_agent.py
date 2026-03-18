@@ -22,9 +22,9 @@ from google.genai import types as genai_types
 
 from .agents import (
     REQUESTY_RESPONSE_MODEL,
-    RESPONSE_AGENT_SYSTEM,
     UsageStats,
     _build_response_messages,
+    get_response_system_prompt,
 )
 from .context_agent import _make_litellm_model
 
@@ -49,6 +49,7 @@ def _build_user_prompt(
     open_questions_by_thing: dict[str, list[str]] | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    interaction_style: str = "auto",
 ) -> str:
     """Build the user prompt content for the ADK agent.
 
@@ -59,6 +60,7 @@ def _build_user_prompt(
         message, reasoning_summary, questions_for_user,
         applied_changes, web_results, open_questions_by_thing,
         priority_question=priority_question, briefing_mode=briefing_mode,
+        interaction_style=interaction_style,
     )
     # The second message (index 1) is the user message with all context
     content: str = messages[1]["content"]
@@ -229,12 +231,14 @@ async def run_response_agent(
     model: str | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    interaction_style: str = "auto",
 ) -> str:
     """Stage 4: generate friendly user-facing response via ADK LlmAgent."""
     user_prompt = _build_user_prompt(
         message, reasoning_summary, questions_for_user,
         applied_changes, web_results, open_questions_by_thing,
         priority_question=priority_question, briefing_mode=briefing_mode,
+        interaction_style=interaction_style,
     )
 
     litellm_model = _make_litellm_model(
@@ -246,7 +250,7 @@ async def run_response_agent(
         name="response_agent",
         description="Generates friendly, conversational responses to the user.",
         model=litellm_model,
-        instruction=RESPONSE_AGENT_SYSTEM,
+        instruction=get_response_system_prompt(interaction_style),
     )
 
     return await _run_agent_for_text(response_agent, user_prompt, usage_stats)
@@ -264,12 +268,14 @@ async def run_response_agent_stream(
     model: str | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    interaction_style: str = "auto",
 ) -> AsyncIterator[str]:
     """Stage 4 (streaming): yield response tokens as they arrive via ADK LlmAgent."""
     user_prompt = _build_user_prompt(
         message, reasoning_summary, questions_for_user,
         applied_changes, web_results, open_questions_by_thing,
         priority_question=priority_question, briefing_mode=briefing_mode,
+        interaction_style=interaction_style,
     )
 
     litellm_model = _make_litellm_model(
@@ -281,7 +287,7 @@ async def run_response_agent_stream(
         name="response_agent",
         description="Generates friendly, conversational responses to the user.",
         model=litellm_model,
-        instruction=RESPONSE_AGENT_SYSTEM,
+        instruction=get_response_system_prompt(interaction_style),
     )
 
     async for token in _run_agent_for_stream(response_agent, user_prompt, usage_stats):

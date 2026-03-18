@@ -24,8 +24,8 @@ from .agents import (
     CONTEXT_AGENT_SYSTEM,
     REQUESTY_REASONING_MODEL,
     REQUESTY_RESPONSE_MODEL,
-    RESPONSE_AGENT_SYSTEM,
     UsageStats,
+    get_response_system_prompt,
 )
 from .auth import user_filter
 from .context_agent import _make_litellm_model, run_context_agent, run_context_refinement
@@ -321,12 +321,14 @@ class ChatPipeline:
         user_models: Mapping[str, str | None] | None = None,
         context_window: int = 10,
         mode: str = "normal",
+        interaction_style: str = "auto",
     ):
         self.user_id = user_id
         self.user_api_key = user_api_key
         self.user_models: Mapping[str, str | None] = user_models or {}
         self.context_window = context_window
         self.mode = mode
+        self.interaction_style = interaction_style
 
         # Create ADK LlmAgent instances for each pipeline stage
         context_model = _make_litellm_model(
@@ -351,13 +353,13 @@ class ChatPipeline:
             name="reasoning_agent",
             description="Reasons about user requests and executes storage changes via tools.",
             model=reasoning_model,
-            instruction=get_system_prompt_for_mode(self.mode),
+            instruction=get_system_prompt_for_mode(self.mode, self.interaction_style),
         )
         self._response_agent = LlmAgent(
             name="response_agent",
             description="Generates friendly, conversational responses to the user.",
             model=response_model,
-            instruction=RESPONSE_AGENT_SYSTEM,
+            instruction=get_response_system_prompt(self.interaction_style),
         )
 
         # Wire all 3 agents into a SequentialAgent defining the pipeline structure.
@@ -671,6 +673,7 @@ class ChatPipeline:
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id, mode=self.mode,
+                            interaction_style=self.interaction_style,
                         )
                         questions_for_user = reasoning_result.get("questions_for_user", [])
                         priority_question = reasoning_result.get("priority_question", "")
@@ -710,6 +713,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            interaction_style=self.interaction_style,
                         )
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
                         self._record_stage_usage(resp_span, "response", usage, calls_before)
@@ -810,6 +814,7 @@ class ChatPipeline:
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id, mode=self.mode,
+                            interaction_style=self.interaction_style,
                         )
                         questions_for_user = reasoning_result.get("questions_for_user", [])
                         priority_question = reasoning_result.get("priority_question", "")
@@ -854,6 +859,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            interaction_style=self.interaction_style,
                         ):
                             reply_parts.append(token)
                             yield PipelineEvent(type="token", data=token)

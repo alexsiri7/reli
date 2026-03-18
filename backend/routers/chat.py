@@ -24,7 +24,7 @@ from ..models import (
     UsageInfo,
 )
 from ..pipeline import ChatPipeline
-from .settings import get_user_api_key, get_user_chat_context_window, get_user_models
+from .settings import get_user_api_key, get_user_chat_context_window, get_user_interaction_style, get_user_models
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +213,7 @@ def _build_pipeline(user_id: str, mode: str = "normal") -> ChatPipeline:
     user_api_key = get_user_api_key(user_id)
     user_models = get_user_models(user_id)
     context_window = get_user_chat_context_window(user_id)
+    interaction_style = get_user_interaction_style(user_id)
 
     pipeline = ChatPipeline(
         user_id=user_id,
@@ -220,6 +221,7 @@ def _build_pipeline(user_id: str, mode: str = "normal") -> ChatPipeline:
         user_models=user_models,
         context_window=context_window,
         mode=mode,
+        interaction_style=interaction_style,
     )
     return pipeline
 
