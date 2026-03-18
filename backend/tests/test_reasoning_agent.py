@@ -753,3 +753,194 @@ class TestToolCatchallErrorHandling:
         result = wrapped(data="not a dict")
         assert "error" in result
         assert "failed" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# thought_signature helpers (GH #158 / Sentry RELI-ZO-5)
+# ---------------------------------------------------------------------------
+
+
+class TestHasToolCallMarkers:
+    """Test _has_tool_call_markers detects enrichment markers from tool call turns."""
+
+    def test_detects_created_marker(self):
+        from backend.reasoning_agent import _has_tool_call_markers
+
+        content = "I updated your project.\n[Created: New Project (project)]"
+        assert _has_tool_call_markers(content) is True
+
+    def test_detects_updated_marker(self):
+        from backend.reasoning_agent import _has_tool_call_markers
+
+        content = "Done.\n[Updated: Existing Task (task)]"
+        assert _has_tool_call_markers(content) is True
+
+    def test_detects_deleted_marker(self):
+        from backend.reasoning_agent import _has_tool_call_markers
+
+        content = "Removed it.\n[Deleted: Old Item]"
+        assert _has_tool_call_markers(content) is True
+
+    def test_detects_merged_marker(self):
+        from backend.reasoning_agent import _has_tool_call_markers
+
+        content = "Merged duplicates.\n[Merged: A into B]"
+        assert _has_tool_call_markers(content) is True
+
+    def test_no_markers_returns_false(self):
+        from backend.reasoning_agent import _has_tool_call_markers
+
+        assert _has_tool_call_markers("Just a normal response.") is False
+
+    def test_empty_content_returns_false(self):
+        from backend.reasoning_agent import _has_tool_call_markers
+
+        assert _has_tool_call_markers("") is False
+        assert _has_tool_call_markers(None) is False  # type: ignore[arg-type]
+
+
+class TestIsThoughtSignatureError:
+    """Test _is_thought_signature_error detects Gemini thought_signature errors."""
+
+    def test_detects_missing_thought_signature(self):
+        from backend.reasoning_agent import _is_thought_signature_error
+
+        exc = Exception(
+            "BadRequestError: Error code: 400 - {'error': {'origin': 'provider', "
+            "'message': 'Function call is missing a thought_signature in functionCall parts.'}}"
+        )
+        assert _is_thought_signature_error(exc) is True
+
+    def test_ignores_unrelated_bad_request(self):
+        from backend.reasoning_agent import _is_thought_signature_error
+
+        exc = Exception("BadRequestError: invalid model parameter")
+        assert _is_thought_signature_error(exc) is False
+
+    def test_ignores_generic_exception(self):
+        from backend.reasoning_agent import _is_thought_signature_error
+
+        assert _is_thought_signature_error(ValueError("oops")) is False
+
+
+class TestRunAdkWithThoughtSignatureFallback:
+    """Test _run_adk_with_thought_signature_fallback retries on thought_signature errors."""
+
+    @pytest.mark.asyncio
+    async def test_success_on_first_try(self):
+        from backend.reasoning_agent import _run_adk_with_thought_signature_fallback
+
+        agent = MagicMock()
+        with patch("backend.reasoning_agent._run_agent_for_text", new=AsyncMock(return_value="ok")):
+            result = await _run_adk_with_thought_signature_fallback(
+                agent, "full prompt", "fallback prompt",
+            )
+        assert result == "ok"
+
+    @pytest.mark.asyncio
+    async def test_retries_without_history_on_thought_signature_error(self):
+        from backend.reasoning_agent import _run_adk_with_thought_signature_fallback
+
+        agent = MagicMock()
+        call_count = 0
+
+        async def mock_run(ag, prompt, stats=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception(
+                    "Function call is missing a thought_signature in functionCall parts."
+                )
+            return "retry ok"
+
+        with patch("backend.reasoning_agent._run_agent_for_text", side_effect=mock_run):
+            result = await _run_adk_with_thought_signature_fallback(
+                agent, "full with history", "just current turn",
+            )
+        assert result == "retry ok"
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_raises_non_thought_signature_errors(self):
+        from backend.reasoning_agent import _run_adk_with_thought_signature_fallback
+
+        agent = MagicMock()
+
+        with patch(
+            "backend.reasoning_agent._run_agent_for_text",
+            new=AsyncMock(side_effect=ValueError("unrelated error")),
+        ), pytest.raises(ValueError, match="unrelated error"):
+            await _run_adk_with_thought_signature_fallback(
+                agent, "full prompt", "fallback prompt",
+            )
+
+
+class TestHistoryFilteringInReasoningAgent:
+    """Test that run_reasoning_agent excludes tool-call history turns."""
+
+    @pytest.mark.asyncio
+    async def test_excludes_assistant_turns_with_tool_markers(self):
+        """Assistant turns with tool call markers should be excluded from history."""
+        metadata = {"reasoning_summary": "test"}
+        history = [
+            {"role": "user", "content": "Create a project called X"},
+            {"role": "assistant", "content": "Done!\n[Created: X (project)]"},
+            {"role": "user", "content": "Now update it"},
+        ]
+
+        with patch("backend.reasoning_agent._run_adk_with_thought_signature_fallback") as mock_run, \
+             patch("backend.reasoning_agent._make_reasoning_tools") as mock_make, \
+             patch("backend.reasoning_agent._make_litellm_model") as mock_factory, \
+             patch("backend.reasoning_agent.LlmAgent"):
+            mock_run.return_value = json.dumps(metadata)
+            mock_make.return_value = (
+                [MagicMock() for _ in range(5)],
+                {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+            )
+            mock_factory.return_value = MagicMock()
+
+            from backend.reasoning_agent import run_reasoning_agent
+
+            await run_reasoning_agent(
+                "Now update it", history, [], api_key="k", user_id="u",
+            )
+
+        # Check the full_prompt passed to the fallback function
+        call_args = mock_run.call_args
+        full_prompt = call_args.args[1]  # second positional arg
+        # User turns should be included
+        assert "<user>" in full_prompt
+        # Assistant turn with tool marker should be excluded
+        assert "[Created:" not in full_prompt
+
+    @pytest.mark.asyncio
+    async def test_keeps_assistant_turns_without_markers(self):
+        """Assistant turns without tool call markers should be kept in history."""
+        metadata = {"reasoning_summary": "test"}
+        history = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there, how can I help?"},
+            {"role": "user", "content": "Tell me about my projects"},
+        ]
+
+        with patch("backend.reasoning_agent._run_adk_with_thought_signature_fallback") as mock_run, \
+             patch("backend.reasoning_agent._make_reasoning_tools") as mock_make, \
+             patch("backend.reasoning_agent._make_litellm_model") as mock_factory, \
+             patch("backend.reasoning_agent.LlmAgent"):
+            mock_run.return_value = json.dumps(metadata)
+            mock_make.return_value = (
+                [MagicMock() for _ in range(5)],
+                {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+            )
+            mock_factory.return_value = MagicMock()
+
+            from backend.reasoning_agent import run_reasoning_agent
+
+            await run_reasoning_agent(
+                "Tell me about my projects", history, [], api_key="k", user_id="u",
+            )
+
+        call_args = mock_run.call_args
+        full_prompt = call_args.args[1]
+        # Both user and assistant turns should be present
+        assert "Hi there, how can I help?" in full_prompt
