@@ -1,0 +1,116 @@
+{
+  "eval_set_id": "reasoning-merge-things",
+  "name": "Reasoning Agent — Merge Things",
+  "description": "Golden dataset: merging duplicate Things",
+  "eval_cases": [
+    {
+      "eval_id": "merge-duplicate-tasks",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nThose two grocery tasks are the same thing, merge them\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-500\", \"title\": \"Buy groceries\", \"type_hint\": \"task\", \"data\": \"{\\\"store\\\": \\\"Trader Joe's\\\"}\", \"active\": 1}, {\"id\": \"thing-501\", \"title\": \"Grocery shopping\", \"type_hint\": \"task\", \"data\": \"{\\\"notes\\\": \\\"weekly\\\"}\", \"active\": 1}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Merged duplicate grocery tasks.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"groceries\", \"grocery\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "keep_id": "thing-500",
+                  "remove_id": "thing-501",
+                  "merged_data_json": "{\"store\": \"Trader Joe's\", \"notes\": \"weekly\"}"
+                },
+                "name": "merge_things",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "thing-500"
+                    },
+                    {
+                      "id": "thing-501"
+                    }
+                  ],
+                  "count": 2
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "merge_things",
+                "response": {
+                  "keep_id": "thing-500",
+                  "remove_id": "thing-501"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}
