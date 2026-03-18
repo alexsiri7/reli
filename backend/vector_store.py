@@ -76,7 +76,10 @@ _embedder = _ThingEmbedder()
 
 
 def _get_collection() -> chromadb.Collection:
-    client = chromadb.PersistentClient(path=str(CHROMA_PATH))
+    client = chromadb.PersistentClient(
+        path=str(CHROMA_PATH),
+        settings=chromadb.Settings(anonymized_telemetry=False),
+    )
     return client.get_or_create_collection(
         name=COLLECTION_NAME,
         embedding_function=_embedder,
