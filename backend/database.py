@@ -207,6 +207,25 @@ def _migrate_backfill_null_user_ids(conn: sqlite3.Connection) -> None:
         conn.execute(f"UPDATE {table} SET user_id = ? WHERE user_id IS NULL", (uid,))
 
 
+def _migrate_interaction_style(conn: sqlite3.Connection) -> None:
+    """Create interaction_style table for learned user interaction preferences."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS interaction_style (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            dimension TEXT NOT NULL,
+            learned_value REAL DEFAULT 0.5,
+            manual_override TEXT,
+            sample_count INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, dimension)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_interaction_style_user ON interaction_style(user_id)"
+    )
+
+
 def _migrate_sweep_runs(conn: sqlite3.Connection) -> None:
     """Create sweep_runs table for logging sweep execution history."""
     conn.execute("""
@@ -430,4 +449,5 @@ def init_db() -> None:
         _migrate_merge_history(conn)
         _migrate_sweep_runs(conn)
         _migrate_connection_suggestions(conn)
+        _migrate_interaction_style(conn)
         _seed_thing_types(conn)

@@ -23,6 +23,7 @@ from ..models import (
     SessionUsage,
     UsageInfo,
 )
+from ..interaction_style import analyze_chat_history, get_style_preferences
 from ..pipeline import ChatPipeline
 from .settings import get_user_api_key, get_user_chat_context_window, get_user_models
 
@@ -321,7 +322,35 @@ def _persist_exchange(
                 (session_id, call.model, call.prompt_tokens, call.completion_tokens, call.cost_usd, user_id or None),
             )
 
+    # Periodically re-analyze interaction style preferences
+    _maybe_update_style(user_id)
+
     return applied_with_sources
+
+
+def _maybe_update_style(user_id: str) -> None:
+    """Re-analyze interaction style if enough new messages have accumulated."""
+    if not user_id:
+        return
+    try:
+        prefs = get_style_preferences(user_id)
+        # Check coaching_vs_consulting as representative dimension
+        cv = prefs.get("coaching_vs_consulting", {})
+        sample_count = cv.get("sample_count", 0)
+
+        # Count current user messages
+        with db() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM chat_history WHERE user_id = ? AND role = 'user'",
+                (user_id,),
+            ).fetchone()
+            total_messages = row["cnt"] if row else 0
+
+        # Re-analyze if never analyzed or 20+ new messages since last analysis
+        if sample_count == 0 or (total_messages - sample_count) >= 20:
+            analyze_chat_history(user_id)
+    except Exception:
+        logger.debug("Style analysis skipped", exc_info=True)
 
 
 @router.post("", response_model=ChatResponse, summary="Send a message through the multi-agent pipeline")

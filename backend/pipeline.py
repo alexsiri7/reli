@@ -710,6 +710,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            user_id=self.user_id,
                         )
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
                         self._record_stage_usage(resp_span, "response", usage, calls_before)
@@ -854,6 +855,7 @@ class ChatPipeline:
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
+                            user_id=self.user_id,
                         ):
                             reply_parts.append(token)
                             yield PipelineEvent(type="token", data=token)

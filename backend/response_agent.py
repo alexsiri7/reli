@@ -27,6 +27,7 @@ from .agents import (
     _build_response_messages,
 )
 from .context_agent import _make_litellm_model
+from .interaction_style import build_style_instruction, get_effective_style
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +230,7 @@ async def run_response_agent(
     model: str | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    user_id: str = "",
 ) -> str:
     """Stage 4: generate friendly user-facing response via ADK LlmAgent."""
     user_prompt = _build_user_prompt(
@@ -242,11 +244,19 @@ async def run_response_agent(
         api_key=api_key,
     )
 
+    # Inject learned interaction style preferences into the system prompt
+    instruction = RESPONSE_AGENT_SYSTEM
+    if user_id:
+        style = get_effective_style(user_id)
+        style_addendum = build_style_instruction(style)
+        if style_addendum:
+            instruction = instruction + style_addendum
+
     response_agent = LlmAgent(
         name="response_agent",
         description="Generates friendly, conversational responses to the user.",
         model=litellm_model,
-        instruction=RESPONSE_AGENT_SYSTEM,
+        instruction=instruction,
     )
 
     return await _run_agent_for_text(response_agent, user_prompt, usage_stats)
@@ -264,6 +274,7 @@ async def run_response_agent_stream(
     model: str | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    user_id: str = "",
 ) -> AsyncIterator[str]:
     """Stage 4 (streaming): yield response tokens as they arrive via ADK LlmAgent."""
     user_prompt = _build_user_prompt(
@@ -277,11 +288,19 @@ async def run_response_agent_stream(
         api_key=api_key,
     )
 
+    # Inject learned interaction style preferences into the system prompt
+    instruction = RESPONSE_AGENT_SYSTEM
+    if user_id:
+        style = get_effective_style(user_id)
+        style_addendum = build_style_instruction(style)
+        if style_addendum:
+            instruction = instruction + style_addendum
+
     response_agent = LlmAgent(
         name="response_agent",
         description="Generates friendly, conversational responses to the user.",
         model=litellm_model,
-        instruction=RESPONSE_AGENT_SYSTEM,
+        instruction=instruction,
     )
 
     async for token in _run_agent_for_stream(response_agent, user_prompt, usage_stats):

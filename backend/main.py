@@ -42,6 +42,7 @@ from .routers import (  # noqa: E402
     feedback,
     focus,
     gmail,
+    interaction_style,
     proactive,
     settings,
     staleness,
@@ -221,6 +222,7 @@ app.include_router(focus.router, prefix="/api", dependencies=_api_deps)
 app.include_router(staleness.router, prefix="/api", dependencies=_api_deps)
 app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
 app.include_router(connections.router, prefix="/api", dependencies=_api_deps)
+app.include_router(interaction_style.router, prefix="/api", dependencies=_api_deps)
 
 
 @app.get("/healthz", tags=["health"], summary="Health check", description="Returns service health status.")

@@ -274,6 +274,7 @@ function SettingsForm({
         </div>
       </div>
       <VoiceSection />
+      <InteractionStyleSection />
       <ThemeSection />
       <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
         {saved && (
@@ -617,6 +618,170 @@ function VoiceSection() {
             Only one voice available on this device
           </p>
         )}
+      </div>
+    </div>
+  )
+}
+
+const STYLE_DIMENSIONS = [
+  {
+    key: 'coaching_vs_consulting' as const,
+    label: 'Coaching vs Consulting',
+    leftLabel: 'Coaching',
+    rightLabel: 'Consulting',
+    description: 'Coaching asks guiding questions; consulting gives direct answers',
+  },
+  {
+    key: 'verbosity' as const,
+    label: 'Verbosity',
+    leftLabel: 'Brief',
+    rightLabel: 'Detailed',
+    description: 'How much detail to include in responses',
+  },
+  {
+    key: 'formality' as const,
+    label: 'Formality',
+    leftLabel: 'Casual',
+    rightLabel: 'Formal',
+    description: 'Tone of voice from casual to professional',
+  },
+]
+
+function InteractionStyleSection() {
+  const {
+    interactionStyle,
+    interactionStyleLoading,
+    interactionStyleAnalyzing,
+    fetchInteractionStyle,
+    updateInteractionStyleOverride,
+    analyzeInteractionStyle,
+  } = useStore(
+    useShallow(s => ({
+      interactionStyle: s.interactionStyle,
+      interactionStyleLoading: s.interactionStyleLoading,
+      interactionStyleAnalyzing: s.interactionStyleAnalyzing,
+      fetchInteractionStyle: s.fetchInteractionStyle,
+      updateInteractionStyleOverride: s.updateInteractionStyleOverride,
+      analyzeInteractionStyle: s.analyzeInteractionStyle,
+    })),
+  )
+
+  useEffect(() => {
+    fetchInteractionStyle()
+  }, [fetchInteractionStyle])
+
+  return (
+    <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Interaction Style</h3>
+        <button
+          onClick={analyzeInteractionStyle}
+          disabled={interactionStyleAnalyzing}
+          className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50 rounded-md transition-colors"
+        >
+          {interactionStyleAnalyzing ? 'Analyzing...' : 'Re-analyze'}
+        </button>
+      </div>
+      <p className="text-xs text-gray-400 dark:text-gray-400 mb-4">
+        Learned from your chat history. Drag to override, or click the reset button to use the learned value.
+      </p>
+
+      {interactionStyleLoading ? (
+        <div className="space-y-3 animate-pulse">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded" />
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded" />
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded" />
+        </div>
+      ) : interactionStyle ? (
+        <div className="space-y-4">
+          {STYLE_DIMENSIONS.map(dim => {
+            const data = interactionStyle[dim.key]
+            return (
+              <StyleSlider
+                key={dim.key}
+                label={dim.label}
+                leftLabel={dim.leftLabel}
+                rightLabel={dim.rightLabel}
+                value={data.value}
+                learnedValue={data.learned_value}
+                hasOverride={data.manual_override !== null}
+                sampleCount={data.sample_count}
+                onChange={val => updateInteractionStyleOverride(dim.key, val)}
+                onReset={() => updateInteractionStyleOverride(dim.key, null)}
+              />
+            )
+          })}
+        </div>
+      ) : (
+        <p className="text-xs text-gray-400 italic">Not enough chat history to learn preferences yet.</p>
+      )}
+    </div>
+  )
+}
+
+function StyleSlider({
+  label,
+  leftLabel,
+  rightLabel,
+  value,
+  learnedValue,
+  hasOverride,
+  sampleCount,
+  onChange,
+  onReset,
+}: {
+  label: string
+  leftLabel: string
+  rightLabel: string
+  value: number
+  learnedValue: number
+  hasOverride: boolean
+  sampleCount: number
+  onChange: (val: number) => void
+  onReset: () => void
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">{label}</label>
+        <div className="flex items-center gap-1.5">
+          {sampleCount > 0 && (
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">
+              {sampleCount} msgs
+            </span>
+          )}
+          {hasOverride && (
+            <button
+              onClick={onReset}
+              className="text-[10px] text-indigo-500 hover:text-indigo-600 dark:text-indigo-400"
+              title="Reset to learned value"
+            >
+              reset
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="relative">
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={Math.round(value * 100)}
+          onChange={e => onChange(parseInt(e.target.value, 10) / 100)}
+          className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+        />
+        {/* Learned value marker */}
+        {sampleCount > 0 && hasOverride && (
+          <div
+            className="absolute top-0 w-1 h-1.5 bg-indigo-300 dark:bg-indigo-600 rounded-full pointer-events-none"
+            style={{ left: `${learnedValue * 100}%`, transform: 'translateX(-50%)' }}
+            title={`Learned: ${Math.round(learnedValue * 100)}%`}
+          />
+        )}
+      </div>
+      <div className="flex justify-between mt-0.5">
+        <span className="text-[10px] text-gray-400 dark:text-gray-500">{leftLabel}</span>
+        <span className="text-[10px] text-gray-400 dark:text-gray-500">{rightLabel}</span>
       </div>
     </div>
   )

@@ -224,6 +224,19 @@ export interface CallUsage {
   cost_usd: number
 }
 
+export interface StyleDimension {
+  value: number
+  learned_value: number
+  manual_override: number | null
+  sample_count: number
+}
+
+export interface InteractionStylePreferences {
+  coaching_vs_consulting: StyleDimension
+  verbosity: StyleDimension
+  formality: StyleDimension
+}
+
 export type ChatMode = 'normal' | 'planning'
 
 export type StreamingStage = 'context' | 'reasoning' | 'response' | null
@@ -386,6 +399,14 @@ interface ReliState {
     user_agent: string
     url: string
   }) => Promise<{ success: boolean; issueUrl?: string; error?: string }>
+
+  // Interaction style preferences
+  interactionStyle: InteractionStylePreferences | null
+  interactionStyleLoading: boolean
+  interactionStyleAnalyzing: boolean
+  fetchInteractionStyle: () => Promise<void>
+  updateInteractionStyleOverride: (dimension: string, value: number | null) => Promise<void>
+  analyzeInteractionStyle: () => Promise<void>
 }
 
 const HISTORY_PAGE_SIZE = 20
@@ -1224,6 +1245,54 @@ export const useStore = create<ReliState>((set, get) => ({
       return { success: true, issueUrl: result.issue_url }
     } catch (e) {
       return { success: false, error: String(e) }
+    }
+  },
+
+  // Interaction style preferences
+  interactionStyle: null,
+  interactionStyleLoading: false,
+  interactionStyleAnalyzing: false,
+  fetchInteractionStyle: async () => {
+    set({ interactionStyleLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/interaction-style`)
+      if (res.ok) {
+        const data = await res.json()
+        set({ interactionStyle: data })
+      }
+    } catch {
+      // silently fail
+    } finally {
+      set({ interactionStyleLoading: false })
+    }
+  },
+  updateInteractionStyleOverride: async (dimension, value) => {
+    try {
+      const res = await apiFetch(`${BASE}/interaction-style`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dimension, value }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        set({ interactionStyle: data })
+      }
+    } catch {
+      // silently fail
+    }
+  },
+  analyzeInteractionStyle: async () => {
+    set({ interactionStyleAnalyzing: true })
+    try {
+      const res = await apiFetch(`${BASE}/interaction-style/analyze`, { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        set({ interactionStyle: data })
+      }
+    } catch {
+      // silently fail
+    } finally {
+      set({ interactionStyleAnalyzing: false })
     }
   },
 }))
