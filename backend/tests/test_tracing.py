@@ -145,16 +145,17 @@ class TestTracedToolDecorator:
         result = wrapped(title="Test", priority=1)
         assert result == {"id": "abc", "title": "Test", "priority": 1}
 
-    def test_traced_tool_propagates_exceptions(self):
-        """Wrapped tool should re-raise exceptions from the original."""
+    def test_traced_tool_catches_exceptions(self):
+        """Wrapped tool should catch exceptions and return error dict."""
         from backend.reasoning_agent import _traced_tool
 
         def failing_tool(x: str) -> dict:
             raise ValueError("boom")
 
         wrapped = _traced_tool(failing_tool)
-        with pytest.raises(ValueError, match="boom"):
-            wrapped(x="test")
+        result = wrapped(x="test")
+        assert "error" in result
+        assert "boom" in result["error"]
 
     def test_traced_tool_records_span_attributes(self):
         """Wrapped tool should set span attributes for inputs and outputs."""
