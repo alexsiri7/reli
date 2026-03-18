@@ -1,5 +1,6 @@
 services:
   reli:
+    build: .
     image: ghcr.io/alexsiri7/reli:${RELI_IMAGE_TAG:-latest}
     ports:
       - "127.0.0.1:8000:8000"

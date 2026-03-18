@@ -64,9 +64,13 @@ def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str,
             try:
                 result = func(*args, **kwargs)
             except Exception as exc:
+                logger.exception(
+                    "Tool %s crashed: %s (args=%s kwargs=%s)",
+                    func.__name__, exc, args, kwargs,
+                )
                 span.set_status(trace.StatusCode.ERROR, str(exc))
                 span.record_exception(exc)
-                raise
+                return {"error": f"Tool {func.__name__} failed: {exc}"}
 
             # Record output
             if isinstance(result, dict):
@@ -423,7 +427,9 @@ def _make_reasoning_tools(
 
         try:
             data = json.loads(data_json) if data_json else {}
-        except json.JSONDecodeError:
+            if not isinstance(data, dict):
+                data = {}
+        except (json.JSONDecodeError, TypeError):
             data = {}
         try:
             open_questions = json.loads(open_questions_json) if open_questions_json else []
@@ -574,7 +580,9 @@ def _make_reasoning_tools(
             if data_json:
                 try:
                     new_data = json.loads(data_json)
-                except json.JSONDecodeError:
+                    if not isinstance(new_data, dict):
+                        new_data = {}
+                except (json.JSONDecodeError, TypeError):
                     new_data = {}
                 if new_data:
                     try:
@@ -665,7 +673,9 @@ def _make_reasoning_tools(
         now = datetime.now(timezone.utc).isoformat()
         try:
             merged_data = json.loads(merged_data_json) if merged_data_json else {}
-        except json.JSONDecodeError:
+            if not isinstance(merged_data, dict):
+                merged_data = {}
+        except (json.JSONDecodeError, TypeError):
             merged_data = {}
 
         with db() as conn:
