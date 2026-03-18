@@ -629,13 +629,13 @@ async def test_reasoning_agent_disables_thinking():
             "test", [], [], api_key="k", user_id="u",
         )
 
-    # Verify _make_litellm_model was called with thinking disabled
+    # Verify _make_litellm_model was called with thinking enabled (re-zo fix)
     mock_factory.assert_called_once()
     call_kwargs = mock_factory.call_args
     extra_body = call_kwargs.kwargs.get("extra_body")
-    assert extra_body is not None, "extra_body must be passed to disable thinking"
-    assert extra_body.get("thinking_config", {}).get("thinking_budget") == 0, \
-        "thinking_budget must be 0 to prevent thought_signature errors"
+    assert extra_body is not None, "extra_body must be passed to enable thinking"
+    assert extra_body.get("thinking_config", {}).get("thinking_budget") == 1000, \
+        "thinking_budget must be 1000 to enable reasoning capabilities"
 
 
 # ---------------------------------------------------------------------------
@@ -894,8 +894,9 @@ class TestHistoryFilteringInReasoningAgent:
              patch("backend.reasoning_agent.LlmAgent"):
             mock_run.return_value = json.dumps(metadata)
             mock_make.return_value = (
-                [MagicMock() for _ in range(5)],
+                [MagicMock() for _ in range(6)],
                 {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+                {},
             )
             mock_factory.return_value = MagicMock()
 
@@ -929,8 +930,9 @@ class TestHistoryFilteringInReasoningAgent:
              patch("backend.reasoning_agent.LlmAgent"):
             mock_run.return_value = json.dumps(metadata)
             mock_make.return_value = (
-                [MagicMock() for _ in range(5)],
+                [MagicMock() for _ in range(6)],
                 {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+                {},
             )
             mock_factory.return_value = MagicMock()
 

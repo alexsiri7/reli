@@ -59,9 +59,17 @@ def _make_litellm_model(
     litellm's completion call (e.g. ``extra_body`` for provider-specific params).
     """
     effective_model = model or REQUESTY_MODEL
-    # LiteLlm expects the openai/ prefix for OpenAI-compatible providers
-    if not effective_model.startswith("openai/"):
+    
+    # Use native gemini/ provider for Gemini models to support thought_signatures.
+    # Otherwise fallback to openai/ for OpenAI-compatible routing.
+    if "gemini" in effective_model.lower():
+        if not (effective_model.startswith("gemini/") or effective_model.startswith("google/")):
+             effective_model = f"gemini/{effective_model}"
+        elif effective_model.startswith("google/"):
+             effective_model = effective_model.replace("google/", "gemini/", 1)
+    elif not effective_model.startswith("openai/"):
         effective_model = f"openai/{effective_model}"
+        
     return LiteLlm(
         model=effective_model,
         api_key=api_key or REQUESTY_API_KEY,
