@@ -229,11 +229,12 @@ class TestTracedToolDecorator:
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
 
-            tools, _ = _make_reasoning_tools("test-user")
+            tools, _, _fetched = _make_reasoning_tools("test-user")
 
         # All tools should still have their original names (via functools.wraps)
         names = [t.__name__ for t in tools]
         assert names == [
+            "fetch_context",
             "create_thing",
             "update_thing",
             "delete_thing",
