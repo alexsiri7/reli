@@ -28,19 +28,12 @@ REQUESTY_API_KEY: str = settings.REQUESTY_API_KEY
 
 
 def _litellm_model(model: str) -> str:
-    """Prefix model name for LiteLLM's provider.
+    """Prefix model name for LiteLLM's OpenAI-compatible provider.
 
-    For Gemini models, we use the native ``gemini/`` provider to support
-    features like thought_signatures. For others, we default to ``openai/``
-    since we route through Requesty's OpenAI-compatible API.
+    Requesty exposes an OpenAI-compatible API, so we tell LiteLLM to use the
+    ``openai/`` provider.  If the model already has an ``openai/`` prefix we
+    leave it alone.
     """
-    if "gemini" in model.lower():
-        if not (model.startswith("gemini/") or model.startswith("google/")):
-            return f"gemini/{model}"
-        if model.startswith("google/"):
-            return model.replace("google/", "gemini/", 1)
-        return model
-
     if model.startswith("openai/"):
         return model
     return f"openai/{model}"

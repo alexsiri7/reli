@@ -894,8 +894,9 @@ class TestHistoryFilteringInReasoningAgent:
              patch("backend.reasoning_agent.LlmAgent"):
             mock_run.return_value = json.dumps(metadata)
             mock_make.return_value = (
-                [MagicMock() for _ in range(5)],
+                [MagicMock() for _ in range(6)],
                 {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+                {},
             )
             mock_factory.return_value = MagicMock()
 
@@ -929,8 +930,9 @@ class TestHistoryFilteringInReasoningAgent:
              patch("backend.reasoning_agent.LlmAgent"):
             mock_run.return_value = json.dumps(metadata)
             mock_make.return_value = (
-                [MagicMock() for _ in range(5)],
+                [MagicMock() for _ in range(6)],
                 {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+                {},
             )
             mock_factory.return_value = MagicMock()
 

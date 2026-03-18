@@ -1162,10 +1162,12 @@ async def run_reasoning_agent(
     # -- ADK path with tool calling --
     tools, applied_changes, fetched_context = _make_reasoning_tools(user_id)
 
-    # Enable thinking with a budget of 1000 tokens.  With the native gemini/
-    # provider prefix (configured in context_agent._make_litellm_model),
-    # LiteLLM and ADK should correctly handle the thought_signatures
-    # required by thinking models for function calling.
+    # Enable thinking with a budget of 1000 tokens.  We use the standard
+    # 'openai/' prefix (via _make_litellm_model) because Requesty's router
+    # does not support the native Gemini generateContent endpoint.
+    # To handle the 'missing thought_signature' errors that can occur when
+    # routing Gemini thinking models through OpenAI proxies, we use history
+    # filtering (excluding tool-call turns) and a retry fallback below.
     litellm_model = _make_litellm_model(
         model=model or REQUESTY_REASONING_MODEL,
         api_key=api_key,
