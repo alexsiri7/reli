@@ -9,8 +9,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from backend.sweep_scheduler import (
+    _get_all_user_ids,
     _get_config,
+    _log_run,
     _run_sweep,
+    _run_sweep_for_user,
     _seconds_until,
     start_scheduler,
     stop_scheduler,
@@ -77,65 +80,145 @@ class TestSecondsUntil:
             assert _seconds_until(h, 0) > 0
 
 
+class TestGetAllUserIds:
+    def test_no_users_returns_legacy(self, patched_db):
+        result = _get_all_user_ids()
+        assert result == [""]
+
+    def test_returns_user_ids(self, patched_db):
+        from backend.database import db
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO users (id, email, google_id, name) VALUES (?, ?, ?, ?)",
+                ("u1", "a@b.com", "g1", "Alice"),
+            )
+            conn.execute(
+                "INSERT INTO users (id, email, google_id, name) VALUES (?, ?, ?, ?)",
+                ("u2", "c@d.com", "g2", "Bob"),
+            )
+        result = _get_all_user_ids()
+        assert result == ["u1", "u2"]
+
+
+class TestLogRun:
+    def test_creates_run_record(self, patched_db):
+        from backend.database import db
+
+        _log_run("sr-test1", "", status="completed", candidates_found=5,
+                 findings_created=2, started_at="2026-01-01T00:00:00Z",
+                 completed_at="2026-01-01T00:01:00Z")
+
+        with db() as conn:
+            row = conn.execute("SELECT * FROM sweep_runs WHERE id = ?", ("sr-test1",)).fetchone()
+        assert row is not None
+        assert row["status"] == "completed"
+        assert row["candidates_found"] == 5
+        assert row["findings_created"] == 2
+
+    def test_upsert_updates_existing(self, patched_db):
+        from backend.database import db
+
+        _log_run("sr-test2", "", status="running", started_at="2026-01-01T00:00:00Z")
+        _log_run("sr-test2", "", status="completed", candidates_found=3,
+                 findings_created=1, started_at="2026-01-01T00:00:00Z",
+                 completed_at="2026-01-01T00:01:00Z")
+
+        with db() as conn:
+            row = conn.execute("SELECT * FROM sweep_runs WHERE id = ?", ("sr-test2",)).fetchone()
+        assert row["status"] == "completed"
+        assert row["candidates_found"] == 3
+
+
+class TestRunSweepForUser:
+    @pytest.mark.asyncio
+    async def test_no_candidates_logs_completed(self, patched_db):
+        from backend.database import db
+
+        with patch("backend.sweep.collect_candidates", return_value=[]):
+            await _run_sweep_for_user("")
+
+        with db() as conn:
+            rows = conn.execute("SELECT * FROM sweep_runs").fetchall()
+        assert len(rows) == 1
+        assert rows[0]["status"] == "completed"
+        assert rows[0]["candidates_found"] == 0
+
+    @pytest.mark.asyncio
+    async def test_with_candidates_runs_reflection(self, patched_db):
+        from backend.database import db
+
+        fake_candidate = MagicMock()
+        mock_result = MagicMock(
+            findings_created=2,
+            usage={"model": "test-model", "prompt_tokens": 50, "completion_tokens": 30, "cost_usd": 0.01},
+        )
+
+        with (
+            patch("backend.sweep.collect_candidates", return_value=[fake_candidate]),
+            patch("backend.sweep.reflect_on_candidates", new_callable=AsyncMock, return_value=mock_result),
+        ):
+            await _run_sweep_for_user("")
+
+        with db() as conn:
+            rows = conn.execute("SELECT * FROM sweep_runs").fetchall()
+        assert len(rows) == 1
+        assert rows[0]["status"] == "completed"
+        assert rows[0]["candidates_found"] == 1
+        assert rows[0]["findings_created"] == 2
+
+
 class TestRunSweep:
     @pytest.mark.asyncio
-    async def test_no_candidates_skips_llm(self, patched_db):
-        """When SQL phase finds nothing, LLM phase is not called."""
-        with (
-            patch("backend.sweep.collect_candidates", return_value=[]) as mock_collect,
-            patch("backend.sweep.reflect_on_candidates") as mock_reflect,
-        ):
+    async def test_iterates_over_users(self, patched_db):
+        from backend.database import db
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO users (id, email, google_id, name) VALUES (?, ?, ?, ?)",
+                ("u1", "a@b.com", "g1", "Alice"),
+            )
+            conn.execute(
+                "INSERT INTO users (id, email, google_id, name) VALUES (?, ?, ?, ?)",
+                ("u2", "c@d.com", "g2", "Bob"),
+            )
+
+        with patch("backend.sweep.collect_candidates", return_value=[]) as mock_collect:
             await _run_sweep()
-            mock_collect.assert_called_once()
-            mock_reflect.assert_not_called()
+
+        # Should have been called once per user
+        assert mock_collect.call_count == 2
+        call_user_ids = [c.kwargs.get("user_id") for c in mock_collect.call_args_list]
+        assert "u1" in call_user_ids
+        assert "u2" in call_user_ids
 
     @pytest.mark.asyncio
-    async def test_with_candidates_runs_llm(self, patched_db):
-        """When SQL phase finds candidates, LLM phase runs."""
-        fake_candidate = MagicMock()
-        mock_result = MagicMock(findings_created=2, usage={"total_tokens": 100})
+    async def test_error_in_one_user_doesnt_block_others(self, patched_db):
+        from backend.database import db
 
-        with (
-            patch(
-                "backend.sweep.collect_candidates",
-                return_value=[fake_candidate],
-            ),
-            patch(
-                "backend.sweep.reflect_on_candidates",
-                new_callable=AsyncMock,
-                return_value=mock_result,
-            ) as mock_reflect,
-        ):
-            await _run_sweep()
-            mock_reflect.assert_called_once_with([fake_candidate])
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO users (id, email, google_id, name) VALUES (?, ?, ?, ?)",
+                ("u1", "a@b.com", "g1", "Alice"),
+            )
+            conn.execute(
+                "INSERT INTO users (id, email, google_id, name) VALUES (?, ?, ?, ?)",
+                ("u2", "c@d.com", "g2", "Bob"),
+            )
 
-    @pytest.mark.asyncio
-    async def test_sql_error_handled(self, patched_db):
-        """Errors in SQL phase are logged, not raised."""
-        with patch(
-            "backend.sweep.collect_candidates",
-            side_effect=RuntimeError("db boom"),
-        ):
-            # Should not raise
-            await _run_sweep()
+        call_count = 0
 
-    @pytest.mark.asyncio
-    async def test_llm_error_handled(self, patched_db):
-        """Errors in LLM phase are logged, not raised."""
-        fake_candidate = MagicMock()
-        with (
-            patch(
-                "backend.sweep.collect_candidates",
-                return_value=[fake_candidate],
-            ),
-            patch(
-                "backend.sweep.reflect_on_candidates",
-                new_callable=AsyncMock,
-                side_effect=RuntimeError("llm boom"),
-            ),
-        ):
-            # Should not raise
-            await _run_sweep()
+        def side_effect(user_id="", **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if user_id == "u1":
+                raise RuntimeError("boom")
+            return []
+
+        with patch("backend.sweep.collect_candidates", side_effect=side_effect):
+            await _run_sweep()  # Should not raise
+
+        assert call_count == 2  # Both users attempted
 
 
 class TestStartStop:
@@ -147,7 +230,7 @@ class TestStartStop:
         mod._task = None
         start_scheduler()
         assert mod._task is not None
-        # Let the task start and exit (disabled → returns immediately)
+        # Let the task start and exit (disabled -> returns immediately)
         await asyncio.sleep(0.1)
         stop_scheduler()
         assert mod._task is None
