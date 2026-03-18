@@ -8,6 +8,10 @@ from backend.sweep import (
     collect_candidates,
     find_approaching_dates,
     find_completed_projects,
+    find_cross_project_duplicate_effort,
+    find_cross_project_resource_conflicts,
+    find_cross_project_shared_blockers,
+    find_cross_project_thematic_connections,
     find_open_questions,
     find_orphan_things,
     find_overdue_checkins,
@@ -479,3 +483,273 @@ class TestCollectCandidates:
         # Alpha (priority 1) should come before Bravo (priority 3)
         approaching = [c for c in results if c.finding_type == "approaching_date"]
         assert approaching[0].thing_title == "Alpha"
+
+    def test_includes_cross_project_findings(self, patched_db):
+        """collect_candidates includes cross-project detection types."""
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Setup database", parent_id="p1")
+            _insert_thing(conn, "t2", "Setup database", parent_id="p2")
+        results = collect_candidates()
+        types = {c.finding_type for c in results}
+        assert "cross_project_duplicate_effort" in types
+
+
+# ---------------------------------------------------------------------------
+# Cross-project: shared blockers
+# ---------------------------------------------------------------------------
+
+
+class TestCrossProjectSharedBlockers:
+    def test_thing_blocking_in_multiple_projects(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Task in Alpha", parent_id="p1")
+            _insert_thing(conn, "t2", "Task in Beta", parent_id="p2")
+            _insert_thing(conn, "blocker", "API Migration")
+            _insert_relationship(conn, "r1", "blocker", "t1", "blocks")
+            _insert_relationship(conn, "r2", "blocker", "t2", "blocks")
+        with db() as conn:
+            results = find_cross_project_shared_blockers(conn)
+        assert len(results) == 1
+        assert results[0].thing_id == "blocker"
+        assert results[0].finding_type == "cross_project_shared_blocker"
+        assert results[0].priority == 1
+        assert results[0].extra["project_count"] == 2
+
+    def test_blocker_in_single_project_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "t1", "Task A", parent_id="p1")
+            _insert_thing(conn, "t2", "Task B", parent_id="p1")
+            _insert_thing(conn, "blocker", "Single Project Blocker")
+            _insert_relationship(conn, "r1", "blocker", "t1", "blocks")
+            _insert_relationship(conn, "r2", "blocker", "t2", "blocks")
+        with db() as conn:
+            results = find_cross_project_shared_blockers(conn)
+        assert len(results) == 0
+
+    def test_inactive_blocker_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Task in Alpha", parent_id="p1")
+            _insert_thing(conn, "t2", "Task in Beta", parent_id="p2")
+            _insert_thing(conn, "blocker", "Done Blocker", active=False)
+            _insert_relationship(conn, "r1", "blocker", "t1", "blocks")
+            _insert_relationship(conn, "r2", "blocker", "t2", "blocks")
+        with db() as conn:
+            results = find_cross_project_shared_blockers(conn)
+        assert len(results) == 0
+
+    def test_depends_on_relationship_type(self, patched_db):
+        """depends_on is treated as a blocking relationship."""
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Task in Alpha", parent_id="p1")
+            _insert_thing(conn, "t2", "Task in Beta", parent_id="p2")
+            _insert_thing(conn, "dep", "Shared Dependency")
+            _insert_relationship(conn, "r1", "t1", "dep", "depends_on")
+            _insert_relationship(conn, "r2", "t2", "dep", "depends_on")
+        with db() as conn:
+            results = find_cross_project_shared_blockers(conn)
+        assert len(results) == 1
+        assert results[0].thing_id == "dep"
+
+
+# ---------------------------------------------------------------------------
+# Cross-project: resource conflicts
+# ---------------------------------------------------------------------------
+
+
+class TestCrossProjectResourceConflicts:
+    def test_person_in_multiple_projects_with_stale_tasks(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Task in Alpha", parent_id="p1", updated_at=old)
+            _insert_thing(conn, "t2", "Task in Beta", parent_id="p2")
+            _insert_thing(conn, "alice", "Alice", type_hint="person")
+            _insert_relationship(conn, "r1", "alice", "t1", "assigned_to")
+            _insert_relationship(conn, "r2", "alice", "t2", "assigned_to")
+        with db() as conn:
+            results = find_cross_project_resource_conflicts(conn, today)
+        assert len(results) == 1
+        assert results[0].thing_id == "alice"
+        assert results[0].finding_type == "cross_project_resource_conflict"
+        assert results[0].extra["stale_tasks"] == 1
+
+    def test_person_in_one_project_excluded(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "t1", "Task A", parent_id="p1", updated_at=old)
+            _insert_thing(conn, "alice", "Alice", type_hint="person")
+            _insert_relationship(conn, "r1", "alice", "t1", "assigned_to")
+        with db() as conn:
+            results = find_cross_project_resource_conflicts(conn, today)
+        assert len(results) == 0
+
+    def test_no_stale_tasks_excluded(self, patched_db):
+        today = date.today()
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Task in Alpha", parent_id="p1")
+            _insert_thing(conn, "t2", "Task in Beta", parent_id="p2")
+            _insert_thing(conn, "alice", "Alice", type_hint="person")
+            _insert_relationship(conn, "r1", "alice", "t1", "assigned_to")
+            _insert_relationship(conn, "r2", "alice", "t2", "assigned_to")
+        with db() as conn:
+            results = find_cross_project_resource_conflicts(conn, today)
+        assert len(results) == 0
+
+    def test_non_person_excluded(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Task in Alpha", parent_id="p1", updated_at=old)
+            _insert_thing(conn, "t2", "Task in Beta", parent_id="p2")
+            _insert_thing(conn, "tool", "Shared Tool", type_hint="tool")
+            _insert_relationship(conn, "r1", "tool", "t1", "used_by")
+            _insert_relationship(conn, "r2", "tool", "t2", "used_by")
+        with db() as conn:
+            results = find_cross_project_resource_conflicts(conn, today)
+        assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# Cross-project: thematic connections
+# ---------------------------------------------------------------------------
+
+
+class TestCrossProjectThematicConnections:
+    def test_similar_titles_across_projects(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Design user authentication flow", parent_id="p1")
+            _insert_thing(conn, "t2", "Implement user authentication service", parent_id="p2")
+        with db() as conn:
+            results = find_cross_project_thematic_connections(conn)
+        assert len(results) == 1
+        assert results[0].finding_type == "cross_project_thematic_connection"
+        assert "user" in results[0].extra["shared_words"]
+        assert "authentication" in results[0].extra["shared_words"]
+
+    def test_same_project_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "t1", "Design user auth", parent_id="p1")
+            _insert_thing(conn, "t2", "Implement user auth", parent_id="p1")
+        with db() as conn:
+            results = find_cross_project_thematic_connections(conn)
+        assert len(results) == 0
+
+    def test_unrelated_titles_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Design homepage layout", parent_id="p1")
+            _insert_thing(conn, "t2", "Fix database migration", parent_id="p2")
+        with db() as conn:
+            results = find_cross_project_thematic_connections(conn)
+        assert len(results) == 0
+
+    def test_short_words_excluded(self, patched_db):
+        """Words shorter than 3 chars should not count."""
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Do it", parent_id="p1")
+            _insert_thing(conn, "t2", "Do it", parent_id="p2")
+        with db() as conn:
+            results = find_cross_project_thematic_connections(conn)
+        # "Do" and "it" are <3 chars, no significant shared words
+        assert len(results) == 0
+
+    def test_inactive_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Design user authentication", parent_id="p1", active=False)
+            _insert_thing(conn, "t2", "Implement user authentication", parent_id="p2")
+        with db() as conn:
+            results = find_cross_project_thematic_connections(conn)
+        assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# Cross-project: duplicate effort
+# ---------------------------------------------------------------------------
+
+
+class TestCrossProjectDuplicateEffort:
+    def test_identical_titles_across_projects(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Setup database", parent_id="p1")
+            _insert_thing(conn, "t2", "Setup database", parent_id="p2")
+        with db() as conn:
+            results = find_cross_project_duplicate_effort(conn)
+        assert len(results) == 1
+        assert results[0].finding_type == "cross_project_duplicate_effort"
+        assert results[0].priority == 2
+
+    def test_case_insensitive_match(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Setup Database", parent_id="p1")
+            _insert_thing(conn, "t2", "setup database", parent_id="p2")
+        with db() as conn:
+            results = find_cross_project_duplicate_effort(conn)
+        assert len(results) == 1
+
+    def test_same_project_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "t1", "Setup database", parent_id="p1")
+            _insert_thing(conn, "t2", "Setup database", parent_id="p1")
+        with db() as conn:
+            results = find_cross_project_duplicate_effort(conn)
+        assert len(results) == 0
+
+    def test_different_titles_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Setup database", parent_id="p1")
+            _insert_thing(conn, "t2", "Deploy server", parent_id="p2")
+        with db() as conn:
+            results = find_cross_project_duplicate_effort(conn)
+        assert len(results) == 0
+
+    def test_inactive_task_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project")
+            _insert_thing(conn, "t1", "Setup database", parent_id="p1", active=False)
+            _insert_thing(conn, "t2", "Setup database", parent_id="p2")
+        with db() as conn:
+            results = find_cross_project_duplicate_effort(conn)
+        assert len(results) == 0
+
+    def test_inactive_project_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
+            _insert_thing(conn, "p2", "Project Beta", type_hint="project", active=False)
+            _insert_thing(conn, "t1", "Setup database", parent_id="p1")
+            _insert_thing(conn, "t2", "Setup database", parent_id="p2")
+        with db() as conn:
+            results = find_cross_project_duplicate_effort(conn)
+        assert len(results) == 0
