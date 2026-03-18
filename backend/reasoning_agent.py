@@ -293,12 +293,73 @@ PLANNING_AGENT_TOOL_SYSTEM = _PLANNING_PREAMBLE + _TOOL_RULES
 # Valid chat modes
 VALID_MODES = {"normal", "planning"}
 
+# ---------------------------------------------------------------------------
+# Interaction style overlays (coach vs consultant calibration)
+# ---------------------------------------------------------------------------
 
-def get_system_prompt_for_mode(mode: str) -> str:
-    """Return the appropriate reasoning agent system prompt for the given mode."""
+_COACH_STYLE_OVERLAY = """
+Interaction Style — COACHING:
+You are in coaching mode. Guide the user toward their own answers through
+thoughtful questions rather than giving direct solutions. Your role is to
+help the user think through problems and discover insights themselves.
+
+- Prefer adding questions to questions_for_user over making direct changes
+- When the user describes a goal, ask clarifying questions before creating tasks
+- Use open-ended questions: "What would success look like?", "What's the first
+  step you see?", "What's holding you back?"
+- When you do create Things, include rich open_questions to prompt reflection
+- Set priority_question to the most thought-provoking question
+- Still make storage changes when the user gives clear, specific instructions
+"""
+
+_CONSULTANT_STYLE_OVERLAY = """
+Interaction Style — CONSULTING:
+You are in consulting mode. Provide direct, actionable answers and
+recommendations. The user wants efficiency and expertise, not guided discovery.
+
+- Prefer making direct storage changes over asking questions
+- When the user describes a goal, immediately break it down into concrete tasks
+- Provide specific recommendations with clear rationale in reasoning_summary
+- Minimize questions_for_user — only ask when you genuinely lack critical info
+- When creating Things, set priorities, checkin_dates, and structure proactively
+- Be decisive: recommend the best path rather than presenting options
+"""
+
+_AUTO_STYLE_OVERLAY = """
+Interaction Style — DYNAMIC CALIBRATION:
+Dynamically adjust your interaction style based on context:
+
+- Use COACHING style (ask questions, guide discovery) when:
+  - The user mentions broad goals, aspirations, or life changes
+  - The request is exploratory or open-ended ("I want to get better at...")
+  - The user seems uncertain or is brainstorming
+  - It's a personal growth or reflection topic
+
+- Use CONSULTING style (direct answers, recommendations) when:
+  - The user gives a specific instruction ("add a task", "remind me about")
+  - The user asks a direct question expecting an answer
+  - The user is in a hurry or gives terse messages
+  - It's a straightforward operational request
+  - The user is in planning mode (already structured thinking)
+
+Match the user's energy and intent. Short, direct messages get direct responses.
+Reflective, exploratory messages get coaching questions.
+"""
+
+
+def get_system_prompt_for_mode(mode: str, interaction_style: str = "auto") -> str:
+    """Return the appropriate reasoning agent system prompt for the given mode and style."""
     if mode == "planning":
-        return PLANNING_AGENT_TOOL_SYSTEM
-    return REASONING_AGENT_TOOL_SYSTEM
+        base = PLANNING_AGENT_TOOL_SYSTEM
+    else:
+        base = REASONING_AGENT_TOOL_SYSTEM
+
+    if interaction_style == "coach":
+        return base + _COACH_STYLE_OVERLAY
+    elif interaction_style == "consultant":
+        return base + _CONSULTANT_STYLE_OVERLAY
+    else:
+        return base + _AUTO_STYLE_OVERLAY
 
 
 # ---------------------------------------------------------------------------
@@ -823,6 +884,7 @@ async def run_reasoning_agent(
     model: str | None = None,
     user_id: str = "",
     mode: str = "normal",
+    interaction_style: str = "auto",
 ) -> dict[str, Any]:
     """Stage 2: decide and apply storage changes.
 
@@ -924,7 +986,7 @@ async def run_reasoning_agent(
         extra_body={"thinking_config": {"thinking_budget": 0}},
     )
 
-    system_prompt = get_system_prompt_for_mode(mode)
+    system_prompt = get_system_prompt_for_mode(mode, interaction_style)
     reasoning_agent = LlmAgent(
         name="reasoning_agent",
         description="Reasons about user requests and executes storage changes via tools.",

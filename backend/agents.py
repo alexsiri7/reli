@@ -1061,6 +1061,46 @@ Rules:
 """
 
 
+_RESPONSE_COACH_OVERLAY = """
+Interaction Style — COACHING:
+Frame your responses to guide the user toward their own insights. When
+presenting questions from the reasoning agent, make them feel like a natural
+conversation that empowers the user to reflect. Use language like "What do you
+think about...", "How does that feel?", "What would make this even better?"
+Celebrate the user's own thinking. When they answer a question well, acknowledge
+their insight: "Great thinking!" Be a supportive thought partner, not a
+directive assistant.
+"""
+
+_RESPONSE_CONSULTANT_OVERLAY = """
+Interaction Style — CONSULTING:
+Frame your responses as expert recommendations. Be crisp, decisive, and
+action-oriented. When changes were made, present them as confident
+recommendations: "Here's what I've set up for you..." When there are questions,
+frame them as the minimum info you need to proceed: "Just need one thing from
+you to lock this in." Minimize back-and-forth. Show competence through
+efficiency.
+"""
+
+_RESPONSE_AUTO_OVERLAY = """
+Interaction Style — DYNAMIC:
+Match the user's energy. If the reasoning_summary suggests coaching questions
+were asked, frame your response supportively and reflectively. If direct changes
+were made with few questions, be crisp and action-oriented. Read the room from
+the user's message tone — short and direct gets consultant energy, exploratory
+and reflective gets coaching warmth.
+"""
+
+
+def get_response_system_prompt(interaction_style: str = "auto") -> str:
+    """Return the response agent system prompt with the appropriate style overlay."""
+    if interaction_style == "coach":
+        return RESPONSE_AGENT_SYSTEM + _RESPONSE_COACH_OVERLAY
+    elif interaction_style == "consultant":
+        return RESPONSE_AGENT_SYSTEM + _RESPONSE_CONSULTANT_OVERLAY
+    return RESPONSE_AGENT_SYSTEM + _RESPONSE_AUTO_OVERLAY
+
+
 def _build_response_messages(
     message: str,
     reasoning_summary: str,
@@ -1070,6 +1110,7 @@ def _build_response_messages(
     open_questions_by_thing: dict[str, list[str]] | None = None,
     priority_question: str = "",
     briefing_mode: bool = False,
+    interaction_style: str = "auto",
 ) -> list[dict[str, Any]]:
     """Build the message list for the response agent (shared by streaming and non-streaming)."""
     context = (
@@ -1089,8 +1130,9 @@ def _build_response_messages(
         context += (
             f"\n\nWeb search results (cite relevant sources in your response):\n{json.dumps(web_results, default=str)}"
         )
+    system_prompt = get_response_system_prompt(interaction_style)
     return [
-        {"role": "system", "content": RESPONSE_AGENT_SYSTEM},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": context},
     ]
 

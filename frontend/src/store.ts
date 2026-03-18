@@ -153,6 +153,8 @@ export interface RequestyModel {
   name: string | null
 }
 
+export type InteractionStyle = 'auto' | 'coach' | 'consultant'
+
 export interface UserSettings {
   requesty_api_key: string
   openai_api_key: string
@@ -165,6 +167,7 @@ export interface UserSettings {
   chat_mode: string
   stale_threshold_days: number
   proactivity_level: string
+  interaction_style: string
 }
 
 export interface UserProfileRelationship {
@@ -345,6 +348,10 @@ interface ReliState {
   // Chat mode (Hats)
   chatMode: ChatMode
   setChatMode: (mode: ChatMode) => void
+
+  // Interaction style (Coach vs Consultant)
+  interactionStyle: InteractionStyle
+  setInteractionStyle: (style: InteractionStyle) => void
 
   // Mobile navigation
   mobileView: 'things' | 'chat'
@@ -984,6 +991,17 @@ export const useStore = create<ReliState>((set, get) => ({
     }).catch(() => {})
   },
 
+  // Interaction style (Coach vs Consultant)
+  interactionStyle: 'auto',
+  setInteractionStyle: (style: InteractionStyle) => {
+    set({ interactionStyle: style })
+    apiFetch(`${BASE}/settings/user`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interaction_style: style }),
+    }).catch(() => {})
+  },
+
   // Mobile navigation
   mobileView: 'things',
   setMobileView: (view) => set({ mobileView: view }),
@@ -1053,6 +1071,9 @@ export const useStore = create<ReliState>((set, get) => ({
       }
       if (data.chat_mode === 'normal' || data.chat_mode === 'planning') {
         set({ chatMode: data.chat_mode })
+      }
+      if (data.interaction_style === 'auto' || data.interaction_style === 'coach' || data.interaction_style === 'consultant') {
+        set({ interactionStyle: data.interaction_style as InteractionStyle })
       }
     } catch {
       // ignore
