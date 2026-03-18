@@ -315,3 +315,30 @@ def test_make_litellm_model_no_double_prefix():
 
     m = _make_litellm_model(model="openai/gpt-4o", api_key="k")
     assert m.model == "openai/gpt-4o"
+
+
+def test_make_litellm_model_disable_thinking():
+    """_make_litellm_model with disable_thinking passes extra kwargs to disable Gemini thinking.
+
+    Regression test for: Gemini 2.5 Flash thought_signature error breaking chat
+    when tools are used through OpenAI-compatible gateways.
+    """
+    from backend.context_agent import _make_litellm_model
+
+    m = _make_litellm_model(
+        model="google/gemini-2.5-flash", api_key="k", disable_thinking=True,
+    )
+    assert m.model == "openai/google/gemini-2.5-flash"
+    # reasoning_effort and extra_body should be in _additional_args
+    assert m._additional_args.get("reasoning_effort") == "none"
+    extra_body = m._additional_args.get("extra_body", {})
+    assert extra_body.get("generationConfig", {}).get("thinkingConfig", {}).get("thinkingBudget") == 0
+
+
+def test_make_litellm_model_default_no_thinking_args():
+    """_make_litellm_model without disable_thinking does not add thinking params."""
+    from backend.context_agent import _make_litellm_model
+
+    m = _make_litellm_model(model="google/gemini-2.5-flash-lite", api_key="k")
+    assert "reasoning_effort" not in m._additional_args
+    assert "extra_body" not in m._additional_args

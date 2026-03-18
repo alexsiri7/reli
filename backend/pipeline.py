@@ -333,6 +333,7 @@ class ChatPipeline:
         reasoning_model = _make_litellm_model(
             model=self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
             api_key=user_api_key,
+            disable_thinking=True,
         )
         response_model = _make_litellm_model(
             model=self.user_models.get("response") or REQUESTY_RESPONSE_MODEL,

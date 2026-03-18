@@ -841,7 +841,9 @@ async def run_reasoning_agent(
     tools, applied_changes = _make_reasoning_tools(user_id)
 
     litellm_model = _make_litellm_model(
-        model=model or REQUESTY_REASONING_MODEL, api_key=api_key
+        model=model or REQUESTY_REASONING_MODEL,
+        api_key=api_key,
+        disable_thinking=True,
     )
 
     reasoning_agent = LlmAgent(

@@ -51,16 +51,47 @@ def _strip_markdown_fences(text: str) -> str:
 def _make_litellm_model(
     model: str | None = None,
     api_key: str | None = None,
+    disable_thinking: bool = False,
 ) -> LiteLlm:
-    """Create a LiteLlm model instance configured for Requesty."""
+    """Create a LiteLlm model instance configured for Requesty.
+
+    Args:
+        model: Model name (e.g. "google/gemini-2.5-flash").
+        api_key: API key override.
+        disable_thinking: If True, disable thinking/reasoning mode.  Required
+            for models that use tool calling through OpenAI-compatible gateways,
+            because thought_signatures cannot be echoed back through the
+            OpenAI message format.
+    """
     effective_model = model or REQUESTY_MODEL
     # LiteLlm expects the openai/ prefix for OpenAI-compatible providers
     if not effective_model.startswith("openai/"):
         effective_model = f"openai/{effective_model}"
+    extra_kwargs: dict[str, Any] = {}
+    if disable_thinking:
+        # Gemini 2.5+ models use thinking by default.  When tools are used,
+        # the model attaches thought_signatures to function call parts that
+        # must be echoed back in subsequent turns.  OpenAI-compatible gateways
+        # (like Requesty) lose these signatures because the OpenAI message
+        # format has no standard field for them.  Disabling thinking avoids
+        # the "Function call is missing a thought_signature" error.
+        #
+        # We send multiple hints so at least one is honoured by the gateway:
+        #   - reasoning_effort: OpenAI-standard param (o1/o3), adopted by
+        #     many gateways for controlling model thinking.
+        #   - extra_body with Gemini-native generationConfig: forwarded
+        #     verbatim by gateways that pass unknown body fields through.
+        extra_kwargs["reasoning_effort"] = "none"
+        extra_kwargs["extra_body"] = {
+            "generationConfig": {
+                "thinkingConfig": {"thinkingBudget": 0},
+            },
+        }
     return LiteLlm(
         model=effective_model,
         api_key=api_key or REQUESTY_API_KEY,
         api_base=REQUESTY_BASE_URL,
+        **extra_kwargs,
     )
 
 

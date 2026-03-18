@@ -1,6 +1,6 @@
 """Tests for POST /chat multi-agent pipeline endpoint."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -453,3 +453,40 @@ class TestFetchUserRelationships:
             # Recently referenced should come first
             assert results[0]["id"] == "task-new"
             assert results[1]["id"] == "task-old"
+
+
+# ---------------------------------------------------------------------------
+# Regression: reasoning model disables thinking for tool calling
+# ---------------------------------------------------------------------------
+
+
+def test_pipeline_reasoning_model_disables_thinking():
+    """ChatPipeline creates reasoning model with disable_thinking=True.
+
+    Regression test for: Gemini 2.5 Flash thought_signature error.
+    The reasoning agent uses tool calling, which is incompatible with
+    Gemini thinking mode through OpenAI-compatible gateways.
+    """
+    from google.adk.models.lite_llm import LiteLlm
+
+    mock_litellm = LiteLlm(model="openai/test", api_key="k", api_base="http://x")
+
+    with patch("backend.pipeline._make_litellm_model") as mock_factory, \
+         patch("backend.pipeline.LlmAgent") as MockLlmAgent, \
+         patch("backend.pipeline.SequentialAgent"):
+        mock_factory.return_value = mock_litellm
+        from backend.pipeline import ChatPipeline
+
+        ChatPipeline(user_id="test-user")
+
+    # _make_litellm_model is called 3 times: context, reasoning, response
+    assert mock_factory.call_count == 3
+    # The second call (reasoning) should have disable_thinking=True
+    reasoning_call = mock_factory.call_args_list[1]
+    assert reasoning_call.kwargs.get("disable_thinking") is True
+
+    # Context and response should NOT have disable_thinking
+    context_call = mock_factory.call_args_list[0]
+    response_call = mock_factory.call_args_list[2]
+    assert context_call.kwargs.get("disable_thinking", False) is False
+    assert response_call.kwargs.get("disable_thinking", False) is False

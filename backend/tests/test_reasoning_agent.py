@@ -596,3 +596,46 @@ def test_tool_system_prompt_no_json_output_schema():
     from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
 
     assert '"storage_changes"' not in REASONING_AGENT_TOOL_SYSTEM
+
+
+# ---------------------------------------------------------------------------
+# Thinking mode disabled for tool calling — regression test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reasoning_agent_disables_thinking_for_tool_calls():
+    """Reasoning agent creates LiteLlm model with disable_thinking=True.
+
+    Regression test for: Gemini 2.5 Flash 'thought_signature' error.
+    When tools are used through OpenAI-compatible gateways (e.g. Requesty),
+    thought_signatures cannot be echoed back, causing the error:
+    'Function call is missing a thought_signature in functionCall parts'.
+    The fix is to disable thinking mode for tool-calling agents.
+    """
+    from google.adk.models.lite_llm import LiteLlm
+
+    mock_litellm = LiteLlm(model="openai/test", api_key="k", api_base="http://x")
+    metadata = {"reasoning_summary": "test"}
+
+    with patch("backend.reasoning_agent._run_agent_for_text") as mock_run, \
+         patch("backend.reasoning_agent._make_reasoning_tools") as mock_make, \
+         patch("backend.reasoning_agent._make_litellm_model") as mock_model_factory, \
+         patch("backend.reasoning_agent.LlmAgent"):
+        mock_run.return_value = json.dumps(metadata)
+        mock_make.return_value = (
+            [MagicMock() for _ in range(5)],
+            {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+        )
+        mock_model_factory.return_value = mock_litellm
+
+        from backend.reasoning_agent import run_reasoning_agent
+
+        await run_reasoning_agent(
+            "test", [], [], api_key="k", user_id="u",
+        )
+
+    # Verify _make_litellm_model was called with disable_thinking=True
+    mock_model_factory.assert_called_once()
+    call_kwargs = mock_model_factory.call_args
+    assert call_kwargs.kwargs.get("disable_thinking") is True
