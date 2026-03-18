@@ -7,6 +7,7 @@ import { CalendarSection } from './CalendarSection'
 import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
 import { MergeSuggestions } from './MergeSuggestions'
+import { ConnectionSuggestions } from './ConnectionSuggestions'
 
 const FINDING_TYPE_ICONS: Record<string, string> = {
   approaching_date: '\u23F0',
@@ -526,6 +527,9 @@ export function Sidebar() {
 
             {/* Merge Suggestions */}
             <MergeSuggestions />
+
+            {/* Connection Suggestions */}
+            <ConnectionSuggestions />
 
             {/* Proactive Surfaces */}
             {proactiveSurfaces && proactiveSurfaces.length > 0 && (

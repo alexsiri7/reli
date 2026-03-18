@@ -153,7 +153,7 @@ async def _run_sweep_for_user(user_id: str) -> None:
 
 
 async def _run_sweep() -> None:
-    """Execute one sweep cycle: iterate over all users."""
+    """Execute one sweep cycle: iterate over all users, then run connection sweep."""
     logger.info("Sweep started")
     user_ids = _get_all_user_ids()
     logger.info("Sweep processing %d user(s)", len(user_ids))
@@ -163,6 +163,19 @@ async def _run_sweep() -> None:
             await _run_sweep_for_user(user_id)
         except Exception:
             logger.exception("Sweep failed for user %s", user_id)
+
+    # Connection sweep: find semantically similar but unconnected Things
+    try:
+        from .connection_sweep import run_connection_sweep
+
+        conn_result = await run_connection_sweep()
+        logger.info(
+            "Connection sweep: %d candidates, %d suggestions created",
+            conn_result.candidates_found,
+            conn_result.suggestions_created,
+        )
+    except Exception:
+        logger.exception("Connection sweep failed")
 
     logger.info("Sweep cycle complete")
 

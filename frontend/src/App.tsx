@@ -12,7 +12,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { FeedbackDialog } from './components/FeedbackDialog'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchMergeSuggestions, fetchUserSettings, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
@@ -31,6 +31,7 @@ function App() {
       fetchProactiveSurfaces: s.fetchProactiveSurfaces,
       fetchFocusRecommendations: s.fetchFocusRecommendations,
       fetchMergeSuggestions: s.fetchMergeSuggestions,
+      fetchConnectionSuggestions: s.fetchConnectionSuggestions,
       fetchUserSettings: s.fetchUserSettings,
       error: s.error,
     }))
@@ -55,6 +56,7 @@ function App() {
     fetchProactiveSurfaces()
     fetchFocusRecommendations()
     fetchMergeSuggestions()
+    fetchConnectionSuggestions()
     fetchUserSettings()
     const interval = setInterval(() => { fetchThings(); fetchBriefing(); fetchProactiveSurfaces(); fetchFocusRecommendations() }, 30_000)
 
@@ -66,7 +68,7 @@ function App() {
     }
 
     return () => clearInterval(interval)
-  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchMergeSuggestions, fetchUserSettings])
+  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings])
 
   // Show nothing while checking auth
   if (!authChecked) {
