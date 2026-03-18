@@ -596,3 +596,40 @@ def test_tool_system_prompt_no_json_output_schema():
     from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
 
     assert '"storage_changes"' not in REASONING_AGENT_TOOL_SYSTEM
+
+
+# ---------------------------------------------------------------------------
+# Thinking disabled regression test (re-xai6)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reasoning_agent_disables_thinking():
+    """LiteLlm model for reasoning agent must disable thinking to avoid
+    thought_signature errors when routing through OpenAI-compatible providers."""
+    metadata = {"reasoning_summary": "test"}
+
+    with patch("backend.reasoning_agent._run_agent_for_text") as mock_run, \
+         patch("backend.reasoning_agent._make_reasoning_tools") as mock_make, \
+         patch("backend.reasoning_agent._make_litellm_model") as mock_factory, \
+         patch("backend.reasoning_agent.LlmAgent"):
+        mock_run.return_value = json.dumps(metadata)
+        mock_make.return_value = (
+            [MagicMock() for _ in range(5)],
+            {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+        )
+        mock_factory.return_value = MagicMock()
+
+        from backend.reasoning_agent import run_reasoning_agent
+
+        await run_reasoning_agent(
+            "test", [], [], api_key="k", user_id="u",
+        )
+
+    # Verify _make_litellm_model was called with thinking disabled
+    mock_factory.assert_called_once()
+    call_kwargs = mock_factory.call_args
+    extra_body = call_kwargs.kwargs.get("extra_body")
+    assert extra_body is not None, "extra_body must be passed to disable thinking"
+    assert extra_body.get("thinking_config", {}).get("thinking_budget") == 0, \
+        "thinking_budget must be 0 to prevent thought_signature errors"

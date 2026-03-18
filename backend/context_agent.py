@@ -51,8 +51,13 @@ def _strip_markdown_fences(text: str) -> str:
 def _make_litellm_model(
     model: str | None = None,
     api_key: str | None = None,
+    **kwargs: Any,
 ) -> LiteLlm:
-    """Create a LiteLlm model instance configured for Requesty."""
+    """Create a LiteLlm model instance configured for Requesty.
+
+    Extra kwargs are forwarded to the LiteLlm constructor and ultimately to
+    litellm's completion call (e.g. ``extra_body`` for provider-specific params).
+    """
     effective_model = model or REQUESTY_MODEL
     # LiteLlm expects the openai/ prefix for OpenAI-compatible providers
     if not effective_model.startswith("openai/"):
@@ -61,6 +66,7 @@ def _make_litellm_model(
         model=effective_model,
         api_key=api_key or REQUESTY_API_KEY,
         api_base=REQUESTY_BASE_URL,
+        **kwargs,
     )
 
 
