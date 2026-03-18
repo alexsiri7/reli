@@ -860,6 +860,25 @@ async def run_reasoning_agent(
             f"{json.dumps(calendar_events, default=str)}"
         )
 
+    # Inject real-time conflict alerts into reasoning context
+    try:
+        from .conflict_detector import detect_all_conflicts
+
+        conflict_alerts = detect_all_conflicts(user_id=user_id)
+        if conflict_alerts:
+            alerts_data = [
+                {"type": a.alert_type, "severity": a.severity, "message": a.message}
+                for a in conflict_alerts
+            ]
+            user_content += (
+                f"\n\nActive conflict alerts (proactively detected):\n"
+                f"{json.dumps(alerts_data, default=str)}\n"
+                f"Surface relevant alerts in your reasoning_summary if they relate "
+                f"to the user's message or the Things in context."
+            )
+    except Exception:
+        pass  # Non-critical — don't break chat if detection fails
+
     # -- Ollama fallback (unchanged — uses JSON blob + apply_storage_changes) --
     if OLLAMA_MODEL:
         try:

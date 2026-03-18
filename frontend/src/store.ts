@@ -29,6 +29,7 @@ import {
   MergeSuggestionSchema,
   MergeResultSchema,
   ConnectionSuggestionSchema,
+  ConflictAlertSchema,
 } from './schemas'
 import { z } from 'zod'
 
@@ -104,6 +105,14 @@ export interface FocusRecommendation {
   is_blocked: boolean
 }
 
+export interface ConflictAlert {
+  alert_type: string
+  severity: string
+  message: string
+  thing_ids: string[]
+  thing_titles: string[]
+}
+
 export interface SweepFinding {
   id: string
   thing_id: string | null
@@ -155,6 +164,7 @@ export interface UserSettings {
   theme: string
   chat_mode: string
   stale_threshold_days: number
+  proactivity_level: string
 }
 
 export interface UserProfileRelationship {
@@ -286,6 +296,7 @@ interface ReliState {
   focusLoading: boolean
   focusCalendarActive: boolean
   fetchFocusRecommendations: () => Promise<void>
+  conflictAlerts: ConflictAlert[]
   searchResults: Thing[]
   searchLoading: boolean
   searchThings: (query: string) => Promise<void>
@@ -306,6 +317,7 @@ interface ReliState {
   fetchThings: () => Promise<void>
   fetchBriefing: () => Promise<void>
   fetchProactiveSurfaces: () => Promise<void>
+  fetchConflictAlerts: () => Promise<void>
   dismissFinding: (findingId: string) => Promise<void>
   snoozeFinding: (findingId: string, until: string) => Promise<void>
   actOnFinding: (finding: SweepFinding) => void
@@ -480,6 +492,7 @@ export const useStore = create<ReliState>((set, get) => ({
   focusRecommendations: [],
   focusLoading: false,
   focusCalendarActive: false,
+  conflictAlerts: [],
   searchResults: [],
   searchLoading: false,
 
@@ -637,6 +650,17 @@ export const useStore = create<ReliState>((set, get) => ({
       // best-effort
     } finally {
       set({ focusLoading: false })
+    }
+  },
+
+  fetchConflictAlerts: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/conflicts`)
+      if (!res.ok) return
+      const data: ConflictAlert[] = validateResponse(z.array(ConflictAlertSchema), await res.json(), '/conflicts')
+      set({ conflictAlerts: data })
+    } catch {
+      // best-effort
     }
   },
 
@@ -866,6 +890,7 @@ export const useStore = create<ReliState>((set, get) => ({
       get().fetchBriefing()
       get().fetchProactiveSurfaces()
       get().fetchFocusRecommendations()
+      get().fetchConflictAlerts()
     } catch (e) {
       set(state => ({
         messages: state.messages.map(m =>

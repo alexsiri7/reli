@@ -118,7 +118,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
   const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -532,6 +532,40 @@ export function Sidebar() {
 
             {/* Connection Suggestions */}
             <ConnectionSuggestions />
+
+            {/* Conflict Alerts */}
+            {conflictAlerts && conflictAlerts.length > 0 && (
+              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+                  {'\u26A0\uFE0F'} Alerts
+                </h2>
+                {conflictAlerts.map((alert, i) => {
+                  const severityColor = alert.severity === 'critical'
+                    ? 'text-red-600 dark:text-red-400'
+                    : alert.severity === 'warning'
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-blue-500 dark:text-blue-400'
+                  const severityIcon = alert.severity === 'critical' ? '\u{1F6A8}' : alert.severity === 'warning' ? '\u26A0\uFE0F' : '\u2139\uFE0F'
+                  const typeIcon = alert.alert_type === 'blocking_chain' ? '\u{1F6D1}' : alert.alert_type === 'schedule_overlap' ? '\u{1F4C5}' : '\u23F0'
+                  return (
+                    <div key={`conflict-${i}`} className="px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors">
+                      <div className="flex items-start gap-2">
+                        <span className="text-sm mt-0.5 shrink-0">{typeIcon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm leading-snug ${severityColor}`}>
+                            {alert.message}
+                          </p>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="text-xs">{severityIcon}</span>
+                            <span className="text-xs text-gray-400 dark:text-gray-500 capitalize">{alert.severity}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </section>
+            )}
 
             {/* Proactive Surfaces */}
             {proactiveSurfaces && proactiveSurfaces.length > 0 && (

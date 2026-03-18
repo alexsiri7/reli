@@ -351,6 +351,17 @@ class FocusResponse(BaseModel):
     calendar_active: bool = False
 
 
+# ── Conflict Alerts ─────────────────────────────────────────────────────────
+
+
+class ConflictAlertResponse(BaseModel):
+    alert_type: str
+    severity: str
+    message: str
+    thing_ids: list[str]
+    thing_titles: list[str]
+
+
 # ── Merge Suggestions ────────────────────────────────────────────────────────
 
 

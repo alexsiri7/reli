@@ -30,6 +30,7 @@ _VALID_KEYS = {
     "theme",
     "chat_mode",
     "stale_threshold_days",
+    "proactivity_level",
 }
 
 
@@ -63,6 +64,7 @@ class UserSettings(BaseModel):
     theme: str = ""
     chat_mode: str = "normal"
     stale_threshold_days: int = 14
+    proactivity_level: str = "medium"
 
 
 class UserSettingsUpdate(BaseModel):
@@ -78,6 +80,7 @@ class UserSettingsUpdate(BaseModel):
     theme: str | None = None
     chat_mode: str | None = None
     stale_threshold_days: int | None = None
+    proactivity_level: str | None = None
 
 
 class RequestyModel(BaseModel):
@@ -174,6 +177,14 @@ def get_user_stale_threshold(user_id: str) -> int:
         except (ValueError, TypeError):
             pass
     return 14
+
+
+def get_user_proactivity_level(user_id: str) -> str:
+    """Return user's proactivity level, defaulting to 'medium'."""
+    val = get_user_setting(user_id, "proactivity_level")
+    if val and val in {"off", "low", "medium", "high"}:
+        return val
+    return "medium"
 
 
 def get_user_api_key(user_id: str) -> str:
@@ -323,6 +334,7 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         theme=user_settings.get("theme", ""),
         chat_mode=user_settings.get("chat_mode", "normal"),
         stale_threshold_days=stale_threshold,
+        proactivity_level=user_settings.get("proactivity_level", "medium"),
     )
 
 
@@ -335,6 +347,7 @@ def update_user_settings(
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required for user settings")
 
+    _VALID_PROACTIVITY = {"off", "low", "medium", "high"}
     with db() as conn:
         for field_name in _VALID_KEYS:
             val = getattr(body, field_name, None)
@@ -346,6 +359,9 @@ def update_user_settings(
                         continue
                 elif field_name == "stale_threshold_days":
                     val = str(max(1, min(int(val), 365)))
+                elif field_name == "proactivity_level":
+                    if str(val) not in _VALID_PROACTIVITY:
+                        continue
                 _set_user_setting(conn, user_id, field_name, str(val))
 
     return get_user_settings_endpoint(user_id)
