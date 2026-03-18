@@ -126,6 +126,15 @@ async def _run_sweep_for_user(user_id: str) -> None:
                 candidates_found=0, findings_created=0,
                 started_at=now, completed_at=datetime.now(timezone.utc).isoformat(),
             )
+            # Still generate morning briefing (captures priorities, overdue, blockers)
+            try:
+                from .morning_briefing import generate_morning_briefing, store_morning_briefing
+
+                content = generate_morning_briefing(user_id)
+                store_morning_briefing(user_id, content)
+                logger.info("Morning briefing generated for user %s (no sweep candidates)", user_label)
+            except Exception:
+                logger.exception("Failed to generate morning briefing for user %s", user_label)
             return
 
         result = await reflect_on_candidates(candidates, user_id=user_id)
@@ -143,6 +152,16 @@ async def _run_sweep_for_user(user_id: str) -> None:
             "Sweep [%s] complete — %d findings created (usage: %s)",
             user_label, result.findings_created, result.usage,
         )
+
+        # Generate morning briefing after sweep completes
+        try:
+            from .morning_briefing import generate_morning_briefing, store_morning_briefing
+
+            content = generate_morning_briefing(user_id)
+            store_morning_briefing(user_id, content)
+            logger.info("Morning briefing generated for user %s", user_label)
+        except Exception:
+            logger.exception("Failed to generate morning briefing for user %s", user_label)
     except Exception as exc:
         logger.exception("Sweep failed for user %s", user_id)
         _log_run(

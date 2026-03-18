@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { Thing, SweepFinding, FocusRecommendation } from '../store'
+import type { Thing, SweepFinding, FocusRecommendation, MorningBriefing } from '../store'
 import { typeIcon } from '../utils'
 import { CalendarSection } from './CalendarSection'
 import { ThingCard } from './ThingCard'
@@ -101,6 +101,125 @@ function FocusCard({ rec }: { rec: FocusRecommendation }) {
   )
 }
 
+function MorningBriefingSection({ briefing }: { briefing: MorningBriefing }) {
+  const [expanded, setExpanded] = useState(true)
+  const c = briefing.content
+
+  const hasPriorities = c.priorities.length > 0
+  const hasOverdue = c.overdue.length > 0
+  const hasBlockers = c.blockers.length > 0
+  const hasFindings = c.findings.length > 0
+  const hasContent = hasPriorities || hasOverdue || hasBlockers || hasFindings
+
+  if (!hasContent) return null
+
+  return (
+    <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+      <button
+        className="w-full flex items-center justify-between px-4 pb-1"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+          Morning Briefing
+        </h2>
+        <span className="text-xs text-gray-300 dark:text-gray-500">{expanded ? '\u25B2' : '\u25BC'}</span>
+      </button>
+
+      {expanded && (
+        <div className="space-y-1">
+          {/* Summary */}
+          <p className="px-4 text-sm text-gray-600 dark:text-gray-300 leading-snug">
+            {c.summary}
+          </p>
+
+          {/* Overdue items */}
+          {hasOverdue && (
+            <div className="px-4 mt-1">
+              <p className="text-xs font-medium text-red-500 dark:text-red-400 uppercase tracking-wider mb-0.5">Overdue</p>
+              {c.overdue.map(item => (
+                <div
+                  key={item.thing_id}
+                  className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  onClick={() => useStore.getState().openThingDetail(item.thing_id)}
+                  role="button"
+                >
+                  <span className="text-red-400 text-xs shrink-0">{'\u26A0'}</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-200 truncate flex-1">{item.title}</span>
+                  <span className="text-xs text-red-400 shrink-0">{item.days_overdue}d</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Top priorities */}
+          {hasPriorities && (
+            <div className="px-4 mt-1">
+              <p className="text-xs font-medium text-amber-500 dark:text-amber-400 uppercase tracking-wider mb-0.5">Priorities</p>
+              {c.priorities.map(item => (
+                <div
+                  key={item.thing_id}
+                  className="flex items-start gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  onClick={() => useStore.getState().openThingDetail(item.thing_id)}
+                  role="button"
+                >
+                  <span className="text-amber-400 text-xs mt-0.5 shrink-0">{'\u2B50'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-700 dark:text-gray-200 truncate leading-snug">{item.title}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 leading-snug">{item.reasons.join(' \u00B7 ')}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Blockers */}
+          {hasBlockers && (
+            <div className="px-4 mt-1">
+              <p className="text-xs font-medium text-orange-500 dark:text-orange-400 uppercase tracking-wider mb-0.5">Blocked</p>
+              {c.blockers.map(item => (
+                <div
+                  key={item.thing_id}
+                  className="flex items-start gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  onClick={() => useStore.getState().openThingDetail(item.thing_id)}
+                  role="button"
+                >
+                  <span className="text-orange-400 text-xs mt-0.5 shrink-0">{'\u{1F6AB}'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-700 dark:text-gray-200 truncate leading-snug">{item.title}</p>
+                    {item.blocked_by.length > 0 && (
+                      <p className="text-xs text-gray-400 dark:text-gray-500 leading-snug truncate">
+                        Blocked by: {item.blocked_by.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Sweep findings summary */}
+          {hasFindings && (
+            <div className="px-4 mt-1">
+              <p className="text-xs font-medium text-blue-500 dark:text-blue-400 uppercase tracking-wider mb-0.5">Insights</p>
+              {c.findings.slice(0, 5).map(f => (
+                <div
+                  key={f.id}
+                  className={`flex items-start gap-2 py-1 ${f.thing_id ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800' : ''} rounded px-1 -mx-1`}
+                  onClick={() => f.thing_id && useStore.getState().openThingDetail(f.thing_id)}
+                  role={f.thing_id ? 'button' : undefined}
+                >
+                  <span className="text-blue-400 text-xs mt-0.5 shrink-0">{'\u{1F4A1}'}</span>
+                  <p className="text-sm text-gray-700 dark:text-gray-200 leading-snug">{f.message}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
 const SIDEBAR_MIN_WIDTH = 200
 const SIDEBAR_MAX_WIDTH = 500
 const SIDEBAR_DEFAULT_WIDTH = 288 // w-72
@@ -118,7 +237,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
   const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -497,6 +616,9 @@ export function Sidebar() {
 
             {/* Google Calendar */}
             <CalendarSection />
+
+            {/* Morning Briefing — pre-generated summary */}
+            {morningBriefing && <MorningBriefingSection briefing={morningBriefing} />}
 
             {/* Daily Briefing — sweep findings + checkin-due things */}
             {(findings.length > 0 || briefing.length > 0) && (

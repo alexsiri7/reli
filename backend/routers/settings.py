@@ -32,6 +32,7 @@ _VALID_KEYS = {
     "stale_threshold_days",
     "proactivity_level",
     "interaction_style",
+    "briefing_preferences",
 }
 
 # Valid interaction styles for coach/consultant calibration

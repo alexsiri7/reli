@@ -123,6 +123,50 @@ export const BriefingResponseSchema = z.object({
   findings: z.array(SweepFindingSchema).optional(),
 })
 
+// --- Morning Briefing ---
+
+export const MorningBriefingItemSchema = z.object({
+  thing_id: z.string(),
+  title: z.string(),
+  score: z.number().nullable().default(null),
+  reasons: z.array(z.string()).default([]),
+  days_overdue: z.number().nullable().default(null),
+  blocked_by: z.array(z.string()).default([]),
+})
+
+export const MorningBriefingFindingSchema = z.object({
+  id: z.string(),
+  message: z.string(),
+  priority: z.number(),
+  thing_id: z.string().nullable().default(null),
+  thing_title: z.string().nullable().default(null),
+})
+
+export const MorningBriefingContentSchema = z.object({
+  summary: z.string(),
+  priorities: z.array(MorningBriefingItemSchema).default([]),
+  overdue: z.array(MorningBriefingItemSchema).default([]),
+  blockers: z.array(MorningBriefingItemSchema).default([]),
+  findings: z.array(MorningBriefingFindingSchema).default([]),
+  stats: z.record(z.string(), z.number()).default({}),
+})
+
+export const MorningBriefingSchema = z.object({
+  id: z.string(),
+  briefing_date: z.string(),
+  content: MorningBriefingContentSchema,
+  generated_at: z.string(),
+})
+
+export const BriefingPreferencesSchema = z.object({
+  include_priorities: z.boolean(),
+  include_overdue: z.boolean(),
+  include_blockers: z.boolean(),
+  include_findings: z.boolean(),
+  max_priorities: z.number(),
+  max_findings: z.number(),
+})
+
 // --- Proactive Surfaces ---
 
 export const ProactiveSurfaceSchema = z.object({
