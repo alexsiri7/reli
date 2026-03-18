@@ -1,6 +1,6 @@
 """Tests for POST /chat multi-agent pipeline endpoint."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -472,7 +472,7 @@ def test_pipeline_reasoning_model_disables_thinking():
     mock_litellm = LiteLlm(model="openai/test", api_key="k", api_base="http://x")
 
     with patch("backend.pipeline._make_litellm_model") as mock_factory, \
-         patch("backend.pipeline.LlmAgent") as MockLlmAgent, \
+         patch("backend.pipeline.LlmAgent"), \
          patch("backend.pipeline.SequentialAgent"):
         mock_factory.return_value = mock_litellm
         from backend.pipeline import ChatPipeline
