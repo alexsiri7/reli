@@ -30,6 +30,8 @@ import {
   MergeResultSchema,
   ConnectionSuggestionSchema,
   ConflictAlertSchema,
+  MorningBriefingSchema,
+  BriefingPreferencesSchema,
 } from './schemas'
 import { z } from 'zod'
 
@@ -124,6 +126,48 @@ export interface SweepFinding {
   expires_at: string | null
   snoozed_until: string | null
   thing: Thing | null
+}
+
+export interface MorningBriefingItem {
+  thing_id: string
+  title: string
+  score: number | null
+  reasons: string[]
+  days_overdue: number | null
+  blocked_by: string[]
+}
+
+export interface MorningBriefingFinding {
+  id: string
+  message: string
+  priority: number
+  thing_id: string | null
+  thing_title: string | null
+}
+
+export interface MorningBriefingContent {
+  summary: string
+  priorities: MorningBriefingItem[]
+  overdue: MorningBriefingItem[]
+  blockers: MorningBriefingItem[]
+  findings: MorningBriefingFinding[]
+  stats: Record<string, number>
+}
+
+export interface MorningBriefing {
+  id: string
+  briefing_date: string
+  content: MorningBriefingContent
+  generated_at: string
+}
+
+export interface BriefingPreferences {
+  include_priorities: boolean
+  include_overdue: boolean
+  include_blockers: boolean
+  include_findings: boolean
+  max_priorities: number
+  max_findings: number
 }
 
 export interface CalendarEvent {
@@ -293,6 +337,13 @@ interface ReliState {
   error: string | null
   calendarStatus: CalendarStatus
   calendarEvents: CalendarEvent[]
+
+  morningBriefing: MorningBriefing | null
+  morningBriefingLoading: boolean
+  briefingPreferences: BriefingPreferences | null
+  fetchMorningBriefing: () => Promise<void>
+  fetchBriefingPreferences: () => Promise<void>
+  updateBriefingPreferences: (prefs: BriefingPreferences) => Promise<void>
 
   proactiveSurfaces: ProactiveSurface[]
   focusRecommendations: FocusRecommendation[]
@@ -495,6 +546,50 @@ export const useStore = create<ReliState>((set, get) => ({
   error: null,
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [],
+  morningBriefing: null,
+  morningBriefingLoading: false,
+  briefingPreferences: null,
+
+  fetchMorningBriefing: async () => {
+    set({ morningBriefingLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/briefing/morning`)
+      if (!res.ok) return
+      const data = validateResponse(MorningBriefingSchema, await res.json(), '/briefing/morning')
+      set({ morningBriefing: data })
+    } catch {
+      // best-effort
+    } finally {
+      set({ morningBriefingLoading: false })
+    }
+  },
+
+  fetchBriefingPreferences: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/briefing/preferences`)
+      if (!res.ok) return
+      const data = validateResponse(BriefingPreferencesSchema, await res.json(), '/briefing/preferences')
+      set({ briefingPreferences: data })
+    } catch {
+      // best-effort
+    }
+  },
+
+  updateBriefingPreferences: async (prefs: BriefingPreferences) => {
+    try {
+      const res = await apiFetch(`${BASE}/briefing/preferences`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(prefs),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = validateResponse(BriefingPreferencesSchema, await res.json(), '/briefing/preferences')
+      set({ briefingPreferences: data })
+    } catch (e) {
+      set({ error: String(e) })
+    }
+  },
+
   proactiveSurfaces: [],
   focusRecommendations: [],
   focusLoading: false,

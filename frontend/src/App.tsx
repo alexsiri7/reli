@@ -12,7 +12,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { FeedbackDialog } from './components/FeedbackDialog'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
@@ -34,6 +34,7 @@ function App() {
       fetchMergeSuggestions: s.fetchMergeSuggestions,
       fetchConnectionSuggestions: s.fetchConnectionSuggestions,
       fetchUserSettings: s.fetchUserSettings,
+      fetchMorningBriefing: s.fetchMorningBriefing,
       error: s.error,
     }))
   )
@@ -60,6 +61,7 @@ function App() {
     fetchMergeSuggestions()
     fetchConnectionSuggestions()
     fetchUserSettings()
+    fetchMorningBriefing()
     const interval = setInterval(() => { fetchThings(); fetchBriefing(); fetchProactiveSurfaces(); fetchFocusRecommendations(); fetchConflictAlerts() }, 30_000)
 
     // Handle OAuth callback redirect
@@ -70,7 +72,7 @@ function App() {
     }
 
     return () => clearInterval(interval)
-  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings])
+  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing])
 
   // Show nothing while checking auth
   if (!authChecked) {

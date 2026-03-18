@@ -229,6 +229,22 @@ def _migrate_sweep_runs(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_sweep_runs_started ON sweep_runs(started_at)")
 
 
+def _migrate_morning_briefings(conn: sqlite3.Connection) -> None:
+    """Create morning_briefings table for pre-generated briefing storage."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS morning_briefings (
+            id TEXT PRIMARY KEY,
+            user_id TEXT REFERENCES users(id),
+            briefing_date TEXT NOT NULL,
+            content JSON NOT NULL,
+            generated_at TIMESTAMP NOT NULL,
+            UNIQUE(user_id, briefing_date)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_morning_briefings_user ON morning_briefings(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_morning_briefings_date ON morning_briefings(briefing_date)")
+
+
 def _migrate_merge_history(conn: sqlite3.Connection) -> None:
     """Create merge_history table to track Thing merges."""
     conn.execute("""
@@ -430,4 +446,5 @@ def init_db() -> None:
         _migrate_merge_history(conn)
         _migrate_sweep_runs(conn)
         _migrate_connection_suggestions(conn)
+        _migrate_morning_briefings(conn)
         _seed_thing_types(conn)

@@ -9,7 +9,23 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import require_user, user_filter
 from ..database import db
-from ..models import BriefingResponse, SweepFinding, SweepFindingCreate, SweepFindingSnooze, Thing
+from ..models import (
+    BriefingPreferences,
+    BriefingResponse,
+    MorningBriefing,
+    MorningBriefingContent,
+    SweepFinding,
+    SweepFindingCreate,
+    SweepFindingSnooze,
+    Thing,
+)
+from ..morning_briefing import (
+    generate_morning_briefing,
+    get_briefing_preferences,
+    get_latest_morning_briefing,
+    save_briefing_preferences,
+    store_morning_briefing,
+)
 from .things import _row_to_thing
 
 router = APIRouter(prefix="/briefing", tags=["briefing"])
@@ -163,3 +179,42 @@ def snooze_finding(finding_id: str, body: SweepFindingSnooze, user_id: str = Dep
         row = conn.execute("SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
 
     return _row_to_finding(row)
+
+
+@router.get("/morning", response_model=MorningBriefing, summary="Get morning briefing")
+def get_morning_briefing(as_of: date | None = None, user_id: str = Depends(require_user)) -> MorningBriefing:
+    """Return the latest pre-generated morning briefing.
+
+    If no pre-generated briefing exists, generates one on-the-fly.
+    """
+    result = get_latest_morning_briefing(user_id, as_of=as_of)
+
+    if not result:
+        # Generate on-the-fly if no stored briefing exists
+        target = as_of or date.today()
+        content = generate_morning_briefing(user_id, target_date=target)
+        briefing_id = store_morning_briefing(user_id, content, briefing_date=target)
+        result = get_latest_morning_briefing(user_id, as_of=target)
+
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to generate morning briefing")
+
+    return MorningBriefing(
+        id=result["id"],
+        briefing_date=result["briefing_date"],
+        content=MorningBriefingContent(**result["content"]),
+        generated_at=result["generated_at"],
+    )
+
+
+@router.get("/preferences", response_model=BriefingPreferences, summary="Get briefing preferences")
+def get_preferences(user_id: str = Depends(require_user)) -> BriefingPreferences:
+    """Return the user's morning briefing preferences."""
+    return get_briefing_preferences(user_id)
+
+
+@router.put("/preferences", response_model=BriefingPreferences, summary="Update briefing preferences")
+def update_preferences(body: BriefingPreferences, user_id: str = Depends(require_user)) -> BriefingPreferences:
+    """Update the user's morning briefing preferences."""
+    save_briefing_preferences(user_id, body)
+    return body

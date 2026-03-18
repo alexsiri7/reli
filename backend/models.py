@@ -325,6 +325,63 @@ class StalenessReport(BaseModel):
     total: int
 
 
+# ── Morning Briefing ─────────────────────────────────────────────────────────
+
+
+class MorningBriefingItem(BaseModel):
+    """A single item in the morning briefing (priority, overdue, or blocker)."""
+
+    thing_id: str
+    title: str
+    score: float | None = None
+    reasons: list[str] = []
+    days_overdue: int | None = None
+    blocked_by: list[str] = []
+
+
+class MorningBriefingFinding(BaseModel):
+    """A sweep finding included in the morning briefing."""
+
+    id: str
+    message: str
+    priority: int
+    thing_id: str | None = None
+    thing_title: str | None = None
+
+
+class MorningBriefingContent(BaseModel):
+    """Structured content of a pre-generated morning briefing."""
+
+    summary: str
+    priorities: list[MorningBriefingItem] = []
+    overdue: list[MorningBriefingItem] = []
+    blockers: list[MorningBriefingItem] = []
+    findings: list[MorningBriefingFinding] = []
+    stats: dict[str, int] = {}
+
+
+class MorningBriefing(BaseModel):
+    """A pre-generated morning briefing."""
+
+    id: str
+    briefing_date: str
+    content: MorningBriefingContent
+    generated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class BriefingPreferences(BaseModel):
+    """User preferences for morning briefing content."""
+
+    include_priorities: bool = True
+    include_overdue: bool = True
+    include_blockers: bool = True
+    include_findings: bool = True
+    max_priorities: int = Field(default=5, ge=1, le=20)
+    max_findings: int = Field(default=10, ge=1, le=50)
+
+
 # ── Proactive Surfaces ───────────────────────────────────────────────────────
 
 
