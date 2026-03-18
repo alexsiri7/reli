@@ -8,16 +8,12 @@ import pytest
 # Fixtures
 # ---------------------------------------------------------------------------
 
-MOCK_CONTEXT_RESULT = {
-    "search_queries": ["test query"],
-    "filter_params": {"active_only": True, "type_hint": None},
-}
-
 MOCK_REASONING_RESULT = {
     "applied_changes": {
         "created": [], "updated": [], "deleted": [],
         "merged": [], "relationships_created": [],
     },
+    "fetched_context": {"things": [], "relationships": []},
     "questions_for_user": [],
     "priority_question": "",
     "reasoning_summary": "No changes needed.",
@@ -27,28 +23,19 @@ MOCK_REASONING_RESULT = {
 MOCK_REPLY = "I understand, no changes were needed."
 
 
-MOCK_REFINEMENT_DONE = {"done": True}
-
-
 def _patch_agents(
-    context_result=None,
     reasoning_result=None,
     reply=None,
-    refinement_result=None,
 ):
     """Return a context manager patching all agent functions."""
     from unittest.mock import patch
 
-    ctx = context_result or MOCK_CONTEXT_RESULT
     rea = reasoning_result or MOCK_REASONING_RESULT
     rep = reply or MOCK_REPLY
-    ref = refinement_result or MOCK_REFINEMENT_DONE
 
     return [
-        patch("backend.pipeline.run_context_agent", new=AsyncMock(return_value=ctx)),
         patch("backend.pipeline.run_reasoning_agent", new=AsyncMock(return_value=rea)),
         patch("backend.pipeline.run_response_agent", new=AsyncMock(return_value=rep)),
-        patch("backend.pipeline.run_context_refinement", new=AsyncMock(return_value=ref)),
     ]
 
 
@@ -61,7 +48,7 @@ def _patch_agents(
 class TestChatPipeline:
     async def test_basic_chat_returns_200(self, async_client):
         patches = _patch_agents()
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "s1", "message": "Hello"},
@@ -75,7 +62,7 @@ class TestChatPipeline:
 
     async def test_chat_persists_messages_to_history(self, async_client):
         patches = _patch_agents()
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1]:
             await async_client.post(
                 "/api/chat",
                 json={"session_id": "persist-sess", "message": "Remember this"},
@@ -99,7 +86,7 @@ class TestChatPipeline:
             "briefing_mode": False,
         }
         patches = _patch_agents(reasoning_result=reasoning_with_create)
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "create-sess", "message": "Add a new task"},
@@ -126,7 +113,7 @@ class TestChatPipeline:
             "briefing_mode": False,
         }
         patches = _patch_agents(reasoning_result=reasoning_with_update)
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "update-sess", "message": "Rename that thing"},
@@ -151,7 +138,7 @@ class TestChatPipeline:
             "briefing_mode": False,
         }
         patches = _patch_agents(reasoning_result=reasoning_with_delete)
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "delete-sess", "message": "Remove that thing"},
@@ -172,7 +159,7 @@ class TestChatPipeline:
             "briefing_mode": False,
         }
         patches = _patch_agents(reasoning_result=reasoning_with_questions)
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "q-sess", "message": "Add something"},
@@ -188,7 +175,7 @@ class TestChatPipeline:
             json={"session_id": "history-sess", "role": "user", "content": "Prior message"},
         )
         patches = _patch_agents()
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1]:
             # Also spy on reasoning agent to verify history is passed
             with patch(
                 "backend.pipeline.run_reasoning_agent",
@@ -217,7 +204,7 @@ class TestChatPipeline:
             "briefing_mode": False,
         }
         patches = _patch_agents(reasoning_result=reasoning_with_bad_delete)
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1]:
             resp = await async_client.post(
                 "/api/chat",
                 json={"session_id": "bad-del-sess", "message": "Delete nothing"},
@@ -225,114 +212,6 @@ class TestChatPipeline:
         assert resp.status_code == 200
         # Unknown ID silently skipped — not in deleted list
         assert "nonexistent-id-xyz" not in resp.json()["applied_changes"]["deleted"]
-
-    async def test_chat_with_web_search(self, async_client):
-        """When context agent requests web search and it's configured, results are included."""
-        from backend.web_search import SearchResult
-
-        context_with_search = {
-            "search_queries": ["test"],
-            "filter_params": {"active_only": True, "type_hint": None},
-            "needs_web_search": True,
-            "web_search_query": "python fastapi tutorial",
-        }
-
-        mock_search_results = [
-            SearchResult(title="FastAPI Tutorial", url="https://example.com/fastapi", snippet="Learn FastAPI..."),
-            SearchResult(title="Python Docs", url="https://docs.python.org", snippet="Official docs..."),
-        ]
-
-        patches = _patch_agents(context_result=context_with_search)
-        with (
-            patches[0],
-            patches[1],
-            patches[2],
-            patches[3],
-            patch("backend.pipeline.is_search_configured", return_value=True),
-            patch("backend.pipeline.google_search", new=AsyncMock(return_value=mock_search_results)),
-        ):
-            resp = await async_client.post(
-                "/api/chat",
-                json={"session_id": "search-sess", "message": "How do I use FastAPI?"},
-            )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "web_results" in data["applied_changes"]
-        assert len(data["applied_changes"]["web_results"]) == 2
-        assert data["applied_changes"]["web_results"][0]["title"] == "FastAPI Tutorial"
-
-    async def test_chat_web_search_skipped_when_not_configured(self, async_client):
-        """When search is not configured, web search is skipped even if requested."""
-        context_with_search = {
-            "search_queries": ["test"],
-            "filter_params": {"active_only": True, "type_hint": None},
-            "needs_web_search": True,
-            "web_search_query": "something",
-        }
-        patches = _patch_agents(context_result=context_with_search)
-        with patches[0], patches[1], patches[2], patches[3]:
-            resp = await async_client.post(
-                "/api/chat",
-                json={"session_id": "no-search-sess", "message": "Search for something"},
-            )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "web_results" not in data["applied_changes"]
-
-    async def test_chat_iterative_context_gathering(self, async_client):
-        """Context agent can request additional searches in refinement loop."""
-        # Create two things: one that references the other
-        await async_client.post("/api/things", json={"title": "Sarah", "type_hint": "person"})
-        await async_client.post(
-            "/api/things", json={"title": "Barcelona Flat", "type_hint": "place"}
-        )
-
-        # First refinement asks for more, second says done
-        refinement_calls = [
-            {
-                "done": False,
-                "search_queries": ["Barcelona Flat"],
-                "thing_ids": [],
-                "filter_params": {"active_only": True},
-            },
-            {"done": True},
-        ]
-        refinement_mock = AsyncMock(side_effect=refinement_calls)
-
-        patches = _patch_agents()
-        with (
-            patches[0],
-            patches[1],
-            patches[2],
-            patch("backend.pipeline.run_context_refinement", new=refinement_mock),
-        ):
-            resp = await async_client.post(
-                "/api/chat",
-                json={"session_id": "iter-sess", "message": "Book near Sarah's flat"},
-            )
-        assert resp.status_code == 200
-        # Refinement was called (at least once for initial results, possibly twice)
-        assert refinement_mock.call_count >= 1
-
-    async def test_chat_context_refinement_stops_at_done(self, async_client):
-        """Refinement loop stops when agent says done=true."""
-        refinement_mock = AsyncMock(return_value={"done": True})
-
-        patches = _patch_agents()
-        with (
-            patches[0],
-            patches[1],
-            patches[2],
-            patch("backend.pipeline.run_context_refinement", new=refinement_mock),
-        ):
-            resp = await async_client.post(
-                "/api/chat",
-                json={"session_id": "done-sess", "message": "Hello"},
-            )
-        assert resp.status_code == 200
-        # Should be called exactly once (first refinement says done)
-        # Note: may be 0 if no Things found to refine on
-        assert refinement_mock.call_count <= 1
 
     async def test_chat_invalid_request_returns_422(self, async_client):
         resp = await async_client.post("/api/chat", json={"session_id": "", "message": ""})
