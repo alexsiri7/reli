@@ -154,6 +154,7 @@ export interface UserSettings {
   chat_context_window: number | null
   theme: string
   chat_mode: string
+  stale_threshold_days: number
 }
 
 export interface UserProfileRelationship {

@@ -214,6 +214,7 @@ export const UserSettingsSchema = z.object({
   chat_context_window: z.number().nullable(),
   theme: z.string(),
   chat_mode: z.string().optional().default('normal'),
+  stale_threshold_days: z.number().default(14),
 })
 
 export const RequestyModelSchema = z.object({

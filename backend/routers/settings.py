@@ -29,6 +29,7 @@ _VALID_KEYS = {
     "chat_context_window",
     "theme",
     "chat_mode",
+    "stale_threshold_days",
 }
 
 
@@ -61,6 +62,7 @@ class UserSettings(BaseModel):
     chat_context_window: int | None = None
     theme: str = ""
     chat_mode: str = "normal"
+    stale_threshold_days: int = 14
 
 
 class UserSettingsUpdate(BaseModel):
@@ -75,6 +77,7 @@ class UserSettingsUpdate(BaseModel):
     chat_context_window: int | None = None
     theme: str | None = None
     chat_mode: str | None = None
+    stale_threshold_days: int | None = None
 
 
 class RequestyModel(BaseModel):
@@ -160,6 +163,17 @@ def get_user_chat_context_window(user_id: str) -> int:
         except (ValueError, TypeError):
             pass
     return get_chat_context_window()
+
+
+def get_user_stale_threshold(user_id: str) -> int:
+    """Return per-user stale threshold in days, defaulting to 14."""
+    val = get_user_setting(user_id, "stale_threshold_days")
+    if val is not None:
+        try:
+            return max(1, min(int(val), 365))
+        except (ValueError, TypeError):
+            pass
+    return 14
 
 
 def get_user_api_key(user_id: str) -> str:
@@ -295,6 +309,9 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
             return "****"
         return "*" * (len(val) - 4) + val[-4:]
 
+    stale_val = user_settings.get("stale_threshold_days")
+    stale_threshold = int(stale_val) if stale_val else 14
+
     return UserSettings(
         requesty_api_key=_mask(user_settings.get("requesty_api_key", "")),
         openai_api_key=_mask(user_settings.get("openai_api_key", "")),
@@ -305,6 +322,7 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         chat_context_window=int(user_settings["chat_context_window"]) if "chat_context_window" in user_settings else None,
         theme=user_settings.get("theme", ""),
         chat_mode=user_settings.get("chat_mode", "normal"),
+        stale_threshold_days=stale_threshold,
     )
 
 
@@ -326,6 +344,8 @@ def update_user_settings(
                 elif field_name == "chat_mode":
                     if val not in ("normal", "planning"):
                         continue
+                elif field_name == "stale_threshold_days":
+                    val = str(max(1, min(int(val), 365)))
                 _set_user_setting(conn, user_id, field_name, str(val))
 
     return get_user_settings_endpoint(user_id)

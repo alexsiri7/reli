@@ -6,7 +6,9 @@ reflection, producing sweep_findings with priority and expiry.
 
 Finding types:
   - approaching_date: Thing with a date (checkin, birthday, deadline, etc.) within 7 days
-  - stale: Active Thing not updated in 14+ days
+  - stale: Active Thing not updated in the configured threshold (low priority, no pending work)
+  - neglected: Active Thing not updated AND high-priority or has pending children
+  - overdue_checkin: Active Thing whose checkin_date is in the past (beyond grace period)
   - orphan: Active Thing with no relationships (no parent, no children, no graph edges)
   - completed_project: Project where all children are inactive but project is still active
   - open_question: Active Thing with unanswered open_questions
@@ -212,15 +214,22 @@ def find_stale_things(
     stale_days: int = 14,
     user_id: str = "",
 ) -> list[SweepCandidate]:
-    """Find active Things not updated in *stale_days* or more."""
+    """Find active Things not updated in *stale_days* or more.
+
+    Includes neglect context: Things with higher priority or pending children
+    are flagged as ``neglected`` instead of plain ``stale``.
+    """
     today = today or date.today()
     cutoff = (today - timedelta(days=stale_days)).isoformat()
     uf_sql, uf_params = user_filter(user_id)
     rows = conn.execute(
-        f"""SELECT id, title, type_hint, updated_at FROM things
-           WHERE active = 1
-             AND updated_at < ?{uf_sql}
-           ORDER BY updated_at ASC""",
+        f"""SELECT t.id, t.title, t.type_hint, t.updated_at, t.priority,
+                  t.checkin_date,
+                  (SELECT COUNT(*) FROM things c WHERE c.parent_id = t.id AND c.active = 1) AS active_children
+           FROM things t
+           WHERE t.active = 1
+             AND t.updated_at < ?{uf_sql}
+           ORDER BY t.updated_at ASC""",
         (cutoff, *uf_params),
     ).fetchall()
 
@@ -229,14 +238,84 @@ def find_stale_things(
         parsed_dt = _parse_date_value(row["updated_at"])
         days_stale = (today - parsed_dt).days if parsed_dt else stale_days
         type_label = row["type_hint"] or "Thing"
+        priority_val = row["priority"] or 3
+        active_children = row["active_children"] or 0
+
+        # Distinguish neglected (high-priority or has pending work) from plain stale
+        is_neglected = priority_val <= 2 or active_children > 0
+        finding_type = "neglected" if is_neglected else "stale"
+
+        if is_neglected:
+            parts = []
+            if priority_val <= 2:
+                parts.append("high-priority")
+            if active_children > 0:
+                parts.append(f"{active_children} pending subtask{'s' if active_children != 1 else ''}")
+            context = ", ".join(parts)
+            message = f"Neglected for {days_stale}d ({context}): {row['title']}"
+            pri = 2  # higher urgency for neglected items
+        else:
+            message = f"Untouched for {days_stale}d: {row['title']}"
+            pri = 3
+
         candidates.append(
             SweepCandidate(
                 thing_id=row["id"],
                 thing_title=row["title"],
-                finding_type="stale",
-                message=f"Untouched for {days_stale}d: {row['title']}",
-                priority=3,
-                extra={"days_stale": days_stale, "type_hint": type_label},
+                finding_type=finding_type,
+                message=message,
+                priority=pri,
+                extra={
+                    "days_stale": days_stale,
+                    "type_hint": type_label,
+                    "is_neglected": is_neglected,
+                    "active_children": active_children,
+                },
+            )
+        )
+    return candidates
+
+
+def find_overdue_checkins(
+    conn: sqlite3.Connection,
+    today: date | None = None,
+    grace_days: int = 1,
+) -> list[SweepCandidate]:
+    """Find active Things with overdue checkin_date (past the grace period).
+
+    Things whose checkin_date is today or within *grace_days* are handled by
+    ``find_approaching_dates``; this catches items that have been overdue longer.
+    """
+    today = today or date.today()
+    cutoff = (today - timedelta(days=grace_days)).isoformat()
+    rows = conn.execute(
+        """SELECT id, title, type_hint, checkin_date, priority FROM things
+           WHERE active = 1
+             AND checkin_date IS NOT NULL
+             AND DATE(checkin_date) < ?
+           ORDER BY checkin_date ASC""",
+        (cutoff,),
+    ).fetchall()
+
+    candidates: list[SweepCandidate] = []
+    for row in rows:
+        parsed = _parse_date_value(row["checkin_date"])
+        if not parsed:
+            continue
+        days_overdue = (today - parsed).days
+        priority_val = row["priority"] or 3
+        pri = 1 if days_overdue >= 7 or priority_val <= 2 else 2
+        candidates.append(
+            SweepCandidate(
+                thing_id=row["id"],
+                thing_title=row["title"],
+                finding_type="overdue_checkin",
+                message=f"Check-in overdue by {days_overdue}d: {row['title']}",
+                priority=pri,
+                extra={
+                    "days_overdue": days_overdue,
+                    "type_hint": row["type_hint"] or "Thing",
+                },
             )
         )
     return candidates
@@ -368,6 +447,7 @@ def collect_candidates(
         candidates = (
             find_approaching_dates(conn, today, window_days, user_id=user_id)
             + find_stale_things(conn, today, stale_days, user_id=user_id)
+            + find_overdue_checkins(conn, today)
             + find_orphan_things(conn, user_id=user_id)
             + find_completed_projects(conn, user_id=user_id)
             + find_open_questions(conn, user_id=user_id)
