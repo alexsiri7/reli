@@ -88,7 +88,21 @@ function loadSidebarWidth(): number {
 export function Sidebar() {
   const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
   const [searchQuery, setSearchQuery] = useState('')
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  // Close user menu on click outside
+  useEffect(() => {
+    if (!userMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [userMenuOpen])
 
   // --- Resizable sidebar state (desktop only) ---
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
@@ -338,38 +352,42 @@ export function Sidebar() {
               </svg>
             </button>
             {currentUser && (
-              <div className="group relative">
+              <div className="relative" ref={userMenuRef}>
                 {currentUser.picture ? (
                   <img
                     src={currentUser.picture}
                     alt={currentUser.name}
                     className="h-7 w-7 rounded-full cursor-pointer"
                     referrerPolicy="no-referrer"
+                    onClick={() => setUserMenuOpen(v => !v)}
                   />
                 ) : (
-                  <div className="h-7 w-7 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-medium cursor-pointer">
+                  <div
+                    className="h-7 w-7 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-medium cursor-pointer"
+                    onClick={() => setUserMenuOpen(v => !v)}
+                  >
                     {currentUser.name.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                <div className={`absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg transition-all z-50 ${userMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
                   <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{currentUser.name}</p>
                     <p className="text-xs text-gray-400 dark:text-gray-400 truncate">{currentUser.email}</p>
                   </div>
                   <button
-                    onClick={() => useStore.getState().openSettings()}
+                    onClick={() => { setUserMenuOpen(false); useStore.getState().openSettings() }}
                     className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                   >
                     Settings
                   </button>
                   <button
-                    onClick={() => useStore.getState().openFeedback()}
+                    onClick={() => { setUserMenuOpen(false); useStore.getState().openFeedback() }}
                     className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                   >
                     Send Feedback
                   </button>
                   <button
-                    onClick={logout}
+                    onClick={() => { setUserMenuOpen(false); logout() }}
                     className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg transition-colors"
                   >
                     Sign out
