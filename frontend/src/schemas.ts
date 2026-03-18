@@ -132,6 +132,16 @@ export const ProactiveSurfaceSchema = z.object({
   days_away: z.number(),
 })
 
+// --- Conflict Alerts ---
+
+export const ConflictAlertSchema = z.object({
+  alert_type: z.string(),
+  severity: z.string(),
+  message: z.string(),
+  thing_ids: z.array(z.string()),
+  thing_titles: z.array(z.string()),
+})
+
 // --- Calendar ---
 
 export const CalendarEventSchema = z.object({
@@ -215,6 +225,7 @@ export const UserSettingsSchema = z.object({
   theme: z.string(),
   chat_mode: z.string().optional().default('normal'),
   stale_threshold_days: z.number().default(14),
+  proactivity_level: z.string().default('medium'),
 })
 
 export const RequestyModelSchema = z.object({

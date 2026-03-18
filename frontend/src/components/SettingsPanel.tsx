@@ -275,6 +275,7 @@ function SettingsForm({
       </div>
       <VoiceSection />
       <ThemeSection />
+      <ProactivitySection />
       <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
         {saved && (
           <span className="text-sm text-green-600 dark:text-green-400">Saved</span>
@@ -655,6 +656,45 @@ function ThemeSection() {
               <path strokeLinecap="round" strokeLinejoin="round" d={opt.icon} />
             </svg>
             {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const proactivityOptions = [
+  { value: 'off', label: 'Off', description: 'No conflict alerts' },
+  { value: 'low', label: 'Low', description: 'Critical only' },
+  { value: 'medium', label: 'Medium', description: 'Warnings & critical' },
+  { value: 'high', label: 'High', description: 'All alerts' },
+]
+
+function ProactivitySection() {
+  const { userSettings, updateUserSettings } = useStore(useShallow(s => ({
+    userSettings: s.userSettings,
+    updateUserSettings: s.updateUserSettings,
+  })))
+  const current = userSettings?.proactivity_level || 'medium'
+
+  return (
+    <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proactive Alerts</h3>
+      <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">How aggressively Reli flags blockers, conflicts, and scheduling issues</p>
+      <div className="flex gap-2">
+        {proactivityOptions.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => updateUserSettings({ proactivity_level: opt.value })}
+            className={`flex-1 flex flex-col items-center gap-0.5 px-2 py-2 rounded-lg border text-sm transition-colors ${
+              current === opt.value
+                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}
+            title={opt.description}
+          >
+            <span className="font-medium">{opt.label}</span>
+            <span className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">{opt.description}</span>
           </button>
         ))}
       </div>
