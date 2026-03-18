@@ -106,19 +106,20 @@ def _fetch_requesty_pricing() -> dict[str, tuple[float, float]]:
     try:
         import httpx
 
-        resp = httpx.get(f"{REQUESTY_BASE_URL}/models", timeout=5.0)
-        if resp.status_code == 200:
-            data = resp.json().get("data", [])
-            for model_info in data:
-                model_id = model_info.get("id", "")
-                input_price = model_info.get("input_price")
-                output_price = model_info.get("output_price")
-                if model_id and input_price is not None and output_price is not None:
-                    # API returns per-token; multiply by 1M for per-million
-                    pricing[model_id] = (
-                        float(input_price) * 1_000_000,
-                        float(output_price) * 1_000_000,
-                    )
+        with httpx.Client(timeout=5.0) as client:
+            resp = client.get(f"{REQUESTY_BASE_URL}/models")
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                for model_info in data:
+                    model_id = model_info.get("id", "")
+                    input_price = model_info.get("input_price")
+                    output_price = model_info.get("output_price")
+                    if model_id and input_price is not None and output_price is not None:
+                        # API returns per-token; multiply by 1M for per-million
+                        pricing[model_id] = (
+                            float(input_price) * 1_000_000,
+                            float(output_price) * 1_000_000,
+                        )
     except Exception as exc:
         logger.warning("Failed to fetch Requesty pricing, using defaults: %s", exc)
 

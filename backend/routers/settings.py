@@ -238,10 +238,11 @@ def list_models(user_id: str = Depends(require_user)) -> list[RequestyModel]:
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
     try:
-        resp = httpx.get(f"{base_url}/models", timeout=10.0, headers=headers)
-        resp.raise_for_status()
-        data = resp.json().get("data", [])
-        return [RequestyModel(id=m["id"], name=m.get("name")) for m in data if m.get("id")]
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(f"{base_url}/models", headers=headers)
+            resp.raise_for_status()
+            data = resp.json().get("data", [])
+            return [RequestyModel(id=m["id"], name=m.get("name")) for m in data if m.get("id")]
     except Exception as exc:
         logger.warning("Failed to fetch models from Requesty: %s", exc)
         raise HTTPException(status_code=502, detail="Could not fetch models from Requesty API") from exc
