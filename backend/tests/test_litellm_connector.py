@@ -56,7 +56,7 @@ def _fake_chunk(content: str | None = None, *, usage: bool = False):
 
 @pytest.mark.asyncio
 async def test_acomplete_routes_through_requesty():
-    """acomplete passes the model with openai/ prefix and Requesty base_url."""
+    """acomplete passes the model with gemini/ prefix for Gemini models."""
     mock_resp = _fake_response("test reply")
 
     with patch("backend.llm.litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_call:
@@ -68,7 +68,7 @@ async def test_acomplete_routes_through_requesty():
 
     mock_call.assert_called_once()
     call_kwargs = mock_call.call_args
-    assert call_kwargs.kwargs["model"] == "openai/google/gemini-2.5-flash-lite"
+    assert call_kwargs.kwargs["model"] == "gemini/gemini-2.5-flash-lite"
     assert call_kwargs.kwargs["api_base"] == REQUESTY_BASE_URL
     assert call_kwargs.kwargs["api_key"] == "test-key"
     assert result.choices[0].message.content == "test reply"
@@ -83,7 +83,7 @@ async def test_acomplete_routes_through_requesty():
     ],
 )
 async def test_acomplete_all_model_configs(model: str):
-    """All three configured models (context, reasoning, response) route correctly."""
+    """Gemini models route with gemini/ prefix."""
     mock_resp = _fake_response("ok", model=model)
 
     with patch("backend.llm.litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_call:
@@ -92,7 +92,8 @@ async def test_acomplete_all_model_configs(model: str):
             model,
         )
 
-    assert mock_call.call_args.kwargs["model"] == f"openai/{model}"
+    expected_model = model.replace("google/", "gemini/", 1)
+    assert mock_call.call_args.kwargs["model"] == expected_model
     assert result.choices[0].message.content == "ok"
 
 
