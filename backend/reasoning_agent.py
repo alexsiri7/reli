@@ -876,6 +876,52 @@ def _make_reasoning_tools(
 
 
 # ---------------------------------------------------------------------------
+# Gemini thought_signature helpers (GH #158 / Sentry RELI-ZO-5)
+# ---------------------------------------------------------------------------
+
+# Markers appended by _enrich_history_content for turns that involved tool calls.
+_TOOL_CALL_MARKERS = ("[Created:", "[Updated:", "[Deleted:", "[Merged:")
+
+
+def _has_tool_call_markers(content: str) -> bool:
+    """Return True if the content contains enrichment markers from tool call turns."""
+    if not content:
+        return False
+    return any(marker in content for marker in _TOOL_CALL_MARKERS)
+
+
+def _is_thought_signature_error(exc: Exception) -> bool:
+    """Return True if the exception is a Gemini thought_signature validation error."""
+    msg = str(exc).lower()
+    return "thought_signature" in msg and ("missing" in msg or "functioncall" in msg)
+
+
+async def _run_adk_with_thought_signature_fallback(
+    agent: "LlmAgent",
+    full_prompt: str,
+    fallback_prompt: str,
+    usage_stats: "UsageStats | None" = None,
+) -> str:
+    """Run an ADK agent with a fallback for thought_signature errors.
+
+    If the first attempt fails with a thought_signature error (Gemini rejects
+    function-call parts that lack signatures when thinking is enabled), retry
+    with only the current-turn content (no history) to avoid replaying
+    problematic tool-call context.
+    """
+    try:
+        return await _run_agent_for_text(agent, full_prompt, usage_stats)
+    except Exception as exc:
+        if _is_thought_signature_error(exc):
+            logger.warning(
+                "thought_signature error from Gemini, retrying without history: %s",
+                exc,
+            )
+            return await _run_agent_for_text(agent, fallback_prompt, usage_stats)
+        raise
+
+
+# ---------------------------------------------------------------------------
 # Public API — drop-in replacement for agents.run_reasoning_agent
 # ---------------------------------------------------------------------------
 
@@ -1005,9 +1051,16 @@ async def run_reasoning_agent(
         tools=tools,  # type: ignore[arg-type]  # list invariance
     )
 
-    # Build history into the user message for ADK (single-turn with context)
+    # Build history into the user message for ADK (single-turn with context).
+    # Exclude assistant turns that had tool calls (identifiable by enrichment
+    # markers like [Created:, [Updated:, [Deleted:]) — replaying these through
+    # Gemini thinking models triggers thought_signature validation errors when
+    # the structured function-call metadata is lost.  User turns are always
+    # safe to include.  See GH #158 / Sentry RELI-ZO-5.
     history_block = ""
     for h in history[-context_window:]:
+        if h["role"] == "assistant" and _has_tool_call_markers(h["content"]):
+            continue
         history_block += f"<{h['role']}>{h['content']}</{h['role']}>\n"
 
     full_prompt = (
@@ -1015,7 +1068,9 @@ async def run_reasoning_agent(
         + user_content
     )
 
-    raw = await _run_agent_for_text(reasoning_agent, full_prompt, usage_stats)
+    raw = await _run_adk_with_thought_signature_fallback(
+        reasoning_agent, full_prompt, user_content, usage_stats,
+    )
     logger.info(
         "Reasoning agent (ADK) raw response: %s",
         raw[:500] if raw else raw,
