@@ -12,6 +12,10 @@ Finding types:
   - orphan: Active Thing with no relationships (no parent, no children, no graph edges)
   - completed_project: Project where all children are inactive but project is still active
   - open_question: Active Thing with unanswered open_questions
+  - cross_project_shared_blocker: Thing that blocks tasks in multiple projects
+  - cross_project_resource_conflict: Person/entity involved in multiple stale projects
+  - cross_project_thematic_connection: Similar Things across different projects
+  - cross_project_duplicate_effort: Tasks with near-identical titles in different projects
   - llm_insight: LLM-generated finding from reflection phase
 """
 
@@ -426,6 +430,262 @@ def find_open_questions(conn: sqlite3.Connection, user_id: str = "") -> list[Swe
 
 
 # ---------------------------------------------------------------------------
+# Cross-project pattern detection (#sweep-finding)
+# ---------------------------------------------------------------------------
+
+
+def find_cross_project_shared_blockers(conn: sqlite3.Connection) -> list[SweepCandidate]:
+    """Find Things that block active tasks in multiple projects.
+
+    A "shared blocker" is a Thing connected (via relationships) to active tasks
+    in 2+ different projects. This means one Thing's resolution would unblock
+    progress across multiple projects.
+    """
+    # Find Things that have "blocks" or similar relationships to tasks in
+    # different projects.  We look for Things connected to children of
+    # different projects via typed edges.
+    rows = conn.execute(
+        """SELECT blocker.id        AS blocker_id,
+                  blocker.title     AS blocker_title,
+                  COUNT(DISTINCT p.id) AS project_count,
+                  GROUP_CONCAT(DISTINCT p.title) AS project_titles
+           FROM things blocker
+           JOIN thing_relationships r
+             ON blocker.id = r.from_thing_id OR blocker.id = r.to_thing_id
+           JOIN things task
+             ON task.id = CASE
+                  WHEN blocker.id = r.from_thing_id THEN r.to_thing_id
+                  ELSE r.from_thing_id
+                END
+           JOIN things p
+             ON task.parent_id = p.id
+             AND p.type_hint = 'project'
+             AND p.active = 1
+           WHERE blocker.active = 1
+             AND task.active = 1
+             AND r.relationship_type IN ('blocks', 'blocked_by', 'depends_on', 'dependency')
+           GROUP BY blocker.id
+           HAVING project_count >= 2"""
+    ).fetchall()
+
+    candidates: list[SweepCandidate] = []
+    for row in rows:
+        projects = row["project_titles"]
+        candidates.append(
+            SweepCandidate(
+                thing_id=row["blocker_id"],
+                thing_title=row["blocker_title"],
+                finding_type="cross_project_shared_blocker",
+                message=(
+                    f"Blocks tasks in {row['project_count']} projects ({projects}): "
+                    f"{row['blocker_title']}"
+                ),
+                priority=1,
+                extra={
+                    "project_count": row["project_count"],
+                    "project_titles": projects,
+                },
+            )
+        )
+    return candidates
+
+
+def find_cross_project_resource_conflicts(
+    conn: sqlite3.Connection,
+    today: date | None = None,
+    stale_days: int = 14,
+) -> list[SweepCandidate]:
+    """Find people/resources involved in multiple projects with stale tasks.
+
+    A "resource conflict" is when a person (type_hint='person') is connected to
+    active tasks in 2+ projects, and at least one of those tasks is stale. This
+    suggests the person may be overcommitted.
+    """
+    today = today or date.today()
+    stale_cutoff = (today - timedelta(days=stale_days)).isoformat()
+
+    rows = conn.execute(
+        """SELECT person.id          AS person_id,
+                  person.title       AS person_title,
+                  COUNT(DISTINCT p.id) AS project_count,
+                  GROUP_CONCAT(DISTINCT p.title) AS project_titles,
+                  SUM(CASE WHEN task.updated_at < ? THEN 1 ELSE 0 END) AS stale_tasks
+           FROM things person
+           JOIN thing_relationships r
+             ON person.id = r.from_thing_id OR person.id = r.to_thing_id
+           JOIN things task
+             ON task.id = CASE
+                  WHEN person.id = r.from_thing_id THEN r.to_thing_id
+                  ELSE r.from_thing_id
+                END
+           JOIN things p
+             ON task.parent_id = p.id
+             AND p.type_hint = 'project'
+             AND p.active = 1
+           WHERE person.active = 1
+             AND person.type_hint = 'person'
+             AND task.active = 1
+           GROUP BY person.id
+           HAVING project_count >= 2 AND stale_tasks > 0""",
+        (stale_cutoff,),
+    ).fetchall()
+
+    candidates: list[SweepCandidate] = []
+    for row in rows:
+        candidates.append(
+            SweepCandidate(
+                thing_id=row["person_id"],
+                thing_title=row["person_title"],
+                finding_type="cross_project_resource_conflict",
+                message=(
+                    f"{row['person_title']} is involved in {row['project_count']} projects "
+                    f"with {row['stale_tasks']} stale task(s): {row['project_titles']}"
+                ),
+                priority=2,
+                extra={
+                    "project_count": row["project_count"],
+                    "project_titles": row["project_titles"],
+                    "stale_tasks": row["stale_tasks"],
+                },
+            )
+        )
+    return candidates
+
+
+def find_cross_project_thematic_connections(
+    conn: sqlite3.Connection,
+) -> list[SweepCandidate]:
+    """Find active Things with similar titles across different projects.
+
+    Uses SQL LIKE matching to find tasks whose titles share significant words
+    (3+ chars) across different project hierarchies. This helps identify
+    thematic connections or potential collaboration opportunities.
+    """
+    # Get all active tasks that belong to a project (via parent_id)
+    rows = conn.execute(
+        """SELECT t.id, t.title, t.parent_id, p.title AS project_title
+           FROM things t
+           JOIN things p ON t.parent_id = p.id AND p.type_hint = 'project' AND p.active = 1
+           WHERE t.active = 1
+           ORDER BY t.title"""
+    ).fetchall()
+
+    if len(rows) < 2:
+        return []
+
+    # Build a list of (id, title, parent_id, project_title) for comparison
+    items = [
+        (row["id"], row["title"], row["parent_id"], row["project_title"])
+        for row in rows
+    ]
+
+    # Extract significant words (3+ chars, lowercased) from each title
+    def _significant_words(title: str) -> set[str]:
+        stop_words = {"the", "and", "for", "with", "from", "this", "that", "are", "was", "has"}
+        return {
+            w.lower()
+            for w in re.findall(r"\b\w+\b", title)
+            if len(w) >= 3 and w.lower() not in stop_words
+        }
+
+    # Compare pairs across different projects
+    seen_pairs: set[tuple[str, str]] = set()
+    candidates: list[SweepCandidate] = []
+
+    for i, (id_a, title_a, proj_a, proj_title_a) in enumerate(items):
+        words_a = _significant_words(title_a)
+        if not words_a:
+            continue
+        for id_b, title_b, proj_b, proj_title_b in items[i + 1 :]:
+            if proj_a == proj_b:
+                continue  # same project
+            pair_key = tuple(sorted([id_a, id_b]))
+            if pair_key in seen_pairs:
+                continue
+            words_b = _significant_words(title_b)
+            shared = words_a & words_b
+            # Require at least 2 shared words, or 1 shared word that's 50%+ of the shorter title
+            min_words = min(len(words_a), len(words_b))
+            if len(shared) >= 2 or (len(shared) >= 1 and min_words <= 2):
+                seen_pairs.add(pair_key)
+                candidates.append(
+                    SweepCandidate(
+                        thing_id=id_a,
+                        thing_title=title_a,
+                        finding_type="cross_project_thematic_connection",
+                        message=(
+                            f"Thematic overlap between \"{title_a}\" ({proj_title_a}) "
+                            f"and \"{title_b}\" ({proj_title_b}) — "
+                            f"shared terms: {', '.join(sorted(shared))}"
+                        ),
+                        priority=3,
+                        extra={
+                            "related_thing_id": id_b,
+                            "related_title": title_b,
+                            "project_a": proj_title_a,
+                            "project_b": proj_title_b,
+                            "shared_words": sorted(shared),
+                        },
+                    )
+                )
+
+    return candidates
+
+
+def find_cross_project_duplicate_effort(
+    conn: sqlite3.Connection,
+) -> list[SweepCandidate]:
+    """Find tasks with near-identical titles across different projects.
+
+    Unlike thematic connections (which find related work), this specifically
+    targets cases where the same work appears to be duplicated in multiple
+    projects — suggesting consolidation.
+    """
+    rows = conn.execute(
+        """SELECT t1.id       AS id_a,
+                  t1.title    AS title_a,
+                  t1.parent_id AS proj_id_a,
+                  p1.title    AS proj_title_a,
+                  t2.id       AS id_b,
+                  t2.title    AS title_b,
+                  t2.parent_id AS proj_id_b,
+                  p2.title    AS proj_title_b
+           FROM things t1
+           JOIN things t2
+             ON t1.id < t2.id
+             AND LOWER(TRIM(t1.title)) = LOWER(TRIM(t2.title))
+           JOIN things p1
+             ON t1.parent_id = p1.id AND p1.type_hint = 'project' AND p1.active = 1
+           JOIN things p2
+             ON t2.parent_id = p2.id AND p2.type_hint = 'project' AND p2.active = 1
+           WHERE t1.active = 1
+             AND t2.active = 1
+             AND t1.parent_id != t2.parent_id"""
+    ).fetchall()
+
+    candidates: list[SweepCandidate] = []
+    for row in rows:
+        candidates.append(
+            SweepCandidate(
+                thing_id=row["id_a"],
+                thing_title=row["title_a"],
+                finding_type="cross_project_duplicate_effort",
+                message=(
+                    f"Possible duplicate: \"{row['title_a']}\" exists in both "
+                    f"{row['proj_title_a']} and {row['proj_title_b']}"
+                ),
+                priority=2,
+                extra={
+                    "duplicate_thing_id": row["id_b"],
+                    "project_a": row["proj_title_a"],
+                    "project_b": row["proj_title_b"],
+                },
+            )
+        )
+    return candidates
+
+
+# ---------------------------------------------------------------------------
 # Main sweep entry point
 # ---------------------------------------------------------------------------
 
@@ -451,6 +711,10 @@ def collect_candidates(
             + find_orphan_things(conn, user_id=user_id)
             + find_completed_projects(conn, user_id=user_id)
             + find_open_questions(conn, user_id=user_id)
+            + find_cross_project_shared_blockers(conn)
+            + find_cross_project_resource_conflicts(conn, today, stale_days)
+            + find_cross_project_thematic_connections(conn)
+            + find_cross_project_duplicate_effort(conn)
         )
 
     # Deduplicate: keep the highest-priority (lowest number) candidate per (thing_id, finding_type)
@@ -481,6 +745,8 @@ Consider:
 - What connections exist between items that the user might not see?
 - What's been forgotten or neglected that deserves attention?
 - Are there patterns (too many stale items, many orphans, etc.)?
+- Cross-project patterns: shared blockers, resource conflicts, thematic
+  connections, and duplicated effort across projects
 - What specific action would help most right now?
 
 Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
