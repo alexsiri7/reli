@@ -64,9 +64,13 @@ def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str,
             try:
                 result = func(*args, **kwargs)
             except Exception as exc:
+                logger.exception(
+                    "Tool %s crashed: %s (args=%s kwargs=%s)",
+                    func.__name__, exc, args, kwargs,
+                )
                 span.set_status(trace.StatusCode.ERROR, str(exc))
                 span.record_exception(exc)
-                raise
+                return {"error": f"Tool {func.__name__} failed: {exc}"}
 
             # Record output
             if isinstance(result, dict):
@@ -423,8 +427,10 @@ def _make_reasoning_tools(
 
         try:
             data = json.loads(data_json) if data_json else {}
-        except json.JSONDecodeError:
-            data = {}
+            if not isinstance(data, dict):
+                return {"error": f"data_json must be a JSON object, got {type(data).__name__}. Wrap your data in curly braces: {{\"key\": \"value\"}}"}
+        except (json.JSONDecodeError, TypeError) as exc:
+            return {"error": f"data_json is not valid JSON: {exc}"}
         try:
             open_questions = json.loads(open_questions_json) if open_questions_json else []
         except json.JSONDecodeError:
@@ -574,8 +580,10 @@ def _make_reasoning_tools(
             if data_json:
                 try:
                     new_data = json.loads(data_json)
-                except json.JSONDecodeError:
-                    new_data = {}
+                    if not isinstance(new_data, dict):
+                        return {"error": f"data_json must be a JSON object, got {type(new_data).__name__}. Use {{\"key\": \"value\"}} format."}
+                except (json.JSONDecodeError, TypeError) as exc:
+                    return {"error": f"data_json is not valid JSON: {exc}"}
                 if new_data:
                     try:
                         old_data = (
@@ -665,8 +673,10 @@ def _make_reasoning_tools(
         now = datetime.now(timezone.utc).isoformat()
         try:
             merged_data = json.loads(merged_data_json) if merged_data_json else {}
-        except json.JSONDecodeError:
-            merged_data = {}
+            if not isinstance(merged_data, dict):
+                return {"error": f"merged_data_json must be a JSON object, got {type(merged_data).__name__}. Use {{\"key\": \"value\"}} format."}
+        except (json.JSONDecodeError, TypeError) as exc:
+            return {"error": f"merged_data_json is not valid JSON: {exc}"}
 
         with db() as conn:
             keep_row = conn.execute(

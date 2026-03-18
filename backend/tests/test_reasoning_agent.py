@@ -633,3 +633,120 @@ async def test_reasoning_agent_disables_thinking():
     assert extra_body is not None, "extra_body must be passed to disable thinking"
     assert extra_body.get("thinking_config", {}).get("thinking_budget") == 0, \
         "thinking_budget must be 0 to prevent thought_signature errors"
+
+
+# ---------------------------------------------------------------------------
+# Regression: data_json as non-dict JSON (string, list, number)
+# ---------------------------------------------------------------------------
+
+
+class TestDataJsonStringRegression:
+    """Regression tests for TypeError when LLM passes a JSON string as data_json.
+
+    The LLM can pass data_json='"some string"' which is valid JSON but
+    json.loads returns a str, not a dict. This caused:
+        TypeError: 'str' object is not a mapping
+    at the dict merge: {**old_data, **new_data}
+    """
+
+    def test_create_thing_with_string_data_json_returns_error(self):
+        """create_thing returns error when data_json is a JSON string."""
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied = _make_reasoning_tools("test-user")
+        create_fn = tools[0]
+
+        result = create_fn(title="Test", data_json='"just a string"')
+        assert "error" in result
+        assert "JSON object" in result["error"]
+        assert applied["created"] == []
+
+    def test_update_thing_with_string_data_json_returns_error(self):
+        """update_thing returns error when data_json is a JSON string."""
+        mock_conn = MagicMock()
+        mock_db_ctx = MagicMock()
+        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
+        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+
+        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
+             patch("backend.reasoning_agent.upsert_thing"), \
+             patch("backend.reasoning_agent.vs_delete"):
+            from backend.reasoning_agent import _make_reasoning_tools
+            tools, applied = _make_reasoning_tools("test-user")
+            update_fn = tools[1]
+
+            existing_row = {"id": "ex-uuid", "title": "Existing", "data": '{}'}
+            mock_existing = MagicMock()
+            mock_existing.__getitem__ = lambda self, key: existing_row[key]
+            mock_conn.execute.return_value.fetchone = MagicMock(
+                return_value=mock_existing
+            )
+
+            result = update_fn(thing_id="ex-uuid", data_json='"string value"')
+            assert "error" in result
+            assert "JSON object" in result["error"]
+
+    def test_update_thing_with_list_data_json_returns_error(self):
+        """update_thing returns error when data_json is a JSON array."""
+        mock_conn = MagicMock()
+        mock_db_ctx = MagicMock()
+        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
+        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+
+        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
+             patch("backend.reasoning_agent.upsert_thing"), \
+             patch("backend.reasoning_agent.vs_delete"):
+            from backend.reasoning_agent import _make_reasoning_tools
+            tools, applied = _make_reasoning_tools("test-user")
+            update_fn = tools[1]
+
+            existing_row = {"id": "ex-uuid", "title": "Existing", "data": '{}'}
+            mock_existing = MagicMock()
+            mock_existing.__getitem__ = lambda self, key: existing_row[key]
+            mock_conn.execute.return_value.fetchone = MagicMock(
+                return_value=mock_existing
+            )
+
+            result = update_fn(thing_id="ex-uuid", data_json='[1, 2, 3]')
+            assert "error" in result
+            assert "JSON object" in result["error"]
+
+    def test_merge_things_with_string_merged_data_json_returns_error(self):
+        """merge_things returns error when merged_data_json is a JSON string."""
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied = _make_reasoning_tools("test-user")
+        merge_fn = tools[3]
+
+        result = merge_fn(keep_id="keep-uuid",
+                          remove_id="remove-uuid",
+                          merged_data_json='"not a dict"')
+        assert "error" in result
+        assert "JSON object" in result["error"]
+
+
+class TestToolCatchallErrorHandling:
+    """Test that _traced_tool wrapper catches exceptions and returns error dicts."""
+
+    def test_tool_exception_returns_error_dict(self):
+        """A tool that raises should return an error dict, not crash."""
+        from backend.reasoning_agent import _traced_tool
+
+        def bad_tool(x: str = "") -> dict:
+            raise ValueError("something broke")
+
+        wrapped = _traced_tool(bad_tool)
+        result = wrapped(x="test")
+        assert "error" in result
+        assert "something broke" in result["error"]
+
+    def test_tool_type_error_returns_error_dict(self):
+        """TypeError from bad data should return error dict, not crash."""
+        from backend.reasoning_agent import _traced_tool
+
+        def merge_tool(data: str = "{}") -> dict:
+            parsed = {"a": 1}
+            return {**parsed, **data}  # type: ignore[dict-item]  # intentional TypeError
+
+        wrapped = _traced_tool(merge_tool)
+        result = wrapped(data="not a dict")
+        assert "error" in result
+        assert "failed" in result["error"]
