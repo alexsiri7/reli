@@ -2,7 +2,7 @@
 
 import textwrap
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import yaml
 
@@ -93,7 +93,10 @@ def test_fetch_requesty_pricing_api_failure():
     """Pricing fetch should fall back to defaults when API is unreachable."""
     from backend.agents import _fetch_requesty_pricing
 
-    with patch("httpx.get", side_effect=ConnectionError("unreachable")):
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client_cls.return_value.__enter__ = lambda self: self
+        mock_client_cls.return_value.__exit__ = lambda self, *a: None
+        mock_client_cls.return_value.get.side_effect = ConnectionError("unreachable")
         pricing = _fetch_requesty_pricing()
 
     # Should still have default entries
@@ -112,9 +115,14 @@ def test_config_pricing_overrides():
         },
     }
 
+    mock_client = MagicMock()
+    mock_client.__enter__ = lambda self: self
+    mock_client.__exit__ = lambda self, *a: None
+    mock_client.get.side_effect = ConnectionError("unreachable")
+
     with (
         patch("backend.agents._config", override_config),
-        patch("httpx.get", side_effect=ConnectionError("unreachable")),
+        patch("httpx.Client", return_value=mock_client),
     ):
         pricing = _fetch_requesty_pricing()
 
