@@ -120,6 +120,19 @@ embedding:
 
 Models can also be overridden via environment variables (`REQUESTY_MODEL`, `REQUESTY_REASONING_MODEL`, `REQUESTY_RESPONSE_MODEL`).
 
+## Observability (Phoenix)
+
+Reli ships with [Arize Phoenix](https://phoenix.arize.com/) for tracing the agent pipeline. When running with Docker Compose, Phoenix starts automatically alongside the app.
+
+**Dashboard:** [http://localhost:6006](http://localhost:6006)
+
+Phoenix captures:
+- Pipeline stages (context → reasoning → validation → response)
+- Google ADK agent executions and tool calls (auto-instrumented)
+- LLM invocations with inputs/outputs
+
+To disable tracing, set `PHOENIX_ENABLED=false` in your `.env`.
+
 ## Testing
 
 ```bash

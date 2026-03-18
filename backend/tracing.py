@@ -46,6 +46,16 @@ def init_tracing() -> None:
         exporter = OTLPSpanExporter(endpoint=settings.PHOENIX_ENDPOINT)
         provider.add_span_processor(BatchSpanProcessor(exporter))
         trace.set_tracer_provider(provider)
+
+        # Auto-instrument Google ADK (agents, tool calls, LLM invocations)
+        try:
+            from openinference.instrumentation.google_adk import GoogleADKInstrumentor
+
+            GoogleADKInstrumentor().instrument(tracer_provider=provider)
+            logger.info("Google ADK auto-instrumentation enabled")
+        except Exception:
+            logger.warning("Failed to enable Google ADK auto-instrumentation", exc_info=True)
+
         _initialized = True
         logger.info(
             "OTEL tracing initialized — exporting to %s (service: %s)",

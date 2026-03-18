@@ -35,6 +35,8 @@ def test_init_tracing_configures_provider_when_enabled():
         mock_exporter = MagicMock()
         mock_processor = MagicMock()
 
+        mock_adk_instrumentor = MagicMock()
+
         with (
             patch("opentelemetry.sdk.trace.TracerProvider", return_value=mock_tracer_provider),
             patch(
@@ -46,6 +48,10 @@ def test_init_tracing_configures_provider_when_enabled():
                 return_value=mock_processor,
             ),
             patch("opentelemetry.trace.set_tracer_provider") as mock_set_tp,
+            patch(
+                "openinference.instrumentation.google_adk.GoogleADKInstrumentor",
+                return_value=mock_adk_instrumentor,
+            ),
         ):
             import backend.tracing
 
@@ -55,6 +61,7 @@ def test_init_tracing_configures_provider_when_enabled():
             mock_exp_cls.assert_called_once_with(endpoint="http://localhost:6006/v1/traces")
             mock_tracer_provider.add_span_processor.assert_called_once_with(mock_processor)
             mock_set_tp.assert_called_once_with(mock_tracer_provider)
+            mock_adk_instrumentor.instrument.assert_called_once_with(tracer_provider=mock_tracer_provider)
             assert backend.tracing._initialized is True
 
 
