@@ -44,6 +44,7 @@ from .routers import (  # noqa: E402
     gmail,
     proactive,
     settings,
+    staleness,
     sweep,
     thing_types,
     things,
@@ -158,6 +159,10 @@ _TAG_METADATA = [
         "description": "Auto-connect: suggested relationships between semantically similar Things.",
     },
     {
+        "name": "staleness",
+        "description": "Staleness & neglect detection: batch summary of stale and neglected items.",
+    },
+    {
         "name": "feedback",
         "description": "User feedback submission via GitHub Issues.",
     },
@@ -213,6 +218,7 @@ app.include_router(proactive.router, prefix="/api", dependencies=_api_deps)
 app.include_router(settings.router, prefix="/api", dependencies=_api_deps)
 app.include_router(sweep.router, prefix="/api", dependencies=_api_deps)
 app.include_router(focus.router, prefix="/api", dependencies=_api_deps)
+app.include_router(staleness.router, prefix="/api", dependencies=_api_deps)
 app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
 app.include_router(connections.router, prefix="/api", dependencies=_api_deps)
 

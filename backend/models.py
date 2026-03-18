@@ -287,6 +287,44 @@ class BriefingResponse(BaseModel):
     total: int
 
 
+# ── Staleness & Neglect ─────────────────────────────────────────────────────
+
+
+class StaleItem(BaseModel):
+    """A Thing that hasn't been updated within the configured staleness window."""
+
+    thing: Thing
+    days_stale: int
+    is_neglected: bool
+    active_children: int = 0
+
+
+class OverdueCheckin(BaseModel):
+    """A Thing whose checkin_date is in the past."""
+
+    thing: Thing
+    days_overdue: int
+
+
+class StalenessCategory(BaseModel):
+    """Staleness counts grouped by category."""
+
+    stale: int = 0
+    neglected: int = 0
+    overdue_checkins: int = 0
+
+
+class StalenessReport(BaseModel):
+    """Batch summary of stale and neglected items."""
+
+    as_of: str
+    stale_threshold_days: int
+    stale_items: list[StaleItem]
+    overdue_checkins: list[OverdueCheckin]
+    counts: StalenessCategory
+    total: int
+
+
 # ── Proactive Surfaces ───────────────────────────────────────────────────────
 
 

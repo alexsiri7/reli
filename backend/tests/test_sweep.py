@@ -10,6 +10,7 @@ from backend.sweep import (
     find_completed_projects,
     find_open_questions,
     find_orphan_things,
+    find_overdue_checkins,
     find_stale_things,
 )
 
@@ -172,6 +173,105 @@ class TestStaleThings:
             results = find_stale_things(conn, today, stale_days=14)
         assert len(results) == 0
 
+    def test_high_priority_flagged_as_neglected(self, patched_db):
+        """High-priority stale Things should be flagged as 'neglected'."""
+        today = date.today()
+        old_date = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Urgent Task", updated_at=old_date)
+            conn.execute("UPDATE things SET priority = 1 WHERE id = 't1'")
+        with db() as conn:
+            results = find_stale_things(conn, today, stale_days=14)
+        assert len(results) == 1
+        assert results[0].finding_type == "neglected"
+        assert results[0].priority == 2  # higher urgency
+        assert "high-priority" in results[0].message
+        assert results[0].extra["is_neglected"] is True
+
+    def test_thing_with_active_children_flagged_as_neglected(self, patched_db):
+        """Stale Things with active children should be flagged as 'neglected'."""
+        today = date.today()
+        old_date = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "proj", "Old Project", type_hint="project", updated_at=old_date)
+            _insert_thing(conn, "c1", "Active Child", parent_id="proj")
+        with db() as conn:
+            results = find_stale_things(conn, today, stale_days=14)
+        neglected = [r for r in results if r.thing_id == "proj"]
+        assert len(neglected) == 1
+        assert neglected[0].finding_type == "neglected"
+        assert "1 pending subtask" in neglected[0].message
+
+    def test_low_priority_no_children_is_plain_stale(self, patched_db):
+        """Low-priority stale Things without children are plain 'stale'."""
+        today = date.today()
+        old_date = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Low Priority Note", updated_at=old_date)
+            conn.execute("UPDATE things SET priority = 4 WHERE id = 't1'")
+        with db() as conn:
+            results = find_stale_things(conn, today, stale_days=14)
+        assert len(results) == 1
+        assert results[0].finding_type == "stale"
+        assert results[0].extra["is_neglected"] is False
+
+
+# ---------------------------------------------------------------------------
+# Overdue check-ins
+# ---------------------------------------------------------------------------
+
+
+class TestOverdueCheckins:
+    def test_overdue_checkin_detected(self, patched_db):
+        today = date.today()
+        past = (today - timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Overdue Task", checkin_date=f"{past}T09:00:00")
+        with db() as conn:
+            results = find_overdue_checkins(conn, today, grace_days=1)
+        assert len(results) == 1
+        assert results[0].finding_type == "overdue_checkin"
+        assert results[0].extra["days_overdue"] == 5
+        assert "overdue by 5d" in results[0].message.lower()
+
+    def test_recent_checkin_within_grace_excluded(self, patched_db):
+        """Check-ins within the grace period are not flagged (handled by approaching_dates)."""
+        today = date.today()
+        yesterday = (today - timedelta(days=0)).isoformat()  # today
+        with db() as conn:
+            _insert_thing(conn, "t1", "Today Check-in", checkin_date=f"{yesterday}T09:00:00")
+        with db() as conn:
+            results = find_overdue_checkins(conn, today, grace_days=1)
+        assert len(results) == 0
+
+    def test_inactive_excluded(self, patched_db):
+        today = date.today()
+        past = (today - timedelta(days=10)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Done Thing", checkin_date=f"{past}T09:00:00", active=False)
+        with db() as conn:
+            results = find_overdue_checkins(conn, today, grace_days=1)
+        assert len(results) == 0
+
+    def test_severely_overdue_gets_high_priority(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=10)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Very Overdue", checkin_date=f"{old}T09:00:00")
+        with db() as conn:
+            results = find_overdue_checkins(conn, today, grace_days=1)
+        assert len(results) == 1
+        assert results[0].priority == 1  # high priority for 7+ days overdue
+
+    def test_future_checkin_excluded(self, patched_db):
+        today = date.today()
+        future = (today + timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Future Check-in", checkin_date=f"{future}T09:00:00")
+        with db() as conn:
+            results = find_overdue_checkins(conn, today, grace_days=1)
+        assert len(results) == 0
+
 
 # ---------------------------------------------------------------------------
 # Orphan Things
@@ -326,12 +426,15 @@ class TestCollectCandidates:
         today = date.today()
         old = (today - timedelta(days=20)).isoformat()
         tomorrow = (today + timedelta(days=1)).isoformat()
+        past = (today - timedelta(days=5)).isoformat()
 
         with db() as conn:
             # approaching date
             _insert_thing(conn, "t1", "Upcoming", checkin_date=f"{tomorrow}T09:00:00")
             # stale
             _insert_thing(conn, "t2", "Stale", updated_at=old)
+            # overdue checkin
+            _insert_thing(conn, "t4", "Overdue", checkin_date=f"{past}T09:00:00")
             # orphan (t1 and t2 are also orphans — they'll appear there too)
             # completed project
             _insert_thing(conn, "proj", "Done Project", type_hint="project")
@@ -343,6 +446,7 @@ class TestCollectCandidates:
         types = {c.finding_type for c in results}
         assert "approaching_date" in types
         assert "stale" in types
+        assert "overdue_checkin" in types
         assert "orphan" in types
         assert "completed_project" in types
         assert "open_question" in types

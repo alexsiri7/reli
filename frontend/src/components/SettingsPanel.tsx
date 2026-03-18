@@ -118,6 +118,7 @@ function SettingsForm({
   const [chatContextWindow, setChatContextWindow] = useState(initial.chat_context_window)
   const [reqApiKey, setReqApiKey] = useState('')
   const [reqApiKeyDisplay, setReqApiKeyDisplay] = useState(initialUserSettings?.requesty_api_key || '')
+  const [staleThresholdDays, setStaleThresholdDays] = useState(initialUserSettings?.stale_threshold_days ?? 14)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -128,8 +129,9 @@ function SettingsForm({
     chatContextWindow !== initial.chat_context_window
 
   const hasApiKeyChange = reqApiKey.length > 0
+  const hasStaleThresholdChange = staleThresholdDays !== (initialUserSettings?.stale_threshold_days ?? 14)
 
-  const hasChanges = hasModelChanges || hasApiKeyChange
+  const hasChanges = hasModelChanges || hasApiKeyChange || hasStaleThresholdChange
 
   const handleSave = async () => {
     setSaving(true)
@@ -145,6 +147,11 @@ function SettingsForm({
       await updateUserSettings({ requesty_api_key: reqApiKey })
       setReqApiKeyDisplay(reqApiKey.length <= 4 ? '****' : '*'.repeat(reqApiKey.length - 4) + reqApiKey.slice(-4))
       setReqApiKey('')
+    }
+
+    // Save stale threshold if changed
+    if (hasStaleThresholdChange) {
+      await updateUserSettings({ stale_threshold_days: staleThresholdDays })
     }
 
     setSaving(false)
@@ -238,6 +245,29 @@ function SettingsForm({
             onChange={e => {
               const v = parseInt(e.target.value, 10)
               if (!isNaN(v)) setChatContextWindow(Math.max(1, Math.min(50, v)))
+            }}
+            className="w-24 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
+          />
+        </div>
+      </div>
+      {/* Staleness Detection */}
+      <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Staleness Detection</h3>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Stale Threshold (days)
+          </label>
+          <p className="text-xs text-gray-400 dark:text-gray-400 mb-1.5">
+            Things not updated for this many days are flagged as stale or neglected (1-365)
+          </p>
+          <input
+            type="number"
+            min={1}
+            max={365}
+            value={staleThresholdDays}
+            onChange={e => {
+              const v = parseInt(e.target.value, 10)
+              if (!isNaN(v)) setStaleThresholdDays(Math.max(1, Math.min(365, v)))
             }}
             className="w-24 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
           />
