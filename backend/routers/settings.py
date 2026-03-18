@@ -28,6 +28,7 @@ _VALID_KEYS = {
     "response_model",
     "chat_context_window",
     "theme",
+    "chat_mode",
 }
 
 
@@ -59,6 +60,7 @@ class UserSettings(BaseModel):
     response_model: str = ""
     chat_context_window: int | None = None
     theme: str = ""
+    chat_mode: str = "normal"
 
 
 class UserSettingsUpdate(BaseModel):
@@ -72,6 +74,7 @@ class UserSettingsUpdate(BaseModel):
     response_model: str | None = None
     chat_context_window: int | None = None
     theme: str | None = None
+    chat_mode: str | None = None
 
 
 class RequestyModel(BaseModel):
@@ -301,6 +304,7 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         response_model=user_settings.get("response_model", ""),
         chat_context_window=int(user_settings["chat_context_window"]) if "chat_context_window" in user_settings else None,
         theme=user_settings.get("theme", ""),
+        chat_mode=user_settings.get("chat_mode", "normal"),
     )
 
 
@@ -319,6 +323,9 @@ def update_user_settings(
             if val is not None:
                 if field_name == "chat_context_window":
                     val = str(max(1, min(int(val), 50)))
+                elif field_name == "chat_mode":
+                    if val not in ("normal", "planning"):
+                        continue
                 _set_user_setting(conn, user_id, field_name, str(val))
 
     return get_user_settings_endpoint(user_id)

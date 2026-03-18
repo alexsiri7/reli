@@ -152,6 +152,7 @@ export interface UserSettings {
   response_model: string
   chat_context_window: number | null
   theme: string
+  chat_mode: string
 }
 
 export interface UserProfileRelationship {
@@ -203,6 +204,8 @@ export interface CallUsage {
   completion_tokens: number
   cost_usd: number
 }
+
+export type ChatMode = 'normal' | 'planning'
 
 export type StreamingStage = 'context' | 'reasoning' | 'response' | null
 
@@ -307,6 +310,10 @@ interface ReliState {
   // View mode
   mainView: 'list' | 'graph'
   setMainView: (view: 'list' | 'graph') => void
+
+  // Chat mode (Hats)
+  chatMode: ChatMode
+  setChatMode: (mode: ChatMode) => void
 
   // Mobile navigation
   mobileView: 'things' | 'chat'
@@ -752,7 +759,7 @@ export const useStore = create<ReliState>((set, get) => ({
       const res = await apiFetch(`${BASE}/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: get().sessionId, message: text }),
+        body: JSON.stringify({ session_id: get().sessionId, message: text, mode: get().chatMode }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
@@ -912,6 +919,18 @@ export const useStore = create<ReliState>((set, get) => ({
   mainView: 'list',
   setMainView: (view) => set({ mainView: view }),
 
+  // Chat mode (Hats)
+  chatMode: 'normal',
+  setChatMode: (mode: ChatMode) => {
+    set({ chatMode: mode })
+    // Persist to user settings
+    apiFetch(`${BASE}/settings/user`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_mode: mode }),
+    }).catch(() => {})
+  },
+
   // Mobile navigation
   mobileView: 'things',
   setMobileView: (view) => set({ mobileView: view }),
@@ -978,6 +997,9 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ userSettings: data })
       if (data.theme === 'light' || data.theme === 'dark' || data.theme === 'system') {
         applyTheme(data.theme)
+      }
+      if (data.chat_mode === 'normal' || data.chat_mode === 'planning') {
+        set({ chatMode: data.chat_mode })
       }
     } catch {
       // ignore

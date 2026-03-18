@@ -188,6 +188,11 @@ class ChatRequest(BaseModel):
         description="User message text (max 10 000 chars)",
         examples=["What tasks are due this week?"],
     )
+    mode: str = Field(
+        default="normal",
+        description="Chat mode ('normal' or 'planning') that changes reasoning behavior",
+        examples=["normal", "planning"],
+    )
 
 
 class MigrateSessionRequest(BaseModel):
@@ -234,6 +239,7 @@ class ChatResponse(BaseModel):
     reply: str
     applied_changes: dict[str, Any]
     questions_for_user: list[str]
+    mode: str = "normal"
     usage: UsageInfo | None = None
     session_usage: SessionUsage | None = None
 

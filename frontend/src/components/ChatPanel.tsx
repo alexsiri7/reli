@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ContextThing, type GmailMessage, type ModelUsage, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
+import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ChatMode, type ContextThing, type GmailMessage, type ModelUsage, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
 import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported } from '../hooks/useTTS'
@@ -568,8 +568,36 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
   )
 }
 
+function ModeToggle({ mode, onChange }: { mode: ChatMode; onChange: (mode: ChatMode) => void }) {
+  const isPlanning = mode === 'planning'
+
+  return (
+    <button
+      onClick={() => onChange(isPlanning ? 'normal' : 'planning')}
+      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+        isPlanning
+          ? 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 ring-1 ring-violet-300 dark:ring-violet-600'
+          : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+      }`}
+      title={isPlanning ? 'Switch to Normal mode' : 'Switch to Planning mode'}
+      aria-label={`Current mode: ${mode}. Click to switch.`}
+    >
+      {isPlanning ? (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
+        </svg>
+      ) : (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+        </svg>
+      )}
+      {isPlanning ? 'Planning' : 'Normal'}
+    </button>
+  )
+}
+
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -578,6 +606,8 @@ export function ChatPanel() {
       sendMessage: s.sendMessage,
       fetchOlderMessages: s.fetchOlderMessages,
       sessionStats: s.sessionStats,
+      chatMode: s.chatMode,
+      setChatMode: s.setChatMode,
     }))
   )
   const { isOnline } = useNetworkStatus()
@@ -648,11 +678,14 @@ export function ChatPanel() {
     <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 min-w-0 min-h-0 mobile-chat-pb md:pb-0">
       {/* Title bar */}
       <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0 flex items-start justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Chat</h2>
-          <p className="text-xs text-gray-400 dark:text-gray-400">Talk to Reli — create, update, and query your Things</p>
+        <div className="flex items-center gap-2">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Chat</h2>
+            <p className="text-xs text-gray-400 dark:text-gray-400">Talk to Reli — create, update, and query your Things</p>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          <ModeToggle mode={chatMode} onChange={setChatMode} />
           <NerdStatsIcon stats={sessionStats} />
         </div>
       </div>

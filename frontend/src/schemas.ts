@@ -78,6 +78,7 @@ export const ChatResponseSchema = z.object({
   reply: z.string(),
   applied_changes: AppliedChangesSchema.nullable().optional(),
   questions_for_user: z.array(z.string()).optional(),
+  mode: z.string().optional(),
   usage: z.object({
     prompt_tokens: z.number(),
     completion_tokens: z.number(),
@@ -212,6 +213,7 @@ export const UserSettingsSchema = z.object({
   response_model: z.string(),
   chat_context_window: z.number().nullable(),
   theme: z.string(),
+  chat_mode: z.string().optional().default('normal'),
 })
 
 export const RequestyModelSchema = z.object({

@@ -208,8 +208,8 @@ def _enrich_history_content(row: sqlite3.Row) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _build_pipeline(user_id: str) -> ChatPipeline:
-    """Build a ChatPipeline configured for the given user."""
+def _build_pipeline(user_id: str, mode: str = "normal") -> ChatPipeline:
+    """Build a ChatPipeline configured for the given user and mode."""
     user_api_key = get_user_api_key(user_id)
     user_models = get_user_models(user_id)
     context_window = get_user_chat_context_window(user_id)
@@ -219,6 +219,7 @@ def _build_pipeline(user_id: str) -> ChatPipeline:
         user_api_key=user_api_key,
         user_models=user_models,
         context_window=context_window,
+        mode=mode,
     )
     return pipeline
 
@@ -328,8 +329,9 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     """4-stage pipeline: Context → Retrieve → Reasoning → Validate → Respond."""
     session_id = body.session_id
     message = body.message
+    mode = body.mode if body.mode in ("normal", "planning") else "normal"
 
-    pipeline = _build_pipeline(user_id)
+    pipeline = _build_pipeline(user_id, mode=mode)
     history = _fetch_history(session_id, pipeline.context_window)
 
     result = await pipeline.run(message, history)
@@ -345,6 +347,7 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         reply=result.reply,
         applied_changes=applied_with_sources,
         questions_for_user=result.questions_for_user,
+        mode=mode,
         usage=UsageInfo(**result.usage.to_dict()),
         session_usage=daily_usage,
     )
@@ -365,8 +368,9 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
         try:
             session_id = body.session_id
             message = body.message
+            mode = body.mode if body.mode in ("normal", "planning") else "normal"
 
-            pipeline = _build_pipeline(user_id)
+            pipeline = _build_pipeline(user_id, mode=mode)
             history = _fetch_history(session_id, pipeline.context_window)
 
             result = None
@@ -399,6 +403,7 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
                 reply=reply,
                 applied_changes=applied_with_sources,
                 questions_for_user=result.questions_for_user,
+                mode=mode,
                 usage=UsageInfo(**result.usage.to_dict()),
                 session_usage=daily_usage,
             )

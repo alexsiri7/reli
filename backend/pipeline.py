@@ -32,7 +32,7 @@ from .context_agent import _make_litellm_model, run_context_agent, run_context_r
 from .database import db
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
-from .reasoning_agent import REASONING_AGENT_TOOL_SYSTEM, run_reasoning_agent
+from .reasoning_agent import get_system_prompt_for_mode, run_reasoning_agent
 from .response_agent import run_response_agent, run_response_agent_stream
 from .tracing import get_tracer, set_span_error
 from .vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
@@ -320,11 +320,13 @@ class ChatPipeline:
         user_api_key: str | None = None,
         user_models: Mapping[str, str | None] | None = None,
         context_window: int = 10,
+        mode: str = "normal",
     ):
         self.user_id = user_id
         self.user_api_key = user_api_key
         self.user_models: Mapping[str, str | None] = user_models or {}
         self.context_window = context_window
+        self.mode = mode
 
         # Create ADK LlmAgent instances for each pipeline stage
         context_model = _make_litellm_model(
@@ -349,7 +351,7 @@ class ChatPipeline:
             name="reasoning_agent",
             description="Reasons about user requests and executes storage changes via tools.",
             model=reasoning_model,
-            instruction=REASONING_AGENT_TOOL_SYSTEM,
+            instruction=get_system_prompt_for_mode(self.mode),
         )
         self._response_agent = LlmAgent(
             name="response_agent",
@@ -614,7 +616,7 @@ class ChatPipeline:
         self,
         message: str,
         history: list[dict[str, Any]],
-    ) -> PipelineResult:
+    ) -> "PipelineResult":
         """Run the full chat pipeline: context → reasoning → response.
 
         Executes each sub-agent of the SequentialAgent in order, with
@@ -668,7 +670,7 @@ class ChatPipeline:
                             calendar_events, relationships=context_relationships,
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
-                            user_id=self.user_id,
+                            user_id=self.user_id, mode=self.mode,
                         )
                         questions_for_user = reasoning_result.get("questions_for_user", [])
                         priority_question = reasoning_result.get("priority_question", "")
@@ -807,7 +809,7 @@ class ChatPipeline:
                             calendar_events, relationships=context_relationships,
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
-                            user_id=self.user_id,
+                            user_id=self.user_id, mode=self.mode,
                         )
                         questions_for_user = reasoning_result.get("questions_for_user", [])
                         priority_question = reasoning_result.get("priority_question", "")
