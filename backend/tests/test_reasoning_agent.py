@@ -56,13 +56,14 @@ class TestMakeReasoningTools:
              patch("backend.reasoning_agent.upsert_thing"), \
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
-            tools, applied = _make_reasoning_tools(user_id)
+            tools, applied, _fetched = _make_reasoning_tools(user_id)
             return tools, applied, mock_db
 
-    def test_returns_five_tools(self):
+    def test_returns_six_tools(self):
         tools, applied, _ = self._get_tools()
-        assert len(tools) == 5
+        assert len(tools) == 6
         names = [t.__name__ for t in tools]
+        assert "fetch_context" in names
         assert "create_thing" in names
         assert "update_thing" in names
         assert "delete_thing" in names
@@ -89,8 +90,8 @@ class TestCreateThingTool:
     def test_create_thing_empty_title_returns_error(self):
         from backend.reasoning_agent import _make_reasoning_tools
 
-        tools, applied = _make_reasoning_tools("test-user")
-        create_fn = tools[0]
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        create_fn = tools[1]
         result = create_fn(title="   ")
         assert "error" in result
         assert applied["created"] == []
@@ -105,8 +106,8 @@ class TestCreateThingTool:
              patch("backend.reasoning_agent.upsert_thing"), \
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
-            tools, applied = _make_reasoning_tools("test-user")
-            create_fn = tools[0]
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            create_fn = tools[1]
 
             # Simulate existing Thing with same title
             existing_row = {
@@ -147,8 +148,8 @@ class TestCreateThingTool:
              patch("backend.reasoning_agent.upsert_thing") as mock_upsert, \
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
-            tools, applied = _make_reasoning_tools("test-user")
-            create_fn = tools[0]
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            create_fn = tools[1]
 
             new_row = {
                 "id": "new-uuid",
@@ -182,8 +183,8 @@ class TestCreateThingTool:
              patch("backend.reasoning_agent.upsert_thing"), \
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
-            tools, applied = _make_reasoning_tools("test-user")
-            create_fn = tools[0]
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            create_fn = tools[1]
 
             new_row = {
                 "id": "person-uuid",
@@ -232,8 +233,8 @@ class TestDeleteThingTool:
              patch("backend.reasoning_agent.upsert_thing"), \
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
-            tools, applied = _make_reasoning_tools("test-user")
-            delete_fn = tools[2]
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            delete_fn = tools[3]
 
             mock_conn.execute.return_value.fetchone = MagicMock(return_value=None)
             result = delete_fn(thing_id="nonexistent")
@@ -250,8 +251,8 @@ class TestDeleteThingTool:
              patch("backend.reasoning_agent.upsert_thing"), \
              patch("backend.reasoning_agent.vs_delete") as mock_vs_delete:
             from backend.reasoning_agent import _make_reasoning_tools
-            tools, applied = _make_reasoning_tools("test-user")
-            delete_fn = tools[2]
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            delete_fn = tools[3]
 
             row = {"id": "del-uuid", "title": "Delete Me"}
             mock_row = MagicMock()
@@ -273,8 +274,8 @@ class TestDeleteThingTool:
 class TestCreateRelationshipTool:
     def test_self_referential_rejected(self):
         from backend.reasoning_agent import _make_reasoning_tools
-        tools, applied = _make_reasoning_tools("test-user")
-        rel_fn = tools[4]
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        rel_fn = tools[5]
         result = rel_fn(
             from_thing_id="same-id",
             to_thing_id="same-id",
@@ -292,8 +293,8 @@ class TestCreateRelationshipTool:
              patch("backend.reasoning_agent.upsert_thing"), \
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
-            tools, applied = _make_reasoning_tools("test-user")
-            rel_fn = tools[4]
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            rel_fn = tools[5]
 
             mock_conn.execute.return_value.fetchone = MagicMock(
                 side_effect=[None, None, None]
@@ -316,8 +317,8 @@ class TestCreateRelationshipTool:
              patch("backend.reasoning_agent.upsert_thing"), \
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
-            tools, applied = _make_reasoning_tools("test-user")
-            rel_fn = tools[4]
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            rel_fn = tools[5]
 
             dup_row = MagicMock()
             dup_row.__getitem__ = lambda self, key: "dup-id"
@@ -341,8 +342,8 @@ class TestCreateRelationshipTool:
              patch("backend.reasoning_agent.upsert_thing"), \
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
-            tools, applied = _make_reasoning_tools("test-user")
-            rel_fn = tools[4]
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            rel_fn = tools[5]
 
             from_row = MagicMock()
             from_row.__getitem__ = lambda self, key: "from-uuid"
@@ -381,14 +382,14 @@ async def test_reasoning_agent_returns_metadata_from_adk():
         mock_run.return_value = json.dumps(metadata)
 
         # Mock _make_reasoning_tools to avoid DB access
-        mock_tools = [MagicMock() for _ in range(5)]
+        mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [], "updated": [], "deleted": [],
             "merged": [], "relationships_created": [],
         }
 
         with patch("backend.reasoning_agent._make_reasoning_tools",
-                    return_value=(mock_tools, mock_applied)):
+                    return_value=(mock_tools, mock_applied, {})):
             from backend.reasoning_agent import run_reasoning_agent
 
             result = await run_reasoning_agent(
@@ -413,7 +414,7 @@ async def test_reasoning_agent_invalid_json_returns_defaults():
     with patch("backend.reasoning_agent._run_agent_for_text") as mock_run:
         mock_run.return_value = "not valid json {{"
 
-        mock_tools = [MagicMock() for _ in range(5)]
+        mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [{"id": "new-uuid", "title": "Test"}],
             "updated": [], "deleted": [],
@@ -421,7 +422,7 @@ async def test_reasoning_agent_invalid_json_returns_defaults():
         }
 
         with patch("backend.reasoning_agent._make_reasoning_tools",
-                    return_value=(mock_tools, mock_applied)):
+                    return_value=(mock_tools, mock_applied, {})):
             from backend.reasoning_agent import run_reasoning_agent
 
             result = await run_reasoning_agent(
@@ -447,14 +448,14 @@ async def test_reasoning_agent_tracks_usage():
     with patch("backend.reasoning_agent._run_agent_for_text") as mock_run:
         mock_run.return_value = json.dumps(metadata)
 
-        mock_tools = [MagicMock() for _ in range(5)]
+        mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [], "updated": [], "deleted": [],
             "merged": [], "relationships_created": [],
         }
 
         with patch("backend.reasoning_agent._make_reasoning_tools",
-                    return_value=(mock_tools, mock_applied)):
+                    return_value=(mock_tools, mock_applied, {})):
             from backend.reasoning_agent import run_reasoning_agent
 
             usage = UsageStats()
@@ -487,12 +488,12 @@ async def test_reasoning_agent_ollama_fallback():
         patch("backend.reasoning_agent._make_reasoning_tools") as mock_make_tools,
     ):
         mock_run.return_value = json.dumps(metadata)
-        mock_tools = [MagicMock() for _ in range(5)]
+        mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [], "updated": [], "deleted": [],
             "merged": [], "relationships_created": [],
         }
-        mock_make_tools.return_value = (mock_tools, mock_applied)
+        mock_make_tools.return_value = (mock_tools, mock_applied, {})
 
         from backend.reasoning_agent import run_reasoning_agent
 
@@ -562,8 +563,9 @@ async def test_reasoning_agent_priority_question_fallback():
          patch("backend.reasoning_agent._make_reasoning_tools") as mock_make:
         mock_run.return_value = json.dumps(metadata)
         mock_make.return_value = (
-            [MagicMock() for _ in range(5)],
+            [MagicMock() for _ in range(6)],
             {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+            {},
         )
 
         from backend.reasoning_agent import run_reasoning_agent
@@ -615,8 +617,9 @@ async def test_reasoning_agent_disables_thinking():
          patch("backend.reasoning_agent.LlmAgent"):
         mock_run.return_value = json.dumps(metadata)
         mock_make.return_value = (
-            [MagicMock() for _ in range(5)],
+            [MagicMock() for _ in range(6)],
             {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+            {},
         )
         mock_factory.return_value = MagicMock()
 
@@ -652,8 +655,8 @@ class TestDataJsonStringRegression:
     def test_create_thing_with_string_data_json_returns_error(self):
         """create_thing returns error when data_json is a JSON string."""
         from backend.reasoning_agent import _make_reasoning_tools
-        tools, applied = _make_reasoning_tools("test-user")
-        create_fn = tools[0]
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        create_fn = tools[1]
 
         result = create_fn(title="Test", data_json='"just a string"')
         assert "error" in result
@@ -671,8 +674,8 @@ class TestDataJsonStringRegression:
              patch("backend.reasoning_agent.upsert_thing"), \
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
-            tools, applied = _make_reasoning_tools("test-user")
-            update_fn = tools[1]
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            update_fn = tools[2]
 
             existing_row = {"id": "ex-uuid", "title": "Existing", "data": '{}'}
             mock_existing = MagicMock()
@@ -696,8 +699,8 @@ class TestDataJsonStringRegression:
              patch("backend.reasoning_agent.upsert_thing"), \
              patch("backend.reasoning_agent.vs_delete"):
             from backend.reasoning_agent import _make_reasoning_tools
-            tools, applied = _make_reasoning_tools("test-user")
-            update_fn = tools[1]
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            update_fn = tools[2]
 
             existing_row = {"id": "ex-uuid", "title": "Existing", "data": '{}'}
             mock_existing = MagicMock()
@@ -713,8 +716,8 @@ class TestDataJsonStringRegression:
     def test_merge_things_with_string_merged_data_json_returns_error(self):
         """merge_things returns error when merged_data_json is a JSON string."""
         from backend.reasoning_agent import _make_reasoning_tools
-        tools, applied = _make_reasoning_tools("test-user")
-        merge_fn = tools[3]
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        merge_fn = tools[4]
 
         result = merge_fn(keep_id="keep-uuid",
                           remove_id="remove-uuid",

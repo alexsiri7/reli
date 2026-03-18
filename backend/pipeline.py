@@ -1,12 +1,8 @@
-"""ADK SequentialAgent pipeline for the Reli chat pipeline.
+"""Chat pipeline for Reli: reasoning agent + response agent.
 
-Wires the 3 converted agents (context, reasoning, response) into an ADK
-SequentialAgent, replacing the manual orchestration previously in chat.py.
-
-The pipeline handles:
-  - Context gathering (with iterative refinement loop)
-  - Database retrieval, web search, Gmail, calendar
-  - Reasoning with tool-based storage changes
+The reasoning agent fetches its own context on-demand via the fetch_context
+tool (formerly a separate pipeline stage). The pipeline handles:
+  - Reasoning with on-demand context fetching and tool-based storage changes
   - Streaming response generation
 """
 
@@ -15,34 +11,24 @@ import logging
 import sqlite3
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any
 
-from google.adk.agents import LlmAgent, SequentialAgent
-
 from .agents import (
-    CONTEXT_AGENT_SYSTEM,
     REQUESTY_REASONING_MODEL,
     REQUESTY_RESPONSE_MODEL,
     UsageStats,
-    get_response_system_prompt,
 )
 from .auth import user_filter
-from .context_agent import _make_litellm_model, run_context_agent, run_context_refinement
 from .database import db
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
-from .reasoning_agent import get_system_prompt_for_mode, run_reasoning_agent
+from .reasoning_agent import run_reasoning_agent
 from .response_agent import run_response_agent, run_response_agent_stream
 from .tracing import get_tracer, set_span_error
 from .vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
-from .web_search import google_search, is_search_configured
 
 logger = logging.getLogger(__name__)
 _tracer = get_tracer()
-
-# Maximum iterations for the context refinement loop
-MAX_CONTEXT_ITERATIONS = 4
 
 
 # ---------------------------------------------------------------------------
@@ -277,41 +263,16 @@ def _fetch_relevant_things(
     return results
 
 
-def _fetch_gmail_context(query: str, user_id: str = "") -> list[dict[str, Any]]:
-    """Fetch Gmail messages matching query for injection into the reasoning agent."""
-    try:
-        from .routers.gmail import _get_service, _parse_message
-
-        service = _get_service(user_id=user_id)
-        result = service.users().messages().list(userId="me", q=query, maxResults=10).execute()
-        msg_refs = result.get("messages", [])
-        messages = []
-        for ref in msg_refs[:10]:
-            msg = service.users().messages().get(userId="me", id=ref["id"], format="full").execute()
-            parsed = _parse_message(msg)
-            messages.append({
-                "id": parsed.id,
-                "subject": parsed.subject,
-                "from": parsed.sender,
-                "date": parsed.date,
-                "snippet": parsed.snippet,
-            })
-        return messages
-    except Exception:
-        return []
-
-
 # ---------------------------------------------------------------------------
-# ChatPipeline — ADK SequentialAgent orchestration
+# ChatPipeline — Reasoning + Response pipeline
 # ---------------------------------------------------------------------------
 
 
 class ChatPipeline:
-    """ADK-based chat pipeline using SequentialAgent.
+    """Chat pipeline with reasoning agent (context-fetching via tool) + response agent.
 
-    Wires context, reasoning, and response agents into an ADK SequentialAgent,
-    centralizing the orchestration that was previously spread across chat.py
-    endpoint functions.
+    The reasoning agent fetches its own context on-demand via the fetch_context
+    tool, replacing the former separate context agent pipeline stage.
     """
 
     def __init__(
@@ -330,238 +291,23 @@ class ChatPipeline:
         self.mode = mode
         self.interaction_style = interaction_style
 
-        # Create ADK LlmAgent instances for each pipeline stage
-        context_model = _make_litellm_model(
-            model=self.user_models.get("context"), api_key=user_api_key,
-        )
-        reasoning_model = _make_litellm_model(
-            model=self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
-            api_key=user_api_key,
-        )
-        response_model = _make_litellm_model(
-            model=self.user_models.get("response") or REQUESTY_RESPONSE_MODEL,
-            api_key=user_api_key,
-        )
-
-        self._context_agent = LlmAgent(
-            name="context_agent",
-            description="Generates search parameters to find relevant Things in the database.",
-            model=context_model,
-            instruction=CONTEXT_AGENT_SYSTEM,
-        )
-        self._reasoning_agent = LlmAgent(
-            name="reasoning_agent",
-            description="Reasons about user requests and executes storage changes via tools.",
-            model=reasoning_model,
-            instruction=get_system_prompt_for_mode(self.mode, self.interaction_style),
-        )
-        self._response_agent = LlmAgent(
-            name="response_agent",
-            description="Generates friendly, conversational responses to the user.",
-            model=response_model,
-            instruction=get_response_system_prompt(self.interaction_style),
-        )
-
-        # Wire all 3 agents into a SequentialAgent defining the pipeline structure.
-        # The pipeline is executed stage-by-stage via run()/run_stream() because
-        # inter-agent processing (DB retrieval, refinement loops, web search)
-        # requires custom logic between stages that goes beyond simple sequential
-        # conversation flow.
-        self.pipeline = SequentialAgent(
-            name="reli_chat_pipeline",
-            description="Context → Reasoning → Response chat pipeline for Reli.",
-            sub_agents=[
-                self._context_agent,
-                self._reasoning_agent,
-                self._response_agent,
-            ],
-        )
+        # The context agent is no longer a separate stage — it's registered
+        # as a tool on the reasoning agent, called on-demand via fetch_context.
+        # Agent instances are created per-call inside run_reasoning_agent() and
+        # run_response_agent().
 
     # ------------------------------------------------------------------
-    # Context gathering (Stage 1)
+    # Calendar data fetching
     # ------------------------------------------------------------------
 
-    async def _run_context_stage(
-        self,
-        message: str,
-        history: list[dict[str, Any]],
-        usage: UsageStats,
-    ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
-        """Run context agent with iterative refinement and data gathering.
-
-        Returns (context_result, relevant_things, context_relationships).
-        """
-        context_result = await run_context_agent(
-            message, history, usage_stats=usage, context_window=self.context_window,
-            api_key=self.user_api_key, model=self.user_models.get("context"),
-        )
-        search_queries = context_result.get("search_queries", [message])
-        fetch_ids = context_result.get("fetch_ids", [])
-        filter_params = context_result.get("filter_params", {})
-
-        logger.info(
-            "Context agent result — search_queries=%r, fetch_ids=%r, filter_params=%r, gmail_query=%r, "
-            "needs_web_search=%r, include_calendar=%r",
-            search_queries, fetch_ids, filter_params,
-            context_result.get("gmail_query"),
-            context_result.get("needs_web_search"),
-            context_result.get("include_calendar"),
-        )
-
-        # Iterative context gathering
-        all_queries: list[str] = list(search_queries)
-        seen_thing_ids: set[str] = set()
-        relevant_things: list[dict[str, Any]] = []
-
-        # Initial fetch
-        with db() as conn:
-            initial_things = _fetch_relevant_things(conn, search_queries, filter_params, user_id=self.user_id)
-            for t in initial_things:
-                if t["id"] not in seen_thing_ids:
-                    seen_thing_ids.add(t["id"])
-                    relevant_things.append(t)
-
-            if fetch_ids:
-                id_things = _fetch_with_family(conn, [
-                    tid for tid in fetch_ids if tid not in seen_thing_ids
-                ])
-                for t in id_things:
-                    if t["id"] not in seen_thing_ids:
-                        seen_thing_ids.add(t["id"])
-                        relevant_things.append(t)
-
-        logger.info(
-            "Initial retrieval: %d Things for queries %r",
-            len(relevant_things), search_queries,
-        )
-
-        # Refinement loop
-        for iteration in range(1, MAX_CONTEXT_ITERATIONS):
-            if not relevant_things:
-                break
-
-            thing_relationships: list[dict[str, Any]] = []
-            with db() as conn:
-                thing_id_list = list(seen_thing_ids)
-                if thing_id_list:
-                    ph = ",".join("?" for _ in thing_id_list)
-                    rel_rows = conn.execute(
-                        f"SELECT from_thing_id, to_thing_id, relationship_type FROM thing_relationships "
-                        f"WHERE from_thing_id IN ({ph}) OR to_thing_id IN ({ph})",
-                        thing_id_list + thing_id_list,
-                    ).fetchall()
-                    thing_relationships = [dict(r) for r in rel_rows]
-
-            refinement = await run_context_refinement(
-                message, history, relevant_things, all_queries,
-                relationships=thing_relationships,
-                usage_stats=usage, context_window=self.context_window,
-                api_key=self.user_api_key, model=self.user_models.get("context"),
-            )
-
-            if refinement.get("done", True):
-                logger.info("Context refinement done after %d iteration(s)", iteration)
-                break
-
-            new_queries = refinement.get("search_queries", [])
-            thing_ids_to_fetch = refinement.get("thing_ids", [])
-            refinement_filter = refinement.get("filter_params", filter_params)
-
-            if not new_queries and not thing_ids_to_fetch:
-                logger.info("Context refinement returned no new queries or IDs, stopping")
-                break
-
-            prev_count = len(relevant_things)
-
-            if new_queries:
-                all_queries.extend(new_queries)
-                with db() as conn:
-                    new_things = _fetch_relevant_things(conn, new_queries, refinement_filter, user_id=self.user_id)
-                    for t in new_things:
-                        if t["id"] not in seen_thing_ids:
-                            seen_thing_ids.add(t["id"])
-                            relevant_things.append(t)
-
-            if thing_ids_to_fetch:
-                with db() as conn:
-                    new_from_ids = _fetch_with_family(conn, [
-                        tid for tid in thing_ids_to_fetch if tid not in seen_thing_ids
-                    ])
-                    for t in new_from_ids:
-                        if t["id"] not in seen_thing_ids:
-                            seen_thing_ids.add(t["id"])
-                            relevant_things.append(t)
-
-            new_count = len(relevant_things) - prev_count
-            logger.info(
-                "Context refinement iteration %d: +%d new Things (total %d), queries=%r, ids=%r",
-                iteration, new_count, len(relevant_things), new_queries, thing_ids_to_fetch,
-            )
-
-            if new_count == 0:
-                logger.info("Context refinement found nothing new, stopping")
-                break
-
-        # Fetch relationships for all relevant things and update last_referenced
-        context_relationships: list[dict[str, Any]] = []
-        if relevant_things:
-            with db() as conn:
-                now = datetime.now(timezone.utc).isoformat()
-                ids = [t["id"] for t in relevant_things]
-                placeholders = ",".join("?" for _ in ids)
-                conn.execute(
-                    f"UPDATE things SET last_referenced = ? WHERE id IN ({placeholders})",
-                    [now] + ids,
-                )
-                rel_rows = conn.execute(
-                    f"SELECT from_thing_id, to_thing_id, relationship_type "
-                    f"FROM thing_relationships "
-                    f"WHERE from_thing_id IN ({placeholders}) OR to_thing_id IN ({placeholders})",
-                    ids + ids,
-                ).fetchall()
-                context_relationships = [dict(r) for r in rel_rows]
-
-        logger.info(
-            "Final context: %d Things, %d relationships after up to %d iterations",
-            len(relevant_things), len(context_relationships), MAX_CONTEXT_ITERATIONS,
-        )
-
-        return context_result, relevant_things, context_relationships
-
-    # ------------------------------------------------------------------
-    # External data fetching
-    # ------------------------------------------------------------------
-
-    async def _fetch_external_data(
-        self,
-        message: str,
-        context_result: dict[str, Any],
-    ) -> tuple[list[dict] | None, list[dict[str, Any]], list[dict] | None]:
-        """Fetch web search results, Gmail context, and calendar events.
-
-        Returns (web_results, gmail_context, calendar_events).
-        """
-        # Web search
-        web_results: list[dict] | None = None
-        if context_result.get("needs_web_search") and is_search_configured():
-            web_query = context_result.get("web_search_query") or message
-            results = await google_search(web_query)
-            if results:
-                web_results = [r.to_dict() for r in results]
-
-        # Gmail
-        gmail_query = context_result.get("gmail_query")
-        gmail_context = _fetch_gmail_context(gmail_query, user_id=self.user_id) if gmail_query else []
-
-        # Calendar
-        calendar_events: list[dict] | None = None
-        if context_result.get("include_calendar") and gcal_connected(user_id=self.user_id):
+    def _fetch_calendar_events(self) -> list[dict] | None:
+        """Fetch upcoming calendar events if Google Calendar is connected."""
+        if gcal_connected(user_id=self.user_id):
             try:
-                calendar_events = fetch_upcoming_events(max_results=15, days_ahead=7, user_id=self.user_id)
+                return fetch_upcoming_events(max_results=15, days_ahead=7, user_id=self.user_id)
             except Exception:
-                calendar_events = None
-
-        return web_results, gmail_context, calendar_events
+                return None
+        return None
 
     # ------------------------------------------------------------------
     # Open questions collection
@@ -619,11 +365,10 @@ class ChatPipeline:
         message: str,
         history: list[dict[str, Any]],
     ) -> "PipelineResult":
-        """Run the full chat pipeline: context → reasoning → response.
+        """Run the full chat pipeline: reasoning (with context tool) → response.
 
-        Executes each sub-agent of the SequentialAgent in order, with
-        inter-agent data gathering (DB retrieval, web search, etc.)
-        between stages.
+        The reasoning agent fetches context on-demand via its fetch_context
+        tool, replacing the former separate context agent stage.
         """
         usage = UsageStats()
 
@@ -633,48 +378,32 @@ class ChatPipeline:
             pipeline_span.set_attribute("reli.history_length", len(history))
 
             try:
-                # Stage 1: Context Agent (iterative loop)
-                calls_before = len(usage.calls)
-                with _tracer.start_as_current_span("reli.stage.context") as ctx_span:
-                    ctx_span.set_attribute("reli.context.model", self.user_models.get("context") or "default")
-                    ctx_span.set_attribute("reli.context.max_iterations", MAX_CONTEXT_ITERATIONS)
-                    try:
-                        context_result, relevant_things, context_relationships = (
-                            await self._run_context_stage(message, history, usage)
-                        )
-                        ctx_span.set_attribute("reli.context.things_found", len(relevant_things))
-                        ctx_span.set_attribute("reli.context.relationships_found", len(context_relationships))
-                        ctx_span.set_attribute(
-                            "reli.context.search_queries",
-                            json.dumps(context_result.get("search_queries", [])),
-                        )
-                        self._record_stage_usage(ctx_span, "context", usage, calls_before)
-                    except Exception as exc:
-                        set_span_error(ctx_span, exc)
-                        raise
+                # Pre-fetch calendar events (cheap, always useful if connected)
+                calendar_events = self._fetch_calendar_events()
 
-                # External data
-                web_results, gmail_context, calendar_events = (
-                    await self._fetch_external_data(message, context_result)
-                )
-
-                # Stage 2: Reasoning Agent
+                # Stage 1: Reasoning Agent (fetches its own context via tool)
                 calls_before = len(usage.calls)
                 with _tracer.start_as_current_span("reli.stage.reasoning") as reason_span:
                     reason_span.set_attribute(
                         "reli.reasoning.model",
                         self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
                     )
-                    reason_span.set_attribute("reli.reasoning.things_input", len(relevant_things))
                     try:
                         reasoning_result = await run_reasoning_agent(
-                            message, history, relevant_things, web_results, gmail_context,
-                            calendar_events, relationships=context_relationships,
+                            message, history, [],
+                            None, None, calendar_events,
+                            relationships=None,
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id, mode=self.mode,
                             interaction_style=self.interaction_style,
                         )
+
+                        # Extract context fetched by the reasoning agent's tool
+                        fetched_ctx = reasoning_result.get("fetched_context", {})
+                        relevant_things = fetched_ctx.get("things", [])
+                        context_relationships = fetched_ctx.get("relationships", [])
+
                         questions_for_user = reasoning_result.get("questions_for_user", [])
                         priority_question = reasoning_result.get("priority_question", "")
                         reasoning_summary = reasoning_result.get("reasoning_summary", "")
@@ -687,6 +416,7 @@ class ChatPipeline:
                         n_created = len(applied_changes.get("created", []))
                         n_updated = len(applied_changes.get("updated", []))
                         n_deleted = len(applied_changes.get("deleted", []))
+                        reason_span.set_attribute("reli.reasoning.things_fetched", len(relevant_things))
                         reason_span.set_attribute("reli.reasoning.changes_created", n_created)
                         reason_span.set_attribute("reli.reasoning.changes_updated", n_updated)
                         reason_span.set_attribute("reli.reasoning.changes_deleted", n_deleted)
@@ -699,7 +429,7 @@ class ChatPipeline:
 
                 open_questions_by_thing = self._collect_open_questions(relevant_things, applied_changes)
 
-                # Stage 3: Response Agent
+                # Stage 2: Response Agent
                 calls_before = len(usage.calls)
                 with _tracer.start_as_current_span("reli.stage.response") as resp_span:
                     resp_span.set_attribute(
@@ -709,7 +439,7 @@ class ChatPipeline:
                     try:
                         reply = await run_response_agent(
                             message, reasoning_summary, questions_for_user, applied_changes,
-                            web_results, usage_stats=usage,
+                            None, usage_stats=usage,
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
@@ -741,8 +471,8 @@ class ChatPipeline:
             briefing_mode=briefing_mode,
             relevant_things=relevant_things,
             context_relationships=context_relationships,
-            web_results=web_results,
-            gmail_context=gmail_context,
+            web_results=None,
+            gmail_context=[],
             calendar_events=calendar_events,
             open_questions_by_thing=open_questions_by_thing,
             usage=usage,
@@ -768,36 +498,10 @@ class ChatPipeline:
             pipeline_span.set_attribute("reli.streaming", True)
 
             try:
-                # Stage 1: Context Agent
-                yield PipelineEvent(type="stage_start", stage="context")
+                # Pre-fetch calendar events
+                calendar_events = self._fetch_calendar_events()
 
-                calls_before = len(usage.calls)
-                with _tracer.start_as_current_span("reli.stage.context") as ctx_span:
-                    ctx_span.set_attribute("reli.context.model", self.user_models.get("context") or "default")
-                    ctx_span.set_attribute("reli.context.max_iterations", MAX_CONTEXT_ITERATIONS)
-                    try:
-                        context_result, relevant_things, context_relationships = (
-                            await self._run_context_stage(message, history, usage)
-                        )
-                        ctx_span.set_attribute("reli.context.things_found", len(relevant_things))
-                        ctx_span.set_attribute("reli.context.relationships_found", len(context_relationships))
-                        ctx_span.set_attribute(
-                            "reli.context.search_queries",
-                            json.dumps(context_result.get("search_queries", [])),
-                        )
-                        self._record_stage_usage(ctx_span, "context", usage, calls_before)
-                    except Exception as exc:
-                        set_span_error(ctx_span, exc)
-                        raise
-
-                # External data
-                web_results, gmail_context, calendar_events = (
-                    await self._fetch_external_data(message, context_result)
-                )
-
-                yield PipelineEvent(type="stage_complete", stage="context")
-
-                # Stage 2: Reasoning Agent
+                # Stage 1: Reasoning Agent (fetches its own context via tool)
                 yield PipelineEvent(type="stage_start", stage="reasoning")
 
                 calls_before = len(usage.calls)
@@ -806,16 +510,21 @@ class ChatPipeline:
                         "reli.reasoning.model",
                         self.user_models.get("reasoning") or REQUESTY_REASONING_MODEL,
                     )
-                    reason_span.set_attribute("reli.reasoning.things_input", len(relevant_things))
                     try:
                         reasoning_result = await run_reasoning_agent(
-                            message, history, relevant_things, web_results, gmail_context,
-                            calendar_events, relationships=context_relationships,
+                            message, history, [],
+                            None, None, calendar_events,
+                            relationships=None,
                             usage_stats=usage, context_window=self.context_window,
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id, mode=self.mode,
                             interaction_style=self.interaction_style,
                         )
+
+                        fetched_ctx = reasoning_result.get("fetched_context", {})
+                        relevant_things = fetched_ctx.get("things", [])
+                        context_relationships = fetched_ctx.get("relationships", [])
+
                         questions_for_user = reasoning_result.get("questions_for_user", [])
                         priority_question = reasoning_result.get("priority_question", "")
                         reasoning_summary = reasoning_result.get("reasoning_summary", "")
@@ -828,6 +537,7 @@ class ChatPipeline:
                         n_created = len(applied_changes.get("created", []))
                         n_updated = len(applied_changes.get("updated", []))
                         n_deleted = len(applied_changes.get("deleted", []))
+                        reason_span.set_attribute("reli.reasoning.things_fetched", len(relevant_things))
                         reason_span.set_attribute("reli.reasoning.changes_created", n_created)
                         reason_span.set_attribute("reli.reasoning.changes_updated", n_updated)
                         reason_span.set_attribute("reli.reasoning.changes_deleted", n_deleted)
@@ -842,7 +552,7 @@ class ChatPipeline:
 
                 yield PipelineEvent(type="stage_complete", stage="reasoning")
 
-                # Stage 3: Response Agent (streaming)
+                # Stage 2: Response Agent (streaming)
                 yield PipelineEvent(type="stage_start", stage="response")
 
                 calls_before = len(usage.calls)
@@ -855,7 +565,7 @@ class ChatPipeline:
                     try:
                         async for token in run_response_agent_stream(
                             message, reasoning_summary, questions_for_user, applied_changes,
-                            web_results, usage_stats=usage,
+                            None, usage_stats=usage,
                             open_questions_by_thing=open_questions_by_thing or None,
                             api_key=self.user_api_key, model=self.user_models.get("response"),
                             priority_question=priority_question, briefing_mode=briefing_mode,
@@ -896,8 +606,8 @@ class ChatPipeline:
                 briefing_mode=briefing_mode,
                 relevant_things=relevant_things,
                 context_relationships=context_relationships,
-                web_results=web_results,
-                gmail_context=gmail_context,
+                web_results=None,
+                gmail_context=[],
                 calendar_events=calendar_events,
                 open_questions_by_thing=open_questions_by_thing,
                 usage=usage,

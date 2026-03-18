@@ -297,12 +297,10 @@ def _persist_exchange(
         num_calls = len(usage.calls)
         stage_labels: list[str | None] = []
         if num_calls >= 1:
-            stage_labels.append("context")
-        for _ in range(max(0, num_calls - 3)):
-            stage_labels.append("context_refinement")
-        if num_calls >= 2:
-            stage_labels.append("reasoning")
-        if num_calls >= 3:
+            # Last call is response, all others are reasoning
+            # (reasoning agent may make multiple calls due to tool use)
+            for _ in range(max(0, num_calls - 1)):
+                stage_labels.append("reasoning")
             stage_labels.append("response")
         while len(stage_labels) < num_calls:
             stage_labels.append(None)

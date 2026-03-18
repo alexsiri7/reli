@@ -56,7 +56,6 @@ def mock_vector_store():
         patch("backend.routers.things.vs_delete", return_value=None) as mock_delete,
         patch("backend.pipeline.vector_count", return_value=0) as mock_count,
         patch("backend.pipeline.vector_search", return_value=[]) as mock_search,
-        patch("backend.pipeline.is_search_configured", return_value=False),
     ):
         yield {
             "upsert": mock_upsert,
