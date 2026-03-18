@@ -138,6 +138,7 @@ const calendarDefaults = {
   dismissFinding: vi.fn(),
   thingTypes: [],
   proactiveSurfaces: [],
+  focusRecommendations: [],
   ...searchDefaults,
   ...filterDefaults,
   ...mergeDefaults,

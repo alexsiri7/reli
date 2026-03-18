@@ -291,6 +291,22 @@ class ProactiveSurface(BaseModel):
     days_away: int
 
 
+# ── Focus Recommendations ──────────────────────────────────────────────────
+
+
+class FocusRecommendation(BaseModel):
+    thing: Thing
+    score: float
+    reasons: list[str]
+    is_blocked: bool = False
+
+
+class FocusResponse(BaseModel):
+    recommendations: list[FocusRecommendation]
+    total: int
+    calendar_active: bool = False
+
+
 # ── Merge Suggestions ────────────────────────────────────────────────────────
 
 

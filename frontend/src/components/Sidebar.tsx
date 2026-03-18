@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { Thing, SweepFinding } from '../store'
+import type { Thing, SweepFinding, FocusRecommendation } from '../store'
 import { typeIcon } from '../utils'
 import { CalendarSection } from './CalendarSection'
 import { ThingCard } from './ThingCard'
@@ -69,6 +69,35 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
   )
 }
 
+function FocusCard({ rec }: { rec: FocusRecommendation }) {
+  return (
+    <div
+      className={`group px-3 py-1 ${rec.is_blocked ? 'opacity-50' : ''}`}
+    >
+      <div
+        className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors px-1 cursor-pointer"
+        onClick={() => useStore.getState().openThingDetail(rec.thing.id)}
+        role="button"
+      >
+        <span className="text-lg leading-none mt-0.5 select-none" title={rec.thing.type_hint ?? 'thing'}>
+          {typeIcon(rec.thing.type_hint)}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
+            {rec.thing.title}
+          </p>
+          <p className="text-xs text-gray-400 dark:text-gray-400 mt-0.5 leading-snug">
+            {rec.reasons.join(' \u00B7 ')}
+          </p>
+        </div>
+        {rec.is_blocked && (
+          <span className="text-[10px] text-red-400 dark:text-red-500 font-medium mt-1 shrink-0">BLOCKED</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const SIDEBAR_MIN_WIDTH = 200
 const SIDEBAR_MAX_WIDTH = 500
 const SIDEBAR_DEFAULT_WIDTH = 288 // w-72
@@ -86,7 +115,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
   const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -480,6 +509,18 @@ export function Sidebar() {
 
                 {/* Checkin-due things */}
                 {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
+              </section>
+            )}
+
+            {/* Focus Recommendations */}
+            {focusRecommendations.length > 0 && (
+              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+                  Focus
+                </h2>
+                {focusRecommendations.slice(0, 5).map(rec => (
+                  <FocusCard key={rec.thing.id} rec={rec} />
+                ))}
               </section>
             )}
 
