@@ -812,7 +812,7 @@ class TestToolCatchallErrorHandling:
 
         def merge_tool(data: str = "{}") -> dict:
             parsed = {"a": 1}
-            return {**parsed, **data}  # TypeError if data is str
+            return {**parsed, **data}  # type: ignore[dict-item]  # intentional TypeError
 
         wrapped = _traced_tool(merge_tool)
         result = wrapped(data="not a dict")
