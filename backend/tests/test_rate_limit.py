@@ -9,7 +9,6 @@ from starlette.responses import JSONResponse
 
 from backend.rate_limit import RateLimitMiddleware, _Bucket, get_rate_limit_config
 
-
 # ---------------------------------------------------------------------------
 # Bucket unit tests
 # ---------------------------------------------------------------------------

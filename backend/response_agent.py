@@ -9,7 +9,6 @@ Streaming is implemented by iterating over partial ADK events and yielding
 text chunks as they arrive.
 """
 
-import json
 import logging
 import uuid
 from collections.abc import AsyncIterator

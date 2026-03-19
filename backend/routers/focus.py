@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import json
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
 from ..auth import require_user, user_filter
 from ..database import db
-from ..google_calendar import fetch_upcoming_events, is_connected as calendar_connected
+from ..google_calendar import fetch_upcoming_events
+from ..google_calendar import is_connected as calendar_connected
 from ..models import FocusRecommendation, FocusResponse, Thing
 from .things import _row_to_thing
 
