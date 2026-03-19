@@ -274,8 +274,8 @@ class TestConflictsEndpoint:
 
         # If auth prevents setting, test the filter function directly instead
         if resp.status_code == 401:
-            from backend.routers.conflicts import _filter_by_proactivity
             from backend.conflict_detector import detect_all_conflicts
+            from backend.routers.conflicts import _filter_by_proactivity
 
             alerts = detect_all_conflicts()
             filtered = _filter_by_proactivity(alerts, "off")

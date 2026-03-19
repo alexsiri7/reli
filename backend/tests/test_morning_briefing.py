@@ -1,6 +1,6 @@
 """Tests for morning briefing generation and API endpoints."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 
 def _create_thing(client, title: str, priority: int = 3, checkin_date: str | None = None, data: dict | None = None) -> dict:
@@ -152,13 +152,13 @@ class TestBriefingPreferencesWithUser:
 
     def test_preferences_affect_briefing_generation(self, patched_db):
         """Preferences control what appears in the generated briefing (unit test)."""
+        from backend.database import db
         from backend.morning_briefing import (
             BriefingPreferences,
             generate_morning_briefing,
             get_briefing_preferences,
             save_briefing_preferences,
         )
-        from backend.database import db
 
         # Create a test user
         with db() as conn:

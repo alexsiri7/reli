@@ -1040,6 +1040,7 @@ async def _run_adk_with_thought_signature_fallback(
     full_prompt: str,
     fallback_prompt: str,
     usage_stats: "UsageStats | None" = None,
+    api_key: str | None = None,
 ) -> str:
     """Run an ADK agent with a fallback for thought_signature errors.
 
@@ -1081,6 +1082,7 @@ async def _run_adk_with_thought_signature_fallback(
                         # We re-create the model instance with the skip parameter
                         agent.model = _make_litellm_model(
                             model=model_str,
+                            api_key=api_key,
                             extra_body={
                                 "thinking_config": {"include_thoughts": True, "thinking_budget": 1000},
                                 "thought_signature": "skip_thought_signature_validator"
@@ -1208,11 +1210,16 @@ async def run_reasoning_agent(
     # is the standard parameter LiteLLM expects for Gemini models.
     # Note: Some OpenAI-compatible proxies (like Requesty) might strip the
     # required thought_signatures from tool-call turns, causing 400 errors.
-    # We handle this via history filtering and a 'Skip Validator' retry below.
+    # We bypass this by injecting a skip validator by default.
+    # TODO: Fix thought_signature stripping in ADK/LiteLLM/Requesty proxy stack
+    # properly and remove this skip (see https://github.com/alexsiri7/reli/issues/180).
     litellm_model = _make_litellm_model(
         model=model or REQUESTY_REASONING_MODEL,
         api_key=api_key,
-        extra_body={"thinking_config": {"include_thoughts": True, "thinking_budget": 1000}},
+        extra_body={
+            "thinking_config": {"include_thoughts": True, "thinking_budget": 1000},
+            "thought_signature": "skip_thought_signature_validator"
+        },
     )
 
     system_prompt = get_system_prompt_for_mode(mode, interaction_style)
@@ -1242,7 +1249,7 @@ async def run_reasoning_agent(
     )
 
     raw = await _run_adk_with_thought_signature_fallback(
-        reasoning_agent, full_prompt, user_content, usage_stats,
+        reasoning_agent, full_prompt, user_content, usage_stats, api_key=api_key
     )
     logger.info(
         "Reasoning agent (ADK) raw response: %s",

@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -302,11 +301,11 @@ async def test_context_refinement_invalid_json_returns_done():
 
 
 def test_make_litellm_model_adds_prefix():
-    """_make_litellm_model adds gemini/ prefix to Gemini models."""
+    """_make_litellm_model adds openai/ prefix to model names."""
     from backend.context_agent import _make_litellm_model
 
     m = _make_litellm_model(model="google/gemini-2.5-flash-lite", api_key="k")
-    assert m.model == "gemini/gemini-2.5-flash-lite"
+    assert m.model == "openai/google/gemini-2.5-flash-lite"
 
 
 def test_make_litellm_model_no_double_prefix():

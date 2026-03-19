@@ -864,14 +864,15 @@ class TestRunAdkWithThoughtSignatureFallback:
             mock_factory.return_value = mock_skip
 
             result = await _run_adk_with_thought_signature_fallback(
-                agent, "full with history", "just current turn",
+                agent, "full with history", "just current turn", usage_stats=None, api_key="test-api-key"
             )
 
         assert "fallback ok" in result
         assert call_count == 3
-        # Verify factory was called with the skip parameter
+        # Verify factory was called with the skip parameter AND the original api_key
         mock_factory.assert_called_once()
         assert mock_factory.call_args.kwargs["extra_body"]["thought_signature"] == "skip_thought_signature_validator"
+        assert mock_factory.call_args.kwargs["api_key"] == "test-api-key"
 
     @pytest.mark.asyncio
     async def test_raises_non_thought_signature_errors(self):

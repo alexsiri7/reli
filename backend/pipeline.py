@@ -19,7 +19,6 @@ from .agents import (
     UsageStats,
 )
 from .auth import user_filter
-from .database import db
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
 from .reasoning_agent import run_reasoning_agent
