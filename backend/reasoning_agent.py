@@ -557,7 +557,10 @@ def _make_reasoning_tools(
         try:
             data = json.loads(data_json) if data_json else {}
             if not isinstance(data, dict):
-                return {"error": f"data_json must be a JSON object, got {type(data).__name__}. Wrap your data in curly braces: {{\"key\": \"value\"}}"}
+                return {
+                    "error": f"data_json must be a JSON object, got {type(data).__name__}. "
+                    "Wrap your data in curly braces: {\"key\": \"value\"}"
+                }
         except (json.JSONDecodeError, TypeError) as exc:
             return {"error": f"data_json is not valid JSON: {exc}"}
         try:
@@ -710,7 +713,10 @@ def _make_reasoning_tools(
                 try:
                     new_data = json.loads(data_json)
                     if not isinstance(new_data, dict):
-                        return {"error": f"data_json must be a JSON object, got {type(new_data).__name__}. Use {{\"key\": \"value\"}} format."}
+                        return {
+                            "error": f"data_json must be a JSON object, got {type(new_data).__name__}. "
+                            "Use {\"key\": \"value\"} format."
+                        }
                 except (json.JSONDecodeError, TypeError) as exc:
                     return {"error": f"data_json is not valid JSON: {exc}"}
                 if new_data:
@@ -803,7 +809,10 @@ def _make_reasoning_tools(
         try:
             merged_data = json.loads(merged_data_json) if merged_data_json else {}
             if not isinstance(merged_data, dict):
-                return {"error": f"merged_data_json must be a JSON object, got {type(merged_data).__name__}. Use {{\"key\": \"value\"}} format."}
+                return {
+                    "error": f"merged_data_json must be a JSON object, got {type(merged_data).__name__}. "
+                    "Use {\"key\": \"value\"} format."
+                }
         except (json.JSONDecodeError, TypeError) as exc:
             return {"error": f"merged_data_json is not valid JSON: {exc}"}
 
@@ -1036,18 +1045,51 @@ async def _run_adk_with_thought_signature_fallback(
 
     If the first attempt fails with a thought_signature error (Gemini rejects
     function-call parts that lack signatures when thinking is enabled), retry
-    with only the current-turn content (no history) to avoid replaying
-    problematic tool-call context.
+    with only the current-turn content (no history) and a NEW session.
+
+    If it STILL fails, we retry one last time with the
+    'skip_thought_signature_validator' workaround injected into extra_body.
     """
     try:
         return await _run_agent_for_text(agent, full_prompt, usage_stats)
     except Exception as exc:
         if _is_thought_signature_error(exc):
             logger.warning(
-                "thought_signature error from Gemini, retrying without history: %s",
+                "thought_signature error from Gemini, retrying with fresh session: %s",
                 exc,
             )
-            return await _run_agent_for_text(agent, fallback_prompt, usage_stats)
+            try:
+                # First retry: same config, fresh session, no history
+                return await _run_agent_for_text(agent, fallback_prompt, usage_stats)
+            except Exception as exc2:
+                if _is_thought_signature_error(exc2):
+                    logger.warning(
+                        "Persistent thought_signature error, retrying with validator skip"
+                    )
+                    # Second retry: Inject the skip validator workaround
+                    original_model = agent.model
+                    try:
+                        # Determine the original model string
+                        if isinstance(original_model, str):
+                            model_str = original_model
+                        elif hasattr(original_model, "model"):
+                            # LiteLlm objects have a .model attribute
+                            model_str = getattr(original_model, "model")
+                        else:
+                            model_str = REQUESTY_REASONING_MODEL
+
+                        # We re-create the model instance with the skip parameter
+                        agent.model = _make_litellm_model(
+                            model=model_str,
+                            extra_body={
+                                "thinking_config": {"include_thoughts": True, "thinking_budget": 1000},
+                                "thought_signature": "skip_thought_signature_validator"
+                            }
+                        )
+                        return await _run_agent_for_text(agent, fallback_prompt, usage_stats)
+                    finally:
+                        agent.model = original_model
+                raise
         raise
 
 
@@ -1162,10 +1204,11 @@ async def run_reasoning_agent(
     # -- ADK path with tool calling --
     tools, applied_changes, fetched_context = _make_reasoning_tools(user_id)
 
-    # Enable thinking with a budget of 1000 tokens.  With the native gemini/
-    # provider prefix (configured in context_agent._make_litellm_model),
-    # LiteLLM and ADK should correctly handle the thought_signatures
-    # required by thinking models for function calling.
+    # Enable thinking for reasoning models. We use 'thinking_budget' which
+    # is the standard parameter LiteLLM expects for Gemini models.
+    # Note: Some OpenAI-compatible proxies (like Requesty) might strip the
+    # required thought_signatures from tool-call turns, causing 400 errors.
+    # We handle this via history filtering and a 'Skip Validator' retry below.
     litellm_model = _make_litellm_model(
         model=model or REQUESTY_REASONING_MODEL,
         api_key=api_key,
