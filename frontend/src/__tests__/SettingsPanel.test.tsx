@@ -138,7 +138,7 @@ describe('SettingsPanel', () => {
     })
   })
 
-  it('shows Saved confirmation after save', async () => {
+  it('closes the modal after save', async () => {
     storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
     storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
     render(<SettingsPanel />)
@@ -148,7 +148,7 @@ describe('SettingsPanel', () => {
     fireEvent.click(screen.getByText('Save'))
 
     await waitFor(() => {
-      expect(screen.getByText('Saved')).toBeInTheDocument()
+      expect(storeState.closeSettings).toHaveBeenCalled()
     })
   })
 
