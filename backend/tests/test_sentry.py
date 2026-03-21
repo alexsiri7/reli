@@ -5,12 +5,6 @@ from unittest.mock import patch
 import pytest
 
 
-@pytest.fixture(autouse=True)
-def _clear_sentry_env(monkeypatch):
-    """Ensure SENTRY_DSN is unset by default so tests don't send real events."""
-    monkeypatch.setenv("SENTRY_DSN", "")
-
-
 def test_init_sentry_noop_without_dsn():
     """init_sentry should be a no-op when SENTRY_DSN is empty."""
     with patch("backend.sentry.settings") as mock_settings:

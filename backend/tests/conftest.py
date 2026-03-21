@@ -13,6 +13,9 @@ from httpx import ASGITransport, AsyncClient
 # Disable rate limiting for all tests (except test_rate_limit.py which uses its own app)
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
+# Blank Sentry DSN so tests never send events to production
+os.environ["SENTRY_DSN"] = ""
+
 # ---------------------------------------------------------------------------
 # Database fixtures
 # ---------------------------------------------------------------------------
