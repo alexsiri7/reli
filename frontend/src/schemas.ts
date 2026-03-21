@@ -44,11 +44,17 @@ export const ContextThingSchema = z.object({
   type_hint: z.string().nullable().optional(),
 })
 
+export const ReferencedThingSchema = z.object({
+  mention: z.string(),
+  thing_id: z.string(),
+})
+
 export const AppliedChangesSchema = z.object({
   created: z.array(z.object({ id: z.string(), title: z.string(), type_hint: z.string().optional() })).optional(),
   updated: z.array(z.object({ id: z.string(), title: z.string() }).catchall(z.unknown())).optional(),
   deleted: z.array(z.string()).optional(),
   context_things: z.array(ContextThingSchema).optional(),
+  referenced_things: z.array(ReferencedThingSchema).optional(),
   web_results: z.array(WebSearchResultSchema).optional(),
 })
 

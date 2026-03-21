@@ -83,11 +83,17 @@ export interface GmailMessage {
   snippet: string
 }
 
+export interface ReferencedThing {
+  mention: string
+  thing_id: string
+}
+
 export interface AppliedChanges {
   created?: { id: string; title: string; type_hint?: string }[]
   updated?: { id: string; title: string; [key: string]: unknown }[]
   deleted?: string[]
   context_things?: ContextThing[]
+  referenced_things?: ReferencedThing[]
   web_results?: WebSearchResult[]
   gmail_context?: GmailMessage[]
   calendar_events?: CalendarEvent[]

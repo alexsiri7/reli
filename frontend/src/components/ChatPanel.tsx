@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ChatMode, type ContextThing, type GmailMessage, type InteractionStyle, type ModelUsage, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
+import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ChatMode, type ContextThing, type GmailMessage, type InteractionStyle, type ModelUsage, type ReferencedThing, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
 import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported } from '../hooks/useTTS'
@@ -410,9 +410,92 @@ function StreamingIndicator({ stage }: { stage: StreamingStage }) {
   )
 }
 
+/** Split text around referenced_things mentions, returning fragments and link segments. */
+function renderTextWithThingLinks(
+  text: string,
+  refs: ReferencedThing[],
+  onClickThing: (id: string) => void,
+): React.ReactNode {
+  if (refs.length === 0) return text
+
+  // Build a regex that matches any of the mention strings (case-insensitive, longest first)
+  const sorted = [...refs].sort((a, b) => b.mention.length - a.mention.length)
+  const escaped = sorted.map(r => r.mention.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const pattern = new RegExp(`(${escaped.join('|')})`, 'gi')
+
+  // Build a lookup from lowercase mention → thing_id
+  const lookup = new Map<string, string>()
+  for (const r of refs) {
+    lookup.set(r.mention.toLowerCase(), r.thing_id)
+  }
+
+  const parts = text.split(pattern)
+  return parts.map((part, i) => {
+    const thingId = lookup.get(part.toLowerCase())
+    if (thingId) {
+      return (
+        <button
+          key={i}
+          onClick={(e) => { e.stopPropagation(); onClickThing(thingId) }}
+          className="inline text-indigo-600 dark:text-indigo-400 underline decoration-indigo-300 dark:decoration-indigo-600 underline-offset-2 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors cursor-pointer font-inherit text-inherit"
+        >
+          {part}
+        </button>
+      )
+    }
+    return part
+  })
+}
+
+function LinkedMarkdown({ content, refs, onClickThing }: { content: string; refs: ReferencedThing[]; onClickThing: (id: string) => void }) {
+  const components = useMemo(() => {
+    if (refs.length === 0) return undefined
+    return {
+      // Intercept text nodes within paragraphs, list items, headings, etc.
+      // ReactMarkdown passes children as string for text nodes
+      p: ({ children, ...props }: React.ComponentPropsWithoutRef<'p'>) => (
+        <p {...props}>{processChildren(children, refs, onClickThing)}</p>
+      ),
+      li: ({ children, ...props }: React.ComponentPropsWithoutRef<'li'>) => (
+        <li {...props}>{processChildren(children, refs, onClickThing)}</li>
+      ),
+      strong: ({ children, ...props }: React.ComponentPropsWithoutRef<'strong'>) => (
+        <strong {...props}>{processChildren(children, refs, onClickThing)}</strong>
+      ),
+      em: ({ children, ...props }: React.ComponentPropsWithoutRef<'em'>) => (
+        <em {...props}>{processChildren(children, refs, onClickThing)}</em>
+      ),
+    }
+  }, [refs, onClickThing])
+
+  return <ReactMarkdown components={components}>{content}</ReactMarkdown>
+}
+
+/** Recursively process React children, replacing string nodes with Thing-linked text. */
+function processChildren(
+  children: React.ReactNode,
+  refs: ReferencedThing[],
+  onClickThing: (id: string) => void,
+): React.ReactNode {
+  if (typeof children === 'string') {
+    return renderTextWithThingLinks(children, refs, onClickThing)
+  }
+  if (Array.isArray(children)) {
+    return children.map((child, i) => {
+      if (typeof child === 'string') {
+        return <span key={i}>{renderTextWithThingLinks(child, refs, onClickThing)}</span>
+      }
+      return child
+    })
+  }
+  return children
+}
+
 function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingId: string | null; speak: (text: string, id: string) => void }) {
   const isUser = msg.role === 'user'
   const ts = formatTimestamp(msg.timestamp)
+  const openThingDetail = useStore(s => s.openThingDetail)
+  const referencedThings = msg.applied_changes?.referenced_things ?? []
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
@@ -441,7 +524,7 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
           ) : (
             <>
               <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-blockquote:my-1">
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <LinkedMarkdown content={msg.content} refs={referencedThings} onClickThing={openThingDetail} />
               </div>
               {msg.streaming && msg.content && (
                 <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
