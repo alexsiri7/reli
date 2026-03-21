@@ -1,7 +1,7 @@
 """Pytest integration for ADK eval suites.
 
-Runs the golden-dataset evaluation for the reasoning and context agents
-via ``AgentEvaluator``. These tests require a live LLM endpoint
+Runs the golden-dataset evaluation for the reasoning, context, and response
+agents via ``AgentEvaluator``. These tests require a live LLM endpoint
 (REQUESTY_API_KEY) and are opt-in via the ``--run-evals`` flag or the
 ``RUN_EVALS=1`` environment variable.
 
@@ -14,6 +14,9 @@ Usage:
 
     # Run only context agent evals
     RUN_EVALS=1 pytest backend/tests/test_evals.py -x -v -k context
+
+    # Run only response agent evals (LLM-as-judge)
+    RUN_EVALS=1 pytest backend/tests/test_evals.py -x -v -k response
 """
 
 from __future__ import annotations
@@ -112,5 +115,29 @@ async def test_context_agent_search_params() -> None:
     await AgentEvaluator.evaluate(
         agent_module="eval.context_agent.agent",
         eval_dataset_file_path_or_dir=str(EVAL_ROOT / "context_agent" / "search_params.test.json"),
+        num_runs=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_response_agent_quality() -> None:
+    """Eval: response agent — response quality (LLM-as-judge)."""
+    from google.adk.evaluation import AgentEvaluator
+
+    await AgentEvaluator.evaluate(
+        agent_module="eval.response_agent.agent",
+        eval_dataset_file_path_or_dir=str(EVAL_ROOT / "response_agent" / "response_quality.test.json"),
+        num_runs=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_response_agent_all() -> None:
+    """Eval: response agent — all scenarios (directory scan)."""
+    from google.adk.evaluation import AgentEvaluator
+
+    await AgentEvaluator.evaluate(
+        agent_module="eval.response_agent.agent",
+        eval_dataset_file_path_or_dir=str(EVAL_ROOT / "response_agent"),
         num_runs=1,
     )

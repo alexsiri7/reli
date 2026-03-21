@@ -1,0 +1,220 @@
+{
+  "eval_set_id": "response-quality",
+  "name": "Response Agent — Response Quality (LLM-as-Judge)",
+  "description": "Golden dataset: response agent generating friendly, conversational user-facing replies",
+  "eval_cases": [
+    {
+      "eval_id": "response-create-confirmation",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "<user_message>\nBuy groceries\n</user_message>\n\n<reasoning_summary>\nCreated a grocery task.\n</reasoning_summary>\n\nApplied changes: {\"created\": [{\"id\": \"thing-001\", \"title\": \"Buy groceries\", \"type_hint\": \"task\", \"priority\": 3}]}\n\nQuestions for user (if any): []\n\nPriority question (ask THIS one): \"\"\n\nBriefing mode: false",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Got it! 'Buy groceries' is on your list. Anything else you need to track?",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": null,
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "response-task-completion",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "<user_message>\nDone with the dentist appointment\n</user_message>\n\n<reasoning_summary>\nMarked dentist appointment as completed.\n</reasoning_summary>\n\nApplied changes: {\"updated\": [{\"id\": \"thing-042\", \"title\": \"Dentist appointment\", \"changes\": {\"active\": false}}]}\n\nQuestions for user (if any): []\n\nPriority question (ask THIS one): \"\"\n\nBriefing mode: false",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "YES! 'Dentist appointment' is DONE! One less thing to worry about. What's next?",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": null,
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "response-priority-question",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "<user_message>\nI want to get fit\n</user_message>\n\n<reasoning_summary>\nCreated a fitness goal. Need more specifics to make it actionable.\n</reasoning_summary>\n\nApplied changes: {\"created\": [{\"id\": \"thing-050\", \"title\": \"Get fit\", \"type_hint\": \"goal\", \"priority\": 2}]}\n\nQuestions for user (if any): [\"What specific fitness activities are you interested in?\", \"Do you have a target date?\"]\n\nPriority question (ask THIS one): \"What does getting fit look like for you — is it running, gym, yoga, or something else?\"\n\nBriefing mode: false",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Love that goal! I've got 'Get fit' tracked for you. To make it really actionable — what does getting fit look like for you? Running, gym, yoga, or something else?",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": null,
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "response-briefing-mode",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "<user_message>\nWhat's on my plate today?\n</user_message>\n\n<reasoning_summary>\nUser requested a briefing. They have 3 active items: Project X deadline Friday, dentist tomorrow at 2pm, grocery shopping.\n</reasoning_summary>\n\nApplied changes: {}\n\nQuestions for user (if any): []\n\nPriority question (ask THIS one): \"\"\n\nBriefing mode: true",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Alright, here's your radar! Project X deadline is Friday — that's the big one. You've also got a dentist appointment tomorrow at 2pm, and groceries on the list. What's speaking to you first?",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": null,
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}

@@ -50,6 +50,11 @@ run_build() {
     docker build -t reli:gate-check .
 }
 
+run_evals() {
+    echo "=== Evals (agent quality) ==="
+    RUN_EVALS=1 python3 -m pytest backend/tests/test_evals.py -x -v --tb=short --no-header
+}
+
 run_screenshots() {
     echo "=== Screenshots (visual regression) ==="
     cd frontend && npm run test:screenshots && cd ..
