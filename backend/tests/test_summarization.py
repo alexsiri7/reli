@@ -97,11 +97,15 @@ class TestConversationSummariesCRUD:
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
-            _insert_messages(conn, user_id, [
-                ("user", "Hello"),
-                ("assistant", "Hi there!"),
-                ("user", "How are you?"),
-            ])
+            _insert_messages(
+                conn,
+                user_id,
+                [
+                    ("user", "Hello"),
+                    ("assistant", "Hi there!"),
+                    ("user", "How are you?"),
+                ],
+            )
 
         messages = get_messages_since_summary(user_id)
         assert len(messages) == 3
@@ -113,20 +117,28 @@ class TestConversationSummariesCRUD:
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
-            msg_ids = _insert_messages(conn, user_id, [
-                ("user", "Old message 1"),
-                ("assistant", "Old response 1"),
-                ("user", "Old message 2"),
-            ])
+            msg_ids = _insert_messages(
+                conn,
+                user_id,
+                [
+                    ("user", "Old message 1"),
+                    ("assistant", "Old response 1"),
+                    ("user", "Old message 2"),
+                ],
+            )
 
         # Summarize up to the second message
         create_summary(user_id, "Summary of old messages", msg_ids[1], 100)
 
         with db() as conn:
-            _insert_messages(conn, user_id, [
-                ("user", "New message"),
-                ("assistant", "New response"),
-            ])
+            _insert_messages(
+                conn,
+                user_id,
+                [
+                    ("user", "New message"),
+                    ("assistant", "New response"),
+                ],
+            )
 
         messages = get_messages_since_summary(user_id)
         # Should include msg_ids[2] ("Old message 2") and the two new ones
@@ -139,10 +151,14 @@ class TestConversationSummariesCRUD:
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
-            msg_ids = _insert_messages(conn, user_id, [
-                ("user", "msg1"),
-                ("assistant", "resp1"),
-            ])
+            msg_ids = _insert_messages(
+                conn,
+                user_id,
+                [
+                    ("user", "msg1"),
+                    ("assistant", "resp1"),
+                ],
+            )
 
         assert get_message_count_since_summary(user_id) == 2
 
@@ -150,11 +166,15 @@ class TestConversationSummariesCRUD:
         assert get_message_count_since_summary(user_id) == 0
 
         with db() as conn:
-            _insert_messages(conn, user_id, [
-                ("user", "msg2"),
-                ("assistant", "resp2"),
-                ("user", "msg3"),
-            ])
+            _insert_messages(
+                conn,
+                user_id,
+                [
+                    ("user", "msg2"),
+                    ("assistant", "resp2"),
+                    ("user", "msg3"),
+                ],
+            )
 
         assert get_message_count_since_summary(user_id) == 3
 
@@ -196,7 +216,8 @@ class TestShouldSummarize:
         with db() as conn:
             _create_test_user(conn, user_id)
             _insert_messages(
-                conn, user_id,
+                conn,
+                user_id,
                 [("user", f"msg{i}") for i in range(DEFAULT_SUMMARY_TRIGGER_N)],
             )
 
@@ -228,12 +249,16 @@ class TestSummarizeConversation:
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
-            _insert_messages(conn, user_id, [
-                ("user", "I need to plan my vacation to Japan"),
-                ("assistant", "I'd love to help you plan your Japan trip!"),
-                ("user", "I want to visit Tokyo and Kyoto"),
-                ("assistant", "Great choices! Tokyo for modern culture, Kyoto for temples."),
-            ])
+            _insert_messages(
+                conn,
+                user_id,
+                [
+                    ("user", "I need to plan my vacation to Japan"),
+                    ("assistant", "I'd love to help you plan your Japan trip!"),
+                    ("user", "I want to visit Tokyo and Kyoto"),
+                    ("assistant", "Great choices! Tokyo for modern culture, Kyoto for temples."),
+                ],
+            )
 
         mock_response = MagicMock()
         mock_response.choices = [
@@ -259,27 +284,33 @@ class TestSummarizeConversation:
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
-            msg_ids = _insert_messages(conn, user_id, [
-                ("user", "Old conversation about dogs"),
-                ("assistant", "Dogs are great pets!"),
-            ])
+            msg_ids = _insert_messages(
+                conn,
+                user_id,
+                [
+                    ("user", "Old conversation about dogs"),
+                    ("assistant", "Dogs are great pets!"),
+                ],
+            )
 
         create_summary(user_id, "User likes dogs.", msg_ids[-1], 50)
 
         with db() as conn:
-            _insert_messages(conn, user_id, [
-                ("user", "Now let's talk about cats"),
-                ("assistant", "Cats are independent and elegant!"),
-            ])
+            _insert_messages(
+                conn,
+                user_id,
+                [
+                    ("user", "Now let's talk about cats"),
+                    ("assistant", "Cats are independent and elegant!"),
+                ],
+            )
 
         captured_messages = []
 
         async def mock_acomplete(messages, model, **kwargs):
             captured_messages.extend(messages)
             resp = MagicMock()
-            resp.choices = [
-                MagicMock(message=MagicMock(content="User likes dogs and cats."))
-            ]
+            resp.choices = [MagicMock(message=MagicMock(content="User likes dogs and cats."))]
             resp.usage = MagicMock(prompt_tokens=100, completion_tokens=30)
             return resp
 
@@ -319,9 +350,13 @@ class TestSummarizeConversation:
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
-            _insert_messages(conn, user_id, [
-                ("user", "x" * 5000),  # Very long message
-            ])
+            _insert_messages(
+                conn,
+                user_id,
+                [
+                    ("user", "x" * 5000),  # Very long message
+                ],
+            )
 
         captured_messages = []
 
