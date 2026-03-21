@@ -1,5 +1,6 @@
 """Chat history endpoints and the multi-agent chat pipeline."""
 
+import asyncio
 import json
 import logging
 import sqlite3
@@ -11,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
 from ..auth import require_user, user_filter
-from ..database import db
+from ..database import db, get_latest_summary
 from ..models import (
     CallUsage,
     ChatMessage,
@@ -197,6 +198,35 @@ def _build_enrichment_summary(raw_applied_changes: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Async summarization trigger
+# ---------------------------------------------------------------------------
+
+
+def _maybe_trigger_summarization(user_id: str) -> None:
+    """Fire-and-forget summarization if message count has reached the threshold.
+
+    Runs in a background asyncio task so it never blocks the chat response.
+    """
+    from ..summarization_agent import should_summarize, summarize_conversation
+
+    if not user_id or not should_summarize(user_id):
+        return
+
+    async def _run() -> None:
+        try:
+            await summarize_conversation(user_id)
+        except Exception:
+            logger.exception("Background summarization failed for user %s", user_id)
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_run())
+    except RuntimeError:
+        # No running event loop — skip (shouldn't happen in normal FastAPI flow)
+        logger.warning("No event loop available for background summarization")
+
+
+# ---------------------------------------------------------------------------
 # Multi-agent pipeline endpoints
 # ---------------------------------------------------------------------------
 
@@ -219,9 +249,34 @@ def _build_pipeline(user_id: str, mode: str = "normal") -> ChatPipeline:
     return pipeline
 
 
-def _fetch_history(session_id: str, context_window: int) -> list[dict[str, Any]]:
-    """Fetch conversation history for the pipeline."""
+def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> list[dict[str, Any]]:
+    """Fetch conversation history for the pipeline.
+
+    If a conversation summary exists for the user, returns the summary as a
+    system message followed by only the messages since that summary. Otherwise
+    falls back to the most recent N messages (original behaviour).
+    """
     history_limit = context_window * 2
+
+    # Try summary-based history if we have a user_id
+    if user_id:
+        latest_summary = get_latest_summary(user_id)
+        if latest_summary:
+            with db() as conn:
+                rows = conn.execute(
+                    "SELECT role, content, applied_changes FROM chat_history"
+                    " WHERE session_id = ? AND id > ?"
+                    " ORDER BY timestamp ASC LIMIT ?",
+                    (session_id, latest_summary["messages_summarized_up_to"], history_limit),
+                ).fetchall()
+            messages = [{"role": r["role"], "content": _enrich_history_content(r)} for r in rows]
+            # Prepend summary as context
+            return [
+                {"role": "system", "content": f"[Conversation summary]\n{latest_summary['summary_text']}"},
+                *messages,
+            ]
+
+    # Fallback: raw history (no summary available or no user_id)
     with db() as conn:
         rows = conn.execute(
             "SELECT role, content, applied_changes FROM chat_history"
@@ -333,13 +388,16 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     mode = body.mode if body.mode in ("normal", "planning") else "normal"
 
     pipeline = _build_pipeline(user_id, mode=mode)
-    history = _fetch_history(session_id, pipeline.context_window)
+    history = _fetch_history(session_id, pipeline.context_window, user_id)
 
     result = await pipeline.run(message, history, session_id=session_id)
 
     applied_with_sources = _persist_exchange(
         session_id, user_id, message, result.reply, result, result.usage,
     )
+
+    # Trigger async summarization if message count threshold reached
+    _maybe_trigger_summarization(user_id)
 
     daily_usage = _compute_daily_usage(user_id)
 
@@ -372,7 +430,7 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
             mode = body.mode if body.mode in ("normal", "planning") else "normal"
 
             pipeline = _build_pipeline(user_id, mode=mode)
-            history = _fetch_history(session_id, pipeline.context_window)
+            history = _fetch_history(session_id, pipeline.context_window, user_id)
 
             result = None
             reply = ""
@@ -396,6 +454,9 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
             applied_with_sources = _persist_exchange(
                 session_id, user_id, message, reply, result, result.usage,
             )
+
+            # Trigger async summarization if message count threshold reached
+            _maybe_trigger_summarization(user_id)
 
             daily_usage = _compute_daily_usage(user_id)
 
