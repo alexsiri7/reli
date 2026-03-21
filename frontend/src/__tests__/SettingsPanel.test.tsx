@@ -107,44 +107,53 @@ describe('SettingsPanel', () => {
   })
 
   it('save button is enabled after changing a model', () => {
-    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
-    storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
+    storeState.modelSettings = { context: 'openai/gpt-4', reasoning: 'openai/gpt-4', response: 'openai/gpt-4', chat_context_window: 3 }
+    storeState.availableModels = [{ id: 'openai/gpt-4', name: null }, { id: 'openai/gpt-3.5', name: null }]
     render(<SettingsPanel />)
 
-    const selects = screen.getAllByRole('combobox')
-    fireEvent.change(selects[0]!, { target: { value: 'gpt-3.5' } })
+    // Open the first model picker (Context Model) and select gpt-3.5
+    const contextLabel = screen.getByText('Context Model')
+    const pickerButton = contextLabel.closest('div')!.querySelector('button')!
+    fireEvent.click(pickerButton)
+    fireEvent.click(screen.getByText('gpt-3.5'))
 
     const saveBtn = screen.getByText('Save')
     expect(saveBtn).not.toBeDisabled()
   })
 
   it('calls updateModelSettings on save', async () => {
-    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
-    storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
+    storeState.modelSettings = { context: 'openai/gpt-4', reasoning: 'openai/gpt-4', response: 'openai/gpt-4', chat_context_window: 3 }
+    storeState.availableModels = [{ id: 'openai/gpt-4', name: null }, { id: 'openai/gpt-3.5', name: null }]
     render(<SettingsPanel />)
 
-    const selects = screen.getAllByRole('combobox')
-    fireEvent.change(selects[0]!, { target: { value: 'gpt-3.5' } })
+    // Open the first model picker and select gpt-3.5
+    const contextLabel = screen.getByText('Context Model')
+    const pickerButton = contextLabel.closest('div')!.querySelector('button')!
+    fireEvent.click(pickerButton)
+    fireEvent.click(screen.getByText('gpt-3.5'))
     fireEvent.click(screen.getByText('Save'))
 
     await waitFor(() => {
       expect(storeState.updateModelSettings).toHaveBeenCalledWith(
         expect.objectContaining({
-          context: 'gpt-3.5',
-          reasoning: 'gpt-4',
-          response: 'gpt-4',
+          context: 'openai/gpt-3.5',
+          reasoning: 'openai/gpt-4',
+          response: 'openai/gpt-4',
         })
       )
     })
   })
 
   it('shows Saved confirmation after save', async () => {
-    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
-    storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
+    storeState.modelSettings = { context: 'openai/gpt-4', reasoning: 'openai/gpt-4', response: 'openai/gpt-4', chat_context_window: 3 }
+    storeState.availableModels = [{ id: 'openai/gpt-4', name: null }, { id: 'openai/gpt-3.5', name: null }]
     render(<SettingsPanel />)
 
-    const selects = screen.getAllByRole('combobox')
-    fireEvent.change(selects[0]!, { target: { value: 'gpt-3.5' } })
+    // Open the first model picker and select gpt-3.5
+    const contextLabel = screen.getByText('Context Model')
+    const pickerButton = contextLabel.closest('div')!.querySelector('button')!
+    fireEvent.click(pickerButton)
+    fireEvent.click(screen.getByText('gpt-3.5'))
     fireEvent.click(screen.getByText('Save'))
 
     await waitFor(() => {
@@ -153,22 +162,21 @@ describe('SettingsPanel', () => {
   })
 
   it('shows cancel button that calls closeSettings', () => {
-    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
-    storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
+    storeState.modelSettings = { context: 'openai/gpt-4', reasoning: 'openai/gpt-4', response: 'openai/gpt-4', chat_context_window: 3 }
+    storeState.availableModels = [{ id: 'openai/gpt-4', name: null }, { id: 'openai/gpt-3.5', name: null }]
     render(<SettingsPanel />)
 
     fireEvent.click(screen.getByText('Cancel'))
     expect(storeState.closeSettings).toHaveBeenCalled()
   })
 
-  it('shows current model in dropdown even if not in available options', () => {
-    storeState.modelSettings = { context: 'custom-model', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
-    storeState.availableModels = [{ id: 'gpt-4' }, { id: 'gpt-3.5' }]
+  it('shows current model name in picker button', () => {
+    storeState.modelSettings = { context: 'custom/custom-model', reasoning: 'openai/gpt-4', response: 'openai/gpt-4', chat_context_window: 3 }
+    storeState.availableModels = [{ id: 'openai/gpt-4', name: null }, { id: 'openai/gpt-3.5', name: null }]
     render(<SettingsPanel />)
 
-    const selects = screen.getAllByRole('combobox')
-    const firstSelect = selects[0]!
-    expect(firstSelect).toHaveValue('custom-model')
+    // The picker button should display the formatted model name
+    expect(screen.getByText('custom-model')).toBeInTheDocument()
   })
 })
 
