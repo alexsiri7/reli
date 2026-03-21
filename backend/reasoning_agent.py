@@ -1018,15 +1018,24 @@ def _make_reasoning_tools(
 # Gemini thought_signature helpers (GH #158 / Sentry RELI-ZO-5)
 # ---------------------------------------------------------------------------
 
-# Markers appended by _enrich_history_content for turns that involved tool calls.
-_TOOL_CALL_MARKERS = ("[Created:", "[Updated:", "[Deleted:", "[Merged:")
+def _had_tool_calls(entry: dict) -> bool:
+    """Return True if a history entry represents a turn that involved tool calls.
 
-
-def _has_tool_call_markers(content: str) -> bool:
-    """Return True if the content contains enrichment markers from tool call turns."""
-    if not content:
-        return False
-    return any(marker in content for marker in _TOOL_CALL_MARKERS)
+    After the _enrich_history_content refactor (re-ay9o), tool-call metadata is
+    stored as structured ``referenced_things`` on the history dict rather than
+    as ``[Created: ...]`` string markers in the content.  We check both so that
+    any pre-migration rows still in the DB are also caught.
+    """
+    # New structured metadata path (post-refactor)
+    if entry.get("referenced_things"):
+        return True
+    # Legacy string-marker path (pre-refactor rows still in DB)
+    content = entry.get("content", "")
+    if content:
+        legacy_markers = ("[Created:", "[Updated:", "[Deleted:", "[Merged:")
+        if any(m in content for m in legacy_markers):
+            return True
+    return False
 
 
 def _is_thought_signature_error(exc: Exception) -> bool:
@@ -1232,14 +1241,13 @@ async def run_reasoning_agent(
     )
 
     # Build history into the user message for ADK (single-turn with context).
-    # Exclude assistant turns that had tool calls (identifiable by enrichment
-    # markers like [Created:, [Updated:, [Deleted:]) — replaying these through
+    # Exclude assistant turns that involved tool calls — replaying these through
     # Gemini thinking models triggers thought_signature validation errors when
     # the structured function-call metadata is lost.  User turns are always
-    # safe to include.  See GH #158 / Sentry RELI-ZO-5.
+    # safe to include.  See GH #158 / Sentry RELI-ZO-5 / RELI-ZO-G.
     history_block = ""
     for h in history[-context_window:]:
-        if h["role"] == "assistant" and _has_tool_call_markers(h["content"]):
+        if h["role"] == "assistant" and _had_tool_calls(h):
             continue
         history_block += f"<{h['role']}>{h['content']}</{h['role']}>\n"
 
