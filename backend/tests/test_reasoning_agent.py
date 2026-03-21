@@ -760,43 +760,44 @@ class TestToolCatchallErrorHandling:
 # ---------------------------------------------------------------------------
 
 
-class TestHasToolCallMarkers:
-    """Test _has_tool_call_markers detects enrichment markers from tool call turns."""
+class TestHasReferencedThings:
+    """Test _has_referenced_things detects structured metadata from tool call turns."""
 
-    def test_detects_created_marker(self):
-        from backend.reasoning_agent import _has_tool_call_markers
+    def test_detects_created(self):
+        from backend.reasoning_agent import _has_referenced_things
 
-        content = "I updated your project.\n[Created: New Project (project)]"
-        assert _has_tool_call_markers(content) is True
+        entry = {"role": "assistant", "content": "Done.", "referenced_things": [{"id": "1", "title": "X", "action": "created"}]}
+        assert _has_referenced_things(entry) is True
 
-    def test_detects_updated_marker(self):
-        from backend.reasoning_agent import _has_tool_call_markers
+    def test_detects_updated(self):
+        from backend.reasoning_agent import _has_referenced_things
 
-        content = "Done.\n[Updated: Existing Task (task)]"
-        assert _has_tool_call_markers(content) is True
+        entry = {"role": "assistant", "content": "Done.", "referenced_things": [{"id": "1", "title": "X", "action": "updated"}]}
+        assert _has_referenced_things(entry) is True
 
-    def test_detects_deleted_marker(self):
-        from backend.reasoning_agent import _has_tool_call_markers
+    def test_detects_deleted(self):
+        from backend.reasoning_agent import _has_referenced_things
 
-        content = "Removed it.\n[Deleted: Old Item]"
-        assert _has_tool_call_markers(content) is True
+        entry = {"role": "assistant", "content": "Done.", "referenced_things": [{"id": "1", "title": "X", "action": "deleted"}]}
+        assert _has_referenced_things(entry) is True
 
-    def test_detects_merged_marker(self):
-        from backend.reasoning_agent import _has_tool_call_markers
+    def test_detects_merged(self):
+        from backend.reasoning_agent import _has_referenced_things
 
-        content = "Merged duplicates.\n[Merged: A into B]"
-        assert _has_tool_call_markers(content) is True
+        entry = {"role": "assistant", "content": "Done.", "referenced_things": [{"id": "1", "title": "X", "action": "merged"}]}
+        assert _has_referenced_things(entry) is True
 
-    def test_no_markers_returns_false(self):
-        from backend.reasoning_agent import _has_tool_call_markers
+    def test_no_referenced_things_returns_false(self):
+        from backend.reasoning_agent import _has_referenced_things
 
-        assert _has_tool_call_markers("Just a normal response.") is False
+        entry = {"role": "assistant", "content": "Just a normal response."}
+        assert _has_referenced_things(entry) is False
 
-    def test_empty_content_returns_false(self):
-        from backend.reasoning_agent import _has_tool_call_markers
+    def test_empty_referenced_things_returns_false(self):
+        from backend.reasoning_agent import _has_referenced_things
 
-        assert _has_tool_call_markers("") is False
-        assert _has_tool_call_markers(None) is False  # type: ignore[arg-type]
+        assert _has_referenced_things({"role": "assistant", "content": "", "referenced_things": []}) is False
+        assert _has_referenced_things({}) is False
 
 
 class TestIsThoughtSignatureError:
@@ -893,12 +894,12 @@ class TestHistoryFilteringInReasoningAgent:
     """Test that run_reasoning_agent excludes tool-call history turns."""
 
     @pytest.mark.asyncio
-    async def test_excludes_assistant_turns_with_tool_markers(self):
-        """Assistant turns with tool call markers should be excluded from history."""
+    async def test_excludes_assistant_turns_with_referenced_things(self):
+        """Assistant turns with referenced_things metadata should be excluded from history."""
         metadata = {"reasoning_summary": "test"}
         history = [
             {"role": "user", "content": "Create a project called X"},
-            {"role": "assistant", "content": "Done!\n[Created: X (project)]"},
+            {"role": "assistant", "content": "Done!", "referenced_things": [{"id": "1", "title": "X", "action": "created"}]},
             {"role": "user", "content": "Now update it"},
         ]
 
@@ -925,8 +926,8 @@ class TestHistoryFilteringInReasoningAgent:
         full_prompt = call_args.args[1]  # second positional arg
         # User turns should be included
         assert "<user>" in full_prompt
-        # Assistant turn with tool marker should be excluded
-        assert "[Created:" not in full_prompt
+        # Assistant turn with referenced_things should be excluded
+        assert "Done!" not in full_prompt
 
     @pytest.mark.asyncio
     async def test_keeps_assistant_turns_without_markers(self):

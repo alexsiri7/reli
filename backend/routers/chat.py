@@ -155,55 +155,6 @@ def migrate_session(body: MigrateSessionRequest, user_id: str = Depends(require_
 
 
 # ---------------------------------------------------------------------------
-# History enrichment
-# ---------------------------------------------------------------------------
-
-
-def _enrich_history_content(row: sqlite3.Row) -> str:
-    """Append Thing metadata summary to assistant messages that have applied_changes.
-
-    This gives the context/reasoning agents visibility into which Things were
-    involved in prior turns, improving pronoun/reference resolution.
-    """
-    content: str = row["content"] or ""
-    if row["role"] != "assistant":
-        return content
-
-    raw = row["applied_changes"]
-    if not raw:
-        return content
-
-    changes = json.loads(raw) if isinstance(raw, str) else raw
-    if not isinstance(changes, dict):
-        return content
-
-    parts: list[str] = []
-
-    # Context things: Things that informed the response
-    context_things = changes.get("context_things", [])
-    if context_things:
-        labels = [
-            f"{t.get('title', t.get('id', '?'))}" + (f" ({t['type_hint']})" if t.get("type_hint") else "")
-            for t in context_things
-        ]
-        parts.append(f"[Context: {', '.join(labels)}]")
-
-    # Created/updated things from storage changes
-    for key, verb in [("created", "Created"), ("updated", "Updated")]:
-        items = changes.get(key, [])
-        if items:
-            labels = [
-                f"{t.get('title', t.get('id', '?'))}" + (f" ({t.get('type_hint', '')})" if t.get("type_hint") else "")
-                for t in items
-            ]
-            parts.append(f"[{verb}: {', '.join(labels)}]")
-
-    if parts:
-        return content + "\n" + "\n".join(parts)
-    return content
-
-
-# ---------------------------------------------------------------------------
 # Multi-agent pipeline endpoints
 # ---------------------------------------------------------------------------
 
@@ -227,7 +178,11 @@ def _build_pipeline(user_id: str, mode: str = "normal") -> ChatPipeline:
 
 
 def _fetch_history(session_id: str, context_window: int) -> list[dict[str, Any]]:
-    """Fetch conversation history for the pipeline."""
+    """Fetch conversation history for the pipeline.
+
+    Returns dicts with pure ``content`` plus structured ``context_things``
+    and ``referenced_things`` metadata extracted from ``applied_changes``.
+    """
     history_limit = context_window * 2
     with db() as conn:
         rows = conn.execute(
@@ -235,7 +190,26 @@ def _fetch_history(session_id: str, context_window: int) -> list[dict[str, Any]]
             " WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
             (session_id, history_limit),
         ).fetchall()
-    return [{"role": r["role"], "content": _enrich_history_content(r)} for r in rows]
+
+    result: list[dict[str, Any]] = []
+    for r in rows:
+        entry: dict[str, Any] = {"role": r["role"], "content": r["content"] or ""}
+
+        # Extract structured metadata from applied_changes for assistant turns
+        if r["role"] == "assistant" and r["applied_changes"]:
+            raw = r["applied_changes"]
+            changes = json.loads(raw) if isinstance(raw, str) else raw
+            if isinstance(changes, dict):
+                entry["context_things"] = changes.get("context_things", [])
+                # Collect all created/updated/deleted/merged things as referenced_things
+                referenced: list[dict[str, Any]] = []
+                for key in ("created", "updated", "deleted", "merged"):
+                    for t in changes.get(key, []):
+                        referenced.append({"id": t.get("id", ""), "title": t.get("title", ""), "action": key})
+                entry["referenced_things"] = referenced
+
+        result.append(entry)
+    return result
 
 
 def _persist_exchange(

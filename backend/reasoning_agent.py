@@ -1018,15 +1018,14 @@ def _make_reasoning_tools(
 # Gemini thought_signature helpers (GH #158 / Sentry RELI-ZO-5)
 # ---------------------------------------------------------------------------
 
-# Markers appended by _enrich_history_content for turns that involved tool calls.
-_TOOL_CALL_MARKERS = ("[Created:", "[Updated:", "[Deleted:", "[Merged:")
+def _has_referenced_things(entry: dict) -> bool:
+    """Return True if the history entry has structured referenced_things metadata.
 
-
-def _has_tool_call_markers(content: str) -> bool:
-    """Return True if the content contains enrichment markers from tool call turns."""
-    if not content:
-        return False
-    return any(marker in content for marker in _TOOL_CALL_MARKERS)
+    This indicates the turn involved tool calls (created/updated/deleted/merged
+    Things), which can trigger thought_signature errors in Gemini thinking
+    models when replayed.
+    """
+    return bool(entry.get("referenced_things"))
 
 
 def _is_thought_signature_error(exc: Exception) -> bool:
@@ -1232,14 +1231,14 @@ async def run_reasoning_agent(
     )
 
     # Build history into the user message for ADK (single-turn with context).
-    # Exclude assistant turns that had tool calls (identifiable by enrichment
-    # markers like [Created:, [Updated:, [Deleted:]) — replaying these through
-    # Gemini thinking models triggers thought_signature validation errors when
-    # the structured function-call metadata is lost.  User turns are always
-    # safe to include.  See GH #158 / Sentry RELI-ZO-5.
+    # Exclude assistant turns that had tool calls (identifiable by structured
+    # referenced_things metadata) — replaying these through Gemini thinking
+    # models triggers thought_signature validation errors when the structured
+    # function-call metadata is lost.  User turns are always safe to include.
+    # See GH #158 / Sentry RELI-ZO-5.
     history_block = ""
     for h in history[-context_window:]:
-        if h["role"] == "assistant" and _has_tool_call_markers(h["content"]):
+        if h["role"] == "assistant" and _has_referenced_things(h):
             continue
         history_block += f"<{h['role']}>{h['content']}</{h['role']}>\n"
 
