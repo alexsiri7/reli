@@ -305,9 +305,7 @@ def _migrate_conversation_summaries(conn: sqlite3.Connection) -> None:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_conv_summaries_user ON conversation_summaries(user_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_summaries_user ON conversation_summaries(user_id)")
 
 
 def get_latest_summary(user_id: str) -> dict[str, Any] | None:
@@ -318,8 +316,7 @@ def get_latest_summary(user_id: str) -> dict[str, Any] | None:
     """
     with db() as conn:
         row = conn.execute(
-            "SELECT * FROM conversation_summaries WHERE user_id = ?"
-            " ORDER BY messages_summarized_up_to DESC LIMIT 1",
+            "SELECT * FROM conversation_summaries WHERE user_id = ? ORDER BY messages_summarized_up_to DESC LIMIT 1",
             (user_id,),
         ).fetchone()
     return dict(row) if row else None
@@ -359,9 +356,7 @@ def get_messages_since_summary(user_id: str) -> list[dict[str, Any]]:
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT id, session_id, role, content, timestamp FROM chat_history"
-                " WHERE user_id = ?"
-                " ORDER BY id ASC",
+                "SELECT id, session_id, role, content, timestamp FROM chat_history WHERE user_id = ? ORDER BY id ASC",
                 (user_id,),
             ).fetchall()
     return [dict(r) for r in rows]
@@ -373,8 +368,7 @@ def get_message_count_since_summary(user_id: str) -> int:
     with db() as conn:
         if latest:
             row = conn.execute(
-                "SELECT COUNT(*) as cnt FROM chat_history"
-                " WHERE user_id = ? AND id > ?",
+                "SELECT COUNT(*) as cnt FROM chat_history WHERE user_id = ? AND id > ?",
                 (user_id, latest["messages_summarized_up_to"]),
             ).fetchone()
         else:

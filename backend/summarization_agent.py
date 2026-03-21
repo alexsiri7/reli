@@ -82,9 +82,7 @@ async def summarize_conversation(
     prompt_parts: list[str] = []
 
     if previous_summary:
-        prompt_parts.append(
-            f"## Previous Summary\n{previous_summary['summary_text']}"
-        )
+        prompt_parts.append(f"## Previous Summary\n{previous_summary['summary_text']}")
 
     prompt_parts.append("## New Messages")
     for msg in messages_since:
@@ -96,8 +94,7 @@ async def summarize_conversation(
         prompt_parts.append(f"**{role_label}**: {content}")
 
     prompt_parts.append(
-        "\n---\nPlease produce an updated summary integrating the new messages"
-        " with any previous summary."
+        "\n---\nPlease produce an updated summary integrating the new messages with any previous summary."
     )
 
     llm_messages = [
@@ -122,7 +119,11 @@ async def summarize_conversation(
 
     if usage_stats:
         usage_stats.accumulate(
-            prompt_tokens, completion_tokens, total_tokens, cost, model,
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+            cost,
+            model,
         )
 
     # Persist the summary
@@ -135,9 +136,12 @@ async def summarize_conversation(
     )
 
     logger.info(
-        "Created conversation summary #%d for user %s: %d messages compressed, "
-        "%d tokens used, $%.6f cost",
-        row_id, user_id, len(messages_since), total_tokens, cost,
+        "Created conversation summary #%d for user %s: %d messages compressed, %d tokens used, $%.6f cost",
+        row_id,
+        user_id,
+        len(messages_since),
+        total_tokens,
+        cost,
     )
 
     return {
