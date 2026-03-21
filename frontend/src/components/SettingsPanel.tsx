@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { ModelSettings, UserSettings, UserProfileRelationship } from '../store'
+import type { ModelSettings, UserSettings, UserProfileRelationship, RequestyModel } from '../store'
 import { useTheme, setTheme } from '../hooks/useTheme'
 import { ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
 import { RelationshipMiniGraph } from './RelationshipMiniGraph'
@@ -40,7 +40,6 @@ export function SettingsPanel() {
     fetchUserProfile()
   }, [fetchModelSettings, fetchAvailableModels, fetchUserSettings, fetchUserProfile])
 
-  const modelOptions = availableModels.map(m => m.id).sort()
   const isLoading = settingsLoading || modelsLoading
 
   return (
@@ -74,7 +73,7 @@ export function SettingsPanel() {
                 key={`${modelSettings.context}|${modelSettings.reasoning}|${modelSettings.response}|${modelSettings.chat_context_window}|${userSettings?.requesty_api_key}`}
                 initial={modelSettings}
                 initialUserSettings={userSettings}
-                modelOptions={modelOptions}
+                models={availableModels}
                 onClose={closeSettings}
               />
             ) : (
@@ -102,12 +101,12 @@ export function SettingsPanel() {
 function SettingsForm({
   initial,
   initialUserSettings,
-  modelOptions,
+  models,
   onClose,
 }: {
   initial: ModelSettings
   initialUserSettings: UserSettings | null
-  modelOptions: string[]
+  models: RequestyModel[]
   onClose: () => void
 }) {
   const updateModelSettings = useStore(s => s.updateModelSettings)
@@ -208,21 +207,21 @@ function SettingsForm({
             label="Context Model"
             description="Gathers context from your data"
             value={context}
-            options={modelOptions}
+            models={models}
             onChange={setContext}
           />
           <ModelSelect
             label="Reasoning Model"
             description="Plans actions and makes decisions"
             value={reasoning}
-            options={modelOptions}
+            models={models}
             onChange={setReasoning}
           />
           <ModelSelect
             label="Response Model"
             description="Generates the final reply"
             value={response}
-            options={modelOptions}
+            models={models}
             onChange={setResponse}
           />
         </div>
@@ -702,39 +701,225 @@ function ProactivitySection() {
   )
 }
 
+function formatModelName(id: string): string {
+  // Strip provider prefix and clean up the name
+  const bare = id.includes('/') ? id.split('/').slice(1).join('/') : id
+  return bare
+    .replace(/-preview.*$/, '') // remove preview suffixes
+    .replace(/-\d{8,}$/, '') // remove date suffixes like -20250514
+    .replace(/-001$/, '') // remove version suffixes
+}
+
+function formatProvider(id: string): string {
+  const provider = id.includes('/') ? id.split('/')[0]! : 'other'
+  const names: Record<string, string> = {
+    google: 'Google',
+    openai: 'OpenAI',
+    anthropic: 'Anthropic',
+    meta: 'Meta',
+    mistral: 'Mistral',
+  }
+  return names[provider] || provider.charAt(0).toUpperCase() + provider.slice(1)
+}
+
+function formatCost(cost: number | null | undefined): string {
+  if (cost == null) return ''
+  if (cost < 0.01) return '<$0.01'
+  if (cost < 1) return `$${cost.toFixed(2)}`
+  return `$${cost.toFixed(2)}`
+}
+
+function costTier(input: number | null | undefined, output: number | null | undefined): 'low' | 'mid' | 'high' | null {
+  if (input == null || output == null) return null
+  // Use a blended cost (weighted toward output since that's usually more)
+  const blended = input * 0.3 + output * 0.7
+  if (blended < 0.5) return 'low'
+  if (blended < 5) return 'mid'
+  return 'high'
+}
+
+const tierColors = {
+  low: 'text-green-600 dark:text-green-400',
+  mid: 'text-yellow-600 dark:text-yellow-400',
+  high: 'text-orange-600 dark:text-orange-400',
+} as const
+
 function ModelSelect({
   label,
   description,
   value,
-  options,
+  models,
   onChange,
 }: {
   label: string
   description: string
   value: string
-  options: string[]
+  models: RequestyModel[]
   onChange: (v: string) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const containerRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  // Close on click outside
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+        setSearch('')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  // Focus search when opened
+  useEffect(() => {
+    if (open) searchRef.current?.focus()
+  }, [open])
+
+  const selectedModel = models.find(m => m.id === value)
+
+  // Group and filter models
+  const grouped = useMemo(() => {
+    const term = search.toLowerCase()
+    const filtered = models.filter(m => {
+      if (!term) return true
+      return m.id.toLowerCase().includes(term) ||
+        (m.name && m.name.toLowerCase().includes(term)) ||
+        formatProvider(m.id).toLowerCase().includes(term)
+    })
+
+    // Sort: selected first, then by provider, then by name
+    filtered.sort((a, b) => {
+      if (a.id === value) return -1
+      if (b.id === value) return 1
+      const provA = formatProvider(a.id)
+      const provB = formatProvider(b.id)
+      if (provA !== provB) return provA.localeCompare(provB)
+      return a.id.localeCompare(b.id)
+    })
+
+    // Group by provider
+    const groups: Record<string, RequestyModel[]> = {}
+    for (const m of filtered) {
+      const prov = formatProvider(m.id)
+      if (!groups[prov]) groups[prov] = []
+      groups[prov]!.push(m)
+    }
+    return groups
+  }, [models, search, value])
+
+  const tier = selectedModel ? costTier(selectedModel.input_cost_per_million, selectedModel.output_cost_per_million) : null
+
   return (
-    <div>
+    <div ref={containerRef} className="relative">
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
         {label}
       </label>
       <p className="text-xs text-gray-400 dark:text-gray-400 mb-1.5">{description}</p>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
+
+      {/* Trigger button */}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500 text-left flex items-center justify-between gap-2"
       >
-        {value && !options.includes(value) && (
-          <option value={value}>{value}</option>
-        )}
-        {options.map(id => (
-          <option key={id} value={id}>
-            {id}
-          </option>
-        ))}
-      </select>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="truncate font-medium">{formatModelName(value)}</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 truncate">{formatProvider(value)}</span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {selectedModel?.input_cost_per_million != null && (
+            <span className={`text-xs ${tier ? tierColors[tier] : 'text-gray-400'}`}>
+              {formatCost(selectedModel.input_cost_per_million)}/{formatCost(selectedModel.output_cost_per_million)}
+            </span>
+          )}
+          <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </div>
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-72 overflow-hidden flex flex-col">
+          {/* Search */}
+          <div className="p-2 border-b border-gray-100 dark:border-gray-700">
+            <input
+              ref={searchRef}
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search models..."
+              className="w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 placeholder:text-gray-400"
+            />
+          </div>
+
+          {/* Model list */}
+          <div className="overflow-y-auto flex-1">
+            {Object.keys(grouped).length === 0 ? (
+              <div className="px-3 py-4 text-sm text-gray-400 text-center">No models found</div>
+            ) : (
+              Object.entries(grouped).map(([provider, provModels]) => (
+                <div key={provider}>
+                  <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-900 sticky top-0">
+                    {provider}
+                  </div>
+                  {provModels.map(m => {
+                    const isSelected = m.id === value
+                    const mTier = costTier(m.input_cost_per_million, m.output_cost_per_million)
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          onChange(m.id)
+                          setOpen(false)
+                          setSearch('')
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between gap-2 transition-colors ${
+                          isSelected
+                            ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {isSelected && (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
+                          )}
+                          <span className={`truncate ${isSelected ? 'font-medium' : ''}`}>
+                            {formatModelName(m.id)}
+                          </span>
+                        </div>
+                        {m.input_cost_per_million != null && m.output_cost_per_million != null && (
+                          <span className={`text-[11px] flex-shrink-0 tabular-nums ${mTier ? tierColors[mTier] : 'text-gray-400'}`}>
+                            {formatCost(m.input_cost_per_million)} / {formatCost(m.output_cost_per_million)}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Cost legend */}
+          <div className="px-3 py-1.5 border-t border-gray-100 dark:border-gray-700 text-[10px] text-gray-400 dark:text-gray-500 flex items-center justify-between">
+            <span>Cost: input / output per 1M tokens</span>
+            <span className="flex gap-2">
+              <span className={tierColors.low}>$ low</span>
+              <span className={tierColors.mid}>$$ mid</span>
+              <span className={tierColors.high}>$$$ high</span>
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

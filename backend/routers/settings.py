@@ -93,6 +93,8 @@ class UserSettingsUpdate(BaseModel):
 class RequestyModel(BaseModel):
     id: str
     name: str | None = None
+    input_cost_per_million: float | None = None
+    output_cost_per_million: float | None = None
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -242,7 +244,32 @@ def list_models(user_id: str = Depends(require_user)) -> list[RequestyModel]:
             resp = client.get(f"{base_url}/models", headers=headers)
             resp.raise_for_status()
             data = resp.json().get("data", [])
-            return [RequestyModel(id=m["id"], name=m.get("name")) for m in data if m.get("id")]
+
+            # Merge pricing from agents.py MODEL_PRICING
+            from ..agents import MODEL_PRICING
+
+            models: list[RequestyModel] = []
+            for m in data:
+                mid = m.get("id", "")
+                if not mid:
+                    continue
+                # Try to get pricing: first from API response, then from MODEL_PRICING
+                input_price = m.get("input_price")
+                output_price = m.get("output_price")
+                if input_price is not None and output_price is not None:
+                    inp = float(input_price) * 1_000_000
+                    out = float(output_price) * 1_000_000
+                elif mid in MODEL_PRICING:
+                    inp, out = MODEL_PRICING[mid]
+                else:
+                    inp, out = None, None
+                models.append(RequestyModel(
+                    id=mid,
+                    name=m.get("name"),
+                    input_cost_per_million=inp,
+                    output_cost_per_million=out,
+                ))
+            return models
     except Exception as exc:
         logger.warning("Failed to fetch models from Requesty: %s", exc)
         raise HTTPException(status_code=502, detail="Could not fetch models from Requesty API") from exc
