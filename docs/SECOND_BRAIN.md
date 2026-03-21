@@ -103,6 +103,62 @@ User: "What's the status on Tom's project?"
             conversation continuity + current state
 ```
 
+## Learning the User: Preference Things
+
+Reli doesn't just store information — it **models the user**. Every interaction
+is a data point about who they are and how they operate. This is a core
+differentiator: a database stores what you tell it; a PA learns *you*.
+
+### How it works
+
+The reasoning agent has two jobs on every interaction:
+1. "What Things should I create/update based on what the user said?"
+2. "What did I just learn about this user?"
+
+Both explicit statements and inferred patterns become **preference Things**:
+
+- **Explicit**: "I hate morning meetings" → immediate preference creation
+- **Inferred**: user cancels morning meetings 3 times → preference emerges
+- Even a single interaction is a signal — "Alex seems to prefer afternoons"
+
+### Preference Things
+
+Stored as regular Things with `type_hint: preference`. They have:
+
+- **Confidence levels** — first observation is "emerging", repeated behavior
+  becomes "strong". Tracks observation count.
+- **Granularity** — starts broad ("doesn't like mornings"), refines over time
+  ("doesn't like Monday mornings before 10am")
+- **Negative preferences** — what the user avoids is as valuable as what
+  they prefer
+- **Conflict tolerance** — "prefers working alone" but "always invites Tom
+  to brainstorms" can coexist. Context determines which applies.
+- **Evolution** — each interaction can update existing preferences
+- **Transparency** — user can see and edit them ("actually I don't mind
+  Tuesday mornings")
+
+### Examples
+
+| User says | Preference learned |
+|-----------|--------------------|
+| "Move it to afternoon, I hate morning meetings" | "Avoids morning meetings" |
+| "Let's invite the usual crew" | Reinforces "usual crew" = Tom, Sarah, Mike |
+| "I'll handle budget later, venue first" | "Does venue-before-budget for events" |
+| "Just book the cheap one" | "Optimizes for cost on travel" |
+
+### Context integration
+
+When the user mentions a topic, the context agent surfaces relevant preference
+Things alongside factual Things. "Plan a party" retrieves both the party task
+AND "Alex's approach to party planning." Preferences get a retrieval boost —
+they're almost always relevant when their topic matches.
+
+### Why this matters for the MCP vision
+
+Preference Things are especially powerful when Reli is a shared memory service
+(#190). Any agent that connects to Reli immediately knows how the user
+operates. The preferences follow the user, not the client.
+
 ## Thing Surface Levels
 
 Not all Things are equal in visibility. The UI needs to distinguish:
