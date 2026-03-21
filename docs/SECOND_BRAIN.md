@@ -29,6 +29,80 @@ The brain is messy by nature. Users don't think in hierarchies — they think in
 associations. "I'm going with Tom to the conference" creates three Things
 (me, Tom, the conference) and two relationships (going-with, attending).
 
+## Interaction Model
+
+Reli is a **single ongoing conversation**, not a session-based chatbot. The user
+doesn't "start new conversations" — they continue talking to their PA. Multiple
+conversations is a crutch; we're exploring what the right way to interact with
+a smart agent is.
+
+This means:
+- One conversation per user, running indefinitely
+- The PA maintains continuity across days, weeks, months
+- The user can pick up where they left off without re-explaining context
+- "New session" is a UI/technical concern, not a user-facing concept
+
+## Memory Architecture
+
+Reli's memory operates in three layers, each with a different scope and lifetime:
+
+| Layer | Storage | Purpose | Lifetime |
+|-------|---------|---------|----------|
+| **Long-term memory** | Things DB (knowledge graph) | People, projects, ideas, relationships — everything worth remembering | Permanent |
+| **Short-term memory** | Rolling conversation summary + last N messages | Conversation flow, recent decisions, user intent | Rolling window |
+| **Task context** | Context agent retrieval (vector search + SQL) | Only what's needed for the current request | Per-request |
+
+### Long-term memory: Things DB
+
+The knowledge graph IS the long-term memory. When the user says "Tom works at
+Acme" — that's a Thing and a relationship, stored permanently. The PA doesn't
+need to "remember" this in conversation history; it lives in the graph and gets
+retrieved when relevant.
+
+### Short-term memory: Rolling summary + recent messages
+
+Conversations can't grow forever — context windows have limits, and old
+back-and-forth becomes noise. Instead of sending full history to the agents:
+
+1. Every N messages, a **summarization agent** compresses `previous_summary +
+   messages_since_last_summary` into a new summary
+2. The summary captures: ongoing topics, recent decisions, user preferences,
+   unresolved threads
+3. Agents receive: `[summary] + [last N raw messages]` — not the full history
+4. Old messages are preserved in `chat_history` for UI scrollback, but agents
+   only see the compressed form
+
+The summary doesn't duplicate what's in Things. If the user created a project
+last week, that's in the graph — the summary only tracks "we were discussing
+next steps for the project."
+
+### Task context: Context agent retrieval
+
+Per-request, the context agent decides what's relevant: it generates search
+queries, retrieves Things from the graph via vector search + SQL, and passes
+only the needed context to the reasoning agent. This keeps each request focused
+— the agent doesn't wade through the entire graph, just the neighborhood that
+matters.
+
+### How the layers interact
+
+```
+User: "What's the status on Tom's project?"
+                    │
+    ┌───────────────┼───────────────┐
+    ▼               ▼               ▼
+ Summary         Recent msgs     Context agent
+ "We discussed   [last N turns    searches Things DB
+  Tom's project   of raw chat]    → finds Tom, project,
+  timeline                          tasks, relationships
+  last week"
+    │               │               │
+    └───────────────┼───────────────┘
+                    ▼
+            Reasoning agent has full picture:
+            conversation continuity + current state
+```
+
 ## Thing Surface Levels
 
 Not all Things are equal in visibility. The UI needs to distinguish:
