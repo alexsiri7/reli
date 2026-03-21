@@ -159,6 +159,46 @@ Preference Things are especially powerful when Reli is a shared memory service
 (#190). Any agent that connects to Reli immediately knows how the user
 operates. The preferences follow the user, not the client.
 
+## The Learning Flywheel
+
+The system is always absorbing, not just when the user explicitly tells it
+something. Three mechanisms work together:
+
+### Real-time: every interaction teaches
+
+The reasoning agent has two outputs beyond its normal work:
+1. **Preference extraction** — "what did I just learn about this user?"
+2. **Priority question** — "what's the single most valuable thing to ask
+   right now?" (always generated, not always asked — the response agent
+   uses judgment on timing)
+
+### Background: the sweep learns patterns
+
+The nightly sweep doesn't just find stale Things. It also:
+
+**Detects gaps** — Things with missing information get questions attached:
+- "Conference trip" has no dates → "When is the conference?"
+- Person "Sarah" has no context → "How do you know Sarah?"
+- Project has tasks but no deadline → "When does this need to be done?"
+
+**Aggregates patterns** — weak signals from individual interactions become
+strong preferences:
+- Rescheduled 3 morning meetings → strengthen "avoids mornings"
+- Always picks cheapest travel option → "cost-conscious traveler"
+- Mentions Tom in 60% of social planning → "Tom is core social group"
+
+### The flywheel effect
+
+```
+Interactions → preferences → better context → better questions
+     ↑                                              │
+     └──────── richer interactions ←────────────────┘
+```
+
+Each turn makes the next turn smarter. The sweep compounds this overnight.
+A PA that's been running for a month knows vastly more than one running for
+a day — not just more facts, but more about *how the user thinks*.
+
 ## Thing Surface Levels
 
 Not all Things are equal in visibility. The UI needs to distinguish:
