@@ -1,8 +1,9 @@
 """OpenTelemetry tracing for the Reli agent pipeline.
 
 Configures a tracer provider that exports spans to Phoenix (or any
-OTLP-compatible collector).  Disabled by default — set PHOENIX_ENABLED=true
-to activate.
+OTLP-compatible collector).  Enabled by default in docker-compose — set
+PHOENIX_ENABLED=false to deactivate.  Also auto-instruments Google ADK
+for automatic spans on agent runs, tool calls, and LLM invocations.
 
 Usage:
     from .tracing import get_tracer
@@ -46,6 +47,16 @@ def init_tracing() -> None:
         exporter = OTLPSpanExporter(endpoint=settings.PHOENIX_ENDPOINT)
         provider.add_span_processor(BatchSpanProcessor(exporter))
         trace.set_tracer_provider(provider)
+
+        # Auto-instrument Google ADK for automatic spans on agent/tool/LLM calls
+        try:
+            from openinference.instrumentation.google_adk import GoogleADKInstrumentor
+
+            GoogleADKInstrumentor().instrument(tracer_provider=provider)
+            logger.info("Google ADK auto-instrumentation enabled")
+        except Exception:
+            logger.warning("Failed to enable Google ADK auto-instrumentation", exc_info=True)
+
         _initialized = True
         logger.info(
             "OTEL tracing initialized — exporting to %s (service: %s)",

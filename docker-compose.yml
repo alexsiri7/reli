@@ -22,4 +22,29 @@ services:
       - SECRET_KEY=${SECRET_KEY:-}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
+      - PHOENIX_ENABLED=${PHOENIX_ENABLED:-true}
+      - PHOENIX_ENDPOINT=http://phoenix:6006/v1/traces
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-reli}
+    depends_on:
+      phoenix:
+        condition: service_healthy
     restart: unless-stopped
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    ports:
+      - "127.0.0.1:6006:6006"
+    volumes:
+      - phoenix_data:/data
+    environment:
+      - PHOENIX_WORKING_DIR=/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6006/healthz')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  phoenix_data:
