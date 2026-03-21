@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 
 def test_init_sentry_noop_without_dsn():
     """init_sentry should be a no-op when SENTRY_DSN is empty."""
