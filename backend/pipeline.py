@@ -259,6 +259,60 @@ def _fetch_relevant_things(
                 seen_ids.add(row["id"])
                 results.append(dict(row))
 
+    # -----------------------------------------------------------------------
+    # Preference boost: ensure preference Things matching the topic are
+    # included and ranked higher than entity Things.  Preferences are almost
+    # always relevant when their topic matches. (GH#191 task 3)
+    # -----------------------------------------------------------------------
+    pref_ids: list[str] = []
+    pref_vc = vector_count()
+    if pref_vc > 0:
+        pref_ids = vector_search(
+            queries=search_queries,
+            n_results=10,
+            active_only=active_only,
+            type_hint="preference",
+            user_id=user_id,
+        )
+    if not pref_ids:
+        # SQL fallback for preference Things
+        for query in search_queries[:3]:
+            pattern = f"%{query}%"
+            pref_sql = (
+                "SELECT id FROM things WHERE type_hint = 'preference'"
+                " AND (title LIKE ? OR data LIKE ?)"
+            )
+            pref_params: list = [pattern, pattern]
+            pref_sql += uf_sql
+            pref_params.extend(uf_params)
+            if active_only:
+                pref_sql += " AND active = 1"
+            pref_sql += " ORDER BY updated_at DESC LIMIT 10"
+            for row in conn.execute(pref_sql, pref_params).fetchall():
+                if row["id"] not in {*pref_ids}:
+                    pref_ids.append(row["id"])
+
+    if pref_ids:
+        # Hydrate any preference Things not already in results
+        new_pref_ids = [pid for pid in pref_ids if pid not in seen_ids]
+        if new_pref_ids:
+            pref_things = _fetch_with_family(conn, new_pref_ids)
+            for t in pref_things:
+                if t["id"] not in seen_ids:
+                    seen_ids.add(t["id"])
+                    results.append(t)
+
+        # Re-order: preference Things first, then everything else
+        preference_results = [t for t in results if t.get("type_hint") == "preference"]
+        other_results = [t for t in results if t.get("type_hint") != "preference"]
+        results = preference_results + other_results
+
+        logger.info(
+            "Preference boost: %d preference Things promoted to top of %d results",
+            len(preference_results),
+            len(results),
+        )
+
     return results
 
 

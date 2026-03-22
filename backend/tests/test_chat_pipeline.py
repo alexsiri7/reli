@@ -332,3 +332,102 @@ class TestFetchUserRelationships:
             # Recently referenced should come first
             assert results[0]["id"] == "task-new"
             assert results[1]["id"] == "task-old"
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _fetch_relevant_things preference boost (GH#191)
+# ---------------------------------------------------------------------------
+
+
+class TestPreferenceBoost:
+    """Preference Things should be boosted to the top of retrieval results."""
+
+    def test_preference_things_sorted_first(self, patched_db):
+        """Preference Things matching the query appear before entity Things."""
+        from backend.database import db
+        from backend.pipeline import _fetch_relevant_things
+
+        with db() as conn:
+            # Create a regular task Thing
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("task-1", "Morning standup meeting", "task", 3, 1, 1),
+            )
+            # Create a preference Thing about meetings
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface, data) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "pref-1",
+                    "Meeting scheduling preferences",
+                    "preference",
+                    3,
+                    1,
+                    1,
+                    '{"patterns": [{"pattern": "Avoids morning meetings", "confidence": "strong"}]}',
+                ),
+            )
+
+            results = _fetch_relevant_things(
+                conn,
+                ["meeting"],
+                {"active_only": True, "type_hint": None},
+            )
+
+            # Both should be found
+            result_ids = [t["id"] for t in results]
+            assert "pref-1" in result_ids
+            assert "task-1" in result_ids
+            # Preference Thing should come first
+            assert result_ids.index("pref-1") < result_ids.index("task-1")
+
+    def test_preference_boost_with_no_preferences(self, patched_db):
+        """When there are no preference Things, results are unchanged."""
+        from backend.database import db
+        from backend.pipeline import _fetch_relevant_things
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("task-1", "Buy groceries", "task", 3, 1, 1),
+            )
+
+            results = _fetch_relevant_things(
+                conn,
+                ["groceries"],
+                {"active_only": True, "type_hint": None},
+            )
+
+            assert len(results) >= 1
+            assert any(t["id"] == "task-1" for t in results)
+
+    def test_preference_boost_does_not_duplicate(self, patched_db):
+        """Preference Things already in results are not duplicated."""
+        from backend.database import db
+        from backend.pipeline import _fetch_relevant_things
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface, data) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "pref-1",
+                    "Travel cost preferences",
+                    "preference",
+                    3,
+                    1,
+                    1,
+                    '{"patterns": [{"pattern": "Optimizes for cost on travel", "confidence": "moderate"}]}',
+                ),
+            )
+
+            results = _fetch_relevant_things(
+                conn,
+                ["travel cost"],
+                {"active_only": True, "type_hint": None},
+            )
+
+            pref_count = sum(1 for t in results if t["id"] == "pref-1")
+            assert pref_count == 1
