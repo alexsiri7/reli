@@ -31,7 +31,8 @@ def _insert_thing(
     thing_id = str(uuid.uuid4())
     with db() as conn:
         conn.execute(
-            """INSERT INTO things (id, title, type_hint, priority, active, surface, data, checkin_date, created_at, updated_at)
+            """INSERT INTO things
+               (id, title, type_hint, priority, active, surface, data, checkin_date, created_at, updated_at)
                VALUES (?, ?, 'task', 3, ?, 1, ?, ?, datetime('now'), datetime('now'))""",
             (thing_id, title, int(active), json.dumps(data) if data else None, checkin_date),
         )

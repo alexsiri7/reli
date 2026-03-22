@@ -91,17 +91,11 @@ def clean_orphan_relationships_supabase() -> tuple[int, list[str]]:
     thing_ids = {row["id"] for row in things_data}
 
     # Fetch all relationships (id + FK columns only).
-    rels_resp = (
-        client.table("thing_relationships")
-        .select("id,from_thing_id,to_thing_id")
-        .execute()
-    )
+    rels_resp = client.table("thing_relationships").select("id,from_thing_id,to_thing_id").execute()
     rels_data: list[dict[str, Any]] = cast(list[dict[str, Any]], rels_resp.data)
 
     orphan_ids: list[str] = [
-        row["id"]
-        for row in rels_data
-        if row["from_thing_id"] not in thing_ids or row["to_thing_id"] not in thing_ids
+        row["id"] for row in rels_data if row["from_thing_id"] not in thing_ids or row["to_thing_id"] not in thing_ids
     ]
 
     if orphan_ids:

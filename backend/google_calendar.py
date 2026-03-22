@@ -129,7 +129,9 @@ def _load_credentials(user_id: str = "") -> Credentials | None:
         if uid is None:
             row = conn.execute("SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'").fetchone()
         else:
-            row = conn.execute("SELECT * FROM google_tokens WHERE user_id = ? AND service = 'calendar'", (uid,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM google_tokens WHERE user_id = ? AND service = 'calendar'", (uid,)
+            ).fetchone()
     if not row:
         return None
 

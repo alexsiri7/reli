@@ -265,7 +265,9 @@ def get_settings(user_id: str = Depends(require_user)) -> ModelSettings:
         context=user_settings.get("context_model") or global_models.get("context", "google/gemini-2.5-flash-lite"),
         reasoning=user_settings.get("reasoning_model") or global_models.get("reasoning", "google/gemini-2.5-flash"),
         response=user_settings.get("response_model") or global_models.get("response", "google/gemini-2.5-flash-lite"),
-        chat_context_window=int(user_settings["chat_context_window"]) if "chat_context_window" in user_settings else global_context_window,
+        chat_context_window=int(user_settings["chat_context_window"])
+        if "chat_context_window" in user_settings
+        else global_context_window,
     )
 
 
@@ -349,7 +351,9 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         context_model=user_settings.get("context_model", ""),
         reasoning_model=user_settings.get("reasoning_model", ""),
         response_model=user_settings.get("response_model", ""),
-        chat_context_window=int(user_settings["chat_context_window"]) if "chat_context_window" in user_settings else None,
+        chat_context_window=int(user_settings["chat_context_window"])
+        if "chat_context_window" in user_settings
+        else None,
         theme=user_settings.get("theme", ""),
         chat_mode=user_settings.get("chat_mode", "normal"),
         stale_threshold_days=stale_threshold,

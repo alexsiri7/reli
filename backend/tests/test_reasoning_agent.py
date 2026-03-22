@@ -52,10 +52,13 @@ class TestMakeReasoningTools:
 
     def _get_tools(self, user_id: str = "test-user"):
         """Create tools with all DB operations mocked."""
-        with patch("backend.reasoning_agent.db") as mock_db, \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db") as mock_db,
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, applied, _fetched = _make_reasoning_tools(user_id)
             return tools, applied, mock_db
 
@@ -196,10 +199,13 @@ class TestCreateThingTool:
         mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, applied, _fetched = _make_reasoning_tools("test-user")
             create_fn = tools[2]
 
@@ -220,9 +226,7 @@ class TestCreateThingTool:
             mock_updated.__getitem__ = lambda self, key: updated_row[key]
             mock_updated.keys = lambda: updated_row.keys()
 
-            mock_conn.execute.return_value.fetchone = MagicMock(
-                side_effect=[mock_existing, mock_updated]
-            )
+            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[mock_existing, mock_updated])
 
             create_fn(
                 title="Test Thing",
@@ -238,10 +242,13 @@ class TestCreateThingTool:
         mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing") as mock_upsert, \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing") as mock_upsert,
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, applied, _fetched = _make_reasoning_tools("test-user")
             create_fn = tools[2]
 
@@ -258,9 +265,7 @@ class TestCreateThingTool:
             mock_new.__getitem__ = lambda self, key: new_row[key]
             mock_new.keys = lambda: new_row.keys()
 
-            mock_conn.execute.return_value.fetchone = MagicMock(
-                side_effect=[None, mock_new]
-            )
+            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, mock_new])
 
             create_fn(title="Brand New", type_hint="task")
 
@@ -273,10 +278,13 @@ class TestCreateThingTool:
         mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, applied, _fetched = _make_reasoning_tools("test-user")
             create_fn = tools[2]
 
@@ -293,9 +301,7 @@ class TestCreateThingTool:
             mock_new.__getitem__ = lambda self, key: new_row[key]
             mock_new.keys = lambda: new_row.keys()
 
-            mock_conn.execute.return_value.fetchone = MagicMock(
-                side_effect=[None, mock_new]
-            )
+            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, mock_new])
 
             create_fn(title="Alice", type_hint="person", surface=True)
 
@@ -323,10 +329,13 @@ class TestDeleteThingTool:
         mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, applied, _fetched = _make_reasoning_tools("test-user")
             delete_fn = tools[4]
 
@@ -341,10 +350,13 @@ class TestDeleteThingTool:
         mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete") as mock_vs_delete:
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete") as mock_vs_delete,
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, applied, _fetched = _make_reasoning_tools("test-user")
             delete_fn = tools[4]
 
@@ -368,6 +380,7 @@ class TestDeleteThingTool:
 class TestCreateRelationshipTool:
     def test_self_referential_rejected(self):
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         rel_fn = tools[6]
         result = rel_fn(
@@ -383,16 +396,17 @@ class TestCreateRelationshipTool:
         mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, applied, _fetched = _make_reasoning_tools("test-user")
             rel_fn = tools[6]
 
-            mock_conn.execute.return_value.fetchone = MagicMock(
-                side_effect=[None, None, None]
-            )
+            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, None, None])
 
             result = rel_fn(
                 from_thing_id="from-uuid",
@@ -407,10 +421,13 @@ class TestCreateRelationshipTool:
         mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, applied, _fetched = _make_reasoning_tools("test-user")
             rel_fn = tools[6]
 
@@ -432,10 +449,13 @@ class TestCreateRelationshipTool:
         mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, applied, _fetched = _make_reasoning_tools("test-user")
             rel_fn = tools[6]
 
@@ -444,9 +464,7 @@ class TestCreateRelationshipTool:
             to_row = MagicMock()
             to_row.__getitem__ = lambda self, key: "to-uuid"
 
-            mock_conn.execute.return_value.fetchone = MagicMock(
-                side_effect=[None, from_row, to_row]
-            )
+            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, from_row, to_row])
 
             result = rel_fn(
                 from_thing_id="from-uuid",
@@ -478,12 +496,14 @@ async def test_reasoning_agent_returns_metadata_from_adk():
         # Mock _make_reasoning_tools to avoid DB access
         mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
-            "created": [], "updated": [], "deleted": [],
-            "merged": [], "relationships_created": [],
+            "created": [],
+            "updated": [],
+            "deleted": [],
+            "merged": [],
+            "relationships_created": [],
         }
 
-        with patch("backend.reasoning_agent._make_reasoning_tools",
-                    return_value=(mock_tools, mock_applied, {})):
+        with patch("backend.reasoning_agent._make_reasoning_tools", return_value=(mock_tools, mock_applied, {})):
             from backend.reasoning_agent import run_reasoning_agent
 
             result = await run_reasoning_agent(
@@ -511,16 +531,21 @@ async def test_reasoning_agent_invalid_json_returns_defaults():
         mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
             "created": [{"id": "new-uuid", "title": "Test"}],
-            "updated": [], "deleted": [],
-            "merged": [], "relationships_created": [],
+            "updated": [],
+            "deleted": [],
+            "merged": [],
+            "relationships_created": [],
         }
 
-        with patch("backend.reasoning_agent._make_reasoning_tools",
-                    return_value=(mock_tools, mock_applied, {})):
+        with patch("backend.reasoning_agent._make_reasoning_tools", return_value=(mock_tools, mock_applied, {})):
             from backend.reasoning_agent import run_reasoning_agent
 
             result = await run_reasoning_agent(
-                "hello", [], [], api_key="k", user_id="u",
+                "hello",
+                [],
+                [],
+                api_key="k",
+                user_id="u",
             )
 
     # Metadata should have defaults
@@ -544,17 +569,24 @@ async def test_reasoning_agent_tracks_usage():
 
         mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
-            "created": [], "updated": [], "deleted": [],
-            "merged": [], "relationships_created": [],
+            "created": [],
+            "updated": [],
+            "deleted": [],
+            "merged": [],
+            "relationships_created": [],
         }
 
-        with patch("backend.reasoning_agent._make_reasoning_tools",
-                    return_value=(mock_tools, mock_applied, {})):
+        with patch("backend.reasoning_agent._make_reasoning_tools", return_value=(mock_tools, mock_applied, {})):
             from backend.reasoning_agent import run_reasoning_agent
 
             usage = UsageStats()
             await run_reasoning_agent(
-                "test", [], [], usage_stats=usage, api_key="k", user_id="u",
+                "test",
+                [],
+                [],
+                usage_stats=usage,
+                api_key="k",
+                user_id="u",
             )
 
     # _run_agent_for_text was called with usage_stats
@@ -584,15 +616,22 @@ async def test_reasoning_agent_ollama_fallback():
         mock_run.return_value = json.dumps(metadata)
         mock_tools = [MagicMock() for _ in range(6)]
         mock_applied = {
-            "created": [], "updated": [], "deleted": [],
-            "merged": [], "relationships_created": [],
+            "created": [],
+            "updated": [],
+            "deleted": [],
+            "merged": [],
+            "relationships_created": [],
         }
         mock_make_tools.return_value = (mock_tools, mock_applied, {})
 
         from backend.reasoning_agent import run_reasoning_agent
 
         result = await run_reasoning_agent(
-            "test", [], [], api_key="k", user_id="u",
+            "test",
+            [],
+            [],
+            api_key="k",
+            user_id="u",
         )
 
     assert result["reasoning_summary"] == "ADK path"
@@ -628,14 +667,20 @@ async def test_reasoning_agent_ollama_success():
     ):
         mock_apply.return_value = {
             "created": [{"id": "new-uuid", "title": "Groceries"}],
-            "updated": [], "deleted": [], "merged": [],
+            "updated": [],
+            "deleted": [],
+            "merged": [],
             "relationships_created": [],
         }
 
         from backend.reasoning_agent import run_reasoning_agent
 
         result = await run_reasoning_agent(
-            "Buy groceries", [], [], api_key="k", user_id="u",
+            "Buy groceries",
+            [],
+            [],
+            api_key="k",
+            user_id="u",
         )
 
     # Ollama path used, ADK not called
@@ -653,8 +698,10 @@ async def test_reasoning_agent_priority_question_fallback():
         "reasoning_summary": "test",
     }
 
-    with patch("backend.reasoning_agent._run_agent_for_text") as mock_run, \
-         patch("backend.reasoning_agent._make_reasoning_tools") as mock_make:
+    with (
+        patch("backend.reasoning_agent._run_agent_for_text") as mock_run,
+        patch("backend.reasoning_agent._make_reasoning_tools") as mock_make,
+    ):
         mock_run.return_value = json.dumps(metadata)
         mock_make.return_value = (
             [MagicMock() for _ in range(6)],
@@ -665,7 +712,11 @@ async def test_reasoning_agent_priority_question_fallback():
         from backend.reasoning_agent import run_reasoning_agent
 
         result = await run_reasoning_agent(
-            "test", [], [], api_key="k", user_id="u",
+            "test",
+            [],
+            [],
+            api_key="k",
+            user_id="u",
         )
 
     assert result["priority_question"] == "First question"
@@ -705,10 +756,12 @@ async def test_reasoning_agent_disables_thinking():
     thought_signature errors when routing through OpenAI-compatible providers."""
     metadata = {"reasoning_summary": "test"}
 
-    with patch("backend.reasoning_agent._run_agent_for_text") as mock_run, \
-         patch("backend.reasoning_agent._make_reasoning_tools") as mock_make, \
-         patch("backend.reasoning_agent._make_litellm_model") as mock_factory, \
-         patch("backend.reasoning_agent.LlmAgent"):
+    with (
+        patch("backend.reasoning_agent._run_agent_for_text") as mock_run,
+        patch("backend.reasoning_agent._make_reasoning_tools") as mock_make,
+        patch("backend.reasoning_agent._make_litellm_model") as mock_factory,
+        patch("backend.reasoning_agent.LlmAgent"),
+    ):
         mock_run.return_value = json.dumps(metadata)
         mock_make.return_value = (
             [MagicMock() for _ in range(6)],
@@ -720,7 +773,11 @@ async def test_reasoning_agent_disables_thinking():
         from backend.reasoning_agent import run_reasoning_agent
 
         await run_reasoning_agent(
-            "test", [], [], api_key="k", user_id="u",
+            "test",
+            [],
+            [],
+            api_key="k",
+            user_id="u",
         )
 
     # Verify _make_litellm_model was called with thinking enabled (re-zo fix)
@@ -728,8 +785,9 @@ async def test_reasoning_agent_disables_thinking():
     call_kwargs = mock_factory.call_args
     extra_body = call_kwargs.kwargs.get("extra_body")
     assert extra_body is not None, "extra_body must be passed to enable thinking"
-    assert extra_body.get("thinking_config", {}).get("thinking_budget") == 1000, \
+    assert extra_body.get("thinking_config", {}).get("thinking_budget") == 1000, (
         "thinking_budget must be 1000 to enable reasoning capabilities"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -749,6 +807,7 @@ class TestDataJsonStringRegression:
     def test_create_thing_with_string_data_json_returns_error(self):
         """create_thing returns error when data_json is a JSON string."""
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         create_fn = tools[2]
 
@@ -764,19 +823,20 @@ class TestDataJsonStringRegression:
         mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, applied, _fetched = _make_reasoning_tools("test-user")
             update_fn = tools[3]
 
-            existing_row = {"id": "ex-uuid", "title": "Existing", "data": '{}'}
+            existing_row = {"id": "ex-uuid", "title": "Existing", "data": "{}"}
             mock_existing = MagicMock()
             mock_existing.__getitem__ = lambda self, key: existing_row[key]
-            mock_conn.execute.return_value.fetchone = MagicMock(
-                return_value=mock_existing
-            )
+            mock_conn.execute.return_value.fetchone = MagicMock(return_value=mock_existing)
 
             result = update_fn(thing_id="ex-uuid", data_json='"string value"')
             assert "error" in result
@@ -789,33 +849,33 @@ class TestDataJsonStringRegression:
         mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, applied, _fetched = _make_reasoning_tools("test-user")
             update_fn = tools[3]
 
-            existing_row = {"id": "ex-uuid", "title": "Existing", "data": '{}'}
+            existing_row = {"id": "ex-uuid", "title": "Existing", "data": "{}"}
             mock_existing = MagicMock()
             mock_existing.__getitem__ = lambda self, key: existing_row[key]
-            mock_conn.execute.return_value.fetchone = MagicMock(
-                return_value=mock_existing
-            )
+            mock_conn.execute.return_value.fetchone = MagicMock(return_value=mock_existing)
 
-            result = update_fn(thing_id="ex-uuid", data_json='[1, 2, 3]')
+            result = update_fn(thing_id="ex-uuid", data_json="[1, 2, 3]")
             assert "error" in result
             assert "JSON object" in result["error"]
 
     def test_merge_things_with_string_merged_data_json_returns_error(self):
         """merge_things returns error when merged_data_json is a JSON string."""
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         merge_fn = tools[5]
 
-        result = merge_fn(keep_id="keep-uuid",
-                          remove_id="remove-uuid",
-                          merged_data_json='"not a dict"')
+        result = merge_fn(keep_id="keep-uuid", remove_id="remove-uuid", merged_data_json='"not a dict"')
         assert "error" in result
         assert "JSON object" in result["error"]
 
@@ -888,7 +948,9 @@ class TestRunAdkWithThoughtSignatureFallback:
         agent = MagicMock()
         with patch("backend.reasoning_agent._run_agent_for_text", new=AsyncMock(return_value="ok")):
             result = await _run_adk_with_thought_signature_fallback(
-                agent, "full prompt", "fallback prompt",
+                agent,
+                "full prompt",
+                "fallback prompt",
             )
         assert result == "ok"
 
@@ -905,14 +967,13 @@ class TestRunAdkWithThoughtSignatureFallback:
             call_count += 1
             # Fail both first try (history) and second try (no history)
             if call_count <= 2:
-                raise Exception(
-                    "Function call is missing a thought_signature in functionCall parts."
-                )
+                raise Exception("Function call is missing a thought_signature in functionCall parts.")
             return f"fallback ok with {ag.model.model}"
 
-        with patch("backend.reasoning_agent._run_agent_for_text", side_effect=mock_run), \
-             patch("backend.reasoning_agent._make_litellm_model") as mock_factory:
-
+        with (
+            patch("backend.reasoning_agent._run_agent_for_text", side_effect=mock_run),
+            patch("backend.reasoning_agent._make_litellm_model") as mock_factory,
+        ):
             # Mock the factory to return a mock model with the skip parameter
             mock_skip = MagicMock()
             mock_skip.model = "openai/google/gemini-3-flash-preview"
@@ -935,12 +996,17 @@ class TestRunAdkWithThoughtSignatureFallback:
 
         agent = MagicMock()
 
-        with patch(
-            "backend.reasoning_agent._run_agent_for_text",
-            new=AsyncMock(side_effect=ValueError("unrelated error")),
-        ), pytest.raises(ValueError, match="unrelated error"):
+        with (
+            patch(
+                "backend.reasoning_agent._run_agent_for_text",
+                new=AsyncMock(side_effect=ValueError("unrelated error")),
+            ),
+            pytest.raises(ValueError, match="unrelated error"),
+        ):
             await _run_adk_with_thought_signature_fallback(
-                agent, "full prompt", "fallback prompt",
+                agent,
+                "full prompt",
+                "fallback prompt",
             )
 
 
@@ -957,10 +1023,12 @@ class TestHistoryEnrichmentInReasoningAgent:
             {"role": "user", "content": "Now update it"},
         ]
 
-        with patch("backend.reasoning_agent._run_adk_with_thought_signature_fallback") as mock_run, \
-             patch("backend.reasoning_agent._make_reasoning_tools") as mock_make, \
-             patch("backend.reasoning_agent._make_litellm_model") as mock_factory, \
-             patch("backend.reasoning_agent.LlmAgent"):
+        with (
+            patch("backend.reasoning_agent._run_adk_with_thought_signature_fallback") as mock_run,
+            patch("backend.reasoning_agent._make_reasoning_tools") as mock_make,
+            patch("backend.reasoning_agent._make_litellm_model") as mock_factory,
+            patch("backend.reasoning_agent.LlmAgent"),
+        ):
             mock_run.return_value = json.dumps(metadata)
             mock_make.return_value = (
                 [MagicMock() for _ in range(6)],
@@ -972,7 +1040,11 @@ class TestHistoryEnrichmentInReasoningAgent:
             from backend.reasoning_agent import run_reasoning_agent
 
             await run_reasoning_agent(
-                "Now update it", history, [], api_key="k", user_id="u",
+                "Now update it",
+                history,
+                [],
+                api_key="k",
+                user_id="u",
             )
 
         # Check the full_prompt passed to the fallback function
@@ -995,10 +1067,12 @@ class TestHistoryEnrichmentInReasoningAgent:
             {"role": "user", "content": "Tell me about my projects"},
         ]
 
-        with patch("backend.reasoning_agent._run_adk_with_thought_signature_fallback") as mock_run, \
-             patch("backend.reasoning_agent._make_reasoning_tools") as mock_make, \
-             patch("backend.reasoning_agent._make_litellm_model") as mock_factory, \
-             patch("backend.reasoning_agent.LlmAgent"):
+        with (
+            patch("backend.reasoning_agent._run_adk_with_thought_signature_fallback") as mock_run,
+            patch("backend.reasoning_agent._make_reasoning_tools") as mock_make,
+            patch("backend.reasoning_agent._make_litellm_model") as mock_factory,
+            patch("backend.reasoning_agent.LlmAgent"),
+        ):
             mock_run.return_value = json.dumps(metadata)
             mock_make.return_value = (
                 [MagicMock() for _ in range(6)],
@@ -1010,7 +1084,11 @@ class TestHistoryEnrichmentInReasoningAgent:
             from backend.reasoning_agent import run_reasoning_agent
 
             await run_reasoning_agent(
-                "Tell me about my projects", history, [], api_key="k", user_id="u",
+                "Tell me about my projects",
+                history,
+                [],
+                api_key="k",
+                user_id="u",
             )
 
         call_args = mock_run.call_args

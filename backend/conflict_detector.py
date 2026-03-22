@@ -127,15 +127,31 @@ def detect_blocking_chains(
         rel_type = row["relationship_type"]
         # For "blocks": from blocks to. For "depends-on": from depends on to (to is blocker).
         if rel_type == "blocks":
-            blocker = {"id": row["blocker_id"], "title": row["blocker_title"],
-                       "data": row["blocker_data"], "checkin_date": row["blocker_checkin"]}
-            blocked = {"id": row["blocked_id"], "title": row["blocked_title"],
-                       "data": row["blocked_data"], "checkin_date": row["blocked_checkin"]}
+            blocker = {
+                "id": row["blocker_id"],
+                "title": row["blocker_title"],
+                "data": row["blocker_data"],
+                "checkin_date": row["blocker_checkin"],
+            }
+            blocked = {
+                "id": row["blocked_id"],
+                "title": row["blocked_title"],
+                "data": row["blocked_data"],
+                "checkin_date": row["blocked_checkin"],
+            }
         else:  # depends-on: from depends on to
-            blocked = {"id": row["blocker_id"], "title": row["blocker_title"],
-                       "data": row["blocker_data"], "checkin_date": row["blocker_checkin"]}
-            blocker = {"id": row["blocked_id"], "title": row["blocked_title"],
-                       "data": row["blocked_data"], "checkin_date": row["blocked_checkin"]}
+            blocked = {
+                "id": row["blocker_id"],
+                "title": row["blocker_title"],
+                "data": row["blocker_data"],
+                "checkin_date": row["blocker_checkin"],
+            }
+            blocker = {
+                "id": row["blocked_id"],
+                "title": row["blocked_title"],
+                "data": row["blocked_data"],
+                "checkin_date": row["blocked_checkin"],
+            }
 
         blocked_dates = _extract_dates(blocked)
         deadline = _get_deadline(blocked_dates)
@@ -155,22 +171,26 @@ def detect_blocking_chains(
                 severity = "info"
                 time_msg = f"is due in {days_left}d"
 
-            alerts.append(ConflictAlert(
-                alert_type="blocking_chain",
-                severity=severity,
-                message=f'"{blocked["title"]}" {time_msg} but is blocked by "{blocker["title"]}"',
-                thing_ids=[blocked["id"], blocker["id"]],
-                thing_titles=[blocked["title"], blocker["title"]],
-            ))
+            alerts.append(
+                ConflictAlert(
+                    alert_type="blocking_chain",
+                    severity=severity,
+                    message=f'"{blocked["title"]}" {time_msg} but is blocked by "{blocker["title"]}"',
+                    thing_ids=[blocked["id"], blocker["id"]],
+                    thing_titles=[blocked["title"], blocker["title"]],
+                )
+            )
         elif not deadline:
             # Still flag active blockers even without deadline
-            alerts.append(ConflictAlert(
-                alert_type="blocking_chain",
-                severity="info",
-                message=f'"{blocked["title"]}" is blocked by "{blocker["title"]}"',
-                thing_ids=[blocked["id"], blocker["id"]],
-                thing_titles=[blocked["title"], blocker["title"]],
-            ))
+            alerts.append(
+                ConflictAlert(
+                    alert_type="blocking_chain",
+                    severity="info",
+                    message=f'"{blocked["title"]}" is blocked by "{blocker["title"]}"',
+                    thing_ids=[blocked["id"], blocker["id"]],
+                    thing_titles=[blocked["title"], blocker["title"]],
+                )
+            )
 
     return alerts
 
@@ -239,17 +259,19 @@ def detect_schedule_overlaps(
 
             # Check overlap
             if start_a <= end_b and start_b <= end_a:
-                alerts.append(ConflictAlert(
-                    alert_type="schedule_overlap",
-                    severity="warning",
-                    message=(
-                        f'Schedule conflict: "{thing_a["title"]}" '
-                        f'({start_a} – {end_a}) overlaps with '
-                        f'"{thing_b["title"]}" ({start_b} – {end_b})'
-                    ),
-                    thing_ids=[thing_a["id"], thing_b["id"]],
-                    thing_titles=[thing_a["title"], thing_b["title"]],
-                ))
+                alerts.append(
+                    ConflictAlert(
+                        alert_type="schedule_overlap",
+                        severity="warning",
+                        message=(
+                            f'Schedule conflict: "{thing_a["title"]}" '
+                            f"({start_a} – {end_a}) overlaps with "
+                            f'"{thing_b["title"]}" ({start_b} – {end_b})'
+                        ),
+                        thing_ids=[thing_a["id"], thing_b["id"]],
+                        thing_titles=[thing_a["title"], thing_b["title"]],
+                    )
+                )
 
     return alerts
 
@@ -281,15 +303,31 @@ def detect_deadline_conflicts(
         rel_type = row["relationship_type"]
         if rel_type == "depends-on":
             # from depends on to: "from" needs "to" to be done first
-            dependent = {"id": row["dep_id"], "title": row["dep_title"],
-                         "data": row["dep_data"], "checkin_date": row["dep_checkin"]}
-            dependency = {"id": row["depn_id"], "title": row["depn_title"],
-                          "data": row["depn_data"], "checkin_date": row["depn_checkin"]}
+            dependent = {
+                "id": row["dep_id"],
+                "title": row["dep_title"],
+                "data": row["dep_data"],
+                "checkin_date": row["dep_checkin"],
+            }
+            dependency = {
+                "id": row["depn_id"],
+                "title": row["depn_title"],
+                "data": row["depn_data"],
+                "checkin_date": row["depn_checkin"],
+            }
         else:  # blocks: from blocks to — "to" depends on "from"
-            dependency = {"id": row["dep_id"], "title": row["dep_title"],
-                          "data": row["dep_data"], "checkin_date": row["dep_checkin"]}
-            dependent = {"id": row["depn_id"], "title": row["depn_title"],
-                         "data": row["depn_data"], "checkin_date": row["depn_checkin"]}
+            dependency = {
+                "id": row["dep_id"],
+                "title": row["dep_title"],
+                "data": row["dep_data"],
+                "checkin_date": row["dep_checkin"],
+            }
+            dependent = {
+                "id": row["depn_id"],
+                "title": row["depn_title"],
+                "data": row["depn_data"],
+                "checkin_date": row["depn_checkin"],
+            }
 
         dependent_dates = _extract_dates(dependent)
         dependency_dates = _extract_dates(dependency)
@@ -299,17 +337,19 @@ def detect_deadline_conflicts(
 
         if dependent_deadline and dependency_deadline and dependency_deadline > dependent_deadline:
             gap = (dependency_deadline - dependent_deadline).days
-            alerts.append(ConflictAlert(
-                alert_type="deadline_conflict",
-                severity="critical" if gap > 3 else "warning",
-                message=(
-                    f'Deadline conflict: "{dependent["title"]}" is due '
-                    f'{dependent_deadline} but depends on "{dependency["title"]}" '
-                    f'which is due {dependency_deadline} ({gap}d later)'
-                ),
-                thing_ids=[dependent["id"], dependency["id"]],
-                thing_titles=[dependent["title"], dependency["title"]],
-            ))
+            alerts.append(
+                ConflictAlert(
+                    alert_type="deadline_conflict",
+                    severity="critical" if gap > 3 else "warning",
+                    message=(
+                        f'Deadline conflict: "{dependent["title"]}" is due '
+                        f'{dependent_deadline} but depends on "{dependency["title"]}" '
+                        f"which is due {dependency_deadline} ({gap}d later)"
+                    ),
+                    thing_ids=[dependent["id"], dependency["id"]],
+                    thing_titles=[dependent["title"], dependency["title"]],
+                )
+            )
 
     return alerts
 

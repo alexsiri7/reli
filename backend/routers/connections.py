@@ -69,14 +69,10 @@ def list_suggestions(
 
             if not from_thing or not to_thing:
                 # One of the Things was deleted, clean up
-                conn.execute(
-                    "DELETE FROM connection_suggestions WHERE id = ?", (row["id"],)
-                )
+                conn.execute("DELETE FROM connection_suggestions WHERE id = ?", (row["id"],))
                 continue
 
-            suggestions.append(
-                _row_to_suggestion(row, dict(from_thing), dict(to_thing))
-            )
+            suggestions.append(_row_to_suggestion(row, dict(from_thing), dict(to_thing)))
 
     return suggestions
 
@@ -116,10 +112,7 @@ def accept_suggestion(
             raise HTTPException(status_code=404, detail="One of the Things no longer exists")
 
         # Determine relationship type
-        rel_type = (
-            body.relationship_type if body and body.relationship_type
-            else row["suggested_relationship_type"]
-        )
+        rel_type = body.relationship_type if body and body.relationship_type else row["suggested_relationship_type"]
 
         # Create the actual relationship
         rel_id = f"rel-{uuid.uuid4().hex[:8]}"

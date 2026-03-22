@@ -64,9 +64,7 @@ class TestHealthDetailed:
         assert isinstance(body["db_connected"], bool)
         assert isinstance(body["chromadb_connected"], bool)
         assert isinstance(body["vector_count"], int)
-        assert body["avg_response_time_ms"] is None or isinstance(
-            body["avg_response_time_ms"], (int, float)
-        )
+        assert body["avg_response_time_ms"] is None or isinstance(body["avg_response_time_ms"], (int, float))
         assert isinstance(body["recent_request_count"], int)
 
     def test_health_db_connected(self, client):

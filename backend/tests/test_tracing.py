@@ -163,14 +163,11 @@ class TestTracedToolDecorator:
 
         mock_span = MagicMock()
         mock_tracer = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("backend.reasoning_agent._tracer", mock_tracer):
+
             def create_thing(title: str, priority: int = 3) -> dict:
                 return {"id": "new-uuid", "title": title}
 
@@ -185,10 +182,7 @@ class TestTracedToolDecorator:
         assert call_args[0][0] == "tool.create_thing"
 
         # Verify input attributes were set
-        set_attr_calls = {
-            call[0][0]: call[0][1]
-            for call in mock_span.set_attribute.call_args_list
-        }
+        set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
         assert set_attr_calls["tool.input.title"] == "Buy groceries"
         assert set_attr_calls["tool.input.priority"] == "1"
         assert "new-uuid" in set_attr_calls["tool.output"]
@@ -200,14 +194,11 @@ class TestTracedToolDecorator:
 
         mock_span = MagicMock()
         mock_tracer = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("backend.reasoning_agent._tracer", mock_tracer):
+
             def bad_tool(thing_id: str) -> dict:
                 return {"error": "Thing not found"}
 
@@ -216,17 +207,16 @@ class TestTracedToolDecorator:
 
         assert result == {"error": "Thing not found"}
 
-        set_attr_calls = {
-            call[0][0]: call[0][1]
-            for call in mock_span.set_attribute.call_args_list
-        }
+        set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
         assert set_attr_calls["tool.error"] == "Thing not found"
 
     def test_tools_from_factory_are_traced(self):
         """Tools returned by _make_reasoning_tools should be wrapped with tracing."""
-        with patch("backend.reasoning_agent.db"), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db"),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
 
             tools, _, _fetched = _make_reasoning_tools("test-user")

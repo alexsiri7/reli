@@ -99,9 +99,7 @@ class TestStalenessEndpoint:
 
         resp = client.get("/api/staleness")
         data = resp.json()
-        all_ids = [s["thing"]["id"] for s in data["stale_items"]] + [
-            o["thing"]["id"] for o in data["overdue_checkins"]
-        ]
+        all_ids = [s["thing"]["id"] for s in data["stale_items"]] + [o["thing"]["id"] for o in data["overdue_checkins"]]
         assert thing["id"] not in all_ids
 
     def test_counts_structure(self, client):

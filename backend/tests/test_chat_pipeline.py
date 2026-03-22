@@ -10,8 +10,11 @@ import pytest
 
 MOCK_REASONING_RESULT = {
     "applied_changes": {
-        "created": [], "updated": [], "deleted": [],
-        "merged": [], "relationships_created": [],
+        "created": [],
+        "updated": [],
+        "deleted": [],
+        "merged": [],
+        "relationships_created": [],
     },
     "fetched_context": {"things": [], "relationships": []},
     "questions_for_user": [],
@@ -78,7 +81,10 @@ class TestChatPipeline:
         reasoning_with_create = {
             "applied_changes": {
                 "created": [{"id": "new-uuid", "title": "New Pipeline Task", "type_hint": "task", "priority": 2}],
-                "updated": [], "deleted": [], "merged": [], "relationships_created": [],
+                "updated": [],
+                "deleted": [],
+                "merged": [],
+                "relationships_created": [],
             },
             "questions_for_user": [],
             "priority_question": "",
@@ -105,7 +111,9 @@ class TestChatPipeline:
             "applied_changes": {
                 "created": [],
                 "updated": [{"id": thing_id, "title": "Updated Title"}],
-                "deleted": [], "merged": [], "relationships_created": [],
+                "deleted": [],
+                "merged": [],
+                "relationships_created": [],
             },
             "questions_for_user": [],
             "priority_question": "",
@@ -128,9 +136,11 @@ class TestChatPipeline:
 
         reasoning_with_delete = {
             "applied_changes": {
-                "created": [], "updated": [],
+                "created": [],
+                "updated": [],
                 "deleted": [thing_id],
-                "merged": [], "relationships_created": [],
+                "merged": [],
+                "relationships_created": [],
             },
             "questions_for_user": [],
             "priority_question": "",
@@ -150,8 +160,11 @@ class TestChatPipeline:
     async def test_chat_with_questions_for_user(self, async_client):
         reasoning_with_questions = {
             "applied_changes": {
-                "created": [], "updated": [], "deleted": [],
-                "merged": [], "relationships_created": [],
+                "created": [],
+                "updated": [],
+                "deleted": [],
+                "merged": [],
+                "relationships_created": [],
             },
             "questions_for_user": ["What priority should this be?"],
             "priority_question": "What priority should this be?",
@@ -194,9 +207,11 @@ class TestChatPipeline:
         """Deleting a non-existent ID should not raise an error."""
         reasoning_with_bad_delete = {
             "applied_changes": {
-                "created": [], "updated": [],
+                "created": [],
+                "updated": [],
                 "deleted": [],  # tools would have returned error, nothing applied
-                "merged": [], "relationships_created": [],
+                "merged": [],
+                "relationships_created": [],
             },
             "questions_for_user": [],
             "priority_question": "",
@@ -234,19 +249,16 @@ class TestFetchUserRelationships:
         with db() as conn:
             # Create user Thing
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
                 ("user-1", "Alice", "person", 3, 1, 1),
             )
             # Create related Things
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
                 ("sister-1", "Bob (sister)", "person", 3, 1, 1),
             )
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
                 ("project-1", "Acme Project", "project", 3, 1, 1),
             )
             # Create relationships from user to both
@@ -287,8 +299,7 @@ class TestFetchUserRelationships:
 
         with db() as conn:
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
                 ("user-1", "Alice", "person", 3, 1, 1),
             )
             results = _fetch_user_relationships(conn, "user-1", ["anything"])
@@ -301,8 +312,7 @@ class TestFetchUserRelationships:
 
         with db() as conn:
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
                 ("user-1", "Alice", "person", 3, 1, 1),
             )
             # Two related Things both matching "Task"

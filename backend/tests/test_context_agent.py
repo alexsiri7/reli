@@ -67,9 +67,7 @@ async def test_context_agent_returns_parsed_json():
 
     with patch("backend.context_agent.Runner") as MockRunner:
         mock_runner = MagicMock()
-        mock_runner.run_async = MagicMock(
-            return_value=_mock_run_async_factory(events)
-        )
+        mock_runner.run_async = MagicMock(return_value=_mock_run_async_factory(events))
         MockRunner.return_value = mock_runner
 
         with patch("backend.context_agent._session_service") as mock_svc:
@@ -99,9 +97,7 @@ async def test_context_agent_invalid_json_fallback():
 
     with patch("backend.context_agent.Runner") as MockRunner:
         mock_runner = MagicMock()
-        mock_runner.run_async = MagicMock(
-            return_value=_mock_run_async_factory(events)
-        )
+        mock_runner.run_async = MagicMock(return_value=_mock_run_async_factory(events))
         MockRunner.return_value = mock_runner
 
         with patch("backend.context_agent._session_service") as mock_svc:
@@ -132,9 +128,7 @@ async def test_context_agent_tracks_usage():
 
     with patch("backend.context_agent.Runner") as MockRunner:
         mock_runner = MagicMock()
-        mock_runner.run_async = MagicMock(
-            return_value=_mock_run_async_factory(events)
-        )
+        mock_runner.run_async = MagicMock(return_value=_mock_run_async_factory(events))
         MockRunner.return_value = mock_runner
 
         with patch("backend.context_agent._session_service") as mock_svc:
@@ -174,9 +168,7 @@ async def test_context_agent_ollama_fallback():
         patch("backend.context_agent._session_service") as mock_svc,
     ):
         mock_runner = MagicMock()
-        mock_runner.run_async = MagicMock(
-            return_value=_mock_run_async_factory(events)
-        )
+        mock_runner.run_async = MagicMock(return_value=_mock_run_async_factory(events))
         MockRunner.return_value = mock_runner
 
         mock_session = MagicMock()
@@ -204,9 +196,7 @@ async def test_context_refinement_done():
 
     with patch("backend.context_agent.Runner") as MockRunner:
         mock_runner = MagicMock()
-        mock_runner.run_async = MagicMock(
-            return_value=_mock_run_async_factory(events)
-        )
+        mock_runner.run_async = MagicMock(return_value=_mock_run_async_factory(events))
         MockRunner.return_value = mock_runner
 
         with patch("backend.context_agent._session_service") as mock_svc:
@@ -242,9 +232,7 @@ async def test_context_refinement_needs_more():
 
     with patch("backend.context_agent.Runner") as MockRunner:
         mock_runner = MagicMock()
-        mock_runner.run_async = MagicMock(
-            return_value=_mock_run_async_factory(events)
-        )
+        mock_runner.run_async = MagicMock(return_value=_mock_run_async_factory(events))
         MockRunner.return_value = mock_runner
 
         with patch("backend.context_agent._session_service") as mock_svc:
@@ -276,9 +264,7 @@ async def test_context_refinement_invalid_json_returns_done():
 
     with patch("backend.context_agent.Runner") as MockRunner:
         mock_runner = MagicMock()
-        mock_runner.run_async = MagicMock(
-            return_value=_mock_run_async_factory(events)
-        )
+        mock_runner.run_async = MagicMock(return_value=_mock_run_async_factory(events))
         MockRunner.return_value = mock_runner
 
         with patch("backend.context_agent._session_service") as mock_svc:
@@ -289,7 +275,11 @@ async def test_context_refinement_invalid_json_returns_done():
             from backend.context_agent import run_context_refinement
 
             result = await run_context_refinement(
-                "test", [], [{"id": "1"}], ["q"], api_key="k",
+                "test",
+                [],
+                [{"id": "1"}],
+                ["q"],
+                api_key="k",
             )
 
     assert result == {"done": True}

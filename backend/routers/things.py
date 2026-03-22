@@ -99,6 +99,7 @@ def _row_to_thing(row: sqlite3.Row) -> Thing:
 
 class UserProfileResponse(BaseModel):
     """The user's anchor Thing with its relationships."""
+
     thing: Thing
     relationships: list[Relationship]
 
@@ -107,6 +108,7 @@ class UserProfileResponse(BaseModel):
 
 class UserProfileRelationship(BaseModel):
     """A relationship resolved with the related Thing's title."""
+
     id: str
     relationship_type: str
     direction: str  # "outgoing" or "incoming"
@@ -116,6 +118,7 @@ class UserProfileRelationship(BaseModel):
 
 class UserProfileDetail(BaseModel):
     """The user's anchor Thing with resolved relationships."""
+
     thing: Thing
     relationships: list[UserProfileRelationship]
 
@@ -387,17 +390,19 @@ def list_merge_history(
                 md = json.loads(md)
             except (json.JSONDecodeError, ValueError):
                 md = None
-        results.append(MergeHistoryRecord(
-            id=r["id"],
-            keep_id=r["keep_id"],
-            remove_id=r["remove_id"],
-            keep_title=r["keep_title"],
-            remove_title=r["remove_title"],
-            merged_data=md,
-            triggered_by=r["triggered_by"],
-            user_id=r["user_id"],
-            created_at=_parse_dt(r["created_at"]) or datetime.min,
-        ))
+        results.append(
+            MergeHistoryRecord(
+                id=r["id"],
+                keep_id=r["keep_id"],
+                remove_id=r["remove_id"],
+                keep_title=r["keep_title"],
+                remove_title=r["remove_title"],
+                merged_data=md,
+                triggered_by=r["triggered_by"],
+                user_id=r["user_id"],
+                created_at=_parse_dt(r["created_at"]) or datetime.min,
+            )
+        )
     return results
 
 
@@ -486,7 +491,7 @@ def _normalize(title: str) -> str:
     t = title.lower().strip()
     for prefix in ("my ", "the ", "a ", "an "):
         if t.startswith(prefix):
-            t = t[len(prefix):]
+            t = t[len(prefix) :]
     return t
 
 
@@ -518,8 +523,7 @@ def get_merge_suggestions(
     with db() as conn:
         uf_sql, uf_params = user_filter(user_id)
         rows = conn.execute(
-            "SELECT id, title, type_hint FROM things WHERE active = 1" + uf_sql
-            + " ORDER BY title",
+            "SELECT id, title, type_hint FROM things WHERE active = 1" + uf_sql + " ORDER BY title",
             uf_params,
         ).fetchall()
 
@@ -542,11 +546,13 @@ def get_merge_suggestions(
             # Boost reason if same type
             if type_a and type_a == type_b:
                 reason += f" (both {type_a})"
-            suggestions.append(MergeSuggestion(
-                thing_a=MergeSuggestionThing(id=id_a, title=title_a, type_hint=type_a),
-                thing_b=MergeSuggestionThing(id=id_b, title=title_b, type_hint=type_b),
-                reason=reason,
-            ))
+            suggestions.append(
+                MergeSuggestion(
+                    thing_a=MergeSuggestionThing(id=id_a, title=title_a, type_hint=type_a),
+                    thing_b=MergeSuggestionThing(id=id_b, title=title_b, type_hint=type_b),
+                    reason=reason,
+                )
+            )
             if len(suggestions) >= limit:
                 break
         if len(suggestions) >= limit:
@@ -568,12 +574,8 @@ def merge_things(
     """Merge remove_id into keep_id: transfer relationships, merge data, delete duplicate."""
     uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
-        keep_row = conn.execute(
-            f"SELECT * FROM things WHERE id = ?{uf_sql}", [body.keep_id, *uf_params]
-        ).fetchone()
-        remove_row = conn.execute(
-            f"SELECT * FROM things WHERE id = ?{uf_sql}", [body.remove_id, *uf_params]
-        ).fetchone()
+        keep_row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [body.keep_id, *uf_params]).fetchone()
+        remove_row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [body.remove_id, *uf_params]).fetchone()
         if not keep_row:
             raise HTTPException(status_code=404, detail=f"Thing '{body.keep_id}' not found")
         if not remove_row:

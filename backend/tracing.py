@@ -60,7 +60,7 @@ def shutdown_tracing() -> None:
     """Flush and shut down the tracer provider."""
     global _initialized
     provider = trace.get_tracer_provider()
-    if _initialized and hasattr(provider, 'shutdown'):
+    if _initialized and hasattr(provider, "shutdown"):
         try:
             provider.shutdown()
             logger.info("Tracer provider shut down")

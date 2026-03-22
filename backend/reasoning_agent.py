@@ -66,7 +66,10 @@ def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str,
             except Exception as exc:
                 logger.exception(
                     "Tool %s crashed: %s (args=%s kwargs=%s)",
-                    func.__name__, exc, args, kwargs,
+                    func.__name__,
+                    exc,
+                    args,
+                    kwargs,
                 )
                 span.set_status(trace.StatusCode.ERROR, str(exc))
                 span.record_exception(exc)
@@ -439,10 +442,10 @@ def _make_reasoning_tools(
 
     # ------------------------------------------------------------------
     def fetch_context(
-        search_queries_json: str = '[]',
-        fetch_ids_json: str = '[]',
+        search_queries_json: str = "[]",
+        fetch_ids_json: str = "[]",
         active_only: bool = True,
-        type_hint: str = '',
+        type_hint: str = "",
     ) -> dict[str, Any]:
         """Search the Things database for relevant context.
 
@@ -491,7 +494,10 @@ def _make_reasoning_tools(
         with db() as conn:
             if search_queries:
                 things = _fetch_relevant_things(
-                    conn, search_queries, filter_params, user_id=user_id,
+                    conn,
+                    search_queries,
+                    filter_params,
+                    user_id=user_id,
                 )
                 for t in things:
                     if t["id"] not in seen_ids:
@@ -500,7 +506,8 @@ def _make_reasoning_tools(
 
             if fetch_ids:
                 id_things = _fetch_with_family(
-                    conn, [tid for tid in fetch_ids if tid not in seen_ids],
+                    conn,
+                    [tid for tid in fetch_ids if tid not in seen_ids],
                 )
                 for t in id_things:
                     if t["id"] not in seen_ids:
@@ -635,7 +642,7 @@ def _make_reasoning_tools(
             if not isinstance(data, dict):
                 return {
                     "error": f"data_json must be a JSON object, got {type(data).__name__}. "
-                    "Wrap your data in curly braces: {\"key\": \"value\"}"
+                    'Wrap your data in curly braces: {"key": "value"}'
                 }
         except (json.JSONDecodeError, TypeError) as exc:
             return {"error": f"data_json is not valid JSON: {exc}"}
@@ -677,12 +684,8 @@ def _make_reasoning_tools(
                     merge_fields["updated_at"] = now
                     set_clause = ", ".join(f"{k} = ?" for k in merge_fields)
                     values = list(merge_fields.values()) + [existing["id"]]
-                    conn.execute(
-                        f"UPDATE things SET {set_clause} WHERE id = ?", values
-                    )
-                updated_row = conn.execute(
-                    "SELECT * FROM things WHERE id = ?", (existing["id"],)
-                ).fetchone()
+                    conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
+                updated_row = conn.execute("SELECT * FROM things WHERE id = ?", (existing["id"],)).fetchone()
                 if updated_row:
                     row_dict = dict(updated_row)
                     applied["updated"].append(row_dict)
@@ -719,9 +722,7 @@ def _make_reasoning_tools(
                     user_id or None,
                 ),
             )
-            row = conn.execute(
-                "SELECT * FROM things WHERE id = ?", (thing_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
             if row:
                 row_dict = dict(row)
                 applied["created"].append(row_dict)
@@ -766,9 +767,7 @@ def _make_reasoning_tools(
         now = datetime.now(timezone.utc).isoformat()
 
         with db() as conn:
-            row = conn.execute(
-                "SELECT * FROM things WHERE id = ?", (thing_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
             if not row:
                 return {"error": f"Thing {thing_id} not found"}
 
@@ -791,17 +790,13 @@ def _make_reasoning_tools(
                     if not isinstance(new_data, dict):
                         return {
                             "error": f"data_json must be a JSON object, got {type(new_data).__name__}. "
-                            "Use {\"key\": \"value\"} format."
+                            'Use {"key": "value"} format.'
                         }
                 except (json.JSONDecodeError, TypeError) as exc:
                     return {"error": f"data_json is not valid JSON: {exc}"}
                 if new_data:
                     try:
-                        old_data = (
-                            json.loads(row["data"])
-                            if isinstance(row["data"], str) and row["data"]
-                            else {}
-                        )
+                        old_data = json.loads(row["data"]) if isinstance(row["data"], str) and row["data"] else {}
                     except (ValueError, TypeError):
                         old_data = {}
                     merged = {**old_data, **new_data}
@@ -821,9 +816,7 @@ def _make_reasoning_tools(
             values = list(fields.values()) + [thing_id]
             conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
 
-            updated_row = conn.execute(
-                "SELECT * FROM things WHERE id = ?", (thing_id,)
-            ).fetchone()
+            updated_row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
             if updated_row:
                 row_dict = dict(updated_row)
                 applied["updated"].append(row_dict)
@@ -846,9 +839,7 @@ def _make_reasoning_tools(
             return {"error": "thing_id is required"}
 
         with db() as conn:
-            row = conn.execute(
-                "SELECT * FROM things WHERE id = ?", (thing_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
             if not row:
                 return {"error": f"Thing {thing_id} not found"}
             conn.execute("DELETE FROM things WHERE id = ?", (thing_id,))
@@ -887,18 +878,14 @@ def _make_reasoning_tools(
             if not isinstance(merged_data, dict):
                 return {
                     "error": f"merged_data_json must be a JSON object, got {type(merged_data).__name__}. "
-                    "Use {\"key\": \"value\"} format."
+                    'Use {"key": "value"} format.'
                 }
         except (json.JSONDecodeError, TypeError) as exc:
             return {"error": f"merged_data_json is not valid JSON: {exc}"}
 
         with db() as conn:
-            keep_row = conn.execute(
-                "SELECT * FROM things WHERE id = ?", (keep_id,)
-            ).fetchone()
-            remove_row = conn.execute(
-                "SELECT * FROM things WHERE id = ?", (remove_id,)
-            ).fetchone()
+            keep_row = conn.execute("SELECT * FROM things WHERE id = ?", (keep_id,)).fetchone()
+            remove_row = conn.execute("SELECT * FROM things WHERE id = ?", (remove_id,)).fetchone()
             if not keep_row or not remove_row:
                 return {"error": "one or both Things not found"}
 
@@ -906,9 +893,7 @@ def _make_reasoning_tools(
             mf: dict[str, Any] = {}
             try:
                 old_data = (
-                    json.loads(keep_row["data"])
-                    if isinstance(keep_row["data"], str) and keep_row["data"]
-                    else {}
+                    json.loads(keep_row["data"]) if isinstance(keep_row["data"], str) and keep_row["data"] else {}
                 )
             except (ValueError, TypeError):
                 old_data = {}
@@ -919,8 +904,7 @@ def _make_reasoning_tools(
             try:
                 keep_oq = (
                     json.loads(keep_row["open_questions"])
-                    if isinstance(keep_row["open_questions"], str)
-                    and keep_row["open_questions"]
+                    if isinstance(keep_row["open_questions"], str) and keep_row["open_questions"]
                     else []
                 )
             except (ValueError, TypeError):
@@ -928,8 +912,7 @@ def _make_reasoning_tools(
             try:
                 remove_oq = (
                     json.loads(remove_row["open_questions"])
-                    if isinstance(remove_row["open_questions"], str)
-                    and remove_row["open_questions"]
+                    if isinstance(remove_row["open_questions"], str) and remove_row["open_questions"]
                     else []
                 )
             except (ValueError, TypeError):
@@ -969,15 +952,11 @@ def _make_reasoning_tools(
             # 5. Record merge history
             try:
                 _rem_data = (
-                    json.loads(remove_row["data"])
-                    if isinstance(remove_row["data"], str) and remove_row["data"]
-                    else {}
+                    json.loads(remove_row["data"]) if isinstance(remove_row["data"], str) and remove_row["data"] else {}
                 )
             except (ValueError, TypeError):
                 _rem_data = {}
-            _merged_snapshot = (
-                {**_rem_data, **merged_data} if (merged_data or _rem_data) else None
-            )
+            _merged_snapshot = {**_rem_data, **merged_data} if (merged_data or _rem_data) else None
             conn.execute(
                 "INSERT INTO merge_history (id, keep_id, remove_id, keep_title,"
                 " remove_title, merged_data, triggered_by, user_id, created_at)"
@@ -996,9 +975,7 @@ def _make_reasoning_tools(
             )
 
             # 6. Re-embed
-            updated_keep = conn.execute(
-                "SELECT * FROM things WHERE id = ?", (keep_id,)
-            ).fetchone()
+            updated_keep = conn.execute("SELECT * FROM things WHERE id = ?", (keep_id,)).fetchone()
             if updated_keep:
                 upsert_thing(dict(updated_keep))
                 merge_info = {
@@ -1048,12 +1025,8 @@ def _make_reasoning_tools(
                 return {"status": "duplicate", "relationship_type": rel_type}
 
             # Verify both things exist
-            from_row = conn.execute(
-                "SELECT id FROM things WHERE id = ?", (from_id,)
-            ).fetchone()
-            to_row = conn.execute(
-                "SELECT id FROM things WHERE id = ?", (to_id,)
-            ).fetchone()
+            from_row = conn.execute("SELECT id FROM things WHERE id = ?", (from_id,)).fetchone()
+            to_row = conn.execute("SELECT id FROM things WHERE id = ?", (to_id,)).fetchone()
             if not from_row or not to_row:
                 missing = []
                 if not from_row:
@@ -1131,9 +1104,7 @@ async def _run_adk_with_thought_signature_fallback(
                 return await _run_agent_for_text(agent, fallback_prompt, usage_stats)
             except Exception as exc2:
                 if _is_thought_signature_error(exc2):
-                    logger.warning(
-                        "Persistent thought_signature error, retrying with validator skip"
-                    )
+                    logger.warning("Persistent thought_signature error, retrying with validator skip")
                     # Second retry: Inject the skip validator workaround
                     original_model = agent.model
                     try:
@@ -1152,8 +1123,8 @@ async def _run_adk_with_thought_signature_fallback(
                             api_key=api_key,
                             extra_body={
                                 "thinking_config": {"include_thoughts": True, "thinking_budget": 1000},
-                                "thought_signature": "skip_thought_signature_validator"
-                            }
+                                "thought_signature": "skip_thought_signature_validator",
+                            },
                         )
                         return await _run_agent_for_text(agent, fallback_prompt, usage_stats)
                     finally:
@@ -1209,24 +1180,13 @@ async def run_reasoning_agent(
             f"additional context beyond these):\n{warm_json}"
         )
     if relationships:
-        user_content += (
-            f"\n\nRelationships between Things:\n"
-            f"{json.dumps(relationships, default=str)}"
-        )
+        user_content += f"\n\nRelationships between Things:\n{json.dumps(relationships, default=str)}"
     if web_results:
-        user_content += (
-            f"\n\nWeb search results:\n{json.dumps(web_results, default=str)}"
-        )
+        user_content += f"\n\nWeb search results:\n{json.dumps(web_results, default=str)}"
     if gmail_context:
-        user_content += (
-            f"\n\nRecent Gmail messages matching user's query:\n"
-            f"{json.dumps(gmail_context, default=str)}"
-        )
+        user_content += f"\n\nRecent Gmail messages matching user's query:\n{json.dumps(gmail_context, default=str)}"
     if calendar_events:
-        user_content += (
-            f"\n\nUpcoming Google Calendar events:\n"
-            f"{json.dumps(calendar_events, default=str)}"
-        )
+        user_content += f"\n\nUpcoming Google Calendar events:\n{json.dumps(calendar_events, default=str)}"
 
     # Inject real-time conflict alerts into reasoning context
     try:
@@ -1235,8 +1195,7 @@ async def run_reasoning_agent(
         conflict_alerts = detect_all_conflicts(user_id=user_id)
         if conflict_alerts:
             alerts_data = [
-                {"type": a.alert_type, "severity": a.severity, "message": a.message}
-                for a in conflict_alerts
+                {"type": a.alert_type, "severity": a.severity, "message": a.message} for a in conflict_alerts
             ]
             user_content += (
                 f"\n\nActive conflict alerts (proactively detected):\n"
@@ -1270,14 +1229,10 @@ async def run_reasoning_agent(
                     result = {}
                 storage_changes = result.get("storage_changes", {})
                 with db() as conn:
-                    applied = apply_storage_changes(
-                        storage_changes, conn, user_id=user_id
-                    )
+                    applied = apply_storage_changes(storage_changes, conn, user_id=user_id)
                 return _build_result(result, applied)
         except Exception as exc:
-            logger.warning(
-                "Ollama reasoning agent failed, falling back to ADK: %s", exc
-            )
+            logger.warning("Ollama reasoning agent failed, falling back to ADK: %s", exc)
 
     # -- ADK path with tool calling --
     tools, applied_changes, fetched_context = _make_reasoning_tools(user_id, session_id=session_id)
@@ -1303,7 +1258,7 @@ async def run_reasoning_agent(
         api_key=api_key,
         extra_body={
             "thinking_config": {"include_thoughts": True, "thinking_budget": 1000},
-            "thought_signature": "skip_thought_signature_validator"
+            "thought_signature": "skip_thought_signature_validator",
         },
     )
 
@@ -1329,10 +1284,7 @@ async def run_reasoning_agent(
         if enrichment:
             history_block += f"<enrichment>{enrichment}</enrichment>\n"
 
-    full_prompt = (
-        (f"Conversation history:\n{history_block}\n" if history_block else "")
-        + user_content
-    )
+    full_prompt = (f"Conversation history:\n{history_block}\n" if history_block else "") + user_content
 
     raw = await _run_adk_with_thought_signature_fallback(
         reasoning_agent, full_prompt, user_content, usage_stats, api_key=api_key

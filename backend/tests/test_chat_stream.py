@@ -10,8 +10,11 @@ import pytest
 
 MOCK_REASONING_RESULT = {
     "applied_changes": {
-        "created": [], "updated": [], "deleted": [],
-        "merged": [], "relationships_created": [],
+        "created": [],
+        "updated": [],
+        "deleted": [],
+        "merged": [],
+        "relationships_created": [],
     },
     "fetched_context": {"things": [], "relationships": []},
     "questions_for_user": [],
@@ -40,13 +43,14 @@ def _patch_agents(reasoning_result=None):
 def _parse_sse(text: str) -> list[dict]:
     """Parse SSE text into a list of {event, data} dicts."""
     import json
+
     events = []
     current_event = None
     for line in text.split("\n"):
         if line.startswith("event: "):
-            current_event = line[len("event: "):]
+            current_event = line[len("event: ") :]
         elif line.startswith("data: ") and current_event is not None:
-            events.append({"event": current_event, "data": json.loads(line[len("data: "):])})
+            events.append({"event": current_event, "data": json.loads(line[len("data: ") :])})
             current_event = None
     return events
 
@@ -152,14 +156,14 @@ class TestChatStream:
 
         # Tokens should appear between response started and response complete
         response_start_idx = next(
-            i for i, e in enumerate(events)
-            if e["event"] == "stage" and e["data"].get("stage") == "response"
-            and e["data"].get("status") == "started"
+            i
+            for i, e in enumerate(events)
+            if e["event"] == "stage" and e["data"].get("stage") == "response" and e["data"].get("status") == "started"
         )
         response_complete_idx = next(
-            i for i, e in enumerate(events)
-            if e["event"] == "stage" and e["data"].get("stage") == "response"
-            and e["data"].get("status") == "complete"
+            i
+            for i, e in enumerate(events)
+            if e["event"] == "stage" and e["data"].get("stage") == "response" and e["data"].get("status") == "complete"
         )
         token_indices = [i for i, e in enumerate(events) if e["event"] == "token"]
         assert all(response_start_idx < idx < response_complete_idx for idx in token_indices)
