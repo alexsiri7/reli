@@ -336,7 +336,7 @@ def create_summary(
             " VALUES (?, ?, ?, ?)",
             (user_id, summary_text, messages_summarized_up_to, token_count),
         )
-        row_id = cursor.lastrowid
+        row_id: int | None = cursor.lastrowid
         if row_id is None:
             raise RuntimeError("INSERT into conversation_summaries failed to return lastrowid")
         return row_id
