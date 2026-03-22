@@ -12,21 +12,18 @@ import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 from .config import settings
-
-if TYPE_CHECKING:
-    from supabase import Client
 
 DB_PATH = Path(settings.DATA_DIR) / "reli.db"
 
 
-def get_connection() -> "sqlite3.Connection | Client":
+def get_connection() -> Any:
     """Return a database connection.
 
-    When STORAGE_BACKEND=supabase, returns a ``supabase.Client`` instead of
-    an ``sqlite3.Connection``.
+    Returns ``sqlite3.Connection`` when STORAGE_BACKEND=sqlite (default),
+    or ``supabase.Client`` when STORAGE_BACKEND=supabase.
     """
     if settings.STORAGE_BACKEND == "supabase":
         from .database_supabase import get_client
@@ -40,7 +37,7 @@ def get_connection() -> "sqlite3.Connection | Client":
 
 
 @contextmanager
-def db() -> "Generator[sqlite3.Connection | Client, None, None]":
+def db() -> Generator[Any, None, None]:
     """Yield a database handle — sqlite3.Connection or supabase.Client."""
     if settings.STORAGE_BACKEND == "supabase":
         from .database_supabase import supabase_db
