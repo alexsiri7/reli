@@ -1140,6 +1140,7 @@ and reflective gets coaching warmth.
 """
 
 
+<<<<<<< HEAD
 def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
     """Load personality preference patterns from Things with type_hint='preference'.
 
