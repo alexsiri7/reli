@@ -13,6 +13,8 @@ from backend.mcp_server import (
     create_thing,
     delete_relationship,
     delete_thing,
+    get_briefing,
+    get_conflicts,
     get_thing,
     mcp,
     search_things,
@@ -372,3 +374,112 @@ class TestIntegration:
         # Clean up
         delete_thing(thing_id=t1["id"])
         delete_thing(thing_id=t2["id"])
+
+
+# ---------------------------------------------------------------------------
+# get_briefing
+# ---------------------------------------------------------------------------
+
+
+class TestGetBriefing:
+    @patch("backend.mcp_server._api_get")
+    def test_default_briefing(self, mock_get: MagicMock) -> None:
+        briefing_data = {
+            "date": "2026-03-22",
+            "things": [{"id": "t1", "title": "Follow up with Tom"}],
+            "findings": [{"id": "sf-1", "message": "Stale task", "priority": 2}],
+            "total": 2,
+        }
+        mock_get.return_value = briefing_data
+        result = get_briefing()
+        mock_get.assert_called_once_with("/api/briefing", params={})
+        assert result["total"] == 2
+        assert len(result["things"]) == 1
+        assert len(result["findings"]) == 1
+
+    @patch("backend.mcp_server._api_get")
+    def test_briefing_with_date(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = {"date": "2026-03-20", "things": [], "findings": [], "total": 0}
+        result = get_briefing(as_of="2026-03-20")
+        mock_get.assert_called_once_with("/api/briefing", params={"as_of": "2026-03-20"})
+        assert result["date"] == "2026-03-20"
+        assert result["total"] == 0
+
+    @patch("backend.mcp_server._api_get")
+    def test_briefing_empty(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = {"date": "2026-03-22", "things": [], "findings": [], "total": 0}
+        result = get_briefing()
+        assert result["things"] == []
+        assert result["findings"] == []
+
+
+# ---------------------------------------------------------------------------
+# get_conflicts
+# ---------------------------------------------------------------------------
+
+
+class TestGetConflicts:
+    @patch("backend.mcp_server._api_get")
+    def test_default_window(self, mock_get: MagicMock) -> None:
+        conflicts = [
+            {
+                "alert_type": "blocking_chain",
+                "severity": "warning",
+                "message": "Task A blocks Task B (due in 3 days)",
+                "thing_ids": ["t1", "t2"],
+                "thing_titles": ["Task A", "Task B"],
+            }
+        ]
+        mock_get.return_value = conflicts
+        result = get_conflicts()
+        mock_get.assert_called_once_with("/api/conflicts", params={"window": 14})
+        assert len(result) == 1
+        assert result[0]["alert_type"] == "blocking_chain"
+
+    @patch("backend.mcp_server._api_get")
+    def test_custom_window(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        get_conflicts(window=30)
+        mock_get.assert_called_once_with("/api/conflicts", params={"window": 30})
+
+    @patch("backend.mcp_server._api_get")
+    def test_window_clamped_min(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        get_conflicts(window=-5)
+        mock_get.assert_called_once_with("/api/conflicts", params={"window": 1})
+
+    @patch("backend.mcp_server._api_get")
+    def test_window_clamped_max(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        get_conflicts(window=200)
+        mock_get.assert_called_once_with("/api/conflicts", params={"window": 90})
+
+    @patch("backend.mcp_server._api_get")
+    def test_no_conflicts(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        result = get_conflicts()
+        assert result == []
+
+    @patch("backend.mcp_server._api_get")
+    def test_multiple_conflict_types(self, mock_get: MagicMock) -> None:
+        conflicts = [
+            {
+                "alert_type": "blocking_chain",
+                "severity": "critical",
+                "message": "X blocks Y",
+                "thing_ids": ["t1", "t2"],
+                "thing_titles": ["X", "Y"],
+            },
+            {
+                "alert_type": "schedule_overlap",
+                "severity": "warning",
+                "message": "A and B overlap",
+                "thing_ids": ["t3", "t4"],
+                "thing_titles": ["A", "B"],
+            },
+        ]
+        mock_get.return_value = conflicts
+        result = get_conflicts(window=7)
+        assert len(result) == 2
+        assert result[0]["severity"] == "critical"
+        assert result[1]["alert_type"] == "schedule_overlap"

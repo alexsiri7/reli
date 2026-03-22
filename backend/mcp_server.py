@@ -1,7 +1,7 @@
-"""Reli MCP server — CRUD + search tools wrapping the REST API.
+"""Reli MCP server — knowledge graph tools wrapping the REST API.
 
-Exposes Things and Relationships as MCP tools over stdio transport.
-Connects to a running Reli API instance via HTTP.
+Exposes Things, Relationships, briefing, and conflict detection as MCP tools
+over stdio transport.  Connects to a running Reli API instance via HTTP.
 
 Usage:
     RELI_API_URL=http://localhost:8000 RELI_API_TOKEN=<jwt> python -m backend.mcp_server
@@ -95,7 +95,10 @@ mcp = FastMCP(
     instructions=(
         "Reli is a personal knowledge graph. Use these tools to search, create, "
         "read, update, and delete Things (tasks, notes, projects, people, ideas, "
-        "goals) and the typed relationships between them."
+        "goals) and the typed relationships between them. "
+        "Use get_briefing to see what needs attention today (checkin-due items and "
+        "sweep findings). Use get_conflicts to detect blockers, schedule overlaps, "
+        "and deadline conflicts."
     ),
 )
 
@@ -272,6 +275,47 @@ def delete_relationship(relationship_id: str) -> dict[str, Any]:
         relationship_id: The UUID of the relationship to delete.
     """
     result: dict[str, Any] = _api_delete(f"/api/things/relationships/{relationship_id}")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Server-side intelligence tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_briefing(as_of: str | None = None) -> dict[str, Any]:
+    """Get today's daily briefing — checkin-due Things and active sweep findings.
+
+    Returns items that need attention: Things with approaching checkin dates,
+    stale items, open questions, and other sweep findings from Reli's
+    server-side intelligence.
+
+    Args:
+        as_of: Optional ISO 8601 date (YYYY-MM-DD) to get the briefing for.
+               Defaults to today.
+    """
+    params: dict[str, Any] = {}
+    if as_of:
+        params["as_of"] = as_of
+    result: dict[str, Any] = _api_get("/api/briefing", params=params)
+    return result
+
+
+@mcp.tool()
+def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
+    """Detect blockers, schedule overlaps, and deadline conflicts among Things.
+
+    Scans the knowledge graph for real-time conflict alerts:
+    - Blocking chains: Thing A blocks Thing B which has an approaching deadline.
+    - Schedule overlaps: Two related Things with overlapping date ranges.
+    - Deadline conflicts: A dependency's deadline is after the dependent's deadline.
+
+    Args:
+        window: Look-ahead window in days for deadline detection (1-90, default 14).
+    """
+    params: dict[str, Any] = {"window": min(max(window, 1), 90)}
+    result: list[dict[str, Any]] = _api_get("/api/conflicts", params=params)
     return result
 
 
