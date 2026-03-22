@@ -1112,13 +1112,64 @@ and reflective gets coaching warmth.
 """
 
 
-def get_response_system_prompt(interaction_style: str = "auto") -> str:
+def _build_personality_overlay(user_id: str = "") -> str:
+    """Build a personality overlay from learned preference patterns.
+
+    Loads the user's personality preference Thing (type_hint='preference')
+    and formats the patterns as additional system prompt guidance.
+    """
+    if not user_id:
+        return ""
+
+    from .database import db
+
+    with db() as conn:
+        from .auth import user_filter
+
+        uf_sql, uf_params = user_filter(user_id)
+        row = conn.execute(
+            f"""SELECT data FROM things
+               WHERE type_hint = 'preference' AND active = 1{uf_sql}
+               LIMIT 1""",
+            uf_params,
+        ).fetchone()
+
+    if not row or not row["data"]:
+        return ""
+
+    try:
+        data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+    except (json.JSONDecodeError, TypeError):
+        return ""
+
+    patterns = data.get("patterns", [])
+    if not patterns:
+        return ""
+
+    # Only include moderate+ confidence patterns
+    relevant = [p for p in patterns if p.get("confidence") in ("moderate", "strong")]
+    if not relevant:
+        return ""
+
+    lines = ["\n\nLearned User Preferences (adapt your behavior accordingly):"]
+    for p in relevant:
+        confidence = p.get("confidence", "moderate")
+        lines.append(f"- [{confidence}] {p.get('pattern', '')}")
+
+    return "\n".join(lines)
+
+
+def get_response_system_prompt(interaction_style: str = "auto", user_id: str = "") -> str:
     """Return the response agent system prompt with the appropriate style overlay."""
     if interaction_style == "coach":
-        return RESPONSE_AGENT_SYSTEM + _RESPONSE_COACH_OVERLAY
+        base = RESPONSE_AGENT_SYSTEM + _RESPONSE_COACH_OVERLAY
     elif interaction_style == "consultant":
-        return RESPONSE_AGENT_SYSTEM + _RESPONSE_CONSULTANT_OVERLAY
-    return RESPONSE_AGENT_SYSTEM + _RESPONSE_AUTO_OVERLAY
+        base = RESPONSE_AGENT_SYSTEM + _RESPONSE_CONSULTANT_OVERLAY
+    else:
+        base = RESPONSE_AGENT_SYSTEM + _RESPONSE_AUTO_OVERLAY
+
+    personality = _build_personality_overlay(user_id)
+    return base + personality
 
 
 def _build_response_messages(

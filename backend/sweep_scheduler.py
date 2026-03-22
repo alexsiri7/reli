@@ -208,6 +208,25 @@ async def _run_sweep() -> None:
     except Exception:
         logger.exception("Connection sweep failed")
 
+    # Personality pattern aggregation: detect implicit behavioral patterns
+    for user_id in user_ids:
+        try:
+            from .personality_sweep import run_personality_sweep
+
+            personality_result = await run_personality_sweep(user_id)
+            user_label = user_id[:8] if user_id else "legacy"
+            if personality_result.signals_detected > 0:
+                logger.info(
+                    "Personality sweep [%s]: %d patterns detected (thing=%s)",
+                    user_label,
+                    personality_result.signals_detected,
+                    personality_result.thing_id,
+                )
+            else:
+                logger.debug("Personality sweep [%s]: no patterns detected", user_label)
+        except Exception:
+            logger.exception("Personality sweep failed for user %s", user_id)
+
     logger.info("Sweep cycle complete")
 
 
