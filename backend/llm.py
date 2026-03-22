@@ -6,6 +6,7 @@ Requesty (``https://router.requesty.ai/v1``) via LiteLLM's ``openai/`` provider
 prefix, which gives us unified error handling, retry logic, and provider routing.
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from typing import Any
@@ -25,6 +26,14 @@ litellm.suppress_debug_info = True
 
 REQUESTY_BASE_URL: str = settings.REQUESTY_BASE_URL or "https://router.requesty.ai/v1"
 REQUESTY_API_KEY: str = settings.REQUESTY_API_KEY
+
+# ---------------------------------------------------------------------------
+# Retry config for transient 404s (Gemini/Vertex AI via LiteLLM)
+# ---------------------------------------------------------------------------
+
+_RETRY_MAX_ATTEMPTS: int = 4
+_RETRY_BASE_DELAY: float = 0.5  # seconds
+_RETRY_MAX_DELAY: float = 8.0  # seconds
 
 
 def _litellm_model(model: str) -> str:
@@ -56,14 +65,30 @@ async def acomplete(
     Returns a ``litellm.ModelResponse`` (typed as Any to avoid mypy issues with
     LiteLLM's dynamic return types).  Callers can access ``.choices``, ``.usage``,
     and ``.model`` as usual.
+
+    Retries with exponential backoff on transient 404 errors (common with
+    Gemini/Vertex AI models via LiteLLM).
     """
-    return await litellm.acompletion(
-        model=_litellm_model(model),
-        messages=messages,
-        api_key=api_key or REQUESTY_API_KEY,
-        api_base=REQUESTY_BASE_URL,
-        **kwargs,
-    )
+    last_exc: Exception | None = None
+    for attempt in range(_RETRY_MAX_ATTEMPTS):
+        try:
+            return await litellm.acompletion(
+                model=_litellm_model(model),
+                messages=messages,
+                api_key=api_key or REQUESTY_API_KEY,
+                api_base=REQUESTY_BASE_URL,
+                **kwargs,
+            )
+        except litellm.NotFoundError as exc:
+            last_exc = exc
+            if attempt < _RETRY_MAX_ATTEMPTS - 1:
+                delay = min(_RETRY_BASE_DELAY * (2 ** attempt), _RETRY_MAX_DELAY)
+                logger.warning(
+                    "LiteLLM 404 on attempt %d/%d for model %s, retrying in %.1fs",
+                    attempt + 1, _RETRY_MAX_ATTEMPTS, model, delay,
+                )
+                await asyncio.sleep(delay)
+    raise last_exc  # type: ignore[misc]
 
 
 async def acomplete_stream(
@@ -76,15 +101,32 @@ async def acomplete_stream(
     """Streaming LLM completion via Requesty.
 
     Yields ``litellm`` chunk objects (same shape as OpenAI streaming chunks).
+
+    Retries with exponential backoff on transient 404 errors (common with
+    Gemini/Vertex AI models via LiteLLM).
     """
-    response = await litellm.acompletion(
-        model=_litellm_model(model),
-        messages=messages,
-        api_key=api_key or REQUESTY_API_KEY,
-        api_base=REQUESTY_BASE_URL,
-        stream=True,
-        stream_options={"include_usage": True},
-        **kwargs,
-    )
-    async for chunk in response:
-        yield chunk
+    last_exc: Exception | None = None
+    for attempt in range(_RETRY_MAX_ATTEMPTS):
+        try:
+            response = await litellm.acompletion(
+                model=_litellm_model(model),
+                messages=messages,
+                api_key=api_key or REQUESTY_API_KEY,
+                api_base=REQUESTY_BASE_URL,
+                stream=True,
+                stream_options={"include_usage": True},
+                **kwargs,
+            )
+            async for chunk in response:
+                yield chunk
+            return
+        except litellm.NotFoundError as exc:
+            last_exc = exc
+            if attempt < _RETRY_MAX_ATTEMPTS - 1:
+                delay = min(_RETRY_BASE_DELAY * (2 ** attempt), _RETRY_MAX_DELAY)
+                logger.warning(
+                    "LiteLLM 404 on attempt %d/%d for model %s (stream), retrying in %.1fs",
+                    attempt + 1, _RETRY_MAX_ATTEMPTS, model, delay,
+                )
+                await asyncio.sleep(delay)
+    raise last_exc  # type: ignore[misc]
