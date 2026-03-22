@@ -1018,16 +1018,6 @@ def _make_reasoning_tools(
 # Gemini thought_signature helpers (GH #158 / Sentry RELI-ZO-5)
 # ---------------------------------------------------------------------------
 
-# Markers appended by _enrich_history_content for turns that involved tool calls.
-_TOOL_CALL_MARKERS = ("[Created:", "[Updated:", "[Deleted:", "[Merged:")
-
-
-def _has_tool_call_markers(content: str) -> bool:
-    """Return True if the content contains enrichment markers from tool call turns."""
-    if not content:
-        return False
-    return any(marker in content for marker in _TOOL_CALL_MARKERS)
-
 
 def _is_thought_signature_error(exc: Exception) -> bool:
     """Return True if the exception is a Gemini thought_signature validation error."""
@@ -1232,16 +1222,17 @@ async def run_reasoning_agent(
     )
 
     # Build history into the user message for ADK (single-turn with context).
-    # Exclude assistant turns that had tool calls (identifiable by enrichment
-    # markers like [Created:, [Updated:, [Deleted:]) — replaying these through
-    # Gemini thinking models triggers thought_signature validation errors when
-    # the structured function-call metadata is lost.  User turns are always
-    # safe to include.  See GH #158 / Sentry RELI-ZO-5.
+    # Content is pristine (enrichment markers are in a separate metadata field),
+    # so all turns can be included without triggering Gemini thought_signature
+    # validation errors.  See GH #158 / re-jux4.
     history_block = ""
     for h in history[-context_window:]:
-        if h["role"] == "assistant" and _has_tool_call_markers(h["content"]):
-            continue
         history_block += f"<{h['role']}>{h['content']}</{h['role']}>\n"
+        # Append enrichment metadata (context/created/updated Things) as a
+        # separate note so the model knows what happened without polluting content.
+        enrichment = h.get("enrichment_metadata", "")
+        if enrichment:
+            history_block += f"<enrichment>{enrichment}</enrichment>\n"
 
     full_prompt = (
         (f"Conversation history:\n{history_block}\n" if history_block else "")

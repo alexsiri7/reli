@@ -159,23 +159,18 @@ def migrate_session(body: MigrateSessionRequest, user_id: str = Depends(require_
 # ---------------------------------------------------------------------------
 
 
-def _enrich_history_content(row: sqlite3.Row) -> str:
-    """Append Thing metadata summary to assistant messages that have applied_changes.
+def _build_enrichment_summary(raw_applied_changes: Any) -> str:
+    """Build a human-readable enrichment summary from applied_changes JSON.
 
-    This gives the context/reasoning agents visibility into which Things were
-    involved in prior turns, improving pronoun/reference resolution.
+    Returns a short summary string describing which Things were involved
+    (context, created, updated) or an empty string if there's nothing to report.
     """
-    content: str = row["content"] or ""
-    if row["role"] != "assistant":
-        return content
+    if not raw_applied_changes:
+        return ""
 
-    raw = row["applied_changes"]
-    if not raw:
-        return content
-
-    changes = json.loads(raw) if isinstance(raw, str) else raw
+    changes = json.loads(raw_applied_changes) if isinstance(raw_applied_changes, str) else raw_applied_changes
     if not isinstance(changes, dict):
-        return content
+        return ""
 
     parts: list[str] = []
 
@@ -198,9 +193,7 @@ def _enrich_history_content(row: sqlite3.Row) -> str:
             ]
             parts.append(f"[{verb}: {', '.join(labels)}]")
 
-    if parts:
-        return content + "\n" + "\n".join(parts)
-    return content
+    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +228,15 @@ def _fetch_history(session_id: str, context_window: int) -> list[dict[str, Any]]
             " WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
             (session_id, history_limit),
         ).fetchall()
-    return [{"role": r["role"], "content": _enrich_history_content(r)} for r in rows]
+    result = []
+    for r in rows:
+        entry: dict[str, Any] = {"role": r["role"], "content": r["content"] or ""}
+        if r["role"] == "assistant":
+            summary = _build_enrichment_summary(r["applied_changes"])
+            if summary:
+                entry["enrichment_metadata"] = summary
+        result.append(entry)
+    return result
 
 
 def _persist_exchange(
