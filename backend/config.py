@@ -11,8 +11,9 @@ Usage:
 """
 
 from pathlib import Path
+from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -78,6 +79,25 @@ class Settings(BaseSettings):
     # --- GitHub Feedback ---
     GITHUB_FEEDBACK_TOKEN: str = ""
     GITHUB_FEEDBACK_REPO: str = ""  # e.g. "owner/repo"
+
+    # --- Storage backend ---
+    STORAGE_BACKEND: Literal["sqlite", "supabase"] = "sqlite"
+    SUPABASE_URL: str = ""
+    SUPABASE_KEY: str = ""
+
+    @model_validator(mode="after")
+    def _validate_supabase_config(self) -> "Settings":
+        if self.STORAGE_BACKEND == "supabase":
+            missing = []
+            if not self.SUPABASE_URL:
+                missing.append("SUPABASE_URL")
+            if not self.SUPABASE_KEY:
+                missing.append("SUPABASE_KEY")
+            if missing:
+                raise ValueError(
+                    f"STORAGE_BACKEND=supabase requires: {', '.join(missing)}"
+                )
+        return self
 
     # --- Sentry ---
     SENTRY_DSN: str = ""
