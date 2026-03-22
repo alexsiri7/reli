@@ -9,7 +9,13 @@ from fastapi import APIRouter, Depends
 
 from ..auth import require_user, user_filter
 from ..database import db
-from ..sweep import ReflectionResult, collect_candidates, reflect_on_candidates
+from ..sweep import (
+    PatternAggregationResult,
+    ReflectionResult,
+    aggregate_personality_patterns,
+    collect_candidates,
+    reflect_on_candidates,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +31,15 @@ async def run_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
     candidates = collect_candidates(user_id=user_id)
     result: ReflectionResult = await reflect_on_candidates(candidates, user_id=user_id)
 
+    # Phase 3: Aggregate personality patterns from behavioral signals
+    pattern_result: PatternAggregationResult = await aggregate_personality_patterns(user_id=user_id)
+
     return {
         "candidates_found": len(candidates),
         "findings_created": result.findings_created,
         "findings": result.findings,
+        "personality_patterns_updated": pattern_result.patterns_updated,
+        "personality_patterns": pattern_result.patterns,
         "usage": result.usage,
     }
 
