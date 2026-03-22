@@ -336,8 +336,9 @@ def create_summary(
             " VALUES (?, ?, ?, ?)",
             (user_id, summary_text, messages_summarized_up_to, token_count),
         )
-        assert cursor.lastrowid is not None
-        return cursor.lastrowid
+        row_id = cursor.lastrowid
+        assert row_id is not None
+        return row_id
 
 
 def get_messages_since_summary(user_id: str) -> list[dict[str, Any]]:

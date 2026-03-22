@@ -292,7 +292,7 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
         ).fetchall()
     result = []
     for r in rows:
-        entry: dict[str, Any] = {"role": r["role"], "content": r["content"] or ""}
+        entry = {"role": r["role"], "content": r["content"] or ""}
         if r["role"] == "assistant":
             summary = _build_enrichment_summary(r["applied_changes"])
             if summary:
