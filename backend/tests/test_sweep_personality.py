@@ -7,14 +7,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from backend.sweep import (
-    PatternAggregationResult,
-    _fetch_dismissed_findings,
     _fetch_recent_interactions,
     _format_interactions_for_llm,
     _merge_patterns,
     aggregate_personality_patterns,
 )
-
 
 # ---------------------------------------------------------------------------
 # _merge_patterns
@@ -241,11 +238,9 @@ class TestAggregatePersonalityPatterns:
                     ("s1", "user" if i % 2 == 0 else "assistant", f"Msg {i}", ts, "u1"),
                 )
 
-        llm_response = json.dumps({
-            "patterns": [
-                {"pattern": "Prefers concise responses", "confidence": "emerging", "observations": 3}
-            ]
-        })
+        llm_response = json.dumps(
+            {"patterns": [{"pattern": "Prefers concise responses", "confidence": "emerging", "observations": 3}]}
+        )
 
         with patch("backend.sweep._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_personality_patterns("u1")
@@ -274,9 +269,9 @@ class TestAggregatePersonalityPatterns:
                 ("u1", "t@t.com", "g1", "Test"),
             )
             # Create existing preference Thing
-            existing_data = json.dumps({
-                "patterns": [{"pattern": "Be concise", "confidence": "emerging", "observations": 2}]
-            })
+            existing_data = json.dumps(
+                {"patterns": [{"pattern": "Be concise", "confidence": "emerging", "observations": 2}]}
+            )
             conn.execute(
                 "INSERT INTO things (id, title, type_hint, active, data, user_id) VALUES (?, ?, ?, ?, ?, ?)",
                 ("existing-pref", "Personality Preferences", "preference", 1, existing_data, "u1"),
@@ -288,12 +283,14 @@ class TestAggregatePersonalityPatterns:
                     ("s1", "user" if i % 2 == 0 else "assistant", f"Msg {i}", ts, "u1"),
                 )
 
-        llm_response = json.dumps({
-            "patterns": [
-                {"pattern": "be concise", "confidence": "emerging", "observations": 2},
-                {"pattern": "No emoji", "confidence": "emerging", "observations": 1},
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "patterns": [
+                    {"pattern": "be concise", "confidence": "emerging", "observations": 2},
+                    {"pattern": "No emoji", "confidence": "emerging", "observations": 1},
+                ]
+            }
+        )
 
         with patch("backend.sweep._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_personality_patterns("u1")

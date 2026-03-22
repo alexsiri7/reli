@@ -968,7 +968,8 @@ def _fetch_recent_interactions(
         }
         if row["applied_changes"]:
             try:
-                changes = json.loads(row["applied_changes"]) if isinstance(row["applied_changes"], str) else row["applied_changes"]
+                raw_changes = row["applied_changes"]
+                changes = json.loads(raw_changes) if isinstance(raw_changes, str) else raw_changes
                 # Summarize changes compactly
                 summary_parts = []
                 for key in ("created", "updated", "deleted", "merged"):
@@ -1084,11 +1085,13 @@ def _merge_patterns(
             updated += 1
         else:
             # Add new pattern
-            merged.append({
-                "pattern": pattern_text,
-                "confidence": new_p.get("confidence", "emerging"),
-                "observations": new_p.get("observations", 1),
-            })
+            merged.append(
+                {
+                    "pattern": pattern_text,
+                    "confidence": new_p.get("confidence", "emerging"),
+                    "observations": new_p.get("observations", 1),
+                }
+            )
             existing_by_text[key] = len(merged) - 1
             created += 1
 
@@ -1144,10 +1147,7 @@ async def aggregate_personality_patterns(
         new_patterns = []
 
     # Filter to valid patterns only
-    new_patterns = [
-        p for p in new_patterns
-        if isinstance(p, dict) and p.get("pattern", "").strip()
-    ]
+    new_patterns = [p for p in new_patterns if isinstance(p, dict) and p.get("pattern", "").strip()]
 
     if not new_patterns:
         logger.info("Personality aggregation for %s: no patterns detected", user_id[:8])
@@ -1180,14 +1180,18 @@ async def aggregate_personality_patterns(
         else:
             thing_id = f"pref-{uuid.uuid4().hex[:8]}"
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, active, data, user_id, surface) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO things (id, title, type_hint, active, data, user_id, surface)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (thing_id, "Personality Preferences", "preference", 1, pref_data, user_id, 0),
             )
 
     total_new = len(new_patterns)
     logger.info(
         "Personality aggregation for %s: %d patterns found (%d updated, %d created)",
-        user_id[:8], total_new, num_updated, num_created,
+        user_id[:8],
+        total_new,
+        num_updated,
+        num_created,
     )
 
     return PatternAggregationResult(
