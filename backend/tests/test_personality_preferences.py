@@ -1,4 +1,4 @@
-"""Tests for personality preference schema, DB loading, and prompt building."""
+"""Tests for personality preference schema, DB loading, prompt building, and signal detection."""
 
 import json
 
@@ -10,6 +10,7 @@ from backend.agents import (
     load_personality_preferences,
 )
 from backend.models import PersonalityPattern, PersonalityPreferenceData
+from backend.reasoning_agent import _make_reasoning_tools
 
 
 # ---------------------------------------------------------------------------
@@ -214,3 +215,213 @@ class TestGetResponseSystemPromptWithPersonality:
     def test_empty_patterns_no_overlay(self):
         prompt = get_response_system_prompt("auto", personality_patterns=[])
         assert "Learned Personality Preferences" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# Signal detection tool
+# ---------------------------------------------------------------------------
+
+
+def _get_signal_tool(user_id: str, patched_db):
+    """Helper to extract the detect_personality_signal tool from reasoning tools."""
+    from backend.database import db
+
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO users (id, email, google_id, name) VALUES (?, ?, ?, ?)",
+            (user_id, "test@test.com", "g1", "Test User"),
+        )
+
+    tools, applied, fetched = _make_reasoning_tools(user_id)
+    # The detect_personality_signal tool is the last one
+    signal_tool = None
+    for t in tools:
+        if t.__name__ == "detect_personality_signal":
+            signal_tool = t
+            break
+    assert signal_tool is not None, "detect_personality_signal tool not found"
+    return signal_tool, applied
+
+
+class TestDetectPersonalitySignal:
+    def test_explicit_correction_creates_preference(self, patched_db):
+        tool, applied = _get_signal_tool("u1", patched_db)
+        result = tool(
+            signal_type="explicit_correction",
+            pattern="No emoji in messages",
+            reasoning="User said 'don't use emoji'",
+        )
+        assert result["status"] == "created"
+        assert result["signal_type"] == "explicit_correction"
+        assert result["pattern"] == "No emoji in messages"
+        assert result["preference_thing_id"] is not None
+
+        # Verify the preference Thing was created
+        patterns = load_personality_preferences("u1")
+        assert len(patterns) == 1
+        assert patterns[0]["pattern"] == "No emoji in messages"
+        assert patterns[0]["confidence"] == "established"  # boost=3 → established
+        assert patterns[0]["observations"] == 3
+
+    def test_positive_signal_creates_emerging(self, patched_db):
+        tool, applied = _get_signal_tool("u1", patched_db)
+        result = tool(
+            signal_type="positive",
+            pattern="Likes proactive suggestions",
+            reasoning="User followed a suggestion",
+        )
+        assert result["status"] == "created"
+
+        patterns = load_personality_preferences("u1")
+        assert len(patterns) == 1
+        assert patterns[0]["confidence"] == "emerging"  # boost=1
+        assert patterns[0]["observations"] == 1
+
+    def test_repeated_signals_strengthen_confidence(self, patched_db):
+        tool, applied = _get_signal_tool("u1", patched_db)
+
+        # First signal
+        tool(signal_type="positive", pattern="Prefers concise responses")
+
+        # Second signal
+        result = tool(signal_type="positive", pattern="Prefers concise responses")
+        assert result["status"] == "strengthened"
+
+        patterns = load_personality_preferences("u1")
+        assert len(patterns) == 1
+        assert patterns[0]["observations"] == 2
+        assert patterns[0]["confidence"] == "emerging"
+
+        # Third signal → established
+        tool(signal_type="positive", pattern="Prefers concise responses")
+        patterns = load_personality_preferences("u1")
+        assert patterns[0]["observations"] == 3
+        assert patterns[0]["confidence"] == "established"
+
+        # Two more → strong
+        tool(signal_type="positive", pattern="Prefers concise responses")
+        tool(signal_type="positive", pattern="Prefers concise responses")
+        patterns = load_personality_preferences("u1")
+        assert patterns[0]["observations"] == 5
+        assert patterns[0]["confidence"] == "strong"
+
+    def test_negative_signal_weakens(self, patched_db):
+        tool, applied = _get_signal_tool("u1", patched_db)
+
+        # Create a pattern with some observations
+        tool(signal_type="explicit_correction", pattern="Prefers concise responses")
+        patterns = load_personality_preferences("u1")
+        assert patterns[0]["observations"] == 3  # explicit_correction boost=3
+
+        # Negative signal weakens it
+        result = tool(signal_type="negative", pattern="Prefers concise responses")
+        assert result["status"] == "weakened"
+
+        patterns = load_personality_preferences("u1")
+        assert patterns[0]["observations"] == 2  # 3 - 1
+
+    def test_negative_for_unknown_pattern_skips(self, patched_db):
+        tool, applied = _get_signal_tool("u1", patched_db)
+        result = tool(
+            signal_type="negative",
+            pattern="Unknown pattern",
+        )
+        assert result["status"] == "skipped"
+
+    def test_implicit_correction_medium_boost(self, patched_db):
+        tool, applied = _get_signal_tool("u1", patched_db)
+        result = tool(
+            signal_type="implicit_correction",
+            pattern="Prefers shorter Thing titles",
+            reasoning="User shortened 3 titles created by Reli",
+        )
+        assert result["status"] == "created"
+
+        patterns = load_personality_preferences("u1")
+        assert len(patterns) == 1
+        assert patterns[0]["observations"] == 2  # implicit boost=2
+        assert patterns[0]["confidence"] == "emerging"
+
+    def test_invalid_signal_type(self, patched_db):
+        tool, applied = _get_signal_tool("u1", patched_db)
+        result = tool(signal_type="invalid", pattern="test")
+        assert "error" in result
+
+    def test_empty_pattern_rejected(self, patched_db):
+        tool, applied = _get_signal_tool("u1", patched_db)
+        result = tool(signal_type="positive", pattern="  ")
+        assert "error" in result
+
+    def test_multiple_patterns_coexist(self, patched_db):
+        tool, applied = _get_signal_tool("u1", patched_db)
+        tool(signal_type="explicit_correction", pattern="No emoji")
+        tool(signal_type="positive", pattern="Likes bullet points")
+
+        patterns = load_personality_preferences("u1")
+        assert len(patterns) == 2
+        pattern_texts = {p["pattern"] for p in patterns}
+        assert "No emoji" in pattern_texts
+        assert "Likes bullet points" in pattern_texts
+
+    def test_case_insensitive_matching(self, patched_db):
+        tool, applied = _get_signal_tool("u1", patched_db)
+        tool(signal_type="positive", pattern="Be concise")
+        tool(signal_type="positive", pattern="be concise")
+
+        patterns = load_personality_preferences("u1")
+        assert len(patterns) == 1
+        assert patterns[0]["observations"] == 2
+
+    def test_uses_existing_preference_thing(self, patched_db):
+        """When a preference Thing already exists, new signals update it."""
+        from backend.database import db
+
+        # Pre-create a preference Thing
+        pref_data = json.dumps({
+            "patterns": [
+                {"pattern": "Be direct", "confidence": "established", "observations": 4}
+            ]
+        })
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, active, data, user_id)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                ("existing-pref", "My Prefs", "preference", 1, pref_data, "u1"),
+            )
+
+        tool, applied = _get_signal_tool("u1", patched_db)
+        result = tool(signal_type="positive", pattern="Likes examples")
+        assert result["status"] == "created"
+        assert result["preference_thing_id"] == "existing-pref"
+
+        # Both patterns should be in the same Thing
+        patterns = load_personality_preferences("u1")
+        assert len(patterns) == 2
+
+    def test_observations_never_below_one(self, patched_db):
+        tool, applied = _get_signal_tool("u1", patched_db)
+
+        # Create with minimum observations
+        tool(signal_type="positive", pattern="Test pattern")
+        patterns = load_personality_preferences("u1")
+        assert patterns[0]["observations"] == 1
+
+        # Negative can't go below 1
+        tool(signal_type="negative", pattern="Test pattern")
+        patterns = load_personality_preferences("u1")
+        assert patterns[0]["observations"] == 1
+
+
+class TestSignalDetectionInSystemPrompt:
+    def test_normal_mode_includes_signal_instructions(self):
+        from backend.reasoning_agent import get_system_prompt_for_mode
+
+        prompt = get_system_prompt_for_mode("normal")
+        assert "detect_personality_signal" in prompt
+        assert "Personality Signal Detection" in prompt
+
+    def test_planning_mode_includes_signal_tool(self):
+        from backend.reasoning_agent import get_system_prompt_for_mode
+
+        prompt = get_system_prompt_for_mode("planning")
+        assert "detect_personality_signal" in prompt

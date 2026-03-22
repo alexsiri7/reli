@@ -126,6 +126,9 @@ You have tools to query and modify the database. Call them as needed:
 - delete_thing — delete a Thing by ID
 - merge_things — merge a duplicate Thing into a primary Thing
 - create_relationship — create a typed link between two Things
+- detect_personality_signal — record when the user gives feedback (explicit or
+  implicit) about how they want Reli to communicate or behave. This shapes
+  future responses through learned personality preferences.
 
 WORKFLOW:
 1. Check if warm context is provided (Things from recent conversation turns).
@@ -138,7 +141,8 @@ WORKFLOW:
    provided history, call chat_history to retrieve older messages.
 3. Review the available Things (warm context and/or fetched context).
 4. Make storage changes (create/update/delete/merge) as needed.
-5. Output your final response as JSON.
+5. Detect personality signals from the user's message and conversation flow.
+6. Output your final response as JSON.
 
 When creating a Thing and then linking it with a relationship, use the ID
 returned by create_thing in your subsequent create_relationship call.
@@ -271,6 +275,48 @@ entity and link them:
    data_json='{"notes": "User\\'s sister\\'s husband"}')  → returns ID_B
 3. create_relationship(from_thing_id=user_id, to_thing_id=ID_A, relationship_type="sister")
 4. create_relationship(from_thing_id=ID_A, to_thing_id=ID_B, relationship_type="husband")
+
+Personality Signal Detection:
+Detect feedback signals about how the user wants Reli to behave, and call
+detect_personality_signal to record them. This is how Reli learns and adapts.
+
+Signal types to watch for:
+
+1. EXPLICIT CORRECTION — user directly states a preference:
+   - "Don't use emoji" → detect_personality_signal("explicit_correction", "No emoji in messages")
+   - "Be more concise" → detect_personality_signal("explicit_correction", "Prefers concise responses")
+   - "Stop asking so many questions" → detect_personality_signal("explicit_correction", "Fewer clarifying questions")
+   These carry high weight (immediate strong signal).
+
+2. POSITIVE — user approves of the current approach:
+   - User follows a suggestion you made → detect_personality_signal("positive", "Likes proactive suggestions")
+   - User says "thanks", "perfect", "exactly" → strengthen whatever approach you used
+   - User engages deeply with a response style → detect that style as preferred
+   Only record positive signals when the approval clearly relates to HOW you
+   communicated, not just WHAT you did.
+
+3. NEGATIVE — user pushes back on an approach:
+   - "Too much detail" → detect_personality_signal("negative", "Prefers concise responses")
+     (but better: use explicit_correction with the positive form)
+   - User ignores a suggestion entirely → weak negative signal
+   - User rephrases what you said more simply → detect_personality_signal("negative", "Prefers concise responses")
+   For negative signals, prefer calling with explicit_correction using the
+   POSITIVE form of what the user wants instead.
+
+4. IMPLICIT CORRECTION — user consistently modifies your output:
+   - User always shortens Thing titles you create → detect_personality_signal("implicit_correction", "Prefers shorter Thing titles")
+   - User always adds detail you omit → detect_personality_signal("implicit_correction", "Wants more detail in Thing data")
+   Only fire implicit corrections after observing a repeated pattern (at least
+   2 instances in the conversation), not on a single occurrence.
+
+Rules:
+- Always phrase patterns as what the user WANTS, not what they reject.
+  Good: "Prefers concise responses"  Bad: "Doesn't like verbose responses"
+- Don't fire signals for every interaction — only when there's a clear
+  preference signal. Most turns won't trigger any signal detection.
+- Explicit corrections are immediate and high-confidence. Implicit patterns
+  need repeated observation.
+- One signal per detected preference per turn. Don't flood with signals.
 """
 
 REASONING_AGENT_TOOL_SYSTEM = _TOOL_PREAMBLE + _TOOL_RULES
@@ -299,6 +345,8 @@ You have tools to query and modify the database. Call them as needed:
 - delete_thing — delete a Thing by ID
 - merge_things — merge a duplicate Thing into a primary Thing
 - create_relationship — create a typed link between two Things
+- detect_personality_signal — record when the user gives feedback (explicit or
+  implicit) about how they want Reli to communicate or behave.
 
 WORKFLOW:
 1. Check if warm context is provided (Things from recent conversation turns).
@@ -311,7 +359,8 @@ WORKFLOW:
    chat_history to retrieve older messages.
 3. Review the available Things (warm context and/or fetched context).
 4. Make storage changes as needed.
-5. Output your final response as JSON.
+5. Detect personality signals from the user's message and conversation flow.
+6. Output your final response as JSON.
 
 When creating a Thing and then linking it with a relationship, use the ID
 returned by create_thing in your subsequent create_relationship call.
@@ -1051,6 +1100,195 @@ def _make_reasoning_tools(
             applied["relationships_created"].append(rel_info)
             return rel_info
 
+    # ------------------------------------------------------------------
+    def detect_personality_signal(
+        signal_type: str,
+        pattern: str,
+        reasoning: str = "",
+    ) -> dict[str, Any]:
+        """Record a personality/behavior signal detected from the conversation.
+
+        Call this when you detect feedback about how the user wants Reli to
+        behave or communicate. This creates or updates a personality preference
+        Thing that shapes future responses.
+
+        Args:
+            signal_type: One of:
+                - "positive" — user liked the approach (followed suggestion,
+                  said thanks, engaged with the response style)
+                - "negative" — user disliked the approach (said "too much
+                  detail", ignored suggestion, rephrased your output)
+                - "explicit_correction" — user directly stated a preference
+                  ("no emoji", "be more concise", "don't ask so many questions")
+                - "implicit_correction" — user consistently modifies your
+                  output in a pattern (shortens titles, adds details you omit)
+            pattern: The preference pattern text, phrased as what the user
+                wants. Examples: "Prefers concise responses",
+                "No emoji in messages", "Likes proactive suggestions".
+                Always phrase positively (what they want, not what they reject).
+            reasoning: Brief explanation of why you detected this signal.
+                Include the specific user behavior that triggered detection.
+
+        Returns:
+            Dict with the updated preference Thing info and the pattern status.
+        """
+        valid_types = {"positive", "negative", "explicit_correction", "implicit_correction"}
+        if signal_type not in valid_types:
+            return {"error": f"signal_type must be one of {valid_types}, got '{signal_type}'"}
+        pattern = pattern.strip()
+        if not pattern:
+            return {"error": "pattern is required"}
+
+        # Confidence boost per signal type
+        confidence_boost: dict[str, int] = {
+            "positive": 1,
+            "negative": 1,
+            "explicit_correction": 3,
+            "implicit_correction": 2,
+        }
+        boost = confidence_boost[signal_type]
+
+        now = datetime.now(timezone.utc).isoformat()
+
+        with db() as conn:
+            # Find existing preference Thing for this user
+            from .auth import user_filter
+
+            filter_sql, filter_params = user_filter(user_id)
+            query = (
+                "SELECT id, data FROM things"
+                " WHERE type_hint = 'preference' AND active = 1"
+            )
+            if filter_sql:
+                query += f" {filter_sql}"
+            rows = conn.execute(query, filter_params).fetchall()
+
+            pref_thing_id: str | None = None
+            existing_patterns: list[dict[str, Any]] = []
+
+            for row in rows:
+                raw = row["data"]
+                if not raw:
+                    continue
+                try:
+                    data = json.loads(raw) if isinstance(raw, str) else raw
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if isinstance(data, dict) and "patterns" in data:
+                    pref_thing_id = row["id"]
+                    existing_patterns = data["patterns"]
+                    break
+
+            # Find matching pattern (case-insensitive)
+            matched_idx: int | None = None
+            pattern_lower = pattern.lower()
+            for idx, p in enumerate(existing_patterns):
+                if isinstance(p, dict) and p.get("pattern", "").lower() == pattern_lower:
+                    matched_idx = idx
+                    break
+
+            if matched_idx is not None:
+                # Update existing pattern
+                p = existing_patterns[matched_idx]
+                old_obs = p.get("observations", 1)
+
+                if signal_type == "negative":
+                    # Negative signals weaken confidence
+                    new_obs = max(1, old_obs - boost)
+                else:
+                    new_obs = old_obs + boost
+
+                p["observations"] = new_obs
+
+                # Adjust confidence level based on observation count
+                if new_obs >= 5:
+                    p["confidence"] = "strong"
+                elif new_obs >= 3:
+                    p["confidence"] = "established"
+                else:
+                    p["confidence"] = "emerging"
+
+                status = "strengthened" if signal_type != "negative" else "weakened"
+            else:
+                if signal_type == "negative":
+                    # Negative signal for an unknown pattern — record the
+                    # inverse preference (what the user DOES want)
+                    return {
+                        "status": "skipped",
+                        "reason": "Negative signal for untracked pattern. "
+                        "Rephrase as a positive preference and call again.",
+                    }
+
+                # Add new pattern
+                initial_obs = boost
+                if initial_obs >= 5:
+                    confidence = "strong"
+                elif initial_obs >= 3:
+                    confidence = "established"
+                else:
+                    confidence = "emerging"
+
+                existing_patterns.append({
+                    "pattern": pattern,
+                    "confidence": confidence,
+                    "observations": initial_obs,
+                })
+                status = "created"
+
+            new_data = json.dumps({"patterns": existing_patterns})
+
+            if pref_thing_id:
+                # Update existing preference Thing
+                conn.execute(
+                    "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
+                    (new_data, now, pref_thing_id),
+                )
+                updated_row = conn.execute(
+                    "SELECT * FROM things WHERE id = ?", (pref_thing_id,)
+                ).fetchone()
+                if updated_row:
+                    row_dict = dict(updated_row)
+                    applied["updated"].append(row_dict)
+                    upsert_thing(row_dict)
+            else:
+                # Create new preference Thing
+                pref_thing_id = str(uuid.uuid4())
+                conn.execute(
+                    """INSERT INTO things
+                       (id, title, type_hint, parent_id, checkin_date, priority,
+                        active, surface, data, open_questions, created_at,
+                        updated_at, user_id)
+                       VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)""",
+                    (
+                        pref_thing_id,
+                        "Reli Personality Preferences",
+                        "preference",
+                        None,
+                        None,
+                        3,
+                        new_data,
+                        None,
+                        now,
+                        now,
+                        user_id or None,
+                    ),
+                )
+                created_row = conn.execute(
+                    "SELECT * FROM things WHERE id = ?", (pref_thing_id,)
+                ).fetchone()
+                if created_row:
+                    row_dict = dict(created_row)
+                    applied["created"].append(row_dict)
+                    upsert_thing(row_dict)
+
+        return {
+            "status": status,
+            "signal_type": signal_type,
+            "pattern": pattern,
+            "reasoning": reasoning,
+            "preference_thing_id": pref_thing_id,
+        }
+
     # Wrap each tool with OTEL span instrumentation
     traced_tools = [
         _traced_tool(fetch_context),
@@ -1060,6 +1298,7 @@ def _make_reasoning_tools(
         _traced_tool(delete_thing),
         _traced_tool(merge_things),
         _traced_tool(create_relationship),
+        _traced_tool(detect_personality_signal),
     ]
     return traced_tools, applied, fetched_context
 
