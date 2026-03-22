@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { ModelSettings, UserSettings, UserProfileRelationship } from '../store'
+import type { ModelSettings, UserSettings, UserProfileRelationship, RequestyModel } from '../store'
 import { useTheme, setTheme } from '../hooks/useTheme'
 import { ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
 import { RelationshipMiniGraph } from './RelationshipMiniGraph'
@@ -40,7 +40,7 @@ export function SettingsPanel() {
     fetchUserProfile()
   }, [fetchModelSettings, fetchAvailableModels, fetchUserSettings, fetchUserProfile])
 
-  const modelOptions = availableModels.map(m => m.id).sort()
+  const sortedModels = [...availableModels].sort((a, b) => a.id.localeCompare(b.id))
   const isLoading = settingsLoading || modelsLoading
 
   return (
@@ -74,7 +74,7 @@ export function SettingsPanel() {
                 key={`${modelSettings.context}|${modelSettings.reasoning}|${modelSettings.response}|${modelSettings.chat_context_window}|${userSettings?.requesty_api_key}`}
                 initial={modelSettings}
                 initialUserSettings={userSettings}
-                modelOptions={modelOptions}
+                models={sortedModels}
                 onClose={closeSettings}
               />
             ) : (
@@ -102,12 +102,12 @@ export function SettingsPanel() {
 function SettingsForm({
   initial,
   initialUserSettings,
-  modelOptions,
+  models,
   onClose,
 }: {
   initial: ModelSettings
   initialUserSettings: UserSettings | null
-  modelOptions: string[]
+  models: RequestyModel[]
   onClose: () => void
 }) {
   const updateModelSettings = useStore(s => s.updateModelSettings)
@@ -208,21 +208,21 @@ function SettingsForm({
             label="Context Model"
             description="Gathers context from your data"
             value={context}
-            options={modelOptions}
+            models={models}
             onChange={setContext}
           />
           <ModelSelect
             label="Reasoning Model"
             description="Plans actions and makes decisions"
             value={reasoning}
-            options={modelOptions}
+            models={models}
             onChange={setReasoning}
           />
           <ModelSelect
             label="Response Model"
             description="Generates the final reply"
             value={response}
-            options={modelOptions}
+            models={models}
             onChange={setResponse}
           />
         </div>
@@ -702,19 +702,28 @@ function ProactivitySection() {
   )
 }
 
+function formatCost(costPerMillion: number): string {
+  if (costPerMillion < 0.01) return '<$0.01'
+  if (costPerMillion < 1) return `$${costPerMillion.toFixed(2)}`
+  return `$${costPerMillion.toFixed(1)}`
+}
+
 function ModelSelect({
   label,
   description,
   value,
-  options,
+  models,
   onChange,
 }: {
   label: string
   description: string
   value: string
-  options: string[]
+  models: RequestyModel[]
   onChange: (v: string) => void
 }) {
+  const selectedModel = models.find(m => m.id === value)
+  const modelIds = models.map(m => m.id)
+
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -726,15 +735,23 @@ function ModelSelect({
         onChange={e => onChange(e.target.value)}
         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
       >
-        {value && !options.includes(value) && (
+        {value && !modelIds.includes(value) && (
           <option value={value}>{value}</option>
         )}
-        {options.map(id => (
-          <option key={id} value={id}>
-            {id}
+        {models.map(m => (
+          <option key={m.id} value={m.id}>
+            {m.id}
+            {m.input_cost_per_million != null && m.output_cost_per_million != null
+              ? ` (${formatCost(m.input_cost_per_million)} in / ${formatCost(m.output_cost_per_million)} out per 1M tokens)`
+              : ''}
           </option>
         ))}
       </select>
+      {selectedModel?.input_cost_per_million != null && selectedModel?.output_cost_per_million != null && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+          Cost: {formatCost(selectedModel.input_cost_per_million)} input / {formatCost(selectedModel.output_cost_per_million)} output per 1M tokens
+        </p>
+      )}
     </div>
   )
 }
