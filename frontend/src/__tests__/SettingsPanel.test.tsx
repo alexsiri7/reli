@@ -170,6 +170,18 @@ describe('SettingsPanel', () => {
     const firstSelect = selects[0]!
     expect(firstSelect).toHaveValue('custom-model')
   })
+
+  it('displays cost info when model has pricing data', () => {
+    storeState.modelSettings = { context: 'gpt-4', reasoning: 'gpt-4', response: 'gpt-4', chat_context_window: 3 }
+    storeState.availableModels = [
+      { id: 'gpt-4', name: null, input_cost_per_million: 30.0, output_cost_per_million: 60.0 },
+      { id: 'gpt-3.5', name: null, input_cost_per_million: 0.5, output_cost_per_million: 1.5 },
+    ]
+    render(<SettingsPanel />)
+
+    // Cost info should be shown below the selected model
+    expect(screen.getAllByText(/\$30\.0 input/)[0]).toBeInTheDocument()
+  })
 })
 
 // Helper: default model settings so SettingsForm renders (required for profile section)
