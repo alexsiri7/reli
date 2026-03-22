@@ -105,9 +105,15 @@ class TestLogRun:
     def test_creates_run_record(self, patched_db):
         from backend.database import db
 
-        _log_run("sr-test1", "", status="completed", candidates_found=5,
-                 findings_created=2, started_at="2026-01-01T00:00:00Z",
-                 completed_at="2026-01-01T00:01:00Z")
+        _log_run(
+            "sr-test1",
+            "",
+            status="completed",
+            candidates_found=5,
+            findings_created=2,
+            started_at="2026-01-01T00:00:00Z",
+            completed_at="2026-01-01T00:01:00Z",
+        )
 
         with db() as conn:
             row = conn.execute("SELECT * FROM sweep_runs WHERE id = ?", ("sr-test1",)).fetchone()
@@ -120,9 +126,15 @@ class TestLogRun:
         from backend.database import db
 
         _log_run("sr-test2", "", status="running", started_at="2026-01-01T00:00:00Z")
-        _log_run("sr-test2", "", status="completed", candidates_found=3,
-                 findings_created=1, started_at="2026-01-01T00:00:00Z",
-                 completed_at="2026-01-01T00:01:00Z")
+        _log_run(
+            "sr-test2",
+            "",
+            status="completed",
+            candidates_found=3,
+            findings_created=1,
+            started_at="2026-01-01T00:00:00Z",
+            completed_at="2026-01-01T00:01:00Z",
+        )
 
         with db() as conn:
             row = conn.execute("SELECT * FROM sweep_runs WHERE id = ?", ("sr-test2",)).fetchone()

@@ -32,7 +32,9 @@ def is_search_configured() -> bool:
 
 
 async def google_search(
-    query: str, num_results: int = 5, client: httpx.AsyncClient | None = None,
+    query: str,
+    num_results: int = 5,
+    client: httpx.AsyncClient | None = None,
 ) -> list[SearchResult]:
     """Search Google using the Custom Search JSON API.
 

@@ -207,15 +207,23 @@ def _fetch_relevant_things(
 
     logger.info(
         "Retrieval strategy: vector_count=%d, sql_things=%d, threshold=%d, use_vector=%s, active_only=%s, type_hint=%r",
-        vc, sql_thing_count, VECTOR_SEARCH_THRESHOLD, use_vector, active_only, type_hint,
+        vc,
+        sql_thing_count,
+        VECTOR_SEARCH_THRESHOLD,
+        use_vector,
+        active_only,
+        type_hint,
     )
 
     seed_ids: list[str] = []
 
     if use_vector:
         seed_ids = vector_search(
-            queries=search_queries, n_results=20, active_only=active_only,
-            type_hint=type_hint, user_id=user_id,
+            queries=search_queries,
+            n_results=20,
+            active_only=active_only,
+            type_hint=type_hint,
+            user_id=user_id,
         )
         logger.info("Vector search returned %d seed IDs", len(seed_ids))
         if not seed_ids:
@@ -389,12 +397,19 @@ class ChatPipeline:
                     )
                     try:
                         reasoning_result = await run_reasoning_agent(
-                            message, history, [],
-                            None, None, calendar_events,
+                            message,
+                            history,
+                            [],
+                            None,
+                            None,
+                            calendar_events,
                             relationships=None,
-                            usage_stats=usage, context_window=self.context_window,
-                            api_key=self.user_api_key, model=self.user_models.get("reasoning"),
-                            user_id=self.user_id, mode=self.mode,
+                            usage_stats=usage,
+                            context_window=self.context_window,
+                            api_key=self.user_api_key,
+                            model=self.user_models.get("reasoning"),
+                            user_id=self.user_id,
+                            mode=self.mode,
                             interaction_style=self.interaction_style,
                         )
 
@@ -407,10 +422,16 @@ class ChatPipeline:
                         priority_question = reasoning_result.get("priority_question", "")
                         reasoning_summary = reasoning_result.get("reasoning_summary", "")
                         briefing_mode = reasoning_result.get("briefing_mode", False)
-                        applied_changes = reasoning_result.get("applied_changes", {
-                            "created": [], "updated": [], "deleted": [], "merged": [],
-                            "relationships_created": [],
-                        })
+                        applied_changes = reasoning_result.get(
+                            "applied_changes",
+                            {
+                                "created": [],
+                                "updated": [],
+                                "deleted": [],
+                                "merged": [],
+                                "relationships_created": [],
+                            },
+                        )
 
                         n_created = len(applied_changes.get("created", []))
                         n_updated = len(applied_changes.get("updated", []))
@@ -437,11 +458,17 @@ class ChatPipeline:
                     )
                     try:
                         reply = await run_response_agent(
-                            message, reasoning_summary, questions_for_user, applied_changes,
-                            None, usage_stats=usage,
+                            message,
+                            reasoning_summary,
+                            questions_for_user,
+                            applied_changes,
+                            None,
+                            usage_stats=usage,
                             open_questions_by_thing=open_questions_by_thing or None,
-                            api_key=self.user_api_key, model=self.user_models.get("response"),
-                            priority_question=priority_question, briefing_mode=briefing_mode,
+                            api_key=self.user_api_key,
+                            model=self.user_models.get("response"),
+                            priority_question=priority_question,
+                            briefing_mode=briefing_mode,
                             interaction_style=self.interaction_style,
                         )
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
@@ -511,12 +538,19 @@ class ChatPipeline:
                     )
                     try:
                         reasoning_result = await run_reasoning_agent(
-                            message, history, [],
-                            None, None, calendar_events,
+                            message,
+                            history,
+                            [],
+                            None,
+                            None,
+                            calendar_events,
                             relationships=None,
-                            usage_stats=usage, context_window=self.context_window,
-                            api_key=self.user_api_key, model=self.user_models.get("reasoning"),
-                            user_id=self.user_id, mode=self.mode,
+                            usage_stats=usage,
+                            context_window=self.context_window,
+                            api_key=self.user_api_key,
+                            model=self.user_models.get("reasoning"),
+                            user_id=self.user_id,
+                            mode=self.mode,
                             interaction_style=self.interaction_style,
                         )
 
@@ -528,10 +562,16 @@ class ChatPipeline:
                         priority_question = reasoning_result.get("priority_question", "")
                         reasoning_summary = reasoning_result.get("reasoning_summary", "")
                         briefing_mode = reasoning_result.get("briefing_mode", False)
-                        applied_changes = reasoning_result.get("applied_changes", {
-                            "created": [], "updated": [], "deleted": [], "merged": [],
-                            "relationships_created": [],
-                        })
+                        applied_changes = reasoning_result.get(
+                            "applied_changes",
+                            {
+                                "created": [],
+                                "updated": [],
+                                "deleted": [],
+                                "merged": [],
+                                "relationships_created": [],
+                            },
+                        )
 
                         n_created = len(applied_changes.get("created", []))
                         n_updated = len(applied_changes.get("updated", []))
@@ -563,11 +603,17 @@ class ChatPipeline:
                     )
                     try:
                         async for token in run_response_agent_stream(
-                            message, reasoning_summary, questions_for_user, applied_changes,
-                            None, usage_stats=usage,
+                            message,
+                            reasoning_summary,
+                            questions_for_user,
+                            applied_changes,
+                            None,
+                            usage_stats=usage,
                             open_questions_by_thing=open_questions_by_thing or None,
-                            api_key=self.user_api_key, model=self.user_models.get("response"),
-                            priority_question=priority_question, briefing_mode=briefing_mode,
+                            api_key=self.user_api_key,
+                            model=self.user_models.get("response"),
+                            priority_question=priority_question,
+                            briefing_mode=briefing_mode,
                             interaction_style=self.interaction_style,
                         ):
                             reply_parts.append(token)

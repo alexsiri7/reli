@@ -252,8 +252,7 @@ def _persist_exchange(
 
     # Build context_things list
     context_things = [
-        {"id": t["id"], "title": t.get("title", ""), "type_hint": t.get("type_hint")}
-        for t in result.relevant_things
+        {"id": t["id"], "title": t.get("title", ""), "type_hint": t.get("type_hint")} for t in result.relevant_things
     ]
 
     applied_with_sources = applied_changes.copy()
@@ -287,9 +286,16 @@ def _persist_exchange(
             " prompt_tokens, completion_tokens, cost_usd, api_calls, model, user_id)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                session_id, "assistant", reply, changes_json,
-                usage.prompt_tokens, usage.completion_tokens,
-                usage.cost_usd, usage.api_calls, usage.model, user_id or None,
+                session_id,
+                "assistant",
+                reply,
+                changes_json,
+                usage.prompt_tokens,
+                usage.completion_tokens,
+                usage.cost_usd,
+                usage.api_calls,
+                usage.model,
+                user_id or None,
             ),
         )
         assistant_msg_id = cursor.lastrowid
@@ -338,7 +344,12 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     result = await pipeline.run(message, history)
 
     applied_with_sources = _persist_exchange(
-        session_id, user_id, message, result.reply, result, result.usage,
+        session_id,
+        user_id,
+        message,
+        result.reply,
+        result,
+        result.usage,
     )
 
     daily_usage = _compute_daily_usage(user_id)
@@ -394,7 +405,12 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
             reply = result.reply
 
             applied_with_sources = _persist_exchange(
-                session_id, user_id, message, reply, result, result.usage,
+                session_id,
+                user_id,
+                message,
+                reply,
+                result,
+                result.usage,
             )
 
             daily_usage = _compute_daily_usage(user_id)

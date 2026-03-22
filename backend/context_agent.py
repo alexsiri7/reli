@@ -32,9 +32,7 @@ from .agents import (
 logger = logging.getLogger(__name__)
 
 # Pattern to match markdown code fences wrapping JSON:  ```json\n...\n```
-_MARKDOWN_FENCE_RE = re.compile(
-    r"^\s*```(?:json)?\s*\n(.*?)\n\s*```\s*$", re.DOTALL
-)
+_MARKDOWN_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*\n(.*?)\n\s*```\s*$", re.DOTALL)
 
 
 def _strip_markdown_fences(text: str) -> str:
@@ -174,9 +172,8 @@ async def run_context_agent(
         history_block += f"<{h['role']}>{h['content']}</{h['role']}>\n"
 
     user_prompt = (
-        f"Conversation history:\n{history_block}\n"
-        f"Current user message: {message}"
-    ) if history_block else message
+        (f"Conversation history:\n{history_block}\nCurrent user message: {message}") if history_block else message
+    )
 
     raw = None
 

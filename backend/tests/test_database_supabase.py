@@ -125,9 +125,7 @@ class TestCleanOrphanRelationships:
         things_query.execute.return_value = MagicMock(data=[{"id": "t1"}])
 
         rels_query.select.return_value = rels_query
-        rels_query.execute.return_value = MagicMock(
-            data=[{"id": "r1", "from_thing_id": "t1", "to_thing_id": "t1"}]
-        )
+        rels_query.execute.return_value = MagicMock(data=[{"id": "r1", "from_thing_id": "t1", "to_thing_id": "t1"}])
 
         count, ids = clean_orphan_relationships_supabase()
         assert count == 0

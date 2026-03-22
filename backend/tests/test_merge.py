@@ -28,8 +28,7 @@ def _insert_relationship(conn, from_id, to_id, rel_type="related-to"):
     """Insert a relationship and return its id."""
     rel_id = str(uuid.uuid4())
     conn.execute(
-        "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type)"
-        " VALUES (?, ?, ?, ?)",
+        "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) VALUES (?, ?, ?, ?)",
         (rel_id, from_id, to_id, rel_type),
     )
     return rel_id
@@ -97,9 +96,7 @@ class TestMergeThings:
 
         with db() as conn:
             # Both relationships should now point to/from keep_id
-            rels = conn.execute(
-                "SELECT * FROM thing_relationships ORDER BY relationship_type"
-            ).fetchall()
+            rels = conn.execute("SELECT * FROM thing_relationships ORDER BY relationship_type").fetchall()
             assert len(rels) == 2
             for rel in rels:
                 assert rel["from_thing_id"] != remove_id
@@ -136,9 +133,7 @@ class TestMergeThings:
         from backend.agents import apply_storage_changes
 
         with db() as conn:
-            keep_id = _insert_thing(
-                conn, "Bob", open_questions=["What's his birthday?", "Where does he work?"]
-            )
+            keep_id = _insert_thing(conn, "Bob", open_questions=["What's his birthday?", "Where does he work?"])
             remove_id = _insert_thing(
                 conn, "My cousin", open_questions=["Where does he work?", "What's his phone number?"]
             )

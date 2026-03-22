@@ -476,10 +476,7 @@ def find_cross_project_shared_blockers(conn: sqlite3.Connection) -> list[SweepCa
                 thing_id=row["blocker_id"],
                 thing_title=row["blocker_title"],
                 finding_type="cross_project_shared_blocker",
-                message=(
-                    f"Blocks tasks in {row['project_count']} projects ({projects}): "
-                    f"{row['blocker_title']}"
-                ),
+                message=(f"Blocks tasks in {row['project_count']} projects ({projects}): {row['blocker_title']}"),
                 priority=1,
                 extra={
                     "project_count": row["project_count"],
@@ -574,19 +571,12 @@ def find_cross_project_thematic_connections(
         return []
 
     # Build a list of (id, title, parent_id, project_title) for comparison
-    items = [
-        (row["id"], row["title"], row["parent_id"], row["project_title"])
-        for row in rows
-    ]
+    items = [(row["id"], row["title"], row["parent_id"], row["project_title"]) for row in rows]
 
     # Extract significant words (3+ chars, lowercased) from each title
     def _significant_words(title: str) -> set[str]:
         stop_words = {"the", "and", "for", "with", "from", "this", "that", "are", "was", "has"}
-        return {
-            w.lower()
-            for w in re.findall(r"\b\w+\b", title)
-            if len(w) >= 3 and w.lower() not in stop_words
-        }
+        return {w.lower() for w in re.findall(r"\b\w+\b", title) if len(w) >= 3 and w.lower() not in stop_words}
 
     # Compare pairs across different projects
     seen_pairs: set[tuple[str, str]] = set()
@@ -614,8 +604,8 @@ def find_cross_project_thematic_connections(
                         thing_title=title_a,
                         finding_type="cross_project_thematic_connection",
                         message=(
-                            f"Thematic overlap between \"{title_a}\" ({proj_title_a}) "
-                            f"and \"{title_b}\" ({proj_title_b}) — "
+                            f'Thematic overlap between "{title_a}" ({proj_title_a}) '
+                            f'and "{title_b}" ({proj_title_b}) — '
                             f"shared terms: {', '.join(sorted(shared))}"
                         ),
                         priority=3,
@@ -671,7 +661,7 @@ def find_cross_project_duplicate_effort(
                 thing_title=row["title_a"],
                 finding_type="cross_project_duplicate_effort",
                 message=(
-                    f"Possible duplicate: \"{row['title_a']}\" exists in both "
+                    f'Possible duplicate: "{row["title_a"]}" exists in both '
                     f"{row['proj_title_a']} and {row['proj_title_b']}"
                 ),
                 priority=2,

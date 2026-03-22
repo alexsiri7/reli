@@ -25,8 +25,15 @@ logger = logging.getLogger(__name__)
 
 _DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 _ONESHOT_KEYS = {
-    "deadline", "due_date", "due", "event_date",
-    "starts_at", "start_date", "ends_at", "end_date", "date",
+    "deadline",
+    "due_date",
+    "due",
+    "event_date",
+    "starts_at",
+    "start_date",
+    "ends_at",
+    "end_date",
+    "date",
 }
 
 
@@ -202,11 +209,14 @@ def generate_morning_briefing(
                 score += 150
                 reasons.append(f"Overdue by {abs(days_until)}d")
                 if prefs.include_overdue:
-                    overdue.append(MorningBriefingItem(
-                        thing_id=tid, title=title,
-                        days_overdue=abs(days_until),
-                        reasons=[f"Deadline overdue by {abs(days_until)}d"],
-                    ))
+                    overdue.append(
+                        MorningBriefingItem(
+                            thing_id=tid,
+                            title=title,
+                            days_overdue=abs(days_until),
+                            reasons=[f"Deadline overdue by {abs(days_until)}d"],
+                        )
+                    )
             elif days_until == 0:
                 score += 130
                 reasons.append("Due today")
@@ -230,11 +240,14 @@ def generate_morning_briefing(
                     score += 90
                     reasons.append(f"Check-in overdue by {abs(days_until_checkin)}d")
                     if prefs.include_overdue and not any(o.thing_id == tid for o in overdue):
-                        overdue.append(MorningBriefingItem(
-                            thing_id=tid, title=title,
-                            days_overdue=abs(days_until_checkin),
-                            reasons=[f"Check-in overdue by {abs(days_until_checkin)}d"],
-                        ))
+                        overdue.append(
+                            MorningBriefingItem(
+                                thing_id=tid,
+                                title=title,
+                                days_overdue=abs(days_until_checkin),
+                                reasons=[f"Check-in overdue by {abs(days_until_checkin)}d"],
+                            )
+                        )
                 elif days_until_checkin == 0:
                     score += 90
                     reasons.append("Check-in due today")
@@ -249,17 +262,16 @@ def generate_morning_briefing(
         is_blocked = tid in blocked_by
         if is_blocked:
             score -= 80
-            blocker_titles = [
-                thing_map[bid]["title"]
-                for bid in blocked_by[tid]
-                if bid in thing_map
-            ]
+            blocker_titles = [thing_map[bid]["title"] for bid in blocked_by[tid] if bid in thing_map]
             if prefs.include_blockers:
-                blockers.append(MorningBriefingItem(
-                    thing_id=tid, title=title,
-                    blocked_by=blocker_titles[:3],
-                    reasons=["Blocked by dependencies"],
-                ))
+                blockers.append(
+                    MorningBriefingItem(
+                        thing_id=tid,
+                        title=title,
+                        blocked_by=blocker_titles[:3],
+                        reasons=["Blocked by dependencies"],
+                    )
+                )
 
         # Staleness
         updated_at = t.get("updated_at")
@@ -286,22 +298,28 @@ def generate_morning_briefing(
     # Sort by score descending and take top N priorities
     scored.sort(key=lambda x: -x[0])
     if prefs.include_priorities:
-        for score_val, tid, title, reasons in scored[:prefs.max_priorities]:
-            priorities.append(MorningBriefingItem(
-                thing_id=tid, title=title,
-                score=round(score_val, 1), reasons=reasons,
-            ))
+        for score_val, tid, title, reasons in scored[: prefs.max_priorities]:
+            priorities.append(
+                MorningBriefingItem(
+                    thing_id=tid,
+                    title=title,
+                    score=round(score_val, 1),
+                    reasons=reasons,
+                )
+            )
 
     # Collect findings
     if prefs.include_findings:
-        for r in finding_rows[:prefs.max_findings]:
-            findings_list.append(MorningBriefingFinding(
-                id=r["id"],
-                message=r["message"],
-                priority=r["priority"],
-                thing_id=r["thing_id"],
-                thing_title=r["thing_title"],
-            ))
+        for r in finding_rows[: prefs.max_findings]:
+            findings_list.append(
+                MorningBriefingFinding(
+                    id=r["id"],
+                    message=r["message"],
+                    priority=r["priority"],
+                    thing_id=r["thing_id"],
+                    thing_title=r["thing_title"],
+                )
+            )
 
     # Build summary
     parts = []
@@ -354,7 +372,9 @@ def store_morning_briefing(user_id: str, content: MorningBriefingContent, briefi
             (briefing_id, user_id or None, today.isoformat(), content.model_dump_json(), now),
         )
 
-    logger.info("Morning briefing stored: %s for user %s on %s", briefing_id, user_id[:8] if user_id else "legacy", today)
+    logger.info(
+        "Morning briefing stored: %s for user %s on %s", briefing_id, user_id[:8] if user_id else "legacy", today
+    )
     return briefing_id
 
 

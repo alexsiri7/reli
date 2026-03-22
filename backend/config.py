@@ -94,9 +94,7 @@ class Settings(BaseSettings):
             if not self.SUPABASE_KEY:
                 missing.append("SUPABASE_KEY")
             if missing:
-                raise ValueError(
-                    f"STORAGE_BACKEND=supabase requires: {', '.join(missing)}"
-                )
+                raise ValueError(f"STORAGE_BACKEND=supabase requires: {', '.join(missing)}")
         return self
 
     # --- Sentry ---
