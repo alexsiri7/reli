@@ -31,7 +31,9 @@ def is_search_configured() -> bool:
     return bool(GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_CX)
 
 
-async def google_search(query: str, num_results: int = 5) -> list[SearchResult]:
+async def google_search(
+    query: str, num_results: int = 5, client: httpx.AsyncClient | None = None,
+) -> list[SearchResult]:
     """Search Google using the Custom Search JSON API.
 
     Returns up to `num_results` results. Returns empty list on failure or
@@ -49,8 +51,13 @@ async def google_search(query: str, num_results: int = 5) -> list[SearchResult]:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(GOOGLE_SEARCH_URL, params=params)
+        if client is None:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(GOOGLE_SEARCH_URL, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+        else:
+            resp = await client.get(GOOGLE_SEARCH_URL, params=params, timeout=10.0)
             resp.raise_for_status()
             data = resp.json()
     except httpx.HTTPStatusError as e:
