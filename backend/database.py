@@ -336,7 +336,10 @@ def create_summary(
             " VALUES (?, ?, ?, ?)",
             (user_id, summary_text, messages_summarized_up_to, token_count),
         )
-        return cursor.lastrowid  # type: ignore[return-value]
+        row_id: int | None = cursor.lastrowid
+        if row_id is None:
+            raise RuntimeError("INSERT into conversation_summaries failed to return lastrowid")
+        return row_id
 
 
 def get_messages_since_summary(user_id: str) -> list[dict[str, Any]]:
