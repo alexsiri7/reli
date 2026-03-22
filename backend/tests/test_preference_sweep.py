@@ -220,7 +220,7 @@ class TestAggregatePreferencePatterns:
             }
         )
 
-        with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value=llm_response):
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_preference_patterns()
 
         assert result.preferences_created == 1
@@ -268,7 +268,7 @@ class TestAggregatePreferencePatterns:
             }
         )
 
-        with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value=llm_response):
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_preference_patterns()
 
         assert result.preferences_created == 0
@@ -293,7 +293,7 @@ class TestAggregatePreferencePatterns:
             for i in range(MIN_INTERACTIONS + 2):
                 _insert_chat_message(conn, "user", f"Message {i}")
 
-        with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value="not json"):
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value="not json"):
             result = await aggregate_preference_patterns()
 
         assert result.preferences_created == 0
@@ -308,7 +308,7 @@ class TestAggregatePreferencePatterns:
 
         llm_response = json.dumps({"preferences": []})
 
-        with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value=llm_response):
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_preference_patterns()
 
         assert result.preferences_created == 0
@@ -334,7 +334,7 @@ class TestAggregatePreferencePatterns:
             }
         )
 
-        with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value=llm_response):
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_preference_patterns()
 
         assert result.preferences_created == 1
@@ -364,7 +364,7 @@ class TestAggregatePreferencePatterns:
             }
         )
 
-        with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value=llm_response):
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_preference_patterns()
 
         assert result.preferences_created == 1
@@ -399,7 +399,7 @@ class TestAggregatePreferencePatterns:
             }
         )
 
-        with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value=llm_response):
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             await aggregate_preference_patterns()
 
         with db() as conn:
