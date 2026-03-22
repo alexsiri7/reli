@@ -27,6 +27,7 @@ from .agents import (
     REQUESTY_MODEL,
     UsageStats,
     _chat_ollama,
+    _with_current_date,
 )
 
 logger = logging.getLogger(__name__)
@@ -180,7 +181,7 @@ async def run_context_agent(
     # Try Ollama first if configured (unchanged — Ollama doesn't use ADK)
     if OLLAMA_MODEL:
         try:
-            messages = [{"role": "system", "content": CONTEXT_AGENT_SYSTEM}]
+            messages = [{"role": "system", "content": _with_current_date(CONTEXT_AGENT_SYSTEM)}]
             for h in history[-context_window:]:
                 messages.append({"role": h["role"], "content": h["content"]})
             messages.append({"role": "user", "content": message})
@@ -208,7 +209,7 @@ async def run_context_agent(
             name="context_agent",
             description="Generates search parameters to find relevant Things in the database.",
             model=litellm_model,
-            instruction=CONTEXT_AGENT_SYSTEM,
+            instruction=_with_current_date(CONTEXT_AGENT_SYSTEM),
             generate_content_config=genai_types.GenerateContentConfig(
                 response_mime_type="application/json",
             ),
@@ -295,7 +296,7 @@ async def run_context_refinement(
     # Try Ollama first if configured
     if OLLAMA_MODEL:
         try:
-            messages = [{"role": "system", "content": CONTEXT_REFINEMENT_SYSTEM}]
+            messages = [{"role": "system", "content": _with_current_date(CONTEXT_REFINEMENT_SYSTEM)}]
             for h in history[-context_window:]:
                 messages.append({"role": h["role"], "content": h["content"]})
             messages.append({"role": "user", "content": refinement_prompt})
@@ -315,7 +316,7 @@ async def run_context_refinement(
             name="context_refinement_agent",
             description="Decides if more context searches are needed.",
             model=litellm_model,
-            instruction=CONTEXT_REFINEMENT_SYSTEM,
+            instruction=_with_current_date(CONTEXT_REFINEMENT_SYSTEM),
             generate_content_config=genai_types.GenerateContentConfig(
                 response_mime_type="application/json",
             ),
