@@ -130,6 +130,21 @@ async def _run_sweep_for_user(user_id: str) -> None:
                 started_at=now,
                 completed_at=datetime.now(timezone.utc).isoformat(),
             )
+            # Run preference aggregation even when no candidates
+            try:
+                from .preference_sweep import aggregate_preference_patterns
+
+                pref_result = await aggregate_preference_patterns(user_id=user_id)
+                if pref_result.preferences_created or pref_result.preferences_updated:
+                    logger.info(
+                        "Preference sweep [%s]: %d created, %d updated",
+                        user_label,
+                        pref_result.preferences_created,
+                        pref_result.preferences_updated,
+                    )
+            except Exception:
+                logger.exception("Preference sweep failed for user %s", user_label)
+
             # Still generate morning briefing (captures priorities, overdue, blockers)
             try:
                 from .morning_briefing import generate_morning_briefing, store_morning_briefing
@@ -142,6 +157,22 @@ async def _run_sweep_for_user(user_id: str) -> None:
             return
 
         result = await reflect_on_candidates(candidates, user_id=user_id)
+
+        # Preference aggregation: detect behavioral patterns from interactions
+        try:
+            from .preference_sweep import aggregate_preference_patterns
+
+            pref_result = await aggregate_preference_patterns(user_id=user_id)
+            if pref_result.preferences_created or pref_result.preferences_updated:
+                logger.info(
+                    "Preference sweep [%s]: %d created, %d updated",
+                    user_label,
+                    pref_result.preferences_created,
+                    pref_result.preferences_updated,
+                )
+        except Exception:
+            logger.exception("Preference sweep failed for user %s", user_label)
+
         _log_run(
             run_id,
             user_id,
