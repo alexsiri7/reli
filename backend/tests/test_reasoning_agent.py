@@ -62,9 +62,9 @@ class TestMakeReasoningTools:
             tools, applied, _fetched = _make_reasoning_tools(user_id)
             return tools, applied, mock_db
 
-    def test_returns_seven_tools(self):
+    def test_returns_eight_tools(self):
         tools, applied, _ = self._get_tools()
-        assert len(tools) == 7
+        assert len(tools) == 8
         names = [t.__name__ for t in tools]
         assert "fetch_context" in names
         assert "chat_history" in names
@@ -73,6 +73,7 @@ class TestMakeReasoningTools:
         assert "delete_thing" in names
         assert "merge_things" in names
         assert "create_relationship" in names
+        assert "detect_personality_signal" in names
 
     def test_applied_starts_empty(self):
         _, applied, _ = self._get_tools()
@@ -116,10 +117,13 @@ class TestChatHistoryTool:
         # Rows come back in DESC order, reversed by the tool
         mock_conn.execute.return_value.fetchall.return_value = list(reversed(mock_rows))
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, _, _fetched = _make_reasoning_tools("test-user", session_id="test-session")
             history_fn = tools[1]
             result = history_fn(n=10)
@@ -139,10 +143,13 @@ class TestChatHistoryTool:
             {"role": "user", "content": "budget meeting", "timestamp": "2026-03-22T00:00:00"},
         ]
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, _, _fetched = _make_reasoning_tools("test-user", session_id="test-session")
             history_fn = tools[1]
             result = history_fn(n=5, search_query="budget")
@@ -160,10 +167,13 @@ class TestChatHistoryTool:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
         mock_conn.execute.return_value.fetchall.return_value = []
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, _, _fetched = _make_reasoning_tools("test-user", session_id="s")
             history_fn = tools[1]
 
@@ -1095,3 +1105,245 @@ class TestHistoryEnrichmentInReasoningAgent:
         full_prompt = call_args.args[1]
         # Both user and assistant turns should be present
         assert "Hi there, how can I help?" in full_prompt
+
+
+# ---------------------------------------------------------------------------
+# detect_personality_signal tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestDetectPersonalitySignalTool:
+    """Tests for the detect_personality_signal tool."""
+
+    def _make_mock_db(self):
+        mock_conn = MagicMock()
+        mock_db_ctx = MagicMock()
+        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
+        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+        return mock_conn, mock_db_ctx
+
+    def test_invalid_signal_type_returns_error(self):
+        from backend.reasoning_agent import _make_reasoning_tools
+
+        tools, _, _fetched = _make_reasoning_tools("test-user")
+        signal_fn = tools[7]  # detect_personality_signal
+        result = signal_fn(signal_type="invalid", pattern="test")
+        assert "error" in result
+
+    def test_empty_pattern_returns_error(self):
+        from backend.reasoning_agent import _make_reasoning_tools
+
+        tools, _, _fetched = _make_reasoning_tools("test-user")
+        signal_fn = tools[7]
+        result = signal_fn(signal_type="positive", pattern="   ")
+        assert "error" in result
+
+    def test_creates_new_preference_thing(self):
+        mock_conn, mock_db_ctx = self._make_mock_db()
+
+        # No existing preference Thing
+        mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, None])
+
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
+            from backend.reasoning_agent import _make_reasoning_tools
+
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            signal_fn = tools[7]
+
+            # First fetchone for existing pref Thing (None = not found)
+            # Second fetchone for the newly inserted row
+            new_row = {
+                "id": "new-pref-uuid",
+                "title": "Reli Communication Preferences",
+                "type_hint": "preference",
+                "data": '{"patterns": []}',
+                "active": 1,
+                "surface": 0,
+            }
+            mock_new = MagicMock()
+            mock_new.__getitem__ = lambda self, key: new_row[key]
+            mock_new.keys = lambda: new_row.keys()
+
+            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, mock_new])
+
+            result = signal_fn(
+                signal_type="explicit_correction",
+                pattern="No emoji",
+                approach_used="Used emoji in task title",
+            )
+
+            assert result["action"] == "created"
+            assert result["pattern"] == "No emoji"
+            assert result["signal_type"] == "explicit_correction"
+            assert result["total_patterns"] == 1
+
+    def test_strengthens_existing_pattern(self):
+        mock_conn, mock_db_ctx = self._make_mock_db()
+
+        existing_data = {
+            "patterns": [
+                {
+                    "pattern": "No emoji",
+                    "signal_type": "explicit_correction",
+                    "confidence": "strong",
+                    "observations": 2,
+                    "last_observed": "2026-03-20T00:00:00Z",
+                    "last_approach": "Used emoji",
+                }
+            ]
+        }
+        existing_row = {
+            "id": "pref-uuid",
+            "title": "Reli Communication Preferences",
+            "type_hint": "preference",
+            "data": json.dumps(existing_data),
+            "active": 1,
+            "surface": 0,
+        }
+        mock_existing = MagicMock()
+        mock_existing.__getitem__ = lambda self, key: existing_row[key]
+        mock_existing.keys = lambda: existing_row.keys()
+
+        updated_row = dict(existing_row)
+        mock_updated = MagicMock()
+        mock_updated.__getitem__ = lambda self, key: updated_row[key]
+        mock_updated.keys = lambda: updated_row.keys()
+
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
+            from backend.reasoning_agent import _make_reasoning_tools
+
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            signal_fn = tools[7]
+
+            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[mock_existing, mock_updated])
+
+            result = signal_fn(
+                signal_type="explicit_correction",
+                pattern="No emoji",
+                approach_used="Used emoji again",
+            )
+
+            assert result["action"] == "strengthened"
+            assert result["id"] == "pref-uuid"
+
+    def test_adds_new_pattern_to_existing_thing(self):
+        mock_conn, mock_db_ctx = self._make_mock_db()
+
+        existing_data = {
+            "patterns": [
+                {
+                    "pattern": "No emoji",
+                    "signal_type": "explicit_correction",
+                    "confidence": "strong",
+                    "observations": 3,
+                    "last_observed": "2026-03-20T00:00:00Z",
+                    "last_approach": "",
+                }
+            ]
+        }
+        existing_row = {
+            "id": "pref-uuid",
+            "title": "Reli Communication Preferences",
+            "type_hint": "preference",
+            "data": json.dumps(existing_data),
+            "active": 1,
+            "surface": 0,
+        }
+        mock_existing = MagicMock()
+        mock_existing.__getitem__ = lambda self, key: existing_row[key]
+        mock_existing.keys = lambda: existing_row.keys()
+
+        updated_row = dict(existing_row)
+        mock_updated = MagicMock()
+        mock_updated.__getitem__ = lambda self, key: updated_row[key]
+        mock_updated.keys = lambda: updated_row.keys()
+
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
+            from backend.reasoning_agent import _make_reasoning_tools
+
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            signal_fn = tools[7]
+
+            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[mock_existing, mock_updated])
+
+            result = signal_fn(
+                signal_type="positive",
+                pattern="Likes bullet points",
+                approach_used="Used bullet point format",
+            )
+
+            assert result["action"] == "added"
+            assert result["total_patterns"] == 2
+
+    def test_explicit_correction_always_strong_confidence(self):
+        mock_conn, mock_db_ctx = self._make_mock_db()
+
+        # Existing pattern with moderate confidence and 1 observation
+        existing_data = {
+            "patterns": [
+                {
+                    "pattern": "Be concise",
+                    "signal_type": "negative",
+                    "confidence": "moderate",
+                    "observations": 1,
+                    "last_observed": "2026-03-20T00:00:00Z",
+                    "last_approach": "",
+                }
+            ]
+        }
+        existing_row = {
+            "id": "pref-uuid",
+            "title": "Reli Communication Preferences",
+            "type_hint": "preference",
+            "data": json.dumps(existing_data),
+            "active": 1,
+            "surface": 0,
+        }
+        mock_existing = MagicMock()
+        mock_existing.__getitem__ = lambda self, key: existing_row[key]
+        mock_existing.keys = lambda: existing_row.keys()
+
+        updated_row = dict(existing_row)
+        mock_updated = MagicMock()
+        mock_updated.__getitem__ = lambda self, key: updated_row[key]
+        mock_updated.keys = lambda: updated_row.keys()
+
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
+            from backend.reasoning_agent import _make_reasoning_tools
+
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            signal_fn = tools[7]
+
+            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[mock_existing, mock_updated])
+
+            # Same pattern but as explicit_correction should upgrade to strong
+            result = signal_fn(
+                signal_type="explicit_correction",
+                pattern="Be concise",
+            )
+
+            assert result["action"] == "strengthened"
+            # Verify the UPDATE call included strong confidence in the data
+            update_call = mock_conn.execute.call_args_list[-2]  # UPDATE call
+            if update_call and len(update_call[0]) > 1:
+                args = update_call[0][1]
+                # The first arg should be the JSON data string
+                if isinstance(args[0], str):
+                    updated_data = json.loads(args[0])
+                    assert updated_data["patterns"][0]["confidence"] == "strong"
