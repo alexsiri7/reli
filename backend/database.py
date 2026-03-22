@@ -293,6 +293,92 @@ def _migrate_merge_history(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_merge_history_user ON merge_history(user_id)")
 
 
+def _migrate_conversation_summaries(conn: sqlite3.Connection) -> None:
+    """Create conversation_summaries table for compressed conversation history."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS conversation_summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            summary_text TEXT NOT NULL,
+            messages_summarized_up_to INTEGER NOT NULL,
+            token_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_summaries_user ON conversation_summaries(user_id)")
+
+
+def get_latest_summary(user_id: str) -> dict[str, Any] | None:
+    """Get the most recent conversation summary for a user.
+
+    Returns a dict with id, summary_text, messages_summarized_up_to, token_count,
+    created_at, or None if no summary exists.
+    """
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM conversation_summaries WHERE user_id = ? ORDER BY messages_summarized_up_to DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def create_summary(
+    user_id: str,
+    summary_text: str,
+    messages_summarized_up_to: int,
+    token_count: int = 0,
+) -> int:
+    """Create a new conversation summary. Returns the new row ID."""
+    with db() as conn:
+        cursor = conn.execute(
+            "INSERT INTO conversation_summaries"
+            " (user_id, summary_text, messages_summarized_up_to, token_count)"
+            " VALUES (?, ?, ?, ?)",
+            (user_id, summary_text, messages_summarized_up_to, token_count),
+        )
+        return cursor.lastrowid  # type: ignore[return-value]
+
+
+def get_messages_since_summary(user_id: str) -> list[dict[str, Any]]:
+    """Get chat messages for a user since their last summary.
+
+    Returns messages ordered chronologically. If no summary exists,
+    returns all messages for the user.
+    """
+    latest = get_latest_summary(user_id)
+    with db() as conn:
+        if latest:
+            rows = conn.execute(
+                "SELECT id, session_id, role, content, timestamp FROM chat_history"
+                " WHERE user_id = ? AND id > ?"
+                " ORDER BY id ASC",
+                (user_id, latest["messages_summarized_up_to"]),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, session_id, role, content, timestamp FROM chat_history WHERE user_id = ? ORDER BY id ASC",
+                (user_id,),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_message_count_since_summary(user_id: str) -> int:
+    """Count messages since the last summary for a user."""
+    latest = get_latest_summary(user_id)
+    with db() as conn:
+        if latest:
+            row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM chat_history WHERE user_id = ? AND id > ?",
+                (user_id, latest["messages_summarized_up_to"]),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM chat_history WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+    return row["cnt"] if row else 0
+
+
 def _migrate_connection_suggestions(conn: sqlite3.Connection) -> None:
     """Create connection_suggestions table for auto-connect feature."""
     conn.execute("""
@@ -485,4 +571,5 @@ def init_db() -> None:
         _migrate_sweep_runs(conn)
         _migrate_connection_suggestions(conn)
         _migrate_morning_briefings(conn)
+        _migrate_conversation_summaries(conn)
         _seed_thing_types(conn)
