@@ -269,7 +269,14 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
                     " ORDER BY timestamp ASC LIMIT ?",
                     (session_id, latest_summary["messages_summarized_up_to"], history_limit),
                 ).fetchall()
-            messages = [{"role": r["role"], "content": _enrich_history_content(r)} for r in rows]
+            messages = []
+            for r in rows:
+                entry: dict[str, Any] = {"role": r["role"], "content": r["content"] or ""}
+                if r["role"] == "assistant":
+                    s = _build_enrichment_summary(r["applied_changes"])
+                    if s:
+                        entry["enrichment_metadata"] = s
+                messages.append(entry)
             # Prepend summary as context
             return [
                 {"role": "system", "content": f"[Conversation summary]\n{latest_summary['summary_text']}"},
