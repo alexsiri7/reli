@@ -51,6 +51,7 @@ from .routers import (  # noqa: E402
     sweep,
     thing_types,
     things,
+    think,
 )
 from .sentry import set_sentry_user  # noqa: E402
 from .sweep_scheduler import start_scheduler, stop_scheduler  # noqa: E402
@@ -227,6 +228,7 @@ app.include_router(focus.router, prefix="/api", dependencies=_api_deps)
 app.include_router(staleness.router, prefix="/api", dependencies=_api_deps)
 app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
 app.include_router(connections.router, prefix="/api", dependencies=_api_deps)
+app.include_router(think.router, prefix="/api", dependencies=_api_deps)
 
 
 @app.get("/healthz", tags=["health"], summary="Health check", description="Returns service health status.")
