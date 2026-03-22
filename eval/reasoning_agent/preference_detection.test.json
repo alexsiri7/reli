@@ -1,0 +1,603 @@
+{
+  "eval_set_id": "reasoning-preference-detection",
+  "name": "Reasoning Agent — Preference Detection",
+  "description": "Golden dataset: detecting and creating/updating user preference Things from explicit statements and behavioral patterns",
+  "eval_cases": [
+    {
+      "eval_id": "preference-explicit-new",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nI hate morning meetings, they ruin my focus time\n</user_message>\n\nRelevant Things from database:\n[]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Noted preference: avoids morning meetings to protect focus time.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"morning meetings\", \"scheduling preferences\", \"preferences\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Scheduling preferences",
+                  "type_hint": "preference",
+                  "data_json": "{\"patterns\": [{\"pattern\": \"Avoids morning meetings\", \"confidence\": \"emerging\", \"observations\": 1, \"first_observed\": \"2026-03-18\", \"last_observed\": \"2026-03-18\"}]}",
+                  "surface": false
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0001",
+                  "title": "Scheduling preferences",
+                  "type_hint": "preference"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "preference-explicit-with-action",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nMove the team standup to afternoon, I hate morning meetings\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-700\", \"title\": \"Team standup\", \"type_hint\": \"event\", \"data\": \"{\\\"time\\\": \\\"09:00\\\", \\\"day\\\": \\\"Monday\\\"}\", \"active\": 1}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Moved standup to afternoon and noted morning meeting preference.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"team standup\", \"morning meetings\", \"scheduling preferences\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "thing_id": "thing-700",
+                  "data_json": "{\"time\": \"14:00\", \"day\": \"Monday\", \"notes\": \"Moved from morning to afternoon\"}"
+                },
+                "name": "update_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Scheduling preferences",
+                  "type_hint": "preference",
+                  "data_json": "{\"patterns\": [{\"pattern\": \"Avoids morning meetings\", \"confidence\": \"emerging\", \"observations\": 1, \"first_observed\": \"2026-03-18\", \"last_observed\": \"2026-03-18\"}]}",
+                  "surface": false
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "thing-700",
+                      "title": "Team standup"
+                    }
+                  ],
+                  "count": 1
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "update_thing",
+                "response": {
+                  "id": "thing-700",
+                  "title": "Team standup"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0002",
+                  "title": "Scheduling preferences",
+                  "type_hint": "preference"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "preference-reinforcement",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nMove that 8am call to after lunch, mornings don't work for me\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"pref-100\", \"title\": \"Scheduling preferences\", \"type_hint\": \"preference\", \"data\": \"{\\\"patterns\\\": [{\\\"pattern\\\": \\\"Avoids morning meetings\\\", \\\"confidence\\\": \\\"emerging\\\", \\\"observations\\\": 1, \\\"first_observed\\\": \\\"2026-03-10\\\", \\\"last_observed\\\": \\\"2026-03-10\\\"}]}\", \"active\": 1}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Reinforced morning meeting avoidance preference.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"8am call\", \"morning meetings\", \"scheduling preferences\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "thing_id": "pref-100",
+                  "data_json": "{\"patterns\": [{\"pattern\": \"Avoids morning meetings\", \"confidence\": \"moderate\", \"observations\": 2, \"first_observed\": \"2026-03-10\", \"last_observed\": \"2026-03-18\"}]}"
+                },
+                "name": "update_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "pref-100",
+                      "title": "Scheduling preferences",
+                      "type_hint": "preference"
+                    }
+                  ],
+                  "count": 1
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "update_thing",
+                "response": {
+                  "id": "pref-100",
+                  "title": "Scheduling preferences"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "preference-inferred-pattern",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nCancel both of those Budget Air flights and rebook with a real airline. I always end up delayed with them.\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-800\", \"title\": \"Flight to NYC\", \"type_hint\": \"task\", \"data\": \"{\\\"airline\\\": \\\"Budget Air\\\", \\\"cost\\\": \\\"$120\\\"}\", \"active\": 1}, {\"id\": \"thing-801\", \"title\": \"Flight to LA\", \"type_hint\": \"task\", \"data\": \"{\\\"airline\\\": \\\"Budget Air\\\", \\\"cost\\\": \\\"$95\\\"}\", \"active\": 1}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [\"Which airline would you prefer for the rebooking?\"], \"priority_question\": \"Which airline would you prefer for the rebooking?\", \"reasoning_summary\": \"Cancelled Budget Air flights and noted preference against budget airlines.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"Budget Air flights\", \"travel preferences\", \"airline\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "thing_id": "thing-800"
+                },
+                "name": "delete_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "thing_id": "thing-801"
+                },
+                "name": "delete_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Travel preferences",
+                  "type_hint": "preference",
+                  "data_json": "{\"patterns\": [{\"pattern\": \"Avoids budget airlines (delays)\", \"confidence\": \"moderate\", \"observations\": 2, \"first_observed\": \"2026-03-18\", \"last_observed\": \"2026-03-18\"}]}",
+                  "surface": false
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "thing-800",
+                      "title": "Flight to NYC"
+                    },
+                    {
+                      "id": "thing-801",
+                      "title": "Flight to LA"
+                    }
+                  ],
+                  "count": 2
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "delete_thing",
+                "response": {
+                  "deleted": "thing-800",
+                  "title": "Flight to NYC"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "delete_thing",
+                "response": {
+                  "deleted": "thing-801",
+                  "title": "Flight to LA"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0003",
+                  "title": "Travel preferences",
+                  "type_hint": "preference"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "preference-negative-explicit",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nJust book the cheap one. I always go with the cheapest option for work travel.\n</user_message>\n\nRelevant Things from database:\n[]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [\"What are you booking?\"], \"priority_question\": \"What are you booking?\", \"reasoning_summary\": \"Noted cost optimization preference for work travel.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"work travel\", \"travel preferences\", \"booking\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Travel preferences",
+                  "type_hint": "preference",
+                  "data_json": "{\"patterns\": [{\"pattern\": \"Optimizes for cost on work travel\", \"confidence\": \"strong\", \"observations\": 1, \"first_observed\": \"2026-03-18\", \"last_observed\": \"2026-03-18\"}]}",
+                  "surface": false
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0004",
+                  "title": "Travel preferences",
+                  "type_hint": "preference"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}
