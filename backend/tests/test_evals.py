@@ -105,6 +105,26 @@ async def test_reasoning_agent_preference_detection() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reasoning_agent_thought_signature() -> None:
+    """Eval: reasoning agent — thought_signature regression for Gemini 3 Flash.
+
+    Exercises consecutive tool calls (fetch_context -> create_thing ->
+    update_thing) that trigger the thought_signature requirement in
+    Gemini thinking models.  Expected to FAIL until the thought_signature
+    stripping bug is fixed (see GH #176).
+    """
+    from google.adk.evaluation import AgentEvaluator
+
+    await AgentEvaluator.evaluate(
+        agent_module="eval.reasoning_agent.agent",
+        eval_dataset_file_path_or_dir=str(
+            EVAL_ROOT / "reasoning_agent" / "thought_signature_tool_chain.test.json"
+        ),
+        num_runs=1,
+    )
+
+
+@pytest.mark.asyncio
 async def test_reasoning_agent_all() -> None:
     """Eval: reasoning agent — all scenarios (directory scan)."""
     from google.adk.evaluation import AgentEvaluator

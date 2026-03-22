@@ -1376,6 +1376,272 @@ _REASONING_PREFERENCE = EvalSet(
 )
 
 # -------------------------------------------------------------------
+# Reasoning Agent — Thought Signature regression (Gemini 3 Flash)
+# -------------------------------------------------------------------
+# Gemini 3 Flash thinking models require a thought_signature in
+# functionCall parts for multi-turn tool-calling conversations.  If ADK
+# strips the thought_signature when reconstructing message history, the
+# model returns a 400 error.  This eval exercises a consecutive
+# fetch_context -> create_thing -> update_thing tool chain to reproduce
+# the failure.
+
+_REASONING_THOUGHT_SIGNATURE = EvalSet(
+    eval_set_id="reasoning-thought-signature-tool-chain",
+    name="Reasoning Agent — Thought Signature Tool Chain",
+    description=(
+        "Regression dataset: consecutive tool calls that trigger the "
+        "Gemini 3 Flash thought_signature requirement.  Exercises "
+        "fetch_context -> create_thing -> update_thing in sequence."
+    ),
+    eval_cases=[
+        # Consecutive tool chain: fetch -> create -> update
+        EvalCase(
+            eval_id="thought-signature-tool-chain",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Create a new project called "
+                            "'Home renovation' and immediately "
+                            "set it to high priority with a note "
+                            "about getting contractor quotes"
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Created home renovation project "
+                                "and set it to high priority with "
+                                "contractor quote note."
+                            ),
+                            questions_for_user=[
+                                "What's your budget for "
+                                "the renovation?",
+                            ],
+                            priority_question=(
+                                "What's your budget for "
+                                "the renovation?"
+                            ),
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "home renovation",
+                                    "renovation project",
+                                    "contractor",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Home renovation",
+                                "type_hint": "project",
+                                "priority": 3,
+                                "open_questions_json": json.dumps([
+                                    "What is the budget?",
+                                    "Which rooms to renovate?",
+                                ]),
+                            }),
+                            _fc("update_thing", {
+                                "thing_id": "eval-thing-0001",
+                                "priority": 1,
+                                "data_json": json.dumps({
+                                    "notes": (
+                                        "Get contractor quotes "
+                                        "before starting"
+                                    ),
+                                }),
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _empty_ctx()),
+                            _fr("create_thing", {
+                                "id": "eval-thing-0001",
+                                "title": "Home renovation",
+                                "type_hint": "project",
+                            }),
+                            _fr("update_thing", {
+                                "id": "eval-thing-0001",
+                                "title": "Home renovation",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Multi-turn: create two things then link them
+        EvalCase(
+            eval_id="thought-signature-create-and-link",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "I have a meeting with the plumber "
+                            "on Friday about the bathroom remodel. "
+                            "Track both the plumber contact and "
+                            "the meeting."
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Created plumber contact and "
+                                "meeting, linked them together."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "plumber",
+                                    "bathroom remodel",
+                                    "meeting",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Plumber",
+                                "type_hint": "person",
+                                "surface": False,
+                            }),
+                            _fc("create_thing", {
+                                "title": (
+                                    "Meeting with plumber about "
+                                    "bathroom remodel"
+                                ),
+                                "type_hint": "event",
+                                "data_json": json.dumps({
+                                    "date": "2026-03-27",
+                                    "notes": "Bathroom remodel",
+                                }),
+                            }),
+                            _fc("create_relationship", {
+                                "from_thing_id": "eval-thing-0001",
+                                "to_thing_id": "eval-thing-0002",
+                                "relationship_type": "involves",
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _empty_ctx()),
+                            _fr("create_thing", {
+                                "id": "eval-thing-0001",
+                                "title": "Plumber",
+                                "type_hint": "person",
+                            }),
+                            _fr("create_thing", {
+                                "id": "eval-thing-0002",
+                                "title": (
+                                    "Meeting with plumber about "
+                                    "bathroom remodel"
+                                ),
+                                "type_hint": "event",
+                            }),
+                            _fr("create_relationship", {
+                                "from_thing_id": "eval-thing-0001",
+                                "to_thing_id": "eval-thing-0002",
+                                "relationship_type": "involves",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Sequential: fetch context with results, then create + update
+        EvalCase(
+            eval_id="thought-signature-fetch-create-update-sequence",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Add a 'Get paint samples' task to my "
+                            "home renovation project and mark the "
+                            "existing 'Choose wall colors' task done",
+                            things_json=json.dumps([
+                                {
+                                    "id": "thing-500",
+                                    "title": "Home renovation",
+                                    "type_hint": "project",
+                                    "active": 1,
+                                },
+                                {
+                                    "id": "thing-501",
+                                    "title": "Choose wall colors",
+                                    "type_hint": "task",
+                                    "active": 1,
+                                },
+                            ]),
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Created paint samples task, marked "
+                                "wall colors task done, linked new "
+                                "task to renovation project."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "home renovation",
+                                    "paint samples",
+                                    "wall colors",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Get paint samples",
+                                "type_hint": "task",
+                                "priority": 2,
+                            }),
+                            _fc("update_thing", {
+                                "thing_id": "thing-501",
+                                "active": False,
+                            }),
+                            _fc("create_relationship", {
+                                "from_thing_id": "thing-500",
+                                "to_thing_id": "eval-thing-0001",
+                                "relationship_type": "subtask",
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _things_ctx(
+                                {
+                                    "id": "thing-500",
+                                    "title": "Home renovation",
+                                },
+                                {
+                                    "id": "thing-501",
+                                    "title": "Choose wall colors",
+                                },
+                            )),
+                            _fr("create_thing", {
+                                "id": "eval-thing-0001",
+                                "title": "Get paint samples",
+                                "type_hint": "task",
+                            }),
+                            _fr("update_thing", {
+                                "id": "thing-501",
+                                "active": False,
+                            }),
+                            _fr("create_relationship", {
+                                "from_thing_id": "thing-500",
+                                "to_thing_id": "eval-thing-0001",
+                                "relationship_type": "subtask",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+    ],
+)
+
+# -------------------------------------------------------------------
 # Writer
 # -------------------------------------------------------------------
 
@@ -1400,6 +1666,10 @@ def main() -> None:
     _write(
         _REASONING_PREFERENCE,
         reasoning_dir / "preference_detection.test.json",
+    )
+    _write(
+        _REASONING_THOUGHT_SIGNATURE,
+        reasoning_dir / "thought_signature_tool_chain.test.json",
     )
     _write(_CONTEXT_SEARCH, context_dir / "search_params.test.json")
     print("Done.")
