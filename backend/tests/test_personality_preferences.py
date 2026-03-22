@@ -214,3 +214,119 @@ class TestGetResponseSystemPromptWithPersonality:
     def test_empty_patterns_no_overlay(self):
         prompt = get_response_system_prompt("auto", personality_patterns=[])
         assert "Learned Personality Preferences" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# Signal detection prompt presence
+# ---------------------------------------------------------------------------
+
+
+class TestSignalDetectionInPrompts:
+    """Verify that personality signal detection instructions are present in
+    both the tool-calling and legacy reasoning agent system prompts."""
+
+    def test_tool_calling_prompt_has_signal_detection(self):
+        from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+
+        assert "Personality Signal Detection" in REASONING_AGENT_TOOL_SYSTEM
+        assert "POSITIVE signals" in REASONING_AGENT_TOOL_SYSTEM
+        assert "NEGATIVE signals" in REASONING_AGENT_TOOL_SYSTEM
+        assert "EXPLICIT CORRECTION" in REASONING_AGENT_TOOL_SYSTEM
+        assert "IMPLICIT CORRECTION" in REASONING_AGENT_TOOL_SYSTEM
+
+    def test_legacy_prompt_has_signal_detection(self):
+        from backend.agents import REASONING_AGENT_SYSTEM
+
+        assert "Personality Signal Detection" in REASONING_AGENT_SYSTEM
+        assert "POSITIVE signals" in REASONING_AGENT_SYSTEM
+        assert "NEGATIVE signals" in REASONING_AGENT_SYSTEM
+        assert "EXPLICIT CORRECTION" in REASONING_AGENT_SYSTEM
+        assert "IMPLICIT CORRECTION" in REASONING_AGENT_SYSTEM
+
+    def test_signal_detection_mentions_preference_type(self):
+        from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+
+        assert 'type_hint="preference"' in REASONING_AGENT_TOOL_SYSTEM
+        # Must instruct to use existing preference Things
+        assert "fetch_context" in REASONING_AGENT_TOOL_SYSTEM
+
+    def test_confidence_levels_documented(self):
+        from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+
+        assert '"emerging"' in REASONING_AGENT_TOOL_SYSTEM
+        assert '"established"' in REASONING_AGENT_TOOL_SYSTEM
+        assert '"strong"' in REASONING_AGENT_TOOL_SYSTEM
+
+    def test_all_modes_include_signal_detection(self):
+        from backend.reasoning_agent import get_system_prompt_for_mode
+
+        for mode in ("normal", "planning"):
+            for style in ("auto", "coach", "consultant"):
+                prompt = get_system_prompt_for_mode(mode, style)
+                assert "Personality Signal Detection" in prompt, (
+                    f"Signal detection missing from mode={mode}, style={style}"
+                )
+
+    def test_over_detection_guard(self):
+        """The prompt should warn against over-detecting casual signals."""
+        from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+
+        assert "over-detect" in REASONING_AGENT_TOOL_SYSTEM.lower()
+
+
+# ---------------------------------------------------------------------------
+# Preference Thing schema for signal storage
+# ---------------------------------------------------------------------------
+
+
+class TestPreferenceThingForSignals:
+    """Verify the schema supports storing signal-detected preferences."""
+
+    def test_pattern_confidence_levels(self):
+        """All confidence levels from the signal detection spec are valid."""
+        for level in ("emerging", "established", "strong"):
+            p = PersonalityPattern(pattern="Test pattern", confidence=level)
+            assert p.confidence == level
+
+    def test_observations_increment(self):
+        """Observations field supports incrementing for repeated signals."""
+        p = PersonalityPattern(pattern="Be concise", observations=1)
+        # Simulate increment
+        p2 = PersonalityPattern(
+            pattern=p.pattern,
+            confidence=p.confidence,
+            observations=p.observations + 1,
+        )
+        assert p2.observations == 2
+
+    def test_preference_thing_with_signal_patterns(self, patched_db):
+        """A preference Thing can store patterns from all signal types."""
+        from backend.database import db
+
+        patterns = {
+            "patterns": [
+                {"pattern": "Prefers concise responses", "confidence": "established", "observations": 5},
+                {"pattern": "No emoji", "confidence": "strong", "observations": 1},
+                {"pattern": "Likes proactive suggestions", "confidence": "emerging", "observations": 2},
+                {"pattern": "Prefers bullet points over prose", "confidence": "emerging", "observations": 2},
+            ]
+        }
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO users (id, email, google_id, name) VALUES (?, ?, ?, ?)",
+                ("u1", "test@test.com", "g1", "Test User"),
+            )
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, active, data, surface, user_id)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("t1", "Communication Style", "preference", 1, json.dumps(patterns), 0, "u1"),
+            )
+
+        result = load_personality_preferences("u1")
+        assert len(result) == 4
+        # Verify confidence levels survived round-trip
+        by_pattern = {p["pattern"]: p for p in result}
+        assert by_pattern["No emoji"]["confidence"] == "strong"
+        assert by_pattern["Prefers concise responses"]["confidence"] == "established"
+        assert by_pattern["Prefers concise responses"]["observations"] == 5
