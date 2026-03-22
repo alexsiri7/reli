@@ -14,6 +14,7 @@ Environment variables:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -36,9 +37,9 @@ def _base_url() -> str:
     return RELI_API_URL.rstrip("/")
 
 
-def _cookies() -> dict[str, str]:
+def _auth_headers() -> dict[str, str]:
     if RELI_API_TOKEN:
-        return {"reli_session": RELI_API_TOKEN}
+        return {"Authorization": f"Bearer {RELI_API_TOKEN}"}
     return {}
 
 
@@ -48,7 +49,7 @@ def _cookies() -> dict[str, str]:
 
 
 def _make_client() -> httpx.Client:
-    return httpx.Client(base_url=_base_url(), cookies=_cookies(), timeout=30.0)
+    return httpx.Client(base_url=_base_url(), headers=_auth_headers(), timeout=30.0)
 
 
 def _api_get(path: str, params: dict[str, Any] | None = None) -> Any:

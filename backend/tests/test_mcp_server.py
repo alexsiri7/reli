@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import jwt
+from fastapi.testclient import TestClient
+
 import httpx
 import pytest
 
@@ -628,3 +631,196 @@ class TestPromptResources:
         prompts = asyncio.run(mcp.list_prompts())
         for p in prompts:
             assert p.description, f"Prompt '{p.name}' has no description"
+
+
+# ---------------------------------------------------------------------------
+# Bearer token auth (re-j102)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def token_client(patched_db):
+    """TestClient with both SECRET_KEY and RELI_API_TOKEN configured."""
+    with (
+        patch("backend.auth.SECRET_KEY", "test-secret-key"),
+        patch("backend.auth._API_TOKEN", "test-mcp-token"),
+    ):
+        from backend.main import app
+
+        with TestClient(app) as c:
+            yield c
+
+
+@pytest.fixture()
+def token_client_with_user(patched_db):
+    """TestClient with token auth and a user in the database."""
+    from backend.database import db
+
+    # Insert a test user
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO users (id, email, google_id, name) VALUES (?, ?, ?, ?)",
+            ("u-test-123", "test@example.com", "google-test", "Test User"),
+        )
+
+    with (
+        patch("backend.auth.SECRET_KEY", "test-secret-key"),
+        patch("backend.auth._API_TOKEN", "test-mcp-token"),
+    ):
+        from backend.main import app
+
+        with TestClient(app) as c:
+            yield c
+
+
+class TestBearerTokenAuth:
+    def test_valid_bearer_token_accepted(self, token_client_with_user):
+        resp = token_client_with_user.get(
+            "/api/things",
+            headers={"Authorization": "Bearer test-mcp-token"},
+        )
+        assert resp.status_code == 200
+
+    def test_invalid_bearer_token_rejected(self, token_client):
+        resp = token_client.get(
+            "/api/things",
+            headers={"Authorization": "Bearer wrong-token"},
+        )
+        assert resp.status_code == 401
+        assert "Invalid API token" in resp.json()["detail"]
+
+    def test_bearer_token_resolves_user(self, token_client_with_user):
+        """Bearer token auth should resolve to the first user in the DB."""
+        # Create a thing via bearer auth
+        resp = token_client_with_user.post(
+            "/api/things",
+            json={"title": "MCP test thing"},
+            headers={"Authorization": "Bearer test-mcp-token"},
+        )
+        assert resp.status_code == 201
+        thing = resp.json()
+        assert thing["title"] == "MCP test thing"
+
+    def test_cookie_auth_still_works_alongside_token(self, token_client_with_user):
+        """Cookie-based JWT auth should still work when token auth is configured."""
+        import jwt
+
+        payload = {"sub": "u-test-123", "email": "test@example.com", "exp": 9999999999}
+        token = jwt.encode(payload, "test-secret-key", algorithm="HS256")
+        token_client_with_user.cookies.set("reli_session", token)
+        resp = token_client_with_user.get("/api/things")
+        assert resp.status_code == 200
+
+    def test_no_auth_header_falls_through_to_cookie(self, token_client):
+        """Without Authorization header, should fall through to cookie check."""
+        resp = token_client.get("/api/things")
+        assert resp.status_code == 401
+        assert "Not authenticated" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# MCP server tool tests (via mocked httpx)
+# ---------------------------------------------------------------------------
+
+
+class TestMCPTools:
+    """Test MCP tool functions with mocked HTTP calls."""
+
+    def test_search_things(self, token_client_with_user):
+        """Create a thing then search for it via REST API (simulating MCP flow)."""
+        headers = {"Authorization": "Bearer test-mcp-token"}
+        # Create
+        token_client_with_user.post(
+            "/api/things",
+            json={"title": "Alice Johnson", "type_hint": "person"},
+            headers=headers,
+        )
+        # Search
+        resp = token_client_with_user.get(
+            "/api/things/search",
+            params={"q": "Alice", "limit": 10},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        results = resp.json()
+        assert len(results) >= 1
+        assert any("Alice" in t["title"] for t in results)
+
+    def test_crud_lifecycle(self, token_client_with_user):
+        """Test full CRUD lifecycle via REST API (simulating MCP tool calls)."""
+        headers = {"Authorization": "Bearer test-mcp-token"}
+
+        # Create
+        resp = token_client_with_user.post(
+            "/api/things",
+            json={"title": "Buy groceries", "type_hint": "task", "priority": 2},
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        thing = resp.json()
+        thing_id = thing["id"]
+        assert thing["title"] == "Buy groceries"
+        assert thing["priority"] == 2
+
+        # Get
+        resp = token_client_with_user.get(f"/api/things/{thing_id}", headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["title"] == "Buy groceries"
+
+        # Update
+        resp = token_client_with_user.patch(
+            f"/api/things/{thing_id}",
+            json={"title": "Buy organic groceries", "active": False},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["title"] == "Buy organic groceries"
+        assert resp.json()["active"] is False
+
+        # Delete
+        resp = token_client_with_user.delete(f"/api/things/{thing_id}", headers=headers)
+        assert resp.status_code == 204
+
+        # Verify deleted
+        resp = token_client_with_user.get(f"/api/things/{thing_id}", headers=headers)
+        assert resp.status_code == 404
+
+    def test_relationship_lifecycle(self, token_client_with_user):
+        """Test create/delete relationship via REST API (simulating MCP tool calls)."""
+        headers = {"Authorization": "Bearer test-mcp-token"}
+
+        # Create two things
+        resp_a = token_client_with_user.post(
+            "/api/things",
+            json={"title": "Alice", "type_hint": "person"},
+            headers=headers,
+        )
+        resp_b = token_client_with_user.post(
+            "/api/things",
+            json={"title": "Acme Corp", "type_hint": "organization"},
+            headers=headers,
+        )
+        id_a = resp_a.json()["id"]
+        id_b = resp_b.json()["id"]
+
+        # Create relationship
+        resp = token_client_with_user.post(
+            "/api/things/relationships",
+            json={
+                "from_thing_id": id_a,
+                "to_thing_id": id_b,
+                "relationship_type": "works_at",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        rel = resp.json()
+        assert rel["relationship_type"] == "works_at"
+        rel_id = rel["id"]
+
+        # Delete relationship
+        resp = token_client_with_user.delete(
+            f"/api/things/relationships/{rel_id}",
+            headers=headers,
+        )
+        assert resp.status_code == 204
