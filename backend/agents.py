@@ -4,6 +4,7 @@ import json
 import logging
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -1196,12 +1197,15 @@ def get_response_system_prompt(
     personality_patterns: list[dict[str, Any]] | None = None,
 ) -> str:
     """Return the response agent system prompt with the appropriate style overlay."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d (%A)")
+    date_line = f"\nToday's date: {today}\n"
+
     if interaction_style == "coach":
-        prompt = RESPONSE_AGENT_SYSTEM + _RESPONSE_COACH_OVERLAY
+        prompt = RESPONSE_AGENT_SYSTEM + date_line + _RESPONSE_COACH_OVERLAY
     elif interaction_style == "consultant":
-        prompt = RESPONSE_AGENT_SYSTEM + _RESPONSE_CONSULTANT_OVERLAY
+        prompt = RESPONSE_AGENT_SYSTEM + date_line + _RESPONSE_CONSULTANT_OVERLAY
     else:
-        prompt = RESPONSE_AGENT_SYSTEM + _RESPONSE_AUTO_OVERLAY
+        prompt = RESPONSE_AGENT_SYSTEM + date_line + _RESPONSE_AUTO_OVERLAY
 
     if personality_patterns:
         prompt += _build_personality_overlay(personality_patterns)
