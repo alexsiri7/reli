@@ -882,3 +882,344 @@ async def reflect_on_candidates(
         findings=created,
         usage=usage_stats.to_dict(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Preference aggregation
+# ---------------------------------------------------------------------------
+
+PREFERENCE_AGGREGATION_SYSTEM = """\
+You are the Preference Analyst for Reli, an AI personal information manager.
+You receive recent user interactions (chat messages) and existing learned
+preferences. Your job: detect repeated behavioral patterns in the interactions
+and output preference updates.
+
+Look for patterns like:
+- Scheduling preferences (avoids mornings, prefers certain days)
+- Decision tendencies (always picks cheapest option, overestimates urgency)
+- Social patterns (frequently mentions certain people)
+- Communication style (prefers concise answers, likes detail)
+- Work habits (procrastinates on certain task types, batches similar work)
+- Lifestyle patterns (exercises mornings, meal preferences)
+
+Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
+{
+  "patterns": [
+    {
+      "pattern": "Human-readable description of the preference",
+      "evidence": "Brief summary of what you observed in the interactions",
+      "observations": 2
+    }
+  ]
+}
+
+Rules:
+- Only output patterns with CLEAR evidence in the interactions (2+ signals).
+- pattern: Written for the system to understand and apply (e.g., "Prefers afternoon meetings over morning ones").
+- evidence: What you saw that supports this (e.g., "Rescheduled 2 morning meetings to afternoon, declined a 9am invite").
+- observations: How many distinct interaction signals support this pattern (minimum 2).
+- Keep to 1-5 patterns. Quality over quantity. Don't fabricate.
+- If no clear patterns emerge, return {"patterns": []}.
+- Don't repeat existing preferences unless you have NEW evidence that strengthens them.
+
+EXISTING PREFERENCES (for context — don't repeat these without new evidence):
+{existing_preferences}
+"""
+
+
+@dataclass
+class PreferenceAggregationResult:
+    """Result of the preference aggregation phase."""
+
+    patterns_created: int = 0
+    patterns_updated: int = 0
+    patterns: list[dict] = field(default_factory=list)
+    usage: dict = field(default_factory=dict)
+
+
+def _load_recent_interactions(
+    conn: sqlite3.Connection,
+    user_id: str,
+    days: int = 7,
+) -> list[dict[str, str]]:
+    """Load recent chat messages for preference analysis."""
+    from .auth import user_filter
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    uf_sql, uf_params = user_filter(user_id)
+
+    rows = conn.execute(
+        f"""SELECT role, content, timestamp FROM chat_history
+           WHERE timestamp >= ?{uf_sql}
+           ORDER BY timestamp ASC
+           LIMIT 200""",
+        (cutoff, *uf_params),
+    ).fetchall()
+
+    return [{"role": row["role"], "content": row["content"]} for row in rows]
+
+
+def _load_existing_preferences(
+    conn: sqlite3.Connection,
+    user_id: str,
+) -> list[dict]:
+    """Load current preference patterns for deduplication."""
+    from .auth import user_filter
+
+    uf_sql, uf_params = user_filter(user_id)
+    rows = conn.execute(
+        f"""SELECT id, title, data FROM things
+           WHERE type_hint = 'preference' AND active = 1{uf_sql}""",
+        uf_params,
+    ).fetchall()
+
+    preferences: list[dict] = []
+    for row in rows:
+        raw = row["data"]
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(data, dict) and "patterns" in data:
+            for p in data["patterns"]:
+                if isinstance(p, dict) and "pattern" in p:
+                    preferences.append({
+                        "thing_id": row["id"],
+                        "pattern": p["pattern"],
+                        "confidence": p.get("confidence", "emerging"),
+                        "observations": p.get("observations", 1),
+                    })
+    return preferences
+
+
+def _format_interactions_for_llm(
+    interactions: list[dict[str, str]],
+    existing_preferences: list[dict],
+) -> tuple[str, str]:
+    """Format interactions and existing preferences for the LLM prompt.
+
+    Returns (system_prompt, user_prompt).
+    """
+    if existing_preferences:
+        pref_lines = []
+        for p in existing_preferences:
+            pref_lines.append(
+                f"- [{p['confidence']}] {p['pattern']} (observed {p['observations']}x)"
+            )
+        existing_text = "\n".join(pref_lines)
+    else:
+        existing_text = "(none yet)"
+
+    system = PREFERENCE_AGGREGATION_SYSTEM.replace("{existing_preferences}", existing_text)
+
+    # Format interactions as a conversation transcript
+    lines = [f"Recent interactions ({len(interactions)} messages):"]
+    for msg in interactions:
+        role = "User" if msg["role"] == "user" else "Assistant"
+        # Truncate very long messages
+        content = msg["content"]
+        if len(content) > 500:
+            content = content[:500] + "..."
+        lines.append(f"[{role}]: {content}")
+
+    return system, "\n".join(lines)
+
+
+def _confidence_for_observations(observations: int) -> str:
+    """Map observation count to confidence level."""
+    if observations >= 5:
+        return "strong"
+    if observations >= 3:
+        return "established"
+    return "emerging"
+
+
+def _find_matching_preference(
+    new_pattern: str,
+    existing: list[dict],
+) -> dict | None:
+    """Find an existing preference that matches a new pattern (simple text overlap).
+
+    Uses word-level overlap to detect semantically similar patterns.
+    """
+    new_words = {w.lower() for w in re.findall(r"\b\w{3,}\b", new_pattern)}
+    if not new_words:
+        return None
+
+    best_match: dict | None = None
+    best_overlap = 0.0
+
+    for pref in existing:
+        existing_words = {w.lower() for w in re.findall(r"\b\w{3,}\b", pref["pattern"])}
+        if not existing_words:
+            continue
+        overlap = len(new_words & existing_words) / min(len(new_words), len(existing_words))
+        if overlap > 0.5 and overlap > best_overlap:
+            best_overlap = overlap
+            best_match = pref
+
+    return best_match
+
+
+async def aggregate_preferences(
+    user_id: str = "",
+    lookback_days: int = 7,
+) -> PreferenceAggregationResult:
+    """Phase 3: Analyze recent interactions to detect preference patterns.
+
+    Loads recent chat history, sends to LLM for pattern detection, and
+    creates or updates preference Things with appropriate confidence levels.
+    """
+    from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
+
+    if not user_id:
+        return PreferenceAggregationResult()
+
+    with db() as conn:
+        interactions = _load_recent_interactions(conn, user_id, lookback_days)
+        existing = _load_existing_preferences(conn, user_id)
+
+    if len(interactions) < 4:
+        # Not enough interactions to detect patterns
+        logger.info("Preference aggregation: skipped (only %d messages)", len(interactions))
+        return PreferenceAggregationResult()
+
+    usage_stats = UsageStats()
+    system_prompt, user_prompt = _format_interactions_for_llm(interactions, existing)
+
+    raw = await _chat(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        model=REQUESTY_REASONING_MODEL,
+        response_format={"type": "json_object"},
+        usage_stats=usage_stats,
+    )
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("Preference aggregation returned invalid JSON: %s", raw[:200])
+        return PreferenceAggregationResult(usage=usage_stats.to_dict())
+
+    raw_patterns = parsed.get("patterns", [])
+    if not isinstance(raw_patterns, list):
+        raw_patterns = []
+
+    now = datetime.now(timezone.utc).isoformat()
+    created_count = 0
+    updated_count = 0
+    result_patterns: list[dict] = []
+
+    with db() as conn:
+        for p in raw_patterns:
+            if not isinstance(p, dict):
+                continue
+            pattern_text = str(p.get("pattern", "")).strip()
+            if not pattern_text:
+                continue
+            new_observations = p.get("observations", 2)
+            if not isinstance(new_observations, int) or new_observations < 1:
+                new_observations = 2
+
+            # Check if this matches an existing preference
+            match = _find_matching_preference(pattern_text, existing)
+
+            if match:
+                # Update existing preference Thing — bump observations and confidence
+                thing_id = match["thing_id"]
+                total_observations = match["observations"] + new_observations
+                new_confidence = _confidence_for_observations(total_observations)
+
+                # Load current Thing data and update the matching pattern
+                row = conn.execute(
+                    "SELECT data FROM things WHERE id = ?", (thing_id,)
+                ).fetchone()
+                if row and row["data"]:
+                    try:
+                        thing_data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+                    except (json.JSONDecodeError, TypeError):
+                        thing_data = {"patterns": []}
+                else:
+                    thing_data = {"patterns": []}
+
+                # Update the matching pattern in the patterns list
+                updated = False
+                for existing_p in thing_data.get("patterns", []):
+                    if isinstance(existing_p, dict) and existing_p.get("pattern") == match["pattern"]:
+                        existing_p["observations"] = total_observations
+                        existing_p["confidence"] = new_confidence
+                        updated = True
+                        break
+
+                if updated:
+                    conn.execute(
+                        "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
+                        (json.dumps(thing_data), now, thing_id),
+                    )
+                    updated_count += 1
+                    result_patterns.append({
+                        "thing_id": thing_id,
+                        "pattern": match["pattern"],
+                        "confidence": new_confidence,
+                        "observations": total_observations,
+                        "action": "updated",
+                    })
+            else:
+                # Create new preference Thing
+                thing_id = f"pref-{uuid.uuid4().hex[:8]}"
+                confidence = _confidence_for_observations(new_observations)
+                thing_data = {
+                    "patterns": [{
+                        "pattern": pattern_text,
+                        "confidence": confidence,
+                        "observations": new_observations,
+                    }]
+                }
+                conn.execute(
+                    """INSERT INTO things
+                       (id, title, type_hint, active, surface, priority, data,
+                        created_at, updated_at, user_id)
+                       VALUES (?, ?, 'preference', 1, 0, 3, ?, ?, ?, ?)""",
+                    (
+                        thing_id,
+                        pattern_text[:100],  # title from pattern text
+                        json.dumps(thing_data),
+                        now,
+                        now,
+                        user_id,
+                    ),
+                )
+                created_count += 1
+                result_patterns.append({
+                    "thing_id": thing_id,
+                    "pattern": pattern_text,
+                    "confidence": confidence,
+                    "observations": new_observations,
+                    "action": "created",
+                })
+
+                # Add to existing list so subsequent patterns in this batch
+                # can match against it
+                existing.append({
+                    "thing_id": thing_id,
+                    "pattern": pattern_text,
+                    "confidence": confidence,
+                    "observations": new_observations,
+                })
+
+    logger.info(
+        "Preference aggregation: %d created, %d updated",
+        created_count,
+        updated_count,
+    )
+
+    return PreferenceAggregationResult(
+        patterns_created=created_count,
+        patterns_updated=updated_count,
+        patterns=result_patterns,
+        usage=usage_stats.to_dict(),
+    )

@@ -162,6 +162,21 @@ async def _run_sweep_for_user(user_id: str) -> None:
             result.usage,
         )
 
+        # Phase 3: Preference aggregation
+        try:
+            from .sweep import aggregate_preferences
+
+            pref_result = await aggregate_preferences(user_id=user_id)
+            if pref_result.patterns_created or pref_result.patterns_updated:
+                logger.info(
+                    "Preference aggregation [%s]: %d created, %d updated",
+                    user_label,
+                    pref_result.patterns_created,
+                    pref_result.patterns_updated,
+                )
+        except Exception:
+            logger.exception("Preference aggregation failed for user %s", user_label)
+
         # Generate morning briefing after sweep completes
         try:
             from .morning_briefing import generate_morning_briefing, store_morning_briefing

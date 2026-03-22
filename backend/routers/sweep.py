@@ -9,7 +9,13 @@ from fastapi import APIRouter, Depends
 
 from ..auth import require_user, user_filter
 from ..database import db
-from ..sweep import ReflectionResult, collect_candidates, reflect_on_candidates
+from ..sweep import (
+    PreferenceAggregationResult,
+    ReflectionResult,
+    aggregate_preferences,
+    collect_candidates,
+    reflect_on_candidates,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +56,27 @@ def list_sweep_runs(
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+@router.post("/preferences", summary="Run preference aggregation")
+async def run_preference_aggregation(
+    lookback_days: int = 7,
+    user_id: str = Depends(require_user),
+) -> dict[str, Any]:
+    """Run the preference aggregation phase: analyze recent interactions for patterns.
+
+    Detects repeated behavioral patterns in chat history and creates or updates
+    preference Things with appropriate confidence levels.
+    """
+    result: PreferenceAggregationResult = await aggregate_preferences(
+        user_id=user_id, lookback_days=lookback_days
+    )
+    return {
+        "patterns_created": result.patterns_created,
+        "patterns_updated": result.patterns_updated,
+        "patterns": result.patterns,
+        "usage": result.usage,
+    }
 
 
 @router.post("/connections", summary="Run connection sweep")
