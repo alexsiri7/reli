@@ -1,16 +1,37 @@
-"""SQLite database setup and connection management."""
+"""Database setup and connection management.
+
+Supports two backends controlled by ``settings.STORAGE_BACKEND``:
+
+* ``sqlite`` (default) — local SQLite file at ``DATA_DIR/reli.db``
+* ``supabase`` — remote Supabase/Postgres via ``supabase-py``
+"""
+
+from __future__ import annotations
 
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .config import settings
+
+if TYPE_CHECKING:
+    from supabase import Client
 
 DB_PATH = Path(settings.DATA_DIR) / "reli.db"
 
 
-def get_connection() -> sqlite3.Connection:
+def get_connection() -> "sqlite3.Connection | Client":
+    """Return a database connection.
+
+    When STORAGE_BACKEND=supabase, returns a ``supabase.Client`` instead of
+    an ``sqlite3.Connection``.
+    """
+    if settings.STORAGE_BACKEND == "supabase":
+        from .database_supabase import get_client
+
+        return get_client()
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -19,8 +40,18 @@ def get_connection() -> sqlite3.Connection:
 
 
 @contextmanager
-def db() -> Generator[sqlite3.Connection, None, None]:
-    conn = get_connection()
+def db() -> "Generator[sqlite3.Connection | Client, None, None]":
+    """Yield a database handle — sqlite3.Connection or supabase.Client."""
+    if settings.STORAGE_BACKEND == "supabase":
+        from .database_supabase import supabase_db
+
+        with supabase_db() as client:
+            yield client
+        return
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     try:
         yield conn
         conn.commit()
@@ -294,6 +325,11 @@ def clean_orphan_relationships() -> tuple[int, list[str]]:
 
     Returns (deleted_count, list_of_deleted_ids).
     """
+    if settings.STORAGE_BACKEND == "supabase":
+        from .database_supabase import clean_orphan_relationships_supabase
+
+        return clean_orphan_relationships_supabase()
+
     import logging
 
     logger = logging.getLogger(__name__)
@@ -313,6 +349,11 @@ def clean_orphan_relationships() -> tuple[int, list[str]]:
 
 def init_db() -> None:
     """Create tables if they don't exist."""
+    if settings.STORAGE_BACKEND == "supabase":
+        from .database_supabase import init_db_supabase
+
+        init_db_supabase()
+        return
     with db() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS things (
