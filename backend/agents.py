@@ -1100,13 +1100,73 @@ and reflective gets coaching warmth.
 """
 
 
-def get_response_system_prompt(interaction_style: str = "auto") -> str:
+def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
+    """Load personality preference patterns from Things with type_hint='preference'.
+
+    Returns a list of pattern dicts with keys: pattern, confidence, observations.
+    Filters to active Things owned by the given user.
+    """
+    if not user_id:
+        return []
+
+    from .auth import user_filter
+    from .database import db
+
+    patterns: list[dict[str, Any]] = []
+    with db() as conn:
+        filter_sql, filter_params = user_filter(user_id)
+        query = "SELECT data FROM things WHERE type_hint = 'preference' AND active = 1"
+        if filter_sql:
+            query += f" AND {filter_sql}"
+        rows = conn.execute(query, filter_params).fetchall()
+
+    for row in rows:
+        raw = row["data"] if isinstance(row, sqlite3.Row) else row[0]
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(data, dict) and "patterns" in data:
+            for p in data["patterns"]:
+                if isinstance(p, dict) and "pattern" in p:
+                    patterns.append({
+                        "pattern": p["pattern"],
+                        "confidence": p.get("confidence", "emerging"),
+                        "observations": p.get("observations", 1),
+                    })
+    return patterns
+
+
+def _build_personality_overlay(patterns: list[dict[str, Any]]) -> str:
+    """Format personality patterns as a prompt overlay section."""
+    if not patterns:
+        return ""
+
+    lines = ["\n\nLearned Personality Preferences (override static defaults):"]
+    for p in patterns:
+        confidence = p.get("confidence", "emerging")
+        lines.append(f"- [{confidence}] {p['pattern']}")
+    return "\n".join(lines)
+
+
+def get_response_system_prompt(
+    interaction_style: str = "auto",
+    personality_patterns: list[dict[str, Any]] | None = None,
+) -> str:
     """Return the response agent system prompt with the appropriate style overlay."""
     if interaction_style == "coach":
-        return RESPONSE_AGENT_SYSTEM + _RESPONSE_COACH_OVERLAY
+        prompt = RESPONSE_AGENT_SYSTEM + _RESPONSE_COACH_OVERLAY
     elif interaction_style == "consultant":
-        return RESPONSE_AGENT_SYSTEM + _RESPONSE_CONSULTANT_OVERLAY
-    return RESPONSE_AGENT_SYSTEM + _RESPONSE_AUTO_OVERLAY
+        prompt = RESPONSE_AGENT_SYSTEM + _RESPONSE_CONSULTANT_OVERLAY
+    else:
+        prompt = RESPONSE_AGENT_SYSTEM + _RESPONSE_AUTO_OVERLAY
+
+    if personality_patterns:
+        prompt += _build_personality_overlay(personality_patterns)
+
+    return prompt
 
 
 def _build_response_messages(
