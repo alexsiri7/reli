@@ -16,6 +16,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
 
 from .config import settings
 from .database import db
@@ -54,20 +55,20 @@ class ConnectionSweepResult:
 
 
 def _build_exclusion_sets_sqlite(
-    conn: object, user_id: str
+    conn: Any, user_id: str
 ) -> tuple[list[dict], dict[str, dict], set[tuple[str, str]], set[tuple[str, str]], set[tuple[str, str]]]:
     """Fetch things and exclusion sets from SQLite."""
     if user_id:
-        things = conn.execute(  # type: ignore[union-attr]
+        things = conn.execute(
             "SELECT id, title, type_hint FROM things WHERE active = 1 AND (user_id = ? OR user_id IS NULL)",
             (user_id,),
         ).fetchall()
     else:
-        things = conn.execute(  # type: ignore[union-attr]
+        things = conn.execute(
             "SELECT id, title, type_hint FROM things WHERE active = 1"
         ).fetchall()
 
-    rel_rows = conn.execute(  # type: ignore[union-attr]
+    rel_rows = conn.execute(
         "SELECT from_thing_id, to_thing_id FROM thing_relationships"
     ).fetchall()
     existing_rels: set[tuple[str, str]] = set()
@@ -75,7 +76,7 @@ def _build_exclusion_sets_sqlite(
         existing_rels.add((row["from_thing_id"], row["to_thing_id"]))
         existing_rels.add((row["to_thing_id"], row["from_thing_id"]))
 
-    sugg_rows = conn.execute(  # type: ignore[union-attr]
+    sugg_rows = conn.execute(
         "SELECT from_thing_id, to_thing_id FROM connection_suggestions WHERE status IN ('pending', 'deferred')"
     ).fetchall()
     existing_suggestions: set[tuple[str, str]] = set()
@@ -84,7 +85,7 @@ def _build_exclusion_sets_sqlite(
         existing_suggestions.add((row["to_thing_id"], row["from_thing_id"]))
 
     parent_pairs: set[tuple[str, str]] = set()
-    parent_rows = conn.execute(  # type: ignore[union-attr]
+    parent_rows = conn.execute(
         "SELECT id, parent_id FROM things WHERE parent_id IS NOT NULL"
     ).fetchall()
     for row in parent_rows:
@@ -97,23 +98,23 @@ def _build_exclusion_sets_sqlite(
 
 
 def _build_exclusion_sets_supabase(
-    client: object, user_id: str
+    client: Any, user_id: str
 ) -> tuple[list[dict], dict[str, dict], set[tuple[str, str]], set[tuple[str, str]], set[tuple[str, str]]]:
     """Fetch things and exclusion sets from Supabase."""
-    query = client.table("things").select("id, title, type_hint").eq("active", True)  # type: ignore[union-attr]
+    query = client.table("things").select("id, title, type_hint").eq("active", True)
     if user_id:
         query = query.or_(f"user_id.eq.{user_id},user_id.is.null")
     things_resp = query.execute()
     thing_list = things_resp.data
 
-    rel_resp = client.table("thing_relationships").select("from_thing_id, to_thing_id").execute()  # type: ignore[union-attr]
+    rel_resp = client.table("thing_relationships").select("from_thing_id, to_thing_id").execute()
     existing_rels: set[tuple[str, str]] = set()
     for row in rel_resp.data:
         existing_rels.add((row["from_thing_id"], row["to_thing_id"]))
         existing_rels.add((row["to_thing_id"], row["from_thing_id"]))
 
     sugg_resp = (
-        client.table("connection_suggestions")  # type: ignore[union-attr]
+        client.table("connection_suggestions")
         .select("from_thing_id, to_thing_id")
         .in_("status", ["pending", "deferred"])
         .execute()
@@ -124,7 +125,7 @@ def _build_exclusion_sets_supabase(
         existing_suggestions.add((row["to_thing_id"], row["from_thing_id"]))
 
     parent_resp = (
-        client.table("things")  # type: ignore[union-attr]
+        client.table("things")
         .select("id, parent_id")
         .not_.is_("parent_id", "null")
         .execute()
@@ -261,7 +262,7 @@ def _find_candidates_supabase(user_id: str, max_per_thing: int) -> list[Connecti
     # Check minimum embedding count
     count_resp = (
         client.table("things")
-        .select("id", count="exact")
+        .select("id", count="exact")  # type: ignore[arg-type]
         .not_.is_("embedding", "null")
         .eq("active", True)
         .execute()
@@ -294,7 +295,10 @@ def _find_candidates_supabase(user_id: str, max_per_thing: int) -> list[Connecti
             logger.debug("pgvector query failed for thing %s: %s", thing_id, exc)
             continue
 
-        matches = [(row["id"], row["distance"]) for row in resp.data]
+        rpc_data: list[dict[str, Any]] = resp.data  # type: ignore[assignment]
+        matches: list[tuple[str, float]] = [
+            (row["id"], row["distance"]) for row in rpc_data
+        ]
 
         _filter_candidates(
             thing_id, thing_title, thing.get("type_hint"),

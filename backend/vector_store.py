@@ -197,10 +197,13 @@ def _fetch_related_titles_supabase(thing_id: str) -> list[str]:
     )
 
     # Collect related IDs
+    from_rows: list[dict[str, Any]] = from_resp.data  # type: ignore[assignment]
+    to_rows: list[dict[str, Any]] = to_resp.data  # type: ignore[assignment]
+
     related_ids: list[str] = []
-    for r in from_resp.data:
+    for r in from_rows:
         related_ids.append(r["to_thing_id"])
-    for r in to_resp.data:
+    for r in to_rows:
         related_ids.append(r["from_thing_id"])
 
     if not related_ids:
@@ -208,14 +211,15 @@ def _fetch_related_titles_supabase(thing_id: str) -> list[str]:
 
     # Fetch titles
     things_resp = client.table("things").select("id, title").in_("id", related_ids).execute()
-    title_map = {t["id"]: t["title"] for t in things_resp.data}
+    things_data: list[dict[str, Any]] = things_resp.data  # type: ignore[assignment]
+    title_map = {t["id"]: t["title"] for t in things_data}
 
     result = []
-    for r in from_resp.data:
+    for r in from_rows:
         title = title_map.get(r["to_thing_id"], "")
         if title:
             result.append(f"{title} ({r['relationship_type']})")
-    for r in to_resp.data:
+    for r in to_rows:
         title = title_map.get(r["from_thing_id"], "")
         if title:
             result.append(f"{title} ({r['relationship_type']})")
@@ -446,7 +450,7 @@ def _vector_count_supabase() -> int:
         client = _get_supabase_client()
         resp = (
             client.table("things")
-            .select("id", count="exact")
+            .select("id", count="exact")  # type: ignore[arg-type]
             .not_.is_("embedding", "null")
             .execute()
         )
@@ -467,7 +471,7 @@ def _reindex_all_supabase() -> int:
 
         # Fetch all things
         resp = client.table("things").select("*").execute()
-        rows = resp.data
+        rows: list[dict[str, Any]] = resp.data  # type: ignore[assignment]
         if not rows:
             return 0
 
@@ -503,7 +507,7 @@ def _vector_search_supabase(
         # Check if there are any embeddings
         count_resp = (
             client.table("things")
-            .select("id", count="exact")
+            .select("id", count="exact")  # type: ignore[arg-type]
             .not_.is_("embedding", "null")
             .execute()
         )
@@ -530,7 +534,8 @@ def _vector_search_supabase(
                 },
             ).execute()
 
-            for row in resp.data:
+            rpc_rows: list[dict[str, Any]] = resp.data  # type: ignore[assignment]
+            for row in rpc_rows:
                 id_ = row["id"]
                 if id_ not in seen_set:
                     seen_set.add(id_)
