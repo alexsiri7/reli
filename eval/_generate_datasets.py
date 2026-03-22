@@ -893,6 +893,423 @@ _CONTEXT_SEARCH = EvalSet(
 
 
 # -------------------------------------------------------------------
+# Reasoning Agent — Preference detection scenarios
+# -------------------------------------------------------------------
+
+# Existing scheduling preference (for reinforcement scenarios)
+_SCHED_PREF = json.dumps([{
+    "id": "pref-100",
+    "title": "Scheduling preferences",
+    "type_hint": "preference",
+    "data": json.dumps({
+        "patterns": [{
+            "pattern": "Avoids morning meetings",
+            "confidence": "emerging",
+            "observations": 1,
+            "first_observed": "2026-03-10",
+            "last_observed": "2026-03-10",
+        }],
+    }),
+    "active": 1,
+}])
+
+# Morning meeting Thing (for action + preference scenario)
+_MORNING_MEETING = json.dumps([{
+    "id": "thing-700",
+    "title": "Team standup",
+    "type_hint": "event",
+    "data": json.dumps({"time": "09:00", "day": "Monday"}),
+    "active": 1,
+}])
+
+# Travel Things (for inferred preference from pattern)
+_TRAVEL_BOOKINGS = json.dumps([
+    {
+        "id": "thing-800",
+        "title": "Flight to NYC",
+        "type_hint": "task",
+        "data": json.dumps({"airline": "Budget Air", "cost": "$120"}),
+        "active": 1,
+    },
+    {
+        "id": "thing-801",
+        "title": "Flight to LA",
+        "type_hint": "task",
+        "data": json.dumps({"airline": "Budget Air", "cost": "$95"}),
+        "active": 1,
+    },
+])
+
+_REASONING_PREFERENCES = EvalSet(
+    eval_set_id="reasoning-preference-detection",
+    name="Reasoning Agent — Preference Detection",
+    description=(
+        "Golden dataset: detecting and creating/updating "
+        "user preference Things from explicit statements "
+        "and behavioral patterns"
+    ),
+    eval_cases=[
+        # Explicit preference — direct statement creates new preference
+        EvalCase(
+            eval_id="preference-explicit-new",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "I hate morning meetings, they ruin "
+                            "my focus time"
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Noted preference: avoids morning "
+                                "meetings to protect focus time."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "morning meetings",
+                                    "scheduling preferences",
+                                    "preferences",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Scheduling preferences",
+                                "type_hint": "preference",
+                                "data_json": json.dumps({
+                                    "patterns": [{
+                                        "pattern": (
+                                            "Avoids morning meetings"
+                                        ),
+                                        "confidence": "emerging",
+                                        "observations": 1,
+                                        "first_observed": "2026-03-18",
+                                        "last_observed": "2026-03-18",
+                                    }],
+                                }),
+                                "surface": False,
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _empty_ctx()),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0001",
+                                "title": "Scheduling preferences",
+                                "type_hint": "preference",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Explicit preference alongside an action — update meeting
+        # AND record preference
+        EvalCase(
+            eval_id="preference-explicit-with-action",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Move the team standup to afternoon, "
+                            "I hate morning meetings",
+                            things_json=_MORNING_MEETING,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Moved standup to afternoon and "
+                                "noted morning meeting preference."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "team standup",
+                                    "morning meetings",
+                                    "scheduling preferences",
+                                ]),
+                            }),
+                            _fc("update_thing", {
+                                "thing_id": "thing-700",
+                                "data_json": json.dumps({
+                                    "time": "14:00",
+                                    "day": "Monday",
+                                    "notes": (
+                                        "Moved from morning to "
+                                        "afternoon"
+                                    ),
+                                }),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Scheduling preferences",
+                                "type_hint": "preference",
+                                "data_json": json.dumps({
+                                    "patterns": [{
+                                        "pattern": (
+                                            "Avoids morning meetings"
+                                        ),
+                                        "confidence": "emerging",
+                                        "observations": 1,
+                                        "first_observed": "2026-03-18",
+                                        "last_observed": "2026-03-18",
+                                    }],
+                                }),
+                                "surface": False,
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _things_ctx(
+                                {
+                                    "id": "thing-700",
+                                    "title": "Team standup",
+                                },
+                            )),
+                            _fr("update_thing", {
+                                "id": "thing-700",
+                                "title": "Team standup",
+                            }),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0002",
+                                "title": "Scheduling preferences",
+                                "type_hint": "preference",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Reinforcement — existing preference gains confidence
+        EvalCase(
+            eval_id="preference-reinforcement",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Move that 8am call to after lunch, "
+                            "mornings don't work for me",
+                            things_json=_SCHED_PREF,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Reinforced morning meeting "
+                                "avoidance preference."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "8am call",
+                                    "morning meetings",
+                                    "scheduling preferences",
+                                ]),
+                            }),
+                            _fc("update_thing", {
+                                "thing_id": "pref-100",
+                                "data_json": json.dumps({
+                                    "patterns": [{
+                                        "pattern": (
+                                            "Avoids morning meetings"
+                                        ),
+                                        "confidence": "moderate",
+                                        "observations": 2,
+                                        "first_observed": "2026-03-10",
+                                        "last_observed": "2026-03-18",
+                                    }],
+                                }),
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _things_ctx(
+                                {
+                                    "id": "pref-100",
+                                    "title": "Scheduling preferences",
+                                    "type_hint": "preference",
+                                },
+                            )),
+                            _fr("update_thing", {
+                                "id": "pref-100",
+                                "title": "Scheduling preferences",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Inferred preference — pattern from behavior
+        EvalCase(
+            eval_id="preference-inferred-pattern",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Cancel both of those Budget Air "
+                            "flights and rebook with a real "
+                            "airline. I always end up delayed "
+                            "with them.",
+                            things_json=_TRAVEL_BOOKINGS,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Cancelled Budget Air flights and "
+                                "noted preference against budget "
+                                "airlines."
+                            ),
+                            questions_for_user=[
+                                "Which airline would you prefer "
+                                "for the rebooking?",
+                            ],
+                            priority_question=(
+                                "Which airline would you prefer "
+                                "for the rebooking?"
+                            ),
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "Budget Air flights",
+                                    "travel preferences",
+                                    "airline",
+                                ]),
+                            }),
+                            _fc("delete_thing", {
+                                "thing_id": "thing-800",
+                            }),
+                            _fc("delete_thing", {
+                                "thing_id": "thing-801",
+                            }),
+                            _fc("create_thing", {
+                                "title": "Travel preferences",
+                                "type_hint": "preference",
+                                "data_json": json.dumps({
+                                    "patterns": [{
+                                        "pattern": (
+                                            "Avoids budget airlines "
+                                            "(delays)"
+                                        ),
+                                        "confidence": "moderate",
+                                        "observations": 2,
+                                        "first_observed": "2026-03-18",
+                                        "last_observed": "2026-03-18",
+                                    }],
+                                }),
+                                "surface": False,
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _things_ctx(
+                                {"id": "thing-800",
+                                 "title": "Flight to NYC"},
+                                {"id": "thing-801",
+                                 "title": "Flight to LA"},
+                            )),
+                            _fr("delete_thing", {
+                                "deleted": "thing-800",
+                                "title": "Flight to NYC",
+                            }),
+                            _fr("delete_thing", {
+                                "deleted": "thing-801",
+                                "title": "Flight to LA",
+                            }),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0003",
+                                "title": "Travel preferences",
+                                "type_hint": "preference",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Negative preference — explicit avoidance
+        EvalCase(
+            eval_id="preference-negative-explicit",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Just book the cheap one. I always "
+                            "go with the cheapest option for "
+                            "work travel."
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Noted cost optimization preference "
+                                "for work travel."
+                            ),
+                            questions_for_user=[
+                                "What are you booking?",
+                            ],
+                            priority_question=(
+                                "What are you booking?"
+                            ),
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "work travel",
+                                    "travel preferences",
+                                    "booking",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Travel preferences",
+                                "type_hint": "preference",
+                                "data_json": json.dumps({
+                                    "patterns": [{
+                                        "pattern": (
+                                            "Optimizes for cost "
+                                            "on work travel"
+                                        ),
+                                        "confidence": "strong",
+                                        "observations": 1,
+                                        "first_observed": "2026-03-18",
+                                        "last_observed": "2026-03-18",
+                                    }],
+                                }),
+                                "surface": False,
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _empty_ctx()),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0004",
+                                "title": "Travel preferences",
+                                "type_hint": "preference",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+    ],
+)
+
+
+# -------------------------------------------------------------------
 # Writer
 # -------------------------------------------------------------------
 
@@ -913,6 +1330,10 @@ def main() -> None:
     _write(_REASONING_MERGE, reasoning_dir / "merge_things.test.json")
     _write(
         _REASONING_MULTISTEP, reasoning_dir / "multi_step.test.json"
+    )
+    _write(
+        _REASONING_PREFERENCES,
+        reasoning_dir / "preference_detection.test.json",
     )
     _write(_CONTEXT_SEARCH, context_dir / "search_params.test.json")
     print("Done.")
