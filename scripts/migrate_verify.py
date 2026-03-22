@@ -19,6 +19,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 
 # Tables where Supabase auto-generates new IDs (can't check by PK)
@@ -79,7 +80,7 @@ class VerificationResult:
 
 
 def verify_row_counts(
-    client: object,
+    client: Any,
     data_dir: Path,
     result: VerificationResult,
 ) -> None:
@@ -122,7 +123,7 @@ def verify_row_counts(
 
 
 def verify_spot_checks(
-    client: object,
+    client: Any,
     data_dir: Path,
     result: VerificationResult,
 ) -> None:
@@ -217,7 +218,7 @@ def verify_spot_checks(
 
 
 def verify_vectors(
-    client: object,
+    client: Any,
     data_dir: Path,
     result: VerificationResult,
 ) -> None:

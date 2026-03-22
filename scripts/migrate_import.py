@@ -23,6 +23,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Column mapping: SQLite name → Supabase name
@@ -132,7 +133,7 @@ def _transform_row(table: str, row: dict, id_maps: dict[str, dict]) -> dict | No
 
 
 def _upsert_batch(
-    client: object,
+    client: Any,
     table: str,
     rows: list[dict],
     dry_run: bool,
@@ -146,21 +147,21 @@ def _upsert_batch(
     # Tables with text PKs use "id"; identity tables have no PK to conflict on
     if table in IDENTITY_TABLES:
         # For identity tables, just insert (no upsert — IDs are auto-generated)
-        resp = client.table(table).insert(rows).execute()  # type: ignore[union-attr]
+        resp = client.table(table).insert(rows).execute()
     elif table == "user_settings":
         # user_settings has composite unique on (user_id, key)
-        resp = client.table(table).upsert(rows, on_conflict="user_id,key").execute()  # type: ignore[union-attr]
+        resp = client.table(table).upsert(rows, on_conflict="user_id,key").execute()
     elif table == "google_tokens":
         # google_tokens has composite unique on (user_id, service)
-        resp = client.table(table).upsert(rows, on_conflict="user_id,service").execute()  # type: ignore[union-attr]
+        resp = client.table(table).upsert(rows, on_conflict="user_id,service").execute()
     else:
-        resp = client.table(table).upsert(rows).execute()  # type: ignore[union-attr]
+        resp = client.table(table).upsert(rows).execute()
 
     return resp.data if resp.data else []
 
 
 def import_table(
-    client: object,
+    client: Any,
     table: str,
     data_dir: Path,
     dry_run: bool,
@@ -213,7 +214,7 @@ def import_table(
 
 
 def import_vectors(
-    client: object, data_dir: Path, dry_run: bool
+    client: Any, data_dir: Path, dry_run: bool
 ) -> int:
     """Import vector embeddings into things.embedding column.
 
