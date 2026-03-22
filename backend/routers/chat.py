@@ -22,6 +22,8 @@ from ..models import (
     MigrateSessionRequest,
     ModelUsage,
     SessionUsage,
+    ThinkRequest,
+    ThinkResponse,
     UsageInfo,
 )
 from ..pipeline import ChatPipeline
@@ -427,6 +429,38 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
         mode=mode,
         usage=UsageInfo(**result.usage.to_dict()),
         session_usage=daily_usage,
+    )
+
+
+@router.post("/think", response_model=ThinkResponse, summary="Run reasoning agent only (no response generation)")
+async def think(body: ThinkRequest, user_id: str = Depends(require_user)) -> ThinkResponse:
+    """Reasoning-as-a-service: run the reasoning agent on a natural-language
+    message and return structured instructions (what was created, updated,
+    linked, deleted).  No user-facing response is generated.
+
+    Designed for MCP ``reli_think`` tool where the calling agent handles
+    presentation and may follow up with CRUD tools.
+    """
+    mode = body.mode if body.mode in ("normal", "planning") else "normal"
+    pipeline = _build_pipeline(user_id, mode=mode)
+
+    history: list[dict[str, Any]] = []
+    if body.session_id:
+        history = _fetch_history(body.session_id, pipeline.context_window, user_id)
+
+    result = await pipeline.think(body.message, history, session_id=body.session_id)
+
+    usage_stats = result.get("usage")
+    usage_info = UsageInfo(**usage_stats.to_dict()) if usage_stats else None
+
+    return ThinkResponse(
+        applied_changes=result["applied_changes"],
+        questions_for_user=result["questions_for_user"],
+        priority_question=result["priority_question"],
+        reasoning_summary=result["reasoning_summary"],
+        briefing_mode=result["briefing_mode"],
+        relevant_things=result["relevant_things"],
+        usage=usage_info,
     )
 
 

@@ -246,6 +246,65 @@ class ChatResponse(BaseModel):
     session_usage: SessionUsage | None = None
 
 
+# ── Think (reasoning-as-a-service) ───────────────────────────────────────────
+
+
+class ThinkRequest(BaseModel):
+    """Run the reasoning agent without generating a user-facing response.
+
+    Returns structured instructions: what was created, updated, linked, or
+    deleted.  The calling agent can inspect the result and optionally follow
+    up with CRUD tools.
+    """
+
+    message: str = Field(
+        ...,
+        min_length=1,
+        max_length=10_000,
+        description="Natural-language request to reason about",
+        examples=["Remember that my dentist appointment is next Thursday at 2pm"],
+    )
+    session_id: str = Field(
+        default="",
+        description="Optional chat session ID for conversation context",
+    )
+    mode: str = Field(
+        default="normal",
+        description="Reasoning mode: 'normal' or 'planning'",
+        examples=["normal", "planning"],
+    )
+
+
+class ThinkResponse(BaseModel):
+    """Structured reasoning result — what the agent decided and executed."""
+
+    applied_changes: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Storage mutations: created, updated, deleted, merged, relationships_created",
+    )
+    questions_for_user: list[str] = Field(
+        default_factory=list,
+        description="Clarifying questions the agent wants to ask, most important first",
+    )
+    priority_question: str = Field(
+        default="",
+        description="The single most important question to surface this turn",
+    )
+    reasoning_summary: str = Field(
+        default="",
+        description="Brief internal note explaining the agent's reasoning and intent",
+    )
+    briefing_mode: bool = Field(
+        default=False,
+        description="True when the message triggered a briefing/status overview",
+    )
+    relevant_things: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Things from the database that were relevant to this request",
+    )
+    usage: UsageInfo | None = None
+
+
 # ── Briefing ──────────────────────────────────────────────────────────────────
 
 

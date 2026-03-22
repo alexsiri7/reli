@@ -557,6 +557,66 @@ class ChatPipeline:
             usage=usage,
         )
 
+    async def think(
+        self,
+        message: str,
+        history: list[dict[str, Any]] | None = None,
+        session_id: str = "",
+    ) -> dict[str, Any]:
+        """Run ONLY the reasoning agent — no response generation.
+
+        Returns structured reasoning output: applied_changes, questions,
+        reasoning_summary, relevant_things, etc.  Useful for MCP
+        ``reli_think`` tool where the calling agent handles presentation.
+        """
+        history = history or []
+        usage = UsageStats()
+
+        warm_context = _fetch_warm_context(session_id, self.user_id) if session_id else []
+
+        with _tracer.start_as_current_span("reli.think") as span:
+            span.set_attribute("reli.user_id", self.user_id)
+            span.set_attribute("reli.message_length", len(message))
+
+            calendar_events = self._fetch_calendar_events()
+
+            reasoning_result = await run_reasoning_agent(
+                message,
+                history,
+                [],
+                None,
+                None,
+                calendar_events,
+                relationships=None,
+                usage_stats=usage,
+                context_window=self.context_window,
+                api_key=self.user_api_key,
+                model=self.user_models.get("reasoning"),
+                user_id=self.user_id,
+                mode=self.mode,
+                interaction_style=self.interaction_style,
+                session_id=session_id,
+                warm_context=warm_context,
+            )
+
+            fetched_ctx = reasoning_result.get("fetched_context", {})
+            relevant_things = fetched_ctx.get("things", [])
+
+            applied_changes = reasoning_result.get(
+                "applied_changes",
+                {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []},
+            )
+
+            return {
+                "applied_changes": applied_changes,
+                "questions_for_user": reasoning_result.get("questions_for_user", []),
+                "priority_question": reasoning_result.get("priority_question", ""),
+                "reasoning_summary": reasoning_result.get("reasoning_summary", ""),
+                "briefing_mode": reasoning_result.get("briefing_mode", False),
+                "relevant_things": relevant_things,
+                "usage": usage,
+            }
+
     async def run_stream(
         self,
         message: str,
