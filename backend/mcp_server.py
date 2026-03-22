@@ -290,9 +290,7 @@ def delete_relationship(relationship_id: str) -> dict[str, Any]:
     Args:
         relationship_id: The UUID of the relationship to delete.
     """
-    result: dict[str, Any] = _api_delete(
-        f"/api/things/relationships/{relationship_id}"
-    )
+    result: dict[str, Any] = _api_delete(f"/api/things/relationships/{relationship_id}")
     return result
 
 
@@ -654,8 +652,7 @@ def main() -> None:
     """Run the MCP server over stdio."""
     if not RELI_API_TOKEN:
         print(
-            "Warning: RELI_API_TOKEN not set. "
-            "Auth will be skipped if server has no SECRET_KEY.",
+            "Warning: RELI_API_TOKEN not set. Auth will be skipped if server has no SECRET_KEY.",
             file=sys.stderr,
         )
     mcp.run(transport="stdio")

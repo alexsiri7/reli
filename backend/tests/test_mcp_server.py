@@ -40,9 +40,7 @@ def _mock_response(data: Any, status_code: int = 200) -> httpx.Response:
 
 
 def _mock_204() -> httpx.Response:
-    return httpx.Response(
-        status_code=204, request=httpx.Request("DELETE", "http://test")
-    )
+    return httpx.Response(status_code=204, request=httpx.Request("DELETE", "http://test"))
 
 
 # ---------------------------------------------------------------------------
@@ -55,9 +53,7 @@ class TestSearchThings:
     def test_basic_search(self, mock_get: MagicMock) -> None:
         mock_get.return_value = [{"id": "t1", "title": "Buy milk"}]
         result = search_things(query="milk")
-        mock_get.assert_called_once_with(
-            "/api/things/search", params={"q": "milk", "limit": 20}
-        )
+        mock_get.assert_called_once_with("/api/things/search", params={"q": "milk", "limit": 20})
         assert len(result) == 1
         assert result[0]["title"] == "Buy milk"
 
@@ -164,9 +160,7 @@ class TestUpdateThing:
     def test_update_title(self, mock_patch: MagicMock) -> None:
         mock_patch.return_value = {"id": "t1", "title": "Updated"}
         result = update_thing(thing_id="t1", title="Updated")
-        mock_patch.assert_called_once_with(
-            "/api/things/t1", json_body={"title": "Updated"}
-        )
+        mock_patch.assert_called_once_with("/api/things/t1", json_body={"title": "Updated"})
         assert result["title"] == "Updated"
 
     @patch("backend.mcp_server._api_patch")
@@ -361,9 +355,7 @@ class TestIntegration:
     def test_crud_lifecycle(self, api_server: None) -> None:
         """Create, read, update, search, and delete a Thing end-to-end."""
         # Create
-        created = create_thing(
-            title="MCP Test Thing", type_hint="task", priority=2
-        )
+        created = create_thing(title="MCP Test Thing", type_hint="task", priority=2)
         assert created["title"] == "MCP Test Thing"
         thing_id = created["id"]
 
@@ -373,9 +365,7 @@ class TestIntegration:
         assert fetched["type_hint"] == "task"
 
         # Update
-        updated = update_thing(
-            thing_id=thing_id, title="Updated MCP Thing", priority=1
-        )
+        updated = update_thing(thing_id=thing_id, title="Updated MCP Thing", priority=1)
         assert updated["title"] == "Updated MCP Thing"
         assert updated["priority"] == 1
 
