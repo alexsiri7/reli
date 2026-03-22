@@ -1197,11 +1197,13 @@ def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
         if isinstance(data, dict) and "patterns" in data:
             for p in data["patterns"]:
                 if isinstance(p, dict) and "pattern" in p:
-                    patterns.append({
-                        "pattern": p["pattern"],
-                        "confidence": p.get("confidence", "emerging"),
-                        "observations": p.get("observations", 1),
-                    })
+                    patterns.append(
+                        {
+                            "pattern": p["pattern"],
+                            "confidence": p.get("confidence", "emerging"),
+                            "observations": p.get("observations", 1),
+                        }
+                    )
     return patterns
 
 

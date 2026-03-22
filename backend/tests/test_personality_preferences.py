@@ -11,7 +11,6 @@ from backend.agents import (
 )
 from backend.models import PersonalityPattern, PersonalityPreferenceData
 
-
 # ---------------------------------------------------------------------------
 # Schema validation
 # ---------------------------------------------------------------------------
@@ -71,12 +70,14 @@ class TestLoadPersonalityPreferences:
                 ("u1", "test@test.com", "g1", "Test User"),
             )
             # Create a preference thing
-            pref_data = json.dumps({
-                "patterns": [
-                    {"pattern": "Be concise", "confidence": "strong", "observations": 3},
-                    {"pattern": "Use examples", "confidence": "emerging"},
-                ]
-            })
+            pref_data = json.dumps(
+                {
+                    "patterns": [
+                        {"pattern": "Be concise", "confidence": "strong", "observations": 3},
+                        {"pattern": "Use examples", "confidence": "emerging"},
+                    ]
+                }
+            )
             conn.execute(
                 "INSERT INTO things (id, title, type_hint, active, data, user_id) VALUES (?, ?, ?, ?, ?, ?)",
                 ("t1", "Communication Style", "preference", 1, pref_data, "u1"),

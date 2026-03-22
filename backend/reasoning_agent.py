@@ -647,9 +647,7 @@ def _make_reasoning_tools(
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT role, content, timestamp FROM chat_history"
-                    " WHERE session_id = ?"
-                    " ORDER BY id DESC LIMIT ?",
+                    "SELECT role, content, timestamp FROM chat_history WHERE session_id = ? ORDER BY id DESC LIMIT ?",
                     (session_id, n),
                 ).fetchall()
 
