@@ -24,6 +24,7 @@ from .agents import (
     REQUESTY_REASONING_MODEL,
     UsageStats,
     _chat_ollama,
+    _with_current_date,
     apply_storage_changes,
 )
 from .context_agent import _make_litellm_model, _run_agent_for_text
@@ -431,11 +432,13 @@ def get_system_prompt_for_mode(mode: str, interaction_style: str = "auto") -> st
         base = REASONING_AGENT_TOOL_SYSTEM
 
     if interaction_style == "coach":
-        return base + _COACH_STYLE_OVERLAY
+        prompt = base + _COACH_STYLE_OVERLAY
     elif interaction_style == "consultant":
-        return base + _CONSULTANT_STYLE_OVERLAY
+        prompt = base + _CONSULTANT_STYLE_OVERLAY
     else:
-        return base + _AUTO_STYLE_OVERLAY
+        prompt = base + _AUTO_STYLE_OVERLAY
+
+    return _with_current_date(prompt)
 
 
 # ---------------------------------------------------------------------------
@@ -1237,7 +1240,7 @@ async def run_reasoning_agent(
     # -- Ollama fallback (unchanged — uses JSON blob + apply_storage_changes) --
     if OLLAMA_MODEL:
         try:
-            messages = [{"role": "system", "content": REASONING_AGENT_SYSTEM}]
+            messages = [{"role": "system", "content": _with_current_date(REASONING_AGENT_SYSTEM)}]
             for h in history[-context_window:]:
                 messages.append({"role": h["role"], "content": h["content"]})
             messages.append({"role": "user", "content": user_content})
