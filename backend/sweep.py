@@ -12,6 +12,7 @@ Finding types:
   - orphan: Active Thing with no relationships (no parent, no children, no graph edges)
   - completed_project: Project where all children are inactive but project is still active
   - open_question: Active Thing with unanswered open_questions
+  - incomplete: Active Thing with information gaps (no dates, minimal data, name-only person)
   - cross_project_shared_blocker: Thing that blocks tasks in multiple projects
   - cross_project_resource_conflict: Person/entity involved in multiple stale projects
   - cross_project_thematic_connection: Similar Things across different projects
@@ -430,6 +431,101 @@ def find_open_questions(conn: sqlite3.Connection, user_id: str = "") -> list[Swe
 
 
 # ---------------------------------------------------------------------------
+# Gap detection — incomplete Things
+# ---------------------------------------------------------------------------
+
+
+def find_incomplete_things(
+    conn: sqlite3.Connection,
+    user_id: str = "",
+) -> list[SweepCandidate]:
+    """Find active Things with information gaps that need filling.
+
+    Detects:
+    - No dates: no checkin_date and no date fields in data JSON
+    - Minimal data: null or empty data dict
+    - Name-only people: type_hint='person' with sparse data
+    - No deadlines: tasks/projects with no deadline-type date
+    """
+    uf_sql, uf_params = user_filter(user_id)
+
+    # Fetch active things that don't already have open_questions
+    rows = conn.execute(
+        f"""SELECT id, title, type_hint, data, checkin_date, parent_id
+           FROM things
+           WHERE active = 1
+             AND (open_questions IS NULL OR open_questions = '[]' OR open_questions = 'null'){uf_sql}
+           ORDER BY updated_at DESC""",
+        uf_params,
+    ).fetchall()
+
+    candidates: list[SweepCandidate] = []
+    seen_ids: set[str] = set()
+
+    for row in rows:
+        thing_id = row["id"]
+        title = row["title"]
+        type_hint = row["type_hint"] or ""
+        checkin_date = row["checkin_date"]
+
+        # Parse data JSON
+        raw_data = row["data"]
+        try:
+            data = json.loads(raw_data) if isinstance(raw_data, str) and raw_data else raw_data
+        except (json.JSONDecodeError, TypeError):
+            data = None
+        if not isinstance(data, dict):
+            data = {}
+
+        gaps: list[str] = []
+
+        # Check: name-only person (most specific — check first)
+        if type_hint == "person":
+            meaningful_keys = {k for k in data if k not in ("notes",) and data[k]}
+            if len(meaningful_keys) < 2:
+                gaps.append("name-only person")
+
+        # Check: minimal data (empty or null data dict)
+        if not data:
+            gaps.append("no data")
+
+        # Check: no dates at all
+        has_checkin = bool(checkin_date)
+        has_data_dates = any(k.lower().replace(" ", "_") in _ALL_DATE_KEYS for k in data)
+        if not has_checkin and not has_data_dates:
+            gaps.append("no dates")
+
+        # Check: task/project without deadline
+        if type_hint in ("task", "project", "goal"):
+            has_deadline = any(k.lower().replace(" ", "_") in _ONESHOT_KEYS for k in data)
+            if not has_checkin and not has_deadline:
+                gaps.append("no deadline")
+
+        if not gaps or thing_id in seen_ids:
+            continue
+        seen_ids.add(thing_id)
+
+        gap_summary = ", ".join(gaps)
+        type_label = type_hint.title() if type_hint else "Thing"
+        candidates.append(
+            SweepCandidate(
+                thing_id=thing_id,
+                thing_title=title,
+                finding_type="incomplete",
+                message=f"Incomplete {type_label} ({gap_summary}): {title}",
+                priority=3,
+                extra={
+                    "type_hint": type_hint or "unknown",
+                    "gaps": gaps,
+                    "data_key_count": len(data),
+                },
+            )
+        )
+
+    return candidates
+
+
+# ---------------------------------------------------------------------------
 # Cross-project pattern detection (#sweep-finding)
 # ---------------------------------------------------------------------------
 
@@ -701,6 +797,7 @@ def collect_candidates(
             + find_orphan_things(conn, user_id=user_id)
             + find_completed_projects(conn, user_id=user_id)
             + find_open_questions(conn, user_id=user_id)
+            + find_incomplete_things(conn, user_id=user_id)
             + find_cross_project_shared_blockers(conn)
             + find_cross_project_resource_conflicts(conn, today, stale_days)
             + find_cross_project_thematic_connections(conn)
@@ -880,5 +977,145 @@ async def reflect_on_candidates(
     return ReflectionResult(
         findings_created=len(created),
         findings=created,
+        usage=usage_stats.to_dict(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Gap question generation
+# ---------------------------------------------------------------------------
+
+GAP_QUESTION_SYSTEM = """\
+You are a knowledge-gap analyst for Reli, an AI personal information manager.
+You receive a list of Things that have been identified as incomplete — missing dates,
+deadlines, details, or other key information.
+
+Your job: for each Thing, generate 1-3 specific, actionable questions that would
+fill the most important gaps. Tailor questions to the Thing's type and context.
+
+Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
+{
+  "things": [
+    {
+      "thing_id": "uuid",
+      "questions": ["Question 1?", "Question 2?"]
+    }
+  ]
+}
+
+Rules:
+- Generate 1-3 questions per Thing. Quality over quantity.
+- Questions should be specific to the Thing, not generic.
+- For people: ask about role, contact info, how you know them, upcoming events.
+- For tasks/projects: ask about deadlines, success criteria, next steps, blockers.
+- For events: ask about date, location, who's attending, preparation needed.
+- For goals: ask about timeline, milestones, how to measure progress.
+- Don't ask about information that's already present in the Thing's data.
+- Write questions as if asking the user directly: "When is this due?" not "What is the deadline for this Thing?"
+- If a Thing already has enough context to not need questions, return an empty questions list for it.
+"""
+
+
+@dataclass
+class GapQuestionResult:
+    """Result of the gap question generation phase."""
+
+    things_updated: int = 0
+    questions_generated: int = 0
+    usage: dict = field(default_factory=dict)
+
+
+async def generate_gap_questions(
+    candidates: list[SweepCandidate] | None = None,
+    user_id: str = "",
+    batch_size: int = 20,
+) -> GapQuestionResult:
+    """Phase 3: Generate questions for incomplete Things and store as open_questions.
+
+    Finds incomplete Things via SQL, sends them to an LLM for question generation,
+    and writes the questions to each Thing's open_questions column.
+    """
+    from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
+
+    if candidates is None:
+        with db() as conn:
+            candidates = find_incomplete_things(conn, user_id=user_id)
+
+    if not candidates:
+        return GapQuestionResult()
+
+    # Limit batch size to avoid overly long prompts
+    candidates = candidates[:batch_size]
+
+    usage_stats = UsageStats()
+
+    # Format candidates for the LLM
+    lines = [f"Today: {date.today().isoformat()}", "", f"{len(candidates)} incomplete Things:"]
+    for i, c in enumerate(candidates, 1):
+        gaps = ", ".join(c.extra.get("gaps", []))
+        data_keys = c.extra.get("data_key_count", 0)
+        lines.append(
+            f'{i}. [{c.extra.get("type_hint", "unknown")}] "{c.thing_title}" '
+            f"(gaps: {gaps}, data keys: {data_keys}) [id={c.thing_id}]"
+        )
+    prompt = "\n".join(lines)
+
+    raw = await _chat(
+        messages=[
+            {"role": "system", "content": GAP_QUESTION_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        model=REQUESTY_REASONING_MODEL,
+        response_format={"type": "json_object"},
+        usage_stats=usage_stats,
+    )
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("Gap question generation returned invalid JSON: %s", raw[:200])
+        return GapQuestionResult(usage=usage_stats.to_dict())
+
+    raw_things = parsed.get("things", [])
+    if not isinstance(raw_things, list):
+        raw_things = []
+
+    # Collect valid thing_ids from candidates
+    valid_thing_ids = {c.thing_id for c in candidates}
+    things_updated = 0
+    questions_generated = 0
+
+    with db() as conn:
+        for item in raw_things:
+            if not isinstance(item, dict):
+                continue
+            thing_id = item.get("thing_id")
+            if not thing_id or thing_id not in valid_thing_ids:
+                continue
+            questions = item.get("questions", [])
+            if not isinstance(questions, list) or not questions:
+                continue
+            # Filter to only string questions
+            questions = [q for q in questions if isinstance(q, str) and q.strip()]
+            if not questions:
+                continue
+
+            conn.execute(
+                """UPDATE things SET open_questions = ?, updated_at = ?
+                   WHERE id = ?""",
+                (json.dumps(questions), datetime.now(timezone.utc).isoformat(), thing_id),
+            )
+            things_updated += 1
+            questions_generated += len(questions)
+
+    logger.info(
+        "Gap question generation: %d things updated, %d questions generated",
+        things_updated,
+        questions_generated,
+    )
+
+    return GapQuestionResult(
+        things_updated=things_updated,
+        questions_generated=questions_generated,
         usage=usage_stats.to_dict(),
     )
