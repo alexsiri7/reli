@@ -363,6 +363,7 @@ class ChatPipeline:
         self,
         message: str,
         history: list[dict[str, Any]],
+        session_id: str = "",
     ) -> "PipelineResult":
         """Run the full chat pipeline: reasoning (with context tool) → response.
 
@@ -396,6 +397,7 @@ class ChatPipeline:
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id, mode=self.mode,
                             interaction_style=self.interaction_style,
+                            session_id=session_id,
                         )
 
                         # Extract context fetched by the reasoning agent's tool
@@ -481,6 +483,7 @@ class ChatPipeline:
         self,
         message: str,
         history: list[dict[str, Any]],
+        session_id: str = "",
     ) -> AsyncIterator[PipelineEvent]:
         """Run the pipeline with streaming, yielding events for SSE delivery.
 
@@ -518,6 +521,7 @@ class ChatPipeline:
                             api_key=self.user_api_key, model=self.user_models.get("reasoning"),
                             user_id=self.user_id, mode=self.mode,
                             interaction_style=self.interaction_style,
+                            session_id=session_id,
                         )
 
                         fetched_ctx = reasoning_result.get("fetched_context", {})

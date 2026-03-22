@@ -335,7 +335,7 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
     pipeline = _build_pipeline(user_id, mode=mode)
     history = _fetch_history(session_id, pipeline.context_window)
 
-    result = await pipeline.run(message, history)
+    result = await pipeline.run(message, history, session_id=session_id)
 
     applied_with_sources = _persist_exchange(
         session_id, user_id, message, result.reply, result, result.usage,
@@ -377,7 +377,7 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
             result = None
             reply = ""
 
-            async for event in pipeline.run_stream(message, history):
+            async for event in pipeline.run_stream(message, history, session_id=session_id):
                 if event.type == "stage_start":
                     yield _sse("stage", {"stage": event.stage, "status": "started"})
                 elif event.type == "stage_complete":
