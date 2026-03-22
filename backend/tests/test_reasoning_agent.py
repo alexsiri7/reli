@@ -760,45 +760,6 @@ class TestToolCatchallErrorHandling:
 # ---------------------------------------------------------------------------
 
 
-class TestHasToolCallMarkers:
-    """Test _has_tool_call_markers detects enrichment markers from tool call turns."""
-
-    def test_detects_created_marker(self):
-        from backend.reasoning_agent import _has_tool_call_markers
-
-        content = "I updated your project.\n[Created: New Project (project)]"
-        assert _has_tool_call_markers(content) is True
-
-    def test_detects_updated_marker(self):
-        from backend.reasoning_agent import _has_tool_call_markers
-
-        content = "Done.\n[Updated: Existing Task (task)]"
-        assert _has_tool_call_markers(content) is True
-
-    def test_detects_deleted_marker(self):
-        from backend.reasoning_agent import _has_tool_call_markers
-
-        content = "Removed it.\n[Deleted: Old Item]"
-        assert _has_tool_call_markers(content) is True
-
-    def test_detects_merged_marker(self):
-        from backend.reasoning_agent import _has_tool_call_markers
-
-        content = "Merged duplicates.\n[Merged: A into B]"
-        assert _has_tool_call_markers(content) is True
-
-    def test_no_markers_returns_false(self):
-        from backend.reasoning_agent import _has_tool_call_markers
-
-        assert _has_tool_call_markers("Just a normal response.") is False
-
-    def test_empty_content_returns_false(self):
-        from backend.reasoning_agent import _has_tool_call_markers
-
-        assert _has_tool_call_markers("") is False
-        assert _has_tool_call_markers(None) is False  # type: ignore[arg-type]
-
-
 class TestIsThoughtSignatureError:
     """Test _is_thought_signature_error detects Gemini thought_signature errors."""
 
@@ -889,16 +850,16 @@ class TestRunAdkWithThoughtSignatureFallback:
             )
 
 
-class TestHistoryFilteringInReasoningAgent:
-    """Test that run_reasoning_agent excludes tool-call history turns."""
+class TestHistoryEnrichmentInReasoningAgent:
+    """Test that run_reasoning_agent includes enrichment metadata separately."""
 
     @pytest.mark.asyncio
-    async def test_excludes_assistant_turns_with_tool_markers(self):
-        """Assistant turns with tool call markers should be excluded from history."""
+    async def test_includes_enrichment_metadata_separately(self):
+        """Assistant turns should have pristine content with enrichment in a separate tag."""
         metadata = {"reasoning_summary": "test"}
         history = [
             {"role": "user", "content": "Create a project called X"},
-            {"role": "assistant", "content": "Done!\n[Created: X (project)]"},
+            {"role": "assistant", "content": "Done!", "enrichment_metadata": "[Created: X (project)]"},
             {"role": "user", "content": "Now update it"},
         ]
 
@@ -925,8 +886,10 @@ class TestHistoryFilteringInReasoningAgent:
         full_prompt = call_args.args[1]  # second positional arg
         # User turns should be included
         assert "<user>" in full_prompt
-        # Assistant turn with tool marker should be excluded
-        assert "[Created:" not in full_prompt
+        # Assistant turn content should be pristine (no markers appended)
+        assert "<assistant>Done!</assistant>" in full_prompt
+        # Enrichment metadata should appear in a separate tag
+        assert "<enrichment>[Created: X (project)]</enrichment>" in full_prompt
 
     @pytest.mark.asyncio
     async def test_keeps_assistant_turns_without_markers(self):
