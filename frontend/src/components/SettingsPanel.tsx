@@ -120,7 +120,6 @@ function SettingsForm({
   const [reqApiKeyDisplay, setReqApiKeyDisplay] = useState(initialUserSettings?.requesty_api_key || '')
   const [staleThresholdDays, setStaleThresholdDays] = useState(initialUserSettings?.stale_threshold_days ?? 14)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
 
   const hasModelChanges =
     context !== initial.context ||
@@ -135,7 +134,6 @@ function SettingsForm({
 
   const handleSave = async () => {
     setSaving(true)
-    setSaved(false)
 
     // Save model settings (these go to per-user DB when auth is active)
     if (hasModelChanges) {
@@ -155,8 +153,7 @@ function SettingsForm({
     }
 
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    onClose()
   }
 
   return (
@@ -277,9 +274,6 @@ function SettingsForm({
       <ThemeSection />
       <ProactivitySection />
       <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
-        {saved && (
-          <span className="text-sm text-green-600 dark:text-green-400">Saved</span>
-        )}
         <button
           onClick={onClose}
           className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
