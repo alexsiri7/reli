@@ -1,8 +1,8 @@
-"""Reli MCP server — knowledge graph tools, briefing, and PA behavior prompts.
+"""Reli MCP server — CRUD + search tools and reli_think reasoning-as-a-service.
 
-Exposes Things, Relationships, briefing, and conflict detection as MCP tools
-over stdio transport, plus MCP prompt resources that teach calling agents how
-to act as a personal assistant using the Reli knowledge graph.
+Exposes Things and Relationships as MCP tools over stdio transport,
+plus `reli_think` for reasoning-as-a-service: send natural language,
+get structured instructions back (what to create/update/link/delete).
 
 Usage:
     RELI_API_URL=http://localhost:8000 RELI_API_TOKEN=<jwt> python -m backend.mcp_server
@@ -102,14 +102,14 @@ mcp = FastMCP(
         "and deadline conflicts. "
         "Use the prompt resources (thing-creation, relationship-patterns, "
         "proactive-surfacing, pa-behavior) to learn how to act as a Reli-powered PA."
+        "Use reli_think for AI-powered reasoning over complex natural language requests."
     ),
 )
 
 
 # ---------------------------------------------------------------------------
-# MCP Tools — CRUD + search (Phase 1)
+# CRUD + Search Tools (Phase 1)
 # ---------------------------------------------------------------------------
-
 
 
 @mcp.tool()
@@ -163,8 +163,7 @@ def create_thing(
 
     Args:
         title: Short descriptive title (required).
-        type_hint: Category like 'task', 'note', 'project', 'person', 'idea',
-            'goal', 'event', 'place', 'concept', 'reference'.
+        type_hint: Category like 'task', 'note', 'project', 'person', 'idea', 'goal', 'event', 'place', 'concept'.
         data: Arbitrary JSON data (e.g. {"email": "...", "birthday": "..."}).
         priority: 1 (highest) to 5 (lowest), default 3.
         parent_id: ID of a parent Thing for hierarchical nesting.
@@ -173,12 +172,7 @@ def create_thing(
         surface: Whether to show in default views.
         open_questions: List of unresolved questions about this Thing.
     """
-    body: dict[str, Any] = {
-        "title": title,
-        "priority": priority,
-        "active": active,
-        "surface": surface,
-    }
+    body: dict[str, Any] = {"title": title, "priority": priority, "active": active, "surface": surface}
     if type_hint is not None:
         body["type_hint"] = type_hint
     if data is not None:
@@ -268,8 +262,7 @@ def create_relationship(
     Args:
         from_thing_id: Source Thing UUID.
         to_thing_id: Target Thing UUID.
-        relationship_type: Label like 'works_with', 'depends_on',
-            'related_to', 'belongs_to'.
+        relationship_type: Label like 'works_with', 'depends_on', 'related_to', 'belongs_to'.
         metadata: Optional JSON metadata for the relationship.
     """
     body: dict[str, Any] = {
@@ -295,7 +288,7 @@ def delete_relationship(relationship_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Server-side intelligence tools
+# Reasoning-as-a-service: reli_think (Phase 3)
 # ---------------------------------------------------------------------------
 
 
@@ -644,6 +637,51 @@ A Relationship has:
 
 
 # ---------------------------------------------------------------------------
+# Reasoning-as-a-service
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def reli_think(
+    message: str,
+    context: str | None = None,
+) -> dict[str, Any]:
+    """Analyze a natural language message and return structured instructions.
+
+    This is reasoning-as-a-service: send natural language describing what
+    the user wants, and get back structured instructions for what to
+    create, update, delete, or link in the knowledge graph. You then
+    execute those instructions using the CRUD tools above.
+
+    This is useful when:
+    - The user's request is complex (multiple entities, relationships)
+    - You want AI-powered analysis of what changes are needed
+    - You're unsure how to map natural language to CRUD operations
+
+    The returned instructions use the same parameter names as the CRUD
+    tools, so you can execute them directly.
+
+    Args:
+        message: Natural language message to analyze (e.g. "I'm meeting
+            Tom for coffee next Tuesday at Blue Bottle").
+        context: Optional additional context to help reasoning (e.g.
+            recently discussed topics, user preferences).
+
+    Returns:
+        Dict with:
+        - instructions: list of {action, params, ref?} dicts
+        - questions_for_user: clarifying questions if intent is ambiguous
+        - reasoning_summary: explanation of the reasoning
+        - context: Things found during analysis
+    """
+    body: dict[str, Any] = {"message": message}
+    if context:
+        body["context"] = context
+    result: dict[str, Any] = _api_post("/api/think", json_body=body)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -651,10 +689,7 @@ A Relationship has:
 def main() -> None:
     """Run the MCP server over stdio."""
     if not RELI_API_TOKEN:
-        print(
-            "Warning: RELI_API_TOKEN not set. Auth will be skipped if server has no SECRET_KEY.",
-            file=sys.stderr,
-        )
+        print("Warning: RELI_API_TOKEN not set. Auth will be skipped if server has no SECRET_KEY.", file=sys.stderr)
     mcp.run(transport="stdio")
 
 
