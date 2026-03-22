@@ -125,11 +125,15 @@ You have tools to query and modify the database. Call them as needed:
 - create_relationship — create a typed link between two Things
 
 WORKFLOW:
-1. ALWAYS start by calling fetch_context with search queries relevant to the
-   user's message. This finds existing Things and prevents creating duplicates.
+1. Check if warm context is provided (Things from recent conversation turns).
+   If warm context covers the user's request, skip fetch_context and proceed
+   directly to storage changes. Only call fetch_context when:
+   - No warm context is provided
+   - The user's message references Things NOT in the warm context
+   - You need to search for Things beyond what's in the warm context
 2. If the user references something from earlier in the conversation not in the
    provided history, call chat_history to retrieve older messages.
-3. Review the returned Things and relationships.
+3. Review the available Things (warm context and/or fetched context).
 4. Make storage changes (create/update/delete/merge) as needed.
 5. Output your final response as JSON.
 
@@ -149,8 +153,9 @@ After making all needed tool calls, output your final response as JSON:
 # output schema section), adapting them for tool calling.
 _TOOL_RULES = """
 Rules for tool calls:
-- NEVER create a Thing that already exists in the "Relevant Things" list. If a
-  matching Thing is already present, use update_thing with its ID instead.
+- NEVER create a Thing that already exists in the "Relevant Things" list or
+  warm context. If a matching Thing is already present, use update_thing with
+  its ID instead.
 - When creating or updating a Thing, proactively include 1-3 open_questions —
   knowledge gaps that would make the Thing more actionable. Examples:
   "What's the deadline?", "Who else is involved?", "What does success look like?"
@@ -293,11 +298,15 @@ You have tools to query and modify the database. Call them as needed:
 - create_relationship — create a typed link between two Things
 
 WORKFLOW:
-1. ALWAYS start by calling fetch_context with search queries relevant to the
-   user's message to find existing Things and prevent duplicates.
+1. Check if warm context is provided (Things from recent conversation turns).
+   If warm context covers the user's request, skip fetch_context and proceed
+   directly to storage changes. Only call fetch_context when:
+   - No warm context is provided
+   - The user's message references Things NOT in the warm context
+   - You need to search for Things beyond what's in the warm context
 2. If the user references something from earlier in the conversation, call
    chat_history to retrieve older messages.
-3. Review returned Things and relationships.
+3. Review the available Things (warm context and/or fetched context).
 4. Make storage changes as needed.
 5. Output your final response as JSON.
 
@@ -1174,6 +1183,7 @@ async def run_reasoning_agent(
     mode: str = "normal",
     interaction_style: str = "auto",
     session_id: str = "",
+    warm_context: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Stage 2: decide and apply storage changes.
 
@@ -1191,6 +1201,13 @@ async def run_reasoning_agent(
         f"<user_message>\n{message}\n</user_message>\n\n"
         f"Relevant Things from database:\n{things_json}"
     )
+    if warm_context:
+        warm_json = json.dumps(warm_context, default=str)
+        user_content += (
+            f"\n\nWarm context (Things from recent conversation turns — "
+            f"already fetched, no need to call fetch_context unless you need "
+            f"additional context beyond these):\n{warm_json}"
+        )
     if relationships:
         user_content += (
             f"\n\nRelationships between Things:\n"
@@ -1264,6 +1281,15 @@ async def run_reasoning_agent(
 
     # -- ADK path with tool calling --
     tools, applied_changes, fetched_context = _make_reasoning_tools(user_id, session_id=session_id)
+
+    # Seed fetched_context with warm context so Things from recent turns
+    # appear in the pipeline result even if fetch_context is not called
+    if warm_context:
+        seen_ids = {t["id"] for t in fetched_context["things"]}
+        for t in warm_context:
+            if t["id"] not in seen_ids:
+                seen_ids.add(t["id"])
+                fetched_context["things"].append(t)
 
     # Enable thinking for reasoning models. We use 'thinking_budget' which
     # is the standard parameter LiteLLM expects for Gemini models.
