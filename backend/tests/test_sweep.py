@@ -830,9 +830,7 @@ class TestPersonalityPatternBrevity:
                     "assistant",
                     f"Created thing {i}",
                     applied_changes={
-                        "created": [
-                            {"id": f"t{i}", "title": "A very long descriptive title here"}
-                        ],
+                        "created": [{"id": f"t{i}", "title": "A very long descriptive title here"}],
                     },
                 )
         with db() as conn:
@@ -935,9 +933,7 @@ class TestPersonalityPatternDateEngagement:
                     "assistant",
                     f"Updated {i}",
                     applied_changes={
-                        "updated": [
-                            {"id": f"d{i}", "title": f"Event {i}", "checkin_date": "2026-04-01"}
-                        ],
+                        "updated": [{"id": f"d{i}", "title": f"Event {i}", "checkin_date": "2026-04-01"}],
                     },
                 )
             _insert_chat_message(
@@ -993,9 +989,7 @@ class TestPersonalityPatternDateEngagement:
                 "assistant",
                 "Updated date",
                 applied_changes={
-                    "updated": [
-                        {"id": "d1", "title": "Event", "checkin_date": "2026-04-01"}
-                    ],
+                    "updated": [{"id": "d1", "title": "Event", "checkin_date": "2026-04-01"}],
                 },
             )
             for i in range(5):
@@ -1022,9 +1016,7 @@ class TestPersonalityPatternDateEngagement:
                     "assistant",
                     f"Updated {i}",
                     applied_changes={
-                        "updated": [
-                            {"id": f"d{i}", "title": f"Event {i}", "checkin_date": "2026-04-01"}
-                        ],
+                        "updated": [{"id": f"d{i}", "title": f"Event {i}", "checkin_date": "2026-04-01"}],
                     },
                     timestamp=old_date,
                 )

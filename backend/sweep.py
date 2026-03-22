@@ -805,9 +805,7 @@ def aggregate_personality_patterns(
                     except (json.JSONDecodeError, TypeError):
                         data = {}
                 if isinstance(data, dict):
-                    has_date = any(
-                        k.lower().replace(" ", "_") in _ALL_DATE_KEYS for k in data
-                    )
+                    has_date = any(k.lower().replace(" ", "_") in _ALL_DATE_KEYS for k in data)
             if has_date:
                 date_thing_ids.add(tid)
             else:
