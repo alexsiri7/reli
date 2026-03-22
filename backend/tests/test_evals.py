@@ -93,6 +93,18 @@ async def test_reasoning_agent_multi_step() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reasoning_agent_preference_detection() -> None:
+    """Eval: reasoning agent — preference detection scenarios."""
+    from google.adk.evaluation import AgentEvaluator
+
+    await AgentEvaluator.evaluate(
+        agent_module="eval.reasoning_agent.agent",
+        eval_dataset_file_path_or_dir=str(EVAL_ROOT / "reasoning_agent" / "preference_detection.test.json"),
+        num_runs=1,
+    )
+
+
+@pytest.mark.asyncio
 async def test_reasoning_agent_all() -> None:
     """Eval: reasoning agent — all scenarios (directory scan)."""
     from google.adk.evaluation import AgentEvaluator
