@@ -2,8 +2,27 @@
 
 import json
 import logging
+import sys
+import types
 from pathlib import Path
 from typing import Any
+
+# ---------------------------------------------------------------------------
+# Suppress ChromaDB PostHog telemetry (re-s5ne)
+#
+# ChromaDB <1.0 bundles a Posthog telemetry client that calls
+# ``posthog.capture(distinct_id, event, props)`` with 3 positional args.
+# Newer versions of the posthog SDK changed ``capture()`` to accept only 1
+# positional arg, causing a TypeError that spams logs.  Injecting a stub
+# module into sys.modules prevents the real SDK from loading and silences
+# the error regardless of which posthog version (or none) is installed.
+# ---------------------------------------------------------------------------
+if "posthog" not in sys.modules:
+    _posthog_stub = types.ModuleType("posthog")
+    _posthog_stub.capture = lambda *_args, **_kwargs: None  # type: ignore[attr-defined]
+    _posthog_stub.disabled = True  # type: ignore[attr-defined]
+    _posthog_stub.project_api_key = ""  # type: ignore[attr-defined]
+    sys.modules["posthog"] = _posthog_stub
 
 import chromadb
 from chromadb import EmbeddingFunction
