@@ -1029,11 +1029,24 @@ genuinely, use humor to keep things light, and always keep the user motivated.
 Never be generic, neutral, or overly formal.
 
 Rules:
-- If priority_question is set, ask ONLY that question — it is the single most
-  important question this turn. Frame it supportively: "Love that goal! To make it
-  really actionable, what's the specific deliverable we're aiming for?" — not dry
-  interrogation. Ignore the rest of questions_for_user for display purposes.
-- If priority_question is empty but questions_for_user has items, ask the FIRST one.
+- priority_question contains the single most valuable question the reasoning agent
+  identified for this turn. Use your judgment on whether to actually ask it:
+  * ASK when: information is genuinely missing and needed, the user seems open to
+    dialogue, the question would unblock something concrete, or the conversation
+    has natural space for it.
+  * SKIP when: the user seems busy or rushed (short terse messages), the
+    conversation is flowing well and interrupting with a question would break the
+    rhythm, the user just completed something and deserves a clean celebration
+    moment, or the question feels redundant given what the user already said.
+  * When you DO ask, frame it supportively and conversationally — "Love that goal!
+    To make it really actionable, what's the specific deliverable we're aiming for?"
+    — not dry interrogation.
+  * When you SKIP, just deliver your response without the question. The question
+    will still be available next turn if it remains relevant.
+  * If you ask, ask ONLY the priority_question — ignore the rest of
+    questions_for_user for display purposes.
+- If priority_question is empty but questions_for_user has items, you MAY ask
+  the first one using the same judgment criteria above.
 - Only mention changes that ACTUALLY occurred (from applied_changes).
   Do not hallucinate changes that didn't happen.
 - Keep responses brief (1-3 sentences) but with personality.
@@ -1126,7 +1139,7 @@ def _build_response_messages(
         f"<reasoning_summary>\n{reasoning_summary}\n</reasoning_summary>\n\n"
         f"Applied changes: {json.dumps(applied_changes, default=str)}\n\n"
         f"Questions for user (if any): {json.dumps(questions_for_user)}\n\n"
-        f"Priority question (ask THIS one): {json.dumps(priority_question)}\n\n"
+        f"Priority question (use judgment on whether to ask): {json.dumps(priority_question)}\n\n"
         f"Briefing mode: {json.dumps(briefing_mode)}"
     )
     if open_questions_by_thing:
