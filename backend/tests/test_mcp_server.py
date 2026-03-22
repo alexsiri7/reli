@@ -15,7 +15,11 @@ from backend.mcp_server import (
     delete_thing,
     get_thing,
     mcp,
+    pa_behavior_guide,
+    proactive_surfacing_guide,
+    relationship_patterns_guide,
     search_things,
+    thing_creation_guide,
     update_thing,
 )
 
@@ -372,3 +376,95 @@ class TestIntegration:
         # Clean up
         delete_thing(thing_id=t1["id"])
         delete_thing(thing_id=t2["id"])
+
+
+# ---------------------------------------------------------------------------
+# MCP Prompt Resources (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class TestPromptResources:
+    """Tests for PA behavior prompt resources."""
+
+    def test_thing_creation_guide_returns_string(self):
+        result = thing_creation_guide()
+        assert isinstance(result, str)
+        assert "Thing Creation Guide" in result
+
+    def test_thing_creation_guide_covers_type_hints(self):
+        result = thing_creation_guide()
+        for hint in ("task", "note", "idea", "project", "goal", "person", "place", "event"):
+            assert hint in result, f"Missing type_hint '{hint}'"
+
+    def test_thing_creation_guide_covers_open_questions(self):
+        result = thing_creation_guide()
+        assert "open_questions" in result
+
+    def test_thing_creation_guide_covers_surface_defaults(self):
+        result = thing_creation_guide()
+        assert "surface" in result
+        assert "false" in result
+
+    def test_relationship_patterns_returns_string(self):
+        result = relationship_patterns_guide()
+        assert isinstance(result, str)
+        assert "Relationship Patterns" in result
+
+    def test_relationship_patterns_covers_types(self):
+        result = relationship_patterns_guide()
+        for rtype in ("parent-of", "child-of", "depends-on", "blocks", "related-to", "involves"):
+            assert rtype in result, f"Missing relationship type '{rtype}'"
+
+    def test_relationship_patterns_covers_possessive(self):
+        result = relationship_patterns_guide()
+        assert "Possessive" in result
+        assert "sister" in result
+
+    def test_proactive_surfacing_returns_string(self):
+        result = proactive_surfacing_guide()
+        assert isinstance(result, str)
+        assert "Proactive Surfacing" in result
+
+    def test_proactive_surfacing_covers_date_types(self):
+        result = proactive_surfacing_guide()
+        for key in ("birthday", "deadline", "due_date", "anniversary"):
+            assert key in result, f"Missing date key '{key}'"
+
+    def test_proactive_surfacing_covers_briefing_mode(self):
+        result = proactive_surfacing_guide()
+        assert "Briefing Mode" in result or "briefing" in result.lower()
+
+    def test_pa_behavior_returns_string(self):
+        result = pa_behavior_guide()
+        assert isinstance(result, str)
+        assert "PA Behavior Guide" in result
+
+    def test_pa_behavior_covers_core_principles(self):
+        result = pa_behavior_guide()
+        assert "Things as State" in result
+        assert "Search Before Creating" in result
+        assert "One Question at a Time" in result
+
+    def test_pa_behavior_covers_data_model(self):
+        result = pa_behavior_guide()
+        for field in ("title", "type_hint", "data", "priority", "active", "surface", "open_questions"):
+            assert field in result, f"Missing data model field '{field}'"
+
+    def test_prompts_registered_on_mcp_server(self):
+        """Verify all prompts are registered on the FastMCP server instance."""
+        import asyncio
+
+        prompts = asyncio.run(mcp.list_prompts())
+        names = {p.name for p in prompts}
+        assert "thing-creation" in names
+        assert "relationship-patterns" in names
+        assert "proactive-surfacing" in names
+        assert "pa-behavior" in names
+
+    def test_prompts_have_descriptions(self):
+        """Each prompt must have a non-empty description."""
+        import asyncio
+
+        prompts = asyncio.run(mcp.list_prompts())
+        for p in prompts:
+            assert p.description, f"Prompt '{p.name}' has no description"
