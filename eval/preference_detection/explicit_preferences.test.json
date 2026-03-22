@@ -1,0 +1,449 @@
+{
+  "eval_set_id": "preference-explicit",
+  "name": "Preference Detection — Explicit Statements",
+  "description": "Golden dataset: detecting explicit preference statements and storing them as preference Things",
+  "eval_cases": [
+    {
+      "eval_id": "explicit-dislike-morning-meetings",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nI hate morning meetings, they ruin my focus\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"user-001\", \"title\": \"User\", \"type_hint\": \"person\"}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Detected scheduling preference: user dislikes morning meetings.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"morning meetings\", \"meeting preference\", \"scheduling preference\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Dislikes morning meetings",
+                  "type_hint": "preference",
+                  "surface": false,
+                  "data_json": "{\"category\": \"scheduling\", \"detail\": \"Hates morning meetings \\u2014 they ruin focus\", \"sentiment\": \"negative\"}"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0001",
+                  "title": "Dislikes morning meetings",
+                  "type_hint": "preference"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "explicit-prefer-email-over-calls",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nI much prefer email over phone calls for work communication\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"user-001\", \"title\": \"User\", \"type_hint\": \"person\"}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Detected communication preference: user prefers email over phone calls.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"email\", \"phone calls\", \"communication preference\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Prefers email over phone calls",
+                  "type_hint": "preference",
+                  "surface": false,
+                  "data_json": "{\"category\": \"communication\", \"detail\": \"Prefers email over phone calls for work communication\", \"sentiment\": \"positive\"}"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0002",
+                  "title": "Prefers email over phone calls",
+                  "type_hint": "preference"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "explicit-preference-in-task",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nSchedule my workout for 6am — I always exercise before work\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"user-001\", \"title\": \"User\", \"type_hint\": \"person\"}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Created workout task and noted early-morning exercise preference.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"workout\", \"exercise\", \"morning routine\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Workout",
+                  "type_hint": "task",
+                  "data_json": "{\"time\": \"06:00\", \"notes\": \"Before work\"}"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Exercises before work",
+                  "type_hint": "preference",
+                  "surface": false,
+                  "data_json": "{\"category\": \"routine\", \"detail\": \"Always exercises before work, prefers 6am\"}"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0003",
+                  "title": "Workout",
+                  "type_hint": "task"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0004",
+                  "title": "Exercises before work",
+                  "type_hint": "preference"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "explicit-update-existing-preference",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nActually, I'm fine with morning meetings now — just not before 9am\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"user-001\", \"title\": \"User\", \"type_hint\": \"person\"}, {\"id\": \"pref-100\", \"title\": \"Prefers afternoon meetings\", \"type_hint\": \"preference\", \"data\": \"{\\\"category\\\": \\\"scheduling\\\", \\\"detail\\\": \\\"Prefers meetings in the afternoon\\\"}\", \"active\": 1}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Updated scheduling preference: morning meetings OK after 9am.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"morning meetings\", \"meeting preference\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "thing_id": "pref-100",
+                  "title": "No meetings before 9am",
+                  "data_json": "{\"category\": \"scheduling\", \"detail\": \"OK with morning meetings but not before 9am\"}"
+                },
+                "name": "update_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "pref-100",
+                      "title": "Prefers afternoon meetings"
+                    }
+                  ],
+                  "count": 1
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "update_thing",
+                "response": {
+                  "id": "pref-100",
+                  "title": "No meetings before 9am"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}

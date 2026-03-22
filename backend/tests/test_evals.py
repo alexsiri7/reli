@@ -114,3 +114,39 @@ async def test_context_agent_search_params() -> None:
         eval_dataset_file_path_or_dir=str(EVAL_ROOT / "context_agent" / "search_params.test.json"),
         num_runs=1,
     )
+
+
+@pytest.mark.asyncio
+async def test_preference_detection_explicit() -> None:
+    """Eval: preference detection — explicit preference statements."""
+    from google.adk.evaluation import AgentEvaluator
+
+    await AgentEvaluator.evaluate(
+        agent_module="eval.preference_detection.agent",
+        eval_dataset_file_path_or_dir=str(EVAL_ROOT / "preference_detection" / "explicit_preferences.test.json"),
+        num_runs=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_preference_detection_inferred() -> None:
+    """Eval: preference detection — inferred behavioral patterns."""
+    from google.adk.evaluation import AgentEvaluator
+
+    await AgentEvaluator.evaluate(
+        agent_module="eval.preference_detection.agent",
+        eval_dataset_file_path_or_dir=str(EVAL_ROOT / "preference_detection" / "inferred_preferences.test.json"),
+        num_runs=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_preference_detection_all() -> None:
+    """Eval: preference detection — all scenarios (directory scan)."""
+    from google.adk.evaluation import AgentEvaluator
+
+    await AgentEvaluator.evaluate(
+        agent_module="eval.preference_detection.agent",
+        eval_dataset_file_path_or_dir=str(EVAL_ROOT / "preference_detection"),
+        num_runs=1,
+    )

@@ -893,6 +893,630 @@ _CONTEXT_SEARCH = EvalSet(
 
 
 # -------------------------------------------------------------------
+# Preference Detection — Explicit preferences
+# -------------------------------------------------------------------
+
+# User entity (always first in Relevant Things for possessive patterns)
+_USER_THING = json.dumps([{
+    "id": "user-001",
+    "title": "User",
+    "type_hint": "person",
+}])
+
+# Existing preference to test dedup / update
+_EXISTING_PREFS = json.dumps([
+    {
+        "id": "user-001",
+        "title": "User",
+        "type_hint": "person",
+    },
+    {
+        "id": "pref-100",
+        "title": "Prefers afternoon meetings",
+        "type_hint": "preference",
+        "data": '{"category": "scheduling", "detail": "Prefers meetings in the afternoon"}',
+        "active": 1,
+    },
+])
+
+_PREF_EXPLICIT = EvalSet(
+    eval_set_id="preference-explicit",
+    name="Preference Detection — Explicit Statements",
+    description=(
+        "Golden dataset: detecting explicit preference statements "
+        "and storing them as preference Things"
+    ),
+    eval_cases=[
+        # Simple negative preference
+        EvalCase(
+            eval_id="explicit-dislike-morning-meetings",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "I hate morning meetings, they ruin my focus",
+                            things_json=_USER_THING,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Detected scheduling preference: "
+                                "user dislikes morning meetings."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "morning meetings",
+                                    "meeting preference",
+                                    "scheduling preference",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Dislikes morning meetings",
+                                "type_hint": "preference",
+                                "surface": False,
+                                "data_json": json.dumps({
+                                    "category": "scheduling",
+                                    "detail": (
+                                        "Hates morning meetings — "
+                                        "they ruin focus"
+                                    ),
+                                    "sentiment": "negative",
+                                }),
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _empty_ctx()),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0001",
+                                "title": "Dislikes morning meetings",
+                                "type_hint": "preference",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Positive preference with action implication
+        EvalCase(
+            eval_id="explicit-prefer-email-over-calls",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "I much prefer email over phone calls "
+                            "for work communication",
+                            things_json=_USER_THING,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Detected communication preference: "
+                                "user prefers email over phone calls."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "email", "phone calls",
+                                    "communication preference",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Prefers email over phone calls",
+                                "type_hint": "preference",
+                                "surface": False,
+                                "data_json": json.dumps({
+                                    "category": "communication",
+                                    "detail": (
+                                        "Prefers email over phone calls "
+                                        "for work communication"
+                                    ),
+                                    "sentiment": "positive",
+                                }),
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _empty_ctx()),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0002",
+                                "title": (
+                                    "Prefers email over phone calls"
+                                ),
+                                "type_hint": "preference",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Preference embedded in a task request
+        EvalCase(
+            eval_id="explicit-preference-in-task",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Schedule my workout for 6am — "
+                            "I always exercise before work",
+                            things_json=_USER_THING,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Created workout task and noted "
+                                "early-morning exercise preference."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "workout", "exercise",
+                                    "morning routine",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Workout",
+                                "type_hint": "task",
+                                "data_json": json.dumps({
+                                    "time": "06:00",
+                                    "notes": "Before work",
+                                }),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Exercises before work",
+                                "type_hint": "preference",
+                                "surface": False,
+                                "data_json": json.dumps({
+                                    "category": "routine",
+                                    "detail": (
+                                        "Always exercises before work, "
+                                        "prefers 6am"
+                                    ),
+                                }),
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _empty_ctx()),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0003",
+                                "title": "Workout",
+                                "type_hint": "task",
+                            }),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0004",
+                                "title": "Exercises before work",
+                                "type_hint": "preference",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Update existing preference (dedup)
+        EvalCase(
+            eval_id="explicit-update-existing-preference",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Actually, I'm fine with morning meetings "
+                            "now — just not before 9am",
+                            things_json=_EXISTING_PREFS,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Updated scheduling preference: "
+                                "morning meetings OK after 9am."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "morning meetings",
+                                    "meeting preference",
+                                ]),
+                            }),
+                            _fc("update_thing", {
+                                "thing_id": "pref-100",
+                                "title": "No meetings before 9am",
+                                "data_json": json.dumps({
+                                    "category": "scheduling",
+                                    "detail": (
+                                        "OK with morning meetings "
+                                        "but not before 9am"
+                                    ),
+                                }),
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _things_ctx({
+                                "id": "pref-100",
+                                "title": "Prefers afternoon meetings",
+                            })),
+                            _fr("update_thing", {
+                                "id": "pref-100",
+                                "title": "No meetings before 9am",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+    ],
+)
+
+# -------------------------------------------------------------------
+# Preference Detection — Inferred from behavioral patterns
+# -------------------------------------------------------------------
+
+# Things showing a behavioral pattern — user always defers tasks with
+# specific characteristics.
+_REPEATED_DEFER = json.dumps([
+    {
+        "id": "user-001",
+        "title": "User",
+        "type_hint": "person",
+    },
+    {
+        "id": "thing-700",
+        "title": "Clean garage",
+        "type_hint": "task",
+        "priority": 3,
+        "active": 1,
+        "data": json.dumps({
+            "deferred_count": 3,
+            "last_deferred": "2026-03-15",
+        }),
+    },
+])
+
+# Things showing a pattern of always setting high priority on health items
+_HEALTH_PATTERN = json.dumps([
+    {
+        "id": "user-001",
+        "title": "User",
+        "type_hint": "person",
+    },
+    {
+        "id": "thing-800",
+        "title": "Annual physical",
+        "type_hint": "task",
+        "priority": 1,
+        "active": 1,
+    },
+    {
+        "id": "thing-801",
+        "title": "Dentist checkup",
+        "type_hint": "task",
+        "priority": 1,
+        "active": 0,
+    },
+    {
+        "id": "thing-802",
+        "title": "Eye exam",
+        "type_hint": "task",
+        "priority": 1,
+        "active": 0,
+    },
+])
+
+# Conversation history showing a consistent time-of-day pattern
+_EVENING_PATTERN_THINGS = json.dumps([
+    {
+        "id": "user-001",
+        "title": "User",
+        "type_hint": "person",
+    },
+])
+
+_PREF_INFERRED = EvalSet(
+    eval_set_id="preference-inferred",
+    name="Preference Detection — Inferred from Behavior",
+    description=(
+        "Golden dataset: inferring preferences from behavioral patterns "
+        "(repeated deferrals, consistent prioritization, time patterns)"
+    ),
+    eval_cases=[
+        # Infer avoidance from repeated deferrals
+        EvalCase(
+            eval_id="inferred-repeated-deferral",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Push the garage cleaning to next week again",
+                            things_json=_REPEATED_DEFER,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Deferred garage cleaning again "
+                                "(4th time). Noted recurring "
+                                "deferral pattern."
+                            ),
+                            questions_for_user=[
+                                "You've deferred this task several "
+                                "times — would you like to break it "
+                                "into smaller steps, or remove it "
+                                "entirely?"
+                            ],
+                            priority_question=(
+                                "You've deferred this task several "
+                                "times — would you like to break it "
+                                "into smaller steps, or remove it "
+                                "entirely?"
+                            ),
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "garage cleaning", "clean garage",
+                                ]),
+                            }),
+                            _fc("update_thing", {
+                                "thing_id": "thing-700",
+                                "data_json": json.dumps({
+                                    "deferred_count": 4,
+                                    "last_deferred": "2026-03-22",
+                                }),
+                                "checkin_date": "2026-03-29",
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _things_ctx({
+                                "id": "thing-700",
+                                "title": "Clean garage",
+                            })),
+                            _fr("update_thing", {
+                                "id": "thing-700",
+                                "title": "Clean garage",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Infer priority pattern from health-related items
+        EvalCase(
+            eval_id="inferred-health-priority-pattern",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "I need to book a dermatologist appointment",
+                            things_json=_HEALTH_PATTERN,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Created dermatologist task with "
+                                "high priority, matching user's "
+                                "pattern of prioritizing health "
+                                "appointments."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "dermatologist",
+                                    "doctor appointment",
+                                    "health",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Book dermatologist appointment",
+                                "type_hint": "task",
+                                "priority": 1,
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _things_ctx(
+                                {
+                                    "id": "thing-800",
+                                    "title": "Annual physical",
+                                    "priority": 1,
+                                },
+                                {
+                                    "id": "thing-801",
+                                    "title": "Dentist checkup",
+                                    "priority": 1,
+                                },
+                                {
+                                    "id": "thing-802",
+                                    "title": "Eye exam",
+                                    "priority": 1,
+                                },
+                            )),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0010",
+                                "title": (
+                                    "Book dermatologist appointment"
+                                ),
+                                "type_hint": "task",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Infer time-of-day preference from conversation pattern
+        EvalCase(
+            eval_id="inferred-evening-planner",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Add 'review tomorrow's agenda' to my "
+                            "evening routine — I always plan the "
+                            "next day at night",
+                            things_json=_EVENING_PATTERN_THINGS,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Created evening routine task and "
+                                "noted planning preference."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "evening routine",
+                                    "tomorrow agenda",
+                                    "planning",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Review tomorrow's agenda",
+                                "type_hint": "task",
+                                "data_json": json.dumps({
+                                    "notes": "Evening routine task",
+                                    "recurring": "daily",
+                                    "time": "evening",
+                                }),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Plans next day in the evening",
+                                "type_hint": "preference",
+                                "surface": False,
+                                "data_json": json.dumps({
+                                    "category": "routine",
+                                    "detail": (
+                                        "Always plans the next day "
+                                        "at night"
+                                    ),
+                                }),
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _empty_ctx()),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0011",
+                                "title": "Review tomorrow's agenda",
+                                "type_hint": "task",
+                            }),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0012",
+                                "title": (
+                                    "Plans next day in the evening"
+                                ),
+                                "type_hint": "preference",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Infer work style from delegation language
+        EvalCase(
+            eval_id="inferred-delegation-preference",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "I need to handle the client presentation "
+                            "myself — I never let anyone else do "
+                            "client-facing work",
+                            things_json=_EVENING_PATTERN_THINGS,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Created presentation task and "
+                                "noted preference for handling "
+                                "client-facing work personally."
+                            )
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "client presentation",
+                                    "client-facing",
+                                    "presentation",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Client presentation",
+                                "type_hint": "task",
+                                "priority": 2,
+                            }),
+                            _fc("create_thing", {
+                                "title": (
+                                    "Handles client-facing work "
+                                    "personally"
+                                ),
+                                "type_hint": "preference",
+                                "surface": False,
+                                "data_json": json.dumps({
+                                    "category": "work_style",
+                                    "detail": (
+                                        "Never delegates client-facing "
+                                        "work — prefers to handle it "
+                                        "personally"
+                                    ),
+                                }),
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _empty_ctx()),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0013",
+                                "title": "Client presentation",
+                                "type_hint": "task",
+                            }),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0014",
+                                "title": (
+                                    "Handles client-facing work "
+                                    "personally"
+                                ),
+                                "type_hint": "preference",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+    ],
+)
+
+
+# -------------------------------------------------------------------
 # Writer
 # -------------------------------------------------------------------
 
@@ -905,6 +1529,8 @@ def _write(eval_set: EvalSet, path: pathlib.Path) -> None:
 def main() -> None:
     reasoning_dir = HERE / "reasoning_agent"
     context_dir = HERE / "context_agent"
+    preference_dir = HERE / "preference_detection"
+    preference_dir.mkdir(exist_ok=True)
 
     print("Generating golden datasets …")
     _write(_REASONING_CREATE, reasoning_dir / "create_thing.test.json")
@@ -915,6 +1541,14 @@ def main() -> None:
         _REASONING_MULTISTEP, reasoning_dir / "multi_step.test.json"
     )
     _write(_CONTEXT_SEARCH, context_dir / "search_params.test.json")
+    _write(
+        _PREF_EXPLICIT,
+        preference_dir / "explicit_preferences.test.json",
+    )
+    _write(
+        _PREF_INFERRED,
+        preference_dir / "inferred_preferences.test.json",
+    )
     print("Done.")
 
 

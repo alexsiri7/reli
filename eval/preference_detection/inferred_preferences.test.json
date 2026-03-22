@@ -1,0 +1,486 @@
+{
+  "eval_set_id": "preference-inferred",
+  "name": "Preference Detection — Inferred from Behavior",
+  "description": "Golden dataset: inferring preferences from behavioral patterns (repeated deferrals, consistent prioritization, time patterns)",
+  "eval_cases": [
+    {
+      "eval_id": "inferred-repeated-deferral",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nPush the garage cleaning to next week again\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"user-001\", \"title\": \"User\", \"type_hint\": \"person\"}, {\"id\": \"thing-700\", \"title\": \"Clean garage\", \"type_hint\": \"task\", \"priority\": 3, \"active\": 1, \"data\": \"{\\\"deferred_count\\\": 3, \\\"last_deferred\\\": \\\"2026-03-15\\\"}\"}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [\"You've deferred this task several times \\u2014 would you like to break it into smaller steps, or remove it entirely?\"], \"priority_question\": \"You've deferred this task several times \\u2014 would you like to break it into smaller steps, or remove it entirely?\", \"reasoning_summary\": \"Deferred garage cleaning again (4th time). Noted recurring deferral pattern.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"garage cleaning\", \"clean garage\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "thing_id": "thing-700",
+                  "data_json": "{\"deferred_count\": 4, \"last_deferred\": \"2026-03-22\"}",
+                  "checkin_date": "2026-03-29"
+                },
+                "name": "update_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "thing-700",
+                      "title": "Clean garage"
+                    }
+                  ],
+                  "count": 1
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "update_thing",
+                "response": {
+                  "id": "thing-700",
+                  "title": "Clean garage"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "inferred-health-priority-pattern",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nI need to book a dermatologist appointment\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"user-001\", \"title\": \"User\", \"type_hint\": \"person\"}, {\"id\": \"thing-800\", \"title\": \"Annual physical\", \"type_hint\": \"task\", \"priority\": 1, \"active\": 1}, {\"id\": \"thing-801\", \"title\": \"Dentist checkup\", \"type_hint\": \"task\", \"priority\": 1, \"active\": 0}, {\"id\": \"thing-802\", \"title\": \"Eye exam\", \"type_hint\": \"task\", \"priority\": 1, \"active\": 0}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Created dermatologist task with high priority, matching user's pattern of prioritizing health appointments.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"dermatologist\", \"doctor appointment\", \"health\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Book dermatologist appointment",
+                  "type_hint": "task",
+                  "priority": 1
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "thing-800",
+                      "title": "Annual physical",
+                      "priority": 1
+                    },
+                    {
+                      "id": "thing-801",
+                      "title": "Dentist checkup",
+                      "priority": 1
+                    },
+                    {
+                      "id": "thing-802",
+                      "title": "Eye exam",
+                      "priority": 1
+                    }
+                  ],
+                  "count": 3
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0010",
+                  "title": "Book dermatologist appointment",
+                  "type_hint": "task"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "inferred-evening-planner",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nAdd 'review tomorrow's agenda' to my evening routine — I always plan the next day at night\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"user-001\", \"title\": \"User\", \"type_hint\": \"person\"}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Created evening routine task and noted planning preference.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"evening routine\", \"tomorrow agenda\", \"planning\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Review tomorrow's agenda",
+                  "type_hint": "task",
+                  "data_json": "{\"notes\": \"Evening routine task\", \"recurring\": \"daily\", \"time\": \"evening\"}"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Plans next day in the evening",
+                  "type_hint": "preference",
+                  "surface": false,
+                  "data_json": "{\"category\": \"routine\", \"detail\": \"Always plans the next day at night\"}"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0011",
+                  "title": "Review tomorrow's agenda",
+                  "type_hint": "task"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0012",
+                  "title": "Plans next day in the evening",
+                  "type_hint": "preference"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "inferred-delegation-preference",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nI need to handle the client presentation myself — I never let anyone else do client-facing work\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"user-001\", \"title\": \"User\", \"type_hint\": \"person\"}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Created presentation task and noted preference for handling client-facing work personally.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"client presentation\", \"client-facing\", \"presentation\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Client presentation",
+                  "type_hint": "task",
+                  "priority": 2
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Handles client-facing work personally",
+                  "type_hint": "preference",
+                  "surface": false,
+                  "data_json": "{\"category\": \"work_style\", \"detail\": \"Never delegates client-facing work \\u2014 prefers to handle it personally\"}"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0013",
+                  "title": "Client presentation",
+                  "type_hint": "task"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0014",
+                  "title": "Handles client-facing work personally",
+                  "type_hint": "preference"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}
