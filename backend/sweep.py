@@ -985,12 +985,14 @@ def _load_existing_preferences(
         if isinstance(data, dict) and "patterns" in data:
             for p in data["patterns"]:
                 if isinstance(p, dict) and "pattern" in p:
-                    preferences.append({
-                        "thing_id": row["id"],
-                        "pattern": p["pattern"],
-                        "confidence": p.get("confidence", "emerging"),
-                        "observations": p.get("observations", 1),
-                    })
+                    preferences.append(
+                        {
+                            "thing_id": row["id"],
+                            "pattern": p["pattern"],
+                            "confidence": p.get("confidence", "emerging"),
+                            "observations": p.get("observations", 1),
+                        }
+                    )
     return preferences
 
 
@@ -1005,9 +1007,7 @@ def _format_interactions_for_llm(
     if existing_preferences:
         pref_lines = []
         for p in existing_preferences:
-            pref_lines.append(
-                f"- [{p['confidence']}] {p['pattern']} (observed {p['observations']}x)"
-            )
+            pref_lines.append(f"- [{p['confidence']}] {p['pattern']} (observed {p['observations']}x)")
         existing_text = "\n".join(pref_lines)
     else:
         existing_text = "(none yet)"
@@ -1135,9 +1135,7 @@ async def aggregate_preferences(
                 new_confidence = _confidence_for_observations(total_observations)
 
                 # Load current Thing data and update the matching pattern
-                row = conn.execute(
-                    "SELECT data FROM things WHERE id = ?", (thing_id,)
-                ).fetchone()
+                row = conn.execute("SELECT data FROM things WHERE id = ?", (thing_id,)).fetchone()
                 if row and row["data"]:
                     try:
                         thing_data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
@@ -1161,23 +1159,27 @@ async def aggregate_preferences(
                         (json.dumps(thing_data), now, thing_id),
                     )
                     updated_count += 1
-                    result_patterns.append({
-                        "thing_id": thing_id,
-                        "pattern": match["pattern"],
-                        "confidence": new_confidence,
-                        "observations": total_observations,
-                        "action": "updated",
-                    })
+                    result_patterns.append(
+                        {
+                            "thing_id": thing_id,
+                            "pattern": match["pattern"],
+                            "confidence": new_confidence,
+                            "observations": total_observations,
+                            "action": "updated",
+                        }
+                    )
             else:
                 # Create new preference Thing
                 thing_id = f"pref-{uuid.uuid4().hex[:8]}"
                 confidence = _confidence_for_observations(new_observations)
                 thing_data = {
-                    "patterns": [{
-                        "pattern": pattern_text,
-                        "confidence": confidence,
-                        "observations": new_observations,
-                    }]
+                    "patterns": [
+                        {
+                            "pattern": pattern_text,
+                            "confidence": confidence,
+                            "observations": new_observations,
+                        }
+                    ]
                 }
                 conn.execute(
                     """INSERT INTO things
@@ -1194,22 +1196,26 @@ async def aggregate_preferences(
                     ),
                 )
                 created_count += 1
-                result_patterns.append({
-                    "thing_id": thing_id,
-                    "pattern": pattern_text,
-                    "confidence": confidence,
-                    "observations": new_observations,
-                    "action": "created",
-                })
+                result_patterns.append(
+                    {
+                        "thing_id": thing_id,
+                        "pattern": pattern_text,
+                        "confidence": confidence,
+                        "observations": new_observations,
+                        "action": "created",
+                    }
+                )
 
                 # Add to existing list so subsequent patterns in this batch
                 # can match against it
-                existing.append({
-                    "thing_id": thing_id,
-                    "pattern": pattern_text,
-                    "confidence": confidence,
-                    "observations": new_observations,
-                })
+                existing.append(
+                    {
+                        "thing_id": thing_id,
+                        "pattern": pattern_text,
+                        "confidence": confidence,
+                        "observations": new_observations,
+                    }
+                )
 
     logger.info(
         "Preference aggregation: %d created, %d updated",

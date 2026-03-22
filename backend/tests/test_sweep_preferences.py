@@ -8,14 +8,12 @@ import pytest
 
 from backend.database import db
 from backend.sweep import (
-    PreferenceAggregationResult,
     _confidence_for_observations,
     _find_matching_preference,
     _load_existing_preferences,
     _load_recent_interactions,
     aggregate_preferences,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -194,15 +192,17 @@ class TestAggregatePreferences:
             for i in range(5):
                 _insert_chat_message(conn, "user", f"Message {i}", timestamp=recent)
 
-        llm_response = json.dumps({
-            "patterns": [
-                {
-                    "pattern": "Prefers afternoon meetings",
-                    "evidence": "Rescheduled morning meetings twice",
-                    "observations": 3,
-                }
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "patterns": [
+                    {
+                        "pattern": "Prefers afternoon meetings",
+                        "evidence": "Rescheduled morning meetings twice",
+                        "observations": 3,
+                    }
+                ]
+            }
+        )
 
         with patch("backend.sweep._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_preferences(user_id="u1")
@@ -234,23 +234,23 @@ class TestAggregatePreferences:
                 "Avoids mornings",
                 type_hint="preference",
                 data={
-                    "patterns": [
-                        {"pattern": "Avoids morning meetings", "confidence": "emerging", "observations": 2}
-                    ]
+                    "patterns": [{"pattern": "Avoids morning meetings", "confidence": "emerging", "observations": 2}]
                 },
             )
             for i in range(5):
                 _insert_chat_message(conn, "user", f"Msg {i}", timestamp=recent)
 
-        llm_response = json.dumps({
-            "patterns": [
-                {
-                    "pattern": "Avoids morning meetings and appointments",
-                    "evidence": "Rescheduled morning events again",
-                    "observations": 2,
-                }
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "patterns": [
+                    {
+                        "pattern": "Avoids morning meetings and appointments",
+                        "evidence": "Rescheduled morning events again",
+                        "observations": 2,
+                    }
+                ]
+            }
+        )
 
         with patch("backend.sweep._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_preferences(user_id="u1")
@@ -262,9 +262,7 @@ class TestAggregatePreferences:
 
         # Verify DB was updated
         with db() as conn:
-            row = conn.execute(
-                "SELECT data FROM things WHERE id = 'pref-exist'"
-            ).fetchone()
+            row = conn.execute("SELECT data FROM things WHERE id = 'pref-exist'").fetchone()
         data = json.loads(row["data"])
         assert data["patterns"][0]["observations"] == 4
         assert data["patterns"][0]["confidence"] == "established"

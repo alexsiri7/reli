@@ -68,9 +68,7 @@ async def run_preference_aggregation(
     Detects repeated behavioral patterns in chat history and creates or updates
     preference Things with appropriate confidence levels.
     """
-    result: PreferenceAggregationResult = await aggregate_preferences(
-        user_id=user_id, lookback_days=lookback_days
-    )
+    result: PreferenceAggregationResult = await aggregate_preferences(user_id=user_id, lookback_days=lookback_days)
     return {
         "patterns_created": result.patterns_created,
         "patterns_updated": result.patterns_updated,
