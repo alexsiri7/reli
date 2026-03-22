@@ -10,7 +10,7 @@ import json
 import logging
 import sqlite3
 from collections.abc import AsyncIterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .agents import (
@@ -23,7 +23,7 @@ from .database import db
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
 from .reasoning_agent import run_reasoning_agent
-from .response_agent import run_response_agent, run_response_agent_stream
+from .response_agent import ResponseResult, parse_response, run_response_agent, run_response_agent_stream
 from .tracing import get_tracer, set_span_error
 from .vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 
@@ -53,6 +53,7 @@ class PipelineResult:
     calendar_events: list[dict[str, Any]] | None
     open_questions_by_thing: dict[str, list[str]]
     usage: UsageStats
+    referenced_things: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -529,7 +530,7 @@ class ChatPipeline:
                         self.user_models.get("response") or REQUESTY_RESPONSE_MODEL,
                     )
                     try:
-                        reply = await run_response_agent(
+                        response_result = await run_response_agent(
                             message,
                             reasoning_summary,
                             questions_for_user,
@@ -544,6 +545,8 @@ class ChatPipeline:
                             interaction_style=self.interaction_style,
                             user_id=self.user_id,
                         )
+                        reply = response_result.text
+                        referenced_things = response_result.referenced_things
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
                         self._record_stage_usage(resp_span, "response", usage, calls_before)
                     except Exception as exc:
@@ -564,6 +567,7 @@ class ChatPipeline:
         return PipelineResult(
             reply=reply,
             applied_changes=applied_changes,
+            referenced_things=referenced_things,
             questions_for_user=questions_for_user,
             priority_question=priority_question,
             reasoning_summary=reasoning_summary,
@@ -700,7 +704,10 @@ class ChatPipeline:
                             reply_parts.append(token)
                             yield PipelineEvent(type="token", data=token)
 
-                        reply = "".join(reply_parts)
+                        raw_reply = "".join(reply_parts)
+                        response_result = parse_response(raw_reply)
+                        reply = response_result.text
+                        referenced_things = response_result.referenced_things
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
                         self._record_stage_usage(resp_span, "response", usage, calls_before)
                     except Exception as exc:
@@ -726,6 +733,7 @@ class ChatPipeline:
             data=PipelineResult(
                 reply=reply,
                 applied_changes=applied_changes,
+                referenced_things=referenced_things,
                 questions_for_user=questions_for_user,
                 priority_question=priority_question,
                 reasoning_summary=reasoning_summary,
