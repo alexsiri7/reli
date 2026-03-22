@@ -1,8 +1,10 @@
-"""Nightly sweep — SQL candidate queries and LLM reflection.
+"""Nightly sweep — SQL candidate queries, LLM reflection, and personality aggregation.
 
 Phase 1 (SQL): Identifies Things that may need the user's attention using cheap
 SQL queries.  Phase 2 (LLM): Sends the candidate list to an LLM for nuanced
-reflection, producing sweep_findings with priority and expiry.
+reflection, producing sweep_findings with priority and expiry.  Phase 3
+(Personality): Aggregates implicit behavioral signals from recent interactions
+and updates personality preference Things.
 
 Finding types:
   - approaching_date: Thing with a date (checkin, birthday, deadline, etc.) within 7 days
@@ -880,5 +882,410 @@ async def reflect_on_candidates(
     return ReflectionResult(
         findings_created=len(created),
         findings=created,
+        usage=usage_stats.to_dict(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Personality pattern aggregation
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class BehavioralSignal:
+    """An implicit signal derived from user behavior."""
+
+    signal_type: str
+    description: str
+    count: int = 1
+    extra: dict = field(default_factory=dict)
+
+
+def collect_behavioral_signals(
+    conn: sqlite3.Connection,
+    user_id: str = "",
+    lookback_days: int = 14,
+) -> list[BehavioralSignal]:
+    """Collect implicit behavioral signals from recent interactions.
+
+    Analyzes chat history, applied_changes, and sweep finding dismissals to
+    identify patterns in how the user interacts with Reli.
+    """
+    from .auth import user_filter
+
+    signals: list[BehavioralSignal] = []
+    uf_sql, uf_params = user_filter(user_id)
+    cutoff = (date.today() - timedelta(days=lookback_days)).isoformat()
+
+    # 1. Title edits: user updated Thing titles shortly after creation
+    #    (suggests Reli's naming doesn't match expectations)
+    title_edit_rows = conn.execute(
+        f"""SELECT COUNT(*) AS cnt
+           FROM chat_history
+           WHERE role = 'assistant'
+             AND applied_changes IS NOT NULL
+             AND applied_changes != '{{}}'
+             AND timestamp >= ?{uf_sql}""",
+        (cutoff, *uf_params),
+    ).fetchall()
+
+    # Parse applied_changes to count title updates
+    update_rows = conn.execute(
+        f"""SELECT applied_changes
+           FROM chat_history
+           WHERE role = 'assistant'
+             AND applied_changes IS NOT NULL
+             AND applied_changes != '{{}}'
+             AND timestamp >= ?{uf_sql}""",
+        (cutoff, *uf_params),
+    ).fetchall()
+
+    title_edits = 0
+    total_updates = 0
+    total_creates = 0
+    for row in update_rows:
+        try:
+            changes = json.loads(row["applied_changes"]) if isinstance(row["applied_changes"], str) else row["applied_changes"]
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(changes, dict):
+            continue
+        updated = changes.get("updated", [])
+        created = changes.get("created", [])
+        if isinstance(updated, list):
+            total_updates += len(updated)
+            for item in updated:
+                if isinstance(item, dict) and "title" in item:
+                    title_edits += 1
+        if isinstance(created, list):
+            total_creates += len(created)
+
+    if title_edits >= 3:
+        signals.append(BehavioralSignal(
+            signal_type="title_editing",
+            description=f"User edited Thing titles {title_edits} times in the last {lookback_days} days",
+            count=title_edits,
+            extra={"total_updates": total_updates, "total_creates": total_creates},
+        ))
+
+    # 2. Dismissed sweep findings by type — indicates which alerts the user
+    #    finds unhelpful
+    dismissed_rows = conn.execute(
+        f"""SELECT finding_type, COUNT(*) AS cnt
+           FROM sweep_findings
+           WHERE dismissed = 1
+             AND created_at >= ?{uf_sql}
+           GROUP BY finding_type
+           HAVING cnt >= 2""",
+        (cutoff, *uf_params),
+    ).fetchall()
+
+    for row in dismissed_rows:
+        signals.append(BehavioralSignal(
+            signal_type="finding_dismissed",
+            description=f"User dismissed {row['cnt']} '{row['finding_type']}' findings",
+            count=row["cnt"],
+            extra={"finding_type": row["finding_type"]},
+        ))
+
+    # 3. Acted-on vs ignored findings — compare dismissed vs total per type
+    finding_engagement = conn.execute(
+        f"""SELECT finding_type,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN dismissed = 1 THEN 1 ELSE 0 END) AS dismissed_count
+           FROM sweep_findings
+           WHERE created_at >= ?{uf_sql}
+           GROUP BY finding_type
+           HAVING total >= 3""",
+        (cutoff, *uf_params),
+    ).fetchall()
+
+    for row in finding_engagement:
+        total = row["total"]
+        dismissed_count = row["dismissed_count"]
+        engagement_rate = 1.0 - (dismissed_count / total) if total > 0 else 0
+        if engagement_rate >= 0.7:
+            signals.append(BehavioralSignal(
+                signal_type="finding_engaged",
+                description=(
+                    f"User engages with '{row['finding_type']}' findings "
+                    f"({total - dismissed_count}/{total} kept)"
+                ),
+                count=total - dismissed_count,
+                extra={
+                    "finding_type": row["finding_type"],
+                    "engagement_rate": round(engagement_rate, 2),
+                },
+            ))
+        elif engagement_rate <= 0.3 and total >= 3:
+            signals.append(BehavioralSignal(
+                signal_type="finding_ignored",
+                description=(
+                    f"User mostly ignores '{row['finding_type']}' findings "
+                    f"({dismissed_count}/{total} dismissed)"
+                ),
+                count=dismissed_count,
+                extra={
+                    "finding_type": row["finding_type"],
+                    "dismiss_rate": round(1.0 - engagement_rate, 2),
+                },
+            ))
+
+    # 4. Message brevity — if user messages are consistently short, they
+    #    may prefer concise interactions
+    msg_stats = conn.execute(
+        f"""SELECT COUNT(*) AS cnt,
+                  AVG(LENGTH(content)) AS avg_len
+           FROM chat_history
+           WHERE role = 'user'
+             AND timestamp >= ?{uf_sql}""",
+        (cutoff, *uf_params),
+    ).fetchone()
+
+    if msg_stats and msg_stats["cnt"] >= 5:
+        avg_len = msg_stats["avg_len"] or 0
+        if avg_len < 50:
+            signals.append(BehavioralSignal(
+                signal_type="brief_messages",
+                description=(
+                    f"User sends brief messages (avg {avg_len:.0f} chars "
+                    f"across {msg_stats['cnt']} messages)"
+                ),
+                count=msg_stats["cnt"],
+                extra={"avg_length": round(avg_len, 1)},
+            ))
+        elif avg_len > 200:
+            signals.append(BehavioralSignal(
+                signal_type="detailed_messages",
+                description=(
+                    f"User sends detailed messages (avg {avg_len:.0f} chars "
+                    f"across {msg_stats['cnt']} messages)"
+                ),
+                count=msg_stats["cnt"],
+                extra={"avg_length": round(avg_len, 1)},
+            ))
+
+    return signals
+
+
+PERSONALITY_AGGREGATION_SYSTEM = """\
+You are the Personality Learning Engine for Reli, an AI personal information manager.
+
+You receive behavioral signals extracted from a user's recent interactions. Your job
+is to identify implicit personality and behavior preferences that should shape how
+Reli communicates and behaves.
+
+Analyze the signals and produce personality patterns. Each pattern should be:
+- Actionable: something Reli can concretely change in its behavior
+- Evidence-based: directly supported by the signals provided
+- Non-judgmental: frame as preferences, not criticisms
+
+Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
+{
+  "patterns": [
+    {
+      "pattern": "Concise, actionable preference description",
+      "confidence": "emerging",
+      "observations": 3
+    }
+  ]
+}
+
+Rules:
+- confidence: "emerging" (2-4 observations), "established" (5-9), "strong" (10+)
+- observations: the count of supporting evidence from the signals
+- pattern: written as a directive for Reli's behavior (e.g., "Use shorter task titles",
+  "Reduce staleness alert priority", "Emphasize date-related items in briefings")
+- Return 0-5 patterns. Quality over quantity. If signals are too weak or
+  contradictory, return {"patterns": []}
+- Do NOT fabricate patterns without evidence in the signals
+- Do NOT repeat existing patterns that are already established (provided below)
+- Merge related signals into a single coherent pattern when appropriate
+"""
+
+
+@dataclass
+class AggregationResult:
+    """Result of the personality pattern aggregation phase."""
+
+    signals_collected: int = 0
+    patterns_updated: int = 0
+    usage: dict = field(default_factory=dict)
+
+
+def _format_signals_for_llm(
+    signals: list[BehavioralSignal],
+    existing_patterns: list[dict],
+) -> str:
+    """Format behavioral signals and existing patterns for the LLM."""
+    if not signals:
+        return "No behavioral signals detected in the recent period."
+
+    lines = [
+        f"Analysis period: last 14 days",
+        f"{len(signals)} behavioral signals detected:",
+        "",
+    ]
+    for i, s in enumerate(signals, 1):
+        extra_str = ""
+        if s.extra:
+            extra_parts = [f"{k}={v}" for k, v in s.extra.items()]
+            extra_str = f" ({', '.join(extra_parts)})"
+        lines.append(f"{i}. [{s.signal_type}] {s.description} (count={s.count}{extra_str})")
+
+    if existing_patterns:
+        lines.append("")
+        lines.append("Existing personality patterns (do NOT duplicate these):")
+        for p in existing_patterns:
+            lines.append(f"- [{p.get('confidence', 'emerging')}] {p['pattern']} (obs={p.get('observations', 1)})")
+
+    return "\n".join(lines)
+
+
+def _merge_patterns(
+    existing: list[dict],
+    new_patterns: list[dict],
+) -> list[dict]:
+    """Merge new patterns into existing ones.
+
+    If a new pattern closely matches an existing one (by normalized text),
+    increment the observations count and potentially upgrade confidence.
+    Otherwise, append the new pattern.
+    """
+
+    def _normalize(text: str) -> str:
+        return " ".join(text.lower().split())
+
+    result = [dict(p) for p in existing]  # deep-ish copy
+    existing_normalized = {_normalize(p["pattern"]): i for i, p in enumerate(result)}
+
+    for new_p in new_patterns:
+        norm = _normalize(new_p["pattern"])
+        if norm in existing_normalized:
+            idx = existing_normalized[norm]
+            result[idx]["observations"] = result[idx].get("observations", 1) + new_p.get("observations", 1)
+            obs = result[idx]["observations"]
+            if obs >= 10:
+                result[idx]["confidence"] = "strong"
+            elif obs >= 5:
+                result[idx]["confidence"] = "established"
+        else:
+            result.append({
+                "pattern": new_p["pattern"],
+                "confidence": new_p.get("confidence", "emerging"),
+                "observations": new_p.get("observations", 1),
+            })
+            existing_normalized[norm] = len(result) - 1
+
+    return result
+
+
+async def aggregate_personality_patterns(
+    user_id: str = "",
+    lookback_days: int = 14,
+) -> AggregationResult:
+    """Phase 3: Aggregate behavioral signals into personality preference patterns.
+
+    Collects implicit signals from recent interactions, sends them to an LLM for
+    pattern analysis, and upserts the resulting patterns into a preference Thing.
+    """
+    from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat, load_personality_preferences
+
+    with db() as conn:
+        signals = collect_behavioral_signals(conn, user_id, lookback_days)
+
+    if not signals:
+        return AggregationResult(signals_collected=0)
+
+    existing_patterns = load_personality_preferences(user_id)
+    usage_stats = UsageStats()
+    prompt = _format_signals_for_llm(signals, existing_patterns)
+
+    raw = await _chat(
+        messages=[
+            {"role": "system", "content": PERSONALITY_AGGREGATION_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        model=REQUESTY_REASONING_MODEL,
+        response_format={"type": "json_object"},
+        usage_stats=usage_stats,
+    )
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("Personality aggregation returned invalid JSON: %s", raw[:200])
+        return AggregationResult(
+            signals_collected=len(signals),
+            usage=usage_stats.to_dict(),
+        )
+
+    new_patterns = parsed.get("patterns", [])
+    if not isinstance(new_patterns, list):
+        new_patterns = []
+
+    # Validate pattern structure
+    valid_patterns = []
+    for p in new_patterns:
+        if not isinstance(p, dict):
+            continue
+        pattern_text = str(p.get("pattern", "")).strip()
+        if not pattern_text:
+            continue
+        confidence = p.get("confidence", "emerging")
+        if confidence not in ("emerging", "established", "strong"):
+            confidence = "emerging"
+        observations = p.get("observations", 1)
+        if not isinstance(observations, int) or observations < 1:
+            observations = 1
+        valid_patterns.append({
+            "pattern": pattern_text,
+            "confidence": confidence,
+            "observations": observations,
+        })
+
+    if not valid_patterns:
+        return AggregationResult(
+            signals_collected=len(signals),
+            usage=usage_stats.to_dict(),
+        )
+
+    # Merge with existing patterns
+    merged = _merge_patterns(existing_patterns, valid_patterns)
+
+    # Upsert the preference Thing
+    from .auth import user_filter
+
+    with db() as conn:
+        uf_sql, uf_params = user_filter(user_id)
+        existing_thing = conn.execute(
+            f"""SELECT id FROM things
+               WHERE type_hint = 'preference'
+                 AND active = 1
+                 AND title = 'Learned Personality Preferences'{uf_sql}
+               LIMIT 1""",
+            uf_params,
+        ).fetchone()
+
+        pref_data = json.dumps({"patterns": merged})
+        now = datetime.now(timezone.utc).isoformat()
+
+        if existing_thing:
+            conn.execute(
+                "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
+                (pref_data, now, existing_thing["id"]),
+            )
+        else:
+            thing_id = f"pref-{uuid.uuid4().hex[:8]}"
+            user_id_val = user_id or None
+            conn.execute(
+                """INSERT INTO things (id, title, type_hint, active, data, created_at, updated_at, user_id)
+                   VALUES (?, ?, ?, 1, ?, ?, ?, ?)""",
+                (thing_id, "Learned Personality Preferences", "preference", pref_data, now, now, user_id_val),
+            )
+
+    return AggregationResult(
+        signals_collected=len(signals),
+        patterns_updated=len(valid_patterns),
         usage=usage_stats.to_dict(),
     )

@@ -9,7 +9,13 @@ from fastapi import APIRouter, Depends
 
 from ..auth import require_user, user_filter
 from ..database import db
-from ..sweep import ReflectionResult, collect_candidates, reflect_on_candidates
+from ..sweep import (
+    AggregationResult,
+    ReflectionResult,
+    collect_candidates,
+    aggregate_personality_patterns,
+    reflect_on_candidates,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +56,21 @@ def list_sweep_runs(
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+@router.post("/personality", summary="Run personality pattern aggregation")
+async def run_personality_aggregation(user_id: str = Depends(require_user)) -> dict[str, Any]:
+    """Run personality pattern aggregation from recent behavioral signals.
+
+    Analyzes implicit patterns in user interactions (title edits, finding
+    dismissals, message brevity, etc.) and updates personality preference Things.
+    """
+    result: AggregationResult = await aggregate_personality_patterns(user_id)
+    return {
+        "signals_collected": result.signals_collected,
+        "patterns_updated": result.patterns_updated,
+        "usage": result.usage,
+    }
 
 
 @router.post("/connections", summary="Run connection sweep")

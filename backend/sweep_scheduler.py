@@ -108,7 +108,7 @@ def _log_run(
 
 async def _run_sweep_for_user(user_id: str) -> None:
     """Execute one sweep cycle for a single user."""
-    from .sweep import collect_candidates, reflect_on_candidates
+    from .sweep import aggregate_personality_patterns, collect_candidates, reflect_on_candidates
 
     run_id = f"sr-{uuid.uuid4().hex[:8]}"
     now = datetime.now(timezone.utc).isoformat()
@@ -161,6 +161,19 @@ async def _run_sweep_for_user(user_id: str) -> None:
             result.findings_created,
             result.usage,
         )
+
+        # Phase 3: Personality pattern aggregation
+        try:
+            agg_result = await aggregate_personality_patterns(user_id)
+            if agg_result.patterns_updated > 0:
+                logger.info(
+                    "Sweep [%s] personality aggregation: %d signals → %d patterns updated",
+                    user_label,
+                    agg_result.signals_collected,
+                    agg_result.patterns_updated,
+                )
+        except Exception:
+            logger.exception("Personality aggregation failed for user %s", user_label)
 
         # Generate morning briefing after sweep completes
         try:
