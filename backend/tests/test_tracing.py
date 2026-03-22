@@ -231,4 +231,5 @@ class TestTracedToolDecorator:
             "delete_thing",
             "merge_things",
             "create_relationship",
+            "record_personality_signal",
         ]
