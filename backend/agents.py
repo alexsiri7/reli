@@ -4,6 +4,7 @@ import json
 import logging
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -244,6 +245,12 @@ async def _chat(
             model=getattr(response, "model", None) or used_model,
         )
     return response.choices[0].message.content or ""
+
+
+def _with_current_date(prompt: str) -> str:
+    """Prepend the current date to a system prompt so the LLM knows 'today'."""
+    today = date.today().strftime("%A, %B %-d, %Y")  # e.g. "Saturday, March 22, 2026"
+    return f"Current date: {today}\n\n{prompt}"
 
 
 # ---------------------------------------------------------------------------
@@ -1206,7 +1213,7 @@ def get_response_system_prompt(
     if personality_patterns:
         prompt += _build_personality_overlay(personality_patterns)
 
-    return prompt
+    return _with_current_date(prompt)
 
 
 def _build_response_messages(

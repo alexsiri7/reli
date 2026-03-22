@@ -276,6 +276,8 @@ export const UserSettingsSchema = z.object({
 export const RequestyModelSchema = z.object({
   id: z.string(),
   name: z.string().nullable(),
+  input_cost_per_million: z.number().nullable().optional(),
+  output_cost_per_million: z.number().nullable().optional(),
 })
 
 // --- User Profile ---

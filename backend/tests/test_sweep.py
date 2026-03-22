@@ -12,11 +12,12 @@ from backend.sweep import (
     find_cross_project_resource_conflicts,
     find_cross_project_shared_blockers,
     find_cross_project_thematic_connections,
-    find_incomplete_things,
+    find_information_gaps,
     find_open_questions,
     find_orphan_things,
     find_overdue_checkins,
     find_stale_things,
+    generate_gap_questions,
 )
 
 # ---------------------------------------------------------------------------
@@ -418,6 +419,251 @@ class TestOpenQuestions:
 
 
 # ---------------------------------------------------------------------------
+# Information gaps
+# ---------------------------------------------------------------------------
+
+
+class TestInformationGaps:
+    def test_name_only_person(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "p1", "Sarah", type_hint="person", updated_at=old)
+            # Force created_at to be old enough
+            conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
+        with db() as conn:
+            results = find_information_gaps(conn, today, min_age_days=3)
+        gaps = [r for r in results if r.extra.get("gap_type") == "name_only_person"]
+        assert len(gaps) == 1
+        assert gaps[0].thing_id == "p1"
+        assert "Name only" in gaps[0].message
+
+    def test_person_with_data_excluded(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "p1",
+                "Tom",
+                type_hint="person",
+                data={"role": "friend"},
+                updated_at=old,
+            )
+            conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
+        with db() as conn:
+            results = find_information_gaps(conn, today, min_age_days=3)
+        gaps = [r for r in results if r.extra.get("gap_type") == "name_only_person"]
+        assert len(gaps) == 0
+
+    def test_person_with_existing_questions_excluded(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "p1",
+                "Sarah",
+                type_hint="person",
+                open_questions=["How do you know Sarah?"],
+                updated_at=old,
+            )
+            conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
+        with db() as conn:
+            results = find_information_gaps(conn, today, min_age_days=3)
+        gaps = [r for r in results if r.extra.get("gap_type") == "name_only_person"]
+        assert len(gaps) == 0
+
+    def test_project_no_deadline(self, patched_db):
+        today = date.today()
+        with db() as conn:
+            _insert_thing(conn, "proj", "Conference Planning", type_hint="project")
+            _insert_thing(conn, "t1", "Book venue", parent_id="proj")
+        with db() as conn:
+            results = find_information_gaps(conn, today, min_age_days=0)
+        gaps = [r for r in results if r.extra.get("gap_type") == "no_deadline_project"]
+        assert len(gaps) == 1
+        assert "no deadline" in gaps[0].message.lower()
+
+    def test_project_with_deadline_excluded(self, patched_db):
+        today = date.today()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "proj",
+                "Conference Planning",
+                type_hint="project",
+                data={"deadline": "2026-06-01"},
+            )
+            _insert_thing(conn, "t1", "Book venue", parent_id="proj")
+        with db() as conn:
+            results = find_information_gaps(conn, today, min_age_days=0)
+        gaps = [r for r in results if r.extra.get("gap_type") == "no_deadline_project"]
+        assert len(gaps) == 0
+
+    def test_project_with_checkin_date_excluded(self, patched_db):
+        today = date.today()
+        future = (today + timedelta(days=10)).isoformat()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "proj",
+                "Conference Planning",
+                type_hint="project",
+                checkin_date=f"{future}T09:00:00",
+            )
+            _insert_thing(conn, "t1", "Book venue", parent_id="proj")
+        with db() as conn:
+            results = find_information_gaps(conn, today, min_age_days=0)
+        gaps = [r for r in results if r.extra.get("gap_type") == "no_deadline_project"]
+        assert len(gaps) == 0
+
+    def test_event_no_dates(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "e1", "Team Offsite", type_hint="event", updated_at=old)
+            conn.execute("UPDATE things SET created_at = ? WHERE id = 'e1'", (old,))
+        with db() as conn:
+            results = find_information_gaps(conn, today, min_age_days=3)
+        gaps = [r for r in results if r.extra.get("gap_type") == "no_dates"]
+        assert len(gaps) == 1
+        assert "no dates" in gaps[0].message.lower()
+
+    def test_event_with_date_in_data_excluded(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "e1",
+                "Team Offsite",
+                type_hint="event",
+                data={"event_date": "2026-05-15"},
+                updated_at=old,
+            )
+            conn.execute("UPDATE things SET created_at = ? WHERE id = 'e1'", (old,))
+        with db() as conn:
+            results = find_information_gaps(conn, today, min_age_days=3)
+        gaps = [r for r in results if r.extra.get("gap_type") == "no_dates"]
+        assert len(gaps) == 0
+
+    def test_minimal_data_old_thing(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Random Idea", updated_at=old)
+            conn.execute("UPDATE things SET created_at = ? WHERE id = 't1'", (old,))
+        with db() as conn:
+            results = find_information_gaps(conn, today, min_age_days=3)
+        gaps = [r for r in results if r.extra.get("gap_type") == "minimal_data"]
+        assert len(gaps) == 1
+        assert "Minimal data" in gaps[0].message
+
+    def test_minimal_data_recent_thing_excluded(self, patched_db):
+        today = date.today()
+        recent = (today - timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "New Idea", updated_at=recent)
+            conn.execute("UPDATE things SET created_at = ? WHERE id = 't1'", (recent,))
+        with db() as conn:
+            results = find_information_gaps(conn, today, min_age_days=3)
+        gaps = [r for r in results if r.extra.get("gap_type") == "minimal_data"]
+        assert len(gaps) == 0  # Too young (< 14 days for minimal_data)
+
+    def test_inactive_excluded(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "p1", "Old Person", type_hint="person", active=False, updated_at=old)
+            conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
+        with db() as conn:
+            results = find_information_gaps(conn, today, min_age_days=3)
+        assert len(results) == 0
+
+
+class TestGenerateGapQuestions:
+    def test_generates_questions_for_person(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "p1", "Sarah", type_hint="person", updated_at=old)
+            conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
+        with db() as conn:
+            gaps = find_information_gaps(conn, today, min_age_days=3)
+            count = generate_gap_questions(conn, gaps)
+        assert count == 1
+        with db() as conn:
+            row = conn.execute("SELECT open_questions FROM things WHERE id = 'p1'").fetchone()
+            questions = json.loads(row["open_questions"])
+        assert len(questions) >= 1
+        assert any("Sarah" in q for q in questions)
+
+    def test_generates_questions_for_project(self, patched_db):
+        today = date.today()
+        with db() as conn:
+            _insert_thing(conn, "proj", "Trip Planning", type_hint="project")
+            _insert_thing(conn, "t1", "Book hotel", parent_id="proj")
+        with db() as conn:
+            gaps = find_information_gaps(conn, today, min_age_days=0)
+            count = generate_gap_questions(conn, gaps)
+        assert count == 1
+        with db() as conn:
+            row = conn.execute("SELECT open_questions FROM things WHERE id = 'proj'").fetchone()
+            questions = json.loads(row["open_questions"])
+        assert len(questions) >= 1
+        assert any("done" in q.lower() or "need" in q.lower() for q in questions)
+
+    def test_skips_thing_with_existing_questions(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "p1",
+                "Sarah",
+                type_hint="person",
+                updated_at=old,
+            )
+            conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
+        # Manually set open_questions before calling generate
+        with db() as conn:
+            conn.execute(
+                "UPDATE things SET open_questions = ? WHERE id = 'p1'",
+                (json.dumps(["Existing question?"]),),
+            )
+        # Now create a fake gap candidate (simulating a race condition)
+        from backend.sweep import SweepCandidate
+
+        fake_gap = SweepCandidate(
+            thing_id="p1",
+            thing_title="Sarah",
+            finding_type="information_gap",
+            message="Name only",
+            extra={"gap_type": "name_only_person", "type_hint": "person"},
+        )
+        with db() as conn:
+            count = generate_gap_questions(conn, [fake_gap])
+        assert count == 0  # Should not overwrite existing questions
+
+    def test_collect_candidates_includes_gaps(self, patched_db):
+        today = date.today()
+        old = (today - timedelta(days=5)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "p1", "Sarah", type_hint="person", updated_at=old)
+            conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
+        results = collect_candidates(today=today)
+        types = {c.finding_type for c in results}
+        assert "information_gap" in types
+        # Also verify questions were generated on the Thing
+        with db() as conn:
+            row = conn.execute("SELECT open_questions FROM things WHERE id = 'p1'").fetchone()
+        assert row["open_questions"] is not None
+        questions = json.loads(row["open_questions"])
+        assert len(questions) >= 1
+
+
+# ---------------------------------------------------------------------------
 # collect_candidates integration
 # ---------------------------------------------------------------------------
 
@@ -754,138 +1000,3 @@ class TestCrossProjectDuplicateEffort:
         with db() as conn:
             results = find_cross_project_duplicate_effort(conn)
         assert len(results) == 0
-
-
-# ---------------------------------------------------------------------------
-# Incomplete Things (gap detection)
-# ---------------------------------------------------------------------------
-
-
-class TestIncompleteThings:
-    def test_thing_with_no_data_detected(self, patched_db):
-        """A Thing with null data is flagged as incomplete."""
-        with db() as conn:
-            _insert_thing(conn, "t1", "Bare Task")
-        with db() as conn:
-            results = find_incomplete_things(conn)
-        ids = [r.thing_id for r in results]
-        assert "t1" in ids
-        gaps = next(r for r in results if r.thing_id == "t1").extra["gaps"]
-        assert "no data" in gaps
-
-    def test_thing_with_dates_not_flagged_for_no_dates(self, patched_db):
-        """A Thing with a checkin_date should not be flagged for 'no dates'."""
-        today = date.today()
-        with db() as conn:
-            _insert_thing(
-                conn,
-                "t1",
-                "Dated Task",
-                checkin_date=f"{today.isoformat()}T09:00:00",
-                data={"notes": "some info"},
-            )
-        with db() as conn:
-            results = find_incomplete_things(conn)
-        t1_results = [r for r in results if r.thing_id == "t1"]
-        if t1_results:
-            assert "no dates" not in t1_results[0].extra["gaps"]
-
-    def test_thing_with_data_dates_not_flagged(self, patched_db):
-        """A Thing with date keys in data should not be flagged for 'no dates'."""
-        with db() as conn:
-            _insert_thing(
-                conn,
-                "t1",
-                "Birthday Person",
-                type_hint="person",
-                data={"birthday": "1990-05-15", "role": "engineer", "email": "a@b.com"},
-            )
-        with db() as conn:
-            results = find_incomplete_things(conn)
-        t1_results = [r for r in results if r.thing_id == "t1"]
-        if t1_results:
-            assert "no dates" not in t1_results[0].extra["gaps"]
-
-    def test_name_only_person_detected(self, patched_db):
-        """A person with only a title and no meaningful data is flagged."""
-        with db() as conn:
-            _insert_thing(conn, "p1", "Jane Doe", type_hint="person")
-        with db() as conn:
-            results = find_incomplete_things(conn)
-        p1_results = [r for r in results if r.thing_id == "p1"]
-        assert len(p1_results) == 1
-        assert "name-only person" in p1_results[0].extra["gaps"]
-
-    def test_person_with_data_not_name_only(self, patched_db):
-        """A person with meaningful data keys is not flagged as name-only."""
-        with db() as conn:
-            _insert_thing(
-                conn,
-                "p1",
-                "Jane Doe",
-                type_hint="person",
-                data={"email": "jane@example.com", "role": "Manager"},
-            )
-        with db() as conn:
-            results = find_incomplete_things(conn)
-        p1_results = [r for r in results if r.thing_id == "p1"]
-        if p1_results:
-            assert "name-only person" not in p1_results[0].extra["gaps"]
-
-    def test_task_without_deadline_detected(self, patched_db):
-        """A task with no deadline/due_date is flagged."""
-        with db() as conn:
-            _insert_thing(conn, "t1", "Build feature", type_hint="task", data={"notes": "important"})
-        with db() as conn:
-            results = find_incomplete_things(conn)
-        t1_results = [r for r in results if r.thing_id == "t1"]
-        assert len(t1_results) == 1
-        assert "no deadline" in t1_results[0].extra["gaps"]
-
-    def test_task_with_deadline_not_flagged(self, patched_db):
-        """A task with a deadline in data is not flagged for 'no deadline'."""
-        with db() as conn:
-            _insert_thing(
-                conn,
-                "t1",
-                "Build feature",
-                type_hint="task",
-                data={"deadline": "2026-04-01", "notes": "important"},
-            )
-        with db() as conn:
-            results = find_incomplete_things(conn)
-        t1_results = [r for r in results if r.thing_id == "t1"]
-        if t1_results:
-            assert "no deadline" not in t1_results[0].extra["gaps"]
-
-    def test_inactive_thing_excluded(self, patched_db):
-        """Inactive Things should not be flagged."""
-        with db() as conn:
-            _insert_thing(conn, "t1", "Done Task", active=False)
-        with db() as conn:
-            results = find_incomplete_things(conn)
-        assert len(results) == 0
-
-    def test_thing_with_open_questions_excluded(self, patched_db):
-        """Things that already have open_questions should not be flagged."""
-        with db() as conn:
-            _insert_thing(conn, "t1", "Already Asked", open_questions=["When is this due?"])
-        with db() as conn:
-            results = find_incomplete_things(conn)
-        assert len(results) == 0
-
-    def test_finding_type_is_incomplete(self, patched_db):
-        """The finding_type for gap detection should be 'incomplete'."""
-        with db() as conn:
-            _insert_thing(conn, "t1", "Bare Thing")
-        with db() as conn:
-            results = find_incomplete_things(conn)
-        assert results[0].finding_type == "incomplete"
-
-    def test_collect_candidates_includes_incomplete(self, patched_db):
-        """collect_candidates should include incomplete findings."""
-        with db() as conn:
-            _insert_thing(conn, "t1", "Bare Thing")
-        results = collect_candidates()
-        types = {c.finding_type for c in results}
-        assert "incomplete" in types

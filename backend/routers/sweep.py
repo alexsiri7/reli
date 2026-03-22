@@ -10,11 +10,10 @@ from fastapi import APIRouter, Depends
 from ..auth import require_user, user_filter
 from ..database import db
 from ..sweep import (
-    GapQuestionResult,
+    PatternAggregationResult,
     ReflectionResult,
+    aggregate_personality_patterns,
     collect_candidates,
-    find_incomplete_things,
-    generate_gap_questions,
     reflect_on_candidates,
 )
 
@@ -32,10 +31,15 @@ async def run_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
     candidates = collect_candidates(user_id=user_id)
     result: ReflectionResult = await reflect_on_candidates(candidates, user_id=user_id)
 
+    # Phase 3: Aggregate personality patterns from behavioral signals
+    pattern_result: PatternAggregationResult = await aggregate_personality_patterns(user_id=user_id)
+
     return {
         "candidates_found": len(candidates),
         "findings_created": result.findings_created,
         "findings": result.findings,
+        "personality_patterns_updated": pattern_result.patterns_updated,
+        "personality_patterns": pattern_result.patterns,
         "usage": result.usage,
     }
 
@@ -57,28 +61,6 @@ def list_sweep_runs(
         ).fetchall()
 
     return [dict(row) for row in rows]
-
-
-@router.post("/gaps", summary="Detect incomplete Things and generate questions")
-async def run_gap_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
-    """Detect Things with missing information and generate open questions.
-
-    Phase 1: SQL query finds Things with gaps (no dates, minimal data,
-    name-only people, no deadlines).
-    Phase 2: LLM generates tailored questions and stores them as
-    open_questions on each Thing.
-    """
-    with db() as conn:
-        candidates = find_incomplete_things(conn, user_id=user_id)
-
-    result: GapQuestionResult = await generate_gap_questions(candidates, user_id=user_id)
-
-    return {
-        "candidates_found": len(candidates),
-        "things_updated": result.things_updated,
-        "questions_generated": result.questions_generated,
-        "usage": result.usage,
-    }
 
 
 @router.post("/connections", summary="Run connection sweep")
