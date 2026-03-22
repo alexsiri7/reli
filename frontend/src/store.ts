@@ -35,7 +35,7 @@ import {
 } from './schemas'
 import { z } from 'zod'
 
-export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | string
+export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | 'preference' | string
 
 export interface ThingType {
   id: string

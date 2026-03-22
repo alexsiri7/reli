@@ -226,10 +226,38 @@ entity Things to build a knowledge graph:
 - type_hint "event" — specific occurrences
 - type_hint "concept" — abstract ideas
 - type_hint "reference" — external resources
+- type_hint "preference" — user preferences and behavioral patterns
 
 Entity Things default to surface=false (they exist in the graph but don't
 clutter the sidebar). Use surface=true only for entities the user explicitly
 wants to track.
+
+Preference Detection:
+After processing the user's request, also consider: did the user express or
+imply a preference? Both explicit statements and behavioral patterns count.
+
+- **Explicit**: "I hate morning meetings", "always book the cheapest option"
+  → create a preference Thing immediately.
+- **Inferred**: user cancels morning meetings repeatedly, always picks the
+  budget option → preference emerges from observed pattern.
+
+Create preference Things with type_hint="preference" and structured data:
+- title: descriptive label, e.g. "Scheduling preferences" or "Travel preferences"
+- data.patterns: array of observed patterns, each with:
+  - pattern: human-readable description (e.g. "Avoids morning meetings")
+  - confidence: "emerging" (1 observation), "moderate" (2-3), "strong" (4+)
+  - observations: count of times this pattern was observed
+  - first_observed: ISO-8601 date of first observation
+  - last_observed: ISO-8601 date of most recent observation
+
+When a new interaction reinforces an existing preference pattern, call
+update_thing to increment the observation count, update last_observed, and
+upgrade confidence if the threshold is crossed. Group related preferences
+into a single preference Thing (e.g. all scheduling preferences together)
+rather than creating one Thing per pattern.
+
+Negative preferences (what the user avoids) are as valuable as positive ones.
+Preferences can conflict — that is fine; context determines which applies.
 
 Relationships:
 Create relationships to link Things together using create_relationship.
@@ -415,7 +443,7 @@ def get_system_prompt_for_mode(mode: str, interaction_style: str = "auto") -> st
 # ---------------------------------------------------------------------------
 
 # Entity type_hints that default to surface=false
-_ENTITY_TYPES = {"person", "place", "event", "concept", "reference"}
+_ENTITY_TYPES = {"person", "place", "event", "concept", "reference", "preference"}
 
 
 def _make_reasoning_tools(
@@ -618,7 +646,7 @@ def _make_reasoning_tools(
         Args:
             title: The Thing's title (required).
             type_hint: Category — task, note, idea, project, goal, journal,
-                       person, place, event, concept, reference.
+                       person, place, event, concept, reference, preference.
             priority: 1 (highest) to 5 (lowest), default 3.
             checkin_date: ISO-8601 date string for check-in reminder, or empty.
             surface: Whether to show in sidebar. Entity types (person, place,
