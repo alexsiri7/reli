@@ -279,6 +279,8 @@ class TestMcpMetadata:
             "delete_thing",
             "create_relationship",
             "delete_relationship",
+            "get_briefing",
+            "get_conflicts",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
 
