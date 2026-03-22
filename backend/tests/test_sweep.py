@@ -5,6 +5,7 @@ from datetime import date, timedelta
 
 from backend.database import db
 from backend.sweep import (
+    aggregate_personality_patterns,
     collect_candidates,
     find_approaching_dates,
     find_completed_projects,
@@ -753,3 +754,298 @@ class TestCrossProjectDuplicateEffort:
         with db() as conn:
             results = find_cross_project_duplicate_effort(conn)
         assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# Personality pattern aggregation
+# ---------------------------------------------------------------------------
+
+
+def _insert_chat_message(
+    conn,
+    role: str,
+    content: str,
+    *,
+    applied_changes: dict | None = None,
+    session_id: str = "test-session",
+    timestamp: str | None = None,
+) -> None:
+    now = timestamp or date.today().isoformat()
+    conn.execute(
+        """INSERT INTO chat_history
+           (session_id, role, content, applied_changes, timestamp)
+           VALUES (?, ?, ?, ?, ?)""",
+        (
+            session_id,
+            role,
+            content,
+            json.dumps(applied_changes) if applied_changes else None,
+            now,
+        ),
+    )
+
+
+def _insert_sweep_finding(
+    conn,
+    finding_id: str,
+    finding_type: str,
+    *,
+    dismissed: bool = False,
+    created_at: str | None = None,
+) -> None:
+    now = created_at or date.today().isoformat()
+    conn.execute(
+        """INSERT INTO sweep_findings
+           (id, finding_type, message, priority, dismissed, created_at)
+           VALUES (?, ?, ?, 3, ?, ?)""",
+        (finding_id, finding_type, f"Test {finding_type}", int(dismissed), now),
+    )
+
+
+class TestPersonalityPatternBrevity:
+    def test_short_titles_detected(self, patched_db):
+        """When most titles are 3 words or fewer, brevity pattern fires."""
+        with db() as conn:
+            for i in range(6):
+                _insert_chat_message(
+                    conn,
+                    "assistant",
+                    f"Created thing {i}",
+                    applied_changes={
+                        "created": [{"id": f"t{i}", "title": "Fix bug"}],
+                    },
+                )
+        with db() as conn:
+            results = aggregate_personality_patterns(conn)
+        assert len(results) == 1
+        assert results[0].extra["pattern"] == "title_brevity"
+        assert results[0].finding_type == "personality_pattern"
+
+    def test_long_titles_no_pattern(self, patched_db):
+        """When most titles are long, brevity pattern does not fire."""
+        with db() as conn:
+            for i in range(6):
+                _insert_chat_message(
+                    conn,
+                    "assistant",
+                    f"Created thing {i}",
+                    applied_changes={
+                        "created": [
+                            {"id": f"t{i}", "title": "A very long descriptive title here"}
+                        ],
+                    },
+                )
+        with db() as conn:
+            results = aggregate_personality_patterns(conn)
+        brevity = [r for r in results if r.extra.get("pattern") == "title_brevity"]
+        assert len(brevity) == 0
+
+    def test_too_few_titles_no_pattern(self, patched_db):
+        """Fewer than 5 titles → not enough data to detect pattern."""
+        with db() as conn:
+            for i in range(3):
+                _insert_chat_message(
+                    conn,
+                    "assistant",
+                    f"Created thing {i}",
+                    applied_changes={
+                        "created": [{"id": f"t{i}", "title": "Bug"}],
+                    },
+                )
+        with db() as conn:
+            results = aggregate_personality_patterns(conn)
+        brevity = [r for r in results if r.extra.get("pattern") == "title_brevity"]
+        assert len(brevity) == 0
+
+    def test_updated_titles_included(self, patched_db):
+        """Updated titles (not just created) count toward brevity."""
+        with db() as conn:
+            for i in range(6):
+                _insert_chat_message(
+                    conn,
+                    "assistant",
+                    f"Updated thing {i}",
+                    applied_changes={
+                        "updated": [{"id": f"t{i}", "title": "Short"}],
+                    },
+                )
+        with db() as conn:
+            results = aggregate_personality_patterns(conn)
+        assert len(results) == 1
+        assert results[0].extra["pattern"] == "title_brevity"
+
+
+class TestPersonalityPatternStalenessFatigue:
+    def test_high_dismiss_rate_detected(self, patched_db):
+        """When ≥60% of stale findings are dismissed, fatigue pattern fires."""
+        with db() as conn:
+            for i in range(4):
+                _insert_sweep_finding(conn, f"sf-d{i}", "stale", dismissed=True)
+            _insert_sweep_finding(conn, "sf-k1", "stale", dismissed=False)
+        with db() as conn:
+            results = aggregate_personality_patterns(conn)
+        fatigue = [r for r in results if r.extra.get("pattern") == "staleness_fatigue"]
+        assert len(fatigue) == 1
+        assert fatigue[0].extra["dismissed"] == 4
+        assert fatigue[0].extra["total"] == 5
+
+    def test_low_dismiss_rate_no_pattern(self, patched_db):
+        """When few stale findings are dismissed, no fatigue pattern."""
+        with db() as conn:
+            _insert_sweep_finding(conn, "sf-d1", "stale", dismissed=True)
+            for i in range(5):
+                _insert_sweep_finding(conn, f"sf-k{i}", "stale", dismissed=False)
+        with db() as conn:
+            results = aggregate_personality_patterns(conn)
+        fatigue = [r for r in results if r.extra.get("pattern") == "staleness_fatigue"]
+        assert len(fatigue) == 0
+
+    def test_neglected_findings_included(self, patched_db):
+        """Both stale and neglected finding types contribute to the pattern."""
+        with db() as conn:
+            for i in range(3):
+                _insert_sweep_finding(conn, f"sf-s{i}", "stale", dismissed=True)
+            for i in range(3):
+                _insert_sweep_finding(conn, f"sf-n{i}", "neglected", dismissed=True)
+        with db() as conn:
+            results = aggregate_personality_patterns(conn)
+        fatigue = [r for r in results if r.extra.get("pattern") == "staleness_fatigue"]
+        assert len(fatigue) == 1
+        assert fatigue[0].extra["total"] == 6
+
+    def test_too_few_findings_no_pattern(self, patched_db):
+        """Fewer than 5 stale findings → not enough data."""
+        with db() as conn:
+            for i in range(3):
+                _insert_sweep_finding(conn, f"sf-d{i}", "stale", dismissed=True)
+        with db() as conn:
+            results = aggregate_personality_patterns(conn)
+        fatigue = [r for r in results if r.extra.get("pattern") == "staleness_fatigue"]
+        assert len(fatigue) == 0
+
+
+class TestPersonalityPatternDateEngagement:
+    def test_high_date_engagement_detected(self, patched_db):
+        """When ≥60% of updated Things have dates, date engagement fires."""
+        with db() as conn:
+            # 4 date Things, 1 non-date
+            for i in range(4):
+                _insert_chat_message(
+                    conn,
+                    "assistant",
+                    f"Updated {i}",
+                    applied_changes={
+                        "updated": [
+                            {"id": f"d{i}", "title": f"Event {i}", "checkin_date": "2026-04-01"}
+                        ],
+                    },
+                )
+            _insert_chat_message(
+                conn,
+                "assistant",
+                "Updated non-date",
+                applied_changes={
+                    "updated": [{"id": "nd1", "title": "No date thing"}],
+                },
+            )
+        with db() as conn:
+            results = aggregate_personality_patterns(conn)
+        date_pat = [r for r in results if r.extra.get("pattern") == "date_engagement"]
+        assert len(date_pat) == 1
+        assert date_pat[0].extra["date_things"] == 4
+
+    def test_date_in_data_json_detected(self, patched_db):
+        """Date fields in the data JSON also count toward date engagement."""
+        with db() as conn:
+            for i in range(4):
+                _insert_chat_message(
+                    conn,
+                    "assistant",
+                    f"Updated {i}",
+                    applied_changes={
+                        "updated": [
+                            {
+                                "id": f"d{i}",
+                                "title": f"Task {i}",
+                                "data": {"deadline": "2026-04-01"},
+                            }
+                        ],
+                    },
+                )
+            _insert_chat_message(
+                conn,
+                "assistant",
+                "Updated non-date",
+                applied_changes={
+                    "updated": [{"id": "nd1", "title": "No date thing"}],
+                },
+            )
+        with db() as conn:
+            results = aggregate_personality_patterns(conn)
+        date_pat = [r for r in results if r.extra.get("pattern") == "date_engagement"]
+        assert len(date_pat) == 1
+
+    def test_low_date_engagement_no_pattern(self, patched_db):
+        """When few updated Things have dates, no pattern fires."""
+        with db() as conn:
+            _insert_chat_message(
+                conn,
+                "assistant",
+                "Updated date",
+                applied_changes={
+                    "updated": [
+                        {"id": "d1", "title": "Event", "checkin_date": "2026-04-01"}
+                    ],
+                },
+            )
+            for i in range(5):
+                _insert_chat_message(
+                    conn,
+                    "assistant",
+                    f"Updated {i}",
+                    applied_changes={
+                        "updated": [{"id": f"nd{i}", "title": f"Task {i}"}],
+                    },
+                )
+        with db() as conn:
+            results = aggregate_personality_patterns(conn)
+        date_pat = [r for r in results if r.extra.get("pattern") == "date_engagement"]
+        assert len(date_pat) == 0
+
+    def test_old_messages_excluded_by_lookback(self, patched_db):
+        """Messages older than lookback_days are excluded from pattern analysis."""
+        old_date = (date.today() - timedelta(days=60)).isoformat()
+        with db() as conn:
+            for i in range(6):
+                _insert_chat_message(
+                    conn,
+                    "assistant",
+                    f"Updated {i}",
+                    applied_changes={
+                        "updated": [
+                            {"id": f"d{i}", "title": f"Event {i}", "checkin_date": "2026-04-01"}
+                        ],
+                    },
+                    timestamp=old_date,
+                )
+        with db() as conn:
+            results = aggregate_personality_patterns(conn, lookback_days=30)
+        assert len(results) == 0
+
+
+class TestCollectCandidatesPersonality:
+    def test_personality_patterns_included(self, patched_db):
+        """collect_candidates includes personality_pattern findings."""
+        with db() as conn:
+            for i in range(6):
+                _insert_chat_message(
+                    conn,
+                    "assistant",
+                    f"Created thing {i}",
+                    applied_changes={
+                        "created": [{"id": f"t{i}", "title": "Fix"}],
+                    },
+                )
+        results = collect_candidates()
+        types = {c.finding_type for c in results}
+        assert "personality_pattern" in types

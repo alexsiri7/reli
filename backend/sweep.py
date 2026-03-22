@@ -16,6 +16,7 @@ Finding types:
   - cross_project_resource_conflict: Person/entity involved in multiple stale projects
   - cross_project_thematic_connection: Similar Things across different projects
   - cross_project_duplicate_effort: Tasks with near-identical titles in different projects
+  - personality_pattern: Implicit user preference detected from interaction history
   - llm_insight: LLM-generated finding from reflection phase
 """
 
@@ -676,6 +677,174 @@ def find_cross_project_duplicate_effort(
 
 
 # ---------------------------------------------------------------------------
+# Personality pattern aggregation
+# ---------------------------------------------------------------------------
+
+
+def aggregate_personality_patterns(
+    conn: sqlite3.Connection,
+    today: date | None = None,
+    lookback_days: int = 30,
+    user_id: str = "",
+) -> list[SweepCandidate]:
+    """Analyze recent interactions for implicit personality/preference patterns.
+
+    Detects three patterns from chat history and sweep finding interactions:
+      - title_brevity: user frequently creates/updates short titles (Reli too verbose)
+      - staleness_fatigue: user dismisses most stale/neglected findings (reduce priority)
+      - date_engagement: user preferentially acts on date-related Things (boost dates)
+
+    Returns personality_pattern candidates for LLM reflection.
+    """
+    today = today or date.today()
+    cutoff = (today - timedelta(days=lookback_days)).isoformat()
+    uf_sql, uf_params = user_filter(user_id)
+    candidates: list[SweepCandidate] = []
+
+    # --- Load applied_changes from recent assistant messages ---
+    change_rows = conn.execute(
+        f"""SELECT applied_changes FROM chat_history
+           WHERE role = 'assistant'
+             AND applied_changes IS NOT NULL
+             AND applied_changes != '{{}}'
+             AND applied_changes != 'null'
+             AND timestamp >= ?{uf_sql}""",
+        (cutoff, *uf_params),
+    ).fetchall()
+
+    parsed_changes: list[dict] = []
+    for row in change_rows:
+        try:
+            raw = row["applied_changes"]
+            changes = json.loads(raw) if isinstance(raw, str) else raw
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(changes, dict):
+            parsed_changes.append(changes)
+
+    # --- Pattern 1: Title brevity ---
+    title_lengths: list[int] = []
+    for changes in parsed_changes:
+        for thing in changes.get("updated", []) + changes.get("created", []):
+            if isinstance(thing, dict) and "title" in thing:
+                title_lengths.append(len(thing["title"].split()))
+
+    if len(title_lengths) >= 5:
+        avg_words = sum(title_lengths) / len(title_lengths)
+        short_count = sum(1 for length in title_lengths if length <= 3)
+        short_ratio = short_count / len(title_lengths)
+        if short_ratio >= 0.6:
+            candidates.append(
+                SweepCandidate(
+                    thing_id="_pattern_brevity",
+                    thing_title="Personality Pattern",
+                    finding_type="personality_pattern",
+                    message=(
+                        f"You tend to keep titles concise ({short_count}/{len(title_lengths)} "
+                        f"are 3 words or fewer, avg {avg_words:.1f} words). "
+                        "Reli will aim for shorter, punchier titles."
+                    ),
+                    priority=3,
+                    extra={
+                        "pattern": "title_brevity",
+                        "avg_words": round(avg_words, 1),
+                        "short_ratio": round(short_ratio, 2),
+                    },
+                )
+            )
+
+    # --- Pattern 2: Staleness dismissal fatigue ---
+    stale_row = conn.execute(
+        f"""SELECT COUNT(*) AS total,
+                  SUM(CASE WHEN dismissed = 1 THEN 1 ELSE 0 END) AS dismissed_count
+           FROM sweep_findings
+           WHERE finding_type IN ('stale', 'neglected')
+             AND created_at >= ?{uf_sql}""",
+        (cutoff, *uf_params),
+    ).fetchone()
+
+    if stale_row and stale_row["total"] and stale_row["total"] >= 5:
+        total = stale_row["total"]
+        dismissed = stale_row["dismissed_count"] or 0
+        dismiss_rate = dismissed / total
+        if dismiss_rate >= 0.6:
+            candidates.append(
+                SweepCandidate(
+                    thing_id="_pattern_staleness",
+                    thing_title="Personality Pattern",
+                    finding_type="personality_pattern",
+                    message=(
+                        f"You've dismissed {dismissed}/{total} staleness alerts recently. "
+                        "Consider increasing your stale threshold or reducing staleness alert priority."
+                    ),
+                    priority=3,
+                    extra={
+                        "pattern": "staleness_fatigue",
+                        "dismiss_rate": round(dismiss_rate, 2),
+                        "total": total,
+                        "dismissed": dismissed,
+                    },
+                )
+            )
+
+    # --- Pattern 3: Date engagement ---
+    date_thing_ids: set[str] = set()
+    non_date_thing_ids: set[str] = set()
+
+    for changes in parsed_changes:
+        for thing in changes.get("updated", []):
+            if not isinstance(thing, dict) or "id" not in thing:
+                continue
+            tid = thing["id"]
+            has_date = bool(thing.get("checkin_date"))
+            if not has_date:
+                data = thing.get("data")
+                if isinstance(data, str):
+                    try:
+                        data = json.loads(data)
+                    except (json.JSONDecodeError, TypeError):
+                        data = {}
+                if isinstance(data, dict):
+                    has_date = any(
+                        k.lower().replace(" ", "_") in _ALL_DATE_KEYS for k in data
+                    )
+            if has_date:
+                date_thing_ids.add(tid)
+            else:
+                non_date_thing_ids.add(tid)
+
+    # Only count Things that are exclusively in one category
+    date_only = date_thing_ids - non_date_thing_ids
+    non_date_only = non_date_thing_ids - date_thing_ids
+    total_acted = len(date_only) + len(non_date_only)
+
+    if total_acted >= 5:
+        date_ratio = len(date_only) / total_acted
+        if date_ratio >= 0.6:
+            candidates.append(
+                SweepCandidate(
+                    thing_id="_pattern_dates",
+                    thing_title="Personality Pattern",
+                    finding_type="personality_pattern",
+                    message=(
+                        f"You consistently act on date-related items "
+                        f"({len(date_only)}/{total_acted} recent updates). "
+                        "Boosting date awareness in your briefings."
+                    ),
+                    priority=3,
+                    extra={
+                        "pattern": "date_engagement",
+                        "date_ratio": round(date_ratio, 2),
+                        "date_things": len(date_only),
+                        "total_acted": total_acted,
+                    },
+                )
+            )
+
+    return candidates
+
+
+# ---------------------------------------------------------------------------
 # Main sweep entry point
 # ---------------------------------------------------------------------------
 
@@ -705,6 +874,7 @@ def collect_candidates(
             + find_cross_project_resource_conflicts(conn, today, stale_days)
             + find_cross_project_thematic_connections(conn)
             + find_cross_project_duplicate_effort(conn)
+            + aggregate_personality_patterns(conn, today, user_id=user_id)
         )
 
     # Deduplicate: keep the highest-priority (lowest number) candidate per (thing_id, finding_type)
