@@ -9,13 +9,11 @@ import pytest
 from backend.database import db
 from backend.preference_sweep import (
     MIN_INTERACTIONS,
-    PreferenceAggregationResult,
     _fetch_existing_preferences,
     _fetch_recent_interactions,
     _format_interactions_for_llm,
     aggregate_preference_patterns,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -205,20 +203,22 @@ class TestAggregatePreferencePatterns:
                 _insert_chat_message(conn, "user", f"Schedule meeting for afternoon {i}")
                 _insert_chat_message(conn, "assistant", f"Done, moved to afternoon {i}")
 
-        llm_response = json.dumps({
-            "preferences": [
-                {
-                    "title": "Prefers afternoon meetings",
-                    "category": "scheduling",
-                    "confidence": 0.65,
-                    "evidence": [
-                        "Rescheduled 5 meetings to afternoon",
-                        "Never requests morning slots",
-                    ],
-                    "existing_id": None,
-                }
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "preferences": [
+                    {
+                        "title": "Prefers afternoon meetings",
+                        "category": "scheduling",
+                        "confidence": 0.65,
+                        "evidence": [
+                            "Rescheduled 5 meetings to afternoon",
+                            "Never requests morning slots",
+                        ],
+                        "existing_id": None,
+                    }
+                ]
+            }
+        )
 
         with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_preference_patterns()
@@ -230,9 +230,7 @@ class TestAggregatePreferencePatterns:
 
         # Verify the Thing was created in the database
         with db() as conn:
-            row = conn.execute(
-                "SELECT * FROM things WHERE type_hint = 'preference'"
-            ).fetchone()
+            row = conn.execute("SELECT * FROM things WHERE type_hint = 'preference'").fetchone()
         assert row is not None
         assert row["title"] == "Prefers afternoon meetings"
         assert row["surface"] == 0  # preferences are hidden from default views
@@ -256,17 +254,19 @@ class TestAggregatePreferencePatterns:
                 _insert_chat_message(conn, "user", f"Move meeting to pm {i}")
                 _insert_chat_message(conn, "assistant", f"Moved {i}")
 
-        llm_response = json.dumps({
-            "preferences": [
-                {
-                    "title": "Prefers afternoons",
-                    "category": "scheduling",
-                    "confidence": 0.55,
-                    "evidence": ["New evidence: rescheduled again"],
-                    "existing_id": "pref-exist",
-                }
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "preferences": [
+                    {
+                        "title": "Prefers afternoons",
+                        "category": "scheduling",
+                        "confidence": 0.55,
+                        "evidence": ["New evidence: rescheduled again"],
+                        "existing_id": "pref-exist",
+                    }
+                ]
+            }
+        )
 
         with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_preference_patterns()
@@ -321,16 +321,18 @@ class TestAggregatePreferencePatterns:
             for i in range(MIN_INTERACTIONS + 2):
                 _insert_chat_message(conn, "user", f"Message {i}")
 
-        llm_response = json.dumps({
-            "preferences": [
-                {
-                    "title": "Over-confident pref",
-                    "category": "other",
-                    "confidence": 1.5,
-                    "evidence": ["ev1", "ev2"],
-                }
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "preferences": [
+                    {
+                        "title": "Over-confident pref",
+                        "category": "other",
+                        "confidence": 1.5,
+                        "evidence": ["ev1", "ev2"],
+                    }
+                ]
+            }
+        )
 
         with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_preference_patterns()
@@ -348,17 +350,19 @@ class TestAggregatePreferencePatterns:
             for i in range(MIN_INTERACTIONS + 2):
                 _insert_chat_message(conn, "user", f"Message {i}")
 
-        llm_response = json.dumps({
-            "preferences": [
-                {
-                    "title": "New pref",
-                    "category": "social",
-                    "confidence": 0.4,
-                    "evidence": ["ev1", "ev2"],
-                    "existing_id": "nonexistent-id",
-                }
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "preferences": [
+                    {
+                        "title": "New pref",
+                        "category": "social",
+                        "confidence": 0.4,
+                        "evidence": ["ev1", "ev2"],
+                        "existing_id": "nonexistent-id",
+                    }
+                ]
+            }
+        )
 
         with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_preference_patterns()
@@ -381,20 +385,22 @@ class TestAggregatePreferencePatterns:
             for i in range(MIN_INTERACTIONS + 2):
                 _insert_chat_message(conn, "user", f"Msg {i}")
 
-        llm_response = json.dumps({
-            "preferences": [
-                {
-                    "title": "Test cap",
-                    "category": "productivity",
-                    "confidence": 0.6,
-                    "evidence": ["new-1", "new-2", "new-3"],
-                    "existing_id": "pref-cap",
-                }
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "preferences": [
+                    {
+                        "title": "Test cap",
+                        "category": "productivity",
+                        "confidence": 0.6,
+                        "evidence": ["new-1", "new-2", "new-3"],
+                        "existing_id": "pref-cap",
+                    }
+                ]
+            }
+        )
 
         with patch("backend.preference_sweep._chat", new_callable=AsyncMock, return_value=llm_response):
-            result = await aggregate_preference_patterns()
+            await aggregate_preference_patterns()
 
         with db() as conn:
             row = conn.execute("SELECT data FROM things WHERE id = 'pref-cap'").fetchone()
