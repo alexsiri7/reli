@@ -12,6 +12,7 @@ const FALLBACK_ICONS: Record<string, string> = {
   event: '📅',
   concept: '🧠',
   reference: '🔗',
+  preference: '⚙️',
 }
 
 export function typeIcon(hint: TypeHint | null | undefined, thingTypes?: ThingType[]): string {

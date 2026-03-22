@@ -132,7 +132,7 @@ def _compute_recommendations(
 
     for thing in things:
         # Skip entity types that aren't actionable tasks
-        if thing.type_hint in ("person", "place", "concept", "reference"):
+        if thing.type_hint in ("person", "place", "concept", "reference", "preference"):
             continue
 
         score = 0.0
