@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useStore } from '../store'
 
 interface Pattern {
@@ -15,8 +15,10 @@ const CONFIDENCE_STYLES: Record<string, { bg: string; text: string; label: strin
   emerging: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400', label: 'Emerging' },
 }
 
+const DEFAULT_STYLE = { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400', label: 'Emerging' }
+
 function ConfidenceBadge({ confidence }: { confidence: string }) {
-  const style = CONFIDENCE_STYLES[confidence] ?? CONFIDENCE_STYLES.emerging
+  const style = CONFIDENCE_STYLES[confidence] ?? DEFAULT_STYLE
   return (
     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${style.bg} ${style.text}`}>
       {style.label}
@@ -106,7 +108,10 @@ export function PreferencePatterns({ thingId, data }: { thingId: string; data: R
   const [adding, setAdding] = useState(false)
   const [newPattern, setNewPattern] = useState('')
 
-  const patterns: Pattern[] = Array.isArray(data?.patterns) ? (data.patterns as Pattern[]) : []
+  const patterns: Pattern[] = useMemo(
+    () => Array.isArray(data?.patterns) ? (data.patterns as Pattern[]) : [],
+    [data],
+  )
 
   const savePatterns = useCallback((updated: Pattern[]) => {
     updateThing(thingId, { data: { ...data, patterns: updated } })
