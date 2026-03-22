@@ -321,7 +321,7 @@ class TestAggregatePersonalityPatterns:
             ]
         })
 
-        with patch("backend.sweep._chat", new_callable=AsyncMock, return_value=llm_response):
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_personality_patterns("u1")
 
         assert result.signals_collected >= 1
@@ -373,7 +373,7 @@ class TestAggregatePersonalityPatterns:
             ]
         })
 
-        with patch("backend.sweep._chat", new_callable=AsyncMock, return_value=llm_response):
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_personality_patterns("u1")
 
         assert result.patterns_updated == 1
@@ -407,7 +407,7 @@ class TestAggregatePersonalityPatterns:
                     (f"s{i}", "assistant", f"Done {i}", changes, now, "u1"),
                 )
 
-        with patch("backend.sweep._chat", new_callable=AsyncMock, return_value="not valid json {"):
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value="not valid json {"):
             result = await aggregate_personality_patterns("u1")
 
         assert result.signals_collected >= 1
@@ -433,7 +433,7 @@ class TestAggregatePersonalityPatterns:
 
         llm_response = json.dumps({"patterns": []})
 
-        with patch("backend.sweep._chat", new_callable=AsyncMock, return_value=llm_response):
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_personality_patterns("u1")
 
         assert result.patterns_updated == 0
