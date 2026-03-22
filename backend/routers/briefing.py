@@ -193,7 +193,7 @@ def get_morning_briefing(as_of: date | None = None, user_id: str = Depends(requi
         # Generate on-the-fly if no stored briefing exists
         target = as_of or date.today()
         content = generate_morning_briefing(user_id, target_date=target)
-        briefing_id = store_morning_briefing(user_id, content, briefing_date=target)
+        store_morning_briefing(user_id, content, briefing_date=target)
         result = get_latest_morning_briefing(user_id, as_of=target)
 
     if not result:

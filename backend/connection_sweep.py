@@ -81,14 +81,10 @@ def find_connection_candidates(
                 (user_id,),
             ).fetchall()
         else:
-            things = conn.execute(
-                "SELECT id, title, type_hint FROM things WHERE active = 1"
-            ).fetchall()
+            things = conn.execute("SELECT id, title, type_hint FROM things WHERE active = 1").fetchall()
 
         # Build set of existing relationships (both directions)
-        rel_rows = conn.execute(
-            "SELECT from_thing_id, to_thing_id FROM thing_relationships"
-        ).fetchall()
+        rel_rows = conn.execute("SELECT from_thing_id, to_thing_id FROM thing_relationships").fetchall()
         existing_rels: set[tuple[str, str]] = set()
         for row in rel_rows:
             existing_rels.add((row["from_thing_id"], row["to_thing_id"]))
@@ -105,9 +101,7 @@ def find_connection_candidates(
 
         # Also exclude parent-child relationships
         parent_pairs: set[tuple[str, str]] = set()
-        parent_rows = conn.execute(
-            "SELECT id, parent_id FROM things WHERE parent_id IS NOT NULL"
-        ).fetchall()
+        parent_rows = conn.execute("SELECT id, parent_id FROM things WHERE parent_id IS NOT NULL").fetchall()
         for row in parent_rows:
             parent_pairs.add((row["id"], row["parent_id"]))
             parent_pairs.add((row["parent_id"], row["id"]))
@@ -239,8 +233,8 @@ async def validate_candidates(
         from_type = f" [{c.from_type_hint}]" if c.from_type_hint else ""
         to_type = f" [{c.to_type_hint}]" if c.to_type_hint else ""
         lines.append(
-            f"{i}. \"{c.from_thing_title}\"{from_type} (id={c.from_thing_id}) "
-            f"<-> \"{c.to_thing_title}\"{to_type} (id={c.to_thing_id}) "
+            f'{i}. "{c.from_thing_title}"{from_type} (id={c.from_thing_id}) '
+            f'<-> "{c.to_thing_title}"{to_type} (id={c.to_thing_id}) '
             f"[similarity={1 - c.distance:.2f}]"
         )
     prompt = "\n".join(lines)
@@ -269,9 +263,7 @@ async def validate_candidates(
         raw_connections = []
 
     # Build lookup of valid candidate pairs
-    valid_pairs = {
-        (c.from_thing_id, c.to_thing_id) for c in candidates
-    } | {
+    valid_pairs = {(c.from_thing_id, c.to_thing_id) for c in candidates} | {
         (c.to_thing_id, c.from_thing_id) for c in candidates
     }
 
@@ -311,9 +303,7 @@ async def validate_candidates(
             sugg_id = f"cs-{uuid.uuid4().hex[:8]}"
 
             # Determine user_id from one of the things
-            user_row = conn.execute(
-                "SELECT user_id FROM things WHERE id = ?", (from_id,)
-            ).fetchone()
+            user_row = conn.execute("SELECT user_id FROM things WHERE id = ?", (from_id,)).fetchone()
             user_id = user_row["user_id"] if user_row else None
 
             conn.execute(
@@ -323,14 +313,16 @@ async def validate_candidates(
                    VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)""",
                 (sugg_id, from_id, to_id, rel_type, reason, confidence, now, user_id),
             )
-            created.append({
-                "id": sugg_id,
-                "from_thing_id": from_id,
-                "to_thing_id": to_id,
-                "suggested_relationship_type": rel_type,
-                "reason": reason,
-                "confidence": confidence,
-            })
+            created.append(
+                {
+                    "id": sugg_id,
+                    "from_thing_id": from_id,
+                    "to_thing_id": to_id,
+                    "suggested_relationship_type": rel_type,
+                    "reason": reason,
+                    "confidence": confidence,
+                }
+            )
 
     return ConnectionSweepResult(
         candidates_found=len(candidates),

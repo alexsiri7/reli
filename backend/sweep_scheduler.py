@@ -122,9 +122,13 @@ async def _run_sweep_for_user(user_id: str) -> None:
 
         if not candidates:
             _log_run(
-                run_id, user_id, status="completed",
-                candidates_found=0, findings_created=0,
-                started_at=now, completed_at=datetime.now(timezone.utc).isoformat(),
+                run_id,
+                user_id,
+                status="completed",
+                candidates_found=0,
+                findings_created=0,
+                started_at=now,
+                completed_at=datetime.now(timezone.utc).isoformat(),
             )
             # Still generate morning briefing (captures priorities, overdue, blockers)
             try:
@@ -139,18 +143,23 @@ async def _run_sweep_for_user(user_id: str) -> None:
 
         result = await reflect_on_candidates(candidates, user_id=user_id)
         _log_run(
-            run_id, user_id, status="completed",
+            run_id,
+            user_id,
+            status="completed",
             candidates_found=len(candidates),
             findings_created=result.findings_created,
             model=result.usage.get("model"),
             prompt_tokens=result.usage.get("prompt_tokens", 0),
             completion_tokens=result.usage.get("completion_tokens", 0),
             cost_usd=result.usage.get("cost_usd", 0.0),
-            started_at=now, completed_at=datetime.now(timezone.utc).isoformat(),
+            started_at=now,
+            completed_at=datetime.now(timezone.utc).isoformat(),
         )
         logger.info(
             "Sweep [%s] complete — %d findings created (usage: %s)",
-            user_label, result.findings_created, result.usage,
+            user_label,
+            result.findings_created,
+            result.usage,
         )
 
         # Generate morning briefing after sweep completes
@@ -165,9 +174,12 @@ async def _run_sweep_for_user(user_id: str) -> None:
     except Exception as exc:
         logger.exception("Sweep failed for user %s", user_id)
         _log_run(
-            run_id, user_id, status="failed",
+            run_id,
+            user_id,
+            status="failed",
             error=str(exc),
-            started_at=now, completed_at=datetime.now(timezone.utc).isoformat(),
+            started_at=now,
+            completed_at=datetime.now(timezone.utc).isoformat(),
         )
 
 

@@ -3,7 +3,9 @@
 from datetime import date, timedelta
 
 
-def _create_thing(client, title: str, priority: int = 3, checkin_date: str | None = None, data: dict | None = None) -> dict:
+def _create_thing(
+    client, title: str, priority: int = 3, checkin_date: str | None = None, data: dict | None = None
+) -> dict:
     payload = {"title": title, "priority": priority, "active": True}
     if checkin_date:
         payload["checkin_date"] = checkin_date
@@ -134,6 +136,7 @@ class TestBriefingPreferencesWithUser:
 
         # Patch require_user to return the test user ID
         from unittest.mock import patch
+
         with patch("backend.routers.briefing.require_user", return_value="test-user"):
             prefs = {
                 "include_priorities": False,

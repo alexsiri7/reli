@@ -48,8 +48,7 @@ class TestUserThingCreation:
 
         with db() as conn:
             count = conn.execute(
-                "SELECT COUNT(*) as c FROM things"
-                " WHERE user_id = ? AND type_hint = 'person'",
+                "SELECT COUNT(*) as c FROM things WHERE user_id = ? AND type_hint = 'person'",
                 (user_id,),
             ).fetchone()["c"]
 

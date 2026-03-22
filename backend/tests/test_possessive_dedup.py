@@ -22,8 +22,7 @@ def _insert_relationship(conn, from_id, to_id, rel_type):
     """Insert a relationship and return its id."""
     rel_id = str(uuid.uuid4())
     conn.execute(
-        "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type)"
-        " VALUES (?, ?, ?, ?)",
+        "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) VALUES (?, ?, ?, ?)",
         (rel_id, from_id, to_id, rel_type),
     )
     return rel_id

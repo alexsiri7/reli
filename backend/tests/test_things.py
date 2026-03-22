@@ -281,8 +281,7 @@ def _insert_orphan_relationship(from_id: str, to_id: str, rel_type: str = "orpha
         # Temporarily disable FK constraints to insert an orphan
         conn.execute("PRAGMA foreign_keys=OFF")
         conn.execute(
-            "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type)"
-            " VALUES (?, ?, ?, ?)",
+            "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) VALUES (?, ?, ?, ?)",
             (rel_id, from_id, to_id, rel_type),
         )
         conn.execute("PRAGMA foreign_keys=ON")

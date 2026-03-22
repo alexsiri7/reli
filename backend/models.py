@@ -184,7 +184,9 @@ class ChatRequest(BaseModel):
 
     session_id: str = Field(..., min_length=1, description="Chat session identifier", examples=["session-abc123"])
     message: str = Field(
-        ..., min_length=1, max_length=10_000,
+        ...,
+        min_length=1,
+        max_length=10_000,
         description="User message text (max 10 000 chars)",
         examples=["What tasks are due this week?"],
     )
@@ -497,6 +499,4 @@ class ConnectionSuggestion(BaseModel):
 class ConnectionSuggestionAccept(BaseModel):
     """Accept a connection suggestion, optionally overriding the relationship type."""
 
-    relationship_type: str | None = Field(
-        default=None, description="Override the suggested relationship type"
-    )
+    relationship_type: str | None = Field(default=None, description="Override the suggested relationship type")

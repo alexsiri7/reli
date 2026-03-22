@@ -12,6 +12,7 @@ from backend.llm import REQUESTY_BASE_URL, acomplete, acomplete_stream
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _fake_response(content: str = "hello", model: str = "google/gemini-2.5-flash-lite"):
     """Build a minimal mock response matching LiteLLM's ModelResponse shape."""
     choice = MagicMock()

@@ -65,9 +65,7 @@ REQUESTY_BASE_URL = settings.REQUESTY_BASE_URL or _config["llm"]["base_url"]
 REQUESTY_API_KEY = settings.REQUESTY_API_KEY
 _models = _config["llm"]["models"]
 REQUESTY_MODEL = settings.REQUESTY_MODEL or _models.get("context", "google/gemini-2.5-flash-lite")
-REQUESTY_REASONING_MODEL = settings.REQUESTY_REASONING_MODEL or _models.get(
-    "reasoning", "google/gemini-2.5-flash"
-)
+REQUESTY_REASONING_MODEL = settings.REQUESTY_REASONING_MODEL or _models.get("reasoning", "google/gemini-2.5-flash")
 REQUESTY_RESPONSE_MODEL = settings.REQUESTY_RESPONSE_MODEL or _models.get("response", "google/gemini-2.5-flash-lite")
 
 # ---------------------------------------------------------------------------
@@ -679,7 +677,10 @@ def apply_storage_changes(
                         logger.info(
                             "Possessive dedup: reusing existing '%s' (id=%s) for relationship '%s'"
                             " instead of creating '%s'",
-                            match["title"], match["id"], rel_type, title,
+                            match["title"],
+                            match["id"],
+                            rel_type,
+                            title,
                         )
                         existing = match
                         # Update the title if the new one is more specific (a name vs a role)
@@ -820,7 +821,10 @@ def apply_storage_changes(
         if not keep_row or not remove_row:
             logger.warning(
                 "Skipping merge: keep_id=%s exists=%s, remove_id=%s exists=%s",
-                keep_id, bool(keep_row), remove_id, bool(remove_row),
+                keep_id,
+                bool(keep_row),
+                remove_id,
+                bool(remove_row),
             )
             continue
 
@@ -951,7 +955,10 @@ def apply_storage_changes(
         ).fetchone()
         if dup:
             logger.info(
-                "Skipping duplicate relationship: %s -> %s (%s)", from_id, to_id, rel_type,
+                "Skipping duplicate relationship: %s -> %s (%s)",
+                from_id,
+                to_id,
+                rel_type,
             )
             continue
         # Verify both things exist
@@ -1136,5 +1143,3 @@ def _build_response_messages(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": context},
     ]
-
-

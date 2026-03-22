@@ -20,8 +20,15 @@ router = APIRouter(prefix="/focus", tags=["focus"])
 # Date parsing (shared logic with sweep/proactive)
 _RECURRING_KEYS = {"birthday", "anniversary", "born", "date_of_birth", "dob"}
 _ONESHOT_KEYS = {
-    "deadline", "due_date", "due", "event_date",
-    "starts_at", "start_date", "ends_at", "end_date", "date",
+    "deadline",
+    "due_date",
+    "due",
+    "event_date",
+    "starts_at",
+    "start_date",
+    "ends_at",
+    "end_date",
+    "date",
 }
 _ALL_DATE_KEYS = _RECURRING_KEYS | _ONESHOT_KEYS
 _DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
@@ -187,11 +194,7 @@ def _compute_recommendations(
         if is_blocked:
             # Blocked things should be deprioritized
             score -= 80
-            blocker_titles = [
-                thing_map[bid].title
-                for bid in blocked_by[thing.id]
-                if bid in thing_map
-            ]
+            blocker_titles = [thing_map[bid].title for bid in blocked_by[thing.id] if bid in thing_map]
             if blocker_titles:
                 reasons.append(f"Blocked by: {', '.join(blocker_titles[:2])}")
             else:
@@ -235,8 +238,11 @@ def _compute_recommendations(
             title_lower = thing.title.lower()
             for summary in busy_today_summaries:
                 # Simple keyword overlap check
-                if (summary in title_lower or title_lower in summary or
-                        any(w in title_lower for w in summary.split() if len(w) > 3)):
+                if (
+                    summary in title_lower
+                    or title_lower in summary
+                    or any(w in title_lower for w in summary.split() if len(w) > 3)
+                ):
                     score += 35
                     reasons.append("Related to today's calendar")
                     break

@@ -56,9 +56,14 @@ def _build_user_prompt(
     message content so the ADK LlmAgent receives it as its input.
     """
     messages = _build_response_messages(
-        message, reasoning_summary, questions_for_user,
-        applied_changes, web_results, open_questions_by_thing,
-        priority_question=priority_question, briefing_mode=briefing_mode,
+        message,
+        reasoning_summary,
+        questions_for_user,
+        applied_changes,
+        web_results,
+        open_questions_by_thing,
+        priority_question=priority_question,
+        briefing_mode=briefing_mode,
         interaction_style=interaction_style,
     )
     # The second message (index 1) is the user message with all context
@@ -234,9 +239,14 @@ async def run_response_agent(
 ) -> str:
     """Stage 4: generate friendly user-facing response via ADK LlmAgent."""
     user_prompt = _build_user_prompt(
-        message, reasoning_summary, questions_for_user,
-        applied_changes, web_results, open_questions_by_thing,
-        priority_question=priority_question, briefing_mode=briefing_mode,
+        message,
+        reasoning_summary,
+        questions_for_user,
+        applied_changes,
+        web_results,
+        open_questions_by_thing,
+        priority_question=priority_question,
+        briefing_mode=briefing_mode,
         interaction_style=interaction_style,
     )
 
@@ -271,9 +281,14 @@ async def run_response_agent_stream(
 ) -> AsyncIterator[str]:
     """Stage 4 (streaming): yield response tokens as they arrive via ADK LlmAgent."""
     user_prompt = _build_user_prompt(
-        message, reasoning_summary, questions_for_user,
-        applied_changes, web_results, open_questions_by_thing,
-        priority_question=priority_question, briefing_mode=briefing_mode,
+        message,
+        reasoning_summary,
+        questions_for_user,
+        applied_changes,
+        web_results,
+        open_questions_by_thing,
+        priority_question=priority_question,
+        briefing_mode=briefing_mode,
         interaction_style=interaction_style,
     )
 
