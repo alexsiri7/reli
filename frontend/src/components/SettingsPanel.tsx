@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { ModelSettings, UserSettings, UserProfileRelationship } from '../store'
+import type { ModelSettings, UserSettings, UserProfileRelationship, RequestyModel } from '../store'
 import { useTheme, setTheme } from '../hooks/useTheme'
 import { ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
 import { RelationshipMiniGraph } from './RelationshipMiniGraph'
@@ -40,7 +40,11 @@ export function SettingsPanel() {
     fetchUserProfile()
   }, [fetchModelSettings, fetchAvailableModels, fetchUserSettings, fetchUserProfile])
 
-  const modelOptions = availableModels.map(m => m.id).sort()
+  const sortedModels = useMemo(
+    () => [...availableModels].sort((a, b) => a.id.localeCompare(b.id)),
+    [availableModels],
+  )
+  const modelOptions = sortedModels.map(m => m.id)
   const isLoading = settingsLoading || modelsLoading
 
   return (
@@ -75,6 +79,7 @@ export function SettingsPanel() {
                 initial={modelSettings}
                 initialUserSettings={userSettings}
                 modelOptions={modelOptions}
+                models={sortedModels}
                 onClose={closeSettings}
               />
             ) : (
@@ -103,11 +108,13 @@ function SettingsForm({
   initial,
   initialUserSettings,
   modelOptions,
+  models,
   onClose,
 }: {
   initial: ModelSettings
   initialUserSettings: UserSettings | null
   modelOptions: string[]
+  models: RequestyModel[]
   onClose: () => void
 }) {
   const updateModelSettings = useStore(s => s.updateModelSettings)
@@ -206,6 +213,7 @@ function SettingsForm({
             description="Gathers context from your data"
             value={context}
             options={modelOptions}
+            models={models}
             onChange={setContext}
           />
           <ModelSelect
@@ -213,6 +221,7 @@ function SettingsForm({
             description="Plans actions and makes decisions"
             value={reasoning}
             options={modelOptions}
+            models={models}
             onChange={setReasoning}
           />
           <ModelSelect
@@ -220,6 +229,7 @@ function SettingsForm({
             description="Generates the final reply"
             value={response}
             options={modelOptions}
+            models={models}
             onChange={setResponse}
           />
         </div>
@@ -696,19 +706,36 @@ function ProactivitySection() {
   )
 }
 
+function formatCost(cost: number | null | undefined): string {
+  if (cost == null) return '—'
+  if (cost < 0.01) return '<$0.01'
+  return `$${cost.toFixed(2)}`
+}
+
 function ModelSelect({
   label,
   description,
   value,
   options,
+  models,
   onChange,
 }: {
   label: string
   description: string
   value: string
   options: string[]
+  models: RequestyModel[]
   onChange: (v: string) => void
 }) {
+  const modelMap = useMemo(() => {
+    const map = new Map<string, RequestyModel>()
+    for (const m of models) map.set(m.id, m)
+    return map
+  }, [models])
+
+  const selected = modelMap.get(value)
+  const hasPricing = selected?.input_cost_per_million != null
+
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -723,12 +750,23 @@ function ModelSelect({
         {value && !options.includes(value) && (
           <option value={value}>{value}</option>
         )}
-        {options.map(id => (
-          <option key={id} value={id}>
-            {id}
-          </option>
-        ))}
+        {options.map(id => {
+          const m = modelMap.get(id)
+          const costLabel = m?.input_cost_per_million != null
+            ? ` (in: ${formatCost(m.input_cost_per_million)} / out: ${formatCost(m.output_cost_per_million)})`
+            : ''
+          return (
+            <option key={id} value={id}>
+              {id}{costLabel}
+            </option>
+          )
+        })}
       </select>
+      {hasPricing && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+          Cost per 1M tokens — input: {formatCost(selected.input_cost_per_million)}, output: {formatCost(selected.output_cost_per_million)}
+        </p>
+      )}
     </div>
   )
 }

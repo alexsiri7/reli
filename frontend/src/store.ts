@@ -195,6 +195,8 @@ export interface ModelSettings {
 export interface RequestyModel {
   id: string
   name: string | null
+  input_cost_per_million?: number | null
+  output_cost_per_million?: number | null
 }
 
 export type InteractionStyle = 'auto' | 'coach' | 'consultant'
