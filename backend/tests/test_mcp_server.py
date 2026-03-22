@@ -15,7 +15,12 @@ from backend.mcp_server import (
     delete_thing,
     get_thing,
     mcp,
+    pa_behavior_guide,
+    proactive_surfacing_rules,
+    relationship_patterns,
     search_things,
+    thing_creation_guidance,
+    type_hint_reference,
     update_thing,
 )
 
@@ -279,6 +284,90 @@ class TestMcpMetadata:
             "delete_relationship",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
+
+    def test_has_all_prompts(self):
+        prompt_names = {p.name for p in mcp._prompt_manager.list_prompts()}
+        expected = {
+            "thing_creation_guidance",
+            "relationship_patterns",
+            "type_hint_reference",
+            "proactive_surfacing_rules",
+            "pa_behavior_guide",
+        }
+        assert expected.issubset(prompt_names), f"Missing prompts: {expected - prompt_names}"
+
+
+# ---------------------------------------------------------------------------
+# Prompt resource tests
+# ---------------------------------------------------------------------------
+
+
+class TestPromptResources:
+    """Verify prompt resources return non-empty strings with expected content."""
+
+    def test_thing_creation_guidance_content(self):
+        result = thing_creation_guidance()
+        assert isinstance(result, str)
+        assert len(result) > 100
+        assert "type_hint" in result
+        assert "task" in result
+        assert "person" in result
+        assert "surface" in result
+        assert "open_questions" in result
+
+    def test_relationship_patterns_content(self):
+        result = relationship_patterns()
+        assert isinstance(result, str)
+        assert len(result) > 100
+        assert "parent-of" in result
+        assert "depends-on" in result
+        assert "Possessive" in result
+        assert "sister" in result
+        assert "Deduplication" in result
+
+    def test_type_hint_reference_content(self):
+        result = type_hint_reference()
+        assert isinstance(result, str)
+        assert len(result) > 100
+        assert "task" in result
+        assert "person" in result
+        assert "event" in result
+        assert "preference" in result
+        assert "surface=false" in result
+
+    def test_proactive_surfacing_rules_content(self):
+        result = proactive_surfacing_rules()
+        assert isinstance(result, str)
+        assert len(result) > 100
+        assert "birthday" in result
+        assert "deadline" in result
+        assert "Conflict Detection" in result
+        assert "search_things" not in result or "surface" in result
+
+    def test_pa_behavior_guide_content(self):
+        result = pa_behavior_guide()
+        assert isinstance(result, str)
+        assert len(result) > 100
+        assert "Core Loop" in result
+        assert "search_things" in result
+        assert "create_thing" in result
+        assert "update_thing" in result
+        assert "Knowledge Graph Hygiene" in result
+        assert "Dedup" in result.lower() or "dedup" in result.lower()
+
+    def test_all_prompts_are_non_empty_strings(self):
+        """Every registered prompt must return a non-empty string."""
+        prompt_funcs = [
+            thing_creation_guidance,
+            relationship_patterns,
+            type_hint_reference,
+            proactive_surfacing_rules,
+            pa_behavior_guide,
+        ]
+        for func in prompt_funcs:
+            result = func()
+            assert isinstance(result, str), f"{func.__name__} did not return str"
+            assert len(result) > 0, f"{func.__name__} returned empty string"
 
 
 # ---------------------------------------------------------------------------
