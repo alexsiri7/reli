@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = ""
     ALLOWED_EMAILS: str = ""  # Comma-separated allowlist; empty = allow all
 
+    # --- MCP API token (for MCP server → REST API auth) ---
+    RELI_API_TOKEN: str = ""  # Shared secret; set to enable token-based auth for MCP
+    RELI_API_URL: str = "http://localhost:8000"  # Base URL for MCP server to reach REST API
+
     @property
     def allowed_emails_set(self) -> set[str]:
         """Parse ALLOWED_EMAILS into a lowercase set. Empty string means allow all."""

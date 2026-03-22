@@ -304,3 +304,65 @@ def test_make_litellm_model_no_double_prefix():
 
     m = _make_litellm_model(model="openai/gpt-4o", api_key="k")
     assert m.model == "openai/gpt-4o"
+
+
+# ---------------------------------------------------------------------------
+# open_questions in context refinement
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_context_refinement_includes_open_questions():
+    """run_context_refinement passes open_questions in the things summary."""
+    events = [
+        _make_mock_event('{"done": true}', usage=True),
+    ]
+
+    captured_prompt = None
+
+    with patch("backend.context_agent.Runner") as MockRunner:
+        mock_runner = MagicMock()
+
+        # Capture the prompt sent to the refinement agent
+        async def _capture_run_async(**kwargs):
+            nonlocal captured_prompt
+            msg = kwargs.get("new_message")
+            if msg and msg.parts:
+                captured_prompt = msg.parts[0].text
+            for ev in events:
+                yield ev
+
+        mock_runner.run_async = MagicMock(side_effect=_capture_run_async)
+        MockRunner.return_value = mock_runner
+
+        with patch("backend.context_agent._session_service") as mock_svc:
+            mock_session = MagicMock()
+            mock_session.id = "test-session"
+            mock_svc.create_session = AsyncMock(return_value=mock_session)
+
+            from backend.context_agent import run_context_refinement
+
+            found_things = [
+                {
+                    "id": "t1",
+                    "title": "Conference Trip",
+                    "type_hint": "task",
+                    "data": None,
+                    "parent_id": None,
+                    "active": True,
+                    "open_questions": ["When is the conference?", "What's the budget?"],
+                },
+            ]
+
+            await run_context_refinement(
+                "tell me about my trip",
+                [],
+                found_things,
+                ["conference"],
+                api_key="k",
+            )
+
+    # The prompt should include the open_questions in the things summary
+    assert captured_prompt is not None
+    assert "open_questions" in captured_prompt
+    assert "When is the conference?" in captured_prompt
