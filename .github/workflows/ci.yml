@@ -136,7 +136,7 @@ jobs:
             docker pull "$IMAGE:$NEW_TAG"
 
             # Update and restart
-            cd /home/asiri/gt/reli/mayor/rig
+            cd /home/asiri/gc/rigs/reli
             git pull --rebase
             RELI_IMAGE_TAG="$NEW_TAG" docker compose up -d
 
