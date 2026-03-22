@@ -882,3 +882,317 @@ async def reflect_on_candidates(
         findings=created,
         usage=usage_stats.to_dict(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Personality pattern aggregation
+# ---------------------------------------------------------------------------
+
+PERSONALITY_AGGREGATION_SYSTEM = """\
+You are the Personality Pattern Analyst for Reli, an AI personal information manager.
+You receive a batch of recent user interactions (messages, assistant responses, and
+applied changes). Your job is to identify IMPLICIT behavioral patterns that reveal
+how the user prefers to interact with Reli.
+
+Look for patterns such as:
+- User consistently shortens or rephrases Reli's task titles → Reli may be too verbose
+- User ignores certain types of suggestions (e.g. staleness alerts) → reduce their priority
+- User always acts quickly on certain types of items (dates, deadlines) → boost awareness
+- User prefers short/terse messages vs detailed explanations
+- User asks follow-up questions about certain topics → wants more depth there
+- User edits Things after creation (titles, data) → Reli's defaults don't match expectations
+- User dismisses findings of certain types → those findings aren't valuable
+- User's tone shifts (formal vs casual) → match communication style
+
+Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
+{
+  "patterns": [
+    {
+      "pattern": "Description of the behavioral pattern observed",
+      "confidence": "emerging",
+      "observations": 3,
+      "evidence": "Brief summary of what you saw that supports this"
+    }
+  ]
+}
+
+Rules:
+- confidence: "emerging" (2-3 observations), "established" (4-7), "strong" (8+)
+- observations: approximate count of interactions supporting this pattern
+- Return 0-5 patterns. Quality over quantity — only genuine patterns.
+- If interactions are too few or too generic to identify patterns, return {"patterns": []}
+- Focus on IMPLICIT patterns, not explicit user requests (those are handled in real-time)
+- Do NOT fabricate patterns from insufficient evidence
+- Each pattern should be actionable — something that changes how Reli behaves
+"""
+
+
+@dataclass
+class PatternAggregationResult:
+    """Result of the personality pattern aggregation phase."""
+
+    patterns_found: int = 0
+    patterns_updated: int = 0
+    patterns_created: int = 0
+    usage: dict = field(default_factory=dict)
+
+
+def _fetch_recent_interactions(
+    conn: sqlite3.Connection,
+    user_id: str,
+    days: int = 7,
+) -> list[dict]:
+    """Fetch recent chat interactions for personality analysis.
+
+    Returns a list of dicts with role, content, applied_changes, and timestamp.
+    Limits to the most recent *days* of interactions.
+    """
+    from .auth import user_filter
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    uf_sql, uf_params = user_filter(user_id)
+
+    rows = conn.execute(
+        f"""SELECT role, content, applied_changes, timestamp
+           FROM chat_history
+           WHERE timestamp > ?{uf_sql}
+           ORDER BY timestamp ASC""",
+        (cutoff, *uf_params),
+    ).fetchall()
+
+    interactions: list[dict] = []
+    for row in rows:
+        entry: dict = {
+            "role": row["role"],
+            "content": row["content"][:500],  # truncate for token efficiency
+        }
+        if row["applied_changes"]:
+            try:
+                changes = json.loads(row["applied_changes"]) if isinstance(row["applied_changes"], str) else row["applied_changes"]
+                # Summarize changes compactly
+                summary_parts = []
+                for key in ("created", "updated", "deleted", "merged"):
+                    items = changes.get(key, [])
+                    if items:
+                        summary_parts.append(f"{key}: {len(items)}")
+                if summary_parts:
+                    entry["changes"] = ", ".join(summary_parts)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        interactions.append(entry)
+
+    return interactions
+
+
+def _fetch_dismissed_findings(
+    conn: sqlite3.Connection,
+    user_id: str,
+    days: int = 14,
+) -> list[dict]:
+    """Fetch recently dismissed sweep findings for pattern analysis."""
+    from .auth import user_filter
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    uf_sql, uf_params = user_filter(user_id)
+
+    rows = conn.execute(
+        f"""SELECT finding_type, message, priority
+           FROM sweep_findings
+           WHERE dismissed = 1
+             AND created_at > ?{uf_sql}""",
+        (cutoff, *uf_params),
+    ).fetchall()
+
+    return [
+        {"finding_type": row["finding_type"], "message": row["message"][:200], "priority": row["priority"]}
+        for row in rows
+    ]
+
+
+def _format_interactions_for_llm(
+    interactions: list[dict],
+    dismissed_findings: list[dict],
+) -> str:
+    """Format recent interactions into a compact prompt for personality analysis."""
+    if not interactions:
+        return "No recent interactions to analyze."
+
+    lines = [f"Recent interactions ({len(interactions)} messages):"]
+    for i, entry in enumerate(interactions, 1):
+        role = entry["role"]
+        content = entry["content"]
+        changes = entry.get("changes", "")
+        change_note = f" [applied: {changes}]" if changes else ""
+        lines.append(f"{i}. [{role}] {content}{change_note}")
+
+    if dismissed_findings:
+        lines.append(f"\nDismissed findings ({len(dismissed_findings)}):")
+        for d in dismissed_findings:
+            lines.append(f"- [{d['finding_type']}] {d['message']}")
+
+    return "\n".join(lines)
+
+
+def _merge_patterns(
+    existing: list[dict],
+    new_patterns: list[dict],
+) -> tuple[list[dict], int, int]:
+    """Merge new patterns into existing ones.
+
+    Returns (merged_list, num_updated, num_created).
+    Matches patterns by normalized text similarity (exact lowercase match).
+    """
+    # Index existing patterns by normalized text
+    existing_by_text: dict[str, int] = {}
+    for idx, p in enumerate(existing):
+        key = p.get("pattern", "").strip().lower()
+        if key:
+            existing_by_text[key] = idx
+
+    merged = list(existing)
+    updated = 0
+    created = 0
+
+    confidence_rank = {"emerging": 0, "established": 1, "strong": 2}
+
+    for new_p in new_patterns:
+        pattern_text = new_p.get("pattern", "").strip()
+        if not pattern_text:
+            continue
+
+        key = pattern_text.lower()
+        if key in existing_by_text:
+            # Update existing: bump observations and potentially confidence
+            idx = existing_by_text[key]
+            old = merged[idx]
+            new_obs = old.get("observations", 1) + new_p.get("observations", 1)
+            # Determine confidence from total observations
+            if new_obs >= 8:
+                new_confidence = "strong"
+            elif new_obs >= 4:
+                new_confidence = "established"
+            else:
+                new_confidence = "emerging"
+            # Only upgrade confidence, never downgrade
+            old_rank = confidence_rank.get(old.get("confidence", "emerging"), 0)
+            new_rank = confidence_rank.get(new_confidence, 0)
+            merged[idx] = {
+                "pattern": old["pattern"],  # keep original casing
+                "confidence": new_confidence if new_rank >= old_rank else old["confidence"],
+                "observations": new_obs,
+            }
+            updated += 1
+        else:
+            # Add new pattern
+            merged.append({
+                "pattern": pattern_text,
+                "confidence": new_p.get("confidence", "emerging"),
+                "observations": new_p.get("observations", 1),
+            })
+            existing_by_text[key] = len(merged) - 1
+            created += 1
+
+    return merged, updated, created
+
+
+async def aggregate_personality_patterns(
+    user_id: str,
+    interaction_days: int = 7,
+) -> PatternAggregationResult:
+    """Phase 3: Analyze recent interactions to detect implicit personality patterns.
+
+    Fetches recent chat history, sends to LLM for pattern detection, then merges
+    detected patterns into the user's personality preference Thing(s).
+    """
+    from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
+
+    if not user_id:
+        return PatternAggregationResult()
+
+    # 1. Gather interaction data
+    with db() as conn:
+        interactions = _fetch_recent_interactions(conn, user_id, days=interaction_days)
+        dismissed = _fetch_dismissed_findings(conn, user_id, days=interaction_days * 2)
+
+    if len(interactions) < 4:
+        # Too few interactions to detect meaningful patterns
+        logger.info("Personality aggregation skipped for %s: only %d interactions", user_id[:8], len(interactions))
+        return PatternAggregationResult()
+
+    # 2. Ask LLM to identify patterns
+    usage_stats = UsageStats()
+    prompt = _format_interactions_for_llm(interactions, dismissed)
+
+    raw = await _chat(
+        messages=[
+            {"role": "system", "content": PERSONALITY_AGGREGATION_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        model=REQUESTY_REASONING_MODEL,
+        response_format={"type": "json_object"},
+        usage_stats=usage_stats,
+    )
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("Personality aggregation returned invalid JSON: %s", raw[:200])
+        return PatternAggregationResult(usage=usage_stats.to_dict())
+
+    new_patterns = parsed.get("patterns", [])
+    if not isinstance(new_patterns, list):
+        new_patterns = []
+
+    # Filter to valid patterns only
+    new_patterns = [
+        p for p in new_patterns
+        if isinstance(p, dict) and p.get("pattern", "").strip()
+    ]
+
+    if not new_patterns:
+        logger.info("Personality aggregation for %s: no patterns detected", user_id[:8])
+        return PatternAggregationResult(usage=usage_stats.to_dict())
+
+    # 3. Load existing personality preferences and merge
+    from .agents import load_personality_preferences
+    from .auth import user_filter
+
+    existing_patterns = load_personality_preferences(user_id)
+
+    merged, num_updated, num_created = _merge_patterns(existing_patterns, new_patterns)
+
+    # 4. Write back to the preference Thing (create if needed)
+    uf_sql, uf_params = user_filter(user_id)
+    with db() as conn:
+        # Find existing preference Thing for this user
+        row = conn.execute(
+            f"SELECT id FROM things WHERE type_hint = 'preference' AND active = 1{uf_sql} LIMIT 1",
+            uf_params,
+        ).fetchone()
+
+        pref_data = json.dumps({"patterns": merged})
+
+        if row:
+            conn.execute(
+                "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
+                (pref_data, datetime.now(timezone.utc).isoformat(), row["id"]),
+            )
+        else:
+            thing_id = f"pref-{uuid.uuid4().hex[:8]}"
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, active, data, user_id, surface) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (thing_id, "Personality Preferences", "preference", 1, pref_data, user_id, 0),
+            )
+
+    total_new = len(new_patterns)
+    logger.info(
+        "Personality aggregation for %s: %d patterns found (%d updated, %d created)",
+        user_id[:8], total_new, num_updated, num_created,
+    )
+
+    return PatternAggregationResult(
+        patterns_found=total_new,
+        patterns_updated=num_updated,
+        patterns_created=num_created,
+        usage=usage_stats.to_dict(),
+    )

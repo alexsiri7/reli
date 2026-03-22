@@ -162,6 +162,22 @@ async def _run_sweep_for_user(user_id: str) -> None:
             result.usage,
         )
 
+        # Phase 3: Personality pattern aggregation
+        try:
+            from .sweep import aggregate_personality_patterns
+
+            ppa_result = await aggregate_personality_patterns(user_id)
+            if ppa_result.patterns_found > 0:
+                logger.info(
+                    "Personality aggregation [%s]: %d patterns (%d updated, %d new)",
+                    user_label,
+                    ppa_result.patterns_found,
+                    ppa_result.patterns_updated,
+                    ppa_result.patterns_created,
+                )
+        except Exception:
+            logger.exception("Personality pattern aggregation failed for user %s", user_label)
+
         # Generate morning briefing after sweep completes
         try:
             from .morning_briefing import generate_morning_briefing, store_morning_briefing
