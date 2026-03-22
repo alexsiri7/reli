@@ -19,6 +19,7 @@ from .agents import (
     UsageStats,
 )
 from .auth import user_filter
+from .database import db
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
 from .reasoning_agent import run_reasoning_agent
@@ -175,6 +176,50 @@ def _fetch_user_thing(conn: sqlite3.Connection, user_id: str) -> dict[str, Any] 
         (user_id,),
     ).fetchone()
     return dict(row) if row else None
+
+
+def _fetch_warm_context(
+    session_id: str,
+    user_id: str = "",
+    n_messages: int = 3,
+) -> list[dict[str, Any]]:
+    """Fetch context Things from the last N assistant messages for warm start.
+
+    Extracts Thing IDs from stored context_things in applied_changes,
+    then fetches their current state from the database. This gives the
+    reasoning agent recent context without needing a fetch_context tool call.
+    """
+    uf_sql, uf_params = user_filter(user_id)
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT applied_changes FROM chat_history"
+            f" WHERE session_id = ? AND role = 'assistant'{uf_sql}"
+            " ORDER BY id DESC LIMIT ?",
+            [session_id, *uf_params, n_messages],
+        ).fetchall()
+
+        thing_ids: list[str] = []
+        seen: set[str] = set()
+        for row in rows:
+            raw = row["applied_changes"]
+            if not raw:
+                continue
+            try:
+                changes = json.loads(raw) if isinstance(raw, str) else raw
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(changes, dict):
+                continue
+            for ct in changes.get("context_things", []):
+                tid = ct.get("id")
+                if tid and tid not in seen:
+                    seen.add(tid)
+                    thing_ids.append(tid)
+
+        if not thing_ids:
+            return []
+
+        return _fetch_with_family(conn, thing_ids)
 
 
 def _fetch_relevant_things(
@@ -372,10 +417,14 @@ class ChatPipeline:
         """
         usage = UsageStats()
 
+        # Warm start: fetch context Things from recent messages
+        warm_context = _fetch_warm_context(session_id, self.user_id) if session_id else []
+
         with _tracer.start_as_current_span("reli.pipeline") as pipeline_span:
             pipeline_span.set_attribute("reli.user_id", self.user_id)
             pipeline_span.set_attribute("reli.message_length", len(message))
             pipeline_span.set_attribute("reli.history_length", len(history))
+            pipeline_span.set_attribute("reli.warm_context_count", len(warm_context))
 
             try:
                 # Pre-fetch calendar events (cheap, always useful if connected)
@@ -398,6 +447,7 @@ class ChatPipeline:
                             user_id=self.user_id, mode=self.mode,
                             interaction_style=self.interaction_style,
                             session_id=session_id,
+                            warm_context=warm_context,
                         )
 
                         # Extract context fetched by the reasoning agent's tool
@@ -493,11 +543,15 @@ class ChatPipeline:
         """
         usage = UsageStats()
 
+        # Warm start: fetch context Things from recent messages
+        warm_context = _fetch_warm_context(session_id, self.user_id) if session_id else []
+
         with _tracer.start_as_current_span("reli.pipeline.stream") as pipeline_span:
             pipeline_span.set_attribute("reli.user_id", self.user_id)
             pipeline_span.set_attribute("reli.message_length", len(message))
             pipeline_span.set_attribute("reli.history_length", len(history))
             pipeline_span.set_attribute("reli.streaming", True)
+            pipeline_span.set_attribute("reli.warm_context_count", len(warm_context))
 
             try:
                 # Pre-fetch calendar events
@@ -522,6 +576,7 @@ class ChatPipeline:
                             user_id=self.user_id, mode=self.mode,
                             interaction_style=self.interaction_style,
                             session_id=session_id,
+                            warm_context=warm_context,
                         )
 
                         fetched_ctx = reasoning_result.get("fetched_context", {})
