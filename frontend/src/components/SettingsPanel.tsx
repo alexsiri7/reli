@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { ModelSettings, UserSettings, UserProfileRelationship } from '../store'
+import type { ModelSettings, UserSettings, UserProfileRelationship, Thing } from '../store'
+import { apiFetch } from '../api'
 import { useTheme, setTheme } from '../hooks/useTheme'
 import { ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
 import { RelationshipMiniGraph } from './RelationshipMiniGraph'
@@ -276,6 +277,7 @@ function SettingsForm({
       <VoiceSection />
       <ThemeSection />
       <ProactivitySection />
+      <LearnedPreferencesSection />
       <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
         {saved && (
           <span className="text-sm text-green-600 dark:text-green-400">Saved</span>
@@ -697,6 +699,128 @@ function ProactivitySection() {
             <span className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">{opt.description}</span>
           </button>
         ))}
+      </div>
+    </div>
+  )
+}
+
+interface PreferencePattern {
+  pattern: string
+  confidence: string
+  observations: number
+}
+
+function getPatterns(thing: Thing): PreferencePattern[] {
+  const data = thing.data as Record<string, unknown> | null
+  if (!data || !Array.isArray(data.patterns)) return []
+  return (data.patterns as PreferencePattern[]).filter(p => p.pattern)
+}
+
+const CONFIDENCE_STYLES: Record<string, string> = {
+  strong: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300',
+  established: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300',
+  emerging: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
+}
+
+function LearnedPreferencesSection() {
+  const { things, fetchThings } = useStore(useShallow(s => ({
+    things: s.things,
+    fetchThings: s.fetchThings,
+  })))
+
+  const preferenceThings = useMemo(
+    () => things.filter(t => t.type_hint === 'preference' && t.active),
+    [things],
+  )
+
+  const allPatterns = useMemo(() => {
+    const result: { thing: Thing; pattern: PreferencePattern; index: number }[] = []
+    for (const t of preferenceThings) {
+      getPatterns(t).forEach((p, i) => result.push({ thing: t, pattern: p, index: i }))
+    }
+    const order = ['strong', 'established', 'emerging']
+    result.sort((a, b) => order.indexOf(a.pattern.confidence) - order.indexOf(b.pattern.confidence))
+    return result
+  }, [preferenceThings])
+
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const handleDeletePattern = async (thingId: string, patternIndex: number) => {
+    const thing = preferenceThings.find(t => t.id === thingId)
+    if (!thing) return
+    const patterns = getPatterns(thing)
+    const updated = patterns.filter((_, i) => i !== patternIndex)
+
+    setDeletingId(`${thingId}-${patternIndex}`)
+    try {
+      if (updated.length === 0) {
+        // Delete the whole Thing if no patterns remain
+        await apiFetch(`/api/things/${thingId}`, { method: 'DELETE' })
+      } else {
+        await apiFetch(`/api/things/${thingId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { ...thing.data, patterns: updated } }),
+        })
+      }
+      await fetchThings()
+    } catch {
+      // best-effort
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  if (preferenceThings.length === 0) {
+    return (
+      <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Learned Preferences</h3>
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          No preferences learned yet. As you chat, Reli will learn your communication preferences.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Learned Preferences</h3>
+      <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+        Patterns Reli has learned from your interactions. These override default personality settings.
+      </p>
+      <div className="space-y-2">
+        {allPatterns.map(({ thing, pattern, index }) => {
+          const key = `${thing.id}-${index}`
+          const isDeleting = deletingId === key
+          return (
+            <div
+              key={key}
+              className={`group flex items-start gap-2 px-3 py-2 rounded-lg border border-gray-100 dark:border-gray-800 ${isDeleting ? 'opacity-50' : ''}`}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-700 dark:text-gray-300">{pattern.pattern}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`inline-block px-1.5 py-0.5 text-[10px] font-medium rounded ${CONFIDENCE_STYLES[pattern.confidence] ?? CONFIDENCE_STYLES.emerging}`}>
+                    {pattern.confidence}
+                  </span>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                    {pattern.observations} observation{pattern.observations !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => handleDeletePattern(thing.id, index)}
+                disabled={isDeleting}
+                className="p-1 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                title="Remove this preference"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

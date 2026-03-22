@@ -162,8 +162,31 @@ export function DetailPanel() {
                 )
               })()}
 
-              {/* Data fields */}
-              {dataEntries.length > 0 && (
+              {/* Data fields — preference Things get structured display */}
+              {thing.type_hint === 'preference' && Array.isArray(thing.data?.patterns) ? (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">Patterns</h3>
+                  <div className="space-y-2">
+                    {(thing.data!.patterns as { pattern: string; confidence: string; observations: number }[]).filter(p => p.pattern).map((p, i) => (
+                      <div key={i} className="px-2.5 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                        <p className="text-sm text-gray-700 dark:text-gray-300">{p.pattern}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`inline-block px-1.5 py-0.5 text-[10px] font-medium rounded ${
+                            p.confidence === 'strong' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
+                            p.confidence === 'established' ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' :
+                            'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                          }`}>
+                            {p.confidence}
+                          </span>
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                            {p.observations} observation{p.observations !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : dataEntries.length > 0 && (
                 <div className="space-y-2">
                   <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">Details</h3>
                   <div className="space-y-1.5">
