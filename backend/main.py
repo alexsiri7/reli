@@ -5,6 +5,8 @@ import pathlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
+import httpx
+
 from .config import settings as _app_settings  # noqa: E402 — must load before other backend imports
 
 # Configure logging — LOG_LEVEL env var controls verbosity (default: INFO)
@@ -63,7 +65,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_db()
     clean_orphan_relationships()
     start_scheduler()
-    yield
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        app.state.httpx_client = client
+        yield
     stop_scheduler()
     shutdown_tracing()
 

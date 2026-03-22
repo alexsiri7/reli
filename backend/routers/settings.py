@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from ..auth import require_user
 from ..database import db
+from ..http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +229,10 @@ def get_user_models(user_id: str) -> dict[str, str]:
 
 
 @router.get("/models", response_model=list[RequestyModel], summary="List available LLM models")
-def list_models(user_id: str = Depends(require_user)) -> list[RequestyModel]:
+async def list_models(
+    user_id: str = Depends(require_user),
+    client: httpx.AsyncClient = Depends(get_http_client),
+) -> list[RequestyModel]:
     """Proxy the Requesty /v1/models endpoint using the user's API key if available."""
     cfg = _read_config()
     base_url = cfg.get("llm", {}).get("base_url", "https://router.requesty.ai/v1")
@@ -238,11 +242,10 @@ def list_models(user_id: str = Depends(require_user)) -> list[RequestyModel]:
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
     try:
-        with httpx.Client(timeout=10.0) as client:
-            resp = client.get(f"{base_url}/models", headers=headers)
-            resp.raise_for_status()
-            data = resp.json().get("data", [])
-            return [RequestyModel(id=m["id"], name=m.get("name")) for m in data if m.get("id")]
+        resp = await client.get(f"{base_url}/models", headers=headers, timeout=10.0)
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+        return [RequestyModel(id=m["id"], name=m.get("name")) for m in data if m.get("id")]
     except Exception as exc:
         logger.warning("Failed to fetch models from Requesty: %s", exc)
         raise HTTPException(status_code=502, detail="Could not fetch models from Requesty API") from exc
