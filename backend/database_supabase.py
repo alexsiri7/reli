@@ -14,8 +14,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Any, cast
 
-from supabase import Client, create_client
+from supabase import Client, create_client  # type: ignore[attr-defined]
 
 from .config import settings
 
@@ -73,7 +74,7 @@ def init_db_supabase() -> None:
     client = get_client()
     for table in _EXPECTED_TABLES:
         # Select zero rows — just enough to confirm the table is accessible.
-        client.table(table).select("*", count="exact").limit(0).execute()
+        client.table(table).select("*", count="exact").limit(0).execute()  # type: ignore[arg-type]
     logger.info("Supabase: all %d expected tables verified", len(_EXPECTED_TABLES))
 
 
@@ -86,7 +87,8 @@ def clean_orphan_relationships_supabase() -> tuple[int, list[str]]:
 
     # Fetch all existing thing IDs.
     things_resp = client.table("things").select("id").execute()
-    thing_ids = {row["id"] for row in things_resp.data}
+    things_data: list[dict[str, Any]] = cast(list[dict[str, Any]], things_resp.data)
+    thing_ids = {row["id"] for row in things_data}
 
     # Fetch all relationships (id + FK columns only).
     rels_resp = (
@@ -94,10 +96,11 @@ def clean_orphan_relationships_supabase() -> tuple[int, list[str]]:
         .select("id,from_thing_id,to_thing_id")
         .execute()
     )
+    rels_data: list[dict[str, Any]] = cast(list[dict[str, Any]], rels_resp.data)
 
-    orphan_ids = [
+    orphan_ids: list[str] = [
         row["id"]
-        for row in rels_resp.data
+        for row in rels_data
         if row["from_thing_id"] not in thing_ids or row["to_thing_id"] not in thing_ids
     ]
 
