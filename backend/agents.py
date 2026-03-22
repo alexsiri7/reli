@@ -1117,7 +1117,7 @@ def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
         filter_sql, filter_params = user_filter(user_id)
         query = "SELECT data FROM things WHERE type_hint = 'preference' AND active = 1"
         if filter_sql:
-            query += f" AND {filter_sql}"
+            query += f" {filter_sql}"
         rows = conn.execute(query, filter_params).fetchall()
 
     for row in rows:
