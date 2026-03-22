@@ -384,6 +384,23 @@ class BriefingPreferences(BaseModel):
     max_findings: int = Field(default=10, ge=1, le=50)
 
 
+# ── Personality Preferences ───────────────────────────────────────────────────
+
+
+class PersonalityPattern(BaseModel):
+    """A single learned personality/behavior pattern."""
+
+    pattern: str = Field(..., min_length=1, description="The learned preference pattern text")
+    confidence: str = Field(default="emerging", description="Confidence level: emerging, established, or strong")
+    observations: int = Field(default=1, ge=1, description="Number of times this pattern has been observed")
+
+
+class PersonalityPreferenceData(BaseModel):
+    """Collection of personality patterns loaded from preference Things."""
+
+    patterns: list[PersonalityPattern] = Field(default_factory=list)
+
+
 # ── Proactive Surfaces ───────────────────────────────────────────────────────
 
 

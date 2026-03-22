@@ -522,6 +522,7 @@ class ChatPipeline:
                             priority_question=priority_question,
                             briefing_mode=briefing_mode,
                             interaction_style=self.interaction_style,
+                            user_id=self.user_id,
                         )
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
                         self._record_stage_usage(resp_span, "response", usage, calls_before)
@@ -674,6 +675,7 @@ class ChatPipeline:
                             priority_question=priority_question,
                             briefing_mode=briefing_mode,
                             interaction_style=self.interaction_style,
+                            user_id=self.user_id,
                         ):
                             reply_parts.append(token)
                             yield PipelineEvent(type="token", data=token)

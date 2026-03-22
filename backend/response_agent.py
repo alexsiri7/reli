@@ -24,6 +24,7 @@ from .agents import (
     UsageStats,
     _build_response_messages,
     get_response_system_prompt,
+    load_personality_preferences,
 )
 from .context_agent import _make_litellm_model
 
@@ -236,8 +237,11 @@ async def run_response_agent(
     priority_question: str = "",
     briefing_mode: bool = False,
     interaction_style: str = "auto",
+    user_id: str = "",
 ) -> str:
     """Stage 4: generate friendly user-facing response via ADK LlmAgent."""
+    personality_patterns = load_personality_preferences(user_id)
+
     user_prompt = _build_user_prompt(
         message,
         reasoning_summary,
@@ -259,7 +263,7 @@ async def run_response_agent(
         name="response_agent",
         description="Generates friendly, conversational responses to the user.",
         model=litellm_model,
-        instruction=get_response_system_prompt(interaction_style),
+        instruction=get_response_system_prompt(interaction_style, personality_patterns),
     )
 
     return await _run_agent_for_text(response_agent, user_prompt, usage_stats)
@@ -278,8 +282,11 @@ async def run_response_agent_stream(
     priority_question: str = "",
     briefing_mode: bool = False,
     interaction_style: str = "auto",
+    user_id: str = "",
 ) -> AsyncIterator[str]:
     """Stage 4 (streaming): yield response tokens as they arrive via ADK LlmAgent."""
+    personality_patterns = load_personality_preferences(user_id)
+
     user_prompt = _build_user_prompt(
         message,
         reasoning_summary,
@@ -301,7 +308,7 @@ async def run_response_agent_stream(
         name="response_agent",
         description="Generates friendly, conversational responses to the user.",
         model=litellm_model,
-        instruction=get_response_system_prompt(interaction_style),
+        instruction=get_response_system_prompt(interaction_style, personality_patterns),
     )
 
     async for token in _run_agent_for_stream(response_agent, user_prompt, usage_stats):
