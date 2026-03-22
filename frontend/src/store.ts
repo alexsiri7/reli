@@ -376,6 +376,7 @@ interface ReliState {
   snoozeFinding: (findingId: string, until: string) => Promise<void>
   actOnFinding: (finding: SweepFinding) => void
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
+  updateThing: (id: string, updates: Record<string, unknown>) => Promise<void>
   fetchHistory: () => Promise<void>
   fetchOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
@@ -821,6 +822,32 @@ export const useStore = create<ReliState>((set, get) => ({
       set(state => ({
         things: state.things.map(t => t.id === id ? updated : t),
         briefing: state.briefing.map(t => t.id === id ? updated : t),
+      }))
+    } catch (e) {
+      set({ error: String(e) })
+    }
+  },
+
+  updateThing: async (id: string, updates: Record<string, unknown>) => {
+    try {
+      const res = await mutationFetch(`${BASE}/things/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      if (res.status === 202) {
+        // Queued offline — optimistically update local state
+        set(state => ({
+          things: state.things.map(t => t.id === id ? { ...t, ...updates } as Thing : t),
+          detailThing: state.detailThing?.id === id ? { ...state.detailThing, ...updates } as Thing : state.detailThing,
+        }))
+        return
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const updated: Thing = validateResponse(ThingSchema, await res.json(), `/things/${id}`)
+      set(state => ({
+        things: state.things.map(t => t.id === id ? updated : t),
+        detailThing: state.detailThing?.id === id ? updated : state.detailThing,
       }))
     } catch (e) {
       set({ error: String(e) })

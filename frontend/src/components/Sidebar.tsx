@@ -359,7 +359,7 @@ export function Sidebar() {
 
   // Group active things by type, excluding children of projects (shown under parent)
   const activeGroups = useMemo(() => {
-    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal'] as const
+    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal', 'preference'] as const
     const FALLBACK_LABELS: Record<string, string> = {
       project: 'Projects',
       goal: 'Goals',
@@ -367,6 +367,7 @@ export function Sidebar() {
       note: 'Notes',
       idea: 'Ideas',
       journal: 'Journal',
+      preference: 'Preferences',
     }
     // Build label map from DB types (pluralise by appending 's')
     const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
@@ -414,10 +415,11 @@ export function Sidebar() {
 
   // Available types for the filter dropdown (derived from active things)
   const availableTypes = useMemo(() => {
-    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal']
+    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal', 'preference']
     const FALLBACK_LABELS: Record<string, string> = {
       project: 'Projects', goal: 'Goals', task: 'Tasks',
       note: 'Notes', idea: 'Ideas', journal: 'Journal',
+      preference: 'Preferences',
     }
     const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
     for (const tt of thingTypes) {

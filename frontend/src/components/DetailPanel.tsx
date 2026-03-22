@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { Relationship, ThingType } from '../store'
 import { typeIcon, formatTimestamp, formatDate, isOverdue, priorityLabel } from '../utils'
+import { PreferencePatterns } from './PreferencePatterns'
 
 export function DetailPanel() {
   const {
@@ -162,8 +163,10 @@ export function DetailPanel() {
                 )
               })()}
 
-              {/* Data fields */}
-              {dataEntries.length > 0 && (
+              {/* Preference patterns (dedicated view) or generic data fields */}
+              {thing.type_hint === 'preference' ? (
+                <PreferencePatterns thingId={thing.id} data={thing.data} />
+              ) : dataEntries.length > 0 ? (
                 <div className="space-y-2">
                   <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">Details</h3>
                   <div className="space-y-1.5">
@@ -177,7 +180,7 @@ export function DetailPanel() {
                     ))}
                   </div>
                 </div>
-              )}
+              ) : null}
 
               {/* Open questions */}
               {thing.open_questions && thing.open_questions.length > 0 && (
