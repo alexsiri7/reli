@@ -1,0 +1,14 @@
+Starting server with Config HP="127.0.0.1:42417"|T="28800000"|R="false"|L="info"
+time="2026-03-22T10:37:27Z" level=info msg="Creating root@localhost superuser"
+time="2026-03-22T10:37:27Z" level=info msg="Server ready. Accepting connections."
+time="2026-03-22T10:37:27Z" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-22T10:37:27Z" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-22T10:37:27Z" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-22T10:37:27Z" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-22T10:37:27Z" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-22T10:37:27Z" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-22T10:37:27Z" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-22T10:37:27Z" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-22T10:37:27Z" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-22T10:38:40Z" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-22T10:38:40Z" level=info msg="stats stopped: context canceled"
