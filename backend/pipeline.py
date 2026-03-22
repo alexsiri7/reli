@@ -6,6 +6,7 @@ tool (formerly a separate pipeline stage). The pipeline handles:
   - Streaming response generation
 """
 
+import asyncio
 import json
 import logging
 import sqlite3
@@ -24,6 +25,7 @@ from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
 from .reasoning_agent import run_reasoning_agent
 from .response_agent import run_response_agent, run_response_agent_stream
+from .signal_detector import detect_and_apply_signals
 from .tracing import get_tracer, set_span_error
 from .vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 
@@ -412,6 +414,45 @@ class ChatPipeline:
         if models_used:
             span.set_attribute(f"reli.{stage}.model", models_used[0])
 
+    # ------------------------------------------------------------------
+    # Personality signal detection (background)
+    # ------------------------------------------------------------------
+
+    def _schedule_signal_detection(
+        self,
+        message: str,
+        history: list[dict[str, Any]],
+        reply: str,
+        usage: UsageStats,
+    ) -> None:
+        """Schedule personality signal detection as a background task.
+
+        Runs asynchronously without blocking the response to the user.
+        Failures are logged but never propagate to the caller.
+        """
+        if not self.user_id:
+            return
+
+        async def _run() -> None:
+            try:
+                await detect_and_apply_signals(
+                    message=message,
+                    history=history,
+                    last_assistant_reply=reply,
+                    user_id=self.user_id,
+                    usage_stats=usage,
+                    api_key=self.user_api_key,
+                    model=self.user_models.get("response"),
+                )
+            except Exception:
+                logger.exception("Background signal detection failed")
+
+        asyncio.ensure_future(_run())
+
+    # ------------------------------------------------------------------
+    # Full pipeline execution
+    # ------------------------------------------------------------------
+
     async def run(
         self,
         message: str,
@@ -536,6 +577,16 @@ class ChatPipeline:
                 pipeline_span.set_attribute("reli.total_tokens", usage.total_tokens)
                 pipeline_span.set_attribute("reli.total_cost_usd", round(usage.cost_usd, 6))
                 pipeline_span.set_attribute("reli.total_api_calls", usage.api_calls)
+
+                # Stage 3: Signal Detection (background, non-blocking)
+                # Detect personality preference signals from the conversation
+                # and update preference Things for future response adaptation.
+                self._schedule_signal_detection(
+                    message,
+                    history,
+                    reply,
+                    usage,
+                )
 
             except Exception as exc:
                 set_span_error(pipeline_span, exc)
@@ -695,6 +746,14 @@ class ChatPipeline:
                 pipeline_span.set_attribute("reli.total_tokens", usage.total_tokens)
                 pipeline_span.set_attribute("reli.total_cost_usd", round(usage.cost_usd, 6))
                 pipeline_span.set_attribute("reli.total_api_calls", usage.api_calls)
+
+                # Signal detection (background, non-blocking)
+                self._schedule_signal_detection(
+                    message,
+                    history,
+                    reply,
+                    usage,
+                )
 
             except Exception as exc:
                 set_span_error(pipeline_span, exc)
