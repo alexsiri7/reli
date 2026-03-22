@@ -235,6 +235,7 @@ class TestTracedToolDecorator:
         names = [t.__name__ for t in tools]
         assert names == [
             "fetch_context",
+            "chat_history",
             "create_thing",
             "update_thing",
             "delete_thing",
