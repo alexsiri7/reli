@@ -17,7 +17,11 @@ from backend.mcp_server import (
     get_conflicts,
     get_thing,
     mcp,
+    pa_behavior_guide,
+    proactive_surfacing_guide,
+    relationship_patterns_guide,
     search_things,
+    thing_creation_guide,
     update_thing,
 )
 
@@ -28,16 +32,17 @@ from backend.mcp_server import (
 
 def _mock_response(data: Any, status_code: int = 200) -> httpx.Response:
     """Build a fake httpx.Response."""
-    resp = httpx.Response(
+    return httpx.Response(
         status_code=status_code,
         json=data if status_code != 204 else None,
         request=httpx.Request("GET", "http://test"),
     )
-    return resp
 
 
 def _mock_204() -> httpx.Response:
-    return httpx.Response(status_code=204, request=httpx.Request("DELETE", "http://test"))
+    return httpx.Response(
+        status_code=204, request=httpx.Request("DELETE", "http://test")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +55,9 @@ class TestSearchThings:
     def test_basic_search(self, mock_get: MagicMock) -> None:
         mock_get.return_value = [{"id": "t1", "title": "Buy milk"}]
         result = search_things(query="milk")
-        mock_get.assert_called_once_with("/api/things/search", params={"q": "milk", "limit": 20})
+        mock_get.assert_called_once_with(
+            "/api/things/search", params={"q": "milk", "limit": 20}
+        )
         assert len(result) == 1
         assert result[0]["title"] == "Buy milk"
 
@@ -60,7 +67,12 @@ class TestSearchThings:
         search_things(query="test", active_only=True, type_hint="task", limit=5)
         mock_get.assert_called_once_with(
             "/api/things/search",
-            params={"q": "test", "limit": 5, "active_only": True, "type_hint": "task"},
+            params={
+                "q": "test",
+                "limit": 5,
+                "active_only": True,
+                "type_hint": "task",
+            },
         )
 
     @patch("backend.mcp_server._api_get")
@@ -78,7 +90,12 @@ class TestSearchThings:
 class TestGetThing:
     @patch("backend.mcp_server._api_get")
     def test_get_existing(self, mock_get: MagicMock) -> None:
-        thing = {"id": "abc-123", "title": "My Task", "type_hint": "task", "priority": 2}
+        thing = {
+            "id": "abc-123",
+            "title": "My Task",
+            "type_hint": "task",
+            "priority": 2,
+        }
         mock_get.return_value = thing
         result = get_thing(thing_id="abc-123")
         mock_get.assert_called_once_with("/api/things/abc-123")
@@ -108,7 +125,12 @@ class TestCreateThing:
         result = create_thing(title="Hello")
         mock_post.assert_called_once_with(
             "/api/things",
-            json_body={"title": "Hello", "priority": 3, "active": True, "surface": True},
+            json_body={
+                "title": "Hello",
+                "priority": 3,
+                "active": True,
+                "surface": True,
+            },
         )
         assert result["id"] == "new-1"
 
@@ -142,12 +164,19 @@ class TestUpdateThing:
     def test_update_title(self, mock_patch: MagicMock) -> None:
         mock_patch.return_value = {"id": "t1", "title": "Updated"}
         result = update_thing(thing_id="t1", title="Updated")
-        mock_patch.assert_called_once_with("/api/things/t1", json_body={"title": "Updated"})
+        mock_patch.assert_called_once_with(
+            "/api/things/t1", json_body={"title": "Updated"}
+        )
         assert result["title"] == "Updated"
 
     @patch("backend.mcp_server._api_patch")
     def test_update_multiple_fields(self, mock_patch: MagicMock) -> None:
-        mock_patch.return_value = {"id": "t1", "title": "Task", "priority": 1, "active": False}
+        mock_patch.return_value = {
+            "id": "t1",
+            "title": "Task",
+            "priority": 1,
+            "active": False,
+        }
         update_thing(thing_id="t1", priority=1, active=False)
         call_body = mock_patch.call_args[1]["json_body"]
         assert call_body == {"priority": 1, "active": False}
@@ -316,7 +345,7 @@ class TestIntegration:
             resp.raise_for_status()
             return resp.json()
 
-        def _delete(path: str) -> dict[str, Any]:
+        def _delete(path: str) -> Any:
             resp = client.delete(path)
             resp.raise_for_status()
             return {"ok": True}
@@ -332,7 +361,9 @@ class TestIntegration:
     def test_crud_lifecycle(self, api_server: None) -> None:
         """Create, read, update, search, and delete a Thing end-to-end."""
         # Create
-        created = create_thing(title="MCP Test Thing", type_hint="task", priority=2)
+        created = create_thing(
+            title="MCP Test Thing", type_hint="task", priority=2
+        )
         assert created["title"] == "MCP Test Thing"
         thing_id = created["id"]
 
@@ -342,7 +373,9 @@ class TestIntegration:
         assert fetched["type_hint"] == "task"
 
         # Update
-        updated = update_thing(thing_id=thing_id, title="Updated MCP Thing", priority=1)
+        updated = update_thing(
+            thing_id=thing_id, title="Updated MCP Thing", priority=1
+        )
         assert updated["title"] == "Updated MCP Thing"
         assert updated["priority"] == 1
 
@@ -485,3 +518,123 @@ class TestGetConflicts:
         assert len(result) == 2
         assert result[0]["severity"] == "critical"
         assert result[1]["alert_type"] == "schedule_overlap"
+
+
+# MCP Prompt Resources (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class TestPromptResources:
+    """Tests for PA behavior prompt resources."""
+
+    def test_thing_creation_guide_returns_string(self) -> None:
+        result = thing_creation_guide()
+        assert isinstance(result, str)
+        assert "Thing Creation Guide" in result
+
+    def test_thing_creation_guide_covers_type_hints(self) -> None:
+        result = thing_creation_guide()
+        for hint in (
+            "task",
+            "note",
+            "idea",
+            "project",
+            "goal",
+            "person",
+            "place",
+            "event",
+        ):
+            assert hint in result, f"Missing type_hint '{hint}'"
+
+    def test_thing_creation_guide_covers_open_questions(self) -> None:
+        result = thing_creation_guide()
+        assert "open_questions" in result
+
+    def test_thing_creation_guide_covers_surface_defaults(self) -> None:
+        result = thing_creation_guide()
+        assert "surface" in result
+        assert "false" in result
+
+    def test_relationship_patterns_returns_string(self) -> None:
+        result = relationship_patterns_guide()
+        assert isinstance(result, str)
+        assert "Relationship Patterns" in result
+
+    def test_relationship_patterns_covers_types(self) -> None:
+        result = relationship_patterns_guide()
+        for rtype in (
+            "parent-of",
+            "child-of",
+            "depends-on",
+            "blocks",
+            "related-to",
+            "involves",
+        ):
+            assert rtype in result, f"Missing relationship type '{rtype}'"
+
+    def test_relationship_patterns_covers_possessive(self) -> None:
+        result = relationship_patterns_guide()
+        assert "Possessive" in result
+        assert "sister" in result
+
+    def test_proactive_surfacing_returns_string(self) -> None:
+        result = proactive_surfacing_guide()
+        assert isinstance(result, str)
+        assert "Proactive Surfacing" in result
+
+    def test_proactive_surfacing_covers_date_types(self) -> None:
+        result = proactive_surfacing_guide()
+        for key in ("birthday", "deadline", "due_date", "anniversary"):
+            assert key in result, f"Missing date key '{key}'"
+
+    def test_proactive_surfacing_covers_briefing_mode(self) -> None:
+        result = proactive_surfacing_guide()
+        assert "Briefing Mode" in result or "briefing" in result.lower()
+
+    def test_pa_behavior_returns_string(self) -> None:
+        result = pa_behavior_guide()
+        assert isinstance(result, str)
+        assert "PA Behavior Guide" in result
+
+    def test_pa_behavior_covers_core_principles(self) -> None:
+        result = pa_behavior_guide()
+        assert "Things as State" in result
+        assert "Search Before Creating" in result
+        assert "One Question at a Time" in result
+
+    def test_pa_behavior_covers_data_model(self) -> None:
+        result = pa_behavior_guide()
+        for field in (
+            "title",
+            "type_hint",
+            "data",
+            "priority",
+            "active",
+            "surface",
+            "open_questions",
+        ):
+            assert field in result, f"Missing data model field '{field}'"
+
+    def test_pa_behavior_covers_personality_overrides(self) -> None:
+        result = pa_behavior_guide()
+        assert "overridable" in result.lower() or "override" in result.lower()
+        assert "preference" in result.lower()
+
+    def test_prompts_registered_on_mcp_server(self) -> None:
+        """Verify all prompts are registered on the FastMCP server instance."""
+        import asyncio
+
+        prompts = asyncio.run(mcp.list_prompts())
+        names = {p.name for p in prompts}
+        assert "thing-creation" in names
+        assert "relationship-patterns" in names
+        assert "proactive-surfacing" in names
+        assert "pa-behavior" in names
+
+    def test_prompts_have_descriptions(self) -> None:
+        """Each prompt must have a non-empty description."""
+        import asyncio
+
+        prompts = asyncio.run(mcp.list_prompts())
+        for p in prompts:
+            assert p.description, f"Prompt '{p.name}' has no description"
