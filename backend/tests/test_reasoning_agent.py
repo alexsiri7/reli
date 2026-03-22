@@ -62,9 +62,9 @@ class TestMakeReasoningTools:
             tools, applied, _fetched = _make_reasoning_tools(user_id)
             return tools, applied, mock_db
 
-    def test_returns_seven_tools(self):
+    def test_returns_eight_tools(self):
         tools, applied, _ = self._get_tools()
-        assert len(tools) == 7
+        assert len(tools) == 8
         names = [t.__name__ for t in tools]
         assert "fetch_context" in names
         assert "chat_history" in names
@@ -72,6 +72,7 @@ class TestMakeReasoningTools:
         assert "update_thing" in names
         assert "delete_thing" in names
         assert "merge_things" in names
+        assert "record_personality_signal" in names
         assert "create_relationship" in names
 
     def test_applied_starts_empty(self):

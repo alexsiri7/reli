@@ -6,8 +6,6 @@ personality/behavior signals from conversation feedback.
 
 import json
 
-import pytest
-
 from backend.reasoning_agent import _make_reasoning_tools
 
 
