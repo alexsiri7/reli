@@ -12,6 +12,7 @@ from backend.sweep import (
     find_cross_project_resource_conflicts,
     find_cross_project_shared_blockers,
     find_cross_project_thematic_connections,
+    find_incomplete_things,
     find_open_questions,
     find_orphan_things,
     find_overdue_checkins,
@@ -753,3 +754,138 @@ class TestCrossProjectDuplicateEffort:
         with db() as conn:
             results = find_cross_project_duplicate_effort(conn)
         assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# Incomplete Things (gap detection)
+# ---------------------------------------------------------------------------
+
+
+class TestIncompleteThings:
+    def test_thing_with_no_data_detected(self, patched_db):
+        """A Thing with null data is flagged as incomplete."""
+        with db() as conn:
+            _insert_thing(conn, "t1", "Bare Task")
+        with db() as conn:
+            results = find_incomplete_things(conn)
+        ids = [r.thing_id for r in results]
+        assert "t1" in ids
+        gaps = next(r for r in results if r.thing_id == "t1").extra["gaps"]
+        assert "no data" in gaps
+
+    def test_thing_with_dates_not_flagged_for_no_dates(self, patched_db):
+        """A Thing with a checkin_date should not be flagged for 'no dates'."""
+        today = date.today()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "t1",
+                "Dated Task",
+                checkin_date=f"{today.isoformat()}T09:00:00",
+                data={"notes": "some info"},
+            )
+        with db() as conn:
+            results = find_incomplete_things(conn)
+        t1_results = [r for r in results if r.thing_id == "t1"]
+        if t1_results:
+            assert "no dates" not in t1_results[0].extra["gaps"]
+
+    def test_thing_with_data_dates_not_flagged(self, patched_db):
+        """A Thing with date keys in data should not be flagged for 'no dates'."""
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "t1",
+                "Birthday Person",
+                type_hint="person",
+                data={"birthday": "1990-05-15", "role": "engineer", "email": "a@b.com"},
+            )
+        with db() as conn:
+            results = find_incomplete_things(conn)
+        t1_results = [r for r in results if r.thing_id == "t1"]
+        if t1_results:
+            assert "no dates" not in t1_results[0].extra["gaps"]
+
+    def test_name_only_person_detected(self, patched_db):
+        """A person with only a title and no meaningful data is flagged."""
+        with db() as conn:
+            _insert_thing(conn, "p1", "Jane Doe", type_hint="person")
+        with db() as conn:
+            results = find_incomplete_things(conn)
+        p1_results = [r for r in results if r.thing_id == "p1"]
+        assert len(p1_results) == 1
+        assert "name-only person" in p1_results[0].extra["gaps"]
+
+    def test_person_with_data_not_name_only(self, patched_db):
+        """A person with meaningful data keys is not flagged as name-only."""
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "p1",
+                "Jane Doe",
+                type_hint="person",
+                data={"email": "jane@example.com", "role": "Manager"},
+            )
+        with db() as conn:
+            results = find_incomplete_things(conn)
+        p1_results = [r for r in results if r.thing_id == "p1"]
+        if p1_results:
+            assert "name-only person" not in p1_results[0].extra["gaps"]
+
+    def test_task_without_deadline_detected(self, patched_db):
+        """A task with no deadline/due_date is flagged."""
+        with db() as conn:
+            _insert_thing(conn, "t1", "Build feature", type_hint="task", data={"notes": "important"})
+        with db() as conn:
+            results = find_incomplete_things(conn)
+        t1_results = [r for r in results if r.thing_id == "t1"]
+        assert len(t1_results) == 1
+        assert "no deadline" in t1_results[0].extra["gaps"]
+
+    def test_task_with_deadline_not_flagged(self, patched_db):
+        """A task with a deadline in data is not flagged for 'no deadline'."""
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "t1",
+                "Build feature",
+                type_hint="task",
+                data={"deadline": "2026-04-01", "notes": "important"},
+            )
+        with db() as conn:
+            results = find_incomplete_things(conn)
+        t1_results = [r for r in results if r.thing_id == "t1"]
+        if t1_results:
+            assert "no deadline" not in t1_results[0].extra["gaps"]
+
+    def test_inactive_thing_excluded(self, patched_db):
+        """Inactive Things should not be flagged."""
+        with db() as conn:
+            _insert_thing(conn, "t1", "Done Task", active=False)
+        with db() as conn:
+            results = find_incomplete_things(conn)
+        assert len(results) == 0
+
+    def test_thing_with_open_questions_excluded(self, patched_db):
+        """Things that already have open_questions should not be flagged."""
+        with db() as conn:
+            _insert_thing(conn, "t1", "Already Asked", open_questions=["When is this due?"])
+        with db() as conn:
+            results = find_incomplete_things(conn)
+        assert len(results) == 0
+
+    def test_finding_type_is_incomplete(self, patched_db):
+        """The finding_type for gap detection should be 'incomplete'."""
+        with db() as conn:
+            _insert_thing(conn, "t1", "Bare Thing")
+        with db() as conn:
+            results = find_incomplete_things(conn)
+        assert results[0].finding_type == "incomplete"
+
+    def test_collect_candidates_includes_incomplete(self, patched_db):
+        """collect_candidates should include incomplete findings."""
+        with db() as conn:
+            _insert_thing(conn, "t1", "Bare Thing")
+        results = collect_candidates()
+        types = {c.finding_type for c in results}
+        assert "incomplete" in types
