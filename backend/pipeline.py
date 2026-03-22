@@ -69,6 +69,26 @@ class PipelineEvent:
 # ---------------------------------------------------------------------------
 
 
+def _parse_thing_open_questions(thing: dict[str, Any]) -> dict[str, Any]:
+    """Deserialize open_questions on a raw Thing dict from JSON string to list.
+
+    SQLite stores open_questions as a JSON-encoded string.  When the dict is
+    later serialized (e.g. for the reasoning agent), this causes double-encoding.
+    Parsing it eagerly ensures downstream consumers see a proper list.
+    """
+    oq = thing.get("open_questions")
+    if oq and isinstance(oq, str):
+        try:
+            parsed = json.loads(oq)
+            if isinstance(parsed, list):
+                thing["open_questions"] = parsed
+            else:
+                thing["open_questions"] = None
+        except (json.JSONDecodeError, TypeError):
+            thing["open_questions"] = None
+    return thing
+
+
 def _sql_things_count(conn: sqlite3.Connection) -> int:
     """Return total number of Things in SQLite."""
     row = conn.execute("SELECT COUNT(*) as cnt FROM things").fetchone()
@@ -83,7 +103,7 @@ def _fetch_with_family(conn: sqlite3.Connection, seed_ids: list[str]) -> list[di
     def _add_row(row: sqlite3.Row) -> None:
         if row["id"] not in seen_ids:
             seen_ids.add(row["id"])
-            results.append(dict(row))
+            results.append(_parse_thing_open_questions(dict(row)))
 
     for thing_id in seed_ids:
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
@@ -164,7 +184,7 @@ def _fetch_user_relationships(
         len(rows),
         search_queries[:3],
     )
-    return [dict(r) for r in rows]
+    return [_parse_thing_open_questions(dict(r)) for r in rows]
 
 
 def _fetch_user_thing(conn: sqlite3.Connection, user_id: str) -> dict[str, Any] | None:
@@ -175,7 +195,7 @@ def _fetch_user_thing(conn: sqlite3.Connection, user_id: str) -> dict[str, Any] 
         "SELECT * FROM things WHERE user_id = ? AND type_hint = 'person' LIMIT 1",
         (user_id,),
     ).fetchone()
-    return dict(row) if row else None
+    return _parse_thing_open_questions(dict(row)) if row else None
 
 
 def _fetch_warm_context(
@@ -310,7 +330,7 @@ def _fetch_relevant_things(
         for row in conn.execute(recent_sql, uf_params).fetchall():
             if row["id"] not in seen_ids:
                 seen_ids.add(row["id"])
-                results.append(dict(row))
+                results.append(_parse_thing_open_questions(dict(row)))
 
     return results
 

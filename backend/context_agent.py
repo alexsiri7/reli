@@ -261,6 +261,7 @@ async def run_context_refinement(
                 "data": t.get("data"),
                 "parent_id": t.get("parent_id"),
                 "active": t.get("active"),
+                "open_questions": t.get("open_questions"),
             }
             for t in found_things
         ],
