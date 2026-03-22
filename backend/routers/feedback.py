@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ..auth import require_user
 from ..config import settings
+from ..http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ def _category_label(category: str) -> str:
 async def submit_feedback(
     body: FeedbackRequest,
     user_id: str = Depends(require_user),
+    client: httpx.AsyncClient = Depends(get_http_client),
 ) -> FeedbackResponse:
     """Create a GitHub issue with the user's feedback and app context."""
     token = settings.GITHUB_FEEDBACK_TOKEN
@@ -75,28 +77,27 @@ async def submit_feedback(
     label = _category_label(body.category)
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"https://api.github.com/repos/{repo}/issues",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                },
-                json={
-                    "title": title,
-                    "body": issue_body,
-                    "labels": [label],
-                },
-                timeout=15.0,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return FeedbackResponse(
-                success=True,
-                issue_url=data.get("html_url"),
-                message="Feedback submitted successfully.",
-            )
+        resp = await client.post(
+            f"https://api.github.com/repos/{repo}/issues",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            json={
+                "title": title,
+                "body": issue_body,
+                "labels": [label],
+            },
+            timeout=15.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return FeedbackResponse(
+            success=True,
+            issue_url=data.get("html_url"),
+            message="Feedback submitted successfully.",
+        )
     except httpx.HTTPStatusError as exc:
         logger.error("GitHub API error creating feedback issue: %s %s", exc.response.status_code, exc.response.text)
         raise HTTPException(status_code=502, detail="Failed to create feedback issue on GitHub.") from exc
