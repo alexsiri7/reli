@@ -16,6 +16,7 @@ Finding types:
   - cross_project_resource_conflict: Person/entity involved in multiple stale projects
   - cross_project_thematic_connection: Similar Things across different projects
   - cross_project_duplicate_effort: Tasks with near-identical titles in different projects
+  - information_gap: Active Thing missing key information (no dates, minimal data, etc.)
   - llm_insight: LLM-generated finding from reflection phase
 
 Preference aggregation (separate phase, see preference_sweep.py):
@@ -433,6 +434,233 @@ def find_open_questions(conn: sqlite3.Connection, user_id: str = "") -> list[Swe
 
 
 # ---------------------------------------------------------------------------
+# Information gap detection
+# ---------------------------------------------------------------------------
+
+# Questions generated per gap type — keyed by (gap_type, type_hint or None).
+_GAP_QUESTIONS: dict[str, dict[str | None, list[str]]] = {
+    "no_dates": {
+        "event": ["When is this event?"],
+        "task": ["When does this need to be done?"],
+        "project": ["When does this need to be done?"],
+        "goal": ["What's your timeline for this goal?"],
+        None: ["Are there any important dates for this?"],
+    },
+    "name_only_person": {
+        None: ["How do you know {title}?", "What's {title}'s role or relationship to you?"],
+    },
+    "no_deadline_project": {
+        None: ["When does this need to be done?", "What does 'done' look like for this project?"],
+    },
+    "minimal_data": {
+        "person": ["How do you know {title}?"],
+        "event": ["When and where is this?", "Who else is involved?"],
+        "project": ["What's the goal of this project?", "What are the next steps?"],
+        "task": ["What does 'done' look like for this?"],
+        None: ['Want to flesh out "{title}" with more details?'],
+    },
+}
+
+
+def _questions_for_gap(
+    gap_type: str,
+    type_hint: str | None,
+    title: str,
+) -> list[str]:
+    """Return question templates for a gap type, formatted with Thing title."""
+    type_map = _GAP_QUESTIONS.get(gap_type, {})
+    templates = type_map.get(type_hint) or type_map.get(None, [])
+    return [t.format(title=title) for t in templates]
+
+
+def find_information_gaps(
+    conn: sqlite3.Connection,
+    today: date | None = None,
+    min_age_days: int = 3,
+    user_id: str = "",
+) -> list[SweepCandidate]:
+    """Find active Things with missing key information.
+
+    Detects:
+    - Things with no dates (no checkin_date, no date fields in data)
+    - Person Things with name only (no or empty data)
+    - Projects with active children but no deadline
+    - Things older than *min_age_days* with null/empty data
+
+    Only flags Things that do NOT already have open_questions (to avoid
+    re-generating questions the user hasn't addressed yet).
+    """
+    today = today or date.today()
+    age_cutoff = (today - timedelta(days=min_age_days)).isoformat()
+    uf_sql, uf_params = user_filter(user_id)
+
+    candidates: list[SweepCandidate] = []
+
+    # --- Name-only persons: person type with null/empty data ---
+    person_rows = conn.execute(
+        f"""SELECT id, title, type_hint, data, created_at FROM things
+           WHERE active = 1
+             AND type_hint = 'person'
+             AND (data IS NULL OR data = '{{}}' OR data = 'null')
+             AND (open_questions IS NULL OR open_questions = '[]' OR open_questions = 'null')
+             AND created_at < ?{uf_sql}""",
+        (age_cutoff, *uf_params),
+    ).fetchall()
+    for row in person_rows:
+        candidates.append(
+            SweepCandidate(
+                thing_id=row["id"],
+                thing_title=row["title"],
+                finding_type="information_gap",
+                message=f"Name only — no context: {row['title']}",
+                priority=3,
+                extra={"gap_type": "name_only_person", "type_hint": "person"},
+            )
+        )
+
+    # --- Projects with children but no deadline ---
+    proj_rows = conn.execute(
+        f"""SELECT p.id, p.title, p.data,
+                  COUNT(c.id) AS child_count
+           FROM things p
+           JOIN things c ON c.parent_id = p.id AND c.active = 1
+           WHERE p.active = 1
+             AND p.type_hint = 'project'
+             AND p.checkin_date IS NULL
+             AND (p.open_questions IS NULL OR p.open_questions = '[]' OR p.open_questions = 'null'){uf_sql}
+           GROUP BY p.id
+           HAVING child_count > 0""",
+        uf_params,
+    ).fetchall()
+    for row in proj_rows:
+        # Check data JSON for deadline/due_date fields
+        has_deadline = False
+        if row["data"]:
+            try:
+                data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+                if isinstance(data, dict):
+                    has_deadline = bool(set(data.keys()) & {"deadline", "due_date", "due", "end_date", "ends_at"})
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not has_deadline:
+            candidates.append(
+                SweepCandidate(
+                    thing_id=row["id"],
+                    thing_title=row["title"],
+                    finding_type="information_gap",
+                    message=f"Project has {row['child_count']} task(s) but no deadline: {row['title']}",
+                    priority=2,
+                    extra={
+                        "gap_type": "no_deadline_project",
+                        "type_hint": "project",
+                        "child_count": row["child_count"],
+                    },
+                )
+            )
+
+    # --- Things with no dates at all ---
+    no_date_rows = conn.execute(
+        f"""SELECT id, title, type_hint, data FROM things
+           WHERE active = 1
+             AND checkin_date IS NULL
+             AND type_hint IN ('event', 'task', 'goal')
+             AND (open_questions IS NULL OR open_questions = '[]' OR open_questions = 'null')
+             AND created_at < ?{uf_sql}""",
+        (age_cutoff, *uf_params),
+    ).fetchall()
+    for row in no_date_rows:
+        has_date = False
+        if row["data"]:
+            try:
+                data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+                if isinstance(data, dict):
+                    has_date = bool(set(k.lower().replace(" ", "_") for k in data.keys()) & _ALL_DATE_KEYS)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not has_date:
+            type_hint = row["type_hint"] or "Thing"
+            candidates.append(
+                SweepCandidate(
+                    thing_id=row["id"],
+                    thing_title=row["title"],
+                    finding_type="information_gap",
+                    message=f"{type_hint.title()} has no dates: {row['title']}",
+                    priority=3,
+                    extra={"gap_type": "no_dates", "type_hint": row["type_hint"]},
+                )
+            )
+
+    # --- Minimal data: old Things with null/empty data (exclude persons, already handled) ---
+    minimal_rows = conn.execute(
+        f"""SELECT id, title, type_hint, created_at FROM things
+           WHERE active = 1
+             AND (data IS NULL OR data = '{{}}' OR data = 'null')
+             AND (type_hint IS NULL OR type_hint NOT IN ('person', 'preference'))
+             AND (open_questions IS NULL OR open_questions = '[]' OR open_questions = 'null')
+             AND created_at < ?{uf_sql}""",
+        (age_cutoff, *uf_params),
+    ).fetchall()
+    # Only flag if old enough to suggest fleshing out (use 14 days for minimal_data)
+    minimal_cutoff = (today - timedelta(days=14)).isoformat()
+    for row in minimal_rows:
+        if row["created_at"] and row["created_at"] > minimal_cutoff:
+            continue
+        type_hint = row["type_hint"] or "Thing"
+        candidates.append(
+            SweepCandidate(
+                thing_id=row["id"],
+                thing_title=row["title"],
+                finding_type="information_gap",
+                message=f"Minimal data — created 14+ days ago: {row['title']}",
+                priority=3,
+                extra={"gap_type": "minimal_data", "type_hint": row["type_hint"]},
+            )
+        )
+
+    return candidates
+
+
+def generate_gap_questions(
+    conn: sqlite3.Connection,
+    gap_candidates: list[SweepCandidate],
+) -> int:
+    """Generate and store open_questions on Things based on detected gaps.
+
+    Only writes questions for Things that don't already have open_questions.
+    Returns the number of Things updated.
+    """
+    updated = 0
+    for candidate in gap_candidates:
+        if candidate.finding_type != "information_gap":
+            continue
+        gap_type = candidate.extra.get("gap_type", "")
+        type_hint = candidate.extra.get("type_hint")
+        questions = _questions_for_gap(gap_type, type_hint, candidate.thing_title)
+        if not questions:
+            continue
+
+        # Double-check the Thing still has no open_questions (race safety)
+        row = conn.execute(
+            "SELECT open_questions FROM things WHERE id = ?",
+            (candidate.thing_id,),
+        ).fetchone()
+        if not row:
+            continue
+        existing = row["open_questions"]
+        if existing and existing not in ("[]", "null", ""):
+            continue
+
+        # Don't update updated_at — sweep-generated questions shouldn't make
+        # a Thing appear "fresh" (which would hide it from stale detection).
+        conn.execute(
+            "UPDATE things SET open_questions = ? WHERE id = ?",
+            (json.dumps(questions), candidate.thing_id),
+        )
+        updated += 1
+    return updated
+
+
+# ---------------------------------------------------------------------------
 # Cross-project pattern detection (#sweep-finding)
 # ---------------------------------------------------------------------------
 
@@ -697,6 +925,12 @@ def collect_candidates(
     today = today or date.today()
 
     with db() as conn:
+        gap_candidates = find_information_gaps(conn, today, user_id=user_id)
+        # Generate and store questions on Things with gaps before collecting
+        # open_questions — so newly generated questions show up in the same sweep.
+        if gap_candidates:
+            generate_gap_questions(conn, gap_candidates)
+
         candidates = (
             find_approaching_dates(conn, today, window_days, user_id=user_id)
             + find_stale_things(conn, today, stale_days, user_id=user_id)
@@ -704,6 +938,7 @@ def collect_candidates(
             + find_orphan_things(conn, user_id=user_id)
             + find_completed_projects(conn, user_id=user_id)
             + find_open_questions(conn, user_id=user_id)
+            + gap_candidates
             + find_cross_project_shared_blockers(conn)
             + find_cross_project_resource_conflicts(conn, today, stale_days)
             + find_cross_project_thematic_connections(conn)
