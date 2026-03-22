@@ -205,8 +205,39 @@ function SettingsForm({
       <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">AI Models</h3>
         <p className="text-xs text-gray-400 dark:text-gray-400 mb-4">
-          Select which models to use for each stage of the chat pipeline.
+          Pick a preset or customise each model individually.
         </p>
+
+        {/* Presets */}
+        <div className="flex gap-2 mb-4">
+          {MODEL_PRESETS.map(preset => {
+            const active =
+              context === preset.context &&
+              reasoning === preset.reasoning &&
+              response === preset.response
+            const ts = COST_TIER_STYLES[preset.tier]
+            return (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => {
+                  setContext(preset.context)
+                  setReasoning(preset.reasoning)
+                  setResponse(preset.response)
+                }}
+                title={preset.description}
+                className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                  active
+                    ? `${ts.bg} ${ts.color} ring-1 ring-current`
+                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                {preset.label}
+              </button>
+            )
+          })}
+        </div>
+
         <div className="space-y-4">
           <ModelPicker
             label="Context Model"
@@ -742,6 +773,42 @@ const PROVIDER_LABELS: Record<string, string> = {
   deepseek: 'DeepSeek',
 }
 
+interface ModelPreset {
+  label: string
+  description: string
+  tier: 'budget' | 'standard' | 'premium'
+  context: string
+  reasoning: string
+  response: string
+}
+
+const MODEL_PRESETS: ModelPreset[] = [
+  {
+    label: 'Budget',
+    description: 'Lowest cost, good for simple tasks',
+    tier: 'budget',
+    context: 'google/gemini-2.5-flash-lite',
+    reasoning: 'google/gemini-2.5-flash-lite',
+    response: 'google/gemini-2.5-flash-lite',
+  },
+  {
+    label: 'Balanced',
+    description: 'Good quality at moderate cost',
+    tier: 'standard',
+    context: 'google/gemini-2.5-flash-lite',
+    reasoning: 'google/gemini-2.5-flash',
+    response: 'google/gemini-2.5-flash-lite',
+  },
+  {
+    label: 'Premium',
+    description: 'Best quality, higher cost',
+    tier: 'premium',
+    context: 'google/gemini-2.5-flash',
+    reasoning: 'anthropic/claude-sonnet-4-20250514',
+    response: 'google/gemini-2.5-flash',
+  },
+]
+
 function ModelPicker({
   label,
   description,
@@ -778,6 +845,16 @@ function ModelPicker({
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(id)
     }
+    // Sort models within each group by input cost (cheapest first)
+    for (const [, ids] of groups) {
+      ids.sort((a, b) => {
+        const ma = modelMap.get(a)
+        const mb = modelMap.get(b)
+        const ca = ma?.input_cost_per_million ?? Infinity
+        const cb = mb?.input_cost_per_million ?? Infinity
+        return ca - cb
+      })
+    }
     // Sort groups: put the provider of the current value first, then alphabetical
     const { provider: currentProvider } = parseModelId(value)
     const entries = [...groups.entries()].sort((a, b) => {
@@ -786,7 +863,7 @@ function ModelPicker({
       return a[0].localeCompare(b[0])
     })
     return entries
-  }, [options, search, value])
+  }, [options, search, value, modelMap])
 
   // Close on outside click
   useEffect(() => {
