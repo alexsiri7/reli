@@ -85,17 +85,16 @@ _DEFAULT_THING_TYPES = [
     ("event", "📅", None),
     ("concept", "🧠", None),
     ("reference", "🔗", None),
+    ("preference", "⚙️", None),
 ]
 
 
 def _seed_thing_types(conn: sqlite3.Connection) -> None:
-    """Seed default thing types if the table is empty."""
-    count = conn.execute("SELECT COUNT(*) FROM thing_types").fetchone()[0]
-    if count == 0:
-        conn.executemany(
-            "INSERT OR IGNORE INTO thing_types (id, name, icon, color) VALUES (?, ?, ?, ?)",
-            [(name, name, icon, color) for name, icon, color in _DEFAULT_THING_TYPES],
-        )
+    """Seed default thing types, adding any missing ones to existing DBs."""
+    conn.executemany(
+        "INSERT OR IGNORE INTO thing_types (id, name, icon, color) VALUES (?, ?, ?, ?)",
+        [(name, name, icon, color) for name, icon, color in _DEFAULT_THING_TYPES],
+    )
 
 
 def _migrate_things_graph(conn: sqlite3.Connection) -> None:
