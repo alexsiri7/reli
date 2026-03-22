@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -55,7 +56,7 @@ class PreferenceAggregationResult:
 
 
 def _fetch_recent_interactions(
-    conn,
+    conn: sqlite3.Connection,
     user_id: str = "",
     days: int = INTERACTION_WINDOW_DAYS,
 ) -> list[dict]:
@@ -85,16 +86,18 @@ def _fetch_recent_interactions(
                 applied = json.loads(raw) if isinstance(raw, str) else raw
             except (json.JSONDecodeError, TypeError):
                 pass
-        interactions.append({
-            "role": row["role"],
-            "content": row["content"][:500],  # truncate long messages
-            "applied_changes": applied,
-            "timestamp": row["timestamp"],
-        })
+        interactions.append(
+            {
+                "role": row["role"],
+                "content": row["content"][:500],  # truncate long messages
+                "applied_changes": applied,
+                "timestamp": row["timestamp"],
+            }
+        )
     return interactions
 
 
-def _fetch_existing_preferences(conn, user_id: str = "") -> list[dict]:
+def _fetch_existing_preferences(conn: sqlite3.Connection, user_id: str = "") -> list[dict]:
     """Fetch existing preference Things for this user."""
     uf_sql, uf_params = user_filter(user_id)
     rows = conn.execute(
@@ -112,11 +115,13 @@ def _fetch_existing_preferences(conn, user_id: str = "") -> list[dict]:
                 data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
             except (json.JSONDecodeError, TypeError):
                 pass
-        preferences.append({
-            "id": row["id"],
-            "title": row["title"],
-            "data": data,
-        })
+        preferences.append(
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "data": data,
+            }
+        )
     return preferences
 
 
@@ -310,13 +315,15 @@ async def aggregate_preference_patterns(
                     (json.dumps(updated_data), now, existing_id),
                 )
                 updated_count += 1
-                result_prefs.append({
-                    "id": existing_id,
-                    "title": title,
-                    "action": "updated",
-                    "old_confidence": old_confidence,
-                    "new_confidence": confidence,
-                })
+                result_prefs.append(
+                    {
+                        "id": existing_id,
+                        "title": title,
+                        "action": "updated",
+                        "old_confidence": old_confidence,
+                        "new_confidence": confidence,
+                    }
+                )
             else:
                 # Create new preference Thing
                 thing_id = f"pref-{uuid.uuid4().hex[:8]}"
@@ -336,12 +343,14 @@ async def aggregate_preference_patterns(
                     (thing_id, title, json.dumps(pref_data), now, now, user_id or None),
                 )
                 created_count += 1
-                result_prefs.append({
-                    "id": thing_id,
-                    "title": title,
-                    "action": "created",
-                    "confidence": confidence,
-                })
+                result_prefs.append(
+                    {
+                        "id": thing_id,
+                        "title": title,
+                        "action": "created",
+                        "confidence": confidence,
+                    }
+                )
 
     return PreferenceAggregationResult(
         preferences_created=created_count,
