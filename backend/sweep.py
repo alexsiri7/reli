@@ -17,6 +17,9 @@ Finding types:
   - cross_project_thematic_connection: Similar Things across different projects
   - cross_project_duplicate_effort: Tasks with near-identical titles in different projects
   - llm_insight: LLM-generated finding from reflection phase
+
+Preference aggregation (separate phase, see preference_sweep.py):
+  - Analyzes chat interaction patterns to detect/update user preference Things
 """
 
 from __future__ import annotations
