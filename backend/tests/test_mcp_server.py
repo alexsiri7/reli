@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import jwt
+from fastapi.testclient import TestClient
+
 import httpx
 import pytest
 
@@ -17,7 +20,11 @@ from backend.mcp_server import (
     get_conflicts,
     get_thing,
     mcp,
+    pa_behavior_guide,
+    proactive_surfacing_guide,
+    relationship_patterns_guide,
     search_things,
+    thing_creation_guide,
     update_thing,
 )
 
@@ -28,12 +35,11 @@ from backend.mcp_server import (
 
 def _mock_response(data: Any, status_code: int = 200) -> httpx.Response:
     """Build a fake httpx.Response."""
-    resp = httpx.Response(
+    return httpx.Response(
         status_code=status_code,
         json=data if status_code != 204 else None,
         request=httpx.Request("GET", "http://test"),
     )
-    return resp
 
 
 def _mock_204() -> httpx.Response:
@@ -60,7 +66,12 @@ class TestSearchThings:
         search_things(query="test", active_only=True, type_hint="task", limit=5)
         mock_get.assert_called_once_with(
             "/api/things/search",
-            params={"q": "test", "limit": 5, "active_only": True, "type_hint": "task"},
+            params={
+                "q": "test",
+                "limit": 5,
+                "active_only": True,
+                "type_hint": "task",
+            },
         )
 
     @patch("backend.mcp_server._api_get")
@@ -78,7 +89,12 @@ class TestSearchThings:
 class TestGetThing:
     @patch("backend.mcp_server._api_get")
     def test_get_existing(self, mock_get: MagicMock) -> None:
-        thing = {"id": "abc-123", "title": "My Task", "type_hint": "task", "priority": 2}
+        thing = {
+            "id": "abc-123",
+            "title": "My Task",
+            "type_hint": "task",
+            "priority": 2,
+        }
         mock_get.return_value = thing
         result = get_thing(thing_id="abc-123")
         mock_get.assert_called_once_with("/api/things/abc-123")
@@ -108,7 +124,12 @@ class TestCreateThing:
         result = create_thing(title="Hello")
         mock_post.assert_called_once_with(
             "/api/things",
-            json_body={"title": "Hello", "priority": 3, "active": True, "surface": True},
+            json_body={
+                "title": "Hello",
+                "priority": 3,
+                "active": True,
+                "surface": True,
+            },
         )
         assert result["id"] == "new-1"
 
@@ -147,7 +168,12 @@ class TestUpdateThing:
 
     @patch("backend.mcp_server._api_patch")
     def test_update_multiple_fields(self, mock_patch: MagicMock) -> None:
-        mock_patch.return_value = {"id": "t1", "title": "Task", "priority": 1, "active": False}
+        mock_patch.return_value = {
+            "id": "t1",
+            "title": "Task",
+            "priority": 1,
+            "active": False,
+        }
         update_thing(thing_id="t1", priority=1, active=False)
         call_body = mock_patch.call_args[1]["json_body"]
         assert call_body == {"priority": 1, "active": False}
@@ -279,6 +305,8 @@ class TestMcpMetadata:
             "delete_thing",
             "create_relationship",
             "delete_relationship",
+            "get_briefing",
+            "get_conflicts",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
 
@@ -314,7 +342,7 @@ class TestIntegration:
             resp.raise_for_status()
             return resp.json()
 
-        def _delete(path: str) -> dict[str, Any]:
+        def _delete(path: str) -> Any:
             resp = client.delete(path)
             resp.raise_for_status()
             return {"ok": True}
@@ -483,3 +511,316 @@ class TestGetConflicts:
         assert len(result) == 2
         assert result[0]["severity"] == "critical"
         assert result[1]["alert_type"] == "schedule_overlap"
+
+
+# MCP Prompt Resources (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class TestPromptResources:
+    """Tests for PA behavior prompt resources."""
+
+    def test_thing_creation_guide_returns_string(self) -> None:
+        result = thing_creation_guide()
+        assert isinstance(result, str)
+        assert "Thing Creation Guide" in result
+
+    def test_thing_creation_guide_covers_type_hints(self) -> None:
+        result = thing_creation_guide()
+        for hint in (
+            "task",
+            "note",
+            "idea",
+            "project",
+            "goal",
+            "person",
+            "place",
+            "event",
+        ):
+            assert hint in result, f"Missing type_hint '{hint}'"
+
+    def test_thing_creation_guide_covers_open_questions(self) -> None:
+        result = thing_creation_guide()
+        assert "open_questions" in result
+
+    def test_thing_creation_guide_covers_surface_defaults(self) -> None:
+        result = thing_creation_guide()
+        assert "surface" in result
+        assert "false" in result
+
+    def test_relationship_patterns_returns_string(self) -> None:
+        result = relationship_patterns_guide()
+        assert isinstance(result, str)
+        assert "Relationship Patterns" in result
+
+    def test_relationship_patterns_covers_types(self) -> None:
+        result = relationship_patterns_guide()
+        for rtype in (
+            "parent-of",
+            "child-of",
+            "depends-on",
+            "blocks",
+            "related-to",
+            "involves",
+        ):
+            assert rtype in result, f"Missing relationship type '{rtype}'"
+
+    def test_relationship_patterns_covers_possessive(self) -> None:
+        result = relationship_patterns_guide()
+        assert "Possessive" in result
+        assert "sister" in result
+
+    def test_proactive_surfacing_returns_string(self) -> None:
+        result = proactive_surfacing_guide()
+        assert isinstance(result, str)
+        assert "Proactive Surfacing" in result
+
+    def test_proactive_surfacing_covers_date_types(self) -> None:
+        result = proactive_surfacing_guide()
+        for key in ("birthday", "deadline", "due_date", "anniversary"):
+            assert key in result, f"Missing date key '{key}'"
+
+    def test_proactive_surfacing_covers_briefing_mode(self) -> None:
+        result = proactive_surfacing_guide()
+        assert "Briefing Mode" in result or "briefing" in result.lower()
+
+    def test_pa_behavior_returns_string(self) -> None:
+        result = pa_behavior_guide()
+        assert isinstance(result, str)
+        assert "PA Behavior Guide" in result
+
+    def test_pa_behavior_covers_core_principles(self) -> None:
+        result = pa_behavior_guide()
+        assert "Things as State" in result
+        assert "Search Before Creating" in result
+        assert "One Question at a Time" in result
+
+    def test_pa_behavior_covers_data_model(self) -> None:
+        result = pa_behavior_guide()
+        for field in (
+            "title",
+            "type_hint",
+            "data",
+            "priority",
+            "active",
+            "surface",
+            "open_questions",
+        ):
+            assert field in result, f"Missing data model field '{field}'"
+
+    def test_pa_behavior_covers_personality_overrides(self) -> None:
+        result = pa_behavior_guide()
+        assert "overridable" in result.lower() or "override" in result.lower()
+        assert "preference" in result.lower()
+
+    def test_prompts_registered_on_mcp_server(self) -> None:
+        """Verify all prompts are registered on the FastMCP server instance."""
+        import asyncio
+
+        prompts = asyncio.run(mcp.list_prompts())
+        names = {p.name for p in prompts}
+        assert "thing-creation" in names
+        assert "relationship-patterns" in names
+        assert "proactive-surfacing" in names
+        assert "pa-behavior" in names
+
+    def test_prompts_have_descriptions(self) -> None:
+        """Each prompt must have a non-empty description."""
+        import asyncio
+
+        prompts = asyncio.run(mcp.list_prompts())
+        for p in prompts:
+            assert p.description, f"Prompt '{p.name}' has no description"
+
+
+# ---------------------------------------------------------------------------
+# Bearer token auth (re-j102)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def token_client(patched_db):
+    """TestClient with both SECRET_KEY and RELI_API_TOKEN configured."""
+    with (
+        patch("backend.auth.SECRET_KEY", "test-secret-key"),
+        patch("backend.auth._API_TOKEN", "test-mcp-token"),
+    ):
+        from backend.main import app
+
+        with TestClient(app) as c:
+            yield c
+
+
+@pytest.fixture()
+def token_client_with_user(patched_db):
+    """TestClient with token auth and a user in the database."""
+    from backend.database import db
+
+    # Insert a test user
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO users (id, email, google_id, name) VALUES (?, ?, ?, ?)",
+            ("u-test-123", "test@example.com", "google-test", "Test User"),
+        )
+
+    with (
+        patch("backend.auth.SECRET_KEY", "test-secret-key"),
+        patch("backend.auth._API_TOKEN", "test-mcp-token"),
+    ):
+        from backend.main import app
+
+        with TestClient(app) as c:
+            yield c
+
+
+class TestBearerTokenAuth:
+    def test_valid_bearer_token_accepted(self, token_client_with_user):
+        resp = token_client_with_user.get(
+            "/api/things",
+            headers={"Authorization": "Bearer test-mcp-token"},
+        )
+        assert resp.status_code == 200
+
+    def test_invalid_bearer_token_rejected(self, token_client):
+        resp = token_client.get(
+            "/api/things",
+            headers={"Authorization": "Bearer wrong-token"},
+        )
+        assert resp.status_code == 401
+        assert "Invalid API token" in resp.json()["detail"]
+
+    def test_bearer_token_resolves_user(self, token_client_with_user):
+        """Bearer token auth should resolve to the first user in the DB."""
+        # Create a thing via bearer auth
+        resp = token_client_with_user.post(
+            "/api/things",
+            json={"title": "MCP test thing"},
+            headers={"Authorization": "Bearer test-mcp-token"},
+        )
+        assert resp.status_code == 201
+        thing = resp.json()
+        assert thing["title"] == "MCP test thing"
+
+    def test_cookie_auth_still_works_alongside_token(self, token_client_with_user):
+        """Cookie-based JWT auth should still work when token auth is configured."""
+        import jwt
+
+        payload = {"sub": "u-test-123", "email": "test@example.com", "exp": 9999999999}
+        token = jwt.encode(payload, "test-secret-key", algorithm="HS256")
+        token_client_with_user.cookies.set("reli_session", token)
+        resp = token_client_with_user.get("/api/things")
+        assert resp.status_code == 200
+
+    def test_no_auth_header_falls_through_to_cookie(self, token_client):
+        """Without Authorization header, should fall through to cookie check."""
+        resp = token_client.get("/api/things")
+        assert resp.status_code == 401
+        assert "Not authenticated" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# MCP server tool tests (via mocked httpx)
+# ---------------------------------------------------------------------------
+
+
+class TestMCPTools:
+    """Test MCP tool functions with mocked HTTP calls."""
+
+    def test_search_things(self, token_client_with_user):
+        """Create a thing then search for it via REST API (simulating MCP flow)."""
+        headers = {"Authorization": "Bearer test-mcp-token"}
+        # Create
+        token_client_with_user.post(
+            "/api/things",
+            json={"title": "Alice Johnson", "type_hint": "person"},
+            headers=headers,
+        )
+        # Search
+        resp = token_client_with_user.get(
+            "/api/things/search",
+            params={"q": "Alice", "limit": 10},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        results = resp.json()
+        assert len(results) >= 1
+        assert any("Alice" in t["title"] for t in results)
+
+    def test_crud_lifecycle(self, token_client_with_user):
+        """Test full CRUD lifecycle via REST API (simulating MCP tool calls)."""
+        headers = {"Authorization": "Bearer test-mcp-token"}
+
+        # Create
+        resp = token_client_with_user.post(
+            "/api/things",
+            json={"title": "Buy groceries", "type_hint": "task", "priority": 2},
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        thing = resp.json()
+        thing_id = thing["id"]
+        assert thing["title"] == "Buy groceries"
+        assert thing["priority"] == 2
+
+        # Get
+        resp = token_client_with_user.get(f"/api/things/{thing_id}", headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["title"] == "Buy groceries"
+
+        # Update
+        resp = token_client_with_user.patch(
+            f"/api/things/{thing_id}",
+            json={"title": "Buy organic groceries", "active": False},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["title"] == "Buy organic groceries"
+        assert resp.json()["active"] is False
+
+        # Delete
+        resp = token_client_with_user.delete(f"/api/things/{thing_id}", headers=headers)
+        assert resp.status_code == 204
+
+        # Verify deleted
+        resp = token_client_with_user.get(f"/api/things/{thing_id}", headers=headers)
+        assert resp.status_code == 404
+
+    def test_relationship_lifecycle(self, token_client_with_user):
+        """Test create/delete relationship via REST API (simulating MCP tool calls)."""
+        headers = {"Authorization": "Bearer test-mcp-token"}
+
+        # Create two things
+        resp_a = token_client_with_user.post(
+            "/api/things",
+            json={"title": "Alice", "type_hint": "person"},
+            headers=headers,
+        )
+        resp_b = token_client_with_user.post(
+            "/api/things",
+            json={"title": "Acme Corp", "type_hint": "organization"},
+            headers=headers,
+        )
+        id_a = resp_a.json()["id"]
+        id_b = resp_b.json()["id"]
+
+        # Create relationship
+        resp = token_client_with_user.post(
+            "/api/things/relationships",
+            json={
+                "from_thing_id": id_a,
+                "to_thing_id": id_b,
+                "relationship_type": "works_at",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        rel = resp.json()
+        assert rel["relationship_type"] == "works_at"
+        rel_id = rel["id"]
+
+        # Delete relationship
+        resp = token_client_with_user.delete(
+            f"/api/things/relationships/{rel_id}",
+            headers=headers,
+        )
+        assert resp.status_code == 204
