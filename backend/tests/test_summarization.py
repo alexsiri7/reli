@@ -178,6 +178,30 @@ class TestConversationSummariesCRUD:
 
         assert get_message_count_since_summary(user_id) == 3
 
+    def test_create_summary_default_token_count(self, patched_db):
+        """create_summary defaults token_count to 0 when omitted."""
+        user_id = "test-user"
+        with db() as conn:
+            _create_test_user(conn, user_id)
+
+        create_summary(user_id, "A summary", 10)
+
+        latest = get_latest_summary(user_id)
+        assert latest is not None
+        assert latest["token_count"] == 0
+
+    def test_created_at_is_populated(self, patched_db):
+        """create_summary sets created_at timestamp automatically."""
+        user_id = "test-user"
+        with db() as conn:
+            _create_test_user(conn, user_id)
+
+        create_summary(user_id, "A summary", 5, 50)
+
+        latest = get_latest_summary(user_id)
+        assert latest is not None
+        assert latest["created_at"] is not None
+
     def test_user_isolation(self, patched_db):
         """Summaries and messages are isolated per user."""
         with db() as conn:
