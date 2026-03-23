@@ -1096,7 +1096,7 @@ def _make_reasoning_tools(
 
 
 # ---------------------------------------------------------------------------
-# Gemini thought_signature helpers (GH #158 / Sentry RELI-ZO-5)
+# Gemini thought_signature helpers (GH #158 / Sentry RELI-ZO-5 / GH #176)
 # ---------------------------------------------------------------------------
 
 
@@ -1113,54 +1113,24 @@ async def _run_adk_with_thought_signature_fallback(
     usage_stats: "UsageStats | None" = None,
     api_key: str | None = None,
 ) -> str:
-    """Run an ADK agent with a fallback for thought_signature errors.
+    """Run an ADK agent, retrying with a fresh session on thought_signature errors.
 
-    If the first attempt fails with a thought_signature error (Gemini rejects
-    function-call parts that lack signatures when thinking is enabled), retry
-    with only the current-turn content (no history) and a NEW session.
-
-    If it STILL fails, we retry one last time with the
-    'skip_thought_signature_validator' workaround injected into extra_body.
+    Gemini thinking models require thought_signature preservation in multi-turn
+    tool calls.  The openai/ routing through Requesty does not support this
+    (see GH #176).  The default config now uses a non-thinking model, so this
+    fallback should rarely trigger.  If it does, we retry once with a fresh
+    session (no accumulated history) which avoids the missing-signature issue.
     """
     try:
         return await _run_agent_for_text(agent, full_prompt, usage_stats)
     except Exception as exc:
         if _is_thought_signature_error(exc):
             logger.warning(
-                "thought_signature error from Gemini, retrying with fresh session: %s",
+                "thought_signature error — retrying with fresh session "
+                "(consider switching to a non-thinking model, see GH #176): %s",
                 exc,
             )
-            try:
-                # First retry: same config, fresh session, no history
-                return await _run_agent_for_text(agent, fallback_prompt, usage_stats)
-            except Exception as exc2:
-                if _is_thought_signature_error(exc2):
-                    logger.warning("Persistent thought_signature error, retrying with validator skip")
-                    # Second retry: Inject the skip validator workaround
-                    original_model = agent.model
-                    try:
-                        # Determine the original model string
-                        if isinstance(original_model, str):
-                            model_str = original_model
-                        elif hasattr(original_model, "model"):
-                            # LiteLlm objects have a .model attribute
-                            model_str = getattr(original_model, "model")
-                        else:
-                            model_str = REQUESTY_REASONING_MODEL
-
-                        # We re-create the model instance with the skip parameter
-                        agent.model = _make_litellm_model(
-                            model=model_str,
-                            api_key=api_key,
-                            extra_body={
-                                "thinking_config": {"include_thoughts": True, "thinking_budget": 1000},
-                                "thought_signature": "skip_thought_signature_validator",
-                            },
-                        )
-                        return await _run_agent_for_text(agent, fallback_prompt, usage_stats)
-                    finally:
-                        agent.model = original_model
-                raise
+            return await _run_agent_for_text(agent, fallback_prompt, usage_stats)
         raise
 
 
@@ -1277,20 +1247,9 @@ async def run_reasoning_agent(
                 seen_ids.add(t["id"])
                 fetched_context["things"].append(t)
 
-    # Enable thinking for reasoning models. We use 'thinking_budget' which
-    # is the standard parameter LiteLLM expects for Gemini models.
-    # Note: Some OpenAI-compatible proxies (like Requesty) might strip the
-    # required thought_signatures from tool-call turns, causing 400 errors.
-    # We bypass this by injecting a skip validator by default.
-    # TODO: Fix thought_signature stripping in ADK/LiteLLM/Requesty proxy stack
-    # properly and remove this skip (see https://github.com/alexsiri7/reli/issues/180).
     litellm_model = _make_litellm_model(
         model=model or REQUESTY_REASONING_MODEL,
         api_key=api_key,
-        extra_body={
-            "thinking_config": {"include_thoughts": True, "thinking_budget": 1000},
-            "thought_signature": "skip_thought_signature_validator",
-        },
     )
 
     system_prompt = get_system_prompt_for_mode(mode, interaction_style)

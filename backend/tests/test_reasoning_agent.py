@@ -751,9 +751,9 @@ def test_tool_system_prompt_no_json_output_schema():
 
 
 @pytest.mark.asyncio
-async def test_reasoning_agent_disables_thinking():
-    """LiteLlm model for reasoning agent must disable thinking to avoid
-    thought_signature errors when routing through OpenAI-compatible providers."""
+async def test_reasoning_agent_no_thinking_config():
+    """Reasoning agent must NOT pass thinking config to avoid thought_signature
+    errors when routing through OpenAI-compatible providers (GH #176)."""
     metadata = {"reasoning_summary": "test"}
 
     with (
@@ -780,13 +780,13 @@ async def test_reasoning_agent_disables_thinking():
             user_id="u",
         )
 
-    # Verify _make_litellm_model was called with thinking enabled (re-zo fix)
+    # Verify _make_litellm_model was called without thinking config
     mock_factory.assert_called_once()
     call_kwargs = mock_factory.call_args
     extra_body = call_kwargs.kwargs.get("extra_body")
-    assert extra_body is not None, "extra_body must be passed to enable thinking"
-    assert extra_body.get("thinking_config", {}).get("thinking_budget") == 1000, (
-        "thinking_budget must be 1000 to enable reasoning capabilities"
+    assert extra_body is None, (
+        "extra_body with thinking_config must NOT be passed — "
+        "thinking models cause thought_signature errors via openai/ routing (GH #176)"
     )
 
 
@@ -955,40 +955,27 @@ class TestRunAdkWithThoughtSignatureFallback:
         assert result == "ok"
 
     @pytest.mark.asyncio
-    async def test_falls_back_to_skip_validator_on_persistent_error(self):
+    async def test_retries_with_fallback_prompt_on_thought_signature_error(self):
         from backend.reasoning_agent import _run_adk_with_thought_signature_fallback
 
         agent = MagicMock()
-        agent.model.model = "openai/google/gemini-3-flash-preview"
         call_count = 0
 
         async def mock_run(ag, prompt, stats=None):
             nonlocal call_count
             call_count += 1
-            # Fail both first try (history) and second try (no history)
-            if call_count <= 2:
+            if call_count == 1:
                 raise Exception("Function call is missing a thought_signature in functionCall parts.")
-            return f"fallback ok with {ag.model.model}"
+            return f"fallback ok: {prompt}"
 
-        with (
-            patch("backend.reasoning_agent._run_agent_for_text", side_effect=mock_run),
-            patch("backend.reasoning_agent._make_litellm_model") as mock_factory,
-        ):
-            # Mock the factory to return a mock model with the skip parameter
-            mock_skip = MagicMock()
-            mock_skip.model = "openai/google/gemini-3-flash-preview"
-            mock_factory.return_value = mock_skip
-
+        with patch("backend.reasoning_agent._run_agent_for_text", side_effect=mock_run):
             result = await _run_adk_with_thought_signature_fallback(
-                agent, "full with history", "just current turn", usage_stats=None, api_key="test-api-key"
+                agent, "full with history", "just current turn"
             )
 
         assert "fallback ok" in result
-        assert call_count == 3
-        # Verify factory was called with the skip parameter AND the original api_key
-        mock_factory.assert_called_once()
-        assert mock_factory.call_args.kwargs["extra_body"]["thought_signature"] == "skip_thought_signature_validator"
-        assert mock_factory.call_args.kwargs["api_key"] == "test-api-key"
+        assert "just current turn" in result
+        assert call_count == 2
 
     @pytest.mark.asyncio
     async def test_raises_non_thought_signature_errors(self):

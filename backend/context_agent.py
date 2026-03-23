@@ -47,6 +47,25 @@ def _strip_markdown_fences(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+# Gemini model names that are known "thinking" models requiring
+# thought_signature handling.  The openai/ routing through Requesty
+# does NOT preserve thought_signatures, so these models will fail
+# on multi-step tool calls.  See GH #176.
+_GEMINI_THINKING_MODELS = frozenset({
+    "gemini-3-flash-preview",
+    "gemini-3-flash",
+    "gemini-2.5-pro-preview",
+    "gemini-2.5-flash-thinking",
+})
+
+
+def _is_thinking_model(model_name: str) -> bool:
+    """Return True if *model_name* is a Gemini thinking model."""
+    # Strip provider prefixes like "google/" or "openai/google/"
+    base = model_name.rsplit("/", 1)[-1]
+    return base in _GEMINI_THINKING_MODELS
+
+
 def _make_litellm_model(
     model: str | None = None,
     api_key: str | None = None,
@@ -56,8 +75,21 @@ def _make_litellm_model(
 
     Extra kwargs are forwarded to the LiteLlm constructor and ultimately to
     litellm's completion call (e.g. ``extra_body`` for provider-specific params).
+
+    Warning: Gemini thinking models (e.g. gemini-3-flash-preview) require
+    thought_signature preservation which is NOT supported when routing
+    through the openai/ prefix to Requesty.  Multi-step tool calls will
+    fail with 400 errors.  Use a non-thinking model for tool-calling agents.
     """
     effective_model = model or REQUESTY_MODEL
+    if _is_thinking_model(effective_model):
+        logger.warning(
+            "Model %s is a Gemini thinking model — multi-step tool calls "
+            "may fail with thought_signature errors when routed through "
+            "the openai/ prefix. Consider using a non-thinking model "
+            "like google/gemini-2.5-flash. See GH #176.",
+            effective_model,
+        )
     # LiteLlm expects the openai/ prefix for OpenAI-compatible providers
     if not effective_model.startswith("openai/"):
         effective_model = f"openai/{effective_model}"
