@@ -9,9 +9,12 @@ Streaming is implemented by iterating over partial ADK events and yielding
 text chunks as they arrive.
 """
 
+import json
 import logging
+import re
 import uuid
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from typing import Any
 
 from google.adk.agents import LlmAgent
@@ -33,6 +36,43 @@ logger = logging.getLogger(__name__)
 # Module-level session service shared across calls (stateless — sessions are
 # created per invocation and never reused).
 _session_service = InMemorySessionService()
+
+
+@dataclass
+class ResponseResult:
+    """Structured response from the response agent."""
+
+    text: str
+    referenced_things: list[dict[str, str]] = field(default_factory=list)
+
+
+# Regex to extract the fenced JSON block appended by the response agent.
+_JSON_FENCE_RE = re.compile(
+    r"```json\s*\n?\s*(\{.*?\})\s*\n?\s*```\s*$",
+    re.DOTALL,
+)
+
+
+def parse_response(raw: str) -> ResponseResult:
+    """Split raw agent output into text + referenced_things."""
+    m = _JSON_FENCE_RE.search(raw)
+    if not m:
+        return ResponseResult(text=raw.strip())
+
+    text = raw[: m.start()].strip()
+    try:
+        data = json.loads(m.group(1))
+        refs = data.get("referenced_things", [])
+        if not isinstance(refs, list):
+            refs = []
+        # Validate each entry has the expected keys
+        valid = []
+        for r in refs:
+            if isinstance(r, dict) and "mention" in r and "thing_id" in r:
+                valid.append({"mention": str(r["mention"]), "thing_id": str(r["thing_id"])})
+        return ResponseResult(text=text, referenced_things=valid)
+    except (json.JSONDecodeError, TypeError):
+        return ResponseResult(text=text)
 
 
 # ---------------------------------------------------------------------------
@@ -238,8 +278,12 @@ async def run_response_agent(
     briefing_mode: bool = False,
     interaction_style: str = "auto",
     user_id: str = "",
-) -> str:
-    """Stage 4: generate friendly user-facing response via ADK LlmAgent."""
+) -> ResponseResult:
+    """Stage 4: generate friendly user-facing response via ADK LlmAgent.
+
+    Returns a ``ResponseResult`` with the text response and structured
+    ``referenced_things`` extracted from the agent's JSON output block.
+    """
     personality_patterns = load_personality_preferences(user_id)
 
     user_prompt = _build_user_prompt(
@@ -266,7 +310,8 @@ async def run_response_agent(
         instruction=get_response_system_prompt(interaction_style, personality_patterns),
     )
 
-    return await _run_agent_for_text(response_agent, user_prompt, usage_stats)
+    raw = await _run_agent_for_text(response_agent, user_prompt, usage_stats)
+    return parse_response(raw)
 
 
 async def run_response_agent_stream(

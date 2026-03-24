@@ -964,18 +964,30 @@ class TestRunAdkWithThoughtSignatureFallback:
         async def mock_run(ag, prompt, stats=None):
             nonlocal call_count
             call_count += 1
-            if call_count == 1:
+            # Fail both first try (history) and second try (no history)
+            if call_count <= 2:
                 raise Exception("Function call is missing a thought_signature in functionCall parts.")
-            return f"fallback ok: {prompt}"
+            return f"fallback ok with {ag.model.model}"
 
-        with patch("backend.reasoning_agent._run_agent_for_text", side_effect=mock_run):
+        with (
+            patch("backend.reasoning_agent._run_agent_for_text", side_effect=mock_run),
+            patch("backend.reasoning_agent._make_litellm_model") as mock_factory,
+        ):
+            # Mock the factory to return a mock model with the skip parameter
+            mock_skip = MagicMock()
+            mock_skip.model = "openai/google/gemini-3-flash-preview"
+            mock_factory.return_value = mock_skip
+
             result = await _run_adk_with_thought_signature_fallback(
-                agent, "full with history", "just current turn"
+                agent, "full with history", "just current turn", usage_stats=None, api_key="test-api-key"
             )
 
         assert "fallback ok" in result
-        assert "just current turn" in result
-        assert call_count == 2
+        assert call_count == 3
+        # Verify factory was called with the skip parameter AND the original api_key
+        mock_factory.assert_called_once()
+        assert mock_factory.call_args.kwargs["extra_body"]["thought_signature"] == "skip_thought_signature_validator"
+        assert mock_factory.call_args.kwargs["api_key"] == "test-api-key"
 
     @pytest.mark.asyncio
     async def test_raises_non_thought_signature_errors(self):

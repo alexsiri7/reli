@@ -319,6 +319,8 @@ def _persist_exchange(
 
     applied_with_sources = applied_changes.copy()
     applied_with_sources["context_things"] = context_things
+    if result.referenced_things:
+        applied_with_sources["referenced_things"] = result.referenced_things
     if result.web_results:
         applied_with_sources["web_results"] = result.web_results
     if usage.calls:

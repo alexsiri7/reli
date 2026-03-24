@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from backend.response_agent import ResponseResult
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -38,7 +40,9 @@ def _patch_agents(
 
     return [
         patch("backend.pipeline.run_reasoning_agent", new=AsyncMock(return_value=rea)),
-        patch("backend.pipeline.run_response_agent", new=AsyncMock(return_value=rep)),
+        patch("backend.pipeline.run_response_agent", new=AsyncMock(
+            return_value=ResponseResult(text=rep),
+        )),
     ]
 
 

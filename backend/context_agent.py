@@ -23,6 +23,7 @@ from .agents import (
     CONTEXT_REFINEMENT_SYSTEM,
     OLLAMA_MODEL,
     REQUESTY_API_KEY,
+    _with_current_date,
     REQUESTY_BASE_URL,
     REQUESTY_MODEL,
     UsageStats,
@@ -294,6 +295,7 @@ async def run_context_refinement(
                 "data": t.get("data"),
                 "parent_id": t.get("parent_id"),
                 "active": t.get("active"),
+                "open_questions": t.get("open_questions"),
             }
             for t in found_things
         ],

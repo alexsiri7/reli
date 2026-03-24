@@ -1113,6 +1113,22 @@ Rules:
   Example: "Alright, here's what's on your radar! [Project X] deadline is calling —
   [Task Y] looks like the power move. We've also got [Task Z] waiting patiently.
   What's speaking to you today?"
+
+OUTPUT FORMAT — MANDATORY:
+After your conversational text response, you MUST append a JSON block on a new
+line fenced with ```json ... ``` containing the Things you referenced. This lets
+the system link your response to database entities.
+
+```json
+{"referenced_things": [{"mention": "<text you used>", "thing_id": "<id from context>"}]}
+```
+
+Rules for referenced_things:
+- Only include Things whose IDs appear in the applied_changes or context you received.
+- "mention" is the phrase YOU wrote in your response that refers to the Thing.
+- "thing_id" is the exact ID from the context (e.g. "thing-abc123").
+- If your response doesn't reference any specific Things, output an empty list: {"referenced_things": []}
+- ALWAYS include the JSON block, even if the list is empty.
 """
 
 

@@ -10,7 +10,7 @@ import json
 import logging
 import sqlite3
 from collections.abc import AsyncIterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .agents import (
@@ -23,7 +23,7 @@ from .database import db
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
 from .reasoning_agent import run_reasoning_agent
-from .response_agent import run_response_agent, run_response_agent_stream
+from .response_agent import ResponseResult, parse_response, run_response_agent, run_response_agent_stream
 from .tracing import get_tracer, set_span_error
 from .vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 
@@ -53,6 +53,7 @@ class PipelineResult:
     calendar_events: list[dict[str, Any]] | None
     open_questions_by_thing: dict[str, list[str]]
     usage: UsageStats
+    referenced_things: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -69,6 +70,26 @@ class PipelineEvent:
 # ---------------------------------------------------------------------------
 
 
+def _parse_thing_open_questions(thing: dict[str, Any]) -> dict[str, Any]:
+    """Deserialize open_questions on a raw Thing dict from JSON string to list.
+
+    SQLite stores open_questions as a JSON-encoded string.  When the dict is
+    later serialized (e.g. for the reasoning agent), this causes double-encoding.
+    Parsing it eagerly ensures downstream consumers see a proper list.
+    """
+    oq = thing.get("open_questions")
+    if oq and isinstance(oq, str):
+        try:
+            parsed = json.loads(oq)
+            if isinstance(parsed, list):
+                thing["open_questions"] = parsed
+            else:
+                thing["open_questions"] = None
+        except (json.JSONDecodeError, TypeError):
+            thing["open_questions"] = None
+    return thing
+
+
 def _sql_things_count(conn: sqlite3.Connection) -> int:
     """Return total number of Things in SQLite."""
     row = conn.execute("SELECT COUNT(*) as cnt FROM things").fetchone()
@@ -83,7 +104,7 @@ def _fetch_with_family(conn: sqlite3.Connection, seed_ids: list[str]) -> list[di
     def _add_row(row: sqlite3.Row) -> None:
         if row["id"] not in seen_ids:
             seen_ids.add(row["id"])
-            results.append(dict(row))
+            results.append(_parse_thing_open_questions(dict(row)))
 
     for thing_id in seed_ids:
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
@@ -164,7 +185,7 @@ def _fetch_user_relationships(
         len(rows),
         search_queries[:3],
     )
-    return [dict(r) for r in rows]
+    return [_parse_thing_open_questions(dict(r)) for r in rows]
 
 
 def _fetch_user_thing(conn: sqlite3.Connection, user_id: str) -> dict[str, Any] | None:
@@ -175,7 +196,7 @@ def _fetch_user_thing(conn: sqlite3.Connection, user_id: str) -> dict[str, Any] 
         "SELECT * FROM things WHERE user_id = ? AND type_hint = 'person' LIMIT 1",
         (user_id,),
     ).fetchone()
-    return dict(row) if row else None
+    return _parse_thing_open_questions(dict(row)) if row else None
 
 
 def _fetch_warm_context(
@@ -310,7 +331,7 @@ def _fetch_relevant_things(
         for row in conn.execute(recent_sql, uf_params).fetchall():
             if row["id"] not in seen_ids:
                 seen_ids.add(row["id"])
-                results.append(dict(row))
+                results.append(_parse_thing_open_questions(dict(row)))
 
     # -----------------------------------------------------------------------
     # Preference boost: ensure preference Things matching the topic are
@@ -563,7 +584,7 @@ class ChatPipeline:
                         self.user_models.get("response") or REQUESTY_RESPONSE_MODEL,
                     )
                     try:
-                        reply = await run_response_agent(
+                        response_result = await run_response_agent(
                             message,
                             reasoning_summary,
                             questions_for_user,
@@ -578,6 +599,8 @@ class ChatPipeline:
                             interaction_style=self.interaction_style,
                             user_id=self.user_id,
                         )
+                        reply = response_result.text
+                        referenced_things = response_result.referenced_things
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
                         self._record_stage_usage(resp_span, "response", usage, calls_before)
                     except Exception as exc:
@@ -598,6 +621,7 @@ class ChatPipeline:
         return PipelineResult(
             reply=reply,
             applied_changes=applied_changes,
+            referenced_things=referenced_things,
             questions_for_user=questions_for_user,
             priority_question=priority_question,
             reasoning_summary=reasoning_summary,
@@ -734,7 +758,10 @@ class ChatPipeline:
                             reply_parts.append(token)
                             yield PipelineEvent(type="token", data=token)
 
-                        reply = "".join(reply_parts)
+                        raw_reply = "".join(reply_parts)
+                        response_result = parse_response(raw_reply)
+                        reply = response_result.text
+                        referenced_things = response_result.referenced_things
                         resp_span.set_attribute("reli.response.reply_length", len(reply))
                         self._record_stage_usage(resp_span, "response", usage, calls_before)
                     except Exception as exc:
@@ -760,6 +787,7 @@ class ChatPipeline:
             data=PipelineResult(
                 reply=reply,
                 applied_changes=applied_changes,
+                referenced_things=referenced_things,
                 questions_for_user=questions_for_user,
                 priority_question=priority_question,
                 reasoning_summary=reasoning_summary,

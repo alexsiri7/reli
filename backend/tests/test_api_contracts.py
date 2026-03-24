@@ -14,6 +14,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from backend.response_agent import ResponseResult
+
 # ---------------------------------------------------------------------------
 # Helpers — shape validators matching frontend TypeScript interfaces
 # ---------------------------------------------------------------------------
@@ -250,7 +252,9 @@ def _agent_patches(reasoning=None, reply="OK"):
     """Return a list of patch context managers for all chat pipeline agents."""
     return [
         patch("backend.pipeline.run_reasoning_agent", new=AsyncMock(return_value=reasoning or MOCK_REASONING)),
-        patch("backend.pipeline.run_response_agent", new=AsyncMock(return_value=reply)),
+        patch("backend.pipeline.run_response_agent", new=AsyncMock(
+            return_value=ResponseResult(text=reply),
+        )),
     ]
 
 

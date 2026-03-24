@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ChatMode, type ContextThing, type GmailMessage, type InteractionStyle, type ModelUsage, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
+import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ChatMode, type ContextThing, type GmailMessage, type InteractionStyle, type ModelUsage, type ReferencedThing, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
 import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported } from '../hooks/useTTS'
@@ -410,9 +410,36 @@ function StreamingIndicator({ stage }: { stage: StreamingStage }) {
   )
 }
 
+/**
+ * Replace referenced Thing mentions in content with markdown links using a
+ * `thing://` scheme so they can be intercepted by a custom ReactMarkdown
+ * link component. Matches are case-insensitive and longest-first to avoid
+ * partial replacements.
+ */
+function injectThingLinks(content: string, refs: ReferencedThing[]): string {
+  if (refs.length === 0) return content
+  // Sort longest mention first to avoid partial matches
+  const sorted = [...refs].sort((a, b) => b.mention.length - a.mention.length)
+  let result = content
+  for (const ref of sorted) {
+    // Escape special regex chars in the mention
+    const escaped = ref.mention.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    // Replace all occurrences, case-insensitive, but only if not already inside a markdown link
+    const re = new RegExp(`(?<!\\[)${escaped}(?!\\]\\()`, 'gi')
+    result = result.replace(re, `[${ref.mention}](thing://${ref.thing_id})`)
+  }
+  return result
+}
+
 function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingId: string | null; speak: (text: string, id: string) => void }) {
   const isUser = msg.role === 'user'
   const ts = formatTimestamp(msg.timestamp)
+  const openThingDetail = useStore(s => s.openThingDetail)
+
+  const referencedThings = msg.applied_changes?.referenced_things ?? []
+  const renderedContent = referencedThings.length > 0
+    ? injectThingLinks(msg.content, referencedThings)
+    : msg.content
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
@@ -441,7 +468,27 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
           ) : (
             <>
               <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-blockquote:my-1">
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <ReactMarkdown
+                  urlTransform={(url) => url}
+                  components={{
+                    a: ({ href, children }) => {
+                      if (href?.startsWith('thing://')) {
+                        const thingId = href.replace('thing://', '')
+                        return (
+                          <button
+                            onClick={() => openThingDetail(thingId)}
+                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 underline decoration-indigo-300 dark:decoration-indigo-500 underline-offset-2 cursor-pointer font-medium"
+                          >
+                            {children}
+                          </button>
+                        )
+                      }
+                      return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+                    },
+                  }}
+                >
+                  {renderedContent}
+                </ReactMarkdown>
               </div>
               {msg.streaming && msg.content && (
                 <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />

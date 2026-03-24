@@ -248,6 +248,7 @@ async def list_models(
         resp.raise_for_status()
         data = resp.json().get("data", [])
 
+
         # Build pricing lookup from Requesty response
         api_pricing: dict[str, tuple[float, float]] = {}
         for m in data:
