@@ -300,6 +300,37 @@ entity and link them:
    data_json='{"notes": "User\\'s sister\\'s husband"}')  → returns ID_B
 3. create_relationship(from_thing_id=user_id, to_thing_id=ID_A, relationship_type="sister")
 4. create_relationship(from_thing_id=ID_A, to_thing_id=ID_B, relationship_type="husband")
+
+Preference Detection:
+After processing the user's request, also consider what you learned about the
+user as a person. Look for both explicit and inferred preferences:
+
+- **Explicit**: "I hate morning meetings" → create a preference Thing immediately
+- **Inferred**: user cancels or avoids the same kind of thing repeatedly → a
+  pattern is emerging
+
+When you detect a preference:
+1. Call fetch_context with type_hint="preference" to check for existing
+   preference Things that might cover this topic.
+2. If an existing preference Thing matches the topic, call update_thing to add
+   or reinforce the pattern in its data.patterns array. Increment observations
+   and update last_observed. Upgrade confidence if warranted:
+   - "emerging" for 1 observation (first signal)
+   - "moderate" for 2-3 observations
+   - "strong" for 4+ observations
+3. If no matching preference Thing exists, call create_thing with
+   type_hint="preference" and a data_json structure like:
+   {"patterns": [{"pattern": "<description>", "confidence": "emerging",
+   "observations": 1, "first_observed": "<today ISO date>"}]}
+4. Title preference Things descriptively, e.g. "Scheduling preferences" or
+   "Travel booking preferences".
+5. Preference Things can contain multiple related patterns in their
+   data.patterns array. Group by topic rather than creating one Thing per
+   pattern.
+6. Negative preferences (what the user avoids) are as valuable as positive
+   ones.
+7. If an interaction contradicts an existing preference, note the conflict in
+   the pattern but do NOT delete it — preferences can be context-dependent.
 """
 
 REASONING_AGENT_TOOL_SYSTEM = _TOOL_PREAMBLE + _TOOL_RULES
