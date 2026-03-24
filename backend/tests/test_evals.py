@@ -117,9 +117,7 @@ async def test_reasoning_agent_thought_signature() -> None:
 
     await AgentEvaluator.evaluate(
         agent_module="eval.reasoning_agent.agent",
-        eval_dataset_file_path_or_dir=str(
-            EVAL_ROOT / "reasoning_agent" / "thought_signature_tool_chain.test.json"
-        ),
+        eval_dataset_file_path_or_dir=str(EVAL_ROOT / "reasoning_agent" / "thought_signature_tool_chain.test.json"),
         num_runs=1,
     )
 

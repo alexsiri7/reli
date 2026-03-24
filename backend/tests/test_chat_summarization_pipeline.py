@@ -9,13 +9,12 @@ Covers:
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from backend.database import create_summary, db
 from backend.routers.chat import _fetch_history, _maybe_trigger_summarization
-
 
 # ---------------------------------------------------------------------------
 # Helpers

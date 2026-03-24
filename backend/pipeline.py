@@ -23,7 +23,7 @@ from .database import db
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
 from .reasoning_agent import run_reasoning_agent
-from .response_agent import ResponseResult, parse_response, run_response_agent, run_response_agent_stream
+from .response_agent import parse_response, run_response_agent, run_response_agent_stream
 from .tracing import get_tracer, set_span_error
 from .vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 
@@ -352,10 +352,7 @@ def _fetch_relevant_things(
         # SQL fallback for preference Things
         for query in search_queries[:3]:
             pattern = f"%{query}%"
-            pref_sql = (
-                "SELECT id FROM things WHERE type_hint = 'preference'"
-                " AND (title LIKE ? OR data LIKE ?)"
-            )
+            pref_sql = "SELECT id FROM things WHERE type_hint = 'preference' AND (title LIKE ? OR data LIKE ?)"
             pref_params: list = [pattern, pattern]
             pref_sql += uf_sql
             pref_params.extend(uf_params)

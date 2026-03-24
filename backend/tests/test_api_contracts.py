@@ -252,9 +252,12 @@ def _agent_patches(reasoning=None, reply="OK"):
     """Return a list of patch context managers for all chat pipeline agents."""
     return [
         patch("backend.pipeline.run_reasoning_agent", new=AsyncMock(return_value=reasoning or MOCK_REASONING)),
-        patch("backend.pipeline.run_response_agent", new=AsyncMock(
-            return_value=ResponseResult(text=reply),
-        )),
+        patch(
+            "backend.pipeline.run_response_agent",
+            new=AsyncMock(
+                return_value=ResponseResult(text=reply),
+            ),
+        ),
     ]
 
 

@@ -82,10 +82,13 @@ async def acomplete(
         except litellm.NotFoundError as exc:
             last_exc = exc
             if attempt < _RETRY_MAX_ATTEMPTS - 1:
-                delay = min(_RETRY_BASE_DELAY * (2 ** attempt), _RETRY_MAX_DELAY)
+                delay = min(_RETRY_BASE_DELAY * (2**attempt), _RETRY_MAX_DELAY)
                 logger.warning(
                     "LiteLLM 404 on attempt %d/%d for model %s, retrying in %.1fs",
-                    attempt + 1, _RETRY_MAX_ATTEMPTS, model, delay,
+                    attempt + 1,
+                    _RETRY_MAX_ATTEMPTS,
+                    model,
+                    delay,
                 )
                 await asyncio.sleep(delay)
     raise last_exc  # type: ignore[misc]
@@ -123,10 +126,13 @@ async def acomplete_stream(
         except litellm.NotFoundError as exc:
             last_exc = exc
             if attempt < _RETRY_MAX_ATTEMPTS - 1:
-                delay = min(_RETRY_BASE_DELAY * (2 ** attempt), _RETRY_MAX_DELAY)
+                delay = min(_RETRY_BASE_DELAY * (2**attempt), _RETRY_MAX_DELAY)
                 logger.warning(
                     "LiteLLM 404 on attempt %d/%d for model %s (stream), retrying in %.1fs",
-                    attempt + 1, _RETRY_MAX_ATTEMPTS, model, delay,
+                    attempt + 1,
+                    _RETRY_MAX_ATTEMPTS,
+                    model,
+                    delay,
                 )
                 await asyncio.sleep(delay)
     raise last_exc  # type: ignore[misc]

@@ -40,9 +40,12 @@ def _patch_agents(
 
     return [
         patch("backend.pipeline.run_reasoning_agent", new=AsyncMock(return_value=rea)),
-        patch("backend.pipeline.run_response_agent", new=AsyncMock(
-            return_value=ResponseResult(text=rep),
-        )),
+        patch(
+            "backend.pipeline.run_response_agent",
+            new=AsyncMock(
+                return_value=ResponseResult(text=rep),
+            ),
+        ),
     ]
 
 
@@ -364,8 +367,7 @@ class TestPreferenceBoost:
         with db() as conn:
             # Create a regular task Thing
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
                 ("task-1", "Morning standup meeting", "task", 3, 1, 1),
             )
             # Create a preference Thing about meetings
@@ -403,8 +405,7 @@ class TestPreferenceBoost:
 
         with db() as conn:
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
                 ("task-1", "Buy groceries", "task", 3, 1, 1),
             )
 

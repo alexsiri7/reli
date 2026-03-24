@@ -616,9 +616,7 @@ def _make_reasoning_tools(
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT role, content, timestamp FROM chat_history"
-                    " WHERE session_id = ?"
-                    " ORDER BY id DESC LIMIT ?",
+                    "SELECT role, content, timestamp FROM chat_history WHERE session_id = ? ORDER BY id DESC LIMIT ?",
                     (session_id, n),
                 ).fetchall()
 
@@ -1148,14 +1146,10 @@ async def _run_adk_with_thought_signature_fallback(
                         else:
                             model_str = REQUESTY_REASONING_MODEL
 
-                        # We re-create the model instance with the skip parameter
+                        # We re-create the model instance for the fallback retry
                         agent.model = _make_litellm_model(
                             model=model_str,
                             api_key=api_key,
-                            extra_body={
-                                "thinking_config": {"include_thoughts": True, "thinking_budget": 1000},
-                                "thought_signature": "skip_thought_signature_validator",
-                            },
                         )
                         return await _run_agent_for_text(agent, fallback_prompt, usage_stats)
                     finally:
@@ -1281,16 +1275,10 @@ async def run_reasoning_agent(
     # is the standard parameter LiteLLM expects for Gemini models.
     # Note: Some OpenAI-compatible proxies (like Requesty) might strip the
     # required thought_signatures from tool-call turns, causing 400 errors.
-    # We bypass this by injecting a skip validator by default.
-    # TODO: Fix thought_signature stripping in ADK/LiteLLM/Requesty proxy stack
-    # properly and remove this skip (see https://github.com/alexsiri7/reli/issues/180).
+    # Switched to non-thinking model to avoid thought_signature errors (GH #176, PR #225).
     litellm_model = _make_litellm_model(
         model=model or REQUESTY_REASONING_MODEL,
         api_key=api_key,
-        extra_body={
-            "thinking_config": {"include_thoughts": True, "thinking_budget": 1000},
-            "thought_signature": "skip_thought_signature_validator",
-        },
     )
 
     system_prompt = get_system_prompt_for_mode(mode, interaction_style)
@@ -1590,10 +1578,6 @@ async def run_think_agent(
     litellm_model = _make_litellm_model(
         model=model or REQUESTY_REASONING_MODEL,
         api_key=api_key,
-        extra_body={
-            "thinking_config": {"include_thoughts": True, "thinking_budget": 1000},
-            "thought_signature": "skip_thought_signature_validator",
-        },
     )
 
     think_agent = LlmAgent(

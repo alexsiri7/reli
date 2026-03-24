@@ -248,7 +248,6 @@ async def list_models(
         resp.raise_for_status()
         data = resp.json().get("data", [])
 
-
         # Build pricing lookup from Requesty response
         api_pricing: dict[str, tuple[float, float]] = {}
         for m in data:
@@ -266,12 +265,14 @@ async def list_models(
             if not mid:
                 continue
             pricing = api_pricing.get(mid) or MODEL_PRICING.get(mid)
-            models.append(RequestyModel(
-                id=mid,
-                name=m.get("name"),
-                input_cost_per_million=pricing[0] if pricing else None,
-                output_cost_per_million=pricing[1] if pricing else None,
-            ))
+            models.append(
+                RequestyModel(
+                    id=mid,
+                    name=m.get("name"),
+                    input_cost_per_million=pricing[0] if pricing else None,
+                    output_cost_per_million=pricing[1] if pricing else None,
+                )
+            )
         return models
     except Exception as exc:
         logger.warning("Failed to fetch models from Requesty: %s", exc)

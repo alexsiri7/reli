@@ -5,11 +5,10 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import jwt
-from fastapi.testclient import TestClient
-
 import httpx
+import jwt
 import pytest
+from fastapi.testclient import TestClient
 
 from backend.mcp_server import (
     create_relationship,
@@ -703,7 +702,6 @@ class TestBearerTokenAuth:
 
     def test_cookie_auth_still_works_alongside_token(self, token_client_with_user):
         """Cookie-based JWT auth should still work when token auth is configured."""
-        import jwt
 
         payload = {"sub": "u-test-123", "email": "test@example.com", "exp": 9999999999}
         token = jwt.encode(payload, "test-secret-key", algorithm="HS256")

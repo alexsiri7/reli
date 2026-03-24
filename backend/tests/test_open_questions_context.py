@@ -1,9 +1,6 @@
 """Tests for open_questions surfacing in the context pipeline."""
 
-import json
-
 from backend.pipeline import _parse_thing_open_questions
-
 
 # ---------------------------------------------------------------------------
 # _parse_thing_open_questions

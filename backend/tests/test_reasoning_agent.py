@@ -116,10 +116,13 @@ class TestChatHistoryTool:
         # Rows come back in DESC order, reversed by the tool
         mock_conn.execute.return_value.fetchall.return_value = list(reversed(mock_rows))
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, _, _fetched = _make_reasoning_tools("test-user", session_id="test-session")
             history_fn = tools[1]
             result = history_fn(n=10)
@@ -139,10 +142,13 @@ class TestChatHistoryTool:
             {"role": "user", "content": "budget meeting", "timestamp": "2026-03-22T00:00:00"},
         ]
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, _, _fetched = _make_reasoning_tools("test-user", session_id="test-session")
             history_fn = tools[1]
             result = history_fn(n=5, search_query="budget")
@@ -160,10 +166,13 @@ class TestChatHistoryTool:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
         mock_conn.execute.return_value.fetchall.return_value = []
 
-        with patch("backend.reasoning_agent.db", return_value=mock_db_ctx), \
-             patch("backend.reasoning_agent.upsert_thing"), \
-             patch("backend.reasoning_agent.vs_delete"):
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
             from backend.reasoning_agent import _make_reasoning_tools
+
             tools, _, _fetched = _make_reasoning_tools("test-user", session_id="s")
             history_fn = tools[1]
 
@@ -984,9 +993,8 @@ class TestRunAdkWithThoughtSignatureFallback:
 
         assert "fallback ok" in result
         assert call_count == 3
-        # Verify factory was called with the skip parameter AND the original api_key
+        # Verify factory was called for the fallback retry with the original api_key
         mock_factory.assert_called_once()
-        assert mock_factory.call_args.kwargs["extra_body"]["thought_signature"] == "skip_thought_signature_validator"
         assert mock_factory.call_args.kwargs["api_key"] == "test-api-key"
 
     @pytest.mark.asyncio

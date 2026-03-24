@@ -23,7 +23,6 @@ from .agents import (
     CONTEXT_REFINEMENT_SYSTEM,
     OLLAMA_MODEL,
     REQUESTY_API_KEY,
-    _with_current_date,
     REQUESTY_BASE_URL,
     REQUESTY_MODEL,
     UsageStats,
@@ -52,12 +51,14 @@ def _strip_markdown_fences(text: str) -> str:
 # thought_signature handling.  The openai/ routing through Requesty
 # does NOT preserve thought_signatures, so these models will fail
 # on multi-step tool calls.  See GH #176.
-_GEMINI_THINKING_MODELS = frozenset({
-    "gemini-3-flash-preview",
-    "gemini-3-flash",
-    "gemini-2.5-pro-preview",
-    "gemini-2.5-flash-thinking",
-})
+_GEMINI_THINKING_MODELS = frozenset(
+    {
+        "gemini-3-flash-preview",
+        "gemini-3-flash",
+        "gemini-2.5-pro-preview",
+        "gemini-2.5-flash-thinking",
+    }
+)
 
 
 def _is_thinking_model(model_name: str) -> bool:

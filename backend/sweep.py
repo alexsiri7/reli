@@ -536,7 +536,6 @@ def find_incomplete_things(
     return candidates
 
 
-
 # ---------------------------------------------------------------------------
 # Information gap detection (used by collect_candidates)
 # ---------------------------------------------------------------------------
@@ -1041,6 +1040,7 @@ def collect_candidates(
             + find_stale_things(conn, today, stale_days, user_id=user_id)
             + find_overdue_checkins(conn, today)
             + find_orphan_things(conn, user_id=user_id)
+            + find_incomplete_things(conn)
             + find_completed_projects(conn, user_id=user_id)
             + find_open_questions(conn, user_id=user_id)
             + gap_candidates

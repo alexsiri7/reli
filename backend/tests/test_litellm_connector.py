@@ -8,8 +8,8 @@ import litellm
 import pytest
 
 from backend.llm import (
-    REQUESTY_BASE_URL,
     _RETRY_MAX_ATTEMPTS,
+    REQUESTY_BASE_URL,
     acomplete,
     acomplete_stream,
 )
@@ -194,12 +194,12 @@ def _make_not_found_error() -> litellm.NotFoundError:
 async def test_acomplete_retries_on_404_then_succeeds():
     """acomplete retries transient 404s and returns on success."""
     mock_resp = _fake_response("recovered")
-    mock_call = AsyncMock(
-        side_effect=[_make_not_found_error(), _make_not_found_error(), mock_resp]
-    )
+    mock_call = AsyncMock(side_effect=[_make_not_found_error(), _make_not_found_error(), mock_resp])
 
-    with patch("backend.llm.litellm.acompletion", mock_call), \
-         patch("backend.llm.asyncio.sleep", new_callable=AsyncMock):
+    with (
+        patch("backend.llm.litellm.acompletion", mock_call),
+        patch("backend.llm.asyncio.sleep", new_callable=AsyncMock),
+    ):
         result = await acomplete(
             [{"role": "user", "content": "hi"}],
             "google/gemini-2.5-flash-lite",
@@ -212,12 +212,12 @@ async def test_acomplete_retries_on_404_then_succeeds():
 @pytest.mark.asyncio
 async def test_acomplete_raises_after_max_retries():
     """acomplete raises NotFoundError after exhausting all retries."""
-    mock_call = AsyncMock(
-        side_effect=[_make_not_found_error()] * _RETRY_MAX_ATTEMPTS
-    )
+    mock_call = AsyncMock(side_effect=[_make_not_found_error()] * _RETRY_MAX_ATTEMPTS)
 
-    with patch("backend.llm.litellm.acompletion", mock_call), \
-         patch("backend.llm.asyncio.sleep", new_callable=AsyncMock):
+    with (
+        patch("backend.llm.litellm.acompletion", mock_call),
+        patch("backend.llm.asyncio.sleep", new_callable=AsyncMock),
+    ):
         with pytest.raises(litellm.NotFoundError):
             await acomplete(
                 [{"role": "user", "content": "hi"}],
@@ -238,8 +238,10 @@ async def test_acomplete_does_not_retry_other_errors():
         )
     )
 
-    with patch("backend.llm.litellm.acompletion", mock_call), \
-         patch("backend.llm.asyncio.sleep", new_callable=AsyncMock):
+    with (
+        patch("backend.llm.litellm.acompletion", mock_call),
+        patch("backend.llm.asyncio.sleep", new_callable=AsyncMock),
+    ):
         with pytest.raises(litellm.BadRequestError):
             await acomplete(
                 [{"role": "user", "content": "hi"}],
@@ -267,8 +269,10 @@ async def test_acomplete_stream_retries_on_404_then_succeeds():
             raise _make_not_found_error()
         return _fake_stream()
 
-    with patch("backend.llm.litellm.acompletion", side_effect=_mock_acompletion), \
-         patch("backend.llm.asyncio.sleep", new_callable=AsyncMock):
+    with (
+        patch("backend.llm.litellm.acompletion", side_effect=_mock_acompletion),
+        patch("backend.llm.asyncio.sleep", new_callable=AsyncMock),
+    ):
         collected = []
         async for chunk in acomplete_stream(
             [{"role": "user", "content": "hi"}],
@@ -284,13 +288,10 @@ async def test_acomplete_stream_retries_on_404_then_succeeds():
 async def test_acomplete_retry_uses_exponential_backoff():
     """acomplete uses exponential backoff delays between retries."""
     mock_resp = _fake_response("ok")
-    mock_call = AsyncMock(
-        side_effect=[_make_not_found_error(), _make_not_found_error(), mock_resp]
-    )
+    mock_call = AsyncMock(side_effect=[_make_not_found_error(), _make_not_found_error(), mock_resp])
     mock_sleep = AsyncMock()
 
-    with patch("backend.llm.litellm.acompletion", mock_call), \
-         patch("backend.llm.asyncio.sleep", mock_sleep):
+    with patch("backend.llm.litellm.acompletion", mock_call), patch("backend.llm.asyncio.sleep", mock_sleep):
         await acomplete(
             [{"role": "user", "content": "hi"}],
             "google/gemini-2.5-flash-lite",

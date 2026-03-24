@@ -5,6 +5,9 @@ from datetime import date, timedelta
 
 from backend.database import db
 from backend.sweep import (
+    _generate_template_gap_questions as generate_gap_questions,
+)
+from backend.sweep import (
     collect_candidates,
     find_approaching_dates,
     find_completed_projects,
@@ -18,7 +21,6 @@ from backend.sweep import (
     find_orphan_things,
     find_overdue_checkins,
     find_stale_things,
-    generate_gap_questions,
 )
 
 # ---------------------------------------------------------------------------

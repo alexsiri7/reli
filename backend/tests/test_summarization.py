@@ -1,11 +1,9 @@
 """Tests for the summarization agent and conversation_summaries CRUD."""
 
 import asyncio
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 
 from backend.database import (
     create_summary,
@@ -20,7 +18,6 @@ from backend.summarization_agent import (
     should_summarize,
     summarize_conversation,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
