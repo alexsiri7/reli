@@ -1239,7 +1239,149 @@ _REASONING_PREFERENCES = EvalSet(
                 ),
             ],
         ),
-        # Negative preference — explicit avoidance
+        # Contradiction — existing preference contradicted by user action
+        EvalCase(
+            eval_id="preference-contradiction",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Schedule an 8am call with the client "
+                            "tomorrow. I know it's early but it's "
+                            "the only time that works.",
+                            things_json=_SCHED_PREF,
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Scheduled 8am call; noted "
+                                "contradiction with morning-meeting "
+                                "avoidance preference."
+                            ),
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "client call",
+                                    "8am",
+                                    "scheduling preferences",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Client call",
+                                "type_hint": "event",
+                                "data_json": json.dumps({
+                                    "time": "08:00",
+                                    "day": "2026-03-19",
+                                }),
+                                "surface": False,
+                            }),
+                            _fc("update_thing", {
+                                "thing_id": "pref-100",
+                                "data_json": json.dumps({
+                                    "patterns": [{
+                                        "pattern": (
+                                            "Avoids morning meetings"
+                                        ),
+                                        "confidence": "emerging",
+                                        "observations": 1,
+                                        "first_observed": "2026-03-10",
+                                        "last_observed": "2026-03-10",
+                                        "exceptions": [
+                                            "Booked 8am client call "
+                                            "when no other time available "
+                                            "(2026-03-19)"
+                                        ],
+                                    }],
+                                }),
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _things_ctx(
+                                {
+                                    "id": "pref-100",
+                                    "title": "Scheduling preferences",
+                                    "type_hint": "preference",
+                                }
+                            )),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0005",
+                                "title": "Client call",
+                                "type_hint": "event",
+                            }),
+                            _fr("update_thing", {
+                                "id": "pref-100",
+                                "title": "Scheduling preferences",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Negative preference — explicit avoidance (what user avoids)
+        EvalCase(
+            eval_id="preference-avoidance-explicit",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "I don't work on weekends — please "
+                            "don't schedule anything on Saturday "
+                            "or Sunday."
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Noted work-life boundary: does not "
+                                "work on weekends."
+                            ),
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "weekend",
+                                    "scheduling preferences",
+                                    "work-life",
+                                ]),
+                            }),
+                            _fc("create_thing", {
+                                "title": "Work-life preferences",
+                                "type_hint": "preference",
+                                "data_json": json.dumps({
+                                    "patterns": [{
+                                        "pattern": (
+                                            "Does not work on weekends"
+                                        ),
+                                        "confidence": "strong",
+                                        "observations": 1,
+                                        "first_observed": "2026-03-18",
+                                        "last_observed": "2026-03-18",
+                                    }],
+                                }),
+                                "surface": False,
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _empty_ctx()),
+                            _fr("create_thing", {
+                                "id": "eval-pref-0006",
+                                "title": "Work-life preferences",
+                                "type_hint": "preference",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Negative preference — existing cost optimization (kept for coverage)
         EvalCase(
             eval_id="preference-negative-explicit",
             conversation=[
