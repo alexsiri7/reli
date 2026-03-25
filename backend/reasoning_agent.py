@@ -302,7 +302,64 @@ entity and link them:
 4. create_relationship(from_thing_id=ID_A, to_thing_id=ID_B, relationship_type="husband")
 """
 
-REASONING_AGENT_TOOL_SYSTEM = _TOOL_PREAMBLE + _TOOL_RULES
+_COMM_STYLE_SIGNAL_RULES = """
+Reli Communication Style Signal Detection:
+Alongside regular storage changes, watch for signals about how the user wants
+RELI ITSELF to communicate. These are NOT preferences about the world — they are
+feedback about Reli's own behavior.
+
+**Explicit corrections** (strong signal — act immediately):
+- Direct style instructions: "don't use emoji", "stop using bullet points",
+  "be more concise", "too verbose", "just answer directly", "no preamble",
+  "shorter responses", "don't explain yourself"
+- The user is explicitly telling Reli to change how it responds.
+
+**Implicit corrections** (weaker signal — note as emerging):
+- User says "just" at the start of a request: "just tell me X", "just do Y"
+- User says "simpler", "shorter", "brief", "quick", "tldr" in a follow-up
+- User appears to be correcting Reli's verbosity or style in their next message
+
+When you detect either type:
+1. Search for an existing `reli_communication` preference Thing via fetch_context
+   with search_queries like ["Reli communication style", "how Reli communicates"].
+2. If an existing preference Thing is found (category='reli_communication'), call
+   update_thing to update its data_json, adding or reinforcing the pattern.
+3. If no preference Thing exists, call create_thing with:
+   - title: "How [user's first name or 'the user'] wants Reli to communicate"
+   - type_hint: "preference"
+   - surface: false
+   - data_json: JSON with category="reli_communication" and patterns array
+
+The patterns array follows this structure:
+  {
+    "category": "reli_communication",
+    "patterns": [
+      {
+        "pattern": "<short description of the style rule>",
+        "confidence": "emerging" | "established" | "strong",
+        "observations": <int count>
+      }
+    ]
+  }
+
+Confidence rules:
+- First detection of a pattern: "emerging", observations=1
+- Pattern repeated 2-3 times: "established", observations=N
+- Pattern consistently seen 4+ times: "strong", observations=N
+- Explicit correction → start at "established" (strong signal)
+- Implicit signal → start at "emerging"
+
+When updating an existing preference Thing, increment observations and upgrade
+confidence when the threshold is reached. Never downgrade confidence based on
+silence — only downgrade if the user explicitly contradicts a prior preference
+(e.g., says "actually use emoji now").
+
+Do NOT create a reli_communication preference if:
+- The user is asking about communication in general (not correcting Reli)
+- The message is ambiguous and could be about something else
+"""
+
+REASONING_AGENT_TOOL_SYSTEM = _TOOL_PREAMBLE + _TOOL_RULES + _COMM_STYLE_SIGNAL_RULES
 
 # ---------------------------------------------------------------------------
 # Planning mode system prompt overlay
@@ -365,7 +422,7 @@ After making all needed tool calls, output your final response as JSON:
 }
 """
 
-PLANNING_AGENT_TOOL_SYSTEM = _PLANNING_PREAMBLE + _TOOL_RULES
+PLANNING_AGENT_TOOL_SYSTEM = _PLANNING_PREAMBLE + _TOOL_RULES + _COMM_STYLE_SIGNAL_RULES
 
 # Valid chat modes
 VALID_MODES = {"normal", "planning"}
