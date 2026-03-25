@@ -12,6 +12,11 @@ Examples of patterns detected:
 
 Preferences are stored as Things with type_hint='preference' and structured
 data including confidence (0.0-1.0), supporting evidence, and category.
+
+Communication style preferences (category='reli_communication') are handled
+separately by aggregate_communication_style_patterns(). They use a different
+data schema: a patterns array with text confidence levels and observation counts
+rather than a single float confidence.
 """
 
 from __future__ import annotations
@@ -52,6 +57,17 @@ class PreferenceAggregationResult:
     preferences_created: int = 0
     preferences_updated: int = 0
     preferences: list[dict] = field(default_factory=list)
+    usage: dict = field(default_factory=dict)
+
+
+@dataclass
+class CommStyleAggregationResult:
+    """Result of the communication style aggregation phase."""
+
+    patterns_added: int = 0
+    patterns_reinforced: int = 0
+    patterns_removed: int = 0
+    thing_id: str | None = None  # ID of the reli_communication preference Thing
     usage: dict = field(default_factory=dict)
 
 
@@ -98,7 +114,11 @@ def _fetch_recent_interactions(
 
 
 def _fetch_existing_preferences(conn: sqlite3.Connection, user_id: str = "") -> list[dict]:
-    """Fetch existing preference Things for this user."""
+    """Fetch existing preference Things for this user.
+
+    Excludes reli_communication preferences — those use a different schema
+    and are handled by aggregate_communication_style_patterns().
+    """
     uf_sql, uf_params = user_filter(user_id)
     rows = conn.execute(
         f"""SELECT id, title, data FROM things
@@ -115,6 +135,9 @@ def _fetch_existing_preferences(conn: sqlite3.Connection, user_id: str = "") -> 
                 data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
             except (json.JSONDecodeError, TypeError):
                 pass
+        # Skip reli_communication preferences — they have a different data schema
+        if data.get("category") == "reli_communication":
+            continue
         preferences.append(
             {
                 "id": row["id"],
@@ -123,6 +146,29 @@ def _fetch_existing_preferences(conn: sqlite3.Connection, user_id: str = "") -> 
             }
         )
     return preferences
+
+
+def _fetch_communication_style_things(conn: sqlite3.Connection, user_id: str = "") -> list[dict]:
+    """Fetch existing reli_communication preference Things for this user."""
+    uf_sql, uf_params = user_filter(user_id)
+    rows = conn.execute(
+        f"""SELECT id, title, data FROM things
+           WHERE type_hint = 'preference'
+             AND active = 1{uf_sql}""",
+        uf_params,
+    ).fetchall()
+
+    result = []
+    for row in rows:
+        data = {}
+        if row["data"]:
+            try:
+                data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if data.get("category") == "reli_communication":
+            result.append({"id": row["id"], "title": row["title"], "data": data})
+    return result
 
 
 def _format_interactions_for_llm(
@@ -356,5 +402,289 @@ async def aggregate_preference_patterns(
         preferences_created=created_count,
         preferences_updated=updated_count,
         preferences=result_prefs,
+        usage=usage_stats.to_dict(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Communication style aggregation
+# ---------------------------------------------------------------------------
+
+# Observation thresholds for confidence upgrades
+_CONF_ESTABLISHED_THRESHOLD = 2  # emerging → established
+_CONF_STRONG_THRESHOLD = 4  # established → strong
+
+
+def _comm_confidence_from_observations(observations: int, explicit: bool) -> str:
+    """Derive confidence level from observation count and signal type."""
+    if explicit:
+        # Explicit corrections start at established
+        if observations >= _CONF_STRONG_THRESHOLD:
+            return "strong"
+        return "established"
+    # Implicit signals start at emerging
+    if observations >= _CONF_STRONG_THRESHOLD:
+        return "strong"
+    if observations >= _CONF_ESTABLISHED_THRESHOLD:
+        return "established"
+    return "emerging"
+
+
+COMM_STYLE_AGGREGATION_SYSTEM = """\
+You are the Communication Style Analyst for Reli, an AI personal information manager.
+You analyze recent user interactions to detect signals about how the user wants RELI
+ITSELF to communicate — not how the user communicates with others.
+
+Look for:
+
+**Explicit corrections** (strong signals):
+- Direct style instructions: "don't use emoji", "stop using bullet points",
+  "be more concise", "too verbose", "just answer directly", "no preamble",
+  "shorter responses", "don't explain yourself"
+- The user is explicitly telling Reli to change how it responds.
+
+**Implicit corrections** (weaker signals):
+- User says "just" at the start: "just tell me X", "just do Y"
+- User says "simpler", "shorter", "brief", "quick", "tldr" in a follow-up
+- User appears to be correcting Reli's response length or style
+
+For each detected pattern, describe it briefly (e.g., "avoids emoji",
+"prefers concise responses", "no bullet points").
+
+Also look for contradictions — if the user explicitly reverses a prior preference
+(e.g., "actually use emoji now"), flag that pattern as contradicted.
+
+Respond with ONLY valid JSON (no markdown, no explanation):
+{
+  "detected": [
+    {
+      "pattern": "short description of the style rule",
+      "explicit": true,
+      "signal_count": 2
+    }
+  ],
+  "reinforced": ["exact pattern text that was seen again"],
+  "contradicted": ["exact pattern text that was explicitly reversed"]
+}
+
+Rules:
+- Only include patterns with at least 1 clear signal in the interaction window
+- "explicit" is true only for direct style corrections, false for implicit signals
+- "signal_count" is how many times this signal appeared in the interactions
+- Keep pattern descriptions concise and specific
+- If no communication style signals are found, return {"detected": [], "reinforced": [], "contradicted": []}
+- Do NOT flag patterns about the user's communication with others (only Reli's behavior)
+"""
+
+
+def _format_interactions_for_comm_style(
+    interactions: list[dict],
+    existing_things: list[dict],
+) -> str:
+    """Format interaction history and existing reli_communication Things for the LLM."""
+    lines = [
+        f"Recent interactions ({len(interactions)} messages over the analysis window):",
+        "",
+    ]
+
+    for i, msg in enumerate(interactions):
+        lines.append(f"{i + 1}. [{msg['role']}] {msg['content']}")
+
+    if existing_things:
+        lines.append("")
+        lines.append("Existing communication style patterns (check if reinforced or contradicted):")
+        for thing in existing_things:
+            patterns = thing["data"].get("patterns", [])
+            for p in patterns:
+                conf = p.get("confidence", "emerging")
+                obs = p.get("observations", 1)
+                lines.append(f"  - \"{p['pattern']}\" (confidence={conf}, observations={obs})")
+
+    return "\n".join(lines)
+
+
+async def aggregate_communication_style_patterns(
+    user_id: str = "",
+) -> CommStyleAggregationResult:
+    """Aggregate reli_communication preference patterns from recent interactions.
+
+    Complements the reasoning agent's real-time detection by sweeping the full
+    interaction window and reinforcing or adding patterns in the reli_communication
+    preference Thing.
+
+    If multiple reli_communication Things exist (shouldn't happen normally), they
+    are consolidated into one.
+    """
+    from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
+
+    with db() as conn:
+        interactions = _fetch_recent_interactions(conn, user_id)
+        existing_things = _fetch_communication_style_things(conn, user_id)
+
+    if len(interactions) < MIN_INTERACTIONS:
+        logger.info(
+            "Comm style sweep: only %d interactions (need %d), skipping",
+            len(interactions),
+            MIN_INTERACTIONS,
+        )
+        return CommStyleAggregationResult()
+
+    usage_stats = UsageStats()
+    prompt = _format_interactions_for_comm_style(interactions, existing_things)
+
+    raw = await _chat(
+        messages=[
+            {"role": "system", "content": COMM_STYLE_AGGREGATION_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        model=REQUESTY_REASONING_MODEL,
+        response_format={"type": "json_object"},
+        usage_stats=usage_stats,
+    )
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("Comm style sweep returned invalid JSON: %s", raw[:200])
+        return CommStyleAggregationResult(usage=usage_stats.to_dict())
+
+    detected = parsed.get("detected", [])
+    reinforced_names = set(parsed.get("reinforced", []))
+    contradicted_names = set(parsed.get("contradicted", []))
+
+    if not isinstance(detected, list):
+        detected = []
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Consolidate all existing Things into one canonical set of patterns
+    # (handles the edge case of multiple reli_communication Things)
+    merged_patterns: list[dict] = []
+    primary_thing_id: str | None = None
+
+    for thing in existing_things:
+        if primary_thing_id is None:
+            primary_thing_id = thing["id"]
+        for p in thing["data"].get("patterns", []):
+            if isinstance(p, dict) and p.get("pattern"):
+                merged_patterns.append(
+                    {
+                        "pattern": p["pattern"],
+                        "confidence": p.get("confidence", "emerging"),
+                        "observations": int(p.get("observations", 1)),
+                    }
+                )
+
+    patterns_added = 0
+    patterns_reinforced = 0
+    patterns_removed = 0
+
+    # Remove contradicted patterns
+    contradicted_lower = {c.lower() for c in contradicted_names}
+    before_count = len(merged_patterns)
+    merged_patterns = [
+        p for p in merged_patterns if p["pattern"].lower() not in contradicted_lower
+    ]
+    patterns_removed = before_count - len(merged_patterns)
+
+    # Reinforce existing patterns
+    existing_pattern_map = {p["pattern"].lower(): p for p in merged_patterns}
+    for name in reinforced_names:
+        key = name.lower()
+        if key in existing_pattern_map:
+            ep = existing_pattern_map[key]
+            ep["observations"] += 1
+            ep["confidence"] = _comm_confidence_from_observations(
+                ep["observations"], ep["confidence"] == "established" or ep["confidence"] == "strong"
+            )
+            patterns_reinforced += 1
+
+    # Add newly detected patterns
+    for item in detected:
+        if not isinstance(item, dict):
+            continue
+        pattern_text = str(item.get("pattern", "")).strip()
+        if not pattern_text:
+            continue
+        explicit = bool(item.get("explicit", False))
+        signal_count = max(1, int(item.get("signal_count", 1)))
+
+        key = pattern_text.lower()
+        if key in existing_pattern_map:
+            # Already exists — reinforce it
+            ep = existing_pattern_map[key]
+            ep["observations"] += signal_count
+            ep["confidence"] = _comm_confidence_from_observations(ep["observations"], explicit)
+            patterns_reinforced += 1
+        else:
+            # New pattern
+            new_pattern = {
+                "pattern": pattern_text,
+                "confidence": _comm_confidence_from_observations(signal_count, explicit),
+                "observations": signal_count,
+            }
+            merged_patterns.append(new_pattern)
+            existing_pattern_map[key] = new_pattern
+            patterns_added += 1
+
+    needs_consolidation = len(existing_things) > 1
+    has_changes = patterns_added > 0 or patterns_reinforced > 0 or patterns_removed > 0
+
+    if not has_changes and not needs_consolidation and primary_thing_id is None:
+        # Nothing to do at all
+        return CommStyleAggregationResult(
+            thing_id=primary_thing_id,
+            usage=usage_stats.to_dict(),
+        )
+
+    with db() as conn:
+        if primary_thing_id:
+            if has_changes or needs_consolidation:
+                # Update the primary Thing with merged patterns
+                thing_data = {
+                    "category": "reli_communication",
+                    "patterns": merged_patterns,
+                    "last_sweep": now,
+                }
+                conn.execute(
+                    "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
+                    (json.dumps(thing_data), now, primary_thing_id),
+                )
+
+            # Deactivate any extra reli_communication Things (duplicates)
+            for thing in existing_things[1:]:
+                conn.execute(
+                    "UPDATE things SET active = 0, updated_at = ? WHERE id = ?",
+                    (now, thing["id"]),
+                )
+        else:
+            # No existing Thing — create one if we have patterns
+            if merged_patterns:
+                primary_thing_id = f"pref-{uuid.uuid4().hex[:8]}"
+                thing_data = {
+                    "category": "reli_communication",
+                    "patterns": merged_patterns,
+                    "last_sweep": now,
+                }
+                conn.execute(
+                    """INSERT INTO things
+                       (id, title, type_hint, priority, active, surface, data,
+                        created_at, updated_at, user_id)
+                       VALUES (?, ?, 'preference', 3, 1, 0, ?, ?, ?, ?)""",
+                    (
+                        primary_thing_id,
+                        "How the user wants Reli to communicate",
+                        json.dumps(thing_data),
+                        now,
+                        now,
+                        user_id or None,
+                    ),
+                )
+
+    return CommStyleAggregationResult(
+        patterns_added=patterns_added,
+        patterns_reinforced=patterns_reinforced,
+        patterns_removed=patterns_removed,
+        thing_id=primary_thing_id,
         usage=usage_stats.to_dict(),
     )
