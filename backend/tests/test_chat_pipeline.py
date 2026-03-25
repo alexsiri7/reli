@@ -359,6 +359,12 @@ class TestFetchUserRelationships:
 class TestPreferenceBoost:
     """Preference Things should be boosted to the top of retrieval results."""
 
+    def _insert_thing(self, conn, thing_id: str, title: str, type_hint: str) -> None:
+        conn.execute(
+            "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
+            (thing_id, title, type_hint, 3, 1, 1),
+        )
+
     def test_preference_things_sorted_first(self, patched_db):
         """Preference Things matching the query appear before entity Things."""
         from backend.database import db
@@ -446,3 +452,98 @@ class TestPreferenceBoost:
 
             pref_count = sum(1 for t in results if t["id"] == "pref-1")
             assert pref_count == 1
+
+    def test_preference_ranked_first_via_vector(self, patched_db):
+        """Preference Things from vector search appear first in results."""
+        from backend.database import db
+        from backend.pipeline import _fetch_relevant_things
+
+        with db() as conn:
+            self._insert_thing(conn, "entity-1", "vacation plans", "note")
+            self._insert_thing(conn, "pref-1", "vacation preference", "preference")
+
+        # Simulate vector search: main search returns entity, preference search returns pref
+        def _mock_vector_search(queries, n_results=20, active_only=True, type_hint=None, user_id=""):
+            if type_hint == "preference":
+                return ["pref-1"]
+            return ["entity-1"]
+
+        import unittest.mock as mock
+        with mock.patch("backend.pipeline.vector_count", return_value=5), \
+             mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search):
+            with db() as conn:
+                results = _fetch_relevant_things(
+                    conn,
+                    ["vacation"],
+                    {"active_only": True, "type_hint": None},
+                    user_id="",
+                )
+
+        ids = [t["id"] for t in results]
+        assert "pref-1" in ids
+        assert "entity-1" in ids
+        assert ids.index("pref-1") < ids.index("entity-1")
+
+    def test_no_boost_when_type_hint_is_preference(self, patched_db):
+        """When caller already filters by type_hint='preference', no extra boost search."""
+        from backend.database import db
+        from backend.pipeline import _fetch_relevant_things
+
+        with db() as conn:
+            self._insert_thing(conn, "pref-1", "communication preference", "preference")
+            self._insert_thing(conn, "entity-1", "communication note", "note")
+
+        import unittest.mock as mock
+        boost_called_with_preference = []
+
+        def _mock_vector_search(queries, n_results=20, active_only=True, type_hint=None, user_id=""):
+            boost_called_with_preference.append(type_hint)
+            return ["pref-1"] if type_hint == "preference" else []
+
+        with mock.patch("backend.pipeline.vector_count", return_value=5), \
+             mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search):
+            with db() as conn:
+                _fetch_relevant_things(
+                    conn,
+                    ["communication"],
+                    {"active_only": True, "type_hint": "preference"},
+                    user_id="",
+                )
+
+        # Only one vector search call: the main search (already filtered to preference)
+        # No second boost call
+        assert boost_called_with_preference.count("preference") == 1
+
+    def test_preference_already_in_seed_moved_to_front(self, patched_db):
+        """Preference IDs already in seed_ids are reordered to the front."""
+        from backend.database import db
+        from backend.pipeline import _fetch_relevant_things
+
+        with db() as conn:
+            self._insert_thing(conn, "entity-1", "project update", "note")
+            self._insert_thing(conn, "entity-2", "project update task", "task")
+            self._insert_thing(conn, "pref-1", "project update preference", "preference")
+
+        import unittest.mock as mock
+
+        def _mock_vector_search(queries, n_results=20, active_only=True, type_hint=None, user_id=""):
+            # Main search returns all three; preference boost also returns pref-1
+            if type_hint == "preference":
+                return ["pref-1"]
+            return ["entity-1", "entity-2", "pref-1"]
+
+        with mock.patch("backend.pipeline.vector_count", return_value=5), \
+             mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search):
+            with db() as conn:
+                results = _fetch_relevant_things(
+                    conn,
+                    ["project"],
+                    {"active_only": True, "type_hint": None},
+                    user_id="",
+                )
+
+        ids = [t["id"] for t in results]
+        assert "pref-1" in ids
+        # Preference must come before both entity Things
+        assert ids.index("pref-1") < ids.index("entity-1")
+        assert ids.index("pref-1") < ids.index("entity-2")
