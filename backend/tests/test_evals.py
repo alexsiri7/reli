@@ -105,6 +105,18 @@ async def test_reasoning_agent_preference_detection() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reasoning_agent_personality_adaptation() -> None:
+    """Eval: reasoning agent — personality adaptation (communication style signal detection)."""
+    from google.adk.evaluation import AgentEvaluator
+
+    await AgentEvaluator.evaluate(
+        agent_module="eval.reasoning_agent.agent",
+        eval_dataset_file_path_or_dir=str(EVAL_ROOT / "reasoning_agent" / "personality_adaptation.test.json"),
+        num_runs=1,
+    )
+
+
+@pytest.mark.asyncio
 async def test_reasoning_agent_thought_signature() -> None:
     """Eval: reasoning agent — thought_signature regression for Gemini 3 Flash.
 

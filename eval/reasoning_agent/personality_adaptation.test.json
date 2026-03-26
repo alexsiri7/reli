@@ -1,0 +1,531 @@
+{
+  "eval_set_id": "reasoning-personality-adaptation",
+  "name": "Reasoning Agent — Personality Adaptation (Communication Style)",
+  "description": "Golden dataset: detecting and storing communication style signals from explicit corrections and implicit feedback. Tests that the reasoning agent correctly creates/updates reli_communication preference Things when users signal how they want Reli to communicate.",
+  "eval_cases": [
+    {
+      "eval_id": "comm-style-explicit-new",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-26 (Thursday)\n\n<user_message>\nCan you stop using bullet points? Just use plain text please.\n</user_message>\n\nRelevant Things from database:\n[]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Noted communication style preference: plain text instead of bullet points.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"Reli communication style\", \"how Reli communicates\", \"reli_communication\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "How the user wants Reli to communicate",
+                  "type_hint": "preference",
+                  "data_json": "{\"category\": \"reli_communication\", \"patterns\": [{\"pattern\": \"avoids bullet points, prefers plain text\", \"confidence\": \"established\", \"observations\": 1}]}",
+                  "surface": false
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-comm-0001",
+                  "title": "How the user wants Reli to communicate",
+                  "type_hint": "preference"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "comm-style-explicit-update-existing",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-26 (Thursday)\n\n<user_message>\nYour responses are way too long. Be more concise.\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"comm-pref-100\", \"title\": \"How the user wants Reli to communicate\", \"type_hint\": \"preference\", \"data\": \"{\\\"category\\\": \\\"reli_communication\\\", \\\"patterns\\\": [{\\\"pattern\\\": \\\"avoids emoji\\\", \\\"confidence\\\": \\\"established\\\", \\\"observations\\\": 1}]}\", \"active\": 1}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Noted communication style: user wants more concise responses.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"Reli communication style\", \"how Reli communicates\", \"reli_communication\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "thing_id": "comm-pref-100",
+                  "data_json": "{\"category\": \"reli_communication\", \"patterns\": [{\"pattern\": \"avoids emoji\", \"confidence\": \"established\", \"observations\": 1}, {\"pattern\": \"prefers concise responses\", \"confidence\": \"established\", \"observations\": 1}]}"
+                },
+                "name": "update_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "comm-pref-100",
+                      "title": "How the user wants Reli to communicate",
+                      "type_hint": "preference"
+                    }
+                  ],
+                  "count": 1
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "update_thing",
+                "response": {
+                  "id": "comm-pref-100",
+                  "title": "How the user wants Reli to communicate"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "comm-style-implicit-signal",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-26 (Thursday)\n\n<user_message>\nJust tell me if there's anything urgent I need to deal with today.\n</user_message>\n\nRelevant Things from database:\n[]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"No urgent items found. Noted possible preference for direct, concise responses.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"urgent tasks\", \"Reli communication style\", \"reli_communication\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "How the user wants Reli to communicate",
+                  "type_hint": "preference",
+                  "data_json": "{\"category\": \"reli_communication\", \"patterns\": [{\"pattern\": \"prefers direct, concise responses\", \"confidence\": \"emerging\", \"observations\": 1}]}",
+                  "surface": false
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-comm-0002",
+                  "title": "How the user wants Reli to communicate",
+                  "type_hint": "preference"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "comm-style-reinforcement",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-26 (Thursday)\n\n<user_message>\nI've said this before — no emoji please. It feels unprofessional.\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"comm-pref-200\", \"title\": \"How the user wants Reli to communicate\", \"type_hint\": \"preference\", \"data\": \"{\\\"category\\\": \\\"reli_communication\\\", \\\"patterns\\\": [{\\\"pattern\\\": \\\"avoids emoji\\\", \\\"confidence\\\": \\\"emerging\\\", \\\"observations\\\": 1}]}\", \"active\": 1}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Reinforced no-emoji preference, upgrading confidence to established.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"Reli communication style\", \"emoji\", \"reli_communication\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "thing_id": "comm-pref-200",
+                  "data_json": "{\"category\": \"reli_communication\", \"patterns\": [{\"pattern\": \"avoids emoji\", \"confidence\": \"established\", \"observations\": 2}]}"
+                },
+                "name": "update_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "comm-pref-200",
+                      "title": "How the user wants Reli to communicate",
+                      "type_hint": "preference"
+                    }
+                  ],
+                  "count": 1
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "update_thing",
+                "response": {
+                  "id": "comm-pref-200",
+                  "title": "How the user wants Reli to communicate"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "comm-style-no-false-positive",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-26 (Thursday)\n\n<user_message>\nI need to draft new communication guidelines for my team. Can you create a note capturing our norms: async-first, no meetings before 10am, Slack for quick questions, email for decisions.\n</user_message>\n\nRelevant Things from database:\n[]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Created team communication guidelines note.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"team communication\", \"communication guidelines\", \"team norms\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Team communication guidelines",
+                  "type_hint": "note",
+                  "data_json": "{\"norms\": [\"async-first\", \"no meetings before 10am\", \"Slack for quick questions\", \"email for decisions\"]}",
+                  "surface": false
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-comm-0003",
+                  "title": "Team communication guidelines",
+                  "type_hint": "note"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    }
+  ]
+}
