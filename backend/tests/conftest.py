@@ -16,6 +16,12 @@ os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 # Prevent test errors from polluting production Sentry (re-icdi)
 os.environ.setdefault("SENTRY_DSN", "")
 
+# Force auth to disabled in tests: prevent production .env credentials from
+# being loaded by pydantic-settings when tests run from the rig directory.
+# test_auth.py patches backend.auth.SECRET_KEY directly for auth-enabled tests.
+os.environ["SECRET_KEY"] = ""
+os.environ["RELI_API_TOKEN"] = ""
+
 # ---------------------------------------------------------------------------
 # Database fixtures
 # ---------------------------------------------------------------------------
