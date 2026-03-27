@@ -267,6 +267,20 @@ def _fetch_relevant_things(
                 seen_ids.add(rel_thing["id"])
                 results.append(rel_thing)
 
+    # Retrieval boost: always include active preference Things so the reasoning
+    # agent has user preferences in context without a separate fetch_context call.
+    # Skip when fetch_context is explicitly filtering by a different type_hint.
+    if not type_hint or type_hint == "preference":
+        pref_rows = conn.execute(
+            f"SELECT * FROM things WHERE type_hint = 'preference' AND active = 1{uf_sql}"
+            " ORDER BY updated_at DESC LIMIT 10",
+            uf_params,
+        ).fetchall()
+        for pref in pref_rows:
+            if pref["id"] not in seen_ids:
+                seen_ids.add(pref["id"])
+                results.append(_parse_thing_open_questions(dict(pref)))
+
     vc = vector_count()
     use_vector = vc >= VECTOR_SEARCH_THRESHOLD
     sql_thing_count = _sql_things_count(conn)

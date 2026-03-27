@@ -272,6 +272,26 @@ entity and link them:
    data_json='{"notes": "User\\'s sister\\'s husband"}')  → returns ID_B
 3. create_relationship(from_thing_id=user_id, to_thing_id=ID_A, relationship_type="sister")
 4. create_relationship(from_thing_id=ID_A, to_thing_id=ID_B, relationship_type="husband")
+
+Preference Detection:
+After addressing the user's immediate request, reflect on whether this interaction
+revealed a user preference worth recording:
+- Explicit: "I prefer X", "I don't like Y", "I always do Z", "never schedule me before 9am"
+- Implicit: user behavior clearly signaling a consistent pattern or avoidance
+
+If a preference is evident:
+1. Call fetch_context(type_hint="preference") to check existing preference Things
+2. Matching preference found → update_thing: increase confidence, append to evidence
+   Pass the full updated data: data_json='{"confidence": 0.5, "evidence": ["obs1", "obs2"]}'
+3. New preference → create_thing:
+   - type_hint="preference", surface=false
+   - data_json='{"confidence": 0.1, "evidence": ["<what you observed>"], "category": "<category>"}'
+   - Categories: communication, scheduling, productivity, social, spending, other
+
+Confidence levels: 0.1 (first observation), 0.5 (2-3 observations), 0.8 (4+ observations)
+
+Only record preferences when clearly evident. A single casual remark is not enough.
+Explicit statements and repeated behavioral signals qualify. Do not fabricate.
 """
 
 REASONING_AGENT_TOOL_SYSTEM = _TOOL_PREAMBLE + _TOOL_RULES
@@ -418,7 +438,7 @@ def get_system_prompt_for_mode(mode: str, interaction_style: str = "auto") -> st
 # ---------------------------------------------------------------------------
 
 # Entity type_hints that default to surface=false
-_ENTITY_TYPES = {"person", "place", "event", "concept", "reference"}
+_ENTITY_TYPES = {"person", "place", "event", "concept", "reference", "preference"}
 
 
 def _make_reasoning_tools(
@@ -619,7 +639,7 @@ def _make_reasoning_tools(
         Args:
             title: The Thing's title (required).
             type_hint: Category — task, note, idea, project, goal, journal,
-                       person, place, event, concept, reference.
+                       person, place, event, concept, reference, preference.
             priority: 1 (highest) to 5 (lowest), default 3.
             checkin_date: ISO-8601 date string for check-in reminder, or empty.
             surface: Whether to show in sidebar. Entity types (person, place,
@@ -1446,8 +1466,9 @@ def _make_think_tools(
                 e.g. '["uuid-1", "uuid-2"]'. Use when you know exact IDs.
             active_only: Only return active Things (default true). Set false to
                 include completed/archived items.
-            type_hint: Filter by type (task, note, person, project, etc.),
-                or empty for all types.
+            type_hint: Filter by type (task, note, person, project, preference, etc.),
+                or empty for all types. Use type_hint="preference" to fetch
+                existing preference Things when detecting user preferences.
 
         Returns:
             Dict with 'things' (list of Thing dicts), 'relationships' (list of

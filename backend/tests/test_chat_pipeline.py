@@ -346,3 +346,108 @@ class TestFetchUserRelationships:
             # Recently referenced should come first
             assert results[0]["id"] == "task-new"
             assert results[1]["id"] == "task-old"
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for preference retrieval boost in _fetch_relevant_things
+# ---------------------------------------------------------------------------
+
+
+class TestPreferenceRetrievalBoost:
+    """Preference Things are always included in _fetch_relevant_things results."""
+
+    def test_preferences_always_included(self, patched_db):
+        """Active preference Things appear in results even without a matching query."""
+        import json
+
+        from backend.database import db
+        from backend.pipeline import _fetch_relevant_things
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface, data, created_at, updated_at)"
+                " VALUES (?, ?, 'preference', 3, 1, 0, ?, datetime('now'), datetime('now'))",
+                ("pref-1", "Prefers concise answers",
+                 json.dumps({"confidence": 0.8, "evidence": ["user asked for shorter replies"], "category": "communication"})),
+            )
+
+        with db() as conn:
+            results = _fetch_relevant_things(conn, ["unrelated query"], {"active_only": True})
+
+        ids = [r["id"] for r in results]
+        assert "pref-1" in ids
+
+    def test_inactive_preferences_excluded(self, patched_db):
+        """Inactive (completed) preference Things are not included in the boost."""
+        import json
+
+        from backend.database import db
+        from backend.pipeline import _fetch_relevant_things
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface, data, created_at, updated_at)"
+                " VALUES (?, ?, 'preference', 3, 0, 0, ?, datetime('now'), datetime('now'))",
+                ("pref-inactive", "Old Preference",
+                 json.dumps({"confidence": 0.1, "evidence": [], "category": "other"})),
+            )
+
+        with db() as conn:
+            results = _fetch_relevant_things(conn, ["test"], {"active_only": True})
+
+        ids = [r["id"] for r in results]
+        assert "pref-inactive" not in ids
+
+    def test_preference_type_hint_filter_includes_preferences(self, patched_db):
+        """When type_hint='preference' filter is used, preferences are still returned."""
+        import json
+
+        from backend.database import db
+        from backend.pipeline import _fetch_relevant_things
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface, data, created_at, updated_at)"
+                " VALUES (?, ?, 'preference', 3, 1, 0, ?, datetime('now'), datetime('now'))",
+                ("pref-2", "Avoids early meetings",
+                 json.dumps({"confidence": 0.5, "evidence": ["reschedules 9am slots"], "category": "scheduling"})),
+            )
+
+        with db() as conn:
+            results = _fetch_relevant_things(
+                conn, ["meetings"], {"active_only": True, "type_hint": "preference"}
+            )
+
+        ids = [r["id"] for r in results]
+        assert "pref-2" in ids
+
+    def test_no_type_hint_always_includes_preferences(self, patched_db):
+        """Preferences appear in results even with an unrelated query when no type filter is set."""
+        import json
+
+        from backend.database import db
+        from backend.pipeline import _fetch_relevant_things
+
+        with db() as conn:
+            # Insert many non-preference Things so fallback padding doesn't kick in
+            for i in range(10):
+                conn.execute(
+                    "INSERT INTO things (id, title, type_hint, priority, active, surface, created_at, updated_at)"
+                    " VALUES (?, ?, 'task', 3, 1, 1, datetime('now'), datetime('now'))",
+                    (f"task-pad-{i}", f"Task number {i}"),
+                )
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface, data, created_at, updated_at)"
+                " VALUES (?, ?, 'preference', 3, 1, 0, ?, datetime('now'), datetime('now'))",
+                ("pref-boost", "Likes bullet points",
+                 json.dumps({"confidence": 0.3, "evidence": [], "category": "communication"})),
+            )
+
+        with db() as conn:
+            results = _fetch_relevant_things(
+                conn, ["completely unrelated xyz123"], {"active_only": True}
+            )
+
+        ids = [r["id"] for r in results]
+        # Preference should appear via boost even though query doesn't match it
+        assert "pref-boost" in ids
