@@ -1,7 +1,7 @@
 """Auto-connect sweep — find semantically similar but unconnected Things.
 
-Phase 1 (Vector): Query ChromaDB for each active Thing, identify pairs that
-are semantically similar but have no existing relationship.
+Phase 1 (Vector): Query the vector store for each active Thing, identify pairs
+that are semantically similar but have no existing relationship.
 
 Phase 2 (LLM): Validate candidate pairs and suggest relationship types.
 
@@ -16,14 +16,15 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
 
+from .config import settings
 from .database import db
 
 logger = logging.getLogger(__name__)
 
 # Minimum similarity score (cosine distance) to consider a pair
-# ChromaDB returns distances where lower = more similar (cosine)
-# We filter by distance < threshold
+# Lower = more similar (cosine distance)
 MAX_DISTANCE = 0.35
 
 # Maximum number of candidate pairs to send to LLM
@@ -53,15 +54,142 @@ class ConnectionSweepResult:
     usage: dict = field(default_factory=dict)
 
 
-def find_connection_candidates(
-    user_id: str = "",
-    max_per_thing: int = 5,
-) -> list[ConnectionCandidate]:
-    """Find semantically similar but unconnected Things using vector search.
+def _build_exclusion_sets_sqlite(
+    conn: Any, user_id: str
+) -> tuple[list[dict], dict[str, dict], set[tuple[str, str]], set[tuple[str, str]], set[tuple[str, str]]]:
+    """Fetch things and exclusion sets from SQLite."""
+    if user_id:
+        things = conn.execute(
+            "SELECT id, title, type_hint FROM things WHERE active = 1 AND (user_id = ? OR user_id IS NULL)",
+            (user_id,),
+        ).fetchall()
+    else:
+        things = conn.execute(
+            "SELECT id, title, type_hint FROM things WHERE active = 1"
+        ).fetchall()
 
-    For each active Thing, queries ChromaDB for similar Things and filters out
-    pairs that already have a relationship or an existing suggestion.
-    """
+    rel_rows = conn.execute(
+        "SELECT from_thing_id, to_thing_id FROM thing_relationships"
+    ).fetchall()
+    existing_rels: set[tuple[str, str]] = set()
+    for row in rel_rows:
+        existing_rels.add((row["from_thing_id"], row["to_thing_id"]))
+        existing_rels.add((row["to_thing_id"], row["from_thing_id"]))
+
+    sugg_rows = conn.execute(
+        "SELECT from_thing_id, to_thing_id FROM connection_suggestions WHERE status IN ('pending', 'deferred')"
+    ).fetchall()
+    existing_suggestions: set[tuple[str, str]] = set()
+    for row in sugg_rows:
+        existing_suggestions.add((row["from_thing_id"], row["to_thing_id"]))
+        existing_suggestions.add((row["to_thing_id"], row["from_thing_id"]))
+
+    parent_pairs: set[tuple[str, str]] = set()
+    parent_rows = conn.execute(
+        "SELECT id, parent_id FROM things WHERE parent_id IS NOT NULL"
+    ).fetchall()
+    for row in parent_rows:
+        parent_pairs.add((row["id"], row["parent_id"]))
+        parent_pairs.add((row["parent_id"], row["id"]))
+
+    thing_list = [dict(t) for t in things]
+    thing_map = {t["id"]: t for t in thing_list}
+    return thing_list, thing_map, existing_rels, existing_suggestions, parent_pairs
+
+
+def _build_exclusion_sets_supabase(
+    client: Any, user_id: str
+) -> tuple[list[dict], dict[str, dict], set[tuple[str, str]], set[tuple[str, str]], set[tuple[str, str]]]:
+    """Fetch things and exclusion sets from Supabase."""
+    query = client.table("things").select("id, title, type_hint").eq("active", True)
+    if user_id:
+        query = query.or_(f"user_id.eq.{user_id},user_id.is.null")
+    things_resp = query.execute()
+    thing_list = things_resp.data
+
+    rel_resp = client.table("thing_relationships").select("from_thing_id, to_thing_id").execute()
+    existing_rels: set[tuple[str, str]] = set()
+    for row in rel_resp.data:
+        existing_rels.add((row["from_thing_id"], row["to_thing_id"]))
+        existing_rels.add((row["to_thing_id"], row["from_thing_id"]))
+
+    sugg_resp = (
+        client.table("connection_suggestions")
+        .select("from_thing_id, to_thing_id")
+        .in_("status", ["pending", "deferred"])
+        .execute()
+    )
+    existing_suggestions: set[tuple[str, str]] = set()
+    for row in sugg_resp.data:
+        existing_suggestions.add((row["from_thing_id"], row["to_thing_id"]))
+        existing_suggestions.add((row["to_thing_id"], row["from_thing_id"]))
+
+    parent_resp = (
+        client.table("things")
+        .select("id, parent_id")
+        .not_.is_("parent_id", "null")
+        .execute()
+    )
+    parent_pairs: set[tuple[str, str]] = set()
+    for row in parent_resp.data:
+        parent_pairs.add((row["id"], row["parent_id"]))
+        parent_pairs.add((row["parent_id"], row["id"]))
+
+    thing_map = {t["id"]: t for t in thing_list}
+    return thing_list, thing_map, existing_rels, existing_suggestions, parent_pairs
+
+
+def _filter_candidates(
+    thing_id: str,
+    thing_title: str,
+    thing_type_hint: str | None,
+    matches: list[tuple[str, float]],
+    thing_map: dict[str, dict],
+    existing_rels: set[tuple[str, str]],
+    existing_suggestions: set[tuple[str, str]],
+    parent_pairs: set[tuple[str, str]],
+    seen_pairs: set[tuple[str, str]],
+    candidates: list[ConnectionCandidate],
+) -> None:
+    """Filter matches and append valid candidates."""
+    for match_id, distance in matches:
+        if match_id == thing_id:
+            continue
+
+        pair = (min(thing_id, match_id), max(thing_id, match_id))
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+
+        if pair in existing_rels or (pair[1], pair[0]) in existing_rels:
+            continue
+        if pair in existing_suggestions or (pair[1], pair[0]) in existing_suggestions:
+            continue
+        if pair in parent_pairs or (pair[1], pair[0]) in parent_pairs:
+            continue
+
+        if distance > MAX_DISTANCE:
+            continue
+
+        match_thing = thing_map.get(match_id)
+        if not match_thing:
+            continue
+
+        candidates.append(
+            ConnectionCandidate(
+                from_thing_id=thing_id,
+                from_thing_title=thing_title,
+                to_thing_id=match_id,
+                to_thing_title=match_thing["title"],
+                distance=distance,
+                from_type_hint=thing_type_hint,
+                to_type_hint=match_thing.get("type_hint"),
+            )
+        )
+
+
+def _find_candidates_chroma(user_id: str, max_per_thing: int) -> list[ConnectionCandidate]:
+    """Find connection candidates using ChromaDB."""
     from .vector_store import _get_collection
 
     try:
@@ -73,40 +201,11 @@ def find_connection_candidates(
         logger.error("ChromaDB unavailable for connection sweep: %s", exc)
         return []
 
-    # Get all active Things
     with db() as conn:
-        if user_id:
-            things = conn.execute(
-                "SELECT id, title, type_hint FROM things WHERE active = 1 AND (user_id = ? OR user_id IS NULL)",
-                (user_id,),
-            ).fetchall()
-        else:
-            things = conn.execute("SELECT id, title, type_hint FROM things WHERE active = 1").fetchall()
+        thing_list, thing_map, existing_rels, existing_suggestions, parent_pairs = (
+            _build_exclusion_sets_sqlite(conn, user_id)
+        )
 
-        # Build set of existing relationships (both directions)
-        rel_rows = conn.execute("SELECT from_thing_id, to_thing_id FROM thing_relationships").fetchall()
-        existing_rels: set[tuple[str, str]] = set()
-        for row in rel_rows:
-            existing_rels.add((row["from_thing_id"], row["to_thing_id"]))
-            existing_rels.add((row["to_thing_id"], row["from_thing_id"]))
-
-        # Build set of existing pending/deferred suggestions
-        sugg_rows = conn.execute(
-            "SELECT from_thing_id, to_thing_id FROM connection_suggestions WHERE status IN ('pending', 'deferred')"
-        ).fetchall()
-        existing_suggestions: set[tuple[str, str]] = set()
-        for row in sugg_rows:
-            existing_suggestions.add((row["from_thing_id"], row["to_thing_id"]))
-            existing_suggestions.add((row["to_thing_id"], row["from_thing_id"]))
-
-        # Also exclude parent-child relationships
-        parent_pairs: set[tuple[str, str]] = set()
-        parent_rows = conn.execute("SELECT id, parent_id FROM things WHERE parent_id IS NOT NULL").fetchall()
-        for row in parent_rows:
-            parent_pairs.add((row["id"], row["parent_id"]))
-            parent_pairs.add((row["parent_id"], row["id"]))
-
-    thing_map = {dict(t)["id"]: dict(t) for t in things}
     seen_pairs: set[tuple[str, str]] = set()
     candidates: list[ConnectionCandidate] = []
 
@@ -121,7 +220,7 @@ def find_connection_candidates(
     elif len(filters) > 1:
         where = {"$and": filters}
 
-    for thing in things:
+    for thing in thing_list:
         thing_id = thing["id"]
         thing_title = thing["title"]
 
@@ -138,49 +237,87 @@ def find_connection_candidates(
         if not results["ids"] or not results["ids"][0]:
             continue
 
+        matches: list[tuple[str, float]] = []
         for i, match_id in enumerate(results["ids"][0]):
-            if match_id == thing_id:
-                continue
-
-            # Normalize pair order to avoid duplicates
-            pair = (min(thing_id, match_id), max(thing_id, match_id))
-            if pair in seen_pairs:
-                continue
-            seen_pairs.add(pair)
-
-            # Skip if already connected
-            if pair in existing_rels or (pair[1], pair[0]) in existing_rels:
-                continue
-            if pair in existing_suggestions or (pair[1], pair[0]) in existing_suggestions:
-                continue
-            if pair in parent_pairs or (pair[1], pair[0]) in parent_pairs:
-                continue
-
-            # Check distance threshold
             distances = results.get("distances")
             distance = distances[0][i] if distances else 1.0
-            if distance > MAX_DISTANCE:
-                continue
+            matches.append((match_id, distance))
 
-            match_thing = thing_map.get(match_id)
-            if not match_thing:
-                continue
+        _filter_candidates(
+            thing_id, thing_title, thing.get("type_hint"),
+            matches, thing_map, existing_rels, existing_suggestions,
+            parent_pairs, seen_pairs, candidates,
+        )
 
-            candidates.append(
-                ConnectionCandidate(
-                    from_thing_id=thing_id,
-                    from_thing_title=thing_title,
-                    to_thing_id=match_id,
-                    to_thing_title=match_thing["title"],
-                    distance=distance,
-                    from_type_hint=thing["type_hint"],
-                    to_type_hint=match_thing.get("type_hint"),
-                )
-            )
-
-    # Sort by distance (most similar first)
     candidates.sort(key=lambda c: c.distance)
     return candidates[:MAX_LLM_CANDIDATES]
+
+
+def _find_candidates_supabase(user_id: str, max_per_thing: int) -> list[ConnectionCandidate]:
+    """Find connection candidates using pgvector via Supabase."""
+    from .database_supabase import get_client
+
+    client = get_client()
+
+    # Check minimum embedding count
+    count_resp = (
+        client.table("things")
+        .select("id", count="exact")  # type: ignore[arg-type]
+        .not_.is_("embedding", "null")
+        .eq("active", True)
+        .execute()
+    )
+    if (count_resp.count or 0) < 2:
+        return []
+
+    thing_list, thing_map, existing_rels, existing_suggestions, parent_pairs = (
+        _build_exclusion_sets_supabase(client, user_id)
+    )
+
+    seen_pairs: set[tuple[str, str]] = set()
+    candidates: list[ConnectionCandidate] = []
+
+    for thing in thing_list:
+        thing_id = thing["id"]
+        thing_title = thing["title"]
+
+        try:
+            resp = client.rpc(
+                "match_things_by_id",
+                {
+                    "thing_id": thing_id,
+                    "match_count": max_per_thing + 1,
+                    "filter_active": True,
+                    "filter_user_id": user_id or None,
+                },
+            ).execute()
+        except Exception as exc:
+            logger.debug("pgvector query failed for thing %s: %s", thing_id, exc)
+            continue
+
+        rpc_data: list[dict[str, Any]] = resp.data  # type: ignore[assignment]
+        matches: list[tuple[str, float]] = [
+            (row["id"], row["distance"]) for row in rpc_data
+        ]
+
+        _filter_candidates(
+            thing_id, thing_title, thing.get("type_hint"),
+            matches, thing_map, existing_rels, existing_suggestions,
+            parent_pairs, seen_pairs, candidates,
+        )
+
+    candidates.sort(key=lambda c: c.distance)
+    return candidates[:MAX_LLM_CANDIDATES]
+
+
+def find_connection_candidates(
+    user_id: str = "",
+    max_per_thing: int = 5,
+) -> list[ConnectionCandidate]:
+    """Find semantically similar but unconnected Things using vector search."""
+    if settings.STORAGE_BACKEND == "supabase":
+        return _find_candidates_supabase(user_id, max_per_thing)
+    return _find_candidates_chroma(user_id, max_per_thing)
 
 
 CONNECTION_VALIDATION_SYSTEM = """\
@@ -233,8 +370,8 @@ async def validate_candidates(
         from_type = f" [{c.from_type_hint}]" if c.from_type_hint else ""
         to_type = f" [{c.to_type_hint}]" if c.to_type_hint else ""
         lines.append(
-            f'{i}. "{c.from_thing_title}"{from_type} (id={c.from_thing_id}) '
-            f'<-> "{c.to_thing_title}"{to_type} (id={c.to_thing_id}) '
+            f"{i}. \"{c.from_thing_title}\"{from_type} (id={c.from_thing_id}) "
+            f"<-> \"{c.to_thing_title}\"{to_type} (id={c.to_thing_id}) "
             f"[similarity={1 - c.distance:.2f}]"
         )
     prompt = "\n".join(lines)
@@ -263,7 +400,9 @@ async def validate_candidates(
         raw_connections = []
 
     # Build lookup of valid candidate pairs
-    valid_pairs = {(c.from_thing_id, c.to_thing_id) for c in candidates} | {
+    valid_pairs = {
+        (c.from_thing_id, c.to_thing_id) for c in candidates
+    } | {
         (c.to_thing_id, c.from_thing_id) for c in candidates
     }
 
@@ -303,26 +442,43 @@ async def validate_candidates(
             sugg_id = f"cs-{uuid.uuid4().hex[:8]}"
 
             # Determine user_id from one of the things
-            user_row = conn.execute("SELECT user_id FROM things WHERE id = ?", (from_id,)).fetchone()
-            user_id = user_row["user_id"] if user_row else None
+            if settings.STORAGE_BACKEND == "supabase":
+                user_row = conn.table("things").select("user_id").eq("id", from_id).limit(1).execute()  # type: ignore[union-attr]
+                sugg_user_id = user_row.data[0]["user_id"] if user_row.data else None
+            else:
+                user_row = conn.execute(  # type: ignore[union-attr]
+                    "SELECT user_id FROM things WHERE id = ?", (from_id,)
+                ).fetchone()
+                sugg_user_id = user_row["user_id"] if user_row else None
 
-            conn.execute(
-                """INSERT INTO connection_suggestions
-                   (id, from_thing_id, to_thing_id, suggested_relationship_type,
-                    reason, confidence, status, created_at, user_id)
-                   VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)""",
-                (sugg_id, from_id, to_id, rel_type, reason, confidence, now, user_id),
-            )
-            created.append(
-                {
+            if settings.STORAGE_BACKEND == "supabase":
+                conn.table("connection_suggestions").insert({  # type: ignore[union-attr]
                     "id": sugg_id,
                     "from_thing_id": from_id,
                     "to_thing_id": to_id,
                     "suggested_relationship_type": rel_type,
                     "reason": reason,
                     "confidence": confidence,
-                }
-            )
+                    "status": "pending",
+                    "created_at": now,
+                    "user_id": sugg_user_id,
+                }).execute()
+            else:
+                conn.execute(  # type: ignore[union-attr]
+                    """INSERT INTO connection_suggestions
+                       (id, from_thing_id, to_thing_id, suggested_relationship_type,
+                        reason, confidence, status, created_at, user_id)
+                       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)""",
+                    (sugg_id, from_id, to_id, rel_type, reason, confidence, now, sugg_user_id),
+                )
+            created.append({
+                "id": sugg_id,
+                "from_thing_id": from_id,
+                "to_thing_id": to_id,
+                "suggested_relationship_type": rel_type,
+                "reason": reason,
+                "confidence": confidence,
+            })
 
     return ConnectionSweepResult(
         candidates_found=len(candidates),

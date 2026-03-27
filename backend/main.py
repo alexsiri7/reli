@@ -243,7 +243,8 @@ def health() -> dict[str, str]:
 
 @app.get("/api/health", tags=["health"])
 def health_detailed() -> dict:
-    """Detailed health check with DB, ChromaDB, and performance metrics."""
+    """Detailed health check with DB, vector store, and performance metrics."""
+    from .config import settings as _settings
     from .database import get_connection
     from .vector_store import vector_count
 
@@ -251,29 +252,37 @@ def health_detailed() -> dict:
     db_ok = False
     try:
         conn = get_connection()
-        conn.execute("SELECT 1")
-        conn.close()
+        if _settings.STORAGE_BACKEND == "supabase":
+            conn.table("things").select("id", count="exact").limit(0).execute()
+        else:
+            conn.execute("SELECT 1")
+            conn.close()
         db_ok = True
     except Exception:
         pass
 
-    # ChromaDB status
-    chroma_ok = False
+    # Vector store status
+    vector_ok = False
     vec_count = 0
     try:
         vec_count = vector_count()
-        chroma_ok = True
+        vector_ok = True
     except Exception:
         pass
 
     avg_ms = metrics_store.avg_response_time_ms()
+
+    backend = _settings.STORAGE_BACKEND
+    vector_backend = "pgvector" if backend == "supabase" else "chromadb"
 
     return {
         "status": "ok" if db_ok else "degraded",
         "service": "reli",
         "uptime_seconds": round(metrics_store.uptime_seconds(), 1),
         "db_connected": db_ok,
-        "chromadb_connected": chroma_ok,
+        "storage_backend": backend,
+        "vector_backend": vector_backend,
+        "chromadb_connected": vector_ok,
         "vector_count": vec_count,
         "avg_response_time_ms": round(avg_ms, 2) if avg_ms is not None else None,
         "recent_request_count": metrics_store.request_count(),
