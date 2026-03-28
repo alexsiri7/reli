@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from './store'
 import { Sidebar } from './components/Sidebar'
@@ -10,8 +10,13 @@ import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { SettingsPanel } from './components/SettingsPanel'
 import { FeedbackDialog } from './components/FeedbackDialog'
+import { CommandPalette } from './components/CommandPalette'
+import { MobileFAB } from './components/MobileFAB'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
 function App() {
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
   const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
@@ -40,6 +45,8 @@ function App() {
   )
 
   const { newVersionAvailable, dismiss, refresh } = useVersionCheck()
+
+  useKeyboardShortcuts({ onOpenPalette: () => setPaletteOpen(true) })
 
   // Check auth on mount
   useEffect(() => {
@@ -165,6 +172,8 @@ function App() {
           Chat
         </button>
       </nav>
+      <MobileFAB onOpenPalette={() => setPaletteOpen(true)} />
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       {settingsOpen && <SettingsPanel />}
       {feedbackOpen && <FeedbackDialog />}
     </div>
