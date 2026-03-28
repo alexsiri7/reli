@@ -49,18 +49,7 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"groceries\", \"buy groceries\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
-                  "title": "Buy groceries",
-                  "type_hint": "task",
-                  "priority": 3
+                  "title": "Buy groceries"
                 },
                 "name": "create_thing",
                 "partial_args": null,
@@ -68,18 +57,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [],
-                  "relationships": [],
-                  "count": 0
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -152,18 +129,7 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"dentist\", \"appointment\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
-                  "title": "Dentist appointment",
-                  "type_hint": "event",
-                  "data_json": "{\"date\": \"2026-04-05\", \"time\": \"14:00\", \"notes\": \"Dentist appointment\"}"
+                  "title": "Dentist appointment"
                 },
                 "name": "create_thing",
                 "partial_args": null,
@@ -171,18 +137,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [],
-                  "relationships": [],
-                  "count": 0
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -255,18 +209,7 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"Sarah\", \"budget project\", \"meeting\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
-                  "title": "Sarah",
-                  "type_hint": "person",
-                  "surface": false
+                  "title": "Sarah"
                 },
                 "name": "create_thing",
                 "partial_args": null,
@@ -275,8 +218,7 @@
               {
                 "id": null,
                 "args": {
-                  "title": "Meeting with Sarah about budget project",
-                  "type_hint": "event"
+                  "title": "Meeting with Sarah about budget project"
                 },
                 "name": "create_thing",
                 "partial_args": null,
@@ -295,18 +237,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [],
-                  "relationships": [],
-                  "count": 0
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,
