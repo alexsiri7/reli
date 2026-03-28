@@ -1,0 +1,121 @@
+name: Eval CI
+
+# Runs eval regression checks when prompt/agent files change.
+# Only fires on PRs — these tests cost ~$0.05-0.20 per run (live LLM calls).
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'backend/agents.py'
+      - 'backend/reasoning_agent.py'
+      - 'backend/response_agent.py'
+      - 'backend/context_agent.py'
+      - 'eval/**'
+      - 'backend/tests/test_evals.py'
+
+jobs:
+  evals:
+    name: Eval regression check
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run evals
+        id: run_evals
+        env:
+          REQUESTY_API_KEY: ${{ secrets.REQUESTY_API_KEY }}
+          GOOGLE_GENAI_USE_VERTEXAI: "false"
+        run: |
+          set +e
+          RUN_EVALS=1 python3 -m pytest backend/tests/test_evals.py \
+            -v --tb=short --no-header \
+            2>&1 | tee /tmp/eval_output.txt
+          echo "EVAL_RC=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+
+      - name: Post results as PR comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let output = '';
+            try {
+              output = fs.readFileSync('/tmp/eval_output.txt', 'utf8');
+            } catch (e) {
+              output = '(no output captured)';
+            }
+
+            // Parse PASSED/FAILED lines from pytest -v output
+            const results = [];
+            for (const line of output.split('\n')) {
+              // e.g. "backend/tests/test_evals.py::test_reasoning_agent_create_thing PASSED"
+              const m = line.match(/::(\w+)\s+(PASSED|FAILED)/);
+              if (m) results.push({ name: m[1], status: m[2] });
+            }
+
+            // Extract score from failure messages (avg_score line in assertion)
+            const scoreMap = {};
+            const scoreRe = /Tool name trajectory score ([\d.]+) below threshold/g;
+            const nameRe = /FAILED backend\/tests\/test_evals\.py::(\w+)/g;
+            let sm, nm;
+            const failedNames = [];
+            while ((nm = nameRe.exec(output)) !== null) failedNames.push(nm[1]);
+            let si = 0;
+            while ((sm = scoreRe.exec(output)) !== null) {
+              if (si < failedNames.length) scoreMap[failedNames[si++]] = parseFloat(sm[1]);
+            }
+
+            const passed = results.filter(r => r.status === 'PASSED').length;
+            const total = results.length;
+            const allPassed = passed === total;
+
+            let body = `## Eval Results ${allPassed ? '✅' : '❌'}\n\n`;
+            if (results.length > 0) {
+              body += '| Eval Case | Score |\n|-----------|-------|\n';
+              for (const r of results) {
+                const icon = r.status === 'PASSED' ? '✅' : '❌';
+                const score = r.status === 'PASSED'
+                  ? '1.00'
+                  : (scoreMap[r.name] !== undefined ? scoreMap[r.name].toFixed(2) : 'n/a');
+                body += `| \`${r.name}\` | ${icon} ${score} |\n`;
+              }
+              body += `\n**${passed}/${total} eval cases passed**`;
+            } else {
+              body += '⚠️ No eval results parsed — see raw output below.\n\n';
+              body += '<details><summary>Raw pytest output</summary>\n\n```\n';
+              body += output.slice(0, 5000);
+              body += '\n```\n</details>';
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      - name: Fail on regression
+        if: always()
+        run: |
+          if [ "${EVAL_RC:-0}" != "0" ]; then
+            echo "Eval regressions detected — merge blocked."
+            exit 1
+          fi
