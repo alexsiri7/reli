@@ -185,7 +185,7 @@ class TestMcpMetadata:
     def test_has_all_tools(self) -> None:
         tool_names = {t.name for t in mcp._tool_manager.list_tools()}
         expected = {
-            "search_things",
+            "fetch_context",
             "get_thing",
             "create_thing",
             "update_thing",

@@ -313,6 +313,7 @@ def update_thing(
     surface: bool | None = None,
     data_json: str = "",
     open_questions_json: str = "",
+    user_id: str = "",
 ) -> dict[str, Any]:
     """Update an existing Thing's fields.
 
@@ -387,7 +388,7 @@ def update_thing(
 # ---------------------------------------------------------------------------
 
 
-def delete_thing(thing_id: str) -> dict[str, Any]:
+def delete_thing(thing_id: str, user_id: str = "") -> dict[str, Any]:
     """Delete a Thing by ID (hard delete).
 
     Returns confirmation dict with the deleted Thing ID.
@@ -551,6 +552,7 @@ def create_relationship(
     from_thing_id: str,
     to_thing_id: str,
     relationship_type: str,
+    user_id: str = "",
 ) -> dict[str, Any]:
     """Create a typed relationship link between two Things.
 
@@ -730,7 +732,7 @@ def list_relationships(
 # ---------------------------------------------------------------------------
 
 
-def delete_relationship(relationship_id: str) -> dict[str, Any]:
+def delete_relationship(relationship_id: str, user_id: str = "") -> dict[str, Any]:
     """Delete a relationship between two Things.
 
     Returns {"ok": True} on success, or an error dict.
