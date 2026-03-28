@@ -1,4 +1,12 @@
-"""ChromaDB vector store for semantic search over Things."""
+"""Vector store for semantic search over Things.
+
+Supports two backends controlled by ``settings.STORAGE_BACKEND``:
+
+* ``sqlite`` (default) — ChromaDB local persistent store
+* ``supabase`` — pgvector stored in the ``things.embedding`` column;
+  similarity search via the ``match_things`` Postgres RPC function
+  (defined in ``supabase/migrations/20260328000000_match_things_function.sql``)
+"""
 
 import json
 import logging
@@ -111,6 +119,11 @@ def _get_collection() -> chromadb.Collection:
 # ---------------------------------------------------------------------------
 
 
+def _get_embedding(text: str) -> list[float]:
+    """Return a single embedding vector for ``text`` using the configured model."""
+    return _embedder([text])[0]
+
+
 def _thing_to_text(thing: dict[str, Any]) -> str:
     """Flatten a Thing dict into a rich searchable string.
 
@@ -169,7 +182,10 @@ def _thing_to_text(thing: dict[str, Any]) -> str:
 
 
 def upsert_thing(thing: dict[str, Any]) -> None:
-    """Embed and upsert a Thing into ChromaDB. Silently no-ops on error."""
+    """Embed and upsert a Thing. Uses ChromaDB (sqlite) or pgvector (supabase)."""
+    if settings.STORAGE_BACKEND == "supabase":
+        _upsert_thing_supabase(thing)
+        return
     try:
         collection = _get_collection()
         text = _thing_to_text(thing)
@@ -189,7 +205,10 @@ def upsert_thing(thing: dict[str, Any]) -> None:
 
 
 def delete_thing(thing_id: str) -> None:
-    """Remove a Thing from ChromaDB. Silently no-ops on error."""
+    """Remove a Thing's embedding. Uses ChromaDB (sqlite) or pgvector (supabase)."""
+    if settings.STORAGE_BACKEND == "supabase":
+        _delete_thing_supabase(thing_id)
+        return
     try:
         collection = _get_collection()
         collection.delete(ids=[thing_id])
@@ -198,7 +217,9 @@ def delete_thing(thing_id: str) -> None:
 
 
 def vector_count() -> int:
-    """Return the number of Things indexed in ChromaDB."""
+    """Return the number of Things with embeddings indexed."""
+    if settings.STORAGE_BACKEND == "supabase":
+        return _vector_count_supabase()
     try:
         return _get_collection().count()
     except Exception as exc:
@@ -211,6 +232,9 @@ def reindex_all() -> int:
 
     Returns the number of Things re-indexed.
     """
+    if settings.STORAGE_BACKEND == "supabase":
+        return _reindex_all_supabase()
+
     from .database import db
 
     try:
@@ -263,6 +287,9 @@ def vector_search(
     (or Things with no user_id for backward compatibility).
     Returns an empty list on any error so callers can fall back to SQL.
     """
+    if settings.STORAGE_BACKEND == "supabase":
+        return _vector_search_supabase(queries, n_results, active_only, type_hint, user_id)
+
     try:
         collection = _get_collection()
         total = collection.count()
@@ -302,4 +329,116 @@ def vector_search(
         return seen_ids
     except Exception as exc:
         logger.error("ChromaDB vector_search failed: %s", exc)
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Supabase / pgvector backend
+# ---------------------------------------------------------------------------
+
+
+def _upsert_thing_supabase(thing: dict[str, Any]) -> None:
+    """Embed a Thing and store its vector in the things.embedding column."""
+    from .database_supabase import get_client
+
+    try:
+        text = _thing_to_text(thing)
+        embedding = _get_embedding(text)
+        client = get_client()
+        client.table("things").update({"embedding": embedding}).eq("id", thing["id"]).execute()
+    except Exception as exc:
+        logger.error("Supabase pgvector upsert failed for thing %s: %s", thing.get("id"), exc)
+
+
+def _delete_thing_supabase(thing_id: str) -> None:
+    """Clear the embedding for a Thing (sets embedding = NULL)."""
+    from .database_supabase import get_client
+
+    try:
+        client = get_client()
+        client.table("things").update({"embedding": None}).eq("id", thing_id).execute()
+    except Exception as exc:
+        logger.error("Supabase pgvector delete failed for thing %s: %s", thing_id, exc)
+
+
+def _vector_count_supabase() -> int:
+    """Count Things that have a non-null embedding in Supabase."""
+    from .database_supabase import get_client
+
+    try:
+        client = get_client()
+        resp = client.table("things").select("id", count="exact").not_.is_("embedding", "null").limit(0).execute()
+        return resp.count or 0
+    except Exception as exc:
+        logger.error("Supabase vector count failed: %s", exc)
+        return 0
+
+
+def _reindex_all_supabase() -> int:
+    """Re-embed all Things and update their embedding columns in Supabase."""
+    from .database_supabase import get_client
+
+    try:
+        client = get_client()
+        resp = client.table("things").select("*").execute()
+        rows: list[dict[str, Any]] = resp.data or []
+        if not rows:
+            return 0
+        count = 0
+        for thing in rows:
+            try:
+                text = _thing_to_text(thing)
+                embedding = _get_embedding(text)
+                client.table("things").update({"embedding": embedding}).eq("id", thing["id"]).execute()
+                count += 1
+            except Exception as exc:
+                logger.error("Supabase reindex failed for thing %s: %s", thing.get("id"), exc)
+        logger.info("Supabase reindex_all: re-indexed %d/%d things", count, len(rows))
+        return count
+    except Exception as exc:
+        logger.error("Supabase reindex_all failed: %s", exc)
+        raise
+
+
+def _vector_search_supabase(
+    queries: list[str],
+    n_results: int,
+    active_only: bool,
+    type_hint: str | None,
+    user_id: str,
+) -> list[str]:
+    """Semantic search via pgvector using the ``match_things`` Postgres RPC.
+
+    The ``match_things`` function must exist in Supabase
+    (see ``supabase/migrations/20260328000000_match_things_function.sql``).
+    """
+    from .database_supabase import get_client
+
+    try:
+        client = get_client()
+        seen_ids: list[str] = []
+        seen_set: set[str] = set()
+
+        for query in queries[:3]:
+            embedding = _get_embedding(query)
+            resp = client.rpc(
+                "match_things",
+                {
+                    "query_embedding": embedding,
+                    "match_count": n_results,
+                    "user_id_filter": user_id or "",
+                    "active_only": active_only,
+                    "type_hint_filter": type_hint,
+                },
+            ).execute()
+            rows: list[dict[str, Any]] = resp.data or []
+            for row in rows:
+                id_ = row.get("id")
+                if id_ and id_ not in seen_set:
+                    seen_set.add(id_)
+                    seen_ids.append(id_)
+
+        return seen_ids
+    except Exception as exc:
+        logger.error("Supabase vector_search failed: %s", exc)
         return []

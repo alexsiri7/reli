@@ -104,3 +104,88 @@ def clean_orphan_relationships_supabase() -> tuple[int, list[str]]:
         logger.info("Cleaned %d orphan relationship(s): %s", len(orphan_ids), orphan_ids)
 
     return len(orphan_ids), orphan_ids
+
+
+# ---------------------------------------------------------------------------
+# Conversation summary helpers
+# ---------------------------------------------------------------------------
+
+
+def get_latest_summary_supabase(user_id: str) -> dict[str, Any] | None:
+    """Get the most recent conversation summary for a user via Supabase."""
+    client = get_client()
+    resp = (
+        client.table("conversation_summaries")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("messages_summarized_up_to", desc=True)
+        .limit(1)
+        .execute()
+    )
+    data: list[dict[str, Any]] = cast(list[dict[str, Any]], resp.data)
+    return data[0] if data else None
+
+
+def create_summary_supabase(
+    user_id: str,
+    summary_text: str,
+    messages_summarized_up_to: int,
+    token_count: int = 0,
+) -> int:
+    """Insert a conversation summary and return its id."""
+    client = get_client()
+    resp = (
+        client.table("conversation_summaries")
+        .insert(
+            {
+                "user_id": user_id,
+                "summary_text": summary_text,
+                "messages_summarized_up_to": messages_summarized_up_to,
+                "token_count": token_count,
+            }
+        )
+        .execute()
+    )
+    inserted: list[dict[str, Any]] = cast(list[dict[str, Any]], resp.data)
+    if not inserted:
+        raise RuntimeError("INSERT into conversation_summaries failed to return data")
+    row_id = inserted[0].get("id")
+    if row_id is None:
+        raise RuntimeError("INSERT into conversation_summaries returned no id")
+    return int(row_id)
+
+
+def get_messages_since_summary_supabase(user_id: str) -> list[dict[str, Any]]:
+    """Return chat messages since the last summary for a user."""
+    latest = get_latest_summary_supabase(user_id)
+    client = get_client()
+
+    query = (
+        client.table("chat_history")
+        .select("id,session_id,role,content,timestamp")
+        .eq("user_id", user_id)
+        .order("id", desc=False)
+    )
+    if latest:
+        query = query.gt("id", latest["messages_summarized_up_to"])
+
+    resp = query.execute()
+    return cast(list[dict[str, Any]], resp.data)
+
+
+def get_message_count_since_summary_supabase(user_id: str) -> int:
+    """Count chat messages since the last summary for a user."""
+    latest = get_latest_summary_supabase(user_id)
+    client = get_client()
+
+    query = (
+        client.table("chat_history")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .limit(0)
+    )
+    if latest:
+        query = query.gt("id", latest["messages_summarized_up_to"])
+
+    resp = query.execute()
+    return resp.count or 0

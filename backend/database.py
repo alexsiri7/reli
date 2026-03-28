@@ -313,6 +313,11 @@ def get_latest_summary(user_id: str) -> dict[str, Any] | None:
     Returns a dict with id, summary_text, messages_summarized_up_to, token_count,
     created_at, or None if no summary exists.
     """
+    if settings.STORAGE_BACKEND == "supabase":
+        from .database_supabase import get_latest_summary_supabase
+
+        return get_latest_summary_supabase(user_id)
+
     with db() as conn:
         row = conn.execute(
             "SELECT * FROM conversation_summaries WHERE user_id = ? ORDER BY messages_summarized_up_to DESC LIMIT 1",
@@ -328,6 +333,11 @@ def create_summary(
     token_count: int = 0,
 ) -> int:
     """Create a new conversation summary. Returns the new row ID."""
+    if settings.STORAGE_BACKEND == "supabase":
+        from .database_supabase import create_summary_supabase
+
+        return create_summary_supabase(user_id, summary_text, messages_summarized_up_to, token_count)
+
     with db() as conn:
         cursor = conn.execute(
             "INSERT INTO conversation_summaries"
@@ -347,6 +357,11 @@ def get_messages_since_summary(user_id: str) -> list[dict[str, Any]]:
     Returns messages ordered chronologically. If no summary exists,
     returns all messages for the user.
     """
+    if settings.STORAGE_BACKEND == "supabase":
+        from .database_supabase import get_messages_since_summary_supabase
+
+        return get_messages_since_summary_supabase(user_id)
+
     latest = get_latest_summary(user_id)
     with db() as conn:
         if latest:
@@ -366,6 +381,11 @@ def get_messages_since_summary(user_id: str) -> list[dict[str, Any]]:
 
 def get_message_count_since_summary(user_id: str) -> int:
     """Count messages since the last summary for a user."""
+    if settings.STORAGE_BACKEND == "supabase":
+        from .database_supabase import get_message_count_since_summary_supabase
+
+        return get_message_count_since_summary_supabase(user_id)
+
     latest = get_latest_summary(user_id)
     with db() as conn:
         if latest:

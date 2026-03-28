@@ -132,6 +132,165 @@ class TestCleanOrphanRelationships:
         assert ids == []
 
 
+class TestSummaryFunctions:
+    """Tests for conversation summary helpers in database_supabase."""
+
+    def test_get_latest_summary_returns_first_row(self, mock_supabase_client):
+        client, _ = mock_supabase_client
+        from backend.database_supabase import get_latest_summary_supabase
+
+        q = MagicMock()
+        client.table.return_value = q
+        q.select.return_value = q
+        q.eq.return_value = q
+        q.order.return_value = q
+        q.limit.return_value = q
+        summary = {"id": 1, "user_id": "u1", "summary_text": "hi", "messages_summarized_up_to": 5}
+        q.execute.return_value = MagicMock(data=[summary])
+
+        result = get_latest_summary_supabase("u1")
+        assert result == summary
+
+    def test_get_latest_summary_returns_none_when_empty(self, mock_supabase_client):
+        client, _ = mock_supabase_client
+        from backend.database_supabase import get_latest_summary_supabase
+
+        q = MagicMock()
+        client.table.return_value = q
+        q.select.return_value = q
+        q.eq.return_value = q
+        q.order.return_value = q
+        q.limit.return_value = q
+        q.execute.return_value = MagicMock(data=[])
+
+        assert get_latest_summary_supabase("u1") is None
+
+    def test_create_summary_returns_id(self, mock_supabase_client):
+        client, _ = mock_supabase_client
+        from backend.database_supabase import create_summary_supabase
+
+        q = MagicMock()
+        client.table.return_value = q
+        q.insert.return_value = q
+        q.execute.return_value = MagicMock(data=[{"id": 42}])
+
+        result = create_summary_supabase("u1", "summary", 10, 100)
+        assert result == 42
+
+    def test_create_summary_raises_on_empty_response(self, mock_supabase_client):
+        client, _ = mock_supabase_client
+        from backend.database_supabase import create_summary_supabase
+
+        q = MagicMock()
+        client.table.return_value = q
+        q.insert.return_value = q
+        q.execute.return_value = MagicMock(data=[])
+
+        with pytest.raises(RuntimeError):
+            create_summary_supabase("u1", "summary", 10)
+
+    def test_get_messages_since_summary_with_summary(self, mock_supabase_client):
+        client, _ = mock_supabase_client
+        from backend.database_supabase import get_messages_since_summary_supabase
+
+        # Mock get_latest_summary_supabase via the table call
+        summary_q = MagicMock()
+        chat_q = MagicMock()
+
+        call_count = [0]
+
+        def table_router(name):
+            call_count[0] += 1
+            if name == "conversation_summaries":
+                return summary_q
+            return chat_q
+
+        client.table.side_effect = table_router
+
+        summary_q.select.return_value = summary_q
+        summary_q.eq.return_value = summary_q
+        summary_q.order.return_value = summary_q
+        summary_q.limit.return_value = summary_q
+        summary_q.execute.return_value = MagicMock(
+            data=[{"id": 1, "messages_summarized_up_to": 5}]
+        )
+
+        chat_q.select.return_value = chat_q
+        chat_q.eq.return_value = chat_q
+        chat_q.order.return_value = chat_q
+        chat_q.gt.return_value = chat_q
+        messages = [{"id": 6, "role": "user", "content": "hi"}]
+        chat_q.execute.return_value = MagicMock(data=messages)
+
+        result = get_messages_since_summary_supabase("u1")
+        assert result == messages
+
+    def test_get_message_count_since_summary(self, mock_supabase_client):
+        client, _ = mock_supabase_client
+        from backend.database_supabase import get_message_count_since_summary_supabase
+
+        summary_q = MagicMock()
+        chat_q = MagicMock()
+
+        def table_router(name):
+            if name == "conversation_summaries":
+                return summary_q
+            return chat_q
+
+        client.table.side_effect = table_router
+
+        summary_q.select.return_value = summary_q
+        summary_q.eq.return_value = summary_q
+        summary_q.order.return_value = summary_q
+        summary_q.limit.return_value = summary_q
+        summary_q.execute.return_value = MagicMock(data=[])  # no summary
+
+        chat_q.select.return_value = chat_q
+        chat_q.eq.return_value = chat_q
+        chat_q.limit.return_value = chat_q
+        chat_q.execute.return_value = MagicMock(count=7)
+
+        result = get_message_count_since_summary_supabase("u1")
+        assert result == 7
+
+
+class TestDatabaseGatingForSummaries:
+    """Verify database.py dispatches summary functions to supabase backend."""
+
+    def test_get_latest_summary_dispatches(self, mock_supabase_client, monkeypatch):
+        monkeypatch.setattr("backend.database.settings.STORAGE_BACKEND", "supabase")
+        from unittest.mock import patch as mp
+
+        with mp("backend.database_supabase.get_latest_summary_supabase", return_value=None) as mock_fn:
+            from backend.database import get_latest_summary
+
+            result = get_latest_summary("u1")
+            mock_fn.assert_called_once_with("u1")
+            assert result is None
+
+    def test_create_summary_dispatches(self, mock_supabase_client, monkeypatch):
+        monkeypatch.setattr("backend.database.settings.STORAGE_BACKEND", "supabase")
+        from unittest.mock import patch as mp
+
+        with mp("backend.database_supabase.create_summary_supabase", return_value=99) as mock_fn:
+            from backend.database import create_summary
+
+            result = create_summary("u1", "text", 10, 200)
+            mock_fn.assert_called_once_with("u1", "text", 10, 200)
+            assert result == 99
+
+    def test_get_message_count_dispatches(self, mock_supabase_client, monkeypatch):
+        monkeypatch.setattr("backend.database.settings.STORAGE_BACKEND", "supabase")
+        from unittest.mock import patch as mp
+
+        with mp("backend.database_supabase.get_message_count_since_summary_supabase", return_value=3) as mock_fn:
+            from backend.database import get_message_count_since_summary
+
+            result = get_message_count_since_summary("u1")
+            mock_fn.assert_called_once_with("u1")
+            assert result == 3
+
+
 class TestDatabaseGating:
     """Verify that database.py dispatches to supabase when flag is set."""
 
