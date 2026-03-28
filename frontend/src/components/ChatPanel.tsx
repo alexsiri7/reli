@@ -814,12 +814,35 @@ export function ChatPanel() {
           </div>
         )}
         {messages.length === 0 && !historyLoading && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="text-5xl mb-4">✨</div>
-            <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">What's on your mind?</h3>
-            <p className="text-sm text-gray-400 dark:text-gray-400 mt-1 max-w-xs">
-              Try: "Remind me to check the server logs tomorrow" or "I had an idea about the new API design"
-            </p>
+          <div className="flex flex-col items-center justify-center h-full px-4">
+            <div className="w-full max-w-sm">
+              {/* Welcome bubble from Reli */}
+              <div className="flex items-start gap-3 mb-6">
+                <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-semibold shrink-0">
+                  R
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 dark:border-gray-700 text-sm text-gray-800 dark:text-gray-100 leading-relaxed">
+                  <p><strong>Welcome to Reli!</strong> I'm your personal assistant — I'll learn how you work and help you stay on top of things.</p>
+                  <p className="mt-2">Let's start simple: <strong>what's on your plate this week?</strong> Tell me about a project, a task, or anything on your mind.</p>
+                </div>
+              </div>
+              {/* Suggestion pills */}
+              <div className="flex flex-col gap-2">
+                {[
+                  "I'm working on a website redesign and need to send the proposal by Friday",
+                  "I have a dentist appointment Thursday and need to prep for a board meeting",
+                  "Just want to explore — show me what you can do",
+                ].map(suggestion => (
+                  <button
+                    key={suggestion}
+                    onClick={() => setInput(suggestion)}
+                    className="text-left px-4 py-2.5 rounded-xl border border-indigo-200 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 text-sm text-indigo-700 dark:text-indigo-300 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+                  >
+                    💬 {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
         {messages.map(msg => (

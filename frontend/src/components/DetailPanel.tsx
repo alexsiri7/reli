@@ -63,7 +63,19 @@ export function DetailPanel() {
     return groups
   }, [detailRelationships, detailThingId, things])
 
-  if (!detailThingId) return null
+  if (!detailThingId) {
+    // On desktop, show a placeholder when things exist but none is selected
+    if (things.length === 0) return null
+    return (
+      <div className="hidden md:flex w-80 shrink-0 flex-col items-center justify-center bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 px-6 text-center">
+        <div className="text-4xl mb-3">🔍</div>
+        <p className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">No Thing selected</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+          Click any Thing in the sidebar to see its details and relationships.
+        </p>
+      </div>
+    )
+  }
 
   const thing = detailThing
   const canGoBack = detailHistory.length > 0
