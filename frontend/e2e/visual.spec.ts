@@ -157,10 +157,10 @@ test.describe('Visual regression – reli frontend', () => {
     await page.goto('/')
     await waitForApp(page)
 
-    await expect(page.locator('aside')).toHaveScreenshot('sidebar-empty.png', {
+    await expect(page.locator('aside').first()).toHaveScreenshot('sidebar-empty.png', {
       ...SNAPSHOT_OPTS,
       animations: 'disabled',
-      mask: [page.locator('aside p.text-xs')],
+      mask: [page.locator('aside').first().locator('p.text-xs')],
     })
   })
 
@@ -171,12 +171,12 @@ test.describe('Visual regression – reli frontend', () => {
     // Wait for Things to render
     await page.waitForSelector('aside h2', { timeout: 5_000 })
 
-    await expect(page.locator('aside')).toHaveScreenshot(
+    await expect(page.locator('aside').first()).toHaveScreenshot(
       'sidebar-with-things.png',
       {
         ...SNAPSHOT_OPTS,
         animations: 'disabled',
-        mask: [page.locator('aside p.text-xs')],
+        mask: [page.locator('aside').first().locator('p.text-xs')],
       }
     )
   })
