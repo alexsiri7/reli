@@ -829,6 +829,102 @@ def get_open_questions(
 
 
 # ---------------------------------------------------------------------------
+# get_preferences
+# ---------------------------------------------------------------------------
+
+
+def get_preferences(
+    user_id: str = "",
+) -> list[dict[str, Any]]:
+    """Return all Things with type_hint='preference'.
+
+    Returns a list of Thing dicts ordered by priority then recency.
+    """
+    uf_sql, uf_params = user_filter(user_id)
+    with db() as conn:
+        rows = conn.execute(
+            f"""SELECT * FROM things
+               WHERE type_hint = 'preference'
+                 AND active = 1{uf_sql}
+               ORDER BY priority ASC, updated_at DESC""",
+            uf_params,
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# update_preference
+# ---------------------------------------------------------------------------
+
+_VALID_CONFIDENCE = {"emerging", "moderate", "strong"}
+
+
+def update_preference(
+    thing_id: str,
+    patterns: list[dict[str, Any]],
+    user_id: str = "",
+) -> dict[str, Any]:
+    """Update the patterns array on a preference Thing.
+
+    Replaces the 'patterns' key in the Thing's data dict with the provided
+    list. Each pattern must have: pattern (str), confidence (str), observations (int).
+    Confidence must be one of: "emerging", "moderate", "strong".
+
+    Returns the updated Thing dict, or an error dict.
+    """
+    thing_id = thing_id.strip()
+    if not thing_id:
+        return {"error": "thing_id is required"}
+
+    if not isinstance(patterns, list):
+        return {"error": "patterns must be a list"}
+
+    # Validate each pattern
+    for i, p in enumerate(patterns):
+        if not isinstance(p, dict):
+            return {"error": f"patterns[{i}] must be a dict"}
+        if "pattern" not in p or not isinstance(p["pattern"], str):
+            return {"error": f"patterns[{i}] missing required string field 'pattern'"}
+        if "confidence" not in p:
+            return {"error": f"patterns[{i}] missing required field 'confidence'"}
+        if p["confidence"] not in _VALID_CONFIDENCE:
+            return {"error": f"patterns[{i}].confidence must be one of: {sorted(_VALID_CONFIDENCE)}"}
+        if "observations" not in p or not isinstance(p["observations"], int):
+            return {"error": f"patterns[{i}] missing required int field 'observations'"}
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    uf_sql, uf_params = user_filter(user_id)
+    with db() as conn:
+        row = conn.execute(
+            f"SELECT * FROM things WHERE id = ? AND type_hint = 'preference'{uf_sql}",
+            [thing_id, *uf_params],
+        ).fetchone()
+        if not row:
+            return {"error": f"Preference Thing {thing_id} not found"}
+
+        # Merge patterns into existing data (only touch the 'patterns' key)
+        try:
+            existing_data = (
+                json.loads(row["data"]) if isinstance(row["data"], str) and row["data"] else {}
+            )
+        except (ValueError, TypeError):
+            existing_data = {}
+
+        existing_data["patterns"] = patterns
+        conn.execute(
+            "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(existing_data), now, thing_id),
+        )
+        updated_row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+        if updated_row:
+            row_dict = dict(updated_row)
+            upsert_thing(row_dict)
+            return row_dict
+        return {"error": "update failed"}
+
+
+# ---------------------------------------------------------------------------
 # get_conflicts
 # ---------------------------------------------------------------------------
 

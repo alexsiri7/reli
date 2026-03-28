@@ -19,6 +19,7 @@ from backend.mcp_server import (
     get_briefing,
     get_conflicts,
     get_open_questions,
+    get_preferences,
     get_thing,
     list_relationships,
     mcp,
@@ -29,6 +30,7 @@ from backend.mcp_server import (
     search_things,
     thing_creation_guide,
     thing_schema_reference,
+    update_preference,
     update_thing,
 )
 
@@ -376,6 +378,8 @@ class TestMcpMetadata:
             "get_briefing",
             "get_open_questions",
             "get_conflicts",
+            "get_preferences",
+            "update_preference",
             "chat_history",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
@@ -468,6 +472,79 @@ class TestIntegration:
         # Clean up (soft-delete)
         delete_thing(thing_id=t1["id"])
         delete_thing(thing_id=t2["id"])
+
+
+# ---------------------------------------------------------------------------
+# get_preferences / update_preference integration
+# ---------------------------------------------------------------------------
+
+
+class TestPreferencesIntegration:
+    """Integration tests for get_preferences and update_preference using a real DB."""
+
+    @pytest.fixture()
+    def api_server(self, patched_db):  # type: ignore[no-untyped-def]
+        yield
+
+    def test_get_preferences_returns_only_preference_type(self, api_server: None) -> None:
+        """get_preferences returns only Things with type_hint='preference'."""
+        # Create a preference Thing and a non-preference Thing
+        pref = create_thing(title="My comm style", type_hint="preference")
+        task = create_thing(title="Not a preference", type_hint="task")
+
+        result = get_preferences()
+        result_ids = {t["id"] for t in result}
+        assert pref["id"] in result_ids
+        assert task["id"] not in result_ids
+
+    def test_get_preferences_empty_when_none_exist(self, api_server: None) -> None:
+        result = get_preferences()
+        assert isinstance(result, list)
+        # Only preference Things — if we created none, the list should be empty
+        # (other tests may have created some, but in patched_db each test is isolated)
+        assert all(t["type_hint"] == "preference" for t in result)
+
+    def test_update_preference_replaces_patterns(self, api_server: None) -> None:
+        """update_preference stores new patterns array in preference Thing's data."""
+        pref = create_thing(title="Comm style pref", type_hint="preference")
+        patterns = [
+            {"pattern": "No emoji", "confidence": "strong", "observations": 5},
+            {"pattern": "Brief replies", "confidence": "moderate", "observations": 2},
+        ]
+        result = update_preference(thing_id=pref["id"], patterns=patterns)
+        assert "error" not in result
+        import json as _json
+        data = _json.loads(result["data"]) if isinstance(result["data"], str) else result["data"] or {}
+        assert data["patterns"] == patterns
+
+    def test_update_preference_validates_confidence(self, api_server: None) -> None:
+        """update_preference rejects invalid confidence values."""
+        pref = create_thing(title="Comm style pref 2", type_hint="preference")
+        bad_patterns = [{"pattern": "X", "confidence": "invalid", "observations": 1}]
+        result = update_preference(thing_id=pref["id"], patterns=bad_patterns)
+        assert "error" in result
+        assert "confidence" in result["error"]
+
+    def test_update_preference_rejects_non_preference_thing(self, api_server: None) -> None:
+        """update_preference only updates Things with type_hint='preference'."""
+        task = create_thing(title="A task", type_hint="task")
+        patterns = [{"pattern": "X", "confidence": "emerging", "observations": 1}]
+        result = update_preference(thing_id=task["id"], patterns=patterns)
+        assert "error" in result
+
+    def test_update_preference_preserves_other_data_fields(self, api_server: None) -> None:
+        """update_preference only touches the 'patterns' key, not other data fields."""
+        import json as _json
+        pref = create_thing(
+            title="Comm style pref 3",
+            type_hint="preference",
+            data={"some_other_key": "should_remain"},
+        )
+        patterns = [{"pattern": "X", "confidence": "emerging", "observations": 1}]
+        result = update_preference(thing_id=pref["id"], patterns=patterns)
+        data = _json.loads(result["data"]) if isinstance(result["data"], str) else result["data"] or {}
+        assert data["some_other_key"] == "should_remain"
+        assert data["patterns"] == patterns
 
 
 # ---------------------------------------------------------------------------
@@ -620,6 +697,83 @@ class TestGetConflicts:
         assert len(result) == 2
         assert result[0]["severity"] == "critical"
         assert result[1]["alert_type"] == "schedule_overlap"
+
+
+# ---------------------------------------------------------------------------
+# get_preferences
+# ---------------------------------------------------------------------------
+
+
+class TestGetPreferences:
+    @patch("backend.mcp_server.shared_tools.get_preferences")
+    def test_returns_preference_things(self, mock_get: MagicMock) -> None:
+        prefs = [
+            {
+                "id": "p1",
+                "title": "Communication style",
+                "type_hint": "preference",
+                "data": '{"patterns": [{"pattern": "No emoji", "confidence": "strong", "observations": 5}]}',
+            }
+        ]
+        mock_get.return_value = prefs
+        result = get_preferences()
+        mock_get.assert_called_once_with()
+        assert len(result) == 1
+        assert result[0]["id"] == "p1"
+        assert result[0]["type_hint"] == "preference"
+
+    @patch("backend.mcp_server.shared_tools.get_preferences")
+    def test_empty_when_no_preferences(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        result = get_preferences()
+        assert result == []
+
+    @patch("backend.mcp_server.shared_tools.get_preferences")
+    def test_returns_multiple_preferences(self, mock_get: MagicMock) -> None:
+        prefs = [
+            {"id": "p1", "title": "Communication style", "type_hint": "preference"},
+            {"id": "p2", "title": "Proactivity level", "type_hint": "preference"},
+        ]
+        mock_get.return_value = prefs
+        result = get_preferences()
+        assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# update_preference
+# ---------------------------------------------------------------------------
+
+
+class TestUpdatePreference:
+    @patch("backend.mcp_server.shared_tools.update_preference")
+    def test_updates_patterns(self, mock_update: MagicMock) -> None:
+        patterns = [
+            {"pattern": "No emoji", "confidence": "strong", "observations": 5},
+            {"pattern": "Concise replies", "confidence": "moderate", "observations": 3},
+        ]
+        updated = {
+            "id": "p1",
+            "title": "Communication style",
+            "type_hint": "preference",
+            "data": '{"patterns": [{"pattern": "No emoji", "confidence": "strong", "observations": 5}]}',
+        }
+        mock_update.return_value = updated
+        result = update_preference(thing_id="p1", patterns=patterns)
+        mock_update.assert_called_once_with(thing_id="p1", patterns=patterns)
+        assert result["id"] == "p1"
+
+    @patch("backend.mcp_server.shared_tools.update_preference")
+    def test_passes_thing_id(self, mock_update: MagicMock) -> None:
+        mock_update.return_value = {"id": "abc123"}
+        patterns = [{"pattern": "X", "confidence": "emerging", "observations": 1}]
+        update_preference(thing_id="abc123", patterns=patterns)
+        mock_update.assert_called_once_with(thing_id="abc123", patterns=patterns)
+
+    @patch("backend.mcp_server.shared_tools.update_preference")
+    def test_returns_error_from_shared_tools(self, mock_update: MagicMock) -> None:
+        mock_update.return_value = {"error": "Preference Thing not-found not found"}
+        result = update_preference(thing_id="not-found", patterns=[])
+        assert "error" in result
 
 
 # MCP Prompt Resources (Phase 2)

@@ -329,6 +329,40 @@ def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+def get_preferences() -> list[dict[str, Any]]:
+    """Get all user preference Things.
+
+    Returns all Things with type_hint='preference'. Call this at session start
+    alongside get_user_profile to load behavior configuration: communication style,
+    proactivity level, question frequency, and other learned patterns.
+    """
+    return shared_tools.get_preferences()
+
+
+@mcp.tool()
+def update_preference(
+    thing_id: str,
+    patterns: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Update the patterns array on a preference Thing.
+
+    Replaces the 'patterns' key in the preference Thing's data. Use this to
+    feed back signals from interactions as the calling agent observes the user's
+    communication style and preferences.
+
+    Each pattern dict must have:
+    - pattern (str): Description of the observed preference.
+    - confidence (str): One of "emerging" (1 obs), "moderate" (2-3 obs), "strong" (4+ obs).
+    - observations (int): Number of times this pattern has been observed.
+
+    Args:
+        thing_id: UUID of the preference Thing to update.
+        patterns: List of pattern dicts (replaces the existing patterns array).
+    """
+    return shared_tools.update_preference(thing_id=thing_id, patterns=patterns)
+
+
+@mcp.tool()
 def chat_history(
     n: int = 10,
     search_query: str = "",
