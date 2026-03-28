@@ -206,9 +206,9 @@ Model selection is configured in `config.yaml`:
 ```yaml
 llm:
   models:
-    context: google/gemini-2.5-flash-lite    # Stage 1: fast, query generation
-    reasoning: google/gemini-3-flash-preview  # Stage 2: structured JSON decisions
-    response: google/gemini-2.5-flash-lite    # Stage 4: natural language
+    context: google/gemini-3.1-flash-lite-preview    # Stage 1: fast, query generation
+    reasoning: google/gemini-3-flash-preview         # Stage 2: structured JSON decisions
+    response: google/gemini-3.1-flash-lite-preview    # Stage 4: natural language
 ```
 
 Override per-user via `PUT /api/settings`. Override globally via env vars: `REQUESTY_MODEL`, `REQUESTY_REASONING_MODEL`, `REQUESTY_RESPONSE_MODEL`.

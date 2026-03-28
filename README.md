@@ -118,9 +118,9 @@ The app is available at `http://localhost:8000`. Data persists in `./data/` via 
 llm:
   base_url: https://router.requesty.ai/v1
   models:
-    context: google/gemini-2.5-flash-lite
-    reasoning: google/gemini-2.5-flash
-    response: google/gemini-2.5-flash-lite
+    context: google/gemini-3.1-flash-lite-preview
+    reasoning: google/gemini-3-flash-preview
+    response: google/gemini-3.1-flash-lite-preview
 
 embedding:
   model: text-embedding-3-small
