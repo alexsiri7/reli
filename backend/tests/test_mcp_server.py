@@ -822,3 +822,56 @@ class TestMCPTools:
             headers=headers,
         )
         assert resp.status_code == 204
+
+
+# ---------------------------------------------------------------------------
+# _TokenAuthMiddleware — unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestTokenAuthMiddleware:
+    """Test the ASGI middleware that guards the /mcp endpoint."""
+
+    def _make_client(self, mcp_api_token: str) -> TestClient:
+        """Wrap a trivial echo app with _TokenAuthMiddleware."""
+        from starlette.applications import Starlette
+        from starlette.requests import Request
+        from starlette.responses import PlainTextResponse
+        from starlette.routing import Route
+
+        from backend.mcp_server import _TokenAuthMiddleware
+
+        def echo(request: Request) -> PlainTextResponse:
+            return PlainTextResponse("ok")
+
+        inner = Starlette(routes=[Route("/", echo)])
+        wrapped = _TokenAuthMiddleware(inner, mcp_api_token)
+        return TestClient(wrapped, raise_server_exceptions=True)
+
+    def test_correct_token_allowed(self) -> None:
+        client = self._make_client("secret-token")
+        resp = client.get("/", headers={"Authorization": "Bearer secret-token"})
+        assert resp.status_code == 200
+        assert resp.text == "ok"
+
+    def test_wrong_token_rejected(self) -> None:
+        client = self._make_client("secret-token")
+        resp = client.get("/", headers={"Authorization": "Bearer wrong"})
+        assert resp.status_code == 401
+
+    def test_missing_auth_header_rejected(self) -> None:
+        client = self._make_client("secret-token")
+        resp = client.get("/")
+        assert resp.status_code == 401
+
+    def test_empty_token_allows_all(self) -> None:
+        """Empty MCP_API_TOKEN = dev mode, no auth required."""
+        client = self._make_client("")
+        resp = client.get("/")
+        assert resp.status_code == 200
+
+    def test_www_authenticate_header_on_401(self) -> None:
+        client = self._make_client("secret-token")
+        resp = client.get("/", headers={"Authorization": "Bearer bad"})
+        assert resp.status_code == 401
+        assert "Bearer" in resp.headers.get("www-authenticate", "")
