@@ -1,96 +1,30 @@
-"""Reli MCP server — knowledge graph tools wrapping the REST API.
+"""Reli MCP server — knowledge graph tools backed by shared tool implementations.
 
-Exposes Things, Relationships, briefing, conflict detection, and reli_think
-reasoning-as-a-service as MCP tools.
+Exposes Things, Relationships, briefing, conflict detection, chat_history,
+and reli_think reasoning-as-a-service as MCP tools.  Tool logic lives in
+``backend.tools`` and is shared with the reasoning agent.
 
 Supports two transports:
 - Streamable HTTP (primary): mounted at /mcp inside the FastAPI app.
   Protected by MCP_API_TOKEN bearer token.
 - stdio (legacy): run via ``python -m backend.mcp_server`` for local clients.
-
-Environment variables (stdio mode):
-    RELI_API_URL   — Base URL of the Reli API (default: http://localhost:8000)
-    RELI_API_TOKEN — JWT session token for authentication (required)
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
-from collections.abc import Awaitable, Callable
 from typing import Any
 
-import httpx
 from mcp.server.fastmcp import FastMCP
-from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from . import tools as shared_tools
+
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-RELI_API_URL = os.environ.get("RELI_API_URL", "http://localhost:8000")
-RELI_API_TOKEN = os.environ.get("RELI_API_TOKEN", "")
-
-
-def _base_url() -> str:
-    return RELI_API_URL.rstrip("/")
-
-
-def _cookies() -> dict[str, str]:
-    if RELI_API_TOKEN:
-        return {"reli_session": RELI_API_TOKEN}
-    return {}
-
-
-# ---------------------------------------------------------------------------
-# HTTP helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_client() -> httpx.Client:
-    return httpx.Client(base_url=_base_url(), cookies=_cookies(), timeout=30.0)
-
-
-def _api_get(path: str, params: dict[str, Any] | None = None) -> Any:
-    """GET request to the Reli API. Returns parsed JSON or raises."""
-    with _make_client() as client:
-        resp = client.get(path, params=params)
-        resp.raise_for_status()
-        if resp.status_code == 204:
-            return {"ok": True}
-        return resp.json()
-
-
-def _api_post(path: str, json_body: dict[str, Any] | None = None) -> Any:
-    """POST request to the Reli API. Returns parsed JSON or raises."""
-    with _make_client() as client:
-        resp = client.post(path, json=json_body)
-        resp.raise_for_status()
-        if resp.status_code == 204:
-            return {"ok": True}
-        return resp.json()
-
-
-def _api_patch(path: str, json_body: dict[str, Any]) -> Any:
-    """PATCH request to the Reli API. Returns parsed JSON or raises."""
-    with _make_client() as client:
-        resp = client.patch(path, json=json_body)
-        resp.raise_for_status()
-        return resp.json()
-
-
-def _api_delete(path: str) -> Any:
-    """DELETE request to the Reli API. Returns success indicator."""
-    with _make_client() as client:
-        resp = client.delete(path)
-        resp.raise_for_status()
-        return {"ok": True}
-
 
 # ---------------------------------------------------------------------------
 # MCP Server
@@ -153,13 +87,12 @@ def search_things(
         type_hint: Filter by type (e.g. 'task', 'project', 'person').
         limit: Maximum results to return (1-200, default 20).
     """
-    params: dict[str, Any] = {"q": query, "limit": limit}
-    if active_only:
-        params["active_only"] = True
-    if type_hint:
-        params["type_hint"] = type_hint
-    result: list[dict[str, Any]] = _api_get("/api/things/search", params=params)
-    return result
+    return shared_tools.search_things(
+        query=query,
+        active_only=active_only,
+        type_hint=type_hint,
+        limit=limit,
+    )
 
 
 @mcp.tool()
@@ -169,8 +102,7 @@ def get_thing(thing_id: str) -> dict[str, Any]:
     Args:
         thing_id: The UUID of the Thing to retrieve.
     """
-    result: dict[str, Any] = _api_get(f"/api/things/{thing_id}")
-    return result
+    return shared_tools.get_thing(thing_id=thing_id)
 
 
 @mcp.tool()
@@ -198,19 +130,17 @@ def create_thing(
         surface: Whether to show in default views.
         open_questions: List of unresolved questions about this Thing.
     """
-    body: dict[str, Any] = {"title": title, "priority": priority, "active": active, "surface": surface}
-    if type_hint is not None:
-        body["type_hint"] = type_hint
-    if data is not None:
-        body["data"] = data
-    if parent_id is not None:
-        body["parent_id"] = parent_id
-    if checkin_date is not None:
-        body["checkin_date"] = checkin_date
-    if open_questions is not None:
-        body["open_questions"] = open_questions
-    result: dict[str, Any] = _api_post("/api/things", json_body=body)
-    return result
+    data_json = json.dumps(data) if data is not None else "{}"
+    oq_json = json.dumps(open_questions) if open_questions is not None else "[]"
+    return shared_tools.create_thing(
+        title=title,
+        type_hint=type_hint or "",
+        priority=priority,
+        checkin_date=checkin_date or "",
+        surface=surface,
+        data_json=data_json,
+        open_questions_json=oq_json,
+    )
 
 
 @mcp.tool()
@@ -240,29 +170,25 @@ def update_thing(
         surface: Set visibility in default views.
         open_questions: New list of unresolved questions.
     """
-    body: dict[str, Any] = {}
-    if title is not None:
-        body["title"] = title
-    if type_hint is not None:
-        body["type_hint"] = type_hint
-    if data is not None:
-        body["data"] = data
-    if priority is not None:
-        body["priority"] = priority
-    if parent_id is not None:
-        body["parent_id"] = parent_id
-    if checkin_date is not None:
-        body["checkin_date"] = checkin_date
-    if active is not None:
-        body["active"] = active
-    if surface is not None:
-        body["surface"] = surface
-    if open_questions is not None:
-        body["open_questions"] = open_questions
-    if not body:
+    data_json = json.dumps(data) if data is not None else ""
+    oq_json = json.dumps(open_questions) if open_questions is not None else ""
+
+    # Check if any field was actually provided
+    has_fields = any(v is not None for v in [title, type_hint, data, priority, parent_id, checkin_date, active, surface, open_questions])
+    if not has_fields:
         return {"error": "No fields provided to update"}
-    result: dict[str, Any] = _api_patch(f"/api/things/{thing_id}", json_body=body)
-    return result
+
+    return shared_tools.update_thing(
+        thing_id=thing_id,
+        title=title or "",
+        active=active,
+        checkin_date=checkin_date or "",
+        priority=priority,
+        type_hint=type_hint or "",
+        surface=surface,
+        data_json=data_json,
+        open_questions_json=oq_json,
+    )
 
 
 @mcp.tool()
@@ -276,8 +202,7 @@ def delete_thing(thing_id: str) -> dict[str, Any]:
     Args:
         thing_id: The UUID of the Thing to deactivate.
     """
-    result: dict[str, Any] = _api_patch(f"/api/things/{thing_id}", json_body={"active": False})
-    return result
+    return shared_tools.update_thing(thing_id=thing_id, active=False)
 
 
 @mcp.tool()
@@ -295,11 +220,7 @@ def merge_things(keep_id: str, remove_id: str) -> dict[str, Any]:
     Returns:
         Dict with keep_id, remove_id, keep_title, remove_title.
     """
-    result: dict[str, Any] = _api_post(
-        "/api/things/merge",
-        json_body={"keep_id": keep_id, "remove_id": remove_id},
-    )
-    return result
+    return shared_tools.merge_things(keep_id=keep_id, remove_id=remove_id)
 
 
 @mcp.tool()
@@ -309,8 +230,7 @@ def list_relationships(thing_id: str) -> list[dict[str, Any]]:
     Args:
         thing_id: The UUID of the Thing whose relationships to retrieve.
     """
-    result: list[dict[str, Any]] = _api_get(f"/api/things/{thing_id}/relationships")
-    return result
+    return shared_tools.list_relationships(thing_id=thing_id)
 
 
 @mcp.tool()
@@ -328,15 +248,11 @@ def create_relationship(
         relationship_type: Label like 'works_with', 'depends_on', 'related_to', 'belongs_to'.
         metadata: Optional JSON metadata for the relationship.
     """
-    body: dict[str, Any] = {
-        "from_thing_id": from_thing_id,
-        "to_thing_id": to_thing_id,
-        "relationship_type": relationship_type,
-    }
-    if metadata is not None:
-        body["metadata"] = metadata
-    result: dict[str, Any] = _api_post("/api/things/relationships", json_body=body)
-    return result
+    return shared_tools.create_relationship(
+        from_thing_id=from_thing_id,
+        to_thing_id=to_thing_id,
+        relationship_type=relationship_type,
+    )
 
 
 @mcp.tool()
@@ -346,8 +262,7 @@ def delete_relationship(relationship_id: str) -> dict[str, Any]:
     Args:
         relationship_id: The UUID of the relationship to delete.
     """
-    result: dict[str, Any] = _api_delete(f"/api/things/relationships/{relationship_id}")
-    return result
+    return shared_tools.delete_relationship(relationship_id=relationship_id)
 
 
 # ---------------------------------------------------------------------------
@@ -367,11 +282,7 @@ def get_briefing(as_of: str | None = None) -> dict[str, Any]:
         as_of: Optional ISO 8601 date (YYYY-MM-DD) to get the briefing for.
                Defaults to today.
     """
-    params: dict[str, Any] = {}
-    if as_of:
-        params["as_of"] = as_of
-    result: dict[str, Any] = _api_get("/api/briefing", params=params)
-    return result
+    return shared_tools.get_briefing(as_of=as_of)
 
 
 @mcp.tool()
@@ -384,9 +295,7 @@ def get_open_questions(limit: int = 50) -> list[dict[str, Any]]:
     Args:
         limit: Maximum number of Things to return (1-200, default 50).
     """
-    params: dict[str, Any] = {"limit": min(max(limit, 1), 200)}
-    result: list[dict[str, Any]] = _api_get("/api/things/open-questions", params=params)
-    return result
+    return shared_tools.get_open_questions(limit=min(max(limit, 1), 200))
 
 
 @mcp.tool()
@@ -401,12 +310,29 @@ def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
     Args:
         window: Look-ahead window in days for deadline detection (1-90, default 14).
     """
-    params: dict[str, Any] = {"window": min(max(window, 1), 90)}
-    result: list[dict[str, Any]] = _api_get("/api/conflicts", params=params)
-    return result
+    return shared_tools.get_conflicts(window=min(max(window, 1), 90))
 
 
-# ---------------------------------------------------------------------------
+@mcp.tool()
+def chat_history(
+    n: int = 10,
+    search_query: str = "",
+) -> dict[str, Any]:
+    """Search across all conversation sessions for the current user.
+
+    Use this to find past conversations, recall things discussed previously,
+    or check what was said about a specific topic across sessions.
+
+    Args:
+        n: Number of messages to retrieve (default 10, max 50).
+        search_query: Optional text to filter messages by content.
+    """
+    return shared_tools.chat_history(
+        n=n,
+        search_query=search_query,
+        cross_session=True,
+    )
+
 
 # ---------------------------------------------------------------------------
 # MCP Prompt Resources — PA behavior guidance for calling agents
@@ -521,8 +447,8 @@ source for possessive relationships.
 2. Search for an existing Thing matching the entity before creating a new one.
 3. Create the relationship with the possessive role as the type (e.g. "sister", \
 "doctor").
-4. If the user provides a name ("my sister Alice"), use the name as the title \
-and include the role in `data.notes`.
+4. If the user provides a name alongside the role ("my sister Alice"), use the \
+name as the title and include the role in `data.notes`.
 
 ## Compound Possessives
 
@@ -898,7 +824,7 @@ The `data` field holds a `patterns` array:
 
 
 @mcp.tool()
-def reli_think(
+async def reli_think(
     message: str,
     context: str | None = None,
 ) -> dict[str, Any]:
@@ -930,11 +856,12 @@ def reli_think(
         - reasoning_summary: explanation of the reasoning
         - context: Things found during analysis
     """
-    body: dict[str, Any] = {"message": message}
-    if context:
-        body["context"] = context
-    result: dict[str, Any] = _api_post("/api/think", json_body=body)
-    return result
+    from .reasoning_agent import run_think_agent
+
+    return await run_think_agent(
+        message=message,
+        context=context or "",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1029,8 +956,6 @@ def create_mcp_asgi_app(mcp_api_token: str = "") -> ASGIApp:
 
 def main() -> None:
     """Run the MCP server over stdio."""
-    if not RELI_API_TOKEN:
-        print("Warning: RELI_API_TOKEN not set. Auth will be skipped if server has no SECRET_KEY.", file=sys.stderr)
     mcp.run(transport="stdio")
 
 
