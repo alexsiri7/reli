@@ -356,6 +356,39 @@ export const ConnectionSuggestionSchema = z.object({
   created_at: z.string(),
 })
 
+// --- Nudges ---
+
+export const NudgeSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  source_id: z.string(),
+  message: z.string(),
+  action_label: z.string().nullable(),
+  action_url: z.string().nullable(),
+  thing_id: z.string().nullable(),
+  dismissed: z.boolean(),
+  created_at: z.string(),
+})
+
+// --- Weekly Digest ---
+
+export const WeeklyDigestContentSchema = z.object({
+  week_start: z.string(),
+  things_completed: z.array(z.object({ id: z.string(), title: z.string(), type: z.string() })),
+  new_connections: z.array(z.object({ from: z.string(), to: z.string(), relationship: z.string() })),
+  preferences_learned: z.array(z.object({ pattern: z.string(), confidence: z.string() })),
+  upcoming_deadlines: z.array(z.object({ id: z.string(), title: z.string(), type: z.string() })),
+  open_questions: z.array(z.string()),
+  summary: z.string(),
+})
+
+export const WeeklyDigestSchema = z.object({
+  id: z.string(),
+  week_start: z.string(),
+  content: WeeklyDigestContentSchema,
+  generated_at: z.string(),
+})
+
 // --- Validation helper ---
 
 /**

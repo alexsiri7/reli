@@ -54,59 +54,11 @@ export default defineConfig({
     versionJsonPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
-      workbox: {
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [
-          {
-            urlPattern: /^https?:\/\/[^/]+\/api\/(things|thing-types|briefing)(\?.*)?$/,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'api-read-cache',
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24, // 1 day
-              },
-            },
-          },
-          {
-            urlPattern: /^https?:\/\/[^/]+\/api\/things\/[^/]+\/relationships(\?.*)?$/,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'api-relationships-cache',
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24,
-              },
-            },
-          },
-          {
-            urlPattern: /^https?:\/\/[^/]+\/api\/chat/,
-            handler: 'NetworkOnly',
-          },
-          {
-            urlPattern: /\.(?:woff2?|ttf|otf|eot)$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'static-fonts',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
-              },
-            },
-          },
-          {
-            urlPattern: /\.(?:png|jpg|jpeg|gif|webp|svg|ico)$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'static-images',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
-              },
-            },
-          },
-        ],
       },
       manifest: {
         name: 'Reli',

@@ -5,6 +5,7 @@ import type { ModelSettings, UserSettings, UserProfileRelationship, RequestyMode
 import { useTheme, setTheme } from '../hooks/useTheme'
 import { ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
 import { RelationshipMiniGraph } from './RelationshipMiniGraph'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 
 export function SettingsPanel() {
   const {
@@ -320,6 +321,7 @@ function SettingsForm({
       <VoiceSection />
       <ThemeSection />
       <ProactivitySection />
+      <NotificationsSection />
       <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
         <button
           onClick={onClose}
@@ -738,6 +740,99 @@ function ProactivitySection() {
             <span className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">{opt.description}</span>
           </button>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function NotificationsSection() {
+  const { openWeeklyDigest } = useStore(useShallow(s => ({
+    openWeeklyDigest: s.openWeeklyDigest,
+  })))
+  const {
+    supported,
+    permission,
+    subscribed,
+    loading,
+    error,
+    notifTypes,
+    toggleType,
+    requestPermissionAndSubscribe,
+    unsubscribe,
+  } = usePushNotifications()
+
+  const typeLabels: Record<string, string> = {
+    calendar: 'Calendar reminders',
+    tasks: 'Task check-ins',
+    insights: 'Proactive insights',
+  }
+
+  return (
+    <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notifications</h3>
+      <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Push notifications and weekly summaries</p>
+
+      {/* Weekly Digest */}
+      <div className="flex items-center justify-between py-2">
+        <div>
+          <p className="text-sm text-gray-700 dark:text-gray-300">Weekly Digest</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">Summary of your week's activity</p>
+        </div>
+        <button
+          onClick={openWeeklyDigest}
+          className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
+        >
+          View →
+        </button>
+      </div>
+
+      {/* Push Notifications */}
+      <div className="mt-2">
+        {!supported ? (
+          <p className="text-xs text-gray-400 dark:text-gray-500 italic">Push notifications are not supported in this browser.</p>
+        ) : (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-700 dark:text-gray-300">Push Notifications</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  {permission === 'denied' ? 'Permission denied — enable in browser settings' :
+                   subscribed ? 'Active — Reli will notify you of important events' :
+                   'Off — get notified even when Reli is closed'}
+                </p>
+              </div>
+              {permission !== 'denied' && (
+                <button
+                  onClick={subscribed ? unsubscribe : requestPermissionAndSubscribe}
+                  disabled={loading}
+                  className={`text-xs font-medium px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50 ${
+                    subscribed
+                      ? 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40'
+                      : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'
+                  }`}
+                >
+                  {loading ? '…' : subscribed ? 'Disable' : 'Enable'}
+                </button>
+              )}
+            </div>
+            {error && <p className="text-xs text-red-500 dark:text-red-400 mt-1">{error}</p>}
+            {subscribed && (
+              <div className="mt-2 space-y-1 pl-1">
+                {Object.entries(typeLabels).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={notifTypes[key as keyof typeof notifTypes]}
+                      onChange={() => toggleType(key as keyof typeof notifTypes)}
+                      className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs text-gray-600 dark:text-gray-300">{label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   )

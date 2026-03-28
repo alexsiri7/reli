@@ -24,6 +24,9 @@ const mockStore = {
   sendMessage: vi.fn(),
   fetchOlderMessages: vi.fn(),
   sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, cost_usd: 0, per_model: [] },
+  nudges: [],
+  dismissNudge: vi.fn(),
+  openThingDetail: vi.fn(),
 }
 
 vi.mock('../store', () => ({

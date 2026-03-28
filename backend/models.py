@@ -517,3 +517,69 @@ class ConnectionSuggestionAccept(BaseModel):
     """Accept a connection suggestion, optionally overriding the relationship type."""
 
     relationship_type: str | None = Field(default=None, description="Override the suggested relationship type")
+
+
+# ── Nudge Banners ────────────────────────────────────────────────────────────
+
+
+class Nudge(BaseModel):
+    """An in-app proactive nudge banner."""
+
+    id: str
+    source: str  # 'proactive' | 'sweep' | 'calendar'
+    source_id: str
+    message: str
+    action_label: str | None = None
+    action_url: str | None = None
+    thing_id: str | None = None
+    dismissed: bool = False
+    created_at: datetime
+
+
+class NudgeDismissRequest(BaseModel):
+    action: str = "dismiss"  # 'dismiss' | 'stop-these'
+
+
+# ── Weekly Digest ────────────────────────────────────────────────────────────
+
+
+class WeeklyDigestContent(BaseModel):
+    """Content of a weekly digest."""
+
+    week_start: str
+    things_completed: list[dict[str, Any]] = []
+    new_connections: list[dict[str, Any]] = []
+    preferences_learned: list[dict[str, Any]] = []
+    upcoming_deadlines: list[dict[str, Any]] = []
+    open_questions: list[str] = []
+    summary: str = ""
+
+
+class WeeklyDigest(BaseModel):
+    """A weekly digest record."""
+
+    id: str
+    week_start: str
+    content: WeeklyDigestContent
+    generated_at: datetime
+
+
+# ── Push Notifications ───────────────────────────────────────────────────────
+
+
+class PushSubscriptionCreate(BaseModel):
+    """Browser push subscription payload."""
+
+    endpoint: str
+    p256dh: str
+    auth: str
+    notification_types: list[str] = ["calendar", "tasks", "insights"]
+
+
+class PushSubscription(BaseModel):
+    """A stored push subscription."""
+
+    id: str
+    endpoint: str
+    notification_types: list[str]
+    created_at: datetime

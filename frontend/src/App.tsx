@@ -10,9 +10,11 @@ import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { SettingsPanel } from './components/SettingsPanel'
 import { FeedbackDialog } from './components/FeedbackDialog'
+import { PreferenceToastContainer } from './components/PreferenceToast'
+import { WeeklyDigestPanel } from './components/WeeklyDigest'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges, weeklyDigestOpen, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
@@ -35,6 +37,8 @@ function App() {
       fetchConnectionSuggestions: s.fetchConnectionSuggestions,
       fetchUserSettings: s.fetchUserSettings,
       fetchMorningBriefing: s.fetchMorningBriefing,
+      fetchNudges: s.fetchNudges,
+      weeklyDigestOpen: s.weeklyDigestOpen,
       error: s.error,
     }))
   )
@@ -62,7 +66,8 @@ function App() {
     fetchConnectionSuggestions()
     fetchUserSettings()
     fetchMorningBriefing()
-    const interval = setInterval(() => { fetchThings(); fetchBriefing(); fetchProactiveSurfaces(); fetchFocusRecommendations(); fetchConflictAlerts() }, 30_000)
+    fetchNudges()
+    const interval = setInterval(() => { fetchThings(); fetchBriefing(); fetchProactiveSurfaces(); fetchFocusRecommendations(); fetchConflictAlerts(); fetchNudges() }, 30_000)
 
     // Handle OAuth callback redirect
     const params = new URLSearchParams(window.location.search)
@@ -72,7 +77,7 @@ function App() {
     }
 
     return () => clearInterval(interval)
-  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing])
+  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges])
 
   // Show nothing while checking auth
   if (!authChecked) {
@@ -167,6 +172,8 @@ function App() {
       </nav>
       {settingsOpen && <SettingsPanel />}
       {feedbackOpen && <FeedbackDialog />}
+      {weeklyDigestOpen && <WeeklyDigestPanel />}
+      <PreferenceToastContainer />
     </div>
   )
 }

@@ -432,6 +432,56 @@ def clean_orphan_relationships() -> tuple[int, list[str]]:
     return len(orphan_ids), orphan_ids
 
 
+def _migrate_nudge_dismissals(conn: sqlite3.Connection) -> None:
+    """Create nudge_dismissals table for tracking dismissed nudges and daily limits."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS nudge_dismissals (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            nudge_source TEXT NOT NULL,
+            nudge_source_id TEXT NOT NULL,
+            action TEXT NOT NULL DEFAULT 'dismiss',
+            dismissed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_nudge_dismissals_user ON nudge_dismissals(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_nudge_dismissals_source ON nudge_dismissals(user_id, nudge_source_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_nudge_dismissals_date ON nudge_dismissals(user_id, dismissed_at)")
+
+
+def _migrate_push_subscriptions(conn: sqlite3.Connection) -> None:
+    """Create push_subscriptions table for browser push notification endpoints."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            endpoint TEXT NOT NULL,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            notification_types TEXT DEFAULT 'calendar,tasks,insights',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, endpoint)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id)")
+
+
+def _migrate_weekly_digests(conn: sqlite3.Connection) -> None:
+    """Create weekly_digests table for storing pre-generated weekly summaries."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS weekly_digests (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            week_start TEXT NOT NULL,
+            content JSON NOT NULL,
+            generated_at TIMESTAMP NOT NULL,
+            UNIQUE(user_id, week_start)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_weekly_digests_user ON weekly_digests(user_id)")
+
+
 def init_db() -> None:
     """Create tables if they don't exist."""
     if settings.STORAGE_BACKEND == "supabase":
@@ -574,4 +624,7 @@ def init_db() -> None:
         _migrate_connection_suggestions(conn)
         _migrate_morning_briefings(conn)
         _migrate_conversation_summaries(conn)
+        _migrate_nudge_dismissals(conn)
+        _migrate_push_subscriptions(conn)
+        _migrate_weekly_digests(conn)
         _seed_thing_types(conn)

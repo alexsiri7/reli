@@ -6,6 +6,8 @@ import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported } from '../hooks/useTTS'
 import { useNetworkStatus } from '../hooks/useNetworkStatus'
+import { NudgeBanner } from './NudgeBanner'
+import { FeatureDiscovery } from './FeatureDiscovery'
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso)
@@ -431,15 +433,23 @@ function injectThingLinks(content: string, refs: ReferencedThing[]): string {
   return result
 }
 
-function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingId: string | null; speak: (text: string, id: string) => void }) {
+const COLLAPSE_THRESHOLD = 600
+
+function MessageBubble({ msg, speakingId, speak, highlighted }: { msg: ChatMessage; speakingId: string | null; speak: (text: string, id: string) => void; highlighted?: boolean }) {
   const isUser = msg.role === 'user'
   const ts = formatTimestamp(msg.timestamp)
   const openThingDetail = useStore(s => s.openThingDetail)
+  const isLong = !isUser && !msg.streaming && msg.content.length > COLLAPSE_THRESHOLD
+  const [collapsed, setCollapsed] = useState(isLong)
 
   const referencedThings = msg.applied_changes?.referenced_things ?? []
   const renderedContent = referencedThings.length > 0
     ? injectThingLinks(msg.content, referencedThings)
     : msg.content
+
+  const displayContent = collapsed
+    ? msg.content.slice(0, COLLAPSE_THRESHOLD).replace(/\s+\S*$/, '') + '\u2026'
+    : renderedContent
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
@@ -450,10 +460,14 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
       )}
       <div className="flex flex-col max-w-[75%]">
         <div
-          className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+          className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed transition-all duration-200 ${
             isUser
               ? 'bg-indigo-600 text-white rounded-br-sm'
-              : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-sm'
+              : `bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border rounded-bl-sm ${
+                  highlighted
+                    ? 'border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-300 dark:ring-indigo-600'
+                    : 'border-gray-200 dark:border-gray-700'
+                }`
           }`}
         >
           {msg.streaming && !msg.content && msg.streamingStage ? (
@@ -487,11 +501,19 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
                     },
                   }}
                 >
-                  {renderedContent}
+                  {displayContent}
                 </ReactMarkdown>
               </div>
               {msg.streaming && msg.content && (
                 <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
+              )}
+              {isLong && (
+                <button
+                  onClick={() => setCollapsed(c => !c)}
+                  className="mt-1.5 text-xs font-medium text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                >
+                  {collapsed ? 'Show more ↓' : 'Show less ↑'}
+                </button>
               )}
             </>
           )}
@@ -706,7 +728,7 @@ function InteractionStyleSelector({ style, onChange }: { style: InteractionStyle
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, detailThingId } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -719,6 +741,7 @@ export function ChatPanel() {
       setChatMode: s.setChatMode,
       interactionStyle: s.interactionStyle,
       setInteractionStyle: s.setInteractionStyle,
+      detailThingId: s.detailThingId,
     }))
   )
   const { isOnline } = useNetworkStatus()
@@ -802,6 +825,10 @@ export function ChatPanel() {
         </div>
       </div>
 
+      {/* Proactive nudge banners + feature discovery hints */}
+      <NudgeBanner />
+      <FeatureDiscovery />
+
       {/* Messages */}
       <div
         ref={scrollContainerRef}
@@ -823,7 +850,16 @@ export function ChatPanel() {
           </div>
         )}
         {messages.map(msg => (
-          <MessageBubble key={msg.id} msg={msg} speakingId={speakingId} speak={speak} />
+          <MessageBubble
+            key={msg.id}
+            msg={msg}
+            speakingId={speakingId}
+            speak={speak}
+            highlighted={
+              !!detailThingId &&
+              (msg.applied_changes?.referenced_things ?? []).some(t => t.thing_id === detailThingId)
+            }
+          />
         ))}
         <div ref={bottomRef} />
       </div>

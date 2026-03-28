@@ -113,6 +113,41 @@ export interface FocusRecommendation {
   is_blocked: boolean
 }
 
+export interface Nudge {
+  id: string
+  source: string
+  source_id: string
+  message: string
+  action_label: string | null
+  action_url: string | null
+  thing_id: string | null
+  dismissed: boolean
+  created_at: string
+}
+
+export interface WeeklyDigestContent {
+  week_start: string
+  things_completed: Array<{ id: string; title: string; type: string }>
+  new_connections: Array<{ from: string; to: string; relationship: string }>
+  preferences_learned: Array<{ pattern: string; confidence: string }>
+  upcoming_deadlines: Array<{ id: string; title: string; type: string }>
+  open_questions: string[]
+  summary: string
+}
+
+export interface WeeklyDigest {
+  id: string
+  week_start: string
+  content: WeeklyDigestContent
+  generated_at: string
+}
+
+export interface PreferenceToast {
+  id: string
+  message: string
+  confidence: 'emerging' | 'moderate' | 'strong'
+}
+
 export interface ConflictAlert {
   alert_type: string
   severity: string
@@ -354,6 +389,26 @@ interface ReliState {
   updateBriefingPreferences: (prefs: BriefingPreferences) => Promise<void>
 
   proactiveSurfaces: ProactiveSurface[]
+
+  // Nudge banners
+  nudges: Nudge[]
+  nudgesLoading: boolean
+  fetchNudges: () => Promise<void>
+  dismissNudge: (id: string, action: 'dismiss' | 'stop-these') => Promise<void>
+
+  // Weekly digest
+  weeklyDigest: WeeklyDigest | null
+  weeklyDigestLoading: boolean
+  weeklyDigestOpen: boolean
+  fetchWeeklyDigest: () => Promise<void>
+  openWeeklyDigest: () => void
+  closeWeeklyDigest: () => void
+
+  // Preference toasts
+  preferenceToasts: PreferenceToast[]
+  addPreferenceToast: (toast: PreferenceToast) => void
+  removePreferenceToast: (id: string) => void
+
   focusRecommendations: FocusRecommendation[]
   focusLoading: boolean
   focusCalendarActive: boolean
@@ -600,6 +655,67 @@ export const useStore = create<ReliState>((set, get) => ({
   },
 
   proactiveSurfaces: [],
+
+  nudges: [],
+  nudgesLoading: false,
+  fetchNudges: async () => {
+    set({ nudgesLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/nudges`)
+      if (res.ok) {
+        const data = await res.json()
+        set({ nudges: data })
+      }
+    } catch {
+      // non-critical
+    } finally {
+      set({ nudgesLoading: false })
+    }
+  },
+  dismissNudge: async (id: string, action: 'dismiss' | 'stop-these') => {
+    set(s => ({ nudges: s.nudges.filter(n => n.id !== id) }))
+    try {
+      await apiFetch(`${BASE}/nudges/${encodeURIComponent(id)}/dismiss`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+    } catch {
+      // best-effort
+    }
+  },
+
+  weeklyDigest: null,
+  weeklyDigestLoading: false,
+  weeklyDigestOpen: false,
+  fetchWeeklyDigest: async () => {
+    set({ weeklyDigestLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/digest/weekly`)
+      if (res.ok) {
+        const data = await res.json()
+        set({ weeklyDigest: data })
+      }
+    } catch {
+      // non-critical
+    } finally {
+      set({ weeklyDigestLoading: false })
+    }
+  },
+  openWeeklyDigest: () => set({ weeklyDigestOpen: true }),
+  closeWeeklyDigest: () => set({ weeklyDigestOpen: false }),
+
+  preferenceToasts: [],
+  addPreferenceToast: (toast: PreferenceToast) => {
+    set(s => ({ preferenceToasts: [...s.preferenceToasts, toast] }))
+    setTimeout(() => {
+      get().removePreferenceToast(toast.id)
+    }, 4000)
+  },
+  removePreferenceToast: (id: string) => {
+    set(s => ({ preferenceToasts: s.preferenceToasts.filter(t => t.id !== id) }))
+  },
+
   focusRecommendations: [],
   focusLoading: false,
   focusCalendarActive: false,
