@@ -924,33 +924,66 @@ def reli_think(
 
 
 class _TokenAuthMiddleware:
-    """ASGI middleware that enforces Bearer token authentication.
+    """ASGI middleware that enforces Bearer token authentication on /mcp.
 
-    If ``mcp_api_token`` is empty, all requests are allowed (dev mode).
-    Otherwise, requests must carry ``Authorization: Bearer <token>``.
+    Accepts two token forms:
+    1. Static API token (``MCP_API_TOKEN``) — legacy; compared as-is.
+    2. JWT issued by the OAuth flow — validated via ``jwt.decode``.
+
+    If neither ``MCP_API_TOKEN`` nor ``SECRET_KEY`` is configured, all requests
+    are allowed (dev mode).
     """
 
     def __init__(self, app: ASGIApp, mcp_api_token: str) -> None:
         self._app = app
-        self._token = mcp_api_token
+        self._static_token = mcp_api_token
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] not in ("http", "websocket"):
             await self._app(scope, receive, send)
             return
 
-        if self._token:
-            headers = dict(scope.get("headers", []))
-            auth_header = headers.get(b"authorization", b"").decode()
-            if auth_header != f"Bearer {self._token}":
-                response = Response(
-                    content='{"detail":"Unauthorized"}',
-                    status_code=401,
-                    media_type="application/json",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-                await response(scope, receive, send)
-                return
+        from .config import settings as _settings
+
+        secret_key = _settings.SECRET_KEY
+        static_token = self._static_token
+
+        # Dev mode: no auth configured
+        if not static_token and not secret_key:
+            await self._app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        auth_header = headers.get(b"authorization", b"").decode()
+
+        authorized = False
+
+        if auth_header.startswith("Bearer "):
+            provided = auth_header[7:]
+
+            # 1. Static token match (legacy / backward compat)
+            if static_token and provided == static_token:
+                authorized = True
+
+            # 2. JWT validation (OAuth flow)
+            if not authorized and secret_key:
+                try:
+                    import jwt as _jwt
+
+                    _jwt.decode(provided, secret_key, algorithms=["HS256"])
+                    authorized = True
+                except Exception:
+                    pass
+
+        if not authorized:
+            response = Response(
+                content='{"detail":"Unauthorized"}',
+                status_code=401,
+                media_type="application/json",
+                headers={"WWW-Authenticate": 'Bearer realm="reli"'},
+            )
+            await response(scope, receive, send)
+            return
 
         await self._app(scope, receive, send)
 

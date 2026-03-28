@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     # --- MCP HTTP server token (for Claude Code → MCP server auth) ---
     MCP_API_TOKEN: str = ""  # Bearer token required to connect to /mcp endpoint
 
+    # --- Application base URL (used in OAuth metadata endpoints) ---
+    # If empty, derived from GOOGLE_AUTH_REDIRECT_URI (scheme + host).
+    RELI_BASE_URL: str = ""  # e.g. https://reli.interstellarai.net
+
     @property
     def allowed_emails_set(self) -> set[str]:
         """Parse ALLOWED_EMAILS into a lowercase set. Empty string means allow all."""
