@@ -1,0 +1,101 @@
+{
+  "eval_set_id": "reasoning-ambiguity-handling",
+  "name": "Reasoning Agent — Ambiguity Handling",
+  "description": "Tests that the agent asks clarifying questions instead of guessing when user intent is unclear, and uses fetch_context to disambiguate when multiple Things could match.",
+  "eval_cases": [
+    {
+      "eval_id": "vague-reference-no-context",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nCan you update that thing from last week?\n</user_message>\n\nRelevant Things from database:\n[]"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "{\"questions_for_user\": [\"Which thing are you referring to?\"], \"priority_question\": \"Which thing are you referring to?\", \"reasoning_summary\": \"Too vague to act on.\", \"briefing_mode\": false}"}],
+            "role": "model"
+          },
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "ambiguous-two-similar-things",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nCancel the meeting with Tom\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-101\", \"title\": \"Meeting with Tom — Q2 planning\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-04-01\"}}, {\"id\": \"thing-102\", \"title\": \"Meeting with Tom — contract review\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-04-03\"}}]"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "{\"questions_for_user\": [\"Which meeting with Tom — Q2 planning (Apr 1) or contract review (Apr 3)?\"], \"priority_question\": \"Which meeting with Tom?\", \"reasoning_summary\": \"Two meetings with Tom, need clarification.\", \"briefing_mode\": false}"}],
+            "role": "model"
+          },
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "ambiguous-then-clarified",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nMark that project done\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-201\", \"title\": \"Kitchen renovation\", \"type_hint\": \"project\", \"data\": {}}, {\"id\": \"thing-202\", \"title\": \"Website redesign\", \"type_hint\": \"project\", \"data\": {}}]"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "{\"questions_for_user\": [\"Which project — Kitchen renovation or Website redesign?\"], \"priority_question\": \"Which project?\", \"reasoning_summary\": \"Two projects, need clarification.\", \"briefing_mode\": false}"}],
+            "role": "model"
+          },
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        },
+        {
+          "invocation_id": "inv-2",
+          "user_content": {
+            "parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nThe kitchen one\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-201\", \"title\": \"Kitchen renovation\", \"type_hint\": \"project\", \"data\": {}}, {\"id\": \"thing-202\", \"title\": \"Website redesign\", \"type_hint\": \"project\", \"data\": {}}]"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Marked kitchen renovation as done.\", \"briefing_mode\": false}"}],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [{"id": null, "args": {"thing_id": "thing-201", "active": false}, "name": "update_thing", "partial_args": null, "will_continue": null}],
+            "tool_responses": [{"id": null, "name": "update_thing", "response": {"id": "thing-201", "title": "Kitchen renovation"}}],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "deal-with-the-dentist-stuff",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nCan you deal with the dentist stuff?\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-301\", \"title\": \"Dentist appointment\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-04-10\", \"time\": \"14:00\", \"dentist\": \"Dr. Smith\"}}, {\"id\": \"thing-302\", \"title\": \"Dental insurance renewal\", \"type_hint\": \"task\", \"data\": {\"deadline\": \"2026-05-01\"}}]"}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "{\"questions_for_user\": [\"What would you like me to do with the dentist items?\"], \"priority_question\": \"What would you like me to do?\", \"reasoning_summary\": \"Vague request, surfacing what exists.\", \"briefing_mode\": false}"}],
+            "role": "model"
+          },
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}

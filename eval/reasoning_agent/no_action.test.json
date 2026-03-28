@@ -1,0 +1,73 @@
+{
+  "eval_set_id": "reasoning-no-action",
+  "name": "Reasoning Agent — No-Action Cases",
+  "description": "Tests that the agent does NOT create or modify Things for conversational messages, gratitude, off-topic questions, or when the user is just chatting.",
+  "eval_cases": [
+    {
+      "eval_id": "simple-thanks",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nThanks, that's perfect!\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-001\", \"title\": \"Buy groceries\", \"type_hint\": \"task\", \"data\": {}}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"User expressed gratitude.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "casual-greeting",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nHey, how's it going?\n</user_message>\n\nRelevant Things from database:\n[]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Casual greeting.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "off-topic-question",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nWhat's the capital of France?\n</user_message>\n\nRelevant Things from database:\n[]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"General knowledge question.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "opinion-not-a-task",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nI think the weather has been really nice lately\n</user_message>\n\nRelevant Things from database:\n[]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Casual observation.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "already-exists-no-duplicate",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nI need to buy groceries\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-050\", \"title\": \"Buy groceries\", \"type_hint\": \"task\", \"data\": {\"notes\": \"Weekly shopping\"}, \"active\": true}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Grocery task already exists.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}
