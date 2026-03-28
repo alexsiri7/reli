@@ -12,6 +12,7 @@ Supports two transports:
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import os
@@ -23,6 +24,10 @@ from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import tools as shared_tools
+
+# Context variable holding the authenticated user_id for the current request.
+# Set by _TokenAuthMiddleware, read by MCP tool functions.
+_current_user_id: contextvars.ContextVar[str] = contextvars.ContextVar("_current_user_id", default="")
 
 logger = logging.getLogger(__name__)
 
@@ -67,31 +72,45 @@ mcp = FastMCP(
 )
 
 
+def _user_id() -> str:
+    """Get the authenticated user_id for the current MCP request."""
+    return _current_user_id.get("")
+
+
 # ---------------------------------------------------------------------------
-# CRUD + Search Tools
+# Context + Search Tools
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool()
-def search_things(
-    query: str,
-    active_only: bool = False,
-    type_hint: str | None = None,
-    limit: int = 20,
-) -> list[dict[str, Any]]:
-    """Search Things by text query across titles, data, types, and relationships.
+def fetch_context(
+    search_queries: list[str] | None = None,
+    fetch_ids: list[str] | None = None,
+    active_only: bool = True,
+    type_hint: str = "",
+) -> dict[str, Any]:
+    """Search the Things database for relevant context.
+
+    Call this tool FIRST to find Things related to the user's request before
+    making storage changes. This prevents creating duplicates and provides
+    full context about what the user has already stored.
 
     Args:
-        query: Free-text search query.
-        active_only: If true, only return active (non-archived) Things.
-        type_hint: Filter by type (e.g. 'task', 'project', 'person').
-        limit: Maximum results to return (1-200, default 20).
+        search_queries: List of search query strings, e.g. ["vacation plans", "travel"].
+        fetch_ids: List of specific Thing IDs to fetch by ID.
+        active_only: Only return active Things (default true).
+        type_hint: Filter by type (task, note, person, project, etc.), or empty for all.
+
+    Returns:
+        Dict with 'things' (list of Thing dicts), 'relationships' (list of
+        relationship dicts between found Things), and 'count' (number found).
     """
-    return shared_tools.search_things(
-        query=query,
+    return shared_tools.fetch_context(
+        search_queries_json=json.dumps(search_queries or []),
+        fetch_ids_json=json.dumps(fetch_ids or []),
         active_only=active_only,
         type_hint=type_hint,
-        limit=limit,
+        user_id=_user_id(),
     )
 
 
@@ -102,7 +121,7 @@ def get_thing(thing_id: str) -> dict[str, Any]:
     Args:
         thing_id: The UUID of the Thing to retrieve.
     """
-    return shared_tools.get_thing(thing_id=thing_id)
+    return shared_tools.get_thing(thing_id=thing_id, user_id=_user_id())
 
 
 @mcp.tool()
@@ -140,6 +159,7 @@ def create_thing(
         surface=surface,
         data_json=data_json,
         open_questions_json=oq_json,
+        user_id=_user_id(),
     )
 
 
@@ -188,6 +208,7 @@ def update_thing(
         surface=surface,
         data_json=data_json,
         open_questions_json=oq_json,
+        user_id=_user_id(),
     )
 
 
@@ -202,7 +223,7 @@ def delete_thing(thing_id: str) -> dict[str, Any]:
     Args:
         thing_id: The UUID of the Thing to deactivate.
     """
-    return shared_tools.update_thing(thing_id=thing_id, active=False)
+    return shared_tools.update_thing(thing_id=thing_id, active=False, user_id=_user_id())
 
 
 @mcp.tool()
@@ -220,7 +241,7 @@ def merge_things(keep_id: str, remove_id: str) -> dict[str, Any]:
     Returns:
         Dict with keep_id, remove_id, keep_title, remove_title.
     """
-    return shared_tools.merge_things(keep_id=keep_id, remove_id=remove_id)
+    return shared_tools.merge_things(keep_id=keep_id, remove_id=remove_id, user_id=_user_id())
 
 
 @mcp.tool()
@@ -230,7 +251,7 @@ def list_relationships(thing_id: str) -> list[dict[str, Any]]:
     Args:
         thing_id: The UUID of the Thing whose relationships to retrieve.
     """
-    return shared_tools.list_relationships(thing_id=thing_id)
+    return shared_tools.list_relationships(thing_id=thing_id, user_id=_user_id())
 
 
 @mcp.tool()
@@ -252,6 +273,7 @@ def create_relationship(
         from_thing_id=from_thing_id,
         to_thing_id=to_thing_id,
         relationship_type=relationship_type,
+        user_id=_user_id(),
     )
 
 
@@ -262,7 +284,7 @@ def delete_relationship(relationship_id: str) -> dict[str, Any]:
     Args:
         relationship_id: The UUID of the relationship to delete.
     """
-    return shared_tools.delete_relationship(relationship_id=relationship_id)
+    return shared_tools.delete_relationship(relationship_id=relationship_id, user_id=_user_id())
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +317,7 @@ def get_briefing(as_of: str | None = None) -> dict[str, Any]:
         as_of: Optional ISO 8601 date (YYYY-MM-DD) to get the briefing for.
                Defaults to today.
     """
-    return shared_tools.get_briefing(as_of=as_of)
+    return shared_tools.get_briefing(as_of=as_of, user_id=_user_id())
 
 
 @mcp.tool()
@@ -310,7 +332,7 @@ def get_open_questions(limit: int = 50) -> list[dict[str, Any]]:
     Args:
         limit: Maximum number of Things to return (1-200, default 50).
     """
-    return shared_tools.get_open_questions(limit=min(max(limit, 1), 200))
+    return shared_tools.get_open_questions(limit=min(max(limit, 1), 200), user_id=_user_id())
 
 
 @mcp.tool()
@@ -325,7 +347,7 @@ def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
     Args:
         window: Look-ahead window in days for deadline detection (1-90, default 14).
     """
-    return shared_tools.get_conflicts(window=min(max(window, 1), 90))
+    return shared_tools.get_conflicts(window=min(max(window, 1), 90), user_id=_user_id())
 
 
 @mcp.tool()
@@ -346,6 +368,7 @@ def chat_history(
         n=n,
         search_query=search_query,
         cross_session=True,
+        user_id=_user_id(),
     )
 
 
@@ -931,8 +954,10 @@ class _TokenAuthMiddleware:
                 try:
                     import jwt as _jwt
 
-                    _jwt.decode(provided, secret_key, algorithms=["HS256"])
+                    payload = _jwt.decode(provided, secret_key, algorithms=["HS256"])
                     authorized = True
+                    user_id = payload.get("sub", "")
+                    _current_user_id.set(user_id)
                 except Exception:
                     pass
 
