@@ -18,6 +18,7 @@ from backend.mcp_server import (
     get_briefing,
     get_conflicts,
     get_thing,
+    list_relationships,
     mcp,
     pa_behavior_guide,
     proactive_surfacing_guide,
@@ -197,6 +198,42 @@ class TestDeleteThing:
 
 
 # ---------------------------------------------------------------------------
+# list_relationships
+# ---------------------------------------------------------------------------
+
+
+class TestListRelationships:
+    @patch("backend.mcp_server._api_get")
+    def test_list_returns_relationships(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = [
+            {"id": "rel-1", "from_thing_id": "a", "to_thing_id": "b", "relationship_type": "works_with"},
+            {"id": "rel-2", "from_thing_id": "c", "to_thing_id": "a", "relationship_type": "blocks"},
+        ]
+        result = list_relationships(thing_id="a")
+        mock_get.assert_called_once_with("/api/things/a/relationships")
+        assert len(result) == 2
+        assert result[0]["id"] == "rel-1"
+        assert result[1]["relationship_type"] == "blocks"
+
+    @patch("backend.mcp_server._api_get")
+    def test_list_empty(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        result = list_relationships(thing_id="no-rels")
+        mock_get.assert_called_once_with("/api/things/no-rels/relationships")
+        assert result == []
+
+    @patch("backend.mcp_server._api_get")
+    def test_list_not_found(self, mock_get: MagicMock) -> None:
+        mock_get.side_effect = httpx.HTTPStatusError(
+            "Not Found",
+            request=httpx.Request("GET", "http://test"),
+            response=httpx.Response(404),
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            list_relationships(thing_id="nonexistent")
+
+
+# ---------------------------------------------------------------------------
 # create_relationship
 # ---------------------------------------------------------------------------
 
@@ -302,6 +339,7 @@ class TestMcpMetadata:
             "create_thing",
             "update_thing",
             "delete_thing",
+            "list_relationships",
             "create_relationship",
             "delete_relationship",
             "get_briefing",
@@ -380,7 +418,7 @@ class TestIntegration:
         assert result["ok"] is True
 
     def test_relationship_lifecycle(self, api_server: None) -> None:
-        """Create two Things, link them, then delete the relationship."""
+        """Create two Things, link them, list, then delete the relationship."""
         t1 = create_thing(title="Thing A", type_hint="person")
         t2 = create_thing(title="Thing B", type_hint="project")
 
@@ -394,9 +432,19 @@ class TestIntegration:
         assert rel["to_thing_id"] == t2["id"]
         assert rel["relationship_type"] == "works_on"
 
+        # List relationships
+        rels = list_relationships(thing_id=t1["id"])
+        assert len(rels) == 1
+        assert rels[0]["id"] == rel["id"]
+        assert rels[0]["relationship_type"] == "works_on"
+
         # Delete relationship
         result = delete_relationship(relationship_id=rel["id"])
         assert result["ok"] is True
+
+        # Verify deleted
+        rels_after = list_relationships(thing_id=t1["id"])
+        assert len(rels_after) == 0
 
         # Clean up
         delete_thing(thing_id=t1["id"])

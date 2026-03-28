@@ -256,6 +256,17 @@ def delete_thing(thing_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def list_relationships(thing_id: str) -> list[dict[str, Any]]:
+    """List all relationships where a Thing is source or target.
+
+    Args:
+        thing_id: The UUID of the Thing whose relationships to retrieve.
+    """
+    result: list[dict[str, Any]] = _api_get(f"/api/things/{thing_id}/relationships")
+    return result
+
+
+@mcp.tool()
 def create_relationship(
     from_thing_id: str,
     to_thing_id: str,
