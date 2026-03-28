@@ -58,6 +58,61 @@ def test_init_tracing_configures_provider_when_enabled():
             assert backend.tracing._initialized is True
 
 
+def test_init_tracing_instruments_adk_when_available():
+    """init_tracing should call ADKInstrumentation().instrument() when package is present."""
+    with patch("backend.tracing.settings") as mock_settings:
+        mock_settings.phoenix_enabled_bool = True
+        mock_settings.PHOENIX_ENDPOINT = "http://localhost:6006/v1/traces"
+        mock_settings.OTEL_SERVICE_NAME = "reli-test"
+
+        mock_tracer_provider = MagicMock()
+        mock_adk_instrumentation = MagicMock()
+
+        with (
+            patch("opentelemetry.sdk.trace.TracerProvider", return_value=mock_tracer_provider),
+            patch("opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter"),
+            patch("opentelemetry.sdk.trace.export.BatchSpanProcessor"),
+            patch("opentelemetry.trace.set_tracer_provider"),
+            patch.dict(
+                "sys.modules",
+                {
+                    "openinference.instrumentation.google_adk": MagicMock(
+                        ADKInstrumentation=MagicMock(return_value=mock_adk_instrumentation)
+                    )
+                },
+            ),
+        ):
+            import backend.tracing
+
+            backend.tracing._initialized = False
+            backend.tracing.init_tracing()
+
+        mock_adk_instrumentation.instrument.assert_called_once_with(tracer_provider=mock_tracer_provider)
+
+
+def test_init_tracing_continues_without_adk_package():
+    """init_tracing should succeed even if openinference-instrumentation-google-adk is missing."""
+    with patch("backend.tracing.settings") as mock_settings:
+        mock_settings.phoenix_enabled_bool = True
+        mock_settings.PHOENIX_ENDPOINT = "http://localhost:6006/v1/traces"
+        mock_settings.OTEL_SERVICE_NAME = "reli-test"
+
+        with (
+            patch("opentelemetry.sdk.trace.TracerProvider", return_value=MagicMock()),
+            patch("opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter"),
+            patch("opentelemetry.sdk.trace.export.BatchSpanProcessor"),
+            patch("opentelemetry.trace.set_tracer_provider"),
+            patch.dict("sys.modules", {"openinference.instrumentation.google_adk": None}),
+        ):
+            import backend.tracing
+
+            backend.tracing._initialized = False
+            # Should not raise even without the ADK instrumentation package
+            backend.tracing.init_tracing()
+
+        assert backend.tracing._initialized is True
+
+
 def test_shutdown_tracing_flushes_provider():
     """shutdown_tracing should call shutdown on the tracer provider."""
     import backend.tracing
