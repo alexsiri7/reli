@@ -503,6 +503,50 @@ def reindex_things(user_id: str = Depends(require_user)) -> dict[str, int]:
     return {"reindexed": count}
 
 
+class PreferenceFeedback(BaseModel):
+    positive: bool
+
+
+@router.patch("/{thing_id}/preference-feedback", response_model=Thing, summary="Update preference confidence via feedback")
+def preference_feedback(
+    thing_id: str,
+    body: PreferenceFeedback,
+    user_id: str = Depends(require_user),
+) -> Thing:
+    """Adjust a preference Thing's confidence up (positive) or down (negative)."""
+    uf_sql, uf_params = user_filter(user_id)
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        row = conn.execute(
+            f"SELECT * FROM things WHERE id = ? AND type_hint = 'preference'{uf_sql}",
+            [thing_id, *uf_params],
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Preference Thing '{thing_id}' not found")
+
+        thing = _row_to_thing(row)
+        data = dict(thing.data) if thing.data else {}
+        current = float(data.get("confidence", 0.5))
+        if body.positive:
+            data["confidence"] = min(1.0, current + 0.15)
+        else:
+            data["confidence"] = max(0.0, current - 0.3)
+
+        # Track feedback in evidence
+        evidence = list(data.get("evidence", []))
+        if isinstance(evidence, list):
+            evidence.append({"feedback": "positive" if body.positive else "negative", "at": now})
+        data["evidence"] = evidence
+        data["updated_at"] = now
+
+        conn.execute(
+            "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(data), now, thing_id),
+        )
+        updated_row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+    return _row_to_thing(updated_row)
+
+
 # ── Merge suggestions & execution ───────────────────────────────────────────
 
 

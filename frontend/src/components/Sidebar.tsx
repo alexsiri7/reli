@@ -4,6 +4,7 @@ import { useStore } from '../store'
 import type { Thing, SweepFinding, FocusRecommendation, MorningBriefing } from '../store'
 import { typeIcon } from '../utils'
 import { CalendarSection } from './CalendarSection'
+import { NudgeBanner } from './NudgeBanner'
 import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
 import { MergeSuggestions } from './MergeSuggestions'
@@ -228,13 +229,14 @@ function confidenceLabel(confidence: number): { label: string; className: string
 
 function PreferenceCard({ thing }: { thing: Thing }) {
   const openThingDetail = useStore(s => s.openThingDetail)
+  const submitPreferenceFeedback = useStore(s => s.submitPreferenceFeedback)
   const confidence: number = typeof thing.data?.confidence === 'number' ? thing.data.confidence : 0
   const evidence: unknown[] = Array.isArray(thing.data?.evidence) ? (thing.data.evidence as unknown[]) : []
   const category: string = typeof thing.data?.category === 'string' ? thing.data.category : ''
   const { label, className } = confidenceLabel(confidence)
 
   return (
-    <div className="px-3 py-1">
+    <div className="px-3 py-1 group">
       <div
         className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors px-2 cursor-pointer border border-transparent hover:border-purple-100 dark:hover:border-purple-900"
         onClick={() => openThingDetail(thing.id)}
@@ -259,6 +261,24 @@ function PreferenceCard({ thing }: { thing: Thing }) {
                 {category}
               </span>
             )}
+          </div>
+          {/* Feedback buttons — visible on hover */}
+          <div className="flex items-center gap-2 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => submitPreferenceFeedback(thing.id, true)}
+              className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200 font-medium transition-colors"
+              title="That's right — strengthen this preference"
+            >
+              That's right
+            </button>
+            <span className="text-gray-300 dark:text-gray-600">·</span>
+            <button
+              onClick={() => submitPreferenceFeedback(thing.id, false)}
+              className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+              title="Not really — weaken this preference"
+            >
+              Not really
+            </button>
           </div>
         </div>
       </div>
@@ -537,8 +557,9 @@ export function Sidebar() {
             </p>
           </div>
           <div className="flex items-center gap-1.5">
+            {/* Graph view toggle */}
             <button
-              onClick={() => setMainView(mainView === 'list' ? 'graph' : 'list')}
+              onClick={() => setMainView(mainView === 'graph' ? 'list' : 'graph')}
               aria-label={mainView === 'graph' ? 'Switch to list view' : 'Switch to graph view'}
               title={mainView === 'graph' ? 'List view' : 'Graph view'}
               className={`p-1.5 rounded-lg transition-colors ${
@@ -553,6 +574,21 @@ export function Sidebar() {
                 ) : (
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zm9 0a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zm-4.5 9a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zM7.5 7.5h9M12 12.75v3" />
                 )}
+              </svg>
+            </button>
+            {/* Calendar view toggle */}
+            <button
+              onClick={() => setMainView(mainView === 'calendar' ? 'list' : 'calendar')}
+              aria-label={mainView === 'calendar' ? 'Switch to list view' : 'Switch to calendar view'}
+              title={mainView === 'calendar' ? 'List view' : 'Calendar view'}
+              className={`p-1.5 rounded-lg transition-colors ${
+                mainView === 'calendar'
+                  ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
+                  : 'text-gray-400 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
               </svg>
             </button>
             {currentUser && (
@@ -669,6 +705,9 @@ export function Sidebar() {
 
             {/* Google Calendar */}
             <CalendarSection />
+
+            {/* Proactive nudge banners — time-sensitive alerts */}
+            <NudgeBanner />
 
             {/* Morning Briefing — pre-generated summary */}
             {morningBriefing && <MorningBriefingSection briefing={morningBriefing} />}

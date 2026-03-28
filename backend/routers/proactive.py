@@ -1,9 +1,12 @@
 """Proactive surfaces — surface time-relevant entities in the sidebar."""
 
+import json
 import re
-from datetime import date
+import uuid
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
 from ..auth import require_user, user_filter
 from ..database import db
@@ -141,3 +144,53 @@ def get_proactive_surfaces(
     # Sort: soonest first, then alphabetically by title.
     surfaces.sort(key=lambda s: (s.days_away, s.thing.title))
     return surfaces
+
+
+class NudgeDismissRequest(BaseModel):
+    thing_id: str
+    nudge_type: str = "general"
+
+
+@router.post("/stop", summary="Stop nudges for a thing")
+def stop_nudge(
+    body: NudgeDismissRequest,
+    user_id: str = Depends(require_user),
+) -> dict:
+    """Create a negative preference signal to stop nudges for a thing."""
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        # Check if there's already a "stop nudge" preference for this thing
+        existing = conn.execute(
+            "SELECT id, data FROM things WHERE type_hint = 'preference' AND user_id = ? AND title LIKE ?",
+            (user_id, f"%nudge%{body.thing_id}%"),
+        ).fetchone()
+
+        if existing:
+            # Strengthen the negative signal
+            try:
+                data = json.loads(existing["data"]) if isinstance(existing["data"], str) else existing["data"] or {}
+            except Exception:
+                data = {}
+            data["confidence"] = max(0.0, min(1.0, float(data.get("confidence", 0.7)) + 0.1))
+            data["updated_at"] = now
+            conn.execute(
+                "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(data), now, existing["id"]),
+            )
+        else:
+            # Create a new negative preference
+            pref_id = str(uuid.uuid4())
+            data = {
+                "category": "notifications",
+                "confidence": 0.7,
+                "negative": True,
+                "thing_id": body.thing_id,
+                "nudge_type": body.nudge_type,
+                "evidence": [{"note": "user dismissed nudge", "at": now}],
+            }
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active, surface, data, created_at, updated_at, user_id) "
+                "VALUES (?, ?, 'preference', 3, 1, 0, ?, ?, ?, ?)",
+                (pref_id, f"Prefers no nudges about this item ({body.nudge_type})", json.dumps(data), now, now, user_id),
+            )
+    return {"ok": True}

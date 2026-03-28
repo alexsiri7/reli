@@ -5,11 +5,13 @@ import { Sidebar } from './components/Sidebar'
 import { ChatPanel } from './components/ChatPanel'
 import { DetailPanel } from './components/DetailPanel'
 import GraphView from './components/GraphView'
+import { CalendarView } from './components/CalendarView'
 import { LoginPage } from './components/LoginPage'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { SettingsPanel } from './components/SettingsPanel'
 import { FeedbackDialog } from './components/FeedbackDialog'
+import { ToastContainer } from './components/ToastContainer'
 
 function App() {
   const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
@@ -119,6 +121,8 @@ function App() {
         <Sidebar />
         {mainView === 'graph' ? (
           <GraphView />
+        ) : mainView === 'calendar' ? (
+          <CalendarView />
         ) : (
           <>
             <DetailPanel />
@@ -167,6 +171,7 @@ function App() {
       </nav>
       {settingsOpen && <SettingsPanel />}
       {feedbackOpen && <FeedbackDialog />}
+      <ToastContainer />
     </div>
   )
 }

@@ -289,6 +289,15 @@ export interface CallUsage {
   cost_usd: number
 }
 
+// ── Toast notifications ────────────────────────────────────────────────────────
+
+export interface Toast {
+  id: string
+  message: string
+  type?: 'info' | 'success' | 'warning' | 'error'
+  duration?: number // ms, default 4000
+}
+
 export type ChatMode = 'normal' | 'planning'
 
 export type StreamingStage = 'context' | 'reasoning' | 'response' | null
@@ -401,9 +410,22 @@ interface ReliState {
   toggleThingFilterType: (type: string) => void
   clearThingFilters: () => void
 
+  // Toast notifications
+  toasts: Toast[]
+  showToast: (msg: string, type?: Toast['type'], duration?: number) => void
+  dismissToast: (id: string) => void
+
+  // Nudge dismiss (local)
+  dismissedNudgeIds: Set<string>
+  dismissNudge: (key: string) => void
+  stopNudgeType: (thingId: string, nudgeType: string) => Promise<void>
+
+  // Preference feedback
+  submitPreferenceFeedback: (thingId: string, positive: boolean) => Promise<void>
+
   // View mode
-  mainView: 'list' | 'graph'
-  setMainView: (view: 'list' | 'graph') => void
+  mainView: 'list' | 'graph' | 'calendar'
+  setMainView: (view: 'list' | 'graph' | 'calendar') => void
 
   // Chat mode (Hats)
   chatMode: ChatMode
@@ -1028,6 +1050,20 @@ export const useStore = create<ReliState>((set, get) => ({
       get().fetchProactiveSurfaces()
       get().fetchFocusRecommendations()
       get().fetchConflictAlerts()
+
+      // Show preference learning toasts if preferences were created/updated
+      const lastMsg = get().messages.findLast(m => m.role === 'assistant' && !m.streaming)
+      const changes = lastMsg?.applied_changes
+      if (changes) {
+        const prefCreated = (changes.created ?? []).filter(c => c.type_hint === 'preference')
+        const prefUpdated = (changes.updated ?? []).filter(c => (c as {type_hint?: string}).type_hint === 'preference')
+        for (const p of prefCreated) {
+          get().showToast(`\uD83E\uDDE0 Learned: ${p.title}`, 'info', 5000)
+        }
+        for (const p of prefUpdated) {
+          get().showToast(`\uD83E\uDDE0 Updated: ${p.title}`, 'info', 4000)
+        }
+      }
     } catch (e) {
       set(state => ({
         messages: state.messages.map(m =>
@@ -1104,6 +1140,56 @@ export const useStore = create<ReliState>((set, get) => ({
       : [...s.thingFilterTypes, type],
   })),
   clearThingFilters: () => set({ thingFilterQuery: '', thingFilterTypes: [] }),
+
+  // Toast notifications
+  toasts: [],
+  showToast: (msg, type = 'info', duration = 4000) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    set(s => ({ toasts: [...s.toasts, { id, message: msg, type, duration }] }))
+  },
+  dismissToast: (id) => set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })),
+
+  // Nudge dismiss (local session)
+  dismissedNudgeIds: new Set(),
+  dismissNudge: (key) => set(s => ({ dismissedNudgeIds: new Set([...s.dismissedNudgeIds, key]) })),
+  stopNudgeType: async (thingId, nudgeType) => {
+    // Dismiss locally immediately
+    const key = `${thingId}:${nudgeType}`
+    set(s => ({ dismissedNudgeIds: new Set([...s.dismissedNudgeIds, key]) }))
+    // Create negative preference signal on backend (best-effort)
+    try {
+      await apiFetch(`${BASE}/proactive/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thing_id: thingId, nudge_type: nudgeType }),
+      })
+    } catch {
+      // best-effort
+    }
+  },
+
+  // Preference feedback
+  submitPreferenceFeedback: async (thingId, positive) => {
+    try {
+      const res = await apiFetch(`${BASE}/things/${thingId}/preference-feedback`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ positive }),
+      })
+      if (!res.ok) return
+      const updated: Thing = validateResponse(ThingSchema, await res.json(), `/things/${thingId}/preference-feedback`)
+      set(s => ({
+        things: s.things.map(t => t.id === thingId ? updated : t),
+        detailThing: s.detailThing?.id === thingId ? updated : s.detailThing,
+      }))
+      get().showToast(
+        positive ? 'Thanks — preference strengthened!' : 'Got it — preference adjusted.',
+        positive ? 'success' : 'info',
+      )
+    } catch {
+      // best-effort
+    }
+  },
 
   // View mode
   mainView: 'list',
