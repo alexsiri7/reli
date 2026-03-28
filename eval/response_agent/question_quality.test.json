@@ -1,0 +1,100 @@
+{
+  "eval_set_id": "response-agent-question-quality",
+  "name": "Response Agent — Priority Question Ask/Hold Judgment",
+  "description": "Golden dataset: response agent must correctly decide when to ask the priority_question (planning mode) vs hold it (rapid-fire command).",
+  "eval_cases": [
+    {
+      "eval_id": "question-hold-rapid-command",
+      "description": "User gave a rapid-fire command. Priority question should be HELD (not asked).",
+      "input": {
+        "user_message": "add coffee to shopping list",
+        "reasoning_summary": "Created task: Coffee (shopping). No open questions.",
+        "applied_changes": {
+          "created": [{"id": "thing-cof01", "title": "Coffee", "type_hint": "task", "active": 1}],
+          "updated": [],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": ["Do you want to set a shopping reminder for the weekend?"],
+        "priority_question": "Do you want to set a shopping reminder for the weekend?",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response does NOT ask about reminders or mention the weekend shopping question",
+        "Response gives a quick, direct confirmation of the creation without opening a dialogue"
+      ]
+    },
+    {
+      "eval_id": "question-hold-batch-command",
+      "description": "User gave multiple rapid commands. Priority question should be HELD.",
+      "input": {
+        "user_message": "done with the report. also done with the client call.",
+        "reasoning_summary": "Marked 'Q4 Report' and 'Client call' as inactive. Priority question about next focus.",
+        "applied_changes": {
+          "created": [],
+          "updated": [
+            {"id": "thing-rep01", "title": "Q4 Report", "type_hint": "task", "active": 0},
+            {"id": "thing-cli01", "title": "Client call", "type_hint": "task", "active": 0}
+          ],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": ["What do you want to tackle next?"],
+        "priority_question": "What do you want to tackle next?",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response celebrates the completions",
+        "Response does NOT ask 'What do you want to tackle next?' or similar question (hold it — user gave rapid commands)"
+      ]
+    },
+    {
+      "eval_id": "question-ask-planning-mode",
+      "description": "User in planning/exploratory mode. Priority question should be ASKED.",
+      "input": {
+        "user_message": "I'm trying to figure out what to work on this week. I have a lot going on.",
+        "reasoning_summary": "No changes. User is in planning mode. Surfacing open items for prioritization.",
+        "applied_changes": {
+          "created": [],
+          "updated": [],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": ["What's the one thing that would make this week a win?"],
+        "priority_question": "What's the one thing that would make this week a win?",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response asks the planning question or a closely related question about priorities or what would make the week successful"
+      ]
+    },
+    {
+      "eval_id": "question-ask-ambiguous-context",
+      "description": "User message is ambiguous/open-ended. Priority question resolves a blocker — should be ASKED.",
+      "input": {
+        "user_message": "I need to prep for the board meeting",
+        "reasoning_summary": "No changes. Multiple board meeting prep items exist. Priority question identifies the blocker.",
+        "applied_changes": {
+          "created": [],
+          "updated": [],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": ["Is the financial summary already drafted, or do you need to start there?"],
+        "priority_question": "Is the financial summary already drafted, or do you need to start there?",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response asks about the financial summary or a similar clarifying question about board meeting prep status"
+      ]
+    }
+  ]
+}
