@@ -1,6 +1,6 @@
 {
   "eval_set_id": "reasoning-personality-adaptation",
-  "name": "Reasoning Agent — Personality Adaptation (Communication Style)",
+  "name": "Reasoning Agent \u2014 Personality Adaptation (Communication Style)",
   "description": "Golden dataset: detecting and storing communication style signals from explicit corrections and implicit feedback. Tests that the reasoning agent correctly creates/updates reli_communication preference Things when users signal how they want Reli to communicate.",
   "eval_cases": [
     {
@@ -49,15 +49,6 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"Reli communication style\", \"how Reli communicates\", \"reli_communication\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
                   "title": "How the user wants Reli to communicate",
                   "type_hint": "preference",
                   "data_json": "{\"category\": \"reli_communication\", \"patterns\": [{\"pattern\": \"avoids bullet points, prefers plain text\", \"confidence\": \"established\", \"observations\": 1}]}",
@@ -69,18 +60,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [],
-                  "relationships": [],
-                  "count": 0
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -153,15 +132,6 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"Reli communication style\", \"how Reli communicates\", \"reli_communication\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
                   "thing_id": "comm-pref-100",
                   "data_json": "{\"category\": \"reli_communication\", \"patterns\": [{\"pattern\": \"avoids emoji\", \"confidence\": \"established\", \"observations\": 1}, {\"pattern\": \"prefers concise responses\", \"confidence\": \"established\", \"observations\": 1}]}"
                 },
@@ -171,23 +141,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [
-                    {
-                      "id": "comm-pref-100",
-                      "title": "How the user wants Reli to communicate",
-                      "type_hint": "preference"
-                    }
-                  ],
-                  "count": 1
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -259,15 +212,6 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"urgent tasks\", \"Reli communication style\", \"reli_communication\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
                   "title": "How the user wants Reli to communicate",
                   "type_hint": "preference",
                   "data_json": "{\"category\": \"reli_communication\", \"patterns\": [{\"pattern\": \"prefers direct, concise responses\", \"confidence\": \"emerging\", \"observations\": 1}]}",
@@ -279,18 +223,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [],
-                  "relationships": [],
-                  "count": 0
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -332,7 +264,7 @@
                 "function_call": null,
                 "function_response": null,
                 "inline_data": null,
-                "text": "Today's date: 2026-03-26 (Thursday)\n\n<user_message>\nI've said this before — no emoji please. It feels unprofessional.\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"comm-pref-200\", \"title\": \"How the user wants Reli to communicate\", \"type_hint\": \"preference\", \"data\": \"{\\\"category\\\": \\\"reli_communication\\\", \\\"patterns\\\": [{\\\"pattern\\\": \\\"avoids emoji\\\", \\\"confidence\\\": \\\"emerging\\\", \\\"observations\\\": 1}]}\", \"active\": 1}]",
+                "text": "Today's date: 2026-03-26 (Thursday)\n\n<user_message>\nI've said this before \u2014 no emoji please. It feels unprofessional.\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"comm-pref-200\", \"title\": \"How the user wants Reli to communicate\", \"type_hint\": \"preference\", \"data\": \"{\\\"category\\\": \\\"reli_communication\\\", \\\"patterns\\\": [{\\\"pattern\\\": \\\"avoids emoji\\\", \\\"confidence\\\": \\\"emerging\\\", \\\"observations\\\": 1}]}\", \"active\": 1}]",
                 "thought": null,
                 "thought_signature": null,
                 "video_metadata": null
@@ -363,15 +295,6 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"Reli communication style\", \"emoji\", \"reli_communication\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
                   "thing_id": "comm-pref-200",
                   "data_json": "{\"category\": \"reli_communication\", \"patterns\": [{\"pattern\": \"avoids emoji\", \"confidence\": \"established\", \"observations\": 2}]}"
                 },
@@ -381,23 +304,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [
-                    {
-                      "id": "comm-pref-200",
-                      "title": "How the user wants Reli to communicate",
-                      "type_hint": "preference"
-                    }
-                  ],
-                  "count": 1
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -469,15 +375,6 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"team communication\", \"communication guidelines\", \"team norms\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
                   "title": "Team communication guidelines",
                   "type_hint": "note",
                   "data_json": "{\"norms\": [\"async-first\", \"no meetings before 10am\", \"Slack for quick questions\", \"email for decisions\"]}",
@@ -489,18 +386,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [],
-                  "relationships": [],
-                  "count": 0
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,

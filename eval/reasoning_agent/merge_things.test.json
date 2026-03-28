@@ -1,6 +1,6 @@
 {
   "eval_set_id": "reasoning-merge-things",
-  "name": "Reasoning Agent — Merge Things",
+  "name": "Reasoning Agent \u2014 Merge Things",
   "description": "Golden dataset: merging duplicate Things",
   "eval_cases": [
     {
@@ -49,15 +49,6 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"groceries\", \"grocery\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
                   "keep_id": "thing-500",
                   "remove_id": "thing-501",
                   "merged_data_json": "{\"store\": \"Trader Joe's\", \"notes\": \"weekly\"}"
@@ -68,24 +59,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [
-                    {
-                      "id": "thing-500"
-                    },
-                    {
-                      "id": "thing-501"
-                    }
-                  ],
-                  "count": 2
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,

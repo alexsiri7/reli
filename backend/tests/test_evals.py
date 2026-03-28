@@ -243,7 +243,14 @@ async def test_context_agent_search_params() -> None:
         text = parts[0].text
         assert text, f"{case.eval_id}: no text in final response"
         # Context agent should output valid JSON with search_queries
-        parsed = json.loads(text)
+        # Strip markdown code fences if present
+        clean = text.strip()
+        if clean.startswith("```"):
+            clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+            if clean.endswith("```"):
+                clean = clean[:-3]
+            clean = clean.strip()
+        parsed = json.loads(clean)
         assert "search_queries" in parsed or "filter_params" in parsed, (
             f"{case.eval_id}: response missing search_queries or filter_params: {text[:200]}"
         )
