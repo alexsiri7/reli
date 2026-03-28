@@ -9,6 +9,50 @@ import { GmailPanel } from './GmailPanel'
 import { MergeSuggestions } from './MergeSuggestions'
 import { ConnectionSuggestions } from './ConnectionSuggestions'
 
+function SnoozeMenu({ onSnooze, onClose }: { onSnooze: (until: string) => void; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  const tomorrow = () => {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    d.setHours(9, 0, 0, 0)
+    return d.toISOString()
+  }
+  const nextWeek = () => {
+    const d = new Date()
+    d.setDate(d.getDate() + 7)
+    d.setHours(9, 0, 0, 0)
+    return d.toISOString()
+  }
+
+  return (
+    <div
+      ref={ref}
+      className="absolute z-20 mt-1 left-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[130px]"
+    >
+      <button
+        onClick={() => { onSnooze(tomorrow()); onClose() }}
+        className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+      >
+        Tomorrow
+      </button>
+      <button
+        onClick={() => { onSnooze(nextWeek()); onClose() }}
+        className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+      >
+        Next week
+      </button>
+    </div>
+  )
+}
+
 const FINDING_TYPE_ICONS: Record<string, string> = {
   approaching_date: '\u23F0',
   stale: '\u{1F4A4}',
@@ -20,16 +64,28 @@ const FINDING_TYPE_ICONS: Record<string, string> = {
   connection: '\u{1F517}',
 }
 
-function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
+function FindingCard({ finding, onDismiss, onSnooze, onChat }: {
   finding: SweepFinding
   onDismiss: (id: string) => void
-  onSnooze: (id: string) => void
-  onAct: (finding: SweepFinding) => void
+  onSnooze: (id: string, until: string) => void
+  onChat: (thingId: string, title: string) => void
 }) {
+  const [leaving, setLeaving] = useState(false)
+  const [showSnooze, setShowSnooze] = useState(false)
   const icon = FINDING_TYPE_ICONS[finding.finding_type] ?? '\u{1F4CB}'
+
+  const handleDismiss = () => {
+    setLeaving(true)
+    setTimeout(() => onDismiss(finding.id), 250)
+  }
+  const handleSnooze = (until: string) => {
+    setLeaving(true)
+    setTimeout(() => onSnooze(finding.id, until), 250)
+  }
+
   return (
     <div
-      className="group px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
+      className={`group px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition-all duration-250 ${leaving ? 'opacity-0 -translate-x-2 max-h-0 overflow-hidden py-0' : 'opacity-100 max-h-40'}`}
     >
       <div className="flex items-start gap-2">
         <span className="text-sm mt-0.5 shrink-0">{icon}</span>
@@ -40,30 +96,106 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
               {typeIcon(finding.thing.type_hint)} {finding.thing.title}
             </p>
           )}
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            {finding.thing_id && (
+          {/* Action buttons: always visible on mobile, hover on desktop */}
+          <div className="flex items-center gap-2 mt-1.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity relative">
+            {finding.thing_id && finding.thing && (
               <button
-                onClick={() => onAct(finding)}
+                onClick={() => onChat(finding.thing_id!, finding.thing!.title)}
                 className="text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium"
-                title="Open in detail panel"
+                title="Chat about this"
               >
-                Open
+                Chat
               </button>
             )}
+            <div className="relative">
+              <button
+                onClick={() => setShowSnooze(v => !v)}
+                className="text-xs text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                title="Snooze"
+              >
+                Snooze
+              </button>
+              {showSnooze && (
+                <SnoozeMenu onSnooze={handleSnooze} onClose={() => setShowSnooze(false)} />
+              )}
+            </div>
             <button
-              onClick={() => onSnooze(finding.id)}
-              className="text-xs text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              title="Snooze for 1 day"
-            >
-              Snooze
-            </button>
-            <button
-              onClick={() => onDismiss(finding.id)}
+              onClick={handleDismiss}
               className="text-xs text-gray-400 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400"
               title="Dismiss"
             >
               Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BriefingThingCard({ thing, onDone, onSnooze, onChat }: {
+  thing: Thing
+  onDone: (id: string) => void
+  onSnooze: (id: string, until: string) => void
+  onChat: (thingId: string, title: string) => void
+}) {
+  const [leaving, setLeaving] = useState(false)
+  const [showSnooze, setShowSnooze] = useState(false)
+
+  const handleDone = () => {
+    setLeaving(true)
+    setTimeout(() => onDone(thing.id), 250)
+  }
+  const handleSnooze = (until: string) => {
+    setLeaving(true)
+    setTimeout(() => onSnooze(thing.id, until), 250)
+  }
+
+  return (
+    <div
+      className={`group px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition-all duration-250 ${leaving ? 'opacity-0 -translate-x-2 max-h-0 overflow-hidden py-0' : 'opacity-100 max-h-40'}`}
+    >
+      <div className="flex items-start gap-2">
+        <span className="text-sm mt-0.5 shrink-0">{typeIcon(thing.type_hint)}</span>
+        <div className="flex-1 min-w-0">
+          <button
+            className="text-sm text-gray-700 dark:text-gray-300 leading-snug text-left truncate w-full hover:text-indigo-600 dark:hover:text-indigo-400"
+            onClick={() => useStore.getState().openThingDetail(thing.id)}
+          >
+            {thing.title}
+          </button>
+          {thing.checkin_date && (
+            <p className="text-xs text-amber-500 dark:text-amber-400 mt-0.5">
+              Check-in due {new Date(thing.checkin_date).toLocaleDateString()}
+            </p>
+          )}
+          {/* Action buttons: always visible on mobile, hover on desktop */}
+          <div className="flex items-center gap-2 mt-1.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity relative">
+            <button
+              onClick={handleDone}
+              className="text-xs text-emerald-500 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-medium"
+              title="Mark as done"
+            >
+              Done
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowSnooze(v => !v)}
+                className="text-xs text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                title="Snooze check-in"
+              >
+                Snooze
+              </button>
+              {showSnooze && (
+                <SnoozeMenu onSnooze={handleSnooze} onClose={() => setShowSnooze(false)} />
+              )}
+            </div>
+            <button
+              onClick={() => onChat(thing.id, thing.title)}
+              className="text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+              title="Chat about this"
+            >
+              Chat
             </button>
           </div>
         </div>
@@ -283,7 +415,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, snoozeThing, archiveThing, chatAboutThing, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, snoozeThing: s.snoozeThing, archiveThing: s.archiveThing, chatAboutThing: s.chatAboutThing, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
   const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -332,12 +464,13 @@ export function Sidebar() {
     document.addEventListener('pointerup', onPointerUp)
   }, [])
 
-  const handleSnooze = useCallback((findingId: string) => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    tomorrow.setHours(9, 0, 0, 0)
-    snoozeFinding(findingId, tomorrow.toISOString())
+  const handleFindingSnooze = useCallback((findingId: string, until: string) => {
+    snoozeFinding(findingId, until)
   }, [snoozeFinding])
+
+  const handleThingSnooze = useCallback((thingId: string, until: string) => {
+    snoozeThing(thingId, until)
+  }, [snoozeThing])
 
   const isSearching = searchQuery.trim().length > 0
 
@@ -682,11 +815,13 @@ export function Sidebar() {
 
                 {/* Sweep findings */}
                 {findings.map(f => (
-                  <FindingCard key={f.id} finding={f} onDismiss={dismissFinding} onSnooze={handleSnooze} onAct={actOnFinding} />
+                  <FindingCard key={f.id} finding={f} onDismiss={dismissFinding} onSnooze={handleFindingSnooze} onChat={chatAboutThing} />
                 ))}
 
-                {/* Checkin-due things */}
-                {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
+                {/* Checkin-due things with inline actions */}
+                {briefing.map(t => (
+                  <BriefingThingCard key={t.id} thing={t} onDone={archiveThing} onSnooze={handleThingSnooze} onChat={chatAboutThing} />
+                ))}
               </section>
             )}
 

@@ -6,6 +6,7 @@ findings into a single stored briefing for the user's next session.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -95,6 +96,86 @@ def save_briefing_preferences(user_id: str, prefs: BriefingPreferences) -> None:
                  value = excluded.value, updated_at = CURRENT_TIMESTAMP""",
             (user_id, prefs.model_dump_json()),
         )
+
+
+def _generate_natural_summary(
+    *,
+    user_id: str,
+    priorities: list[MorningBriefingItem],
+    overdue: list[MorningBriefingItem],
+    blockers: list[MorningBriefingItem],
+    findings: list[MorningBriefingFinding],
+    today: date,
+) -> str:
+    """Generate a natural language summary using the LLM.
+
+    Falls back to a mechanical summary if the LLM call fails.
+    """
+    # Build fallback summary first
+    parts = []
+    if priorities:
+        parts.append(f"{len(priorities)} top priorit{'y' if len(priorities) == 1 else 'ies'}")
+    if overdue:
+        parts.append(f"{len(overdue)} overdue item{'s' if len(overdue) != 1 else ''}")
+    if blockers:
+        parts.append(f"{len(blockers)} blocked item{'s' if len(blockers) != 1 else ''}")
+    if findings:
+        parts.append(f"{len(findings)} sweep finding{'s' if len(findings) != 1 else ''}")
+    fallback = f"Good morning! You have {', '.join(parts)}." if parts else "Good morning! Everything looks clear today."
+
+    if not (priorities or overdue or blockers or findings):
+        return fallback
+
+    try:
+        from .agents import REQUESTY_RESPONSE_MODEL, load_personality_preferences, _build_personality_overlay
+        from .llm import acomplete
+
+        # Build a concise briefing data prompt
+        lines: list[str] = [f"Today is {today.strftime('%A, %B %d')}."]
+        if overdue:
+            lines.append(f"Overdue: {', '.join(i.title for i in overdue[:3])}")
+        if priorities:
+            top = priorities[:3]
+            lines.append(f"Top priorities: {', '.join(i.title for i in top)}")
+        if blockers:
+            lines.append(f"Blocked: {', '.join(i.title for i in blockers[:2])}")
+        if findings:
+            lines.append(f"Insights: {', '.join(f.message[:60] for f in findings[:2])}")
+
+        briefing_data = "\n".join(lines)
+
+        personality_patterns = load_personality_preferences(user_id)
+        personality_overlay = _build_personality_overlay(personality_patterns)
+
+        system_prompt = (
+            "You are a thoughtful personal assistant writing the user's morning briefing summary. "
+            "Write 1-2 sentences that sound natural and conversational — like a note from someone who cares, "
+            "not a database report. Reference specific items by name when possible. "
+            "Do NOT start with 'Good morning' unless it flows naturally. "
+            "Keep it under 40 words."
+            + personality_overlay
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": briefing_data},
+        ]
+
+        loop = asyncio.new_event_loop()
+        try:
+            response = loop.run_until_complete(
+                acomplete(messages, REQUESTY_RESPONSE_MODEL, max_tokens=80)
+            )
+        finally:
+            loop.close()
+
+        text = response.choices[0].message.content
+        if text:
+            return text.strip()
+    except Exception:
+        logger.debug("Natural summary generation failed, using fallback", exc_info=True)
+
+    return fallback
 
 
 def generate_morning_briefing(
@@ -321,21 +402,15 @@ def generate_morning_briefing(
                 )
             )
 
-    # Build summary
-    parts = []
-    if priorities:
-        parts.append(f"{len(priorities)} top priorit{'y' if len(priorities) == 1 else 'ies'}")
-    if overdue:
-        parts.append(f"{len(overdue)} overdue item{'s' if len(overdue) != 1 else ''}")
-    if blockers:
-        parts.append(f"{len(blockers)} blocked item{'s' if len(blockers) != 1 else ''}")
-    if findings_list:
-        parts.append(f"{len(findings_list)} sweep finding{'s' if len(findings_list) != 1 else ''}")
-
-    if parts:
-        summary = f"Good morning! You have {', '.join(parts)}."
-    else:
-        summary = "Good morning! Everything looks clear today."
+    # Build natural language summary using LLM
+    summary = _generate_natural_summary(
+        user_id=user_id,
+        priorities=priorities,
+        overdue=overdue,
+        blockers=blockers,
+        findings=findings_list,
+        today=today,
+    )
 
     stats = {
         "total_active": len([t for t in thing_map.values() if t.get("type_hint") not in skip_types]),

@@ -706,7 +706,7 @@ function InteractionStyleSelector({ style, onChange }: { style: InteractionStyle
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, pendingChatInput, setPendingChatInput } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -719,6 +719,8 @@ export function ChatPanel() {
       setChatMode: s.setChatMode,
       interactionStyle: s.interactionStyle,
       setInteractionStyle: s.setInteractionStyle,
+      pendingChatInput: s.pendingChatInput,
+      setPendingChatInput: s.setPendingChatInput,
     }))
   )
   const { isOnline } = useNetworkStatus()
@@ -733,6 +735,15 @@ export function ChatPanel() {
     inputRef.current?.focus()
   }, [])
   const { listening, toggleListening } = useVoiceInput(handleTranscript)
+
+  // Consume pending chat input set by "Chat about it" briefing action
+  useEffect(() => {
+    if (pendingChatInput) {
+      setInput(pendingChatInput)
+      setPendingChatInput(null)
+      setTimeout(() => inputRef.current?.focus(), 50)
+    }
+  }, [pendingChatInput, setPendingChatInput])
   const prevScrollHeightRef = useRef<number>(0)
   const isLoadingOlderRef = useRef(false)
 

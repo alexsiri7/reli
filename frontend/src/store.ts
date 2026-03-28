@@ -384,7 +384,11 @@ interface ReliState {
   snoozeFinding: (findingId: string, until: string) => Promise<void>
   actOnFinding: (finding: SweepFinding) => void
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
+  archiveThing: (id: string) => Promise<void>
   updateThing: (id: string, updates: Record<string, unknown>) => Promise<void>
+  pendingChatInput: string | null
+  setPendingChatInput: (text: string | null) => void
+  chatAboutThing: (thingId: string, title: string) => void
   fetchHistory: () => Promise<void>
   fetchOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
@@ -557,6 +561,7 @@ export const useStore = create<ReliState>((set, get) => ({
   calendarEvents: [],
   morningBriefing: null,
   morningBriefingLoading: false,
+  pendingChatInput: null,
   briefingPreferences: null,
 
   fetchMorningBriefing: async () => {
@@ -807,6 +812,39 @@ export const useStore = create<ReliState>((set, get) => ({
   actOnFinding: (finding: SweepFinding) => {
     if (finding.thing_id) {
       get().openThingDetail(finding.thing_id)
+    }
+  },
+
+  setPendingChatInput: (text: string | null) => {
+    set({ pendingChatInput: text })
+  },
+
+  chatAboutThing: (thingId: string, title: string) => {
+    get().openThingDetail(thingId)
+    set({ pendingChatInput: `Tell me about "${title}"`, mobileView: 'chat' })
+  },
+
+  archiveThing: async (id: string) => {
+    try {
+      const res = await mutationFetch(`${BASE}/things/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: false }),
+      })
+      if (res.status === 202) {
+        set(state => ({
+          things: state.things.map(t => t.id === id ? { ...t, active: false } : t),
+          briefing: state.briefing.filter(t => t.id !== id),
+        }))
+        return
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      set(state => ({
+        things: state.things.map(t => t.id === id ? { ...t, active: false } : t),
+        briefing: state.briefing.filter(t => t.id !== id),
+      }))
+    } catch (e) {
+      set({ error: String(e) })
     }
   },
 
