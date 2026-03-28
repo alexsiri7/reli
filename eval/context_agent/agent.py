@@ -11,9 +11,9 @@ from google.adk.agents import LlmAgent
 from google.genai import types as genai_types
 
 from backend.agents import CONTEXT_AGENT_SYSTEM
-from backend.context_agent import _make_litellm_model
+from eval._eval_model import make_eval_model
 
-model = _make_litellm_model()
+model = make_eval_model("context")
 
 root_agent = LlmAgent(
     name="context_agent",

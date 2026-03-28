@@ -18,6 +18,7 @@ from google.adk.agents import LlmAgent
 
 from backend.context_agent import _make_litellm_model
 from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+from eval._eval_model import make_eval_model
 
 # ---------------------------------------------------------------------------
 # Stub tools — same signatures as production, but no DB
@@ -97,6 +98,14 @@ def create_relationship(
     }
 
 
+def chat_history(
+    n: int = 10,
+    search_query: str = "",
+) -> dict[str, Any]:
+    """Retrieve older messages from the current conversation (eval stub)."""
+    return {"messages": [], "count": 0}
+
+
 # ---------------------------------------------------------------------------
 # Agent construction
 # ---------------------------------------------------------------------------
@@ -104,7 +113,7 @@ def create_relationship(
 
 def _build_agent() -> LlmAgent:
     """Build the reasoning agent wired with stub tools."""
-    model = _make_litellm_model()
+    model = make_eval_model("reasoning")
     return LlmAgent(
         name="reasoning_agent",
         description="Reasoning agent for Reli — decides storage changes via tool calls.",
@@ -117,6 +126,7 @@ def _build_agent() -> LlmAgent:
             delete_thing,
             merge_things,
             create_relationship,
+            chat_history,
         ],
     )
 
