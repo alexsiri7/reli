@@ -215,6 +215,88 @@ async def test_reasoning_agent_thought_signature() -> None:
     )
 
 
+@pytest.mark.asyncio
+async def test_reasoning_agent_priority_question() -> None:
+    """Eval: reasoning agent — priority_question quality.
+
+    Verifies that the reasoning agent sets a non-empty priority_question when
+    Things have information gaps (missing dates, unknown people, open questions,
+    scheduling conflicts) and leaves it empty when context is complete.
+
+    Unlike the tool-trajectory evals, this test inspects the final response
+    JSON to check the priority_question field directly.
+    """
+    agent = _load_agent("eval.reasoning_agent.agent")
+    cases = _load_eval_cases(
+        str(EVAL_ROOT / "reasoning_agent" / "priority_question.test.json")
+    )
+
+    failures: list[str] = []
+    total = len(cases)
+    passed = 0
+
+    for case in cases:
+        # Determine expected priority_question from the golden final_response
+        expected_pq = ""
+        try:
+            golden_text = case.conversation[0].final_response.parts[0].text
+            expected_pq = json.loads(golden_text).get("priority_question", "")
+        except Exception:
+            pass  # If we can't parse expected, we skip the pq check for this case
+
+        # Run the agent
+        try:
+            user_sim = UserSimulatorProvider().provide(case)
+            invocations = await EvaluationGenerator._generate_inferences_from_root_agent(
+                root_agent=agent,
+                user_simulator=user_sim,
+            )
+        except Exception as exc:
+            failures.append(f"{case.eval_id}: agent error: {exc}")
+            continue
+
+        if not invocations:
+            failures.append(f"{case.eval_id}: no invocations returned")
+            continue
+
+        inv = invocations[0]
+        if not inv.final_response or not inv.final_response.parts:
+            failures.append(f"{case.eval_id}: no final response")
+            continue
+
+        text = (inv.final_response.parts[0].text or "").strip()
+        try:
+            actual = json.loads(text)
+        except json.JSONDecodeError:
+            failures.append(
+                f"{case.eval_id}: final response is not valid JSON: {text[:120]}"
+            )
+            continue
+
+        actual_pq = actual.get("priority_question", "")
+
+        # Validate: non-empty expected → non-empty actual; empty expected → empty actual
+        if expected_pq and not actual_pq:
+            failures.append(
+                f"{case.eval_id}: expected non-empty priority_question, got empty"
+            )
+        elif not expected_pq and actual_pq:
+            failures.append(
+                f"{case.eval_id}: expected empty priority_question, got: {actual_pq!r}"
+            )
+        else:
+            passed += 1
+
+    threshold = 0.6
+    score = passed / total if total else 0.0
+    if score < threshold:
+        failure_details = "\n  ".join(failures)
+        assert False, (
+            f"Priority question eval score {score:.2f} below threshold {threshold}.\n"
+            f"Failures:\n  {failure_details}"
+        )
+
+
 # ── Context agent evals ──────────────────────────────────────────────────────
 
 

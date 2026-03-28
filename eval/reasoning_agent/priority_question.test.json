@@ -1,0 +1,528 @@
+{
+  "eval_set_id": "reasoning-priority-question",
+  "name": "Reasoning Agent — Priority Question Quality",
+  "description": "Golden dataset: reasoning agent generates a relevant priority_question when Things have information gaps, and leaves it empty when context is complete.",
+  "eval_cases": [
+    {
+      "eval_id": "pq-person-no-context",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nI'm having lunch with Marcus next week\n</user_message>\n\nRelevant Things from database:\n[]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [\"Who is Marcus?\"], \"priority_question\": \"Who is Marcus?\", \"reasoning_summary\": \"Created lunch meeting with Marcus. No prior context on Marcus — asked who he is.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "title": "Marcus",
+                  "type_hint": "person",
+                  "surface": false
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Lunch with Marcus"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-thing-0001",
+                  "title": "Marcus",
+                  "type_hint": "person"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-thing-0002",
+                  "title": "Lunch with Marcus",
+                  "type_hint": "event"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "pq-event-missing-dates",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nNeed to track the Berlin conference trip\n</user_message>\n\nRelevant Things from database:\n[]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [\"When is the Berlin conference?\"], \"priority_question\": \"When is the Berlin conference?\", \"reasoning_summary\": \"Created Berlin conference trip. No dates provided — asked for when.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "title": "Berlin conference trip",
+                  "type_hint": "event"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-thing-0001",
+                  "title": "Berlin conference trip",
+                  "type_hint": "event"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "pq-existing-thing-with-open-questions",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nHow's the Paris trip planning going?\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"trip-001\", \"title\": \"Paris trip\", \"type_hint\": \"event\", \"active\": 1, \"open_questions\": [\"When are you going?\", \"Who's joining you?\"]}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [\"When are you going?\", \"Who's joining you?\"], \"priority_question\": \"When are you going?\", \"reasoning_summary\": \"Paris trip has open questions — surfaced the most important one.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"Paris trip\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "trip-001",
+                      "title": "Paris trip",
+                      "open_questions": ["When are you going?", "Who's joining you?"]
+                    }
+                  ],
+                  "count": 1
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "pq-no-gap-complete-task",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nPick up milk today before 6pm\n</user_message>\n\nRelevant Things from database:\n[]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Created task to pick up milk today before 6pm.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "title": "Pick up milk"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-thing-0001",
+                  "title": "Pick up milk",
+                  "type_hint": "task"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "pq-scheduling-conflict",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nSchedule a team meeting Thursday April 2nd at 2pm\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"dental-001\", \"title\": \"Dentist appointment\", \"type_hint\": \"event\", \"active\": 1, \"data\": \"{\\\"date\\\": \\\"2026-04-02\\\", \\\"time\\\": \\\"14:00\\\"}\"}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [\"You already have a dentist appointment at 2pm on April 2nd — still want to schedule the team meeting then?\"], \"priority_question\": \"You already have a dentist appointment at 2pm on April 2nd — still want to schedule the team meeting then?\", \"reasoning_summary\": \"Detected scheduling conflict: dentist appointment already exists at 2pm April 2nd. Asked user to confirm.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "title": "Team meeting"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-thing-0001",
+                  "title": "Team meeting",
+                  "type_hint": "event"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "pq-project-no-deadline",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nI've been working on the Q3 marketing report\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"proj-001\", \"title\": \"Q3 marketing report\", \"type_hint\": \"project\", \"active\": 1, \"data\": \"{\\\"notes\\\": \\\"In progress\\\"}\"}, {\"id\": \"task-001\", \"title\": \"Gather campaign metrics\", \"type_hint\": \"task\", \"active\": 1, \"parent_id\": \"proj-001\"}]",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "media_resolution": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "file_data": null,
+                "function_call": null,
+                "function_response": null,
+                "inline_data": null,
+                "text": "{\"questions_for_user\": [\"When does the Q3 marketing report need to be done?\"], \"priority_question\": \"When does the Q3 marketing report need to be done?\", \"reasoning_summary\": \"Q3 report is in progress with tasks but no deadline. Asked for deadline.\", \"briefing_mode\": false}",
+                "thought": null,
+                "thought_signature": null,
+                "video_metadata": null
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {
+                  "search_queries_json": "[\"Q3 marketing report\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "proj-001",
+                      "title": "Q3 marketing report",
+                      "type_hint": "project",
+                      "data": {"notes": "In progress"}
+                    },
+                    {
+                      "id": "task-001",
+                      "title": "Gather campaign metrics",
+                      "type_hint": "task"
+                    }
+                  ],
+                  "count": 2
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}
