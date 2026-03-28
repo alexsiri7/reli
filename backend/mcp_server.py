@@ -92,6 +92,30 @@ def _api_delete(path: str) -> Any:
         return {"ok": True}
 
 
+def _log_mutation(
+    operation: str,
+    thing_id: str | None = None,
+    before_snapshot: dict[str, Any] | None = None,
+    after_snapshot: dict[str, Any] | None = None,
+    client_id: str = "mcp",
+) -> None:
+    """Log an MCP mutation to the journal. Errors are swallowed to not break the tool."""
+    try:
+        body: dict[str, Any] = {
+            "operation": operation,
+            "client_id": client_id,
+        }
+        if thing_id is not None:
+            body["thing_id"] = thing_id
+        if before_snapshot is not None:
+            body["before_snapshot"] = before_snapshot
+        if after_snapshot is not None:
+            body["after_snapshot"] = after_snapshot
+        _api_post("/api/things/mutations", json_body=body)
+    except Exception:
+        logger.exception("Failed to log MCP mutation for operation=%s thing_id=%s", operation, thing_id)
+
+
 # ---------------------------------------------------------------------------
 # MCP Server
 # ---------------------------------------------------------------------------
@@ -189,6 +213,7 @@ def create_thing(
     if open_questions is not None:
         body["open_questions"] = open_questions
     result: dict[str, Any] = _api_post("/api/things", json_body=body)
+    _log_mutation("create_thing", thing_id=result.get("id"), after_snapshot=result)
     return result
 
 
@@ -240,7 +265,13 @@ def update_thing(
         body["open_questions"] = open_questions
     if not body:
         return {"error": "No fields provided to update"}
+    before: dict[str, Any] | None = None
+    try:
+        before = _api_get(f"/api/things/{thing_id}")
+    except Exception:
+        pass
     result: dict[str, Any] = _api_patch(f"/api/things/{thing_id}", json_body=body)
+    _log_mutation("update_thing", thing_id=thing_id, before_snapshot=before, after_snapshot=result)
     return result
 
 
@@ -255,7 +286,13 @@ def delete_thing(thing_id: str) -> dict[str, Any]:
     Args:
         thing_id: The UUID of the Thing to deactivate.
     """
+    before: dict[str, Any] | None = None
+    try:
+        before = _api_get(f"/api/things/{thing_id}")
+    except Exception:
+        pass
     result: dict[str, Any] = _api_patch(f"/api/things/{thing_id}", json_body={"active": False})
+    _log_mutation("delete_thing", thing_id=thing_id, before_snapshot=before, after_snapshot=result)
     return result
 
 
@@ -274,9 +311,22 @@ def merge_things(keep_id: str, remove_id: str) -> dict[str, Any]:
     Returns:
         Dict with keep_id, remove_id, keep_title, remove_title.
     """
+    before_keep: dict[str, Any] | None = None
+    before_remove: dict[str, Any] | None = None
+    try:
+        before_keep = _api_get(f"/api/things/{keep_id}")
+        before_remove = _api_get(f"/api/things/{remove_id}")
+    except Exception:
+        pass
     result: dict[str, Any] = _api_post(
         "/api/things/merge",
         json_body={"keep_id": keep_id, "remove_id": remove_id},
+    )
+    _log_mutation(
+        "merge_things",
+        thing_id=keep_id,
+        before_snapshot={"keep": before_keep, "remove": before_remove},
+        after_snapshot=result,
     )
     return result
 
@@ -304,6 +354,11 @@ def create_relationship(
     if metadata is not None:
         body["metadata"] = metadata
     result: dict[str, Any] = _api_post("/api/things/relationships", json_body=body)
+    _log_mutation(
+        "create_relationship",
+        thing_id=from_thing_id,
+        after_snapshot=result,
+    )
     return result
 
 
@@ -315,6 +370,7 @@ def delete_relationship(relationship_id: str) -> dict[str, Any]:
         relationship_id: The UUID of the relationship to delete.
     """
     result: dict[str, Any] = _api_delete(f"/api/things/relationships/{relationship_id}")
+    _log_mutation("delete_relationship", after_snapshot={"relationship_id": relationship_id})
     return result
 
 
@@ -359,7 +415,30 @@ def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
     return result
 
 
-# ---------------------------------------------------------------------------
+@mcp.tool()
+def get_mutations(
+    thing_id: str | None = None,
+    limit: int = 50,
+    since: str | None = None,
+) -> list[dict[str, Any]]:
+    """Query the MCP mutations journal for audit and rollback purposes.
+
+    Returns logged MCP write operations (create, update, delete, merge, relationship
+    changes) with before and after snapshots of the affected Things.
+
+    Args:
+        thing_id: Optional UUID to filter mutations to a specific Thing.
+        limit: Maximum number of mutations to return (1-500, default 50).
+        since: Optional ISO 8601 timestamp to return only mutations after this time.
+    """
+    params: dict[str, Any] = {"limit": min(max(limit, 1), 500)}
+    if thing_id is not None:
+        params["thing_id"] = thing_id
+    if since is not None:
+        params["since"] = since
+    result: list[dict[str, Any]] = _api_get("/api/things/mutations", params=params)
+    return result
+
 
 # ---------------------------------------------------------------------------
 # MCP Prompt Resources — PA behavior guidance for calling agents

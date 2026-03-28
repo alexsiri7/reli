@@ -17,6 +17,7 @@ from backend.mcp_server import (
     delete_thing,
     get_briefing,
     get_conflicts,
+    get_mutations,
     get_thing,
     mcp,
     merge_things,
@@ -118,8 +119,9 @@ class TestGetThing:
 
 
 class TestCreateThing:
+    @patch("backend.mcp_server._log_mutation")
     @patch("backend.mcp_server._api_post")
-    def test_create_minimal(self, mock_post: MagicMock) -> None:
+    def test_create_minimal(self, mock_post: MagicMock, mock_log: MagicMock) -> None:
         mock_post.return_value = {"id": "new-1", "title": "Hello"}
         result = create_thing(title="Hello")
         mock_post.assert_called_once_with(
@@ -132,9 +134,13 @@ class TestCreateThing:
             },
         )
         assert result["id"] == "new-1"
+        mock_log.assert_called_once_with(
+            "create_thing", thing_id="new-1", after_snapshot={"id": "new-1", "title": "Hello"}
+        )
 
+    @patch("backend.mcp_server._log_mutation")
     @patch("backend.mcp_server._api_post")
-    def test_create_with_all_fields(self, mock_post: MagicMock) -> None:
+    def test_create_with_all_fields(self, mock_post: MagicMock, mock_log: MagicMock) -> None:
         mock_post.return_value = {"id": "new-2", "title": "Meeting with Tom"}
         create_thing(
             title="Meeting with Tom",
@@ -159,15 +165,21 @@ class TestCreateThing:
 
 
 class TestUpdateThing:
+    @patch("backend.mcp_server._log_mutation")
+    @patch("backend.mcp_server._api_get")
     @patch("backend.mcp_server._api_patch")
-    def test_update_title(self, mock_patch: MagicMock) -> None:
+    def test_update_title(self, mock_patch: MagicMock, mock_get: MagicMock, mock_log: MagicMock) -> None:
+        mock_get.return_value = {"id": "t1", "title": "Old"}
         mock_patch.return_value = {"id": "t1", "title": "Updated"}
         result = update_thing(thing_id="t1", title="Updated")
         mock_patch.assert_called_once_with("/api/things/t1", json_body={"title": "Updated"})
         assert result["title"] == "Updated"
 
+    @patch("backend.mcp_server._log_mutation")
+    @patch("backend.mcp_server._api_get")
     @patch("backend.mcp_server._api_patch")
-    def test_update_multiple_fields(self, mock_patch: MagicMock) -> None:
+    def test_update_multiple_fields(self, mock_patch: MagicMock, mock_get: MagicMock, mock_log: MagicMock) -> None:
+        mock_get.return_value = {"id": "t1", "title": "Task", "priority": 3, "active": True}
         mock_patch.return_value = {
             "id": "t1",
             "title": "Task",
@@ -189,17 +201,23 @@ class TestUpdateThing:
 
 
 class TestDeleteThing:
+    @patch("backend.mcp_server._log_mutation")
+    @patch("backend.mcp_server._api_get")
     @patch("backend.mcp_server._api_patch")
-    def test_soft_delete(self, mock_patch: MagicMock) -> None:
+    def test_soft_delete(self, mock_patch: MagicMock, mock_get: MagicMock, mock_log: MagicMock) -> None:
+        mock_get.return_value = {"id": "t1", "title": "My Task", "active": True}
         mock_patch.return_value = {"id": "t1", "title": "My Task", "active": False}
         result = delete_thing(thing_id="t1")
         mock_patch.assert_called_once_with("/api/things/t1", json_body={"active": False})
         assert result["active"] is False
         assert result["id"] == "t1"
 
+    @patch("backend.mcp_server._log_mutation")
+    @patch("backend.mcp_server._api_get")
     @patch("backend.mcp_server._api_patch")
-    def test_soft_delete_returns_thing(self, mock_patch: MagicMock) -> None:
+    def test_soft_delete_returns_thing(self, mock_patch: MagicMock, mock_get: MagicMock, mock_log: MagicMock) -> None:
         thing = {"id": "abc", "title": "Buy milk", "active": False, "type_hint": "task"}
+        mock_get.return_value = {"id": "abc", "title": "Buy milk", "active": True, "type_hint": "task"}
         mock_patch.return_value = thing
         result = delete_thing(thing_id="abc")
         assert result["title"] == "Buy milk"
@@ -212,8 +230,14 @@ class TestDeleteThing:
 
 
 class TestMergeThings:
+    @patch("backend.mcp_server._log_mutation")
+    @patch("backend.mcp_server._api_get")
     @patch("backend.mcp_server._api_post")
-    def test_merge_basic(self, mock_post: MagicMock) -> None:
+    def test_merge_basic(self, mock_post: MagicMock, mock_get: MagicMock, mock_log: MagicMock) -> None:
+        mock_get.side_effect = [
+            {"id": "a", "title": "Alice Johnson"},
+            {"id": "b", "title": "A. Johnson"},
+        ]
         mock_post.return_value = {
             "keep_id": "a",
             "remove_id": "b",
@@ -230,8 +254,14 @@ class TestMergeThings:
         assert result["keep_title"] == "Alice Johnson"
         assert result["remove_title"] == "A. Johnson"
 
+    @patch("backend.mcp_server._log_mutation")
+    @patch("backend.mcp_server._api_get")
     @patch("backend.mcp_server._api_post")
-    def test_merge_returns_titles(self, mock_post: MagicMock) -> None:
+    def test_merge_returns_titles(self, mock_post: MagicMock, mock_get: MagicMock, mock_log: MagicMock) -> None:
+        mock_get.side_effect = [
+            {"id": "x", "title": "Project Alpha"},
+            {"id": "y", "title": "proj alpha"},
+        ]
         mock_post.return_value = {
             "keep_id": "x",
             "remove_id": "y",
@@ -249,8 +279,9 @@ class TestMergeThings:
 
 
 class TestCreateRelationship:
+    @patch("backend.mcp_server._log_mutation")
     @patch("backend.mcp_server._api_post")
-    def test_create_basic(self, mock_post: MagicMock) -> None:
+    def test_create_basic(self, mock_post: MagicMock, mock_log: MagicMock) -> None:
         mock_post.return_value = {
             "id": "rel-1",
             "from_thing_id": "a",
@@ -272,8 +303,9 @@ class TestCreateRelationship:
         )
         assert result["id"] == "rel-1"
 
+    @patch("backend.mcp_server._log_mutation")
     @patch("backend.mcp_server._api_post")
-    def test_create_with_metadata(self, mock_post: MagicMock) -> None:
+    def test_create_with_metadata(self, mock_post: MagicMock, mock_log: MagicMock) -> None:
         mock_post.return_value = {"id": "rel-2"}
         create_relationship(
             from_thing_id="a",
@@ -291,12 +323,52 @@ class TestCreateRelationship:
 
 
 class TestDeleteRelationship:
+    @patch("backend.mcp_server._log_mutation")
     @patch("backend.mcp_server._api_delete")
-    def test_delete(self, mock_delete: MagicMock) -> None:
+    def test_delete(self, mock_delete: MagicMock, mock_log: MagicMock) -> None:
         mock_delete.return_value = {"ok": True}
         result = delete_relationship(relationship_id="rel-1")
         mock_delete.assert_called_once_with("/api/things/relationships/rel-1")
         assert result["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# get_mutations
+# ---------------------------------------------------------------------------
+
+
+class TestGetMutations:
+    @patch("backend.mcp_server._api_get")
+    def test_basic(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = [
+            {
+                "id": "m1",
+                "operation": "create_thing",
+                "thing_id": "t1",
+                "before_snapshot": None,
+                "after_snapshot": {"id": "t1", "title": "Hello"},
+            }
+        ]
+        result = get_mutations()
+        mock_get.assert_called_once_with("/api/things/mutations", params={"limit": 50})
+        assert len(result) == 1
+        assert result[0]["operation"] == "create_thing"
+
+    @patch("backend.mcp_server._api_get")
+    def test_with_filters(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        get_mutations(thing_id="t1", limit=10, since="2026-01-01T00:00:00Z")
+        mock_get.assert_called_once_with(
+            "/api/things/mutations",
+            params={"limit": 10, "thing_id": "t1", "since": "2026-01-01T00:00:00Z"},
+        )
+
+    @patch("backend.mcp_server._api_get")
+    def test_limit_clamped(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        get_mutations(limit=9999)
+        params = mock_get.call_args[1]["params"]
+        assert params["limit"] == 500
 
 
 # ---------------------------------------------------------------------------
@@ -890,6 +962,103 @@ class TestMCPTools:
             headers=headers,
         )
         assert resp.status_code == 204
+
+
+# ---------------------------------------------------------------------------
+# Mutations REST endpoint — integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestMutationsEndpoint:
+    """Integration tests for POST/GET /api/things/mutations."""
+
+    def test_log_and_query_mutations(self, token_client_with_user: TestClient) -> None:
+        headers = {"Authorization": "Bearer test-mcp-token"}
+
+        # Create a thing to reference
+        resp = token_client_with_user.post(
+            "/api/things",
+            json={"title": "Auditable Thing"},
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        thing_id = resp.json()["id"]
+
+        # Log a mutation via POST
+        resp = token_client_with_user.post(
+            "/api/things/mutations",
+            json={
+                "operation": "create_thing",
+                "thing_id": thing_id,
+                "after_snapshot": {"id": thing_id, "title": "Auditable Thing"},
+                "client_id": "test-client",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        assert "id" in resp.json()
+
+        # Query mutations via GET (no filter)
+        resp = token_client_with_user.get("/api/things/mutations", headers=headers)
+        assert resp.status_code == 200
+        mutations = resp.json()
+        assert len(mutations) >= 1
+        ops = [m["operation"] for m in mutations]
+        assert "create_thing" in ops
+
+    def test_query_mutations_by_thing_id(self, token_client_with_user: TestClient) -> None:
+        headers = {"Authorization": "Bearer test-mcp-token"}
+
+        # Create a thing
+        resp = token_client_with_user.post(
+            "/api/things", json={"title": "Filtered Thing"}, headers=headers
+        )
+        thing_id = resp.json()["id"]
+
+        # Log two mutations with different thing_ids
+        token_client_with_user.post(
+            "/api/things/mutations",
+            json={"operation": "update_thing", "thing_id": thing_id},
+            headers=headers,
+        )
+        token_client_with_user.post(
+            "/api/things/mutations",
+            json={"operation": "delete_thing", "thing_id": "other-id"},
+            headers=headers,
+        )
+
+        # Filter by thing_id
+        resp = token_client_with_user.get(
+            f"/api/things/mutations?thing_id={thing_id}", headers=headers
+        )
+        assert resp.status_code == 200
+        mutations = resp.json()
+        assert all(m["thing_id"] == thing_id for m in mutations)
+
+    def test_log_mutation_with_before_after_snapshots(self, token_client_with_user: TestClient) -> None:
+        headers = {"Authorization": "Bearer test-mcp-token"}
+        before = {"id": "t1", "title": "Before", "active": True}
+        after = {"id": "t1", "title": "After", "active": False}
+
+        resp = token_client_with_user.post(
+            "/api/things/mutations",
+            json={
+                "operation": "update_thing",
+                "thing_id": "t1",
+                "before_snapshot": before,
+                "after_snapshot": after,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 201
+
+        # Retrieve and verify snapshots
+        resp = token_client_with_user.get("/api/things/mutations?thing_id=t1", headers=headers)
+        found = [m for m in resp.json() if m.get("thing_id") == "t1"]
+        assert len(found) >= 1
+        m = found[0]
+        assert m["before_snapshot"]["title"] == "Before"
+        assert m["after_snapshot"]["active"] is False
 
 
 # ---------------------------------------------------------------------------

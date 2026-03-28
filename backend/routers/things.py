@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from pydantic import BaseModel
 
 from ..auth import require_user, user_filter
-from ..database import clean_orphan_relationships, db
+from ..database import clean_orphan_relationships, db, log_mcp_mutation, query_mcp_mutations
 from ..models import (
     GraphEdge,
     GraphNode,
@@ -406,6 +406,43 @@ def list_merge_history(
     return results
 
 
+# ---------------------------------------------------------------------------
+# MCP Mutations Journal
+# ---------------------------------------------------------------------------
+
+
+class MutationLog(BaseModel):
+    operation: str
+    thing_id: str | None = None
+    before_snapshot: dict[str, Any] | None = None
+    after_snapshot: dict[str, Any] | None = None
+    client_id: str | None = None
+
+
+@router.post("/mutations", status_code=status.HTTP_201_CREATED, summary="Log an MCP mutation")
+def log_mutation(body: MutationLog, _user_id: str = Depends(require_user)) -> dict[str, str]:
+    """Append an MCP write operation to the mutations journal."""
+    row_id = log_mcp_mutation(
+        operation=body.operation,
+        thing_id=body.thing_id,
+        before_snapshot=body.before_snapshot,
+        after_snapshot=body.after_snapshot,
+        client_id=body.client_id,
+    )
+    return {"id": row_id}
+
+
+@router.get("/mutations", summary="Query the MCP mutations journal")
+def get_mutations_endpoint(
+    thing_id: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    since: str | None = Query(default=None),
+    _user_id: str = Depends(require_user),
+) -> list[dict[str, Any]]:
+    """Query logged MCP mutations, optionally filtered by thing_id or timestamp."""
+    return query_mcp_mutations(thing_id=thing_id, limit=limit, since=since)
+
+
 @router.get("/{thing_id}", response_model=Thing, summary="Get a Thing")
 def get_thing(thing_id: str, user_id: str = Depends(require_user)) -> Thing:
     """Retrieve a single Thing by ID."""
@@ -797,3 +834,4 @@ def delete_relationship(rel_id: str) -> None:
         if not row:
             raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
         conn.execute("DELETE FROM thing_relationships WHERE id = ?", (rel_id,))
+

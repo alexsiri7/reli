@@ -21,6 +21,7 @@ Finding types:
   - cross_project_duplicate_effort: Tasks with near-identical titles in different projects
   - information_gap: Active Thing missing key information (no dates, minimal data, etc.)
   - llm_insight: LLM-generated finding from reflection phase
+  - suspicious_mcp_mutations: Unusual MCP write patterns (bulk deletes, bulk field removal)
 
 Preference aggregation (separate phase, see preference_sweep.py):
   - Analyzes chat interaction patterns to detect/update user preference Things
@@ -1015,6 +1016,83 @@ def find_cross_project_duplicate_effort(
 # ---------------------------------------------------------------------------
 
 
+def find_suspicious_mcp_mutations(
+    conn: sqlite3.Connection,
+    window_hours: int = 24,
+    bulk_delete_threshold: int = 5,
+    bulk_field_removal_threshold: int = 10,
+) -> list[SweepCandidate]:
+    """Scan recent MCP mutations for suspicious patterns.
+
+    Detects:
+    - Bulk deletes: many things deactivated in a short window
+    - Bulk field removal: update that removes many data fields at once
+    """
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
+
+    rows = conn.execute(
+        "SELECT * FROM mcp_mutations WHERE timestamp >= ? ORDER BY timestamp DESC",
+        (cutoff,),
+    ).fetchall()
+
+    candidates: list[SweepCandidate] = []
+
+    # Detect bulk deletes
+    delete_ops = [r for r in rows if dict(r).get("operation") == "delete_thing"]
+    if len(delete_ops) >= bulk_delete_threshold:
+        candidates.append(
+            SweepCandidate(
+                thing_id="",
+                thing_title="MCP mutations",
+                finding_type="suspicious_mcp_mutations",
+                message=(
+                    f"{len(delete_ops)} Things were deactivated via MCP in the last "
+                    f"{window_hours}h. Review the mutations journal to confirm this was intentional."
+                ),
+                priority=1,
+                extra={"pattern": "bulk_delete", "count": len(delete_ops)},
+            )
+        )
+
+    # Detect bulk field removal in a single update
+    for row in rows:
+        r = dict(row)
+        if r.get("operation") != "update_thing":
+            continue
+        before_raw = r.get("before_snapshot")
+        after_raw = r.get("after_snapshot")
+        if not (before_raw and after_raw):
+            continue
+        try:
+            before = json.loads(before_raw) if isinstance(before_raw, str) else before_raw
+            after = json.loads(after_raw) if isinstance(after_raw, str) else after_raw
+            before_data = before.get("data") or {}
+            after_data = after.get("data") or {}
+            removed_keys = set(before_data.keys()) - set(after_data.keys())
+            if len(removed_keys) >= bulk_field_removal_threshold:
+                thing_id = r.get("thing_id", "")
+                thing_title = (after.get("title") or before.get("title") or thing_id)
+                candidates.append(
+                    SweepCandidate(
+                        thing_id=thing_id,
+                        thing_title=thing_title,
+                        finding_type="suspicious_mcp_mutations",
+                        message=(
+                            f"{len(removed_keys)} data fields were removed from \"{thing_title}\" "
+                            f"in a single MCP update. Removed: {', '.join(sorted(removed_keys)[:5])}."
+                        ),
+                        priority=1,
+                        extra={"pattern": "bulk_field_removal", "removed_keys": list(removed_keys)},
+                    )
+                )
+        except Exception:
+            pass
+
+    return candidates
+
+
 def collect_candidates(
     today: date | None = None,
     window_days: int = 7,
@@ -1048,6 +1126,7 @@ def collect_candidates(
             + find_cross_project_resource_conflicts(conn, today, stale_days)
             + find_cross_project_thematic_connections(conn)
             + find_cross_project_duplicate_effort(conn)
+            + find_suspicious_mcp_mutations(conn)
         )
 
     # Deduplicate: keep the highest-priority (lowest number) candidate per (thing_id, finding_type)

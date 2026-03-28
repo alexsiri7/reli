@@ -432,6 +432,96 @@ def clean_orphan_relationships() -> tuple[int, list[str]]:
     return len(orphan_ids), orphan_ids
 
 
+def _migrate_mcp_mutations(conn: sqlite3.Connection) -> None:
+    """Create mcp_mutations table for append-only audit log of MCP write operations."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS mcp_mutations (
+            id TEXT PRIMARY KEY,
+            timestamp TEXT NOT NULL,
+            client_id TEXT,
+            operation TEXT NOT NULL,
+            thing_id TEXT,
+            before_snapshot TEXT,
+            after_snapshot TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_mcp_mutations_thing ON mcp_mutations(thing_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_mcp_mutations_created ON mcp_mutations(created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_mcp_mutations_operation ON mcp_mutations(operation)")
+
+
+def log_mcp_mutation(
+    operation: str,
+    thing_id: str | None = None,
+    before_snapshot: dict[str, Any] | None = None,
+    after_snapshot: dict[str, Any] | None = None,
+    client_id: str | None = None,
+) -> str:
+    """Append an MCP write operation to the mutations journal. Returns the new row id."""
+    import json
+    import uuid
+    from datetime import datetime, timezone
+
+    row_id = str(uuid.uuid4())
+    ts = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO mcp_mutations (id, timestamp, client_id, operation, thing_id,"
+            " before_snapshot, after_snapshot) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                row_id,
+                ts,
+                client_id,
+                operation,
+                thing_id,
+                json.dumps(before_snapshot) if before_snapshot is not None else None,
+                json.dumps(after_snapshot) if after_snapshot is not None else None,
+            ),
+        )
+    return row_id
+
+
+def query_mcp_mutations(
+    thing_id: str | None = None,
+    limit: int = 50,
+    since: str | None = None,
+) -> list[dict[str, Any]]:
+    """Query the mutations journal. Optionally filter by thing_id or timestamp."""
+    import json
+
+    params: list[Any] = []
+    where_clauses: list[str] = []
+    if thing_id:
+        where_clauses.append("thing_id = ?")
+        params.append(thing_id)
+    if since:
+        where_clauses.append("timestamp >= ?")
+        params.append(since)
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    params.append(min(max(limit, 1), 500))
+    with db() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM mcp_mutations {where_sql} ORDER BY timestamp DESC LIMIT ?",
+            params,
+        ).fetchall()
+    result = []
+    for row in rows:
+        r = dict(row)
+        if r.get("before_snapshot"):
+            try:
+                r["before_snapshot"] = json.loads(r["before_snapshot"])
+            except Exception:
+                pass
+        if r.get("after_snapshot"):
+            try:
+                r["after_snapshot"] = json.loads(r["after_snapshot"])
+            except Exception:
+                pass
+        result.append(r)
+    return result
+
+
 def init_db() -> None:
     """Create tables if they don't exist."""
     if settings.STORAGE_BACKEND == "supabase":
@@ -574,4 +664,5 @@ def init_db() -> None:
         _migrate_connection_suggestions(conn)
         _migrate_morning_briefings(conn)
         _migrate_conversation_summaries(conn)
+        _migrate_mcp_mutations(conn)
         _seed_thing_types(conn)
