@@ -157,10 +157,10 @@ test.describe('Visual regression – reli frontend', () => {
     await page.goto('/')
     await waitForApp(page)
 
-    await expect(page.locator('aside')).toHaveScreenshot('sidebar-empty.png', {
+    await expect(page.locator('aside').first()).toHaveScreenshot('sidebar-empty.png', {
       ...SNAPSHOT_OPTS,
       animations: 'disabled',
-      mask: [page.locator('aside p.text-xs')],
+      mask: [page.locator('aside').first().locator('p.text-xs')],
     })
   })
 
@@ -168,15 +168,15 @@ test.describe('Visual regression – reli frontend', () => {
     await interceptApi(page, { things: true })
     await page.goto('/')
     await waitForApp(page)
-    // Wait for Things to render
-    await page.waitForSelector('aside h2', { timeout: 5_000 })
+    // Wait for Things to render (sections use button headers now)
+    await page.waitForSelector('aside section', { timeout: 5_000 })
 
-    await expect(page.locator('aside')).toHaveScreenshot(
+    await expect(page.locator('aside').first()).toHaveScreenshot(
       'sidebar-with-things.png',
       {
         ...SNAPSHOT_OPTS,
         animations: 'disabled',
-        mask: [page.locator('aside p.text-xs')],
+        mask: [page.locator('aside').first().locator('p.text-xs')],
       }
     )
   })
@@ -214,7 +214,7 @@ test.describe('Visual regression – reli frontend', () => {
     await interceptApi(page, { things: true, history: true })
     await page.goto('/')
     await waitForApp(page)
-    await page.waitForSelector('aside h2', { timeout: 5_000 })
+    await page.waitForSelector('aside section', { timeout: 5_000 })
 
     await expect(page).toHaveScreenshot('full-layout-populated.png', {
       ...SNAPSHOT_OPTS,

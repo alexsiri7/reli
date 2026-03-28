@@ -150,6 +150,8 @@ const calendarDefaults = {
   thingTypes: [],
   proactiveSurfaces: [],
   focusRecommendations: [],
+  updateThing: vi.fn(),
+  createThing: vi.fn(),
   ...searchDefaults,
   ...filterDefaults,
   ...mergeDefaults,
@@ -199,9 +201,9 @@ describe('Sidebar', () => {
     expect(screen.getByText('Overdue Task')).toBeInTheDocument()
   })
 
-  it('shows snooze button on ThingCard', () => {
+  it('shows snooze button on ThingCard for non-task types', () => {
     mockState = {
-      things: [makeThing({ title: 'My Thing' })],
+      things: [makeThing({ title: 'My Note', type_hint: 'note' })],
       briefing: [],
       loading: false,
       snoozeThing: vi.fn(),
@@ -209,6 +211,31 @@ describe('Sidebar', () => {
     }
     render(<Sidebar />)
     expect(screen.getByTitle('Snooze')).toBeInTheDocument()
+  })
+
+  it('shows task checkbox for task-type Things', () => {
+    mockState = {
+      things: [makeThing({ title: 'My Task', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    expect(screen.getByTitle('Mark complete')).toBeInTheDocument()
+    expect(screen.getByText('My Task')).toBeInTheDocument()
+  })
+
+  it('shows quick-add button per section', () => {
+    mockState = {
+      things: [makeThing({ title: 'My Task', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    expect(screen.getByText('+ Add task')).toBeInTheDocument()
   })
 
   it('is expanded by default on desktop', () => {

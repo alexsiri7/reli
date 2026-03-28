@@ -9,6 +9,136 @@ import { GmailPanel } from './GmailPanel'
 import { MergeSuggestions } from './MergeSuggestions'
 import { ConnectionSuggestions } from './ConnectionSuggestions'
 
+function TaskCheckbox({ thing }: { thing: Thing }) {
+  const updateThing = useStore(s => s.updateThing)
+  const [pending, setPending] = useState(false)
+
+  const handleToggle = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (pending) return
+    setPending(true)
+    try {
+      await updateThing(thing.id, { active: !thing.active })
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleToggle}
+      aria-label={thing.active ? 'Mark task complete' : 'Mark task incomplete'}
+      title={thing.active ? 'Mark complete' : 'Mark incomplete'}
+      disabled={pending}
+      className={`shrink-0 flex items-center justify-center h-4 w-4 rounded border transition-colors mt-0.5 ${
+        thing.active
+          ? 'border-gray-300 dark:border-gray-600 hover:border-indigo-400 dark:hover:border-indigo-500 bg-white dark:bg-gray-900'
+          : 'border-emerald-500 bg-emerald-500 dark:border-emerald-400 dark:bg-emerald-400'
+      } ${pending ? 'opacity-50' : ''}`}
+    >
+      {!thing.active && (
+        <svg className="h-2.5 w-2.5 text-white dark:text-gray-900" viewBox="0 0 10 10" fill="currentColor">
+          <path d="M1.5 5.5L4 8l4.5-5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
+function QuickAddForm({ typeHint, typeLabel, onClose, projects }: {
+  typeHint: string
+  typeLabel: string
+  onClose: () => void
+  projects: Thing[]
+}) {
+  const createThing = useStore(s => s.createThing)
+  const [title, setTitle] = useState('')
+  const [checkinDate, setCheckinDate] = useState('')
+  const [parentId, setParentId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const handleSave = async () => {
+    if (!title.trim() || saving) return
+    setSaving(true)
+    try {
+      await createThing({
+        title: title.trim(),
+        type_hint: typeHint,
+        checkin_date: checkinDate || null,
+        parent_id: parentId || null,
+      })
+      onClose()
+    } catch {
+      setSaving(false)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSave()
+    if (e.key === 'Escape') onClose()
+  }
+
+  const showParentSelector = typeHint === 'task' && projects.length > 0
+
+  return (
+    <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800">
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder={`${typeLabel} title…`}
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        onKeyDown={handleKeyDown}
+        disabled={saving}
+        className="w-full px-2 py-1 text-sm rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500"
+      />
+      <div className="flex items-center gap-2 mt-1.5">
+        <input
+          type="date"
+          value={checkinDate}
+          onChange={e => setCheckinDate(e.target.value)}
+          disabled={saving}
+          title="Check-in date (optional)"
+          className="flex-1 px-1.5 py-0.5 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+        />
+        {showParentSelector && (
+          <select
+            value={parentId}
+            onChange={e => setParentId(e.target.value)}
+            disabled={saving}
+            title="Parent project (optional)"
+            className="flex-1 px-1.5 py-0.5 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 truncate"
+          >
+            <option value="">No project</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.title}</option>
+            ))}
+          </select>
+        )}
+        <button
+          onClick={handleSave}
+          disabled={!title.trim() || saving}
+          className="px-2 py-0.5 text-xs rounded bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          {saving ? '…' : 'Add'}
+        </button>
+        <button
+          onClick={onClose}
+          disabled={saving}
+          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 const FINDING_TYPE_ICONS: Record<string, string> = {
   approaching_date: '\u23F0',
   stale: '\u{1F4A4}',
@@ -379,6 +509,20 @@ export function Sidebar() {
     return () => mql.removeEventListener('change', handler)
   }, [])
 
+  // Per-section collapse state (GH#278)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  const toggleSection = useCallback((type: string) => {
+    setCollapsedSections(prev => {
+      const next = new Set(prev)
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
+      return next
+    })
+  }, [])
+
+  // Per-section quick-add state (GH#280)
+  const [quickAddOpen, setQuickAddOpen] = useState<string | null>(null)
+
   const upcoming = things
     .filter(t => t.checkin_date != null)
     .sort((a, b) => {
@@ -386,8 +530,6 @@ export function Sidebar() {
       const db = new Date(b.checkin_date!).getTime()
       return da - db
     })
-
-  const active = things.filter(t => t.checkin_date == null)
 
   // Recently discussed: things referenced in the last 7 days, sorted by most recent
   const [nowMs, setNowMs] = useState(() => Date.now())
@@ -405,13 +547,15 @@ export function Sidebar() {
 
   // Group active things by type, excluding children of projects (shown under parent)
   const activeGroups = useMemo(() => {
-    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal', 'preference'] as const
+    // Most-actionable-first ordering (GH#278)
+    const TYPE_ORDER = ['task', 'project', 'person', 'idea', 'note', 'goal', 'journal', 'preference'] as const
     const FALLBACK_LABELS: Record<string, string> = {
-      project: 'Projects',
-      goal: 'Goals',
       task: 'Tasks',
-      note: 'Notes',
+      project: 'Projects',
+      person: 'People',
       idea: 'Ideas',
+      note: 'Notes',
+      goal: 'Goals',
       journal: 'Journal',
       preference: 'Preferences',
     }
@@ -422,9 +566,10 @@ export function Sidebar() {
         typeLabels[tt.name] = tt.name.charAt(0).toUpperCase() + tt.name.slice(1) + 's'
       }
     }
-    const projectIds = new Set(active.filter(t => t.type_hint === 'project').map(t => t.id))
+    const projectIds = new Set(things.filter(t => t.type_hint === 'project').map(t => t.id))
     // Don't show children of projects or preference Things as standalone items (preferences get their own section)
-    let standalone = active.filter(t => (!t.parent_id || !projectIds.has(t.parent_id)) && t.type_hint !== 'preference')
+    // Use all things (including inactive ones) so completed tasks remain visible in the Tasks section
+    let standalone = things.filter(t => (!t.parent_id || !projectIds.has(t.parent_id)) && t.type_hint !== 'preference' && t.checkin_date == null)
 
     // Apply client-side filters
     const filterQ = thingFilterQuery.trim().toLowerCase()
@@ -446,7 +591,11 @@ export function Sidebar() {
     for (const type of TYPE_ORDER) {
       const items = byType.get(type)
       if (items && items.length > 0) {
-        groups.push({ type, label: typeLabels[type] ?? type, icon: typeIcon(type, thingTypes), items })
+        // For tasks: sort active first, completed (inactive) at bottom (GH#278, GH#279)
+        const sorted = type === 'task'
+          ? [...items].sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1))
+          : items
+        groups.push({ type, label: typeLabels[type] ?? type, icon: typeIcon(type, thingTypes), items: sorted })
         byType.delete(type)
       }
     }
@@ -457,7 +606,7 @@ export function Sidebar() {
       }
     }
     return groups
-  }, [active, thingTypes, thingFilterQuery, thingFilterTypes])
+  }, [things, thingTypes, thingFilterQuery, thingFilterTypes])
 
   // Preference Things — shown in their own dedicated section
   const preferenceThings = useMemo(() => {
@@ -466,11 +615,11 @@ export function Sidebar() {
 
   // Available types for the filter dropdown (derived from active things)
   const availableTypes = useMemo(() => {
-    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal', 'preference']
+    const TYPE_ORDER = ['task', 'project', 'person', 'idea', 'note', 'goal', 'journal', 'preference']
     const FALLBACK_LABELS: Record<string, string> = {
-      project: 'Projects', goal: 'Goals', task: 'Tasks',
-      note: 'Notes', idea: 'Ideas', journal: 'Journal',
-      preference: 'Preferences',
+      task: 'Tasks', project: 'Projects', person: 'People',
+      idea: 'Ideas', note: 'Notes', goal: 'Goals',
+      journal: 'Journal', preference: 'Preferences',
     }
     const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
     for (const tt of thingTypes) {
@@ -478,7 +627,7 @@ export function Sidebar() {
         typeLabels[tt.name] = tt.name.charAt(0).toUpperCase() + tt.name.slice(1) + 's'
       }
     }
-    const typesInUse = new Set(active.map(t => t.type_hint ?? 'other'))
+    const typesInUse = new Set(things.filter(t => t.checkin_date == null).map(t => t.type_hint ?? 'other'))
     const ordered: { type: string; label: string; icon: string }[] = []
     for (const type of TYPE_ORDER) {
       if (typesInUse.has(type)) {
@@ -490,7 +639,7 @@ export function Sidebar() {
       ordered.push({ type, label: typeLabels[type] ?? type.charAt(0).toUpperCase() + type.slice(1), icon: typeIcon(type, thingTypes) })
     }
     return ordered
-  }, [active, thingTypes])
+  }, [things, thingTypes])
 
   const activeFilterCount = thingFilterTypes.length + (thingFilterQuery.trim() ? 1 : 0)
   const isThingFilterActive = activeFilterCount > 0
@@ -791,7 +940,7 @@ export function Sidebar() {
             )}
 
         {/* Things filter bar */}
-        {active.length > 0 && (
+        {things.filter(t => t.checkin_date == null).length > 0 && (
           <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800">
             <div className="flex items-center gap-1.5">
               <div className="relative flex-1">
@@ -874,16 +1023,69 @@ export function Sidebar() {
         )}
 
         {/* Active Things grouped by type */}
-        {activeGroups.map(group => (
+        {activeGroups.map(group => {
+          const isCollapsed = collapsedSections.has(group.type)
+          const activeCount = group.items.filter(t => t.active).length
+          const completedCount = group.items.filter(t => !t.active).length
+          const projects = things.filter(t => t.type_hint === 'project' && t.active)
+          return (
           <section key={group.type} className="py-2 border-t border-gray-100 dark:border-gray-800">
-            <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+            <button
+              className="w-full px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest flex items-center gap-1.5 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              onClick={() => toggleSection(group.type)}
+              aria-expanded={!isCollapsed}
+            >
               <span>{group.icon}</span>
               <span>{group.label}</span>
-              <span className="ml-auto text-[10px] font-normal tabular-nums">{group.items.length}</span>
-            </h2>
-            {group.items.map(t => <ThingCard key={t.id} thing={t} />)}
+              <span className="ml-auto text-[10px] font-normal tabular-nums flex items-center gap-1">
+                {activeCount > 0 && <span>{activeCount}</span>}
+                {completedCount > 0 && <span className="text-emerald-500 dark:text-emerald-400">✓{completedCount}</span>}
+                <span className="ml-1 text-gray-300 dark:text-gray-600">{isCollapsed ? '▼' : '▲'}</span>
+              </span>
+            </button>
+            {!isCollapsed && (
+              <>
+                {group.items.map(t =>
+                  group.type === 'task' ? (
+                    <div key={t.id} className={`px-3 py-1 flex items-start gap-2 ${!t.active ? 'opacity-50' : ''}`}>
+                      <div className="pt-2 pl-1">
+                        <TaskCheckbox thing={t} />
+                      </div>
+                      <div
+                        className={`flex-1 min-w-0 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 group transition-colors cursor-pointer px-1 ${!t.active ? 'line-through text-gray-400 dark:text-gray-500' : ''}`}
+                        onClick={() => useStore.getState().openThingDetail(t.id)}
+                        role="button"
+                      >
+                        <p className="text-sm font-medium truncate leading-snug">
+                          {t.title}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <ThingCard key={t.id} thing={t} />
+                  )
+                )}
+                {/* Quick-add (GH#280) */}
+                {quickAddOpen === group.type ? (
+                  <QuickAddForm
+                    typeHint={group.type}
+                    typeLabel={group.label.replace(/s$/, '')}
+                    onClose={() => setQuickAddOpen(null)}
+                    projects={projects}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setQuickAddOpen(group.type)}
+                    className="w-full text-left px-5 py-1 text-xs text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
+                  >
+                    + Add {group.label.replace(/s$/, '').toLowerCase()}
+                  </button>
+                )}
+              </>
+            )}
           </section>
-        ))}
+          )
+        })}
 
         {/* Preferences — learned behavioral patterns */}
         {preferenceThings.length > 0 && (

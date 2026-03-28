@@ -385,6 +385,7 @@ interface ReliState {
   actOnFinding: (finding: SweepFinding) => void
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
   updateThing: (id: string, updates: Record<string, unknown>) => Promise<void>
+  createThing: (data: { title: string; type_hint?: string; checkin_date?: string | null; parent_id?: string | null }) => Promise<Thing>
   fetchHistory: () => Promise<void>
   fetchOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
@@ -859,6 +860,23 @@ export const useStore = create<ReliState>((set, get) => ({
       }))
     } catch (e) {
       set({ error: String(e) })
+    }
+  },
+
+  createThing: async (data) => {
+    try {
+      const res = await apiFetch(`${BASE}/things`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const created: Thing = validateResponse(ThingSchema, await res.json(), '/things')
+      set(state => ({ things: [created, ...state.things] }))
+      return created
+    } catch (e) {
+      set({ error: String(e) })
+      throw e
     }
   },
 
