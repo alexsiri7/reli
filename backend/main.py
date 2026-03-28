@@ -46,6 +46,7 @@ from .routers import (  # noqa: E402
     feedback,
     focus,
     gmail,
+    mcp_oauth,
     proactive,
     settings,
     staleness,
@@ -215,6 +216,9 @@ app.add_middleware(SentryUserContextMiddleware)
 
 # Auth routes are public (login/callback/logout)
 app.include_router(auth.router, prefix="/api")
+
+# MCP OAuth routes — public, no prefix (/.well-known/..., /oauth/authorize, /oauth/token)
+app.include_router(mcp_oauth.router)
 
 # All other /api routes require a valid JWT session
 _api_deps = [Depends(require_user)]
