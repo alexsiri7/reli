@@ -357,11 +357,35 @@ def delete_relationship(relationship_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def get_briefing(as_of: str | None = None) -> dict[str, Any]:
-    """Get today's daily briefing — checkin-due Things and active sweep findings.
+    """Get today's daily briefing — structured sweep output for the calling PA agent.
 
-    Returns items that need attention: Things with approaching checkin dates,
-    stale items, open questions, and other sweep findings from Reli's
-    server-side intelligence.
+    Returns machine-readable data categorised by type so the agent can decide what
+    to surface and how. Returns empty categories (total=0) if no sweep has run or
+    nothing needs attention.
+
+    Response structure:
+      - date: ISO 8601 date the briefing is for.
+      - concern_checkins: Things the user asked to be reminded about on or before
+        this date (each has a ``checkin_date`` field).
+      - approaching_dates: Sweep findings for Things with time-sensitive dates within
+        ~7 days (``finding_type: "approaching_date"``). Includes a linked ``thing``
+        object and a human-readable ``message``.
+      - stale_things: Things that haven't been updated recently and may need attention.
+        Covers ``finding_type: "stale"`` (untouched 14+ days) and
+        ``finding_type: "neglected"`` (high-priority or has pending work but stale).
+      - pattern_observations: Structural observations about Things — missing information,
+        gaps in knowledge, or incomplete records. Covers
+        ``finding_type: "information_gap"`` and ``finding_type: "incomplete"``.
+      - other_findings: Remaining active findings not in the above categories. Common
+        types: ``"overdue_checkin"`` (checkin_date already past), ``"orphan"`` (no
+        relationships), ``"completed_project"`` (all children done),
+        ``"open_question"`` (has unanswered open_questions — see get_open_questions
+        for the dedicated tool), ``"cross_project_resource_conflict"`` (person
+        involved in multiple stale projects).
+      - total: Total count across all categories.
+
+    Each finding has: ``id``, ``finding_type``, ``message`` (human-readable summary),
+    ``priority`` (0=critical → 4=backlog), ``thing_id``, and optional ``thing`` object.
 
     Args:
         as_of: Optional ISO 8601 date (YYYY-MM-DD) to get the briefing for.
@@ -370,16 +394,50 @@ def get_briefing(as_of: str | None = None) -> dict[str, Any]:
     params: dict[str, Any] = {}
     if as_of:
         params["as_of"] = as_of
-    result: dict[str, Any] = _api_get("/api/briefing", params=params)
-    return result
+    raw: dict[str, Any] = _api_get("/api/briefing", params=params)
+
+    findings: list[dict[str, Any]] = raw.get("findings", [])
+    approaching_types = {"approaching_date"}
+    stale_types = {"stale", "neglected"}
+    pattern_types = {"information_gap", "incomplete"}
+
+    approaching: list[dict[str, Any]] = []
+    stale: list[dict[str, Any]] = []
+    pattern: list[dict[str, Any]] = []
+    other: list[dict[str, Any]] = []
+    for f in findings:
+        ft = f.get("finding_type", "")
+        if ft in approaching_types:
+            approaching.append(f)
+        elif ft in stale_types:
+            stale.append(f)
+        elif ft in pattern_types:
+            pattern.append(f)
+        else:
+            other.append(f)
+
+    concern_checkins: list[dict[str, Any]] = raw.get("things", [])
+    total = len(concern_checkins) + len(findings)
+
+    return {
+        "date": raw.get("date"),
+        "concern_checkins": concern_checkins,
+        "approaching_dates": approaching,
+        "stale_things": stale,
+        "pattern_observations": pattern,
+        "other_findings": other,
+        "total": total,
+    }
 
 
 @mcp.tool()
 def get_open_questions(limit: int = 50) -> list[dict[str, Any]]:
     """Get Things that have unresolved open questions, ordered by priority then recency.
 
-    Returns active Things with non-empty open_questions arrays. The calling agent
-    can use these to proactively ask the user clarifying questions during conversation.
+    Returns active Things with non-empty ``open_questions`` arrays. Each Thing
+    includes its full field set including the ``open_questions`` list of strings —
+    knowledge gaps the PA should proactively resolve by asking the user during
+    conversation. Returns an empty list if no Things have open questions.
 
     Args:
         limit: Maximum number of Things to return (1-200, default 50).

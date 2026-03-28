@@ -532,16 +532,19 @@ class TestGetBriefing:
     def test_default_briefing(self, mock_get: MagicMock) -> None:
         briefing_data = {
             "date": "2026-03-22",
-            "things": [{"id": "t1", "title": "Follow up with Tom"}],
-            "findings": [{"id": "sf-1", "message": "Stale task", "priority": 2}],
+            "things": [{"id": "t1", "title": "Follow up with Tom", "checkin_date": "2026-03-22"}],
+            "findings": [{"id": "sf-1", "finding_type": "stale", "message": "Stale task", "priority": 2}],
             "total": 2,
         }
         mock_get.return_value = briefing_data
         result = get_briefing()
         mock_get.assert_called_once_with("/api/briefing", params={})
         assert result["total"] == 2
-        assert len(result["things"]) == 1
-        assert len(result["findings"]) == 1
+        assert len(result["concern_checkins"]) == 1
+        assert len(result["stale_things"]) == 1
+        assert result["approaching_dates"] == []
+        assert result["pattern_observations"] == []
+        assert result["other_findings"] == []
 
     @patch("backend.mcp_server._api_get")
     def test_briefing_with_date(self, mock_get: MagicMock) -> None:
@@ -555,8 +558,41 @@ class TestGetBriefing:
     def test_briefing_empty(self, mock_get: MagicMock) -> None:
         mock_get.return_value = {"date": "2026-03-22", "things": [], "findings": [], "total": 0}
         result = get_briefing()
-        assert result["things"] == []
-        assert result["findings"] == []
+        assert result["concern_checkins"] == []
+        assert result["approaching_dates"] == []
+        assert result["stale_things"] == []
+        assert result["pattern_observations"] == []
+        assert result["other_findings"] == []
+        assert result["total"] == 0
+
+    @patch("backend.mcp_server._api_get")
+    def test_briefing_categorizes_findings(self, mock_get: MagicMock) -> None:
+        """Findings are sorted into the correct categories."""
+        briefing_data = {
+            "date": "2026-03-22",
+            "things": [],
+            "findings": [
+                {"id": "sf-1", "finding_type": "approaching_date", "message": "Due soon", "priority": 1},
+                {"id": "sf-2", "finding_type": "stale", "message": "Stale task", "priority": 2},
+                {"id": "sf-3", "finding_type": "neglected", "message": "Neglected goal", "priority": 1},
+                {"id": "sf-4", "finding_type": "information_gap", "message": "Missing info", "priority": 3},
+                {"id": "sf-5", "finding_type": "incomplete", "message": "Name-only person", "priority": 3},
+                {"id": "sf-6", "finding_type": "overdue_checkin", "message": "Overdue", "priority": 2},
+                {"id": "sf-7", "finding_type": "open_question", "message": "Has questions", "priority": 3},
+            ],
+            "total": 7,
+        }
+        mock_get.return_value = briefing_data
+        result = get_briefing()
+        assert len(result["approaching_dates"]) == 1
+        assert result["approaching_dates"][0]["id"] == "sf-1"
+        assert len(result["stale_things"]) == 2
+        assert {f["id"] for f in result["stale_things"]} == {"sf-2", "sf-3"}
+        assert len(result["pattern_observations"]) == 2
+        assert {f["id"] for f in result["pattern_observations"]} == {"sf-4", "sf-5"}
+        assert len(result["other_findings"]) == 2
+        assert {f["id"] for f in result["other_findings"]} == {"sf-6", "sf-7"}
+        assert result["total"] == 7  # 0 things + 7 findings
 
 
 # ---------------------------------------------------------------------------
