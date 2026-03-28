@@ -19,6 +19,7 @@ from backend.mcp_server import (
     get_conflicts,
     get_open_questions,
     get_thing,
+    get_user_profile,
     list_relationships,
     mcp,
     merge_things,
@@ -395,6 +396,7 @@ class TestMcpMetadata:
             "get_briefing",
             "get_open_questions",
             "get_conflicts",
+            "get_user_profile",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
 
@@ -672,6 +674,66 @@ class TestGetConflicts:
         assert len(result) == 2
         assert result[0]["severity"] == "critical"
         assert result[1]["alert_type"] == "schedule_overlap"
+
+
+# get_user_profile
+# ---------------------------------------------------------------------------
+
+
+class TestGetUserProfile:
+    @patch("backend.mcp_server._api_get")
+    def test_returns_profile_with_relationships(self, mock_get: MagicMock) -> None:
+        profile = {
+            "thing": {
+                "id": "u1",
+                "title": "Alice",
+                "type_hint": "person",
+                "surface": False,
+                "priority": 3,
+                "active": True,
+            },
+            "relationships": [
+                {
+                    "id": "r1",
+                    "relationship_type": "works_with",
+                    "direction": "outgoing",
+                    "related_thing_id": "t2",
+                    "related_thing_title": "Bob",
+                }
+            ],
+        }
+        mock_get.return_value = profile
+        result = get_user_profile()
+        mock_get.assert_called_once_with("/api/things/me")
+        assert result["thing"]["title"] == "Alice"
+        assert result["thing"]["type_hint"] == "person"
+        assert len(result["relationships"]) == 1
+        assert result["relationships"][0]["direction"] == "outgoing"
+        assert result["relationships"][0]["related_thing_title"] == "Bob"
+
+    @patch("backend.mcp_server._api_get")
+    def test_no_relationships(self, mock_get: MagicMock) -> None:
+        profile = {
+            "thing": {"id": "u1", "title": "Alice", "type_hint": "person"},
+            "relationships": [],
+        }
+        mock_get.return_value = profile
+        result = get_user_profile()
+        assert result["relationships"] == []
+
+    @patch("backend.mcp_server._api_get")
+    def test_propagates_404_error(self, mock_get: MagicMock) -> None:
+        mock_get.side_effect = httpx.HTTPStatusError(
+            "404",
+            request=httpx.Request("GET", "http://test/api/things/me"),
+            response=httpx.Response(
+                status_code=404,
+                json={"detail": "User profile Thing not found"},
+                request=httpx.Request("GET", "http://test/api/things/me"),
+            ),
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            get_user_profile()
 
 
 # MCP Prompt Resources (Phase 2)

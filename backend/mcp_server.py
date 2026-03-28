@@ -102,6 +102,8 @@ mcp = FastMCP(
         "Reli is a personal knowledge graph. Use these tools to search, create, "
         "read, update, and delete Things (tasks, notes, projects, people, ideas, "
         "goals) and the typed relationships between them. "
+        "Call get_user_profile once at session start to load the user's anchor Thing "
+        "(who they are) and their relationships. "
         "Use get_briefing to see what needs attention today (checkin-due items and "
         "sweep findings). Use get_open_questions to find Things with unresolved "
         "knowledge gaps and ask the user proactively. "
@@ -384,6 +386,21 @@ def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
     """
     params: dict[str, Any] = {"window": min(max(window, 1), 90)}
     result: list[dict[str, Any]] = _api_get("/api/conflicts", params=params)
+    return result
+
+
+@mcp.tool()
+def get_user_profile() -> dict[str, Any]:
+    """Get the current user's profile Thing with all resolved relationships.
+
+    Returns the user's anchor Thing (type_hint=person, surface=false) — the
+    "who am I" context a calling agent should load at session start. Includes
+    all relationships with direction (incoming/outgoing) and related Thing
+    titles and IDs.
+
+    Returns a clear error if no user profile Thing exists.
+    """
+    result: dict[str, Any] = _api_get("/api/things/me")
     return result
 
 
