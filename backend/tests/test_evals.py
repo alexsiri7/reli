@@ -89,8 +89,8 @@ async def _run_single_case(agent, case) -> tuple[bool, str]:
         actual_tools = get_all_tool_calls(actual_inv.intermediate_data)
         expected_tools = get_all_tool_calls(expected_inv.intermediate_data)
 
-        actual_names = [tc.name for tc in actual_tools]
-        expected_names = [tc.name for tc in expected_tools]
+        actual_names: list[str] = [tc.name for tc in actual_tools if tc.name]
+        expected_names: list[str] = [tc.name for tc in expected_tools if tc.name]
 
         if _tool_names_in_order(actual_names, expected_names):
             return True, f"{case.eval_id}: OK ({actual_names})"
@@ -238,7 +238,10 @@ async def test_context_agent_search_params() -> None:
         assert invocations, f"{case.eval_id}: no invocations returned"
         inv = invocations[0]
         assert inv.final_response, f"{case.eval_id}: no final response"
-        text = inv.final_response.parts[0].text
+        parts = inv.final_response.parts
+        assert parts, f"{case.eval_id}: no parts in final response"
+        text = parts[0].text
+        assert text, f"{case.eval_id}: no text in final response"
         # Context agent should output valid JSON with search_queries
         parsed = json.loads(text)
         assert "search_queries" in parsed or "filter_params" in parsed, (
