@@ -1,0 +1,127 @@
+{
+  "eval_set_id": "response-agent-tone-personality",
+  "name": "Response Agent — Tone and Personality",
+  "description": "Golden dataset: tone consistency, celebration on completion, and personality pattern compliance (no-emoji, concise).",
+  "eval_cases": [
+    {
+      "eval_id": "tone-creation-default",
+      "description": "Task created with default personality. Response should be warm, brief, and confirm creation without celebrating as if done.",
+      "input": {
+        "user_message": "add a task to finish the quarterly report by Friday",
+        "reasoning_summary": "Created new task: Quarterly report. Check-in set for 2026-03-28.",
+        "applied_changes": {
+          "created": [{"id": "thing-q001", "title": "Quarterly report", "type_hint": "task", "checkin_date": "2026-03-28", "active": 1}],
+          "updated": [],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response confirms the thing was created or tracked",
+        "Response is brief (1-3 sentences)",
+        "Response does NOT use celebration language as if the task is already completed (no 'done', 'finished', 'you crushed it' for a newly created item)",
+        "Response has personality — warm and specific, not generic boilerplate"
+      ]
+    },
+    {
+      "eval_id": "tone-task-completion-celebration",
+      "description": "Task marked inactive (completed). Response should celebrate prominently.",
+      "input": {
+        "user_message": "just finished the gym session",
+        "reasoning_summary": "Marked 'Morning gym session' as inactive (completed).",
+        "applied_changes": {
+          "created": [],
+          "updated": [{"id": "thing-gym01", "title": "Morning gym session", "type_hint": "task", "active": 0}],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response uses clearly celebratory language (e.g., 'done', 'YES', 'crushed it', 'on fire', 'impressive', or similar enthusiastic phrasing)",
+        "Response does NOT just say the item was 'updated' in a neutral/administrative tone"
+      ]
+    },
+    {
+      "eval_id": "personality-no-emoji",
+      "description": "Learned preference for no emoji. Response must contain zero emoji characters.",
+      "input": {
+        "user_message": "schedule dentist appointment for next week",
+        "reasoning_summary": "Created task: Dentist appointment. Check-in set for 2026-04-04.",
+        "applied_changes": {
+          "created": [{"id": "thing-d001", "title": "Dentist appointment", "type_hint": "task", "checkin_date": "2026-04-04", "active": 1}],
+          "updated": [],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": [
+          {"pattern": "avoids emoji", "confidence": "established", "observations": 3}
+        ]
+      },
+      "rubric": [
+        "Response contains NO emoji characters (no 🎉 🔥 ✅ 👍 💪 or any other Unicode emoji symbol)"
+      ]
+    },
+    {
+      "eval_id": "personality-concise",
+      "description": "Learned preference for concise responses. Response should be short.",
+      "input": {
+        "user_message": "what do I have going on?",
+        "reasoning_summary": "No changes made. Surfacing active items: Project Alpha deadline, Team sync meeting, Budget review.",
+        "applied_changes": {
+          "created": [],
+          "updated": [],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": [
+          {"pattern": "prefers concise responses", "confidence": "established", "observations": 2}
+        ]
+      },
+      "rubric": [
+        "Response is concise — no more than 3 short sentences",
+        "Response does not include long bullet-point lists or extensive elaboration on each item"
+      ]
+    },
+    {
+      "eval_id": "tone-briefing-mode",
+      "description": "Briefing mode active. Response should be energetic and action-oriented.",
+      "input": {
+        "user_message": "morning briefing",
+        "reasoning_summary": "Briefing mode. Active items: Project Alpha (due Friday), Team sync (2pm today), Budget review (overdue).",
+        "applied_changes": {
+          "created": [],
+          "updated": [],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": true,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response has an energetic, action-oriented tone (frames items as opportunities, uses motivating language)",
+        "Response mentions at least one of the active items (Project Alpha, Team sync, or Budget review)"
+      ]
+    }
+  ]
+}

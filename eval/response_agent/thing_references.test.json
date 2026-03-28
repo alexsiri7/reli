@@ -1,0 +1,77 @@
+{
+  "eval_set_id": "response-agent-thing-references",
+  "name": "Response Agent — Thing Reference Accuracy",
+  "description": "Golden dataset: response agent must include a valid JSON block referencing Things from applied_changes with correct IDs.",
+  "eval_cases": [
+    {
+      "eval_id": "references-single-update",
+      "description": "Single thing updated. JSON block must reference it with correct ID.",
+      "input": {
+        "user_message": "update the sprint planning doc",
+        "reasoning_summary": "Updated 'Q2 Sprint Planning' with new notes.",
+        "applied_changes": {
+          "created": [],
+          "updated": [{"id": "thing-spr01", "title": "Q2 Sprint Planning", "type_hint": "task", "active": 1}],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response includes a ```json ... ``` code block",
+        "The JSON block contains a 'referenced_things' key",
+        "The referenced_things list includes an entry with thing_id 'thing-spr01'"
+      ]
+    },
+    {
+      "eval_id": "references-creation",
+      "description": "Thing created. JSON block must reference it or be empty (since created things may not have IDs in context yet — empty list is acceptable).",
+      "input": {
+        "user_message": "add budget review to my tasks",
+        "reasoning_summary": "Created task: Budget review.",
+        "applied_changes": {
+          "created": [{"id": "thing-bud01", "title": "Budget review", "type_hint": "task", "active": 1}],
+          "updated": [],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response includes a ```json ... ``` code block",
+        "The JSON block contains a 'referenced_things' key with a valid JSON array (may be empty if no ID was in context)"
+      ]
+    },
+    {
+      "eval_id": "references-no-changes",
+      "description": "No changes applied. JSON block should have empty referenced_things.",
+      "input": {
+        "user_message": "just checking in",
+        "reasoning_summary": "No changes. User is checking in with no specific action needed.",
+        "applied_changes": {
+          "created": [],
+          "updated": [],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response includes a ```json ... ``` code block",
+        "The referenced_things list is empty (no things to reference when there are no changes)"
+      ]
+    }
+  ]
+}
