@@ -183,8 +183,8 @@ describe('SettingsPanel', () => {
     ]
     render(<SettingsPanel />)
 
-    // Cost info should be shown below the selected model
-    expect(screen.getAllByText(/\$30\.00 in/)[0]).toBeInTheDocument()
+    // Cost info should be shown below the selected model (per 1K tokens)
+    expect(screen.getAllByText(/\$0\.03 in/)[0]).toBeInTheDocument()
   })
 })
 
