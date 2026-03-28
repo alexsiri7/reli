@@ -96,6 +96,19 @@ def _api_delete(path: str) -> Any:
 # MCP Server
 # ---------------------------------------------------------------------------
 
+from mcp.server.fastmcp.server import TransportSecuritySettings
+
+# Allow the production host through MCP's DNS rebinding protection.
+# Derive from RELI_BASE_URL or GOOGLE_AUTH_REDIRECT_URI.
+_RELI_HOST = os.environ.get("RELI_BASE_URL", "").replace("https://", "").replace("http://", "").rstrip("/")
+if not _RELI_HOST:
+    _redirect_uri = os.environ.get("GOOGLE_AUTH_REDIRECT_URI", "")
+    if _redirect_uri:
+        _RELI_HOST = _redirect_uri.split("/")[2] if len(_redirect_uri.split("/")) > 2 else ""
+_allowed_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+if _RELI_HOST:
+    _allowed_hosts.append(_RELI_HOST)
+
 mcp = FastMCP(
     "Reli",
     instructions=(
@@ -113,6 +126,10 @@ mcp = FastMCP(
     ),
     # Path is "/" because FastAPI mounts us at /mcp — the combined path is /mcp/
     streamable_http_path="/",
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=_allowed_hosts,
+    ),
 )
 
 
