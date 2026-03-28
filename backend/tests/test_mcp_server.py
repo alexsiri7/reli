@@ -17,6 +17,7 @@ from backend.mcp_server import (
     delete_thing,
     get_briefing,
     get_conflicts,
+    get_open_questions,
     get_thing,
     list_relationships,
     mcp,
@@ -391,6 +392,7 @@ class TestMcpMetadata:
             "create_relationship",
             "delete_relationship",
             "get_briefing",
+            "get_open_questions",
             "get_conflicts",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
@@ -554,6 +556,49 @@ class TestGetBriefing:
         result = get_briefing()
         assert result["things"] == []
         assert result["findings"] == []
+
+
+# ---------------------------------------------------------------------------
+# get_open_questions
+# ---------------------------------------------------------------------------
+
+
+class TestGetOpenQuestions:
+    @patch("backend.mcp_server._api_get")
+    def test_returns_things_with_open_questions(self, mock_get: MagicMock) -> None:
+        things = [
+            {"id": "t1", "title": "Plan vacation", "open_questions": ["What destination?", "When?"]},
+            {"id": "t2", "title": "Fix bug", "open_questions": ["Which release?"]},
+        ]
+        mock_get.return_value = things
+        result = get_open_questions()
+        mock_get.assert_called_once_with("/api/things/open-questions", params={"limit": 50})
+        assert len(result) == 2
+        assert result[0]["id"] == "t1"
+
+    @patch("backend.mcp_server._api_get")
+    def test_empty_when_no_open_questions(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        result = get_open_questions()
+        assert result == []
+
+    @patch("backend.mcp_server._api_get")
+    def test_custom_limit(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        get_open_questions(limit=10)
+        mock_get.assert_called_once_with("/api/things/open-questions", params={"limit": 10})
+
+    @patch("backend.mcp_server._api_get")
+    def test_limit_clamped_min(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        get_open_questions(limit=0)
+        mock_get.assert_called_once_with("/api/things/open-questions", params={"limit": 1})
+
+    @patch("backend.mcp_server._api_get")
+    def test_limit_clamped_max(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        get_open_questions(limit=999)
+        mock_get.assert_called_once_with("/api/things/open-questions", params={"limit": 200})
 
 
 # ---------------------------------------------------------------------------
@@ -938,6 +983,35 @@ class TestMCPTools:
             headers=headers,
         )
         assert resp.status_code == 204
+
+    def test_open_questions_endpoint(self, token_client_with_user):
+        """Things with open_questions appear in the /api/things/open-questions endpoint."""
+        headers = {"Authorization": "Bearer test-mcp-token"}
+
+        # Create a thing WITH open questions
+        resp = token_client_with_user.post(
+            "/api/things",
+            json={"title": "Plan birthday party", "type_hint": "task", "open_questions": ["Who to invite?", "Venue?"]},
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        thing_id = resp.json()["id"]
+
+        # Create a thing WITHOUT open questions
+        token_client_with_user.post(
+            "/api/things",
+            json={"title": "Buy milk", "type_hint": "task"},
+            headers=headers,
+        )
+
+        # Only the thing with open questions should appear
+        resp = token_client_with_user.get("/api/things/open-questions", headers=headers)
+        assert resp.status_code == 200
+        results = resp.json()
+        ids = [t["id"] for t in results]
+        assert thing_id in ids
+        thing = next(t for t in results if t["id"] == thing_id)
+        assert thing["open_questions"] == ["Who to invite?", "Venue?"]
 
 
 # ---------------------------------------------------------------------------

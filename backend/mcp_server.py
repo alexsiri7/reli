@@ -103,7 +103,9 @@ mcp = FastMCP(
         "read, update, and delete Things (tasks, notes, projects, people, ideas, "
         "goals) and the typed relationships between them. "
         "Use get_briefing to see what needs attention today (checkin-due items and "
-        "sweep findings). Use get_conflicts to detect blockers, schedule overlaps, "
+        "sweep findings). Use get_open_questions to find Things with unresolved "
+        "knowledge gaps and ask the user proactively. "
+        "Use get_conflicts to detect blockers, schedule overlaps, "
         "and deadline conflicts. "
         "Use the prompt resources (thing-creation, relationship-patterns, "
         "proactive-surfacing, pa-behavior) to learn how to act as a Reli-powered PA."
@@ -350,6 +352,21 @@ def get_briefing(as_of: str | None = None) -> dict[str, Any]:
     if as_of:
         params["as_of"] = as_of
     result: dict[str, Any] = _api_get("/api/briefing", params=params)
+    return result
+
+
+@mcp.tool()
+def get_open_questions(limit: int = 50) -> list[dict[str, Any]]:
+    """Get Things that have unresolved open questions, ordered by priority then recency.
+
+    Returns active Things with non-empty open_questions arrays. The calling agent
+    can use these to proactively ask the user clarifying questions during conversation.
+
+    Args:
+        limit: Maximum number of Things to return (1-200, default 50).
+    """
+    params: dict[str, Any] = {"limit": min(max(limit, 1), 200)}
+    result: list[dict[str, Any]] = _api_get("/api/things/open-questions", params=params)
     return result
 
 
