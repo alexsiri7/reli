@@ -316,6 +316,42 @@ def _fetch_relevant_things(
                     seen_sql.add(row["id"])
                     seed_ids.append(row["id"])
 
+    # Preference boost: run a dedicated search for preference Things so they always
+    # surface when their topic matches, ranked above entity Things.
+    # Preferences have type_hint='preference' and encode user-specific behavioral rules.
+    if search_queries and type_hint != "preference":
+        preference_ids: list[str] = []
+        if vc > 0:
+            preference_ids = vector_search(
+                queries=search_queries,
+                n_results=10,
+                active_only=active_only,
+                type_hint="preference",
+                user_id=user_id,
+            )
+        if not preference_ids:
+            pref_seen: set[str] = set()
+            for query in search_queries[:3]:
+                pattern = f"%{query}%"
+                pref_sql = (
+                    "SELECT id FROM things WHERE type_hint = 'preference'"
+                    " AND (title LIKE ? OR data LIKE ?)"
+                )
+                pref_params_list: list = [pattern, pattern]
+                pref_sql += uf_sql
+                pref_params_list.extend(uf_params)
+                if active_only:
+                    pref_sql += " AND active = 1"
+                pref_sql += " ORDER BY updated_at DESC LIMIT 10"
+                for row in conn.execute(pref_sql, pref_params_list).fetchall():
+                    if row["id"] not in pref_seen:
+                        pref_seen.add(row["id"])
+                        preference_ids.append(row["id"])
+        if preference_ids:
+            pref_set = set(preference_ids)
+            seed_ids = preference_ids + [sid for sid in seed_ids if sid not in pref_set]
+            logger.info("Preference boost: %d matching preferences ranked first", len(preference_ids))
+
     logger.info("Total seed IDs before hydration: %d", len(seed_ids))
 
     family_results = _fetch_with_family(conn, seed_ids)
@@ -337,7 +373,12 @@ def _fetch_relevant_things(
     # Preference boost: ensure preference Things matching the topic are
     # included and ranked higher than entity Things.  Preferences are almost
     # always relevant when their topic matches. (GH#191 task 3)
+    # Skip when caller already filters to type_hint='preference' — the main
+    # search already covers this and a second boost would be redundant.
     # -----------------------------------------------------------------------
+    if type_hint == "preference":
+        return results
+
     pref_ids: list[str] = []
     pref_vc = vector_count()
     if pref_vc > 0:
