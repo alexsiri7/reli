@@ -11,7 +11,7 @@ from google.adk.agents import LlmAgent
 from google.genai import types as genai_types
 
 from backend.agents import CONTEXT_AGENT_SYSTEM
-from eval._eval_model import make_eval_model
+from eval._eval_model import make_eval_model, make_eval_model_by_name
 
 model = make_eval_model("context")
 
@@ -24,3 +24,16 @@ root_agent = LlmAgent(
         response_mime_type="application/json",
     ),
 )
+
+
+def build_agent(model_name: str) -> LlmAgent:
+    """Build the context agent with a specific model name (for model comparison)."""
+    return LlmAgent(
+        name="context_agent",
+        description="Generates search parameters to find relevant Things in the database.",
+        model=make_eval_model_by_name(model_name),
+        instruction=CONTEXT_AGENT_SYSTEM,
+        generate_content_config=genai_types.GenerateContentConfig(
+            response_mime_type="application/json",
+        ),
+    )
