@@ -10,6 +10,7 @@ from google.adk.models.lite_llm import LiteLlm
 
 from backend.agents import (
     REQUESTY_API_KEY,
+    REQUESTY_BASE_URL,
     REQUESTY_MODEL,
     REQUESTY_REASONING_MODEL,
     REQUESTY_RESPONSE_MODEL,
@@ -47,4 +48,5 @@ def make_eval_model(stage: str = "reasoning") -> LiteLlm:
         return LiteLlm(
             model=effective,
             api_key=REQUESTY_API_KEY,
+            api_base=REQUESTY_BASE_URL,
         )

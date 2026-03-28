@@ -9,14 +9,14 @@ Uses a custom ToolNameTrajectoryEvaluator that matches tool names only
 between runs while consistently calling the correct tools.
 
 Usage:
-    # Run all evals
-    RUN_EVALS=1 pytest backend/tests/test_evals.py -x -v
+    # Run all evals (--no-cov avoids the 70% coverage threshold which only applies to unit tests)
+    RUN_EVALS=1 pytest backend/tests/test_evals.py -x -v --no-cov
 
     # Run only reasoning agent evals
-    RUN_EVALS=1 pytest backend/tests/test_evals.py -x -v -k reasoning
+    RUN_EVALS=1 pytest backend/tests/test_evals.py -x -v --no-cov -k reasoning
 
     # Run only context agent evals
-    RUN_EVALS=1 pytest backend/tests/test_evals.py -x -v -k context
+    RUN_EVALS=1 pytest backend/tests/test_evals.py -x -v --no-cov -k context
 """
 
 from __future__ import annotations
