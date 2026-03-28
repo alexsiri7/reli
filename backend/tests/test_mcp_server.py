@@ -130,6 +130,24 @@ class TestCreateThing:
         assert call_kwargs["checkin_date"] == "2026-03-25T09:00:00Z"
         assert json.loads(call_kwargs["open_questions_json"]) == ["What time?"]
 
+    @patch("backend.mcp_server._api_post")
+    def test_create_with_parent_id(self, mock_post: MagicMock) -> None:
+        mock_post.return_value = {"id": "child-1", "title": "Sub-task", "parent_id": "parent-1"}
+        create_thing(title="Sub-task", parent_id="parent-1")
+        call_body = mock_post.call_args[1]["json_body"]
+        assert call_body["parent_id"] == "parent-1"
+
+    @patch("backend.mcp_server._api_post")
+    def test_create_omits_none_optional_fields(self, mock_post: MagicMock) -> None:
+        mock_post.return_value = {"id": "new-3", "title": "Note"}
+        create_thing(title="Note")
+        call_body = mock_post.call_args[1]["json_body"]
+        assert "type_hint" not in call_body
+        assert "data" not in call_body
+        assert "parent_id" not in call_body
+        assert "checkin_date" not in call_body
+        assert "open_questions" not in call_body
+
 
 # ---------------------------------------------------------------------------
 # update_thing
@@ -154,6 +172,34 @@ class TestUpdateThing:
         }
         update_thing(thing_id="t1", priority=1, active=False)
         mock_update.assert_called_once()
+
+    @patch("backend.mcp_server._api_patch")
+    def test_update_all_optional_fields(self, mock_patch: MagicMock) -> None:
+        mock_patch.return_value = {"id": "t2", "title": "Updated"}
+        update_thing(
+            thing_id="t2",
+            title="Updated",
+            type_hint="task",
+            data={"note": "extra"},
+            priority=2,
+            parent_id="p-1",
+            checkin_date="2026-04-01",
+            active=True,
+            surface=False,
+            open_questions=["When?"],
+        )
+        call_body = mock_patch.call_args[1]["json_body"]
+        assert call_body == {
+            "title": "Updated",
+            "type_hint": "task",
+            "data": {"note": "extra"},
+            "priority": 2,
+            "parent_id": "p-1",
+            "checkin_date": "2026-04-01",
+            "active": True,
+            "surface": False,
+            "open_questions": ["When?"],
+        }
 
     def test_update_no_fields(self) -> None:
         result = update_thing(thing_id="t1")
