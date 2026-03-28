@@ -68,9 +68,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_db()
     clean_orphan_relationships()
     start_scheduler()
+
+    # Start MCP session manager (required for streamable HTTP transport).
+    # When mounted as a sub-app, Starlette's lifespan doesn't trigger,
+    # so we run the session manager from the main app's lifespan.
+    from .mcp_server import mcp as _mcp_server
+
     async with httpx.AsyncClient(timeout=15.0) as client:
         app.state.httpx_client = client
-        yield
+        # Guard against double-start (tests create multiple app instances)
+        if _mcp_server._session_manager and not _mcp_server._session_manager._has_started:
+            async with _mcp_server.session_manager.run():
+                yield
+        else:
+            yield
     stop_scheduler()
     shutdown_tracing()
 
