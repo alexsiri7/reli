@@ -36,6 +36,9 @@ logger = logging.getLogger(__name__)
 RELI_API_URL = os.environ.get("RELI_API_URL", "http://localhost:8000")
 RELI_API_TOKEN = os.environ.get("RELI_API_TOKEN", "")
 
+# JWT algorithm (must match backend/auth.py)
+_JWT_ALGORITHM = "HS256"
+
 
 def _base_url() -> str:
     return RELI_API_URL.rstrip("/")
@@ -93,6 +96,47 @@ def _api_delete(path: str) -> Any:
 
 
 # ---------------------------------------------------------------------------
+# User identity helper (for direct-DB tools)
+# ---------------------------------------------------------------------------
+
+
+def _get_mcp_user_id() -> str:
+    """Resolve the user_id for the current MCP session.
+
+    Mirrors the logic in ``backend/auth.py``:
+    1. If ``RELI_API_TOKEN`` is a valid JWT, extract ``sub`` claim.
+    2. If it matches the static ``RELI_API_TOKEN`` configured on the backend
+       (single-tenant shortcut), return the first user in the DB.
+    3. Otherwise return ``""`` (auth disabled / dev mode).
+    """
+    token = RELI_API_TOKEN
+    if not token:
+        return ""
+
+    # Try JWT decode first
+    try:
+        import jwt as _jwt
+        from .config import settings as _settings
+
+        if _settings.SECRET_KEY:
+            payload = _jwt.decode(token, _settings.SECRET_KEY, algorithms=[_JWT_ALGORITHM])
+            return payload.get("sub", "")
+    except Exception:
+        pass
+
+    # Fall back: static token → resolve first user
+    try:
+        from .database import get_connection
+
+        conn = get_connection()
+        row = conn.execute("SELECT id FROM users ORDER BY created_at LIMIT 1").fetchone()
+        conn.close()
+        return row["id"] if row else ""
+    except Exception:
+        return ""
+
+
+# ---------------------------------------------------------------------------
 # MCP Server
 # ---------------------------------------------------------------------------
 
@@ -102,13 +146,16 @@ mcp = FastMCP(
         "Reli is a personal knowledge graph. Use these tools to search, create, "
         "read, update, and delete Things (tasks, notes, projects, people, ideas, "
         "goals) and the typed relationships between them. "
+        "Use fetch_context to search for relevant Things before making changes — "
+        "this prevents duplicates and gives you full context. "
+        "Use chat_history to browse or search past conversations across all sessions. "
         "Use get_briefing to see what needs attention today (checkin-due items and "
         "sweep findings). Use get_open_questions to find Things with unresolved "
         "knowledge gaps and ask the user proactively. "
         "Use get_conflicts to detect blockers, schedule overlaps, "
         "and deadline conflicts. "
         "Use the prompt resources (thing-creation, relationship-patterns, "
-        "proactive-surfacing, pa-behavior) to learn how to act as a Reli-powered PA."
+        "proactive-surfacing, pa-behavior) to learn how to act as a Reli-powered PA. "
         "Use reli_think for AI-powered reasoning over complex natural language requests."
     ),
 )
@@ -333,6 +380,78 @@ def delete_relationship(relationship_id: str) -> dict[str, Any]:
         relationship_id: The UUID of the relationship to delete.
     """
     result: dict[str, Any] = _api_delete(f"/api/things/relationships/{relationship_id}")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Knowledge-graph context tools (shared implementations from tools.py)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def fetch_context(
+    search_queries: list[str],
+    fetch_ids: list[str] | None = None,
+    active_only: bool = True,
+    type_hint: str | None = None,
+) -> dict[str, Any]:
+    """Search the knowledge graph for Things relevant to the given queries.
+
+    Returns matching Things, their relationships, and updates
+    ``last_referenced`` timestamps.  Use this to find what already exists
+    before creating new Things.
+
+    Args:
+        search_queries: List of search query strings, e.g. ["vacation plans", "travel"].
+        fetch_ids: Optional list of specific Thing UUIDs to fetch by ID.
+        active_only: Only return active (non-archived) Things (default true).
+        type_hint: Filter by type (task, note, person, project, etc.), or omit for all.
+
+    Returns:
+        Dict with 'things' (list of Thing dicts), 'relationships' (list of
+        relationship dicts between found Things), and 'count' (number found).
+    """
+    from .tools import fetch_context as _fetch_context_impl
+
+    user_id = _get_mcp_user_id()
+    result: dict[str, Any] = _fetch_context_impl(
+        user_id=user_id,
+        search_queries=search_queries,
+        fetch_ids=fetch_ids or [],
+        active_only=active_only,
+        type_hint=type_hint,
+    )
+    return result
+
+
+@mcp.tool()
+def chat_history(
+    n: int = 10,
+    search_query: str = "",
+) -> dict[str, Any]:
+    """Browse or search recent conversation history across all sessions.
+
+    Unlike the in-agent version (which is session-scoped), this searches
+    across all conversations for the authenticated user.
+
+    Args:
+        n: Number of messages to retrieve (1–50, default 10).
+        search_query: Optional text to filter messages by content.
+            If provided, only messages containing this text are returned.
+
+    Returns:
+        Dict with 'messages' (list of {role, content, timestamp} dicts)
+        and 'count' (number of messages returned).
+    """
+    from .tools import chat_history_tool as _chat_history_impl
+
+    user_id = _get_mcp_user_id()
+    result: dict[str, Any] = _chat_history_impl(
+        n=n,
+        search_query=search_query,
+        session_id="",  # cross-session mode
+        user_id=user_id,
+    )
     return result
 
 

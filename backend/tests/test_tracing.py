@@ -213,9 +213,9 @@ class TestTracedToolDecorator:
     def test_tools_from_factory_are_traced(self):
         """Tools returned by _make_reasoning_tools should be wrapped with tracing."""
         with (
-            patch("backend.reasoning_agent.db"),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db"),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 

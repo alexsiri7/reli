@@ -29,9 +29,17 @@ from .agents import (
 )
 from .context_agent import _make_litellm_model, _run_agent_for_text
 from .database import db
+from .tools import (
+    ENTITY_TYPES as _ENTITY_TYPES_FROM_TOOLS,
+    chat_history_tool as _chat_history_impl,
+    create_relationship as _create_relationship_impl,
+    create_thing as _create_thing_impl,
+    delete_thing as _delete_thing_impl,
+    fetch_context as _fetch_context_impl,
+    merge_things as _merge_things_impl,
+    update_thing as _update_thing_impl,
+)
 from .tracing import get_tracer
-from .vector_store import delete_thing as vs_delete
-from .vector_store import upsert_thing
 
 logger = logging.getLogger(__name__)
 
@@ -534,7 +542,7 @@ def get_system_prompt_for_mode(mode: str, interaction_style: str = "auto") -> st
 # ---------------------------------------------------------------------------
 
 # Entity type_hints that default to surface=false
-_ENTITY_TYPES = {"person", "place", "event", "concept", "reference", "preference"}
+_ENTITY_TYPES = _ENTITY_TYPES_FROM_TOOLS
 
 
 def _make_reasoning_tools(
@@ -546,6 +554,10 @@ def _make_reasoning_tools(
     Returns (tools_list, applied_changes_dict, fetched_context_dict).
     Both dicts are mutated by the tools during execution and contain the
     final state after the agent finishes running.
+
+    The heavy-lifting DB implementations live in ``backend/tools.py``; these
+    are thin wrappers that bind ``user_id``/``session_id`` and track
+    side-effects (``applied`` and ``fetched_context``).
     """
     applied: dict[str, list[Any]] = {
         "created": [],
@@ -586,8 +598,6 @@ def _make_reasoning_tools(
             Dict with 'things' (list of Thing dicts), 'relationships' (list of
             relationship dicts between found Things), and 'count' (number found).
         """
-        from .pipeline import _fetch_relevant_things, _fetch_with_family
-
         try:
             search_queries = json.loads(search_queries_json)
             if not isinstance(search_queries, list):
@@ -602,72 +612,22 @@ def _make_reasoning_tools(
         except (json.JSONDecodeError, TypeError):
             fetch_ids = []
 
-        if not search_queries and not fetch_ids:
-            return {"things": [], "relationships": [], "count": 0}
-
-        filter_params = {"active_only": active_only, "type_hint": type_hint or None}
-
-        seen_ids: set[str] = set()
-        results: list[dict[str, Any]] = []
-
-        with db() as conn:
-            if search_queries:
-                things = _fetch_relevant_things(
-                    conn,
-                    search_queries,
-                    filter_params,
-                    user_id=user_id,
-                )
-                for t in things:
-                    if t["id"] not in seen_ids:
-                        seen_ids.add(t["id"])
-                        results.append(t)
-
-            if fetch_ids:
-                id_things = _fetch_with_family(
-                    conn,
-                    [tid for tid in fetch_ids if tid not in seen_ids],
-                )
-                for t in id_things:
-                    if t["id"] not in seen_ids:
-                        seen_ids.add(t["id"])
-                        results.append(t)
-
-            # Fetch relationships between found Things
-            relationships: list[dict[str, Any]] = []
-            if results:
-                ids = [t["id"] for t in results]
-                ph = ",".join("?" for _ in ids)
-                rel_rows = conn.execute(
-                    f"SELECT from_thing_id, to_thing_id, relationship_type "
-                    f"FROM thing_relationships "
-                    f"WHERE from_thing_id IN ({ph}) OR to_thing_id IN ({ph})",
-                    ids + ids,
-                ).fetchall()
-                relationships = [dict(r) for r in rel_rows]
-
-            # Update last_referenced timestamp
-            if results:
-                now = datetime.now(timezone.utc).isoformat()
-                ids = [t["id"] for t in results]
-                ph = ",".join("?" for _ in ids)
-                conn.execute(
-                    f"UPDATE things SET last_referenced = ? WHERE id IN ({ph})",
-                    [now] + ids,
-                )
+        result = _fetch_context_impl(
+            user_id=user_id,
+            search_queries=search_queries,
+            fetch_ids=fetch_ids,
+            active_only=active_only,
+            type_hint=type_hint or None,
+        )
 
         # Track fetched context for pipeline result
         seen_fetched = {t["id"] for t in fetched_context["things"]}
-        for t in results:
+        for t in result["things"]:
             if t["id"] not in seen_fetched:
                 fetched_context["things"].append(t)
-        fetched_context["relationships"] = relationships
+        fetched_context["relationships"] = result["relationships"]
 
-        return {
-            "things": results,
-            "relationships": relationships,
-            "count": len(results),
-        }
+        return result
 
     # ------------------------------------------------------------------
     def chat_history(
@@ -692,33 +652,7 @@ def _make_reasoning_tools(
         if not session_id:
             return {"messages": [], "count": 0, "error": "No session context available"}
 
-        n = max(1, min(n, 50))
-
-        with db() as conn:
-            if search_query and search_query.strip():
-                rows = conn.execute(
-                    "SELECT role, content, timestamp FROM chat_history"
-                    " WHERE session_id = ? AND content LIKE ?"
-                    " ORDER BY id DESC LIMIT ?",
-                    (session_id, f"%{search_query.strip()}%", n),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT role, content, timestamp FROM chat_history WHERE session_id = ? ORDER BY id DESC LIMIT ?",
-                    (session_id, n),
-                ).fetchall()
-
-        # Reverse to chronological order
-        messages = [
-            {
-                "role": r["role"],
-                "content": r["content"],
-                "timestamp": r["timestamp"],
-            }
-            for r in reversed(rows)
-        ]
-
-        return {"messages": messages, "count": len(messages)}
+        return _chat_history_impl(n=n, search_query=search_query, session_id=session_id)
 
     # ------------------------------------------------------------------
     def create_thing(
@@ -748,104 +682,23 @@ def _make_reasoning_tools(
         Returns:
             The created Thing dict including its generated 'id'.
         """
-        title = title.strip()
-        if not title:
-            return {"error": "title is required"}
-
-        now = datetime.now(timezone.utc).isoformat()
-
-        try:
-            data = json.loads(data_json) if data_json else {}
-            if not isinstance(data, dict):
-                return {
-                    "error": f"data_json must be a JSON object, got {type(data).__name__}. "
-                    'Wrap your data in curly braces: {"key": "value"}'
-                }
-        except (json.JSONDecodeError, TypeError) as exc:
-            return {"error": f"data_json is not valid JSON: {exc}"}
-        try:
-            open_questions = json.loads(open_questions_json) if open_questions_json else []
-        except json.JSONDecodeError:
-            open_questions = []
-
-        with db() as conn:
-            # Deduplicate: if a Thing with the same title exists, convert to update
-            existing = conn.execute(
-                "SELECT * FROM things WHERE LOWER(title) = LOWER(?) AND active = 1 LIMIT 1",
-                (title,),
-            ).fetchone()
-
-            if existing:
-                logger.info(
-                    "Dedup: converting create for '%s' into update on %s",
-                    title,
-                    existing["id"],
-                )
-                merge_fields: dict[str, Any] = {}
-                if data:
-                    try:
-                        old = (
-                            json.loads(existing["data"])
-                            if isinstance(existing["data"], str) and existing["data"]
-                            else {}
-                        )
-                    except (ValueError, TypeError):
-                        old = {}
-                    merged = {**old, **data}
-                    merge_fields["data"] = json.dumps(merged)
-                if open_questions:
-                    merge_fields["open_questions"] = json.dumps(open_questions)
-                if checkin_date and not existing["checkin_date"]:
-                    merge_fields["checkin_date"] = checkin_date
-                if merge_fields:
-                    merge_fields["updated_at"] = now
-                    set_clause = ", ".join(f"{k} = ?" for k in merge_fields)
-                    values = list(merge_fields.values()) + [existing["id"]]
-                    conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
-                updated_row = conn.execute("SELECT * FROM things WHERE id = ?", (existing["id"],)).fetchone()
-                if updated_row:
-                    row_dict = dict(updated_row)
-                    applied["updated"].append(row_dict)
-                    upsert_thing(row_dict)
-                    return row_dict
-                return {"id": existing["id"], "title": title, "deduplicated": True}
-
-            # Create new Thing
-            thing_id = str(uuid.uuid4())
-            data_str = json.dumps(data) if isinstance(data, dict) else str(data)
-            effective_surface = surface
-            if type_hint in _ENTITY_TYPES:
-                effective_surface = False
-            oq_json = json.dumps(open_questions) if open_questions else None
-
-            conn.execute(
-                """INSERT INTO things
-                   (id, title, type_hint, parent_id, checkin_date, priority,
-                    active, surface, data, open_questions, created_at,
-                    updated_at, user_id)
-                   VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""",
-                (
-                    thing_id,
-                    title,
-                    type_hint or None,
-                    None,
-                    checkin_date or None,
-                    priority,
-                    int(effective_surface),
-                    data_str,
-                    oq_json,
-                    now,
-                    now,
-                    user_id or None,
-                ),
-            )
-            row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
-            if row:
-                row_dict = dict(row)
-                applied["created"].append(row_dict)
-                upsert_thing(row_dict)
-                return row_dict
-            return {"id": thing_id, "title": title}
+        result = _create_thing_impl(
+            user_id=user_id,
+            title=title,
+            type_hint=type_hint,
+            priority=priority,
+            checkin_date=checkin_date,
+            surface=surface,
+            data_json=data_json,
+            open_questions_json=open_questions_json,
+        )
+        was_dedup = result.pop("_was_dedup", False)
+        if "error" not in result and "id" in result:
+            if was_dedup:
+                applied["updated"].append(result)
+            else:
+                applied["created"].append(result)
+        return result
 
     # ------------------------------------------------------------------
     def update_thing(
@@ -877,69 +730,21 @@ def _make_reasoning_tools(
         Returns:
             The updated Thing dict, or an error dict.
         """
-        thing_id = thing_id.strip()
-        if not thing_id:
-            return {"error": "thing_id is required"}
-
-        now = datetime.now(timezone.utc).isoformat()
-
-        with db() as conn:
-            row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
-            if not row:
-                return {"error": f"Thing {thing_id} not found"}
-
-            fields: dict[str, Any] = {}
-            if title:
-                fields["title"] = title
-            if active is not None:
-                fields["active"] = int(bool(active))
-            if checkin_date:
-                fields["checkin_date"] = checkin_date
-            if priority is not None:
-                fields["priority"] = priority
-            if type_hint:
-                fields["type_hint"] = type_hint
-            if surface is not None:
-                fields["surface"] = int(bool(surface))
-            if data_json:
-                try:
-                    new_data = json.loads(data_json)
-                    if not isinstance(new_data, dict):
-                        return {
-                            "error": f"data_json must be a JSON object, got {type(new_data).__name__}. "
-                            'Use {"key": "value"} format.'
-                        }
-                except (json.JSONDecodeError, TypeError) as exc:
-                    return {"error": f"data_json is not valid JSON: {exc}"}
-                if new_data:
-                    try:
-                        old_data = json.loads(row["data"]) if isinstance(row["data"], str) and row["data"] else {}
-                    except (ValueError, TypeError):
-                        old_data = {}
-                    merged = {**old_data, **new_data}
-                    fields["data"] = json.dumps(merged)
-            if open_questions_json:
-                try:
-                    oq = json.loads(open_questions_json)
-                    fields["open_questions"] = json.dumps(oq) if oq else None
-                except json.JSONDecodeError:
-                    pass
-
-            if not fields:
-                return {"error": "no fields to update"}
-
-            fields["updated_at"] = now
-            set_clause = ", ".join(f"{k} = ?" for k in fields)
-            values = list(fields.values()) + [thing_id]
-            conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
-
-            updated_row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
-            if updated_row:
-                row_dict = dict(updated_row)
-                applied["updated"].append(row_dict)
-                upsert_thing(row_dict)
-                return row_dict
-            return {"error": "update failed"}
+        result = _update_thing_impl(
+            user_id=user_id,
+            thing_id=thing_id,
+            title=title,
+            active=active,
+            checkin_date=checkin_date,
+            priority=priority,
+            type_hint=type_hint,
+            surface=surface,
+            data_json=data_json,
+            open_questions_json=open_questions_json,
+        )
+        if "error" not in result and "id" in result:
+            applied["updated"].append(result)
+        return result
 
     # ------------------------------------------------------------------
     def delete_thing(thing_id: str) -> dict[str, Any]:
@@ -951,18 +756,10 @@ def _make_reasoning_tools(
         Returns:
             Confirmation dict with the deleted Thing ID.
         """
-        thing_id = thing_id.strip()
-        if not thing_id:
-            return {"error": "thing_id is required"}
-
-        with db() as conn:
-            row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
-            if not row:
-                return {"error": f"Thing {thing_id} not found"}
-            conn.execute("DELETE FROM things WHERE id = ?", (thing_id,))
-            applied["deleted"].append(thing_id)
-            vs_delete(thing_id)
-        return {"deleted": thing_id, "title": row["title"]}
+        result = _delete_thing_impl(user_id=user_id, thing_id=thing_id)
+        if "deleted" in result:
+            applied["deleted"].append(result["deleted"])
+        return result
 
     # ------------------------------------------------------------------
     def merge_things(
@@ -984,127 +781,15 @@ def _make_reasoning_tools(
         Returns:
             Confirmation dict with merge details.
         """
-        keep_id = keep_id.strip()
-        remove_id = remove_id.strip()
-        if not keep_id or not remove_id or keep_id == remove_id:
-            return {"error": "need two distinct Thing IDs"}
-
-        now = datetime.now(timezone.utc).isoformat()
-        try:
-            merged_data = json.loads(merged_data_json) if merged_data_json else {}
-            if not isinstance(merged_data, dict):
-                return {
-                    "error": f"merged_data_json must be a JSON object, got {type(merged_data).__name__}. "
-                    'Use {"key": "value"} format.'
-                }
-        except (json.JSONDecodeError, TypeError) as exc:
-            return {"error": f"merged_data_json is not valid JSON: {exc}"}
-
-        with db() as conn:
-            keep_row = conn.execute("SELECT * FROM things WHERE id = ?", (keep_id,)).fetchone()
-            remove_row = conn.execute("SELECT * FROM things WHERE id = ?", (remove_id,)).fetchone()
-            if not keep_row or not remove_row:
-                return {"error": "one or both Things not found"}
-
-            # 1. Merge data
-            mf: dict[str, Any] = {}
-            try:
-                old_data = (
-                    json.loads(keep_row["data"]) if isinstance(keep_row["data"], str) and keep_row["data"] else {}
-                )
-            except (ValueError, TypeError):
-                old_data = {}
-            if merged_data or old_data:
-                mf["data"] = json.dumps({**old_data, **merged_data})
-
-            # 2. Transfer open_questions
-            try:
-                keep_oq = (
-                    json.loads(keep_row["open_questions"])
-                    if isinstance(keep_row["open_questions"], str) and keep_row["open_questions"]
-                    else []
-                )
-            except (ValueError, TypeError):
-                keep_oq = []
-            try:
-                remove_oq = (
-                    json.loads(remove_row["open_questions"])
-                    if isinstance(remove_row["open_questions"], str) and remove_row["open_questions"]
-                    else []
-                )
-            except (ValueError, TypeError):
-                remove_oq = []
-            if remove_oq:
-                existing_set = set(keep_oq)
-                for q in remove_oq:
-                    if q not in existing_set:
-                        keep_oq.append(q)
-                        existing_set.add(q)
-                mf["open_questions"] = json.dumps(keep_oq)
-
-            if mf:
-                mf["updated_at"] = now
-                set_clause = ", ".join(f"{k} = ?" for k in mf)
-                values = list(mf.values()) + [keep_id]
-                conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
-
-            # 3. Re-point relationships
-            conn.execute(
-                "UPDATE thing_relationships SET from_thing_id = ? WHERE from_thing_id = ?",
-                (keep_id, remove_id),
-            )
-            conn.execute(
-                "UPDATE thing_relationships SET to_thing_id = ? WHERE to_thing_id = ?",
-                (keep_id, remove_id),
-            )
-            conn.execute(
-                "DELETE FROM thing_relationships WHERE from_thing_id = ? AND to_thing_id = ?",
-                (keep_id, keep_id),
-            )
-
-            # 4. Delete duplicate
-            conn.execute("DELETE FROM things WHERE id = ?", (remove_id,))
-            vs_delete(remove_id)
-
-            # 5. Record merge history
-            try:
-                _rem_data = (
-                    json.loads(remove_row["data"]) if isinstance(remove_row["data"], str) and remove_row["data"] else {}
-                )
-            except (ValueError, TypeError):
-                _rem_data = {}
-            _merged_snapshot = {**_rem_data, **merged_data} if (merged_data or _rem_data) else None
-            conn.execute(
-                "INSERT INTO merge_history (id, keep_id, remove_id, keep_title,"
-                " remove_title, merged_data, triggered_by, user_id, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    str(uuid.uuid4()),
-                    keep_id,
-                    remove_id,
-                    keep_row["title"],
-                    remove_row["title"],
-                    json.dumps(_merged_snapshot) if _merged_snapshot else None,
-                    "agent",
-                    user_id or None,
-                    now,
-                ),
-            )
-
-            # 6. Re-embed
-            updated_keep = conn.execute("SELECT * FROM things WHERE id = ?", (keep_id,)).fetchone()
-            if updated_keep:
-                upsert_thing(dict(updated_keep))
-                merge_info = {
-                    "keep_id": keep_id,
-                    "remove_id": remove_id,
-                    "keep_title": updated_keep["title"],
-                    "remove_title": remove_row["title"],
-                }
-                applied["merged"].append(merge_info)
-                return merge_info
-
-        return {"error": "merge failed"}
+        result = _merge_things_impl(
+            user_id=user_id,
+            keep_id=keep_id,
+            remove_id=remove_id,
+            merged_data_json=merged_data_json,
+        )
+        if "error" not in result and "keep_id" in result:
+            applied["merged"].append(result)
+        return result
 
     # ------------------------------------------------------------------
     def create_relationship(
@@ -1123,50 +808,14 @@ def _make_reasoning_tools(
         Returns:
             The created relationship dict, or an error dict.
         """
-        from_id = from_thing_id.strip()
-        to_id = to_thing_id.strip()
-        rel_type = relationship_type.strip()
-        if not from_id or not to_id or not rel_type:
-            return {"error": "from_thing_id, to_thing_id, and relationship_type are required"}
-        if from_id == to_id:
-            return {"error": "cannot create self-referential relationship"}
-
-        with db() as conn:
-            # Skip duplicate
-            dup = conn.execute(
-                "SELECT id FROM thing_relationships"
-                " WHERE from_thing_id = ? AND to_thing_id = ? AND relationship_type = ? LIMIT 1",
-                (from_id, to_id, rel_type),
-            ).fetchone()
-            if dup:
-                return {"status": "duplicate", "relationship_type": rel_type}
-
-            # Verify both things exist
-            from_row = conn.execute("SELECT id FROM things WHERE id = ?", (from_id,)).fetchone()
-            to_row = conn.execute("SELECT id FROM things WHERE id = ?", (to_id,)).fetchone()
-            if not from_row or not to_row:
-                missing = []
-                if not from_row:
-                    missing.append(f"from={from_id}")
-                if not to_row:
-                    missing.append(f"to={to_id}")
-                return {"error": f"Thing(s) not found: {', '.join(missing)}"}
-
-            rel_id = str(uuid.uuid4())
-            conn.execute(
-                "INSERT INTO thing_relationships"
-                " (id, from_thing_id, to_thing_id, relationship_type, metadata)"
-                " VALUES (?, ?, ?, ?, ?)",
-                (rel_id, from_id, to_id, rel_type, None),
-            )
-            rel_info = {
-                "id": rel_id,
-                "from_thing_id": from_id,
-                "to_thing_id": to_id,
-                "relationship_type": rel_type,
-            }
-            applied["relationships_created"].append(rel_info)
-            return rel_info
+        result = _create_relationship_impl(
+            from_thing_id=from_thing_id,
+            to_thing_id=to_thing_id,
+            relationship_type=relationship_type,
+        )
+        if "error" not in result and "id" in result:
+            applied["relationships_created"].append(result)
+        return result
 
     # Wrap each tool with OTEL span instrumentation
     traced_tools = [

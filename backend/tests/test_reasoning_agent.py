@@ -53,9 +53,9 @@ class TestMakeReasoningTools:
     def _get_tools(self, user_id: str = "test-user"):
         """Create tools with all DB operations mocked."""
         with (
-            patch("backend.reasoning_agent.db") as mock_db,
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db") as mock_db,
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -117,9 +117,9 @@ class TestChatHistoryTool:
         mock_conn.execute.return_value.fetchall.return_value = list(reversed(mock_rows))
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -143,9 +143,9 @@ class TestChatHistoryTool:
         ]
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -167,9 +167,9 @@ class TestChatHistoryTool:
         mock_conn.execute.return_value.fetchall.return_value = []
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -209,9 +209,9 @@ class TestCreateThingTool:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -252,9 +252,9 @@ class TestCreateThingTool:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing") as mock_upsert,
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing") as mock_upsert,
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -288,9 +288,9 @@ class TestCreateThingTool:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -333,9 +333,9 @@ class TestCreateThingTool:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -405,9 +405,9 @@ class TestDeleteThingTool:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -426,9 +426,9 @@ class TestDeleteThingTool:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete") as mock_vs_delete,
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete") as mock_vs_delete,
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -472,9 +472,9 @@ class TestCreateRelationshipTool:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -497,9 +497,9 @@ class TestCreateRelationshipTool:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -525,9 +525,9 @@ class TestCreateRelationshipTool:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -899,9 +899,9 @@ class TestDataJsonStringRegression:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -925,9 +925,9 @@ class TestDataJsonStringRegression:
         mock_db_ctx.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -1271,9 +1271,9 @@ class TestCommStylePreferenceStructure:
         mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, mock_new])
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing") as mock_upsert,
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing") as mock_upsert,
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
@@ -1347,9 +1347,9 @@ class TestCommStylePreferenceStructure:
         )
 
         with (
-            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
+            patch("backend.tools.db", return_value=mock_db_ctx),
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
