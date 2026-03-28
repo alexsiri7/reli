@@ -638,6 +638,30 @@ export function Sidebar() {
           </div>
         </div>
 
+        {/* Briefing / All Things view toggle (desktop only) */}
+        <div className="hidden md:flex px-3 py-1.5 border-b border-gray-200 dark:border-gray-800 gap-1">
+          <button
+            onClick={() => setMainView('briefing')}
+            className={`flex-1 text-xs font-medium py-1 rounded-md transition-colors ${
+              mainView === 'briefing'
+                ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}
+          >
+            Briefing
+          </button>
+          <button
+            onClick={() => setMainView(mainView === 'graph' ? 'graph' : 'list')}
+            className={`flex-1 text-xs font-medium py-1 rounded-md transition-colors ${
+              mainView !== 'briefing'
+                ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}
+          >
+            All Things
+          </button>
+        </div>
+
         {/* Search results */}
         {isSearching ? (
           <section className="py-2 flex-1">

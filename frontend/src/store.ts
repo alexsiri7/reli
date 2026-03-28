@@ -402,8 +402,8 @@ interface ReliState {
   clearThingFilters: () => void
 
   // View mode
-  mainView: 'list' | 'graph'
-  setMainView: (view: 'list' | 'graph') => void
+  mainView: 'briefing' | 'list' | 'graph'
+  setMainView: (view: 'briefing' | 'list' | 'graph') => void
 
   // Chat mode (Hats)
   chatMode: ChatMode
@@ -414,8 +414,8 @@ interface ReliState {
   setInteractionStyle: (style: InteractionStyle) => void
 
   // Mobile navigation
-  mobileView: 'things' | 'chat'
-  setMobileView: (view: 'things' | 'chat') => void
+  mobileView: 'briefing' | 'things' | 'chat'
+  setMobileView: (view: 'briefing' | 'things' | 'chat') => void
 
   // Settings
   settingsOpen: boolean
@@ -1106,7 +1106,7 @@ export const useStore = create<ReliState>((set, get) => ({
   clearThingFilters: () => set({ thingFilterQuery: '', thingFilterTypes: [] }),
 
   // View mode
-  mainView: 'list',
+  mainView: 'briefing',
   setMainView: (view) => set({ mainView: view }),
 
   // Chat mode (Hats)
@@ -1133,7 +1133,7 @@ export const useStore = create<ReliState>((set, get) => ({
   },
 
   // Mobile navigation
-  mobileView: 'things',
+  mobileView: 'briefing',
   setMobileView: (view) => set({ mobileView: view }),
 
   // Settings
