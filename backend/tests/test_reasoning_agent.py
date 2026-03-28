@@ -325,6 +325,72 @@ class TestCreateThingTool:
             # surface is at index 6 in the INSERT params
             assert args[6] == 0
 
+    def test_create_preference_defaults_surface_false(self):
+        """Preference type_hint should default to surface=false like other entity types."""
+        mock_conn = MagicMock()
+        mock_db_ctx = MagicMock()
+        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
+        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
+            from backend.reasoning_agent import _make_reasoning_tools
+
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            create_fn = tools[2]
+
+            new_row = {
+                "id": "pref-uuid",
+                "title": "Scheduling preferences",
+                "type_hint": "preference",
+                "data": '{"patterns": []}',
+                "active": 1,
+                "surface": 0,
+                "open_questions": None,
+            }
+            mock_new = MagicMock()
+            mock_new.__getitem__ = lambda self, key: new_row[key]
+            mock_new.keys = lambda: new_row.keys()
+
+            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, mock_new])
+
+            create_fn(title="Scheduling preferences", type_hint="preference", surface=True)
+
+            insert_call = None
+            for call in mock_conn.execute.call_args_list:
+                if "INSERT INTO things" in str(call):
+                    insert_call = call
+                    break
+            assert insert_call is not None
+            args = insert_call[0][1]
+            # surface is at index 6 in the INSERT params
+            assert args[6] == 0
+
+
+class TestPreferencePromptInstructions:
+    """Verify the reasoning agent prompt includes preference detection instructions."""
+
+    def test_preference_in_entity_types(self):
+        from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+        assert 'type_hint "preference"' in REASONING_AGENT_TOOL_SYSTEM
+
+    def test_preference_detection_section(self):
+        from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+        assert "Preference Detection:" in REASONING_AGENT_TOOL_SYSTEM
+
+    def test_preference_in_entity_types_set(self):
+        from backend.reasoning_agent import _ENTITY_TYPES
+        assert "preference" in _ENTITY_TYPES
+
+    def test_preference_confidence_levels_documented(self):
+        from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+        assert "emerging" in REASONING_AGENT_TOOL_SYSTEM
+        assert "moderate" in REASONING_AGENT_TOOL_SYSTEM
+        assert "strong" in REASONING_AGENT_TOOL_SYSTEM
+
 
 # ---------------------------------------------------------------------------
 # delete_thing tool tests
