@@ -1,6 +1,6 @@
 {
   "eval_set_id": "reasoning-update-thing",
-  "name": "Reasoning Agent — Update Thing",
+  "name": "Reasoning Agent \u2014 Update Thing",
   "description": "Golden dataset: updating existing Things (title, notes, priority, data fields)",
   "eval_cases": [
     {
@@ -49,15 +49,6 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"groceries\", \"grocery\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
                   "thing_id": "thing-100",
                   "title": "Weekly grocery shopping"
                 },
@@ -67,22 +58,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [
-                    {
-                      "id": "thing-100",
-                      "title": "Buy groceries"
-                    }
-                  ],
-                  "count": 1
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -154,15 +129,6 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"grocery shopping\", \"groceries\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
                   "thing_id": "thing-100",
                   "active": false
                 },
@@ -172,22 +138,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [
-                    {
-                      "id": "thing-100",
-                      "title": "Buy groceries"
-                    }
-                  ],
-                  "count": 1
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -259,15 +209,6 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"dentist appointment\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
                   "thing_id": "thing-200",
                   "priority": 1
                 },
@@ -277,22 +218,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [
-                    {
-                      "id": "thing-200",
-                      "title": "Dentist appointment"
-                    }
-                  ],
-                  "count": 1
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -364,15 +289,6 @@
               {
                 "id": null,
                 "args": {
-                  "search_queries_json": "[\"budget project\"]"
-                },
-                "name": "fetch_context",
-                "partial_args": null,
-                "will_continue": null
-              },
-              {
-                "id": null,
-                "args": {
                   "thing_id": "thing-300",
                   "data_json": "{\"notes\": \"Q2 deadline is June 30\", \"deadline\": \"2026-06-30\"}"
                 },
@@ -382,22 +298,6 @@
               }
             ],
             "tool_responses": [
-              {
-                "will_continue": null,
-                "scheduling": null,
-                "parts": null,
-                "id": null,
-                "name": "fetch_context",
-                "response": {
-                  "things": [
-                    {
-                      "id": "thing-300",
-                      "title": "Budget project"
-                    }
-                  ],
-                  "count": 1
-                }
-              },
               {
                 "will_continue": null,
                 "scheduling": null,
