@@ -111,6 +111,8 @@ mcp = FastMCP(
         "proactive-surfacing, pa-behavior) to learn how to act as a Reli-powered PA."
         "Use reli_think for AI-powered reasoning over complex natural language requests."
     ),
+    # Path is "/" because FastAPI mounts us at /mcp — the combined path is /mcp/
+    streamable_http_path="/",
 )
 
 
