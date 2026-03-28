@@ -18,7 +18,7 @@ from google.adk.agents import LlmAgent
 
 from backend.context_agent import _make_litellm_model
 from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
-from eval._eval_model import make_eval_model
+from eval._eval_model import make_eval_model, make_eval_model_by_name
 
 # ---------------------------------------------------------------------------
 # Stub tools — same signatures as production, but no DB
@@ -111,6 +111,17 @@ def chat_history(
 # ---------------------------------------------------------------------------
 
 
+_STUB_TOOLS = [
+    fetch_context,
+    create_thing,
+    update_thing,
+    delete_thing,
+    merge_things,
+    create_relationship,
+    chat_history,
+]
+
+
 def _build_agent() -> LlmAgent:
     """Build the reasoning agent wired with stub tools."""
     model = make_eval_model("reasoning")
@@ -119,15 +130,19 @@ def _build_agent() -> LlmAgent:
         description="Reasoning agent for Reli — decides storage changes via tool calls.",
         model=model,
         instruction=REASONING_AGENT_TOOL_SYSTEM,
-        tools=[
-            fetch_context,
-            create_thing,
-            update_thing,
-            delete_thing,
-            merge_things,
-            create_relationship,
-            chat_history,
-        ],
+        tools=_STUB_TOOLS,
+    )
+
+
+def build_agent(model_name: str) -> LlmAgent:
+    """Build the reasoning agent with a specific model name (for model comparison)."""
+    model = make_eval_model_by_name(model_name)
+    return LlmAgent(
+        name="reasoning_agent",
+        description="Reasoning agent for Reli — decides storage changes via tool calls.",
+        model=model,
+        instruction=REASONING_AGENT_TOOL_SYSTEM,
+        tools=_STUB_TOOLS,
     )
 
 

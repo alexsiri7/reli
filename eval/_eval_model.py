@@ -48,3 +48,25 @@ def make_eval_model(stage: str = "reasoning") -> LiteLlm:
             model=effective,
             api_key=REQUESTY_API_KEY,
         )
+
+
+def make_eval_model_by_name(model_name: str) -> LiteLlm:
+    """Create a LiteLlm model for evals using an explicit model name.
+
+    Accepts names like ``google/gemini-2.5-flash`` or ``gemini-2.5-flash``.
+    Uses GOOGLE_API_KEY if set (direct Google AI Studio), else Requesty routing.
+    """
+    google_api_key = os.environ.get("GOOGLE_API_KEY")
+    base_name = model_name.rsplit("/", 1)[-1] if "/" in model_name else model_name
+
+    if google_api_key:
+        return LiteLlm(
+            model=f"gemini/{base_name}",
+            api_key=google_api_key,
+        )
+    else:
+        effective = model_name if model_name.startswith("openai/") else f"openai/{model_name}"
+        return LiteLlm(
+            model=effective,
+            api_key=REQUESTY_API_KEY,
+        )
