@@ -756,6 +756,29 @@ class TestPromptResources:
         assert "Search Before Creating" in result
         assert "One Question at a Time" in result
 
+    def test_pa_behavior_covers_data_preservation(self) -> None:
+        result = pa_behavior_guide()
+        assert "Preserve Existing Data" in result or "preserve" in result.lower()
+        # Must instruct not to overwrite fields the user didn't mention
+        assert "overwrite" in result.lower() or "only change" in result.lower()
+
+    def test_pa_behavior_covers_anchor_thing(self) -> None:
+        result = pa_behavior_guide()
+        assert "anchor" in result.lower()
+        assert "possessive" in result.lower() or "from_thing_id" in result
+
+    def test_pa_behavior_covers_ask_vs_best_guess(self) -> None:
+        result = pa_behavior_guide()
+        assert "best guess" in result.lower() or "best interpretation" in result.lower()
+        assert "ask" in result.lower()
+
+    def test_pa_behavior_covers_preference_detection(self) -> None:
+        result = pa_behavior_guide()
+        assert "emerging" in result.lower()
+        assert "moderate" in result.lower()
+        assert "strong" in result.lower()
+        assert "confidence" in result.lower()
+
     def test_pa_behavior_covers_data_model(self) -> None:
         result = pa_behavior_guide()
         for field in (
