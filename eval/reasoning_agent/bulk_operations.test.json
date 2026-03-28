@@ -1,0 +1,81 @@
+{
+  "eval_set_id": "reasoning-bulk-operations",
+  "name": "Reasoning Agent — Bulk Operations",
+  "description": "Tests batch updates, deletes, and completions across multiple Things.",
+  "eval_cases": [
+    {
+      "eval_id": "mark-all-done",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nI finished everything related to the house move\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-1101\", \"title\": \"Pack kitchen boxes\", \"type_hint\": \"task\", \"data\": {\"project\": \"house move\"}, \"active\": true}, {\"id\": \"thing-1102\", \"title\": \"Cancel old utilities\", \"type_hint\": \"task\", \"data\": {\"project\": \"house move\"}, \"active\": true}, {\"id\": \"thing-1103\", \"title\": \"Change address at bank\", \"type_hint\": \"task\", \"data\": {\"project\": \"house move\"}, \"active\": true}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Marked all house move tasks done.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {
+            "tool_uses": [
+              {"id": null, "args": {"thing_id": "thing-1101", "active": false}, "name": "update_thing", "partial_args": null, "will_continue": null},
+              {"id": null, "args": {"thing_id": "thing-1102", "active": false}, "name": "update_thing", "partial_args": null, "will_continue": null},
+              {"id": null, "args": {"thing_id": "thing-1103", "active": false}, "name": "update_thing", "partial_args": null, "will_continue": null}
+            ],
+            "tool_responses": [
+              {"id": null, "name": "update_thing", "response": {"id": "thing-1101", "title": "Pack kitchen boxes"}},
+              {"id": null, "name": "update_thing", "response": {"id": "thing-1102", "title": "Cancel old utilities"}},
+              {"id": null, "name": "update_thing", "response": {"id": "thing-1103", "title": "Change address at bank"}}
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "cancel-meetings-selectively",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nCancel all my meetings next week, I'm going to be out sick\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-1201\", \"title\": \"Team standup\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-03-30\"}}, {\"id\": \"thing-1202\", \"title\": \"1:1 with Sarah\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-03-31\"}}, {\"id\": \"thing-1203\", \"title\": \"Client presentation\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-04-01\"}}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Cancelled all meetings.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {
+            "tool_uses": [
+              {"id": null, "args": {"thing_id": "thing-1201"}, "name": "delete_thing", "partial_args": null, "will_continue": null},
+              {"id": null, "args": {"thing_id": "thing-1202"}, "name": "delete_thing", "partial_args": null, "will_continue": null},
+              {"id": null, "args": {"thing_id": "thing-1203"}, "name": "delete_thing", "partial_args": null, "will_continue": null}
+            ],
+            "tool_responses": [
+              {"id": null, "name": "delete_thing", "response": {"deleted": "thing-1201"}},
+              {"id": null, "name": "delete_thing", "response": {"deleted": "thing-1202"}},
+              {"id": null, "name": "delete_thing", "response": {"deleted": "thing-1203"}}
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "make-everything-high-priority",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nEverything related to the product launch needs to be high priority\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-1301\", \"title\": \"Finalize launch copy\", \"type_hint\": \"task\", \"data\": {\"project\": \"product launch\"}, \"priority\": 3}, {\"id\": \"thing-1302\", \"title\": \"QA testing sprint\", \"type_hint\": \"task\", \"data\": {\"project\": \"product launch\"}, \"priority\": 2}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Updated all product launch tasks to high priority.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {
+            "tool_uses": [
+              {"id": null, "args": {"thing_id": "thing-1301", "priority": 1}, "name": "update_thing", "partial_args": null, "will_continue": null},
+              {"id": null, "args": {"thing_id": "thing-1302", "priority": 1}, "name": "update_thing", "partial_args": null, "will_continue": null}
+            ],
+            "tool_responses": [
+              {"id": null, "name": "update_thing", "response": {"id": "thing-1301", "title": "Finalize launch copy"}},
+              {"id": null, "name": "update_thing", "response": {"id": "thing-1302", "title": "QA testing sprint"}}
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}

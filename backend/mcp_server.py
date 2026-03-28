@@ -1,13 +1,14 @@
 """Reli MCP server — knowledge graph tools wrapping the REST API.
 
 Exposes Things, Relationships, briefing, conflict detection, and reli_think
-reasoning-as-a-service as MCP tools over stdio transport.  Connects to a
-running Reli API instance via HTTP.
+reasoning-as-a-service as MCP tools.
 
-Usage:
-    RELI_API_URL=http://localhost:8000 RELI_API_TOKEN=<jwt> python -m backend.mcp_server
+Supports two transports:
+- Streamable HTTP (primary): mounted at /mcp inside the FastAPI app.
+  Protected by MCP_API_TOKEN bearer token.
+- stdio (legacy): run via ``python -m backend.mcp_server`` for local clients.
 
-Environment variables:
+Environment variables (stdio mode):
     RELI_API_URL   — Base URL of the Reli API (default: http://localhost:8000)
     RELI_API_TOKEN — JWT session token for authentication (required)
 """
@@ -17,10 +18,14 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -241,12 +246,38 @@ def update_thing(
 
 @mcp.tool()
 def delete_thing(thing_id: str) -> dict[str, Any]:
-    """Delete a Thing from the knowledge graph.
+    """Soft-delete a Thing by marking it inactive (active=false).
+
+    The Thing record is preserved in the knowledge graph — MCP clients cannot
+    permanently destroy data. Returns the deactivated Thing so the client can
+    confirm what was deleted.
 
     Args:
-        thing_id: The UUID of the Thing to delete.
+        thing_id: The UUID of the Thing to deactivate.
     """
-    result: dict[str, Any] = _api_delete(f"/api/things/{thing_id}")
+    result: dict[str, Any] = _api_patch(f"/api/things/{thing_id}", json_body={"active": False})
+    return result
+
+
+@mcp.tool()
+def merge_things(keep_id: str, remove_id: str) -> dict[str, Any]:
+    """Merge two Things into one, removing the duplicate.
+
+    Transfers all relationships from remove_id to keep_id, merges data dicts,
+    re-parents children, records merge history, and updates the vector index.
+    The remove_id Thing is permanently deleted; keep_id is the canonical record.
+
+    Args:
+        keep_id: UUID of the Thing to keep (the canonical record).
+        remove_id: UUID of the Thing to merge into keep_id and remove.
+
+    Returns:
+        Dict with keep_id, remove_id, keep_title, remove_title.
+    """
+    result: dict[str, Any] = _api_post(
+        "/api/things/merge",
+        json_body={"keep_id": keep_id, "remove_id": remove_id},
+    )
     return result
 
 
@@ -681,6 +712,58 @@ def reli_think(
         body["context"] = context
     result: dict[str, Any] = _api_post("/api/think", json_body=body)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Streamable HTTP transport (for mounting inside FastAPI)
+# ---------------------------------------------------------------------------
+
+
+class _TokenAuthMiddleware:
+    """ASGI middleware that enforces Bearer token authentication.
+
+    If ``mcp_api_token`` is empty, all requests are allowed (dev mode).
+    Otherwise, requests must carry ``Authorization: Bearer <token>``.
+    """
+
+    def __init__(self, app: ASGIApp, mcp_api_token: str) -> None:
+        self._app = app
+        self._token = mcp_api_token
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] not in ("http", "websocket"):
+            await self._app(scope, receive, send)
+            return
+
+        if self._token:
+            headers = dict(scope.get("headers", []))
+            auth_header = headers.get(b"authorization", b"").decode()
+            if auth_header != f"Bearer {self._token}":
+                response = Response(
+                    content='{"detail":"Unauthorized"}',
+                    status_code=401,
+                    media_type="application/json",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+                await response(scope, receive, send)
+                return
+
+        await self._app(scope, receive, send)
+
+
+def create_mcp_asgi_app(mcp_api_token: str = "") -> ASGIApp:
+    """Return the MCP Streamable HTTP ASGI app, wrapped with token auth.
+
+    Mount this at ``/mcp`` in the FastAPI app:
+
+        from backend.mcp_server import create_mcp_asgi_app
+        app.mount("/mcp", create_mcp_asgi_app(settings.MCP_API_TOKEN))
+
+    Args:
+        mcp_api_token: Required Bearer token. Empty string disables auth (dev mode).
+    """
+    starlette_app = mcp.streamable_http_app()
+    return _TokenAuthMiddleware(starlette_app, mcp_api_token)
 
 
 # ---------------------------------------------------------------------------

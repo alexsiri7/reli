@@ -1,0 +1,68 @@
+{
+  "eval_set_id": "reasoning-temporal-reasoning",
+  "name": "Reasoning Agent — Temporal Reasoning",
+  "description": "Tests that the agent correctly interprets relative dates, handles time-sensitive queries, and makes temporal inferences.",
+  "eval_cases": [
+    {
+      "eval_id": "relative-date-next-week",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nMove the dentist to next Thursday\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-401\", \"title\": \"Dentist appointment\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-03-30\", \"time\": \"10:00\"}}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Updated dentist to April 2nd.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {
+            "tool_uses": [{"id": null, "args": {"thing_id": "thing-401"}, "name": "update_thing", "partial_args": null, "will_continue": null}],
+            "tool_responses": [{"id": null, "name": "update_thing", "response": {"id": "thing-401", "title": "Dentist appointment"}}],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "whats-on-tomorrow",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nWhat do I have on tomorrow?\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-501\", \"title\": \"Sunday brunch with Lisa\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-03-29\", \"time\": \"11:00\"}}, {\"id\": \"thing-502\", \"title\": \"Team standup\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-03-30\", \"time\": \"09:00\"}}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Tomorrow is Sunday. Brunch with Lisa at 11am.\", \"briefing_mode\": true}"}], "role": "model"},
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "deadline-urgency",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nRemind me to submit the tax return\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-601\", \"title\": \"Tax return 2025\", \"type_hint\": \"task\", \"data\": {\"deadline\": \"2026-03-31\", \"notes\": \"Need to file online\"}, \"active\": true}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Tax return already tracked, deadline is 3 days away.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "postpone-to-end-of-month",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nPush the report deadline to end of next month\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-701\", \"title\": \"Quarterly report\", \"type_hint\": \"task\", \"data\": {\"deadline\": \"2026-03-31\", \"notes\": \"Q1 financial summary\"}}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Updated deadline to end of April.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {
+            "tool_uses": [{"id": null, "args": {"thing_id": "thing-701"}, "name": "update_thing", "partial_args": null, "will_continue": null}],
+            "tool_responses": [{"id": null, "name": "update_thing", "response": {"id": "thing-701", "title": "Quarterly report"}}],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}

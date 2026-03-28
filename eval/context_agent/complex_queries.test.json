@@ -1,0 +1,28 @@
+{
+  "eval_set_id": "context-complex-queries",
+  "name": "Context Agent — Complex Queries",
+  "description": "Tests that the context agent generates meaningful search parameters for nuanced, abstract, and multi-dimensional queries.",
+  "eval_cases": [
+    {
+      "eval_id": "context-procrastination",
+      "conversation": [{"invocation_id": "inv-1", "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nShow me things I've been putting off\n</user_message>"}], "role": "user"}, "final_response": {"parts": [{"text": "{\"search_queries\": [\"overdue\", \"postponed\", \"pending\"], \"filter_params\": {\"active_only\": true}}"}], "role": "model"}, "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []}, "creation_timestamp": 0.0, "rubrics": null, "app_details": null}],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "context-upcoming-deadlines",
+      "conversation": [{"invocation_id": "inv-1", "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nWhat's urgent? Anything I need to deal with before Monday?\n</user_message>"}], "role": "user"}, "final_response": {"parts": [{"text": "{\"search_queries\": [\"urgent\", \"deadline\", \"high priority\"], \"filter_params\": {\"active_only\": true}}"}], "role": "model"}, "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []}, "creation_timestamp": 0.0, "rubrics": null, "app_details": null}],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "context-people-network",
+      "conversation": [{"invocation_id": "inv-1", "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nWho do I need to follow up with?\n</user_message>"}], "role": "user"}, "final_response": {"parts": [{"text": "{\"search_queries\": [\"follow up\", \"pending response\"], \"filter_params\": {\"active_only\": true, \"type_hint\": \"person\"}}"}], "role": "model"}, "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []}, "creation_timestamp": 0.0, "rubrics": null, "app_details": null}],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "context-cross-domain",
+      "conversation": [{"invocation_id": "inv-1", "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nAnything related to money or finances I should be aware of?\n</user_message>"}], "role": "user"}, "final_response": {"parts": [{"text": "{\"search_queries\": [\"finances\", \"budget\", \"payment\", \"tax\"], \"filter_params\": {\"active_only\": true}}"}], "role": "model"}, "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []}, "creation_timestamp": 0.0, "rubrics": null, "app_details": null}],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}

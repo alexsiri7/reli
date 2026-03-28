@@ -19,6 +19,7 @@ from backend.mcp_server import (
     get_conflicts,
     get_thing,
     mcp,
+    merge_things,
     pa_behavior_guide,
     proactive_surfacing_guide,
     relationship_patterns_guide,
@@ -188,12 +189,58 @@ class TestUpdateThing:
 
 
 class TestDeleteThing:
-    @patch("backend.mcp_server._api_delete")
-    def test_delete(self, mock_delete: MagicMock) -> None:
-        mock_delete.return_value = {"ok": True}
+    @patch("backend.mcp_server._api_patch")
+    def test_soft_delete(self, mock_patch: MagicMock) -> None:
+        mock_patch.return_value = {"id": "t1", "title": "My Task", "active": False}
         result = delete_thing(thing_id="t1")
-        mock_delete.assert_called_once_with("/api/things/t1")
-        assert result["ok"] is True
+        mock_patch.assert_called_once_with("/api/things/t1", json_body={"active": False})
+        assert result["active"] is False
+        assert result["id"] == "t1"
+
+    @patch("backend.mcp_server._api_patch")
+    def test_soft_delete_returns_thing(self, mock_patch: MagicMock) -> None:
+        thing = {"id": "abc", "title": "Buy milk", "active": False, "type_hint": "task"}
+        mock_patch.return_value = thing
+        result = delete_thing(thing_id="abc")
+        assert result["title"] == "Buy milk"
+        assert result["active"] is False
+
+
+# ---------------------------------------------------------------------------
+# merge_things
+# ---------------------------------------------------------------------------
+
+
+class TestMergeThings:
+    @patch("backend.mcp_server._api_post")
+    def test_merge_basic(self, mock_post: MagicMock) -> None:
+        mock_post.return_value = {
+            "keep_id": "a",
+            "remove_id": "b",
+            "keep_title": "Alice Johnson",
+            "remove_title": "A. Johnson",
+        }
+        result = merge_things(keep_id="a", remove_id="b")
+        mock_post.assert_called_once_with(
+            "/api/things/merge",
+            json_body={"keep_id": "a", "remove_id": "b"},
+        )
+        assert result["keep_id"] == "a"
+        assert result["remove_id"] == "b"
+        assert result["keep_title"] == "Alice Johnson"
+        assert result["remove_title"] == "A. Johnson"
+
+    @patch("backend.mcp_server._api_post")
+    def test_merge_returns_titles(self, mock_post: MagicMock) -> None:
+        mock_post.return_value = {
+            "keep_id": "x",
+            "remove_id": "y",
+            "keep_title": "Project Alpha",
+            "remove_title": "proj alpha",
+        }
+        result = merge_things(keep_id="x", remove_id="y")
+        assert result["keep_title"] == "Project Alpha"
+        assert result["remove_title"] == "proj alpha"
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +349,7 @@ class TestMcpMetadata:
             "create_thing",
             "update_thing",
             "delete_thing",
+            "merge_things",
             "create_relationship",
             "delete_relationship",
             "get_briefing",
@@ -355,7 +403,7 @@ class TestIntegration:
             yield
 
     def test_crud_lifecycle(self, api_server: None) -> None:
-        """Create, read, update, search, and delete a Thing end-to-end."""
+        """Create, read, update, search, and soft-delete a Thing end-to-end."""
         # Create
         created = create_thing(title="MCP Test Thing", type_hint="task", priority=2)
         assert created["title"] == "MCP Test Thing"
@@ -375,9 +423,29 @@ class TestIntegration:
         results = search_things(query="Updated MCP")
         assert any(r["id"] == thing_id for r in results)
 
-        # Delete
+        # Soft-delete — returns deactivated Thing, does NOT hard-delete
         result = delete_thing(thing_id=thing_id)
-        assert result["ok"] is True
+        assert result["id"] == thing_id
+        assert result["active"] is False
+
+        # Thing still exists in the DB (soft-deleted)
+        fetched_after = get_thing(thing_id=thing_id)
+        assert fetched_after["active"] is False
+
+    def test_merge_lifecycle(self, api_server: None) -> None:
+        """Create two Things, merge them, verify the duplicate is gone."""
+        keep = create_thing(title="Alice Johnson", type_hint="person")
+        remove = create_thing(title="A. Johnson", type_hint="person")
+
+        result = merge_things(keep_id=keep["id"], remove_id=remove["id"])
+        assert result["keep_id"] == keep["id"]
+        assert result["remove_id"] == remove["id"]
+        assert result["keep_title"] == "Alice Johnson"
+        assert result["remove_title"] == "A. Johnson"
+
+        # Kept thing still exists
+        kept = get_thing(thing_id=keep["id"])
+        assert kept["id"] == keep["id"]
 
     def test_relationship_lifecycle(self, api_server: None) -> None:
         """Create two Things, link them, then delete the relationship."""
@@ -398,7 +466,7 @@ class TestIntegration:
         result = delete_relationship(relationship_id=rel["id"])
         assert result["ok"] is True
 
-        # Clean up
+        # Clean up (soft-delete)
         delete_thing(thing_id=t1["id"])
         delete_thing(thing_id=t2["id"])
 
@@ -822,3 +890,56 @@ class TestMCPTools:
             headers=headers,
         )
         assert resp.status_code == 204
+
+
+# ---------------------------------------------------------------------------
+# _TokenAuthMiddleware — unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestTokenAuthMiddleware:
+    """Test the ASGI middleware that guards the /mcp endpoint."""
+
+    def _make_client(self, mcp_api_token: str) -> TestClient:
+        """Wrap a trivial echo app with _TokenAuthMiddleware."""
+        from starlette.applications import Starlette
+        from starlette.requests import Request
+        from starlette.responses import PlainTextResponse
+        from starlette.routing import Route
+
+        from backend.mcp_server import _TokenAuthMiddleware
+
+        def echo(request: Request) -> PlainTextResponse:
+            return PlainTextResponse("ok")
+
+        inner = Starlette(routes=[Route("/", echo)])
+        wrapped = _TokenAuthMiddleware(inner, mcp_api_token)
+        return TestClient(wrapped, raise_server_exceptions=True)
+
+    def test_correct_token_allowed(self) -> None:
+        client = self._make_client("secret-token")
+        resp = client.get("/", headers={"Authorization": "Bearer secret-token"})
+        assert resp.status_code == 200
+        assert resp.text == "ok"
+
+    def test_wrong_token_rejected(self) -> None:
+        client = self._make_client("secret-token")
+        resp = client.get("/", headers={"Authorization": "Bearer wrong"})
+        assert resp.status_code == 401
+
+    def test_missing_auth_header_rejected(self) -> None:
+        client = self._make_client("secret-token")
+        resp = client.get("/")
+        assert resp.status_code == 401
+
+    def test_empty_token_allows_all(self) -> None:
+        """Empty MCP_API_TOKEN = dev mode, no auth required."""
+        client = self._make_client("")
+        resp = client.get("/")
+        assert resp.status_code == 200
+
+    def test_www_authenticate_header_on_401(self) -> None:
+        client = self._make_client("secret-token")
+        resp = client.get("/", headers={"Authorization": "Bearer bad"})
+        assert resp.status_code == 401
+        assert "Bearer" in resp.headers.get("www-authenticate", "")

@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     RELI_API_TOKEN: str = ""  # Shared secret; set to enable token-based auth for MCP
     RELI_API_URL: str = "http://localhost:8000"  # Base URL for MCP server to reach REST API
 
+    # --- MCP HTTP server token (for Claude Code → MCP server auth) ---
+    MCP_API_TOKEN: str = ""  # Bearer token required to connect to /mcp endpoint
+
     @property
     def allowed_emails_set(self) -> set[str]:
         """Parse ALLOWED_EMAILS into a lowercase set. Empty string means allow all."""

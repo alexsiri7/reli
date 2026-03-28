@@ -1,0 +1,97 @@
+{
+  "eval_set_id": "preference-sweep-aggregation",
+  "name": "Preference Sweep — Pattern Aggregation",
+  "description": "Golden datasets for the preference aggregation sweep. An LLM judge scores accuracy, calibration, and safety.",
+  "cases": [
+    {
+      "case_id": "clear-morning-avoidance",
+      "description": "User consistently reschedules morning meetings to afternoon across 6 interactions.",
+      "interactions": [
+        {"role": "user", "content": "Move the 9am standup to 2pm", "applied_changes": {"updated": [{"title": "Team standup", "id": "t-001"}]}, "timestamp": "2026-03-01T09:15:00Z"},
+        {"role": "assistant", "content": "Done, moved standup to 2pm.", "applied_changes": null, "timestamp": "2026-03-01T09:15:30Z"},
+        {"role": "user", "content": "Can you push the morning sync to after lunch?", "applied_changes": {"updated": [{"title": "Morning sync", "id": "t-002"}]}, "timestamp": "2026-03-05T08:45:00Z"},
+        {"role": "assistant", "content": "Moved to 1pm.", "applied_changes": null, "timestamp": "2026-03-05T08:45:30Z"},
+        {"role": "user", "content": "Reschedule the 8am client call to 3pm", "applied_changes": {"updated": [{"title": "Client call", "id": "t-003"}]}, "timestamp": "2026-03-10T08:30:00Z"},
+        {"role": "assistant", "content": "Rescheduled to 3pm.", "applied_changes": null, "timestamp": "2026-03-10T08:30:30Z"},
+        {"role": "user", "content": "I hate early meetings, move the 7:30 kickoff to 2:30", "applied_changes": {"updated": [{"title": "Project kickoff", "id": "t-004"}]}, "timestamp": "2026-03-15T07:40:00Z"},
+        {"role": "assistant", "content": "Done — moved to 2:30pm.", "applied_changes": null, "timestamp": "2026-03-15T07:40:30Z"},
+        {"role": "user", "content": "Schedule the review for Thursday afternoon", "applied_changes": {"created": [{"title": "Sprint review", "id": "t-005"}]}, "timestamp": "2026-03-20T10:00:00Z"},
+        {"role": "assistant", "content": "Created sprint review for Thursday at 2pm.", "applied_changes": null, "timestamp": "2026-03-20T10:00:30Z"}
+      ],
+      "existing_preferences": [],
+      "judge_criteria": {"must_detect": ["scheduling pattern", "avoids mornings"], "expected_category": "scheduling", "confidence_range": [0.5, 0.9], "min_evidence_count": 2, "must_not": ["fabricate patterns not in data"]}
+    },
+    {
+      "case_id": "cost-conscious-traveler",
+      "description": "User consistently chooses cheap options for travel.",
+      "interactions": [
+        {"role": "user", "content": "Book the cheapest flight to London", "applied_changes": {"created": [{"title": "Flight to London", "id": "t-010"}]}, "timestamp": "2026-03-02T10:00:00Z"},
+        {"role": "assistant", "content": "Found a budget flight for $340.", "applied_changes": null, "timestamp": "2026-03-02T10:00:30Z"},
+        {"role": "user", "content": "No, I don't want the business class upgrade, basic economy is fine", "applied_changes": {"updated": [{"title": "Flight to London", "id": "t-010"}]}, "timestamp": "2026-03-02T10:05:00Z"},
+        {"role": "assistant", "content": "Kept basic economy.", "applied_changes": null, "timestamp": "2026-03-02T10:05:30Z"},
+        {"role": "user", "content": "Find me a hostel or budget hotel near the conference", "applied_changes": {"created": [{"title": "London accommodation", "id": "t-011"}]}, "timestamp": "2026-03-04T11:00:00Z"},
+        {"role": "assistant", "content": "Found a budget hotel for $85/night.", "applied_changes": null, "timestamp": "2026-03-04T11:00:30Z"},
+        {"role": "user", "content": "For the Berlin trip just get the cheapest direct flight", "applied_changes": {"created": [{"title": "Flight to Berlin", "id": "t-012"}]}, "timestamp": "2026-03-15T09:00:00Z"},
+        {"role": "assistant", "content": "Cheapest direct is $220 with Ryanair.", "applied_changes": null, "timestamp": "2026-03-15T09:00:30Z"},
+        {"role": "user", "content": "Perfect, book it", "applied_changes": null, "timestamp": "2026-03-15T09:01:00Z"},
+        {"role": "assistant", "content": "Booked.", "applied_changes": null, "timestamp": "2026-03-15T09:01:30Z"}
+      ],
+      "existing_preferences": [],
+      "judge_criteria": {"must_detect": ["cost-conscious", "budget"], "expected_category": "spending", "confidence_range": [0.5, 0.9], "min_evidence_count": 2, "must_not": ["scheduling preferences from this data"]}
+    },
+    {
+      "case_id": "reinforce-existing-preference",
+      "description": "Existing weak morning avoidance preference. New interactions confirm it.",
+      "interactions": [
+        {"role": "user", "content": "Push the 9am meeting to after lunch", "applied_changes": {"updated": [{"title": "Design review", "id": "t-020"}]}, "timestamp": "2026-03-18T09:10:00Z"},
+        {"role": "assistant", "content": "Moved to 1:30pm.", "applied_changes": null, "timestamp": "2026-03-18T09:10:30Z"},
+        {"role": "user", "content": "That early call tomorrow, can we do 2pm instead?", "applied_changes": {"updated": [{"title": "Vendor call", "id": "t-021"}]}, "timestamp": "2026-03-20T16:00:00Z"},
+        {"role": "assistant", "content": "Rescheduled to 2pm.", "applied_changes": null, "timestamp": "2026-03-20T16:00:30Z"},
+        {"role": "user", "content": "Buy milk and eggs", "applied_changes": {"created": [{"title": "Buy milk and eggs", "id": "t-022"}]}, "timestamp": "2026-03-21T12:00:00Z"},
+        {"role": "assistant", "content": "Added.", "applied_changes": null, "timestamp": "2026-03-21T12:00:30Z"},
+        {"role": "user", "content": "How's the renovation going?", "applied_changes": null, "timestamp": "2026-03-22T15:00:00Z"},
+        {"role": "assistant", "content": "On track.", "applied_changes": null, "timestamp": "2026-03-22T15:00:30Z"},
+        {"role": "user", "content": "Schedule the plumber for Thursday afternoon", "applied_changes": {"created": [{"title": "Plumber visit", "id": "t-023"}]}, "timestamp": "2026-03-23T10:00:00Z"},
+        {"role": "assistant", "content": "Created for Thursday 2pm.", "applied_changes": null, "timestamp": "2026-03-23T10:00:30Z"}
+      ],
+      "existing_preferences": [{"id": "pref-existing-001", "title": "Prefers afternoon meetings", "data": {"confidence": 0.4, "category": "scheduling", "evidence": ["Moved standup from 9am to 2pm"], "sweep_count": 1}}],
+      "judge_criteria": {"must_detect": ["morning avoidance confirmed"], "should_reference_existing": "pref-existing-001", "confidence_should_increase": true, "confidence_range": [0.45, 0.75], "must_not": ["create duplicate scheduling preference"]}
+    },
+    {
+      "case_id": "no-patterns-sparse-data",
+      "description": "Varied chat history with no repeated patterns. Should return empty or very low confidence.",
+      "interactions": [
+        {"role": "user", "content": "Buy groceries", "applied_changes": {"created": [{"title": "Buy groceries", "id": "t-030"}]}, "timestamp": "2026-03-05T10:00:00Z"},
+        {"role": "assistant", "content": "Added.", "applied_changes": null, "timestamp": "2026-03-05T10:00:30Z"},
+        {"role": "user", "content": "Schedule dentist for next week", "applied_changes": {"created": [{"title": "Dentist", "id": "t-031"}]}, "timestamp": "2026-03-10T14:00:00Z"},
+        {"role": "assistant", "content": "Created.", "applied_changes": null, "timestamp": "2026-03-10T14:00:30Z"},
+        {"role": "user", "content": "What's the weather like?", "applied_changes": null, "timestamp": "2026-03-12T09:00:00Z"},
+        {"role": "assistant", "content": "I don't have weather data.", "applied_changes": null, "timestamp": "2026-03-12T09:00:30Z"},
+        {"role": "user", "content": "Read chapter 5 of the design book", "applied_changes": {"created": [{"title": "Read design book ch5", "id": "t-032"}]}, "timestamp": "2026-03-18T20:00:00Z"},
+        {"role": "assistant", "content": "Added.", "applied_changes": null, "timestamp": "2026-03-18T20:00:30Z"},
+        {"role": "user", "content": "Call mom on Sunday", "applied_changes": {"created": [{"title": "Call mom", "id": "t-033"}]}, "timestamp": "2026-03-20T11:00:00Z"},
+        {"role": "assistant", "content": "Created.", "applied_changes": null, "timestamp": "2026-03-20T11:00:30Z"}
+      ],
+      "existing_preferences": [],
+      "judge_criteria": {"should_be_empty_or_low": true, "max_preferences": 1, "max_confidence": 0.5, "must_not": ["fabricate strong patterns"]}
+    },
+    {
+      "case_id": "contradicts-existing-preference",
+      "description": "Existing morning avoidance but recent interactions show morning scheduling. Confidence should decrease.",
+      "interactions": [
+        {"role": "user", "content": "Schedule a 7am run for every morning this week", "applied_changes": {"created": [{"title": "Morning run", "id": "t-040"}]}, "timestamp": "2026-03-18T06:45:00Z"},
+        {"role": "assistant", "content": "Created morning run series.", "applied_changes": null, "timestamp": "2026-03-18T06:45:30Z"},
+        {"role": "user", "content": "Set up a breakfast meeting with the team for 8am Wednesday", "applied_changes": {"created": [{"title": "Team breakfast", "id": "t-041"}]}, "timestamp": "2026-03-19T09:00:00Z"},
+        {"role": "assistant", "content": "Created.", "applied_changes": null, "timestamp": "2026-03-19T09:00:30Z"},
+        {"role": "user", "content": "I've been waking up early lately, it's great", "applied_changes": null, "timestamp": "2026-03-20T07:00:00Z"},
+        {"role": "assistant", "content": "That's great!", "applied_changes": null, "timestamp": "2026-03-20T07:00:30Z"},
+        {"role": "user", "content": "Move the afternoon sync to 9am, I want mornings productive", "applied_changes": {"updated": [{"title": "Team sync", "id": "t-042"}]}, "timestamp": "2026-03-22T08:00:00Z"},
+        {"role": "assistant", "content": "Moved to 9am.", "applied_changes": null, "timestamp": "2026-03-22T08:00:30Z"},
+        {"role": "user", "content": "Check what I have on Friday", "applied_changes": null, "timestamp": "2026-03-23T10:00:00Z"},
+        {"role": "assistant", "content": "Morning run at 7am and client meeting at 11am.", "applied_changes": null, "timestamp": "2026-03-23T10:00:30Z"}
+      ],
+      "existing_preferences": [{"id": "pref-existing-002", "title": "Prefers afternoon meetings", "data": {"confidence": 0.65, "category": "scheduling", "evidence": ["Moved standup from 9am to 2pm", "Rescheduled morning sync to after lunch", "Said 'I hate early meetings'"], "sweep_count": 2}}],
+      "judge_criteria": {"should_reference_existing": "pref-existing-002", "confidence_should_decrease": true, "confidence_range": [0.2, 0.55], "must_not": ["ignore the contradiction", "keep confidence at 0.65 or higher"]}
+    }
+  ]
+}

@@ -1088,11 +1088,15 @@ class TestHistoryEnrichmentInReasoningAgent:
 
     @pytest.mark.asyncio
     async def test_includes_enrichment_metadata_separately(self):
-        """Assistant turns should have pristine content with enrichment in a separate tag."""
+        """Assistant turns should have pristine content with structured enrichment in a separate tag."""
         metadata = {"reasoning_summary": "test"}
         history = [
             {"role": "user", "content": "Create a project called X"},
-            {"role": "assistant", "content": "Done!", "enrichment_metadata": "[Created: X (project)]"},
+            {
+                "role": "assistant",
+                "content": "Done!",
+                "context_things": [{"id": "t1", "title": "X", "type_hint": "project"}],
+            },
             {"role": "user", "content": "Now update it"},
         ]
 
@@ -1127,8 +1131,10 @@ class TestHistoryEnrichmentInReasoningAgent:
         assert "<user>" in full_prompt
         # Assistant turn content should be pristine (no markers appended)
         assert "<assistant>Done!</assistant>" in full_prompt
-        # Enrichment metadata should appear in a separate tag
-        assert "<enrichment>[Created: X (project)]</enrichment>" in full_prompt
+        # Structured enrichment should appear in a separate tag with JSON content
+        assert "<enrichment>" in full_prompt
+        assert '"context_things"' in full_prompt
+        assert '"t1"' in full_prompt
 
     @pytest.mark.asyncio
     async def test_keeps_assistant_turns_without_markers(self):

@@ -1,0 +1,47 @@
+{
+  "eval_set_id": "reasoning-briefing-mode",
+  "name": "Reasoning Agent — Briefing Mode",
+  "description": "Tests that the agent correctly triggers briefing_mode for status/overview questions.",
+  "eval_cases": [
+    {
+      "eval_id": "whats-on-my-plate",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nWhat's on my plate?\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-1401\", \"title\": \"Buy groceries\", \"type_hint\": \"task\", \"priority\": 2}, {\"id\": \"thing-1402\", \"title\": \"Dentist appointment\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-04-05\"}}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Overview request.\", \"briefing_mode\": true}"}], "role": "model"},
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "how-are-things",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nHow are things looking?\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-1501\", \"title\": \"Quarterly report\", \"type_hint\": \"task\", \"data\": {\"deadline\": \"2026-03-31\"}, \"priority\": 1}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Status overview.\", \"briefing_mode\": true}"}], "role": "model"},
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "catch-me-up",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nCatch me up — what should I focus on this weekend?\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-1601\", \"title\": \"Tax return 2025\", \"type_hint\": \"task\", \"data\": {\"deadline\": \"2026-03-31\"}, \"priority\": 1, \"active\": true}, {\"id\": \"thing-1602\", \"title\": \"Read book for book club\", \"type_hint\": \"task\", \"data\": {\"meeting_date\": \"2026-04-05\"}, \"priority\": 3, \"active\": true}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Weekend focus — tax return urgent.\", \"briefing_mode\": true}"}], "role": "model"},
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}

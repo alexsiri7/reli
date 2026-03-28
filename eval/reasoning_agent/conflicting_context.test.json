@@ -1,0 +1,55 @@
+{
+  "eval_set_id": "reasoning-conflicting-context",
+  "name": "Reasoning Agent — Conflicting Context",
+  "description": "Tests contradiction detection: agent asks before overwriting conflicting data, but applies explicit corrections directly.",
+  "eval_cases": [
+    {
+      "eval_id": "contradicts-existing-date",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nMy flight to Paris is on April 10th\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-801\", \"title\": \"Flight to Paris\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-04-15\", \"airline\": \"Air France\", \"flight\": \"AF123\"}}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [\"I have your Paris flight recorded for April 15th. Did the date change to April 10th, or is this a different flight?\"], \"priority_question\": \"Did the date change?\", \"reasoning_summary\": \"Date conflict detected.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {"tool_uses": [], "tool_responses": [], "intermediate_responses": []},
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "user-confirms-override",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nThe budget meeting is at 3pm, not 2pm\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-901\", \"title\": \"Budget meeting\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-04-01\", \"time\": \"14:00\"}}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Explicit correction from 2pm to 3pm.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {
+            "tool_uses": [{"id": null, "args": {"thing_id": "thing-901"}, "name": "update_thing", "partial_args": null, "will_continue": null}],
+            "tool_responses": [{"id": null, "name": "update_thing", "response": {"id": "thing-901", "title": "Budget meeting"}}],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    },
+    {
+      "eval_id": "new-info-enriches-existing",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {"parts": [{"text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nThe dentist appointment is with Dr. Martinez\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"thing-1001\", \"title\": \"Dentist appointment\", \"type_hint\": \"event\", \"data\": {\"date\": \"2026-04-05\", \"time\": \"14:00\"}}]"}], "role": "user"},
+          "final_response": {"parts": [{"text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Added dentist name — enrichment, no conflict.\", \"briefing_mode\": false}"}], "role": "model"},
+          "intermediate_data": {
+            "tool_uses": [{"id": null, "args": {"thing_id": "thing-1001"}, "name": "update_thing", "partial_args": null, "will_continue": null}],
+            "tool_responses": [{"id": null, "name": "update_thing", "response": {"id": "thing-1001", "title": "Dentist appointment"}}],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0, "rubrics": null, "app_details": null
+        }
+      ],
+      "conversation_scenario": null, "session_input": null, "creation_timestamp": 0.0, "rubrics": null, "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}

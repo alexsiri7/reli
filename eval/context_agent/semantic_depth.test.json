@@ -1,0 +1,49 @@
+{
+  "eval_set_id": "context-semantic-depth",
+  "name": "Context Agent — Semantic Depth & Relevance",
+  "description": "Tests semantic expansion (e.g. 'visit my sister' -> search for sister entity) and over-expansion avoidance. Uses LLM-as-judge.",
+  "cases": [
+    {
+      "case_id": "visit-sister-chain",
+      "description": "User wants to book a hotel to visit their sister. Should search for sister entity AND hotel/travel.",
+      "user_message": "I need to book a hotel to visit my sister next month",
+      "conversation_history": [],
+      "judge_criteria": {"must_search_for": ["sister", "hotel"], "should_search_for": ["visit", "travel"], "must_not_only_search": ["hotel"], "rationale": "Need to find who the sister is and where she lives."}
+    },
+    {
+      "case_id": "birthday-gift-for-partner",
+      "description": "Should search for the partner entity and their preferences, not just 'gift'.",
+      "user_message": "I need to get a birthday present for Alex, any ideas based on what they like?",
+      "conversation_history": [],
+      "judge_criteria": {"must_search_for": ["Alex"], "should_search_for": ["birthday", "gift", "preferences"], "must_not_only_search": ["birthday gift"], "rationale": "Need Alex's interests and preferences."}
+    },
+    {
+      "case_id": "project-status-with-subtasks",
+      "description": "Should search for the project and related tasks/people.",
+      "user_message": "How's the kitchen renovation going? Are we on track?",
+      "conversation_history": [],
+      "judge_criteria": {"must_search_for": ["kitchen renovation"], "should_search_for": ["renovation", "contractor"], "must_not_only_search": ["kitchen renovation"], "rationale": "Need subtasks, related people, blockers."}
+    },
+    {
+      "case_id": "avoid-irrelevant-expansion",
+      "description": "Simple time lookup — should NOT over-expand.",
+      "user_message": "What time is the dentist tomorrow?",
+      "conversation_history": [],
+      "judge_criteria": {"must_search_for": ["dentist"], "should_not_search_for": ["health insurance", "medical records", "hospital"], "rationale": "Simple lookup, don't expand into every health Thing."}
+    },
+    {
+      "case_id": "vacation-planning-multi-entity",
+      "description": "Should search broadly for destination, travel, accommodation, existing plans.",
+      "user_message": "Let's start planning the Japan trip — what do we already have?",
+      "conversation_history": [],
+      "judge_criteria": {"must_search_for": ["Japan"], "should_search_for": ["trip", "travel", "flight", "hotel"], "should_set_active_only": false, "rationale": "Need ALL Japan-related Things including completed research."}
+    },
+    {
+      "case_id": "email-context-for-meeting",
+      "description": "Meeting prep should search for people, topics, and consider email.",
+      "user_message": "Help me prepare for my meeting with Sarah about the contract tomorrow",
+      "conversation_history": [],
+      "judge_criteria": {"must_search_for": ["Sarah", "contract"], "should_search_for": ["meeting"], "should_consider_email": true, "rationale": "Need meeting Thing, Sarah entity, contract context, maybe recent emails."}
+    }
+  ]
+}
