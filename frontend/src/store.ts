@@ -455,6 +455,15 @@ interface ReliState {
   dismissConnectionSuggestion: (id: string) => Promise<void>
   deferConnectionSuggestion: (id: string) => Promise<void>
 
+  // Command palette
+  commandPaletteOpen: boolean
+  openCommandPalette: () => void
+  closeCommandPalette: () => void
+
+  // Sidebar collapse (desktop)
+  sidebarCollapsed: boolean
+  toggleSidebar: () => void
+
   // Feedback
   feedbackOpen: boolean
   openFeedback: () => void
@@ -1380,6 +1389,15 @@ export const useStore = create<ReliState>((set, get) => ({
       // ignore
     }
   },
+
+  // Command palette
+  commandPaletteOpen: false,
+  openCommandPalette: () => set({ commandPaletteOpen: true }),
+  closeCommandPalette: () => set({ commandPaletteOpen: false }),
+
+  // Sidebar collapse (desktop)
+  sidebarCollapsed: false,
+  toggleSidebar: () => set(s => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
   // Feedback
   feedbackOpen: false,

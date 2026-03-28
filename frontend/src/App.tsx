@@ -7,20 +7,25 @@ import { DetailPanel } from './components/DetailPanel'
 import GraphView from './components/GraphView'
 import { LoginPage } from './components/LoginPage'
 import { useVersionCheck } from './hooks/useVersionCheck'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { SettingsPanel } from './components/SettingsPanel'
 import { FeedbackDialog } from './components/FeedbackDialog'
+import { CommandPalette } from './components/CommandPalette'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, feedbackOpen, commandPaletteOpen, openCommandPalette, mainView, mobileView, setMobileView, sidebarCollapsed, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
       settingsOpen: s.settingsOpen,
       feedbackOpen: s.feedbackOpen,
+      commandPaletteOpen: s.commandPaletteOpen,
+      openCommandPalette: s.openCommandPalette,
       mainView: s.mainView,
       mobileView: s.mobileView,
       setMobileView: s.setMobileView,
+      sidebarCollapsed: s.sidebarCollapsed,
       fetchCurrentUser: s.fetchCurrentUser,
       fetchThingTypes: s.fetchThingTypes,
       fetchThings: s.fetchThings,
@@ -40,6 +45,9 @@ function App() {
   )
 
   const { newVersionAvailable, dismiss, refresh } = useVersionCheck()
+
+  // Global keyboard shortcuts
+  useKeyboardShortcuts()
 
   // Check auth on mount
   useEffect(() => {
@@ -116,7 +124,7 @@ function App() {
       <OfflineIndicator />
       {/* Desktop: side-by-side layout */}
       <div className="hidden md:contents">
-        <Sidebar />
+        {!sidebarCollapsed && <Sidebar />}
         {mainView === 'graph' ? (
           <GraphView />
         ) : (
@@ -165,8 +173,20 @@ function App() {
           Chat
         </button>
       </nav>
+      {/* Mobile FAB — opens command palette */}
+      <button
+        className="md:hidden fixed bottom-20 right-4 z-50 w-12 h-12 rounded-full bg-indigo-600 text-white shadow-lg flex items-center justify-center hover:bg-indigo-700 active:scale-95 transition-transform"
+        onClick={openCommandPalette}
+        aria-label="Open command palette"
+        title="Search & commands"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+        </svg>
+      </button>
       {settingsOpen && <SettingsPanel />}
       {feedbackOpen && <FeedbackDialog />}
+      {commandPaletteOpen && <CommandPalette />}
     </div>
   )
 }

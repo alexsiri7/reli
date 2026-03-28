@@ -838,6 +838,7 @@ export function ChatPanel() {
         <div className="flex items-end gap-2 bg-gray-100 dark:bg-gray-800 rounded-2xl px-3 py-2">
           <textarea
             ref={inputRef}
+            id="chat-input"
             rows={1}
             maxLength={10000}
             value={input}
