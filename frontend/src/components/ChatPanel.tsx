@@ -706,7 +706,7 @@ function InteractionStyleSelector({ style, onChange }: { style: InteractionStyle
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, things, loading: thingsLoading } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -719,6 +719,8 @@ export function ChatPanel() {
       setChatMode: s.setChatMode,
       interactionStyle: s.interactionStyle,
       setInteractionStyle: s.setInteractionStyle,
+      things: s.things,
+      loading: s.loading,
     }))
   )
   const { isOnline } = useNetworkStatus()
@@ -814,13 +816,46 @@ export function ChatPanel() {
           </div>
         )}
         {messages.length === 0 && !historyLoading && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="text-5xl mb-4">✨</div>
-            <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">What's on your mind?</h3>
-            <p className="text-sm text-gray-400 dark:text-gray-400 mt-1 max-w-xs">
-              Try: "Remind me to check the server logs tomorrow" or "I had an idea about the new API design"
-            </p>
-          </div>
+          things.length === 0 && !thingsLoading ? (
+            /* First-time user: guided onboarding */
+            <div className="flex flex-col items-center justify-center h-full text-center px-6">
+              <div className="text-5xl mb-4">👋</div>
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Welcome to Reli</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 max-w-sm leading-relaxed">
+                I'm your personal assistant. Let's get to know each other — tell me what you're working on and I'll start tracking it for you.
+              </p>
+              <div className="mt-5 flex flex-col gap-2 w-full max-w-sm">
+                {[
+                  "I'm working on a project to redesign our onboarding flow",
+                  "I need to follow up with Sarah about the Q2 budget proposal",
+                  "I have an idea about improving the API performance",
+                ].map(suggestion => (
+                  <button
+                    key={suggestion}
+                    onClick={() => {
+                      setInput(suggestion)
+                      inputRef.current?.focus()
+                    }}
+                    className="text-left text-sm px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                  >
+                    "{suggestion}"
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-4">
+                Or type anything — I'll create Things from what you share.
+              </p>
+            </div>
+          ) : (
+            /* Returning user: no messages in current session */
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="text-5xl mb-4">✨</div>
+              <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">What's on your mind?</h3>
+              <p className="text-sm text-gray-400 dark:text-gray-400 mt-1 max-w-xs">
+                Try: "Remind me to check the server logs tomorrow" or "I had an idea about the new API design"
+              </p>
+            </div>
+          )
         )}
         {messages.map(msg => (
           <MessageBubble key={msg.id} msg={msg} speakingId={speakingId} speak={speak} />

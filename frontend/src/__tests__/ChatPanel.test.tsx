@@ -24,6 +24,8 @@ const mockStore = {
   sendMessage: vi.fn(),
   fetchOlderMessages: vi.fn(),
   sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, cost_usd: 0, per_model: [] },
+  things: [{ id: '1', title: 'Existing thing' }],
+  loading: false,
 }
 
 vi.mock('../store', () => ({
@@ -52,12 +54,20 @@ beforeEach(() => {
   mockStore.chatLoading = false
   mockStore.historyLoading = false
   mockStore.hasMoreHistory = false
+  mockStore.things = [{ id: '1', title: 'Existing thing' }]
+  mockStore.loading = false
 })
 
 describe('ChatPanel', () => {
-  it('renders empty state prompt', () => {
+  it('renders returning user empty state when things exist', () => {
     render(<ChatPanel />)
     expect(screen.getByText("What's on your mind?")).toBeInTheDocument()
+  })
+
+  it('renders onboarding welcome for first-time users with no things', () => {
+    mockStore.things = []
+    render(<ChatPanel />)
+    expect(screen.getByText('Welcome to Reli')).toBeInTheDocument()
   })
 
   it('renders messages', () => {
@@ -119,5 +129,6 @@ describe('ChatPanel', () => {
     mockStore.hasMoreHistory = true
     render(<ChatPanel />)
     expect(screen.queryByText("What's on your mind?")).not.toBeInTheDocument()
+    expect(screen.queryByText('Welcome to Reli')).not.toBeInTheDocument()
   })
 })

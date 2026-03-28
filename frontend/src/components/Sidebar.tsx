@@ -674,7 +674,7 @@ export function Sidebar() {
             {morningBriefing && <MorningBriefingSection briefing={morningBriefing} />}
 
             {/* Daily Briefing — sweep findings + checkin-due things */}
-            {(findings.length > 0 || briefing.length > 0) && (
+            {(findings.length > 0 || briefing.length > 0) ? (
               <section className="py-2 border-b border-gray-100 dark:border-gray-800">
                 <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
                   Daily Briefing
@@ -687,6 +687,15 @@ export function Sidebar() {
 
                 {/* Checkin-due things */}
                 {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
+              </section>
+            ) : !morningBriefing && !loading && things.length > 0 && (
+              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+                  Daily Briefing
+                </h2>
+                <p className="px-4 py-2 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+                  Your morning briefing shows up here once you have Things with check-in dates. Tell me about something you need to follow up on.
+                </p>
               </section>
             )}
 
@@ -911,8 +920,12 @@ export function Sidebar() {
             <GmailPanel />
 
             {!loading && things.length === 0 && (
-              <div className="px-4 py-6 text-sm text-gray-400 dark:text-gray-400 text-center">
-                Start by typing in the chat…
+              <div className="px-6 py-8 text-center">
+                <div className="text-3xl mb-3">📋</div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No Things yet</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 leading-relaxed">
+                  Things you mention in chat appear here — try telling me about a project.
+                </p>
               </div>
             )}
           </>
