@@ -1168,3 +1168,200 @@ class TestHistoryEnrichmentInReasoningAgent:
         full_prompt = call_args.args[1]
         # Both user and assistant turns should be present
         assert "Hi there, how can I help?" in full_prompt
+
+
+# ---------------------------------------------------------------------------
+# Communication style signal detection — system prompt coverage
+# ---------------------------------------------------------------------------
+
+
+class TestCommStyleSignalSystemPrompt:
+    """Verify that communication style signal detection is present in system prompts."""
+
+    def test_comm_style_rules_in_tool_system(self):
+        """REASONING_AGENT_TOOL_SYSTEM includes communication style signal rules."""
+        from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+
+        assert "reli_communication" in REASONING_AGENT_TOOL_SYSTEM
+        assert "Explicit corrections" in REASONING_AGENT_TOOL_SYSTEM
+        assert "Implicit corrections" in REASONING_AGENT_TOOL_SYSTEM
+
+    def test_comm_style_rules_in_planning_system(self):
+        """PLANNING_AGENT_TOOL_SYSTEM also includes communication style signal rules."""
+        from backend.reasoning_agent import PLANNING_AGENT_TOOL_SYSTEM
+
+        assert "reli_communication" in PLANNING_AGENT_TOOL_SYSTEM
+        assert "Explicit corrections" in PLANNING_AGENT_TOOL_SYSTEM
+
+    def test_comm_style_signal_examples_present(self):
+        """Key explicit correction examples are present in the prompt."""
+        from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+
+        assert "don't use emoji" in REASONING_AGENT_TOOL_SYSTEM
+        assert "be more concise" in REASONING_AGENT_TOOL_SYSTEM
+        assert "stop using bullet points" in REASONING_AGENT_TOOL_SYSTEM
+
+    def test_comm_style_confidence_levels_documented(self):
+        """Confidence escalation rules are in the prompt."""
+        from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+
+        assert "emerging" in REASONING_AGENT_TOOL_SYSTEM
+        assert "established" in REASONING_AGENT_TOOL_SYSTEM
+        assert "strong" in REASONING_AGENT_TOOL_SYSTEM
+
+    def test_get_system_prompt_includes_comm_style(self):
+        """get_system_prompt_for_mode returns prompt with comm style rules."""
+        from backend.reasoning_agent import get_system_prompt_for_mode
+
+        for mode in ("normal", "planning"):
+            for style in ("auto", "coach", "consultant"):
+                prompt = get_system_prompt_for_mode(mode, style)
+                assert "reli_communication" in prompt, (
+                    f"reli_communication missing from mode={mode}, style={style}"
+                )
+
+
+# ---------------------------------------------------------------------------
+# Communication style signal — create_thing structure
+# ---------------------------------------------------------------------------
+
+
+class TestCommStylePreferenceStructure:
+    """Verify that create_thing can store reli_communication preference data."""
+
+    def test_create_reli_comm_preference_thing(self):
+        """create_thing stores a reli_communication preference with correct structure."""
+        mock_conn = MagicMock()
+        mock_db_ctx = MagicMock()
+        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
+        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+
+        pref_data_str = json.dumps({
+            "category": "reli_communication",
+            "patterns": [
+                {
+                    "pattern": "Avoid using emoji in responses",
+                    "confidence": "established",
+                    "observations": 1,
+                }
+            ],
+        })
+
+        # First fetchone: no existing thing (dedup check returns None)
+        # Second fetchone: newly inserted row
+        new_row = {
+            "id": "pref-uuid",
+            "title": "How the user wants Reli to communicate",
+            "type_hint": "preference",
+            "data": pref_data_str,
+            "active": 1,
+            "surface": 0,
+            "open_questions": None,
+        }
+        mock_new = MagicMock()
+        mock_new.__getitem__ = lambda self, key: new_row[key]
+        mock_new.keys = lambda: new_row.keys()
+
+        mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, mock_new])
+
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing") as mock_upsert,
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
+            from backend.reasoning_agent import _make_reasoning_tools
+
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            create_fn = tools[2]
+
+            result = create_fn(
+                title="How the user wants Reli to communicate",
+                type_hint="preference",
+                data_json=pref_data_str,
+                surface=False,
+            )
+
+        assert "error" not in result
+        assert len(applied["created"]) == 1
+        created = applied["created"][0]
+        assert created["type_hint"] == "preference"
+
+        # Verify the stored data has the right structure
+        stored_data = json.loads(created["data"])
+        assert stored_data["category"] == "reli_communication"
+        assert stored_data["patterns"][0]["pattern"] == "Avoid using emoji in responses"
+        assert stored_data["patterns"][0]["confidence"] == "established"
+        mock_upsert.assert_called_once()
+
+    def test_update_existing_reli_comm_preference(self):
+        """update_thing can reinforce an existing reli_communication preference."""
+        mock_conn = MagicMock()
+        mock_db_ctx = MagicMock()
+        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
+        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+
+        existing_data = json.dumps({
+            "category": "reli_communication",
+            "patterns": [
+                {
+                    "pattern": "Be concise",
+                    "confidence": "emerging",
+                    "observations": 1,
+                }
+            ],
+        })
+        existing_row = {
+            "id": "pref-uuid",
+            "title": "How the user wants Reli to communicate",
+            "data": existing_data,
+            "checkin_date": None,
+            "open_questions": None,
+        }
+        mock_existing = MagicMock()
+        mock_existing.__getitem__ = lambda self, key: existing_row[key]
+        mock_existing.keys = lambda: existing_row.keys()
+
+        updated_data = json.dumps({
+            "category": "reli_communication",
+            "patterns": [
+                {
+                    "pattern": "Be concise",
+                    "confidence": "established",
+                    "observations": 2,
+                }
+            ],
+        })
+        updated_row = {**existing_row, "data": updated_data}
+        mock_updated = MagicMock()
+        mock_updated.__getitem__ = lambda self, key: updated_row[key]
+        mock_updated.keys = lambda: updated_row.keys()
+
+        mock_conn.execute.return_value.fetchone = MagicMock(
+            side_effect=[mock_existing, mock_updated]
+        )
+
+        with (
+            patch("backend.reasoning_agent.db", return_value=mock_db_ctx),
+            patch("backend.reasoning_agent.upsert_thing"),
+            patch("backend.reasoning_agent.vs_delete"),
+        ):
+            from backend.reasoning_agent import _make_reasoning_tools
+
+            tools, applied, _fetched = _make_reasoning_tools("test-user")
+            update_fn = tools[3]
+
+            new_data = json.dumps({
+                "category": "reli_communication",
+                "patterns": [
+                    {
+                        "pattern": "Be concise",
+                        "confidence": "established",
+                        "observations": 2,
+                    }
+                ],
+            })
+
+            result = update_fn(thing_id="pref-uuid", data_json=new_data)
+
+        assert "error" not in result
+        assert len(applied["updated"]) == 1
