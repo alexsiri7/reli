@@ -160,7 +160,7 @@ class TestFetchHistory:
         assert history[0]["content"] == "Hello"
 
     def test_enrichment_metadata_preserved(self, patched_db):
-        """Assistant messages with applied_changes get enrichment_metadata."""
+        """Assistant messages with applied_changes get structured context_things in history."""
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
@@ -177,8 +177,8 @@ class TestFetchHistory:
 
         history = _fetch_history("sess-1", context_window=50, user_id=user_id)
         assert len(history) == 1
-        assert "enrichment_metadata" in history[0]
-        assert "My Task" in history[0]["enrichment_metadata"]
+        assert "context_things" in history[0]
+        assert history[0]["context_things"][0]["title"] == "My Task"
 
 
 # ---------------------------------------------------------------------------

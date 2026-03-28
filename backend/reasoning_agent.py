@@ -1379,17 +1379,23 @@ async def run_reasoning_agent(
     )
 
     # Build history into the user message for ADK (single-turn with context).
-    # Content is pristine (enrichment markers are in a separate metadata field),
-    # so all turns can be included without triggering Gemini thought_signature
-    # validation errors.  See GH #158 / re-jux4.
+    # Content is pristine; Thing context is passed as structured metadata so
+    # the model has access to real IDs and titles without polluting content.
+    # See GH #158 / re-jux4.
     history_block = ""
     for h in history[-context_window:]:
         history_block += f"<{h['role']}>{h['content']}</{h['role']}>\n"
-        # Append enrichment metadata (context/created/updated Things) as a
-        # separate note so the model knows what happened without polluting content.
-        enrichment = h.get("enrichment_metadata", "")
-        if enrichment:
-            history_block += f"<enrichment>{enrichment}</enrichment>\n"
+        # Append structured Thing context so the model knows which Things were
+        # involved in each turn (context used, items referenced in the reply).
+        context_things = h.get("context_things", [])
+        referenced_things = h.get("referenced_things", [])
+        if context_things or referenced_things:
+            meta: dict[str, Any] = {}
+            if context_things:
+                meta["context_things"] = context_things
+            if referenced_things:
+                meta["referenced_things"] = referenced_things
+            history_block += f"<enrichment>{json.dumps(meta)}</enrichment>\n"
 
     full_prompt = (f"Conversation history:\n{history_block}\n" if history_block else "") + user_content
 
