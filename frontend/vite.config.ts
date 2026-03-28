@@ -56,7 +56,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/oauth\//, /^\/.well-known\//, /^\/mcp/],
         runtimeCaching: [
           {
             urlPattern: /^https?:\/\/[^/]+\/api\/(things|thing-types|briefing)(\?.*)?$/,
