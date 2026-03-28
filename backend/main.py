@@ -32,6 +32,7 @@ from starlette.responses import Response as StarletteResponse  # noqa: E402
 
 from .auth import COOKIE_NAME, JWT_ALGORITHM, SECRET_KEY, require_user  # noqa: E402
 from .database import clean_orphan_relationships, init_db  # noqa: E402
+from .mcp_server import create_mcp_asgi_app  # noqa: E402
 from .metrics import MetricsMiddleware, metrics_response  # noqa: E402
 from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
 from .response_metrics import ResponseMetricsMiddleware, metrics_store  # noqa: E402
@@ -284,6 +285,10 @@ def health_detailed() -> dict:
 def metrics() -> StarletteResponse:
     return metrics_response()
 
+
+# MCP server — Streamable HTTP transport, mounted at /mcp
+# Protected by MCP_API_TOKEN bearer token (empty = dev/open mode)
+app.mount("/mcp", create_mcp_asgi_app(_app_settings.MCP_API_TOKEN))
 
 # Serve React SPA (only when the built dist directory exists)
 if _FRONTEND_DIST.is_dir():
