@@ -76,8 +76,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         app.state.httpx_client = client
-        # Guard against double-start (tests create multiple app instances)
-        if _mcp_server._session_manager and not _mcp_server._session_manager._has_started:
+        sm = _mcp_server._session_manager
+        if sm is not None:
+            if sm._has_started:
+                # The session manager's run() is one-shot per instance. After it exits
+                # (e.g., hot-reload, uvicorn worker restart, or test teardown), _has_started
+                # remains True and _task_group is None. Reset the one-shot state so we can
+                # call run() again on the same instance — the ASGI handler holds a reference
+                # to this object, so creating a new instance would leave the handler broken.
+                import anyio as _anyio
+
+                sm._has_started = False
+                sm._run_lock = _anyio.Lock()
             async with _mcp_server.session_manager.run():
                 yield
         else:
