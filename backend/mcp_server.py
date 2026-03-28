@@ -272,11 +272,24 @@ def delete_relationship(relationship_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def get_briefing(as_of: str | None = None) -> dict[str, Any]:
-    """Get today's daily briefing — checkin-due Things and active sweep findings.
+    """Get today's daily briefing — structured sweep output for the calling agent.
 
-    Returns items that need attention: Things with approaching checkin dates,
-    stale items, open questions, and other sweep findings from Reli's
-    server-side intelligence.
+    Returns machine-readable data for the PA to decide what to surface. Response
+    structure:
+      - date: ISO 8601 date the briefing is for.
+      - things: Things with approaching checkin dates (the user asked to be
+        reminded on/before this date). Each has a ``checkin_date`` field.
+      - findings: Active sweep findings. Each has a ``finding_type`` field:
+          - ``approaching_date``: Something time-sensitive within 7 days.
+          - ``stale``: Active Thing not updated in 14+ days.
+          - ``neglected``: High-priority or active-children Thing that's stale.
+          - ``overdue_checkin``: Thing whose checkin_date is in the past.
+          - ``cross_project_resource_conflict``: Person involved in multiple stale projects.
+        Each finding also has ``message`` (human-readable summary), ``priority``
+        (0=critical → 4=backlog), and an optional linked ``thing`` object.
+      - total: Total count of things + findings.
+
+    Returns empty lists (total=0) if no sweep has run or nothing needs attention.
 
     Args:
         as_of: Optional ISO 8601 date (YYYY-MM-DD) to get the briefing for.
@@ -289,8 +302,10 @@ def get_briefing(as_of: str | None = None) -> dict[str, Any]:
 def get_open_questions(limit: int = 50) -> list[dict[str, Any]]:
     """Get Things that have unresolved open questions, ordered by priority then recency.
 
-    Returns active Things with non-empty open_questions arrays. The calling agent
-    can use these to proactively ask the user clarifying questions during conversation.
+    Returns active Things with non-empty ``open_questions`` arrays. Each Thing
+    includes its full field set including the ``open_questions`` list of strings —
+    knowledge gaps the PA should proactively resolve by asking the user during
+    conversation. Returns an empty list if no Things have open questions.
 
     Args:
         limit: Maximum number of Things to return (1-200, default 50).
