@@ -547,3 +547,167 @@ class TestPreferenceBoost:
         # Preference must come before both entity Things
         assert ids.index("pref-1") < ids.index("entity-1")
         assert ids.index("pref-1") < ids.index("entity-2")
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _fetch_warm_context
+# ---------------------------------------------------------------------------
+
+
+class TestFetchWarmContext:
+    """Tests for _fetch_warm_context — warm start context for the reasoning agent."""
+
+    def test_empty_session_returns_empty(self, patched_db):
+        """Session with no messages returns empty list."""
+        from backend.pipeline import _fetch_warm_context
+
+        result = _fetch_warm_context("no-such-session")
+        assert result == []
+
+    def test_no_applied_changes_returns_empty(self, patched_db):
+        """Assistant messages with no applied_changes return empty list."""
+        from backend.database import db
+        from backend.pipeline import _fetch_warm_context
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
+                ("sess-1", "assistant", "Hello!", None),
+            )
+
+        result = _fetch_warm_context("sess-1")
+        assert result == []
+
+    def test_fetches_things_from_context_things(self, patched_db):
+        """Things referenced in applied_changes.context_things are returned."""
+        import json
+
+        from backend.database import db
+        from backend.pipeline import _fetch_warm_context
+
+        with db() as conn:
+            # Create a Thing
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active) VALUES (?, ?, ?, ?, ?)",
+                ("thing-1", "My Project", "project", 3, 1),
+            )
+            # Create an assistant message referencing that Thing
+            changes = {"context_things": [{"id": "thing-1"}]}
+            conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
+                ("sess-1", "assistant", "Got it.", json.dumps(changes)),
+            )
+
+        result = _fetch_warm_context("sess-1")
+        assert len(result) == 1
+        assert result[0]["id"] == "thing-1"
+        assert result[0]["title"] == "My Project"
+
+    def test_deduplicates_same_thing_across_messages(self, patched_db):
+        """Same thing_id referenced in multiple messages is returned only once."""
+        import json
+
+        from backend.database import db
+        from backend.pipeline import _fetch_warm_context
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active) VALUES (?, ?, ?, ?, ?)",
+                ("thing-1", "My Project", "project", 3, 1),
+            )
+            changes = {"context_things": [{"id": "thing-1"}]}
+            for i in range(3):
+                conn.execute(
+                    "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
+                    ("sess-1", "assistant", f"Message {i}", json.dumps(changes)),
+                )
+
+        result = _fetch_warm_context("sess-1")
+        ids = [t["id"] for t in result]
+        assert ids.count("thing-1") == 1
+
+    def test_ignores_user_messages(self, patched_db):
+        """User messages are not scanned for context_things."""
+        import json
+
+        from backend.database import db
+        from backend.pipeline import _fetch_warm_context
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active) VALUES (?, ?, ?, ?, ?)",
+                ("thing-1", "My Project", "project", 3, 1),
+            )
+            # user message with context_things (should be ignored)
+            changes = {"context_things": [{"id": "thing-1"}]}
+            conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
+                ("sess-1", "user", "Tell me about my project", json.dumps(changes)),
+            )
+
+        result = _fetch_warm_context("sess-1")
+        assert result == []
+
+    def test_respects_n_messages_limit(self, patched_db):
+        """Only the last n_messages assistant messages are scanned."""
+        import json
+
+        from backend.database import db
+        from backend.pipeline import _fetch_warm_context
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active) VALUES (?, ?, ?, ?, ?)",
+                ("old-thing", "Old Thing", "note", 3, 1),
+            )
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, priority, active) VALUES (?, ?, ?, ?, ?)",
+                ("new-thing", "New Thing", "note", 3, 1),
+            )
+            # Insert 4 messages: oldest references old-thing, 3 newer reference new-thing
+            conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
+                ("sess-1", "assistant", "Old", json.dumps({"context_things": [{"id": "old-thing"}]})),
+            )
+            for i in range(3):
+                conn.execute(
+                    "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
+                    ("sess-1", "assistant", f"New {i}", json.dumps({"context_things": [{"id": "new-thing"}]})),
+                )
+
+        # With default n=3, should only see the 3 newest (new-thing), not old-thing
+        result = _fetch_warm_context("sess-1", n_messages=3)
+        ids = [t["id"] for t in result]
+        assert "new-thing" in ids
+        assert "old-thing" not in ids
+
+    def test_handles_malformed_applied_changes(self, patched_db):
+        """Malformed applied_changes JSON is skipped gracefully."""
+        from backend.database import db
+        from backend.pipeline import _fetch_warm_context
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
+                ("sess-1", "assistant", "Broken JSON", "{not valid json}"),
+            )
+
+        result = _fetch_warm_context("sess-1")
+        assert result == []
+
+    def test_missing_thing_id_in_context_things(self, patched_db):
+        """context_things entries missing 'id' key are skipped."""
+        import json
+
+        from backend.database import db
+        from backend.pipeline import _fetch_warm_context
+
+        with db() as conn:
+            changes = {"context_things": [{"title": "No ID here"}]}
+            conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, applied_changes) VALUES (?, ?, ?, ?)",
+                ("sess-1", "assistant", "Message", json.dumps(changes)),
+            )
+
+        result = _fetch_warm_context("sess-1")
+        assert result == []
