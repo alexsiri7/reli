@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -135,39 +136,41 @@ class TestReliThinkMcpTool:
         tool_names = {t.name for t in mcp._tool_manager.list_tools()}
         assert "reli_think" in tool_names
 
-    @patch("backend.mcp_server._api_post")
-    def test_reli_think_basic(self, mock_post: MagicMock) -> None:
-        mock_post.return_value = {
+    @patch("backend.reasoning_agent.run_think_agent", new_callable=AsyncMock)
+    def test_reli_think_basic(self, mock_agent: AsyncMock) -> None:
+        mock_agent.return_value = {
             "instructions": [{"action": "create_thing", "params": {"title": "Test"}}],
             "questions_for_user": [],
             "reasoning_summary": "Test plan.",
         }
-        result = reli_think(message="Create a test thing")
-        mock_post.assert_called_once_with(
-            "/api/think",
-            json_body={"message": "Create a test thing"},
+        result = asyncio.run(reli_think(message="Create a test thing"))
+        mock_agent.assert_called_once_with(
+            message="Create a test thing",
+            context="",
         )
         assert len(result["instructions"]) == 1
 
-    @patch("backend.mcp_server._api_post")
-    def test_reli_think_with_context(self, mock_post: MagicMock) -> None:
-        mock_post.return_value = {
+    @patch("backend.reasoning_agent.run_think_agent", new_callable=AsyncMock)
+    def test_reli_think_with_context(self, mock_agent: AsyncMock) -> None:
+        mock_agent.return_value = {
             "instructions": [],
             "questions_for_user": ["What kind of task?"],
             "reasoning_summary": "Need clarification.",
         }
-        reli_think(message="Do the thing", context="User is busy today")
-        mock_post.assert_called_once_with(
-            "/api/think",
-            json_body={"message": "Do the thing", "context": "User is busy today"},
+        asyncio.run(reli_think(message="Do the thing", context="User is busy today"))
+        mock_agent.assert_called_once_with(
+            message="Do the thing",
+            context="User is busy today",
         )
 
-    @patch("backend.mcp_server._api_post")
-    def test_reli_think_no_context(self, mock_post: MagicMock) -> None:
-        mock_post.return_value = {"instructions": [], "questions_for_user": [], "reasoning_summary": ""}
-        reli_think(message="Hello")
-        call_body = mock_post.call_args[1]["json_body"]
-        assert "context" not in call_body
+    @patch("backend.reasoning_agent.run_think_agent", new_callable=AsyncMock)
+    def test_reli_think_no_context(self, mock_agent: AsyncMock) -> None:
+        mock_agent.return_value = {"instructions": [], "questions_for_user": [], "reasoning_summary": ""}
+        asyncio.run(reli_think(message="Hello"))
+        mock_agent.assert_called_once_with(
+            message="Hello",
+            context="",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -192,44 +195,3 @@ class TestMcpMetadata:
             "reli_think",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
-
-
-# ---------------------------------------------------------------------------
-# Integration test with real FastAPI test client
-# ---------------------------------------------------------------------------
-
-
-class TestThinkIntegration:
-    """Test the reli_think MCP tool against a real Reli API test server."""
-
-    @pytest.fixture()
-    def api_server(self, client):  # type: ignore[no-untyped-def]
-        """Patch MCP HTTP helpers to use the FastAPI test client."""
-
-        def _post(path: str, json_body: dict[str, Any] | None = None) -> Any:
-            resp = client.post(path, json=json_body)
-            resp.raise_for_status()
-            if resp.status_code == 204:
-                return {"ok": True}
-            return resp.json()
-
-        with patch("backend.mcp_server._api_post", side_effect=_post):
-            yield
-
-    @patch("backend.routers.think.run_think_agent", new_callable=AsyncMock)
-    def test_reli_think_via_api(self, mock_agent: AsyncMock, api_server: None) -> None:
-        """reli_think MCP tool -> /api/think -> mock agent -> structured result."""
-        mock_agent.return_value = {
-            "instructions": [
-                {
-                    "action": "create_thing",
-                    "params": {"title": "Groceries", "type_hint": "task", "priority": 2},
-                    "ref": "ref_0",
-                }
-            ],
-            "questions_for_user": [],
-            "reasoning_summary": "Creating a grocery task.",
-        }
-        result = reli_think(message="I need to buy groceries")
-        assert len(result["instructions"]) == 1
-        assert result["instructions"][0]["params"]["title"] == "Groceries"
