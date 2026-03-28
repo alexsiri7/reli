@@ -146,8 +146,13 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
     flow = Flow.from_client_config(_client_config(), scopes=AUTH_SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI
 
-    # Restore PKCE code_verifier from the auth request
+    # Restore PKCE code_verifier from the auth request.
+    # For MCP OAuth flows the verifier is stored in mcp_oauth_sessions instead.
     code_verifier = _pending_flows.pop(state, None)
+    if not code_verifier:
+        mcp_session = mcp_oauth_sessions.get(state)
+        if mcp_session:
+            code_verifier = mcp_session.get("google_code_verifier", "")
     if code_verifier:
         flow.code_verifier = code_verifier
 
