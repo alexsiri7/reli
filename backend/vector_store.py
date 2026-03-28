@@ -63,7 +63,7 @@ class _ThingEmbedder(EmbeddingFunction):
             try:
                 from openai import OpenAI
 
-                client = OpenAI(api_key=REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
+                client = OpenAI(api_key=REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL, timeout=30.0)
                 resp = client.embeddings.create(model=EMBEDDING_MODEL, input=input)
                 return [e.embedding for e in resp.data]
             except Exception as exc:
