@@ -160,41 +160,28 @@ def migrate_session(body: MigrateSessionRequest, user_id: str = Depends(require_
 # ---------------------------------------------------------------------------
 
 
-def _build_enrichment_summary(raw_applied_changes: Any) -> str:
-    """Build a human-readable enrichment summary from applied_changes JSON.
+def _extract_thing_context(raw_applied_changes: Any) -> dict[str, Any]:
+    """Extract structured Thing context from applied_changes JSON.
 
-    Returns a short summary string describing which Things were involved
-    (context, created, updated) or an empty string if there's nothing to report.
+    Returns a dict with 'context_things' and/or 'referenced_things' lists
+    so the reasoning agent has structured access to which Things were involved.
+    Returns an empty dict if there is nothing to report.
     """
     if not raw_applied_changes:
-        return ""
+        return {}
 
     changes = json.loads(raw_applied_changes) if isinstance(raw_applied_changes, str) else raw_applied_changes
     if not isinstance(changes, dict):
-        return ""
+        return {}
 
-    parts: list[str] = []
-
-    # Context things: Things that informed the response
+    result: dict[str, Any] = {}
     context_things = changes.get("context_things", [])
     if context_things:
-        labels = [
-            f"{t.get('title', t.get('id', '?'))}" + (f" ({t['type_hint']})" if t.get("type_hint") else "")
-            for t in context_things
-        ]
-        parts.append(f"[Context: {', '.join(labels)}]")
-
-    # Created/updated things from storage changes
-    for key, verb in [("created", "Created"), ("updated", "Updated")]:
-        items = changes.get(key, [])
-        if items:
-            labels = [
-                f"{t.get('title', t.get('id', '?'))}" + (f" ({t.get('type_hint', '')})" if t.get("type_hint") else "")
-                for t in items
-            ]
-            parts.append(f"[{verb}: {', '.join(labels)}]")
-
-    return "\n".join(parts)
+        result["context_things"] = context_things
+    referenced_things = changes.get("referenced_things", [])
+    if referenced_things:
+        result["referenced_things"] = referenced_things
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -273,9 +260,8 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
             for r in rows:
                 entry: dict[str, Any] = {"role": r["role"], "content": r["content"] or ""}
                 if r["role"] == "assistant":
-                    s = _build_enrichment_summary(r["applied_changes"])
-                    if s:
-                        entry["enrichment_metadata"] = s
+                    ctx = _extract_thing_context(r["applied_changes"])
+                    entry.update(ctx)
                 messages.append(entry)
             # Prepend summary as context
             return [
@@ -294,9 +280,8 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
     for r in rows:
         entry = {"role": r["role"], "content": r["content"] or ""}
         if r["role"] == "assistant":
-            summary = _build_enrichment_summary(r["applied_changes"])
-            if summary:
-                entry["enrichment_metadata"] = summary
+            ctx = _extract_thing_context(r["applied_changes"])
+            entry.update(ctx)
         result.append(entry)
     return result
 
