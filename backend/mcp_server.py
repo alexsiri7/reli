@@ -246,12 +246,38 @@ def update_thing(
 
 @mcp.tool()
 def delete_thing(thing_id: str) -> dict[str, Any]:
-    """Delete a Thing from the knowledge graph.
+    """Soft-delete a Thing by marking it inactive (active=false).
+
+    The Thing record is preserved in the knowledge graph — MCP clients cannot
+    permanently destroy data. Returns the deactivated Thing so the client can
+    confirm what was deleted.
 
     Args:
-        thing_id: The UUID of the Thing to delete.
+        thing_id: The UUID of the Thing to deactivate.
     """
-    result: dict[str, Any] = _api_delete(f"/api/things/{thing_id}")
+    result: dict[str, Any] = _api_patch(f"/api/things/{thing_id}", json_body={"active": False})
+    return result
+
+
+@mcp.tool()
+def merge_things(keep_id: str, remove_id: str) -> dict[str, Any]:
+    """Merge two Things into one, removing the duplicate.
+
+    Transfers all relationships from remove_id to keep_id, merges data dicts,
+    re-parents children, records merge history, and updates the vector index.
+    The remove_id Thing is permanently deleted; keep_id is the canonical record.
+
+    Args:
+        keep_id: UUID of the Thing to keep (the canonical record).
+        remove_id: UUID of the Thing to merge into keep_id and remove.
+
+    Returns:
+        Dict with keep_id, remove_id, keep_title, remove_title.
+    """
+    result: dict[str, Any] = _api_post(
+        "/api/things/merge",
+        json_body={"keep_id": keep_id, "remove_id": remove_id},
+    )
     return result
 
 
