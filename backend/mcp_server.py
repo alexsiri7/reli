@@ -102,6 +102,8 @@ mcp = FastMCP(
         "Reli is a personal knowledge graph. Use these tools to search, create, "
         "read, update, and delete Things (tasks, notes, projects, people, ideas, "
         "goals) and the typed relationships between them. "
+        "Use get_preferences and update_preference to load and record the user's "
+        "learned behavioral preferences at session start and end. "
         "Use get_briefing to see what needs attention today (checkin-due items and "
         "sweep findings). Use get_open_questions to find Things with unresolved "
         "knowledge gaps and ask the user proactively. "
@@ -334,6 +336,46 @@ def delete_relationship(relationship_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Server-side intelligence tools
 # ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_preferences() -> list[dict[str, Any]]:
+    """Get all preference Things — the user's learned behavioral preferences.
+
+    Returns Things with type_hint='preference'. Each preference Thing has a
+    patterns array in its data field describing how the user wants the PA to
+    behave (communication style, proactivity level, question frequency, etc.).
+
+    Should be called at session start alongside get_user_profile to load the
+    user's behavioral configuration.
+    """
+    result: list[dict[str, Any]] = _api_get("/api/things/preferences")
+    return result
+
+
+@mcp.tool()
+def update_preference(
+    thing_id: str,
+    patterns: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Update the patterns array on a preference Thing.
+
+    Replaces the patterns array in the Thing's data field without touching
+    other fields. Use this to record behavioral signals observed during
+    a conversation.
+
+    Args:
+        thing_id: UUID of the preference Thing to update.
+        patterns: List of pattern dicts, each with:
+            - pattern (str): Description of the observed preference pattern.
+            - confidence (str): One of 'emerging' (1 obs), 'moderate' (2-3), 'strong' (4+).
+            - observations (int): Number of times this pattern was observed.
+    """
+    result: dict[str, Any] = _api_patch(
+        f"/api/things/{thing_id}/preferences",
+        json_body={"patterns": patterns},
+    )
+    return result
 
 
 @mcp.tool()

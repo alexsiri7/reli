@@ -165,6 +165,80 @@ def get_user_thing(user_id: str = Depends(require_user)) -> UserProfileDetail:
     return UserProfileDetail(thing=thing, relationships=relationships)
 
 
+@router.get("/preferences", response_model=list[Thing], summary="List all preference Things")
+def get_preferences(user_id: str = Depends(require_user)) -> list[Thing]:
+    """Return all Things with type_hint='preference', ordered by priority."""
+    uf_sql, uf_params = user_filter(user_id)
+    with db() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM things WHERE type_hint = 'preference'{uf_sql} ORDER BY priority ASC, updated_at DESC",
+            uf_params,
+        ).fetchall()
+    return [_row_to_thing(r) for r in rows]
+
+
+class PreferencePatternItem(BaseModel):
+    pattern: str
+    confidence: str
+    observations: int
+
+
+class PreferencePatternsUpdate(BaseModel):
+    patterns: list[PreferencePatternItem]
+
+
+VALID_CONFIDENCE = {"emerging", "moderate", "strong"}
+
+
+@router.patch("/{thing_id}/preferences", response_model=Thing, summary="Update patterns on a preference Thing")
+def update_preference_patterns(
+    thing_id: str,
+    body: PreferencePatternsUpdate,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(require_user),
+) -> Thing:
+    """Replace the patterns array in a preference Thing's data field.
+
+    Only updates data.patterns — other data fields and top-level Thing fields
+    are left untouched.
+    """
+    for item in body.patterns:
+        if item.confidence not in VALID_CONFIDENCE:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid confidence '{item.confidence}'. Must be one of: {sorted(VALID_CONFIDENCE)}",
+            )
+        if item.observations < 0:
+            raise HTTPException(status_code=422, detail="observations must be non-negative")
+
+    uf_sql, uf_params = user_filter(user_id)
+    with db() as conn:
+        row = conn.execute(
+            f"SELECT * FROM things WHERE id = ? AND type_hint = 'preference'{uf_sql}",
+            [thing_id, *uf_params],
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Preference Thing '{thing_id}' not found")
+
+        existing_data = row["data"]
+        if isinstance(existing_data, str) and existing_data:
+            try:
+                existing_data = json.loads(existing_data)
+            except (json.JSONDecodeError, ValueError):
+                existing_data = {}
+        if not isinstance(existing_data, dict):
+            existing_data = {}
+
+        existing_data["patterns"] = [p.model_dump() for p in body.patterns]
+        conn.execute(
+            "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
+            [json.dumps(existing_data), datetime.now(timezone.utc).isoformat(), thing_id],
+        )
+        row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+    background_tasks.add_task(upsert_thing, dict(row))
+    return _row_to_thing(row)
+
+
 @router.get("/open-questions", response_model=list[Thing], summary="List Things with open questions")
 def get_open_questions(
     limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),

@@ -18,6 +18,7 @@ from backend.mcp_server import (
     get_briefing,
     get_conflicts,
     get_open_questions,
+    get_preferences,
     get_thing,
     list_relationships,
     mcp,
@@ -28,6 +29,7 @@ from backend.mcp_server import (
     search_things,
     thing_creation_guide,
     thing_schema_reference,
+    update_preference,
     update_thing,
 )
 
@@ -395,6 +397,8 @@ class TestMcpMetadata:
             "get_briefing",
             "get_open_questions",
             "get_conflicts",
+            "get_preferences",
+            "update_preference",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
 
@@ -600,6 +604,73 @@ class TestGetOpenQuestions:
         mock_get.return_value = []
         get_open_questions(limit=999)
         mock_get.assert_called_once_with("/api/things/open-questions", params={"limit": 200})
+
+
+# ---------------------------------------------------------------------------
+# get_preferences
+# ---------------------------------------------------------------------------
+
+
+class TestGetPreferences:
+    @patch("backend.mcp_server._api_get")
+    def test_returns_preference_things(self, mock_get: MagicMock) -> None:
+        prefs = [
+            {
+                "id": "p1",
+                "title": "Communication style",
+                "type_hint": "preference",
+                "data": {"patterns": [{"pattern": "concise", "confidence": "strong", "observations": 5}]},
+            }
+        ]
+        mock_get.return_value = prefs
+        result = get_preferences()
+        mock_get.assert_called_once_with("/api/things/preferences")
+        assert len(result) == 1
+        assert result[0]["type_hint"] == "preference"
+
+    @patch("backend.mcp_server._api_get")
+    def test_empty_when_no_preferences(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        result = get_preferences()
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# update_preference
+# ---------------------------------------------------------------------------
+
+
+class TestUpdatePreference:
+    @patch("backend.mcp_server._api_patch")
+    def test_updates_patterns(self, mock_patch: MagicMock) -> None:
+        updated = {
+            "id": "p1",
+            "title": "Communication style",
+            "type_hint": "preference",
+            "data": {"patterns": [{"pattern": "concise", "confidence": "strong", "observations": 5}]},
+        }
+        mock_patch.return_value = updated
+        patterns = [{"pattern": "concise", "confidence": "strong", "observations": 5}]
+        result = update_preference("p1", patterns)
+        mock_patch.assert_called_once_with(
+            "/api/things/p1/preferences",
+            json_body={"patterns": patterns},
+        )
+        assert result["id"] == "p1"
+        assert result["data"]["patterns"][0]["confidence"] == "strong"
+
+    @patch("backend.mcp_server._api_patch")
+    def test_multiple_patterns(self, mock_patch: MagicMock) -> None:
+        mock_patch.return_value = {"id": "p1"}
+        patterns = [
+            {"pattern": "uses bullet points", "confidence": "emerging", "observations": 1},
+            {"pattern": "prefers brevity", "confidence": "moderate", "observations": 3},
+        ]
+        update_preference("p1", patterns)
+        mock_patch.assert_called_once_with(
+            "/api/things/p1/preferences",
+            json_body={"patterns": patterns},
+        )
 
 
 # ---------------------------------------------------------------------------
