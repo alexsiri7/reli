@@ -63,6 +63,7 @@ def mock_vector_store():
         patch("backend.routers.auth.upsert_thing", return_value=None),
         patch("backend.routers.things.upsert_thing", return_value=None) as mock_upsert,
         patch("backend.routers.things.vs_delete", return_value=None) as mock_delete,
+        patch("backend.routers.things.vector_search", return_value=[]) as mock_vector_search,
         patch("backend.pipeline.vector_count", return_value=0) as mock_count,
         patch("backend.pipeline.vector_search", return_value=[]) as mock_search,
     ):
@@ -71,6 +72,7 @@ def mock_vector_store():
             "delete": mock_delete,
             "count": mock_count,
             "search": mock_search,
+            "vector_search": mock_vector_search,
         }
 
 

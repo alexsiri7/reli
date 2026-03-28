@@ -28,7 +28,7 @@ from ..models import (
     ThingUpdate,
 )
 from ..vector_store import delete_thing as vs_delete
-from ..vector_store import reindex_all, upsert_thing
+from ..vector_store import reindex_all, upsert_thing, vector_search
 
 router = APIRouter(prefix="/things", tags=["things"])
 
@@ -193,11 +193,21 @@ def search_things(
     limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
     user_id: str = Depends(require_user),
 ) -> list[Thing]:
-    """Search Things by text query across title, data, type_hint, and related Things."""
+    """Search Things by hybrid query: SQLite LIKE text search merged with ChromaDB vector similarity."""
     if not q.strip():
         return []
 
     pattern = f"%{q}%"
+
+    # --- Vector search (ChromaDB) — may return empty list if index is empty ---
+    vector_ids = vector_search(
+        queries=[q],
+        n_results=limit,
+        active_only=active_only,
+        type_hint=type_hint,
+        user_id=user_id,
+    )
+
     with db() as conn:
         # Build a WHERE filter applied to all branches of the UNION
         filters = ""
@@ -252,9 +262,24 @@ def search_things(
             " LIMIT ?"
         )
         params = [*direct_params, *rel_params, limit]
-        rows = conn.execute(sql, params).fetchall()
+        sql_rows = conn.execute(sql, params).fetchall()
+        sql_things = [_row_to_thing(r) for r in sql_rows]
 
-    return [_row_to_thing(r) for r in rows]
+        # Merge vector results: fetch any vector IDs not already in SQL results
+        sql_ids = {t.id for t in sql_things}
+        extra_ids = [vid for vid in vector_ids if vid not in sql_ids]
+        vector_things: list[Thing] = []
+        if extra_ids:
+            placeholders = ",".join("?" * len(extra_ids))
+            vec_rows = conn.execute(
+                f"SELECT * FROM things WHERE id IN ({placeholders})",
+                extra_ids,
+            ).fetchall()
+            vector_things = [_row_to_thing(r) for r in vec_rows]
+
+    # SQL matches first (ranked by relevance), then vector-only matches
+    combined = sql_things + vector_things
+    return combined[:limit]
 
 
 @router.get("", response_model=list[Thing], summary="List Things")

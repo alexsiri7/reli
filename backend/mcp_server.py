@@ -145,13 +145,18 @@ def search_things(
 
 @mcp.tool()
 def get_thing(thing_id: str) -> dict[str, Any]:
-    """Get a single Thing by its ID, including all fields.
+    """Get a single Thing by its ID, including all fields and its relationships.
+
+    Returns a dict with two keys:
+    - "thing": the Thing record (all fields)
+    - "relationships": list of all relationships where this Thing is source or target
 
     Args:
         thing_id: The UUID of the Thing to retrieve.
     """
-    result: dict[str, Any] = _api_get(f"/api/things/{thing_id}")
-    return result
+    thing: dict[str, Any] = _api_get(f"/api/things/{thing_id}")
+    relationships: list[dict[str, Any]] = _api_get(f"/api/things/{thing_id}/relationships")
+    return {"thing": thing, "relationships": relationships}
 
 
 @mcp.tool()
