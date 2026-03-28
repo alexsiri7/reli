@@ -216,8 +216,11 @@ async def _run_agent_for_stream(
     total_tokens = 0
     model_name = ""
 
-    # Track previously yielded text length to emit only new characters
+    # Track previously yielded text length to emit only new characters.
+    # Stop yielding once the JSON fence (```json) appears — that block is
+    # post-processing metadata, not user-visible content.
     yielded_length = 0
+    fence_hit = False
 
     async for event in runner.run_async(
         user_id=user_id,
@@ -226,18 +229,36 @@ async def _run_agent_for_stream(
     ):
         if event.content and event.content.parts:
             for part in event.content.parts:
+                if fence_hit:
+                    continue
                 if part.text and event.partial:
                     # Partial events contain the full accumulated text so far.
-                    # Yield only the new portion since the last yield.
-                    new_text = part.text[yielded_length:]
-                    if new_text:
-                        yield new_text
+                    # Yield only the new portion since the last yield, stopping
+                    # at the JSON fence if present.
+                    fence_pos = part.text.find("```json")
+                    if fence_pos != -1 and fence_pos >= yielded_length:
+                        text_before_fence = part.text[yielded_length:fence_pos].rstrip()
+                        if text_before_fence:
+                            yield text_before_fence
+                        fence_hit = True
                         yielded_length = len(part.text)
+                    else:
+                        new_text = part.text[yielded_length:]
+                        if new_text:
+                            yield new_text
+                            yielded_length = len(part.text)
                 elif part.text and not event.partial:
                     # Final (non-partial) event — yield any remaining text
-                    new_text = part.text[yielded_length:]
-                    if new_text:
-                        yield new_text
+                    fence_pos = part.text.find("```json")
+                    if fence_pos != -1 and fence_pos >= yielded_length:
+                        text_before_fence = part.text[yielded_length:fence_pos].rstrip()
+                        if text_before_fence:
+                            yield text_before_fence
+                        fence_hit = True
+                    else:
+                        new_text = part.text[yielded_length:]
+                        if new_text:
+                            yield new_text
                     yielded_length = 0  # Reset for potential multi-turn
 
         if event.usage_metadata:

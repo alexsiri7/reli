@@ -402,8 +402,8 @@ interface ReliState {
   clearThingFilters: () => void
 
   // View mode
-  mainView: 'list' | 'graph'
-  setMainView: (view: 'list' | 'graph') => void
+  mainView: 'list' | 'graph' | 'briefing'
+  setMainView: (view: 'list' | 'graph' | 'briefing') => void
 
   // Chat mode (Hats)
   chatMode: ChatMode

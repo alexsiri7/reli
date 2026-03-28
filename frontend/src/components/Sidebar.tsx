@@ -214,6 +214,16 @@ function MorningBriefingSection({ briefing }: { briefing: MorningBriefing }) {
               ))}
             </div>
           )}
+
+          {/* Link to full briefing page */}
+          <div className="px-4 mt-2 pb-1">
+            <button
+              onClick={() => useStore.getState().setMainView('briefing')}
+              className="text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium"
+            >
+              View full briefing →
+            </button>
+          </div>
         </div>
       )}
     </section>
