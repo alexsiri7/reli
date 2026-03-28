@@ -1,5 +1,7 @@
 """Tests for Things CRUD endpoints."""
 
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 
 from backend.database import db
@@ -361,3 +363,59 @@ class TestOrphanRelationships:
         assert resp.status_code == 200
         assert resp.json()["deleted_count"] == 0
         assert resp.json()["deleted_ids"] == []
+
+
+# ---------------------------------------------------------------------------
+# Hybrid search (SQL LIKE + ChromaDB vector)
+# ---------------------------------------------------------------------------
+
+
+class TestHybridSearch:
+    def test_search_empty_query_returns_empty(self, client):
+        resp = client.get("/api/things/search", params={"q": ""})
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_search_sql_match(self, client):
+        create_thing(client, title="Buy milk")
+        create_thing(client, title="Call dentist")
+        resp = client.get("/api/things/search", params={"q": "milk"})
+        assert resp.status_code == 200
+        data = resp.json()
+        titles = [t["title"] for t in data]
+        assert "Buy milk" in titles
+        assert "Call dentist" not in titles
+
+    def test_search_merges_vector_results(self, client):
+        t1 = create_thing(client, title="Buy milk")
+        t2 = create_thing(client, title="Walk dog")  # won't match SQL for "milk"
+        with patch("backend.routers.things.vector_search", return_value=[t2["id"]]):
+            resp = client.get("/api/things/search", params={"q": "milk"})
+        assert resp.status_code == 200
+        data = resp.json()
+        ids = [t["id"] for t in data]
+        # SQL match comes first
+        assert ids[0] == t1["id"]
+        # Vector-only result appended
+        assert t2["id"] in ids
+
+    def test_search_no_duplicates_when_vector_overlaps_sql(self, client):
+        t1 = create_thing(client, title="Buy milk")
+        # Vector returns the same ID as SQL — should not duplicate
+        with patch("backend.routers.things.vector_search", return_value=[t1["id"]]):
+            resp = client.get("/api/things/search", params={"q": "milk"})
+        assert resp.status_code == 200
+        data = resp.json()
+        ids = [t["id"] for t in data]
+        assert ids.count(t1["id"]) == 1
+
+    def test_search_active_only_filter(self, client):
+        t_active = create_thing(client, title="Active task", active=True)
+        t_inactive = create_thing(client, title="Active task archived")
+        client.patch(f"/api/things/{t_inactive['id']}", json={"active": False})
+        resp = client.get("/api/things/search", params={"q": "Active task", "active_only": True})
+        assert resp.status_code == 200
+        data = resp.json()
+        ids = [t["id"] for t in data]
+        assert t_active["id"] in ids
+        assert t_inactive["id"] not in ids

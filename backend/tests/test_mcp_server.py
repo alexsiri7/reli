@@ -91,18 +91,33 @@ class TestSearchThings:
 
 class TestGetThing:
     @patch("backend.mcp_server._api_get")
-    def test_get_existing(self, mock_get: MagicMock) -> None:
+    def test_get_existing_with_relationships(self, mock_get: MagicMock) -> None:
         thing = {
             "id": "abc-123",
             "title": "My Task",
             "type_hint": "task",
             "priority": 2,
         }
-        mock_get.return_value = thing
+        relationships = [
+            {"id": "rel-1", "from_thing_id": "abc-123", "to_thing_id": "other-1", "relationship_type": "depends_on"}
+        ]
+        mock_get.side_effect = [thing, relationships]
         result = get_thing(thing_id="abc-123")
-        mock_get.assert_called_once_with("/api/things/abc-123")
-        assert result["id"] == "abc-123"
-        assert result["title"] == "My Task"
+        assert mock_get.call_count == 2
+        mock_get.assert_any_call("/api/things/abc-123")
+        mock_get.assert_any_call("/api/things/abc-123/relationships")
+        assert result["thing"]["id"] == "abc-123"
+        assert result["thing"]["title"] == "My Task"
+        assert len(result["relationships"]) == 1
+        assert result["relationships"][0]["relationship_type"] == "depends_on"
+
+    @patch("backend.mcp_server._api_get")
+    def test_get_thing_no_relationships(self, mock_get: MagicMock) -> None:
+        thing = {"id": "abc-123", "title": "My Task", "type_hint": "task", "priority": 2}
+        mock_get.side_effect = [thing, []]
+        result = get_thing(thing_id="abc-123")
+        assert result["thing"]["id"] == "abc-123"
+        assert result["relationships"] == []
 
     @patch("backend.mcp_server._api_get")
     def test_get_not_found(self, mock_get: MagicMock) -> None:
@@ -450,10 +465,11 @@ class TestIntegration:
         assert created["title"] == "MCP Test Thing"
         thing_id = created["id"]
 
-        # Get
+        # Get — returns {"thing": ..., "relationships": [...]}
         fetched = get_thing(thing_id=thing_id)
-        assert fetched["id"] == thing_id
-        assert fetched["type_hint"] == "task"
+        assert fetched["thing"]["id"] == thing_id
+        assert fetched["thing"]["type_hint"] == "task"
+        assert isinstance(fetched["relationships"], list)
 
         # Update
         updated = update_thing(thing_id=thing_id, title="Updated MCP Thing", priority=1)
@@ -471,7 +487,7 @@ class TestIntegration:
 
         # Thing still exists in the DB (soft-deleted)
         fetched_after = get_thing(thing_id=thing_id)
-        assert fetched_after["active"] is False
+        assert fetched_after["thing"]["active"] is False
 
     def test_merge_lifecycle(self, api_server: None) -> None:
         """Create two Things, merge them, verify the duplicate is gone."""
@@ -486,7 +502,7 @@ class TestIntegration:
 
         # Kept thing still exists
         kept = get_thing(thing_id=keep["id"])
-        assert kept["id"] == keep["id"]
+        assert kept["thing"]["id"] == keep["id"]
 
     def test_relationship_lifecycle(self, api_server: None) -> None:
         """Create two Things, link them, list, then delete the relationship."""
