@@ -165,6 +165,26 @@ def get_user_thing(user_id: str = Depends(require_user)) -> UserProfileDetail:
     return UserProfileDetail(thing=thing, relationships=relationships)
 
 
+@router.get("/open-questions", response_model=list[Thing], summary="List Things with open questions")
+def get_open_questions(
+    limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
+    user_id: str = Depends(require_user),
+) -> list[Thing]:
+    """Return active Things that have non-empty open_questions arrays, ordered by priority then recency."""
+    uf_sql, uf_params = user_filter(user_id)
+    with db() as conn:
+        rows = conn.execute(
+            f"""SELECT * FROM things
+               WHERE active = 1
+                 AND open_questions IS NOT NULL
+                 AND open_questions != '[]'{uf_sql}
+               ORDER BY priority ASC, updated_at DESC
+               LIMIT ?""",
+            [*uf_params, limit],
+        ).fetchall()
+    return [_row_to_thing(r) for r in rows]
+
+
 @router.get("/search", response_model=list[Thing], summary="Search Things across the full graph")
 def search_things(
     q: str = Query("", description="Free-text search query matched against title, data, type_hint, and relationships"),
