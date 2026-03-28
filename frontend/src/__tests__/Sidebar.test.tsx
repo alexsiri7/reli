@@ -11,7 +11,7 @@ type Thing = {
   priority: number
   active: boolean
   surface: boolean
-  data: null
+  data: Record<string, unknown> | null
   created_at: string
   updated_at: string
   last_referenced: string | null
