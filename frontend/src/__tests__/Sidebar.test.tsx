@@ -11,7 +11,7 @@ type Thing = {
   priority: number
   active: boolean
   surface: boolean
-  data: null
+  data: Record<string, unknown> | null
   created_at: string
   updated_at: string
   last_referenced: string | null
@@ -241,5 +241,44 @@ describe('Sidebar', () => {
     // Open it again
     fireEvent.click(screen.getByLabelText('Open sidebar'))
     expect(screen.getByLabelText('Close sidebar')).toBeInTheDocument()
+  })
+
+  it('shows Preferences section for preference Things', () => {
+    const pref = makeThing({
+      id: 'p1',
+      title: 'Avoids morning meetings',
+      type_hint: 'preference',
+      data: { confidence: 0.8, category: 'scheduling', evidence: ['obs1', 'obs2', 'obs3'] },
+    })
+    mockState = {
+      things: [pref],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    expect(screen.getByText('Preferences')).toBeInTheDocument()
+    expect(screen.getByText('Avoids morning meetings')).toBeInTheDocument()
+    expect(screen.getByText('Strong')).toBeInTheDocument()
+    expect(screen.getByText('3 obs.')).toBeInTheDocument()
+  })
+
+  it('does not show preference Things in regular type groups', () => {
+    const pref = makeThing({ id: 'p1', title: 'My Preference', type_hint: 'preference', data: null })
+    const task = makeThing({ id: 't2', title: 'My Task', type_hint: 'task', data: null })
+    mockState = {
+      things: [pref, task],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    // 'Tasks' group should exist (for the task) but preference should not appear in it
+    expect(screen.getByText('Tasks')).toBeInTheDocument()
+    expect(screen.getByText('Preferences')).toBeInTheDocument()
+    // The preference title appears only once (in Preferences section, not in Tasks)
+    expect(screen.getAllByText('My Preference')).toHaveLength(1)
   })
 })

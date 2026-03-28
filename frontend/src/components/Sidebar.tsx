@@ -220,6 +220,52 @@ function MorningBriefingSection({ briefing }: { briefing: MorningBriefing }) {
   )
 }
 
+function confidenceLabel(confidence: number): { label: string; className: string } {
+  if (confidence >= 0.7) return { label: 'Strong', className: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950' }
+  if (confidence >= 0.5) return { label: 'Moderate', className: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950' }
+  return { label: 'Emerging', className: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950' }
+}
+
+function PreferenceCard({ thing }: { thing: Thing }) {
+  const openThingDetail = useStore(s => s.openThingDetail)
+  const confidence: number = typeof thing.data?.confidence === 'number' ? thing.data.confidence : 0
+  const evidence: unknown[] = Array.isArray(thing.data?.evidence) ? (thing.data.evidence as unknown[]) : []
+  const category: string = typeof thing.data?.category === 'string' ? thing.data.category : ''
+  const { label, className } = confidenceLabel(confidence)
+
+  return (
+    <div className="px-3 py-1">
+      <div
+        className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors px-2 cursor-pointer border border-transparent hover:border-purple-100 dark:hover:border-purple-900"
+        onClick={() => openThingDetail(thing.id)}
+        role="button"
+      >
+        <span className="text-base leading-none mt-0.5 select-none shrink-0">⚙️</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
+            {thing.title}
+          </p>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${className}`}>
+              {label}
+            </span>
+            {evidence.length > 0 && (
+              <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                {evidence.length} obs.
+              </span>
+            )}
+            {category && (
+              <span className="text-[10px] text-gray-400 dark:text-gray-500 capitalize">
+                {category}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const SIDEBAR_MIN_WIDTH = 200
 const SIDEBAR_MAX_WIDTH = 500
 const SIDEBAR_DEFAULT_WIDTH = 288 // w-72
@@ -377,8 +423,8 @@ export function Sidebar() {
       }
     }
     const projectIds = new Set(active.filter(t => t.type_hint === 'project').map(t => t.id))
-    // Don't show children of projects as standalone items
-    let standalone = active.filter(t => !t.parent_id || !projectIds.has(t.parent_id))
+    // Don't show children of projects or preference Things as standalone items (preferences get their own section)
+    let standalone = active.filter(t => (!t.parent_id || !projectIds.has(t.parent_id)) && t.type_hint !== 'preference')
 
     // Apply client-side filters
     const filterQ = thingFilterQuery.trim().toLowerCase()
@@ -412,6 +458,11 @@ export function Sidebar() {
     }
     return groups
   }, [active, thingTypes, thingFilterQuery, thingFilterTypes])
+
+  // Preference Things — shown in their own dedicated section
+  const preferenceThings = useMemo(() => {
+    return things.filter(t => t.type_hint === 'preference')
+  }, [things])
 
   // Available types for the filter dropdown (derived from active things)
   const availableTypes = useMemo(() => {
@@ -833,6 +884,18 @@ export function Sidebar() {
             {group.items.map(t => <ThingCard key={t.id} thing={t} />)}
           </section>
         ))}
+
+        {/* Preferences — learned behavioral patterns */}
+        {preferenceThings.length > 0 && (
+          <section className="py-2 border-t border-gray-100 dark:border-gray-800">
+            <h2 className="px-4 pb-1 text-xs font-semibold text-purple-400 dark:text-purple-400 uppercase tracking-widest flex items-center gap-1.5">
+              <span>⚙️</span>
+              <span>Preferences</span>
+              <span className="ml-auto text-[10px] font-normal tabular-nums text-gray-400">{preferenceThings.length}</span>
+            </h2>
+            {preferenceThings.map(t => <PreferenceCard key={t.id} thing={t} />)}
+          </section>
+        )}
 
             {/* Upcoming Check-ins */}
             {upcoming.length > 0 && (
