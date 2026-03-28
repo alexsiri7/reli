@@ -1011,6 +1011,145 @@ def find_cross_project_duplicate_effort(
 
 
 # ---------------------------------------------------------------------------
+# Mutation pattern analysis
+# ---------------------------------------------------------------------------
+
+_BULK_DELETE_THRESHOLD = 5  # deactivations within a 1-hour window
+_BULK_FIELD_REMOVAL_THRESHOLD = 5  # data keys removed in a single update
+
+
+def find_suspicious_mutations(
+    conn: sqlite3.Connection,
+    window_hours: int = 24,
+) -> list[SweepCandidate]:
+    """Detect suspicious patterns in recent MCP mutations.
+
+    Checks:
+    - Bulk deactivations: 5+ things deactivated (active set to false) in one hour.
+    - Mass field removal: a single update removes 5+ data keys from a Thing.
+    - Bulk relationship deletions: 5+ relationships deleted in one hour.
+    """
+    candidates: list[SweepCandidate] = []
+
+    # Check if mcp_mutations table exists (may not if DB is pre-migration)
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "mcp_mutations" not in tables:
+        return candidates
+
+    window_start = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
+
+    # 1. Bulk deactivations: update_thing mutations with active=false in a 1h window
+    update_rows = conn.execute(
+        """SELECT id, thing_id, timestamp, before_snapshot, after_snapshot
+           FROM mcp_mutations
+           WHERE operation = 'update_thing'
+             AND timestamp >= ?
+           ORDER BY timestamp""",
+        (window_start,),
+    ).fetchall()
+
+    deactivations: list[tuple[str, str]] = []  # (timestamp, thing_id)
+    for row in update_rows:
+        try:
+            after = json.loads(row["after_snapshot"]) if isinstance(row["after_snapshot"], str) else row["after_snapshot"]
+            if isinstance(after, dict) and after.get("active") in (0, False):
+                before = json.loads(row["before_snapshot"]) if isinstance(row["before_snapshot"], str) else row["before_snapshot"]
+                if isinstance(before, dict) and before.get("active") in (1, True):
+                    deactivations.append((row["timestamp"], row["thing_id"] or ""))
+        except (json.JSONDecodeError, TypeError, KeyError):
+            pass
+
+    # Find if any 1-hour window contains >= threshold deactivations
+    for ts_i, _tid in deactivations:
+        try:
+            t_i = datetime.fromisoformat(ts_i.replace("Z", "+00:00"))
+            group = [
+                d for d in deactivations
+                if abs((datetime.fromisoformat(d[0].replace("Z", "+00:00")) - t_i).total_seconds()) <= 3600
+            ]
+        except Exception:
+            group = []
+        if len(group) >= _BULK_DELETE_THRESHOLD:
+            candidates.append(
+                SweepCandidate(
+                    thing_id=None,
+                    thing_title="MCP mutation alert",
+                    finding_type="suspicious_mutation",
+                    message=(
+                        f"Suspicious activity: {len(group)} Things were deactivated within 1 hour "
+                        f"via MCP (around {ts_i[:16]}). Review the mutations journal with get_mutations."
+                    ),
+                    priority=1,
+                )
+            )
+            break  # one alert per sweep is enough
+
+    # 2. Mass field removal in a single update
+    for row in update_rows:
+        try:
+            before = json.loads(row["before_snapshot"]) if isinstance(row["before_snapshot"], str) else row["before_snapshot"]
+            after = json.loads(row["after_snapshot"]) if isinstance(row["after_snapshot"], str) else row["after_snapshot"]
+            if not isinstance(before, dict) or not isinstance(after, dict):
+                continue
+            before_data = json.loads(before.get("data") or "{}") if isinstance(before.get("data"), str) else (before.get("data") or {})
+            after_data = json.loads(after.get("data") or "{}") if isinstance(after.get("data"), str) else (after.get("data") or {})
+            if not isinstance(before_data, dict) or not isinstance(after_data, dict):
+                continue
+            removed_keys = set(before_data.keys()) - set(after_data.keys())
+            if len(removed_keys) >= _BULK_FIELD_REMOVAL_THRESHOLD:
+                candidates.append(
+                    SweepCandidate(
+                        thing_id=row["thing_id"],
+                        thing_title=str(before.get("title", "Unknown")),
+                        finding_type="suspicious_mutation",
+                        message=(
+                            f"{len(removed_keys)} data fields were removed from "
+                            f"\"{before.get('title', row['thing_id'])}\" in a single MCP update "
+                            f"({', '.join(sorted(removed_keys)[:5])}{'...' if len(removed_keys) > 5 else ''}). "
+                            "Review via get_mutations if this was unintentional."
+                        ),
+                        priority=1,
+                        extra={"removed_keys": list(removed_keys)},
+                    )
+                )
+        except (json.JSONDecodeError, TypeError, KeyError):
+            pass
+
+    # 3. Bulk relationship deletions in 1 hour
+    rel_delete_rows = conn.execute(
+        """SELECT timestamp FROM mcp_mutations
+           WHERE operation = 'delete_relationship'
+             AND timestamp >= ?
+           ORDER BY timestamp""",
+        (window_start,),
+    ).fetchall()
+
+    if len(rel_delete_rows) >= _BULK_DELETE_THRESHOLD:
+        try:
+            times = [datetime.fromisoformat(r["timestamp"].replace("Z", "+00:00")) for r in rel_delete_rows]
+            for i, t_i in enumerate(times):
+                group_count = sum(1 for t in times if abs((t - t_i).total_seconds()) <= 3600)
+                if group_count >= _BULK_DELETE_THRESHOLD:
+                    candidates.append(
+                        SweepCandidate(
+                            thing_id=None,
+                            thing_title="MCP mutation alert",
+                            finding_type="suspicious_mutation",
+                            message=(
+                                f"Suspicious activity: {group_count} relationships were deleted within 1 hour "
+                                f"via MCP. Review the mutations journal with get_mutations."
+                            ),
+                            priority=1,
+                        )
+                    )
+                    break
+        except Exception:
+            pass
+
+    return candidates
+
+
+# ---------------------------------------------------------------------------
 # Main sweep entry point
 # ---------------------------------------------------------------------------
 
@@ -1048,6 +1187,7 @@ def collect_candidates(
             + find_cross_project_resource_conflicts(conn, today, stale_days)
             + find_cross_project_thematic_connections(conn)
             + find_cross_project_duplicate_effort(conn)
+            + find_suspicious_mutations(conn)
         )
 
     # Deduplicate: keep the highest-priority (lowest number) candidate per (thing_id, finding_type)

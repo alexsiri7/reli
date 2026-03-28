@@ -8,9 +8,12 @@ Supports two backends controlled by ``settings.STORAGE_BACKEND``:
 
 from __future__ import annotations
 
+import json
 import sqlite3
+import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -432,6 +435,49 @@ def clean_orphan_relationships() -> tuple[int, list[str]]:
     return len(orphan_ids), orphan_ids
 
 
+def _migrate_mcp_mutations(conn: sqlite3.Connection) -> None:
+    """Create mcp_mutations table and indexes if they don't exist."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS mcp_mutations (
+            id TEXT PRIMARY KEY,
+            timestamp TEXT NOT NULL,
+            client_id TEXT,
+            operation TEXT NOT NULL,
+            thing_id TEXT,
+            before_snapshot TEXT,
+            after_snapshot TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_mcp_mutations_thing ON mcp_mutations(thing_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_mcp_mutations_timestamp ON mcp_mutations(timestamp)")
+
+
+def log_mutation(
+    conn: sqlite3.Connection,
+    operation: str,
+    thing_id: str | None,
+    before: dict | None,
+    after: dict | None,
+    client_id: str | None = None,
+) -> None:
+    """Append a mutation record to mcp_mutations. Never updates or deletes rows."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO mcp_mutations (id, timestamp, client_id, operation, thing_id, before_snapshot, after_snapshot)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            str(uuid.uuid4()),
+            now,
+            client_id,
+            operation,
+            thing_id,
+            json.dumps(before, default=str) if before is not None else None,
+            json.dumps(after, default=str) if after is not None else None,
+        ),
+    )
+
+
 def init_db() -> None:
     """Create tables if they don't exist."""
     if settings.STORAGE_BACKEND == "supabase":
@@ -574,4 +620,5 @@ def init_db() -> None:
         _migrate_connection_suggestions(conn)
         _migrate_morning_briefings(conn)
         _migrate_conversation_summaries(conn)
+        _migrate_mcp_mutations(conn)
         _seed_thing_types(conn)

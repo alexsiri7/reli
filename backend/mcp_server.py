@@ -387,7 +387,33 @@ def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
     return result
 
 
-# ---------------------------------------------------------------------------
+@mcp.tool()
+def get_mutations(
+    thing_id: str | None = None,
+    operation: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Query the MCP mutations journal for audit and rollback purposes.
+
+    Returns a log of write operations performed via MCP, newest first.
+    Each entry includes before/after snapshots of the affected Thing so that
+    manual rollback is possible by examining the journal.
+
+    Args:
+        thing_id: Filter to mutations affecting a specific Thing UUID.
+        operation: Filter by operation type: create_thing, update_thing,
+                   delete_thing, merge_things, create_relationship,
+                   delete_relationship.
+        limit: Maximum number of entries to return (1-500, default 50).
+    """
+    params: dict[str, Any] = {"limit": min(max(limit, 1), 500)}
+    if thing_id:
+        params["thing_id"] = thing_id
+    if operation:
+        params["operation"] = operation
+    result: list[dict[str, Any]] = _api_get("/api/mutations", params=params)
+    return result
+
 
 # ---------------------------------------------------------------------------
 # MCP Prompt Resources — PA behavior guidance for calling agents

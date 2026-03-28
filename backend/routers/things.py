@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from pydantic import BaseModel
 
 from ..auth import require_user, user_filter
-from ..database import clean_orphan_relationships, db
+from ..database import clean_orphan_relationships, db, log_mutation
 from ..models import (
     GraphEdge,
     GraphNode,
@@ -372,6 +372,7 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks, user_id: 
             ),
         )
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+        log_mutation(conn, "create_thing", thing_id, None, dict(row))
     background_tasks.add_task(upsert_thing, dict(row))
     return _row_to_thing(row)
 
@@ -447,6 +448,7 @@ def update_thing(
         row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
+        before_snapshot = dict(row)
 
         if body.parent_id is not None:
             if body.parent_id == thing_id:
@@ -480,6 +482,7 @@ def update_thing(
         values = list(fields.values()) + [thing_id]
         conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
         row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+        log_mutation(conn, "update_thing", thing_id, before_snapshot, dict(row))
     background_tasks.add_task(upsert_thing, dict(row))
     return _row_to_thing(row)
 
@@ -489,10 +492,12 @@ def delete_thing(thing_id: str, background_tasks: BackgroundTasks, user_id: str 
     """Delete a Thing and remove it from the vector index."""
     uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
-        row = conn.execute(f"SELECT id FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
+        row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
+        before_snapshot = dict(row)
         conn.execute(f"DELETE FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params])
+        log_mutation(conn, "delete_thing", thing_id, before_snapshot, None)
     background_tasks.add_task(vs_delete, thing_id)
 
 
@@ -603,6 +608,7 @@ def merge_things(
         if body.keep_id == body.remove_id:
             raise HTTPException(status_code=422, detail="Cannot merge a Thing with itself")
 
+        merge_before = {"keep": dict(keep_row), "remove": dict(remove_row)}
         now = datetime.now(timezone.utc).isoformat()
 
         # 1. Merge data dicts
@@ -705,6 +711,7 @@ def merge_things(
 
         # 7. Re-embed the kept thing
         updated = conn.execute("SELECT * FROM things WHERE id = ?", (body.keep_id,)).fetchone()
+        log_mutation(conn, "merge_things", body.keep_id, merge_before, dict(updated) if updated else None)
 
     background_tasks.add_task(vs_delete, body.remove_id)
     if updated:
@@ -806,6 +813,7 @@ def create_relationship(body: RelationshipCreate, user_id: str = Depends(require
             (rel_id, body.from_thing_id, body.to_thing_id, body.relationship_type, meta_json),
         )
         row = conn.execute("SELECT * FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()
+        log_mutation(conn, "create_relationship", body.from_thing_id, None, dict(row))
     return _parse_rel_row(row)
 
 
@@ -813,7 +821,9 @@ def create_relationship(body: RelationshipCreate, user_id: str = Depends(require
 def delete_relationship(rel_id: str) -> None:
     """Delete a relationship by ID."""
     with db() as conn:
-        row = conn.execute("SELECT id FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()
+        row = conn.execute("SELECT * FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
+        before_snapshot = dict(row)
         conn.execute("DELETE FROM thing_relationships WHERE id = ?", (rel_id,))
+        log_mutation(conn, "delete_relationship", row["from_thing_id"], before_snapshot, None)
