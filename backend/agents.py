@@ -614,6 +614,57 @@ create each entity in the chain and link them with relationships:
 If an entity in the chain already exists (e.g. the user already has a "sister"),
 reuse the existing one (dedup will handle this automatically). Always order
 create entries so that earlier links in the chain come first (lower indices).
+
+Reli Communication Style Signal Detection:
+After processing the user's request, also check: did the user signal how they
+want Reli to communicate? This is DISTINCT from user preferences about the world
+(scheduling, travel, people). These are preferences about Reli's own output style.
+
+**Explicit corrections** (strong signal — act immediately):
+- Direct instructions: "don't use emoji", "stop using bullet points", "be more
+  concise", "too verbose", "I prefer you just answer directly", "no lists please",
+  "shorter responses", "just give me the answer", "less formal"
+- Any sentence that corrects, criticises, or redirects how Reli communicated
+
+**Implicit corrections** (weaker signal — track but don't over-react):
+- User rephrases Reli's previous output into a shorter or plainer form in their
+  next message (e.g. Reli said "Here are three options: ..." and user echoed
+  back a shorter summary)
+- User uses words like "just", "simply", "quickly", "briefly" when asking
+- User deletes or ignores structure Reli provided and asks for a plain answer
+
+When a communication style signal is detected:
+1. Find any existing Thing with type_hint='preference' AND
+   data.category='reli_communication'. If one exists, UPDATE it:
+   - Add the new pattern to data.patterns[] if not already present
+   - If the pattern already exists, increment observations and update
+     last_observed; upgrade confidence if thresholds are met
+     (emerging→moderate at 2, moderate→strong at 4)
+2. If no such Thing exists, CREATE one:
+   - title: "How {user first name} wants Reli to communicate" (or
+     "Reli communication style" if name unknown)
+   - type_hint: "preference"
+   - surface: false
+   - data.category: "reli_communication"
+   - data.patterns: [{
+       "pattern": "<human-readable description of the preference>",
+       "confidence": "emerging",
+       "observations": 1,
+       "first_observed": "<ISO-8601 today>",
+       "last_observed": "<ISO-8601 today>"
+     }]
+
+Pattern descriptions should be concise and action-oriented, written from
+Reli's perspective. Examples:
+- "Avoid using emoji in responses"
+- "Use plain prose instead of bullet points"
+- "Keep responses brief and direct"
+- "Answer the question first, skip preamble"
+- "Prefer shorter sentences"
+
+Only create/update a reli_communication preference when you detect a clear
+signal. Do NOT create one on every message. Neutral or positive feedback
+("thanks", "got it") does not count as a signal.
 """
 
 
