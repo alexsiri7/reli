@@ -282,6 +282,29 @@ def merge_things(keep_id: str, remove_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def get_user_profile() -> dict[str, Any]:
+    """Get the current user's profile Thing with all resolved relationships.
+
+    Returns the user's anchor Thing (type_hint=person, surface=false) — the
+    "who am I" context a calling agent should load at session start.
+
+    Each relationship includes direction (incoming/outgoing), the related
+    Thing's title, and its ID.
+
+    Returns:
+        Dict with:
+        - thing: the user's anchor Thing
+        - relationships: list of {id, relationship_type, direction,
+          related_thing_id, related_thing_title}
+
+    Raises:
+        httpx.HTTPStatusError (404): if no user profile Thing exists.
+    """
+    result: dict[str, Any] = _api_get("/api/things/me")
+    return result
+
+
+@mcp.tool()
 def create_relationship(
     from_thing_id: str,
     to_thing_id: str,

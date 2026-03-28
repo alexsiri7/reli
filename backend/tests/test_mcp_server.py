@@ -18,6 +18,7 @@ from backend.mcp_server import (
     get_briefing,
     get_conflicts,
     get_thing,
+    get_user_profile,
     mcp,
     merge_things,
     pa_behavior_guide,
@@ -244,6 +245,63 @@ class TestMergeThings:
 
 
 # ---------------------------------------------------------------------------
+# get_user_profile
+# ---------------------------------------------------------------------------
+
+
+class TestGetUserProfile:
+    @patch("backend.mcp_server._api_get")
+    def test_returns_profile(self, mock_get: MagicMock) -> None:
+        profile = {
+            "thing": {
+                "id": "u-1",
+                "title": "Alice",
+                "type_hint": "person",
+                "surface": False,
+                "active": True,
+                "priority": 3,
+            },
+            "relationships": [
+                {
+                    "id": "rel-1",
+                    "relationship_type": "works_at",
+                    "direction": "outgoing",
+                    "related_thing_id": "org-1",
+                    "related_thing_title": "Acme Corp",
+                }
+            ],
+        }
+        mock_get.return_value = profile
+        result = get_user_profile()
+        mock_get.assert_called_once_with("/api/things/me")
+        assert result["thing"]["id"] == "u-1"
+        assert result["thing"]["title"] == "Alice"
+        assert len(result["relationships"]) == 1
+        assert result["relationships"][0]["direction"] == "outgoing"
+        assert result["relationships"][0]["related_thing_title"] == "Acme Corp"
+
+    @patch("backend.mcp_server._api_get")
+    def test_no_relationships(self, mock_get: MagicMock) -> None:
+        profile = {
+            "thing": {"id": "u-2", "title": "Bob", "type_hint": "person"},
+            "relationships": [],
+        }
+        mock_get.return_value = profile
+        result = get_user_profile()
+        assert result["relationships"] == []
+
+    @patch("backend.mcp_server._api_get")
+    def test_not_found_raises(self, mock_get: MagicMock) -> None:
+        mock_get.side_effect = httpx.HTTPStatusError(
+            "Not Found",
+            request=httpx.Request("GET", "http://test"),
+            response=httpx.Response(404),
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            get_user_profile()
+
+
+# ---------------------------------------------------------------------------
 # create_relationship
 # ---------------------------------------------------------------------------
 
@@ -350,6 +408,7 @@ class TestMcpMetadata:
             "update_thing",
             "delete_thing",
             "merge_things",
+            "get_user_profile",
             "create_relationship",
             "delete_relationship",
             "get_briefing",
