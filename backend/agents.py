@@ -24,36 +24,26 @@ _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
 
 
 def _load_config() -> dict[str, Any]:
-    """Load config from config.yaml, falling back to defaults."""
-    defaults: dict[str, Any] = {
-        "llm": {
-            "base_url": "https://router.requesty.ai/v1",
-            "models": {
-                "context": "google/gemini-2.5-flash-lite",
-                "reasoning": "google/gemini-2.5-flash",
-                "response": "google/gemini-2.5-flash-lite",
-            },
-        },
-        "ollama": {"base_url": "http://localhost:11434", "model": ""},
-        "embedding": {"model": "text-embedding-3-small"},
-    }
+    """Load config from config.yaml. Errors if the file is missing."""
     try:
         with open(_CONFIG_PATH) as f:
             cfg = yaml.safe_load(f) or {}
-        # Merge top-level keys (config overrides defaults)
-        for key in defaults:
-            if key in cfg:
-                if isinstance(defaults[key], dict) and isinstance(cfg[key], dict):
-                    defaults[key] = {**defaults[key], **cfg[key]}
-                else:
-                    defaults[key] = cfg[key]
-        # Preserve pricing overrides if present
-        if "pricing" in cfg:
-            defaults["pricing"] = cfg["pricing"]
-        return defaults
     except FileNotFoundError:
-        logger.warning("config.yaml not found at %s, using defaults", _CONFIG_PATH)
-        return defaults
+        raise FileNotFoundError(
+            f"config.yaml not found at {_CONFIG_PATH}. "
+            "Copy config.yaml.example to config.yaml and set your models."
+        )
+
+    # Validate required keys
+    if "llm" not in cfg or "models" not in cfg.get("llm", {}):
+        raise ValueError("config.yaml must contain llm.models with context, reasoning, and response entries")
+
+    models = cfg["llm"]["models"]
+    for key in ("context", "reasoning", "response"):
+        if key not in models:
+            raise ValueError(f"config.yaml llm.models.{key} is required")
+
+    return cfg
 
 
 _config = _load_config()
@@ -65,9 +55,9 @@ _config = _load_config()
 REQUESTY_BASE_URL = settings.REQUESTY_BASE_URL or _config["llm"]["base_url"]
 REQUESTY_API_KEY = settings.REQUESTY_API_KEY
 _models = _config["llm"]["models"]
-REQUESTY_MODEL = settings.REQUESTY_MODEL or _models.get("context", "google/gemini-2.5-flash-lite")
-REQUESTY_REASONING_MODEL = settings.REQUESTY_REASONING_MODEL or _models.get("reasoning", "google/gemini-2.5-flash")
-REQUESTY_RESPONSE_MODEL = settings.REQUESTY_RESPONSE_MODEL or _models.get("response", "google/gemini-2.5-flash-lite")
+REQUESTY_MODEL = settings.REQUESTY_MODEL or _models["context"]
+REQUESTY_REASONING_MODEL = settings.REQUESTY_REASONING_MODEL or _models["reasoning"]
+REQUESTY_RESPONSE_MODEL = settings.REQUESTY_RESPONSE_MODEL or _models["response"]
 
 # ---------------------------------------------------------------------------
 # Ollama — optional local LLM for context agent
@@ -90,6 +80,8 @@ _DEFAULT_PRICING: dict[str, tuple[float, float]] = {
     "google/gemini-2.5-flash-preview-05-20": (0.15, 0.60),
     "google/gemini-2.5-flash-lite": (0.10, 0.40),
     "google/gemini-2.5-flash": (0.15, 0.60),
+    "google/gemini-3.1-flash-lite-preview": (0.10, 0.40),
+    "google/gemini-3-flash-preview": (0.15, 0.60),
 }
 
 

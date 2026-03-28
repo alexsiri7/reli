@@ -81,9 +81,9 @@ cd frontend && npm run dev
 llm:
   base_url: https://router.requesty.ai/v1
   models:
-    context: google/gemini-2.5-flash-lite    # Stage 1: query generation (fast/cheap)
-    reasoning: google/gemini-3-flash-preview  # Stage 2: structured decisions
-    response: google/gemini-2.5-flash-lite    # Stage 4: natural language replies
+    context: google/gemini-3.1-flash-lite-preview    # Stage 1: query generation (fast/cheap)
+    reasoning: google/gemini-3-flash-preview         # Stage 2: structured decisions
+    response: google/gemini-3.1-flash-lite-preview    # Stage 4: natural language replies
 
 embedding:
   model: text-embedding-3-small

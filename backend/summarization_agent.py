@@ -1,7 +1,7 @@
 """Summarization agent for conversation compression.
 
 Compresses previous_summary + messages_since into a concise new summary.
-Uses a cheap model (gemini-2.5-flash-lite) to keep costs low. Designed to
+Uses the context (cheap) model from config.yaml to keep costs low. Designed to
 be triggered after every N messages via async background task.
 """
 
@@ -19,8 +19,8 @@ from .llm import acomplete
 
 logger = logging.getLogger(__name__)
 
-# Default model for summarization — cheap and fast
-SUMMARIZATION_MODEL = "google/gemini-2.5-flash-lite"
+# Use the context (cheap) model from config for summarization
+from .agents import REQUESTY_MODEL as SUMMARIZATION_MODEL  # noqa: E402
 
 # Default number of messages before triggering summarization
 DEFAULT_SUMMARY_TRIGGER_N = 20

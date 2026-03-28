@@ -31,17 +31,16 @@ def test_config_yaml_structure():
     assert "embedding" in cfg
 
 
-def test_load_config_defaults(tmp_path):
-    """_load_config falls back to defaults when config.yaml is missing."""
+def test_load_config_errors_when_missing(tmp_path):
+    """_load_config raises FileNotFoundError when config.yaml is missing."""
+    import pytest
+
     from backend.agents import _load_config
 
     missing_path = tmp_path / "nonexistent.yaml"
     with patch("backend.agents._CONFIG_PATH", missing_path):
-        cfg = _load_config()
-
-    assert cfg["llm"]["models"]["reasoning"] == "google/gemini-2.5-flash"
-    assert cfg["llm"]["models"]["context"] == "google/gemini-2.5-flash-lite"
-    assert cfg["llm"]["models"]["response"] == "google/gemini-2.5-flash-lite"
+        with pytest.raises(FileNotFoundError, match="config.yaml not found"):
+            _load_config()
 
 
 def test_load_config_custom(tmp_path):
@@ -80,13 +79,15 @@ def test_per_stage_model_vars():
 
 
 def test_model_pricing_populated():
-    """MODEL_PRICING should contain entries for all configured models."""
+    """MODEL_PRICING should contain entries for configured models."""
     import backend.agents as agents
 
     assert len(agents.MODEL_PRICING) > 0
-    # At minimum, the defaults should be present
-    assert "google/gemini-2.5-flash-lite" in agents.MODEL_PRICING
-    assert "google/gemini-2.5-flash" in agents.MODEL_PRICING
+    # The configured models should have pricing (from API fetch or defaults)
+    for model in (agents.REQUESTY_MODEL, agents.REQUESTY_REASONING_MODEL, agents.REQUESTY_RESPONSE_MODEL):
+        assert model in agents.MODEL_PRICING or agents._strip_provider(model) in {
+            agents._strip_provider(k) for k in agents.MODEL_PRICING
+        }, f"No pricing found for configured model {model}"
 
 
 def test_fetch_requesty_pricing_api_failure():

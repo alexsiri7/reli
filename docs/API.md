@@ -308,9 +308,9 @@ LLM model configuration and per-user preferences.
 **`PUT /api/settings` body:**
 ```json
 {
-  "context_model": "google/gemini-2.5-flash-lite",
+  "context_model": "google/gemini-3.1-flash-lite-preview",
   "reasoning_model": "google/gemini-3-flash-preview",
-  "response_model": "google/gemini-2.5-flash-lite"
+  "response_model": "google/gemini-3.1-flash-lite-preview"
 }
 ```
 
