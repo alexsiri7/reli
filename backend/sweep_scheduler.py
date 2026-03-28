@@ -145,6 +145,22 @@ async def _run_sweep_for_user(user_id: str) -> None:
             except Exception:
                 logger.exception("Preference sweep failed for user %s", user_label)
 
+            # Run communication style aggregation even when no candidates
+            try:
+                from .preference_sweep import aggregate_communication_style_patterns
+
+                comm_result = await aggregate_communication_style_patterns(user_id=user_id)
+                if comm_result.patterns_added or comm_result.patterns_reinforced or comm_result.patterns_removed:
+                    logger.info(
+                        "Comm style sweep [%s]: %d added, %d reinforced, %d removed",
+                        user_label,
+                        comm_result.patterns_added,
+                        comm_result.patterns_reinforced,
+                        comm_result.patterns_removed,
+                    )
+            except Exception:
+                logger.exception("Comm style sweep failed for user %s", user_label)
+
             # Still generate morning briefing (captures priorities, overdue, blockers)
             try:
                 from .morning_briefing import generate_morning_briefing, store_morning_briefing
@@ -172,6 +188,22 @@ async def _run_sweep_for_user(user_id: str) -> None:
                 )
         except Exception:
             logger.exception("Preference sweep failed for user %s", user_label)
+
+        # Communication style aggregation: reinforce reli_communication patterns
+        try:
+            from .preference_sweep import aggregate_communication_style_patterns
+
+            comm_result = await aggregate_communication_style_patterns(user_id=user_id)
+            if comm_result.patterns_added or comm_result.patterns_reinforced or comm_result.patterns_removed:
+                logger.info(
+                    "Comm style sweep [%s]: %d added, %d reinforced, %d removed",
+                    user_label,
+                    comm_result.patterns_added,
+                    comm_result.patterns_reinforced,
+                    comm_result.patterns_removed,
+                )
+        except Exception:
+            logger.exception("Comm style sweep failed for user %s", user_label)
 
         _log_run(
             run_id,
