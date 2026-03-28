@@ -240,6 +240,7 @@ def search_things(
 @router.get("", response_model=list[Thing], summary="List Things")
 def list_things(
     active_only: bool = Query(True, description="Filter to active Things only"),
+    type_hint: str | None = Query(None, description="Filter by type_hint (e.g. 'preference', 'task')"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     user_id: str = Depends(require_user),
@@ -253,6 +254,9 @@ def list_things(
         params.extend(uf_params)
         if active_only:
             where += " AND active = 1"
+        if type_hint:
+            where += " AND type_hint = ?"
+            params.append(type_hint)
         params.extend([limit, offset])
         rows = conn.execute(
             f"SELECT * FROM things {where} ORDER BY checkin_date ASC, priority ASC LIMIT ? OFFSET ?",

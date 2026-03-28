@@ -360,6 +360,52 @@ def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Preference Tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_preferences() -> list[dict[str, Any]]:
+    """Get all user preference Things.
+
+    Returns all Things with type_hint='preference'. Load these at session
+    start to understand the user's communication style, proactivity level,
+    and other behavioral preferences that override the PA defaults.
+    """
+    result: list[dict[str, Any]] = _api_get("/api/things", params={"type_hint": "preference", "active_only": False})
+    return result
+
+
+@mcp.tool()
+def update_preference(
+    thing_id: str,
+    patterns: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Update the patterns array on a preference Thing.
+
+    Only modifies the patterns key inside the Thing's data dict — all other
+    fields (title, priority, etc.) are preserved.
+
+    Args:
+        thing_id: The UUID of the preference Thing to update.
+        patterns: List of pattern objects. Each must have:
+            - pattern (str): Description of the observed preference.
+            - confidence (str): "emerging" (1 obs), "moderate" (2-3), or "strong" (4+).
+            - observations (int): Number of times this pattern was observed.
+    """
+    valid_confidence = {"emerging", "moderate", "strong"}
+    for p in patterns:
+        if p.get("confidence") not in valid_confidence:
+            return {"error": f"Invalid confidence '{p.get('confidence')}'. Must be one of: emerging, moderate, strong"}
+
+    current: dict[str, Any] = _api_get(f"/api/things/{thing_id}")
+    existing_data: dict[str, Any] = current.get("data") or {}
+    updated_data = {**existing_data, "patterns": patterns}
+    result: dict[str, Any] = _api_patch(f"/api/things/{thing_id}", json_body={"data": updated_data})
+    return result
+
+
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # MCP Prompt Resources — PA behavior guidance for calling agents

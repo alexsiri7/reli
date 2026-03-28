@@ -17,6 +17,7 @@ from backend.mcp_server import (
     delete_thing,
     get_briefing,
     get_conflicts,
+    get_preferences,
     get_thing,
     mcp,
     merge_things,
@@ -25,6 +26,7 @@ from backend.mcp_server import (
     relationship_patterns_guide,
     search_things,
     thing_creation_guide,
+    update_preference,
     update_thing,
 )
 
@@ -354,6 +356,8 @@ class TestMcpMetadata:
             "delete_relationship",
             "get_briefing",
             "get_conflicts",
+            "get_preferences",
+            "update_preference",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
 
@@ -943,3 +947,98 @@ class TestTokenAuthMiddleware:
         resp = client.get("/", headers={"Authorization": "Bearer bad"})
         assert resp.status_code == 401
         assert "Bearer" in resp.headers.get("www-authenticate", "")
+
+
+# ---------------------------------------------------------------------------
+# get_preferences
+# ---------------------------------------------------------------------------
+
+
+class TestGetPreferences:
+    @patch("backend.mcp_server._api_get")
+    def test_returns_all_preference_things(self, mock_get: MagicMock) -> None:
+        prefs = [
+            {"id": "p1", "title": "Communication style", "type_hint": "preference", "data": {"patterns": []}},
+            {"id": "p2", "title": "Proactivity level", "type_hint": "preference", "data": {"patterns": []}},
+        ]
+        mock_get.return_value = prefs
+        result = get_preferences()
+        mock_get.assert_called_once_with("/api/things", params={"type_hint": "preference", "active_only": False})
+        assert len(result) == 2
+        assert result[0]["type_hint"] == "preference"
+
+    @patch("backend.mcp_server._api_get")
+    def test_returns_empty_when_no_preferences(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = []
+        result = get_preferences()
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# update_preference
+# ---------------------------------------------------------------------------
+
+
+class TestUpdatePreference:
+    @patch("backend.mcp_server._api_patch")
+    @patch("backend.mcp_server._api_get")
+    def test_updates_patterns_array(self, mock_get: MagicMock, mock_patch: MagicMock) -> None:
+        mock_get.return_value = {
+            "id": "p1",
+            "title": "Communication style",
+            "type_hint": "preference",
+            "data": {"other_field": "preserved"},
+        }
+        updated = {
+            "id": "p1",
+            "title": "Communication style",
+            "type_hint": "preference",
+            "data": {"other_field": "preserved", "patterns": [{"pattern": "Concise", "confidence": "strong", "observations": 5}]},
+        }
+        mock_patch.return_value = updated
+
+        patterns = [{"pattern": "Concise", "confidence": "strong", "observations": 5}]
+        result = update_preference("p1", patterns)
+
+        mock_get.assert_called_once_with("/api/things/p1")
+        mock_patch.assert_called_once_with(
+            "/api/things/p1",
+            json_body={"data": {"other_field": "preserved", "patterns": patterns}},
+        )
+        assert result["data"]["patterns"][0]["confidence"] == "strong"
+
+    @patch("backend.mcp_server._api_patch")
+    @patch("backend.mcp_server._api_get")
+    def test_preserves_existing_data_fields(self, mock_get: MagicMock, mock_patch: MagicMock) -> None:
+        mock_get.return_value = {
+            "id": "p1",
+            "data": {"category": "communication", "patterns": [{"pattern": "Old", "confidence": "emerging", "observations": 1}]},
+        }
+        mock_patch.return_value = {"id": "p1"}
+
+        patterns = [{"pattern": "New", "confidence": "moderate", "observations": 2}]
+        update_preference("p1", patterns)
+
+        call_args = mock_patch.call_args[1]["json_body"]
+        assert call_args["data"]["category"] == "communication"
+        assert call_args["data"]["patterns"] == patterns
+
+    @patch("backend.mcp_server._api_get")
+    def test_rejects_invalid_confidence(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = {"id": "p1", "data": {}}
+        patterns = [{"pattern": "Bad", "confidence": "ultra", "observations": 1}]
+        result = update_preference("p1", patterns)
+        assert "error" in result
+        assert "ultra" in result["error"]
+        mock_get.assert_not_called()
+
+    @patch("backend.mcp_server._api_patch")
+    @patch("backend.mcp_server._api_get")
+    def test_accepts_all_valid_confidence_levels(self, mock_get: MagicMock, mock_patch: MagicMock) -> None:
+        mock_get.return_value = {"id": "p1", "data": {}}
+        mock_patch.return_value = {"id": "p1"}
+
+        for level in ["emerging", "moderate", "strong"]:
+            patterns = [{"pattern": "x", "confidence": level, "observations": 1}]
+            result = update_preference("p1", patterns)
+            assert "error" not in result
