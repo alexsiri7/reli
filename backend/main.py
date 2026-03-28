@@ -25,7 +25,7 @@ init_tracing()
 
 from fastapi import Depends, FastAPI, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import FileResponse  # noqa: E402
+from fastapi.responses import FileResponse, RedirectResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
 from starlette.responses import Response as StarletteResponse  # noqa: E402
@@ -293,6 +293,14 @@ def metrics() -> StarletteResponse:
 # MCP server — Streamable HTTP transport, mounted at /mcp
 # Protected by MCP_API_TOKEN bearer token (empty = dev/open mode)
 app.mount("/mcp", create_mcp_asgi_app(_app_settings.MCP_API_TOKEN))
+
+
+# Redirect bare /mcp to /mcp/ so the mount catches it
+# (Starlette mount only matches /mcp/... not bare /mcp)
+@app.api_route("/mcp", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
+def mcp_redirect(request: Request) -> RedirectResponse:
+    url = str(request.url)
+    return RedirectResponse(url=url.rstrip("/") + "/", status_code=307)
 
 # Serve React SPA (only when the built dist directory exists)
 if _FRONTEND_DIST.is_dir():
