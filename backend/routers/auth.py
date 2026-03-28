@@ -133,7 +133,12 @@ def google_login() -> dict:
 
 @router.get("/google/callback", include_in_schema=False)
 def google_callback(code: str, state: str = "") -> RedirectResponse:
-    """Exchange authorization code for tokens, create session."""
+    """Exchange authorization code for tokens, create session.
+
+    When the flow was initiated by /oauth/authorize (MCP OAuth), redirects
+    back to the MCP client's redirect_uri with an authorization code instead
+    of setting a session cookie.
+    """
     if not SECRET_KEY:
         raise HTTPException(status_code=501, detail="SECRET_KEY not configured")
 
@@ -178,8 +183,29 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
         return RedirectResponse(url="/?error=invite_only")
 
     user_id = _upsert_user(google_id, email, name, picture)
-    token = _create_jwt(user_id, email)
 
+    # Check if this callback was initiated by an MCP OAuth flow
+    from ..oauth_state import pop_mcp_flow, store_auth_code
+
+    mcp_flow = pop_mcp_flow(state)
+    if mcp_flow is not None:
+        # MCP OAuth path: issue an authorization code and redirect to the MCP client
+        import urllib.parse
+
+        auth_code = store_auth_code(
+            user_id=user_id,
+            email=email,
+            code_challenge=mcp_flow.code_challenge,
+            code_challenge_method=mcp_flow.code_challenge_method,
+            redirect_uri=mcp_flow.redirect_uri,
+        )
+        params = {"code": auth_code, "state": mcp_flow.original_state}
+        redirect_url = mcp_flow.redirect_uri + "?" + urllib.parse.urlencode(params)
+        logger.info("MCP OAuth: redirecting to %s", mcp_flow.redirect_uri)
+        return RedirectResponse(url=redirect_url)
+
+    # Web UI path: create JWT session cookie and redirect to app
+    token = _create_jwt(user_id, email)
     redirect = RedirectResponse(url="/")
     redirect.set_cookie(
         key=COOKIE_NAME,

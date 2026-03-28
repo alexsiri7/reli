@@ -1076,7 +1076,9 @@ class TestMCPTools:
 class TestTokenAuthMiddleware:
     """Test the ASGI middleware that guards the /mcp endpoint."""
 
-    def _make_client(self, mcp_api_token: str) -> TestClient:
+    _SECRET = "test-secret-key-32-bytes-padding!!"
+
+    def _make_client(self, secret_key: str) -> TestClient:
         """Wrap a trivial echo app with _TokenAuthMiddleware."""
         from starlette.applications import Starlette
         from starlette.requests import Request
@@ -1089,33 +1091,45 @@ class TestTokenAuthMiddleware:
             return PlainTextResponse("ok")
 
         inner = Starlette(routes=[Route("/", echo)])
-        wrapped = _TokenAuthMiddleware(inner, mcp_api_token)
+        wrapped = _TokenAuthMiddleware(inner, secret_key)
         return TestClient(wrapped, raise_server_exceptions=True)
 
-    def test_correct_token_allowed(self) -> None:
-        client = self._make_client("secret-token")
-        resp = client.get("/", headers={"Authorization": "Bearer secret-token"})
+    def _make_jwt(self, secret: str) -> str:
+        payload = {"sub": "u-test", "email": "test@example.com", "exp": 9999999999}
+        return jwt.encode(payload, secret, algorithm="HS256")
+
+    def test_valid_jwt_allowed(self) -> None:
+        client = self._make_client(self._SECRET)
+        token = self._make_jwt(self._SECRET)
+        resp = client.get("/", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200
         assert resp.text == "ok"
 
-    def test_wrong_token_rejected(self) -> None:
-        client = self._make_client("secret-token")
-        resp = client.get("/", headers={"Authorization": "Bearer wrong"})
+    def test_jwt_signed_with_wrong_key_rejected(self) -> None:
+        client = self._make_client(self._SECRET)
+        token = self._make_jwt("wrong-key-32-bytes-padding!!!!!!!")
+        resp = client.get("/", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 401
+
+    def test_static_token_rejected(self) -> None:
+        """Plain strings are no longer valid — must be a JWT."""
+        client = self._make_client(self._SECRET)
+        resp = client.get("/", headers={"Authorization": "Bearer plain-static-token"})
         assert resp.status_code == 401
 
     def test_missing_auth_header_rejected(self) -> None:
-        client = self._make_client("secret-token")
+        client = self._make_client(self._SECRET)
         resp = client.get("/")
         assert resp.status_code == 401
 
-    def test_empty_token_allows_all(self) -> None:
-        """Empty MCP_API_TOKEN = dev mode, no auth required."""
+    def test_empty_secret_allows_all(self) -> None:
+        """Empty secret_key = dev mode, no auth required."""
         client = self._make_client("")
         resp = client.get("/")
         assert resp.status_code == 200
 
     def test_www_authenticate_header_on_401(self) -> None:
-        client = self._make_client("secret-token")
+        client = self._make_client(self._SECRET)
         resp = client.get("/", headers={"Authorization": "Bearer bad"})
         assert resp.status_code == 401
         assert "Bearer" in resp.headers.get("www-authenticate", "")

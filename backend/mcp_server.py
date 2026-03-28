@@ -924,25 +924,34 @@ def reli_think(
 
 
 class _TokenAuthMiddleware:
-    """ASGI middleware that enforces Bearer token authentication.
+    """ASGI middleware that enforces JWT Bearer token authentication.
 
-    If ``mcp_api_token`` is empty, all requests are allowed (dev mode).
-    Otherwise, requests must carry ``Authorization: Bearer <token>``.
+    If ``secret_key`` is empty, all requests are allowed (dev mode).
+    Otherwise, requests must carry ``Authorization: Bearer <jwt>`` where
+    the JWT was issued by the /oauth/token endpoint (HS256, signed with
+    the same SECRET_KEY used for web UI sessions).
     """
 
-    def __init__(self, app: ASGIApp, mcp_api_token: str) -> None:
+    def __init__(self, app: ASGIApp, secret_key: str) -> None:
         self._app = app
-        self._token = mcp_api_token
+        self._secret_key = secret_key
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] not in ("http", "websocket"):
             await self._app(scope, receive, send)
             return
 
-        if self._token:
+        if self._secret_key:
+            import jwt as pyjwt
+
             headers = dict(scope.get("headers", []))
             auth_header = headers.get(b"authorization", b"").decode()
-            if auth_header != f"Bearer {self._token}":
+            token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+            try:
+                if not token:
+                    raise ValueError("missing token")
+                pyjwt.decode(token, self._secret_key, algorithms=["HS256"])
+            except Exception:
                 response = Response(
                     content='{"detail":"Unauthorized"}',
                     status_code=401,
@@ -955,19 +964,20 @@ class _TokenAuthMiddleware:
         await self._app(scope, receive, send)
 
 
-def create_mcp_asgi_app(mcp_api_token: str = "") -> ASGIApp:
-    """Return the MCP Streamable HTTP ASGI app, wrapped with token auth.
+def create_mcp_asgi_app(secret_key: str = "") -> ASGIApp:
+    """Return the MCP Streamable HTTP ASGI app, wrapped with JWT auth.
 
     Mount this at ``/mcp`` in the FastAPI app:
 
         from backend.mcp_server import create_mcp_asgi_app
-        app.mount("/mcp", create_mcp_asgi_app(settings.MCP_API_TOKEN))
+        app.mount("/mcp", create_mcp_asgi_app(settings.SECRET_KEY))
 
     Args:
-        mcp_api_token: Required Bearer token. Empty string disables auth (dev mode).
+        secret_key: JWT signing secret (SECRET_KEY). Empty string disables
+                    auth (dev mode — any request is allowed).
     """
     starlette_app = mcp.streamable_http_app()
-    return _TokenAuthMiddleware(starlette_app, mcp_api_token)
+    return _TokenAuthMiddleware(starlette_app, secret_key)
 
 
 # ---------------------------------------------------------------------------

@@ -46,6 +46,7 @@ from .routers import (  # noqa: E402
     feedback,
     focus,
     gmail,
+    oauth,
     proactive,
     settings,
     staleness,
@@ -216,6 +217,9 @@ app.add_middleware(SentryUserContextMiddleware)
 # Auth routes are public (login/callback/logout)
 app.include_router(auth.router, prefix="/api")
 
+# MCP OAuth endpoints — public, mounted at root (/.well-known/*, /oauth/*)
+app.include_router(oauth.router)
+
 # All other /api routes require a valid JWT session
 _api_deps = [Depends(require_user)]
 
@@ -287,8 +291,8 @@ def metrics() -> StarletteResponse:
 
 
 # MCP server — Streamable HTTP transport, mounted at /mcp
-# Protected by MCP_API_TOKEN bearer token (empty = dev/open mode)
-app.mount("/mcp", create_mcp_asgi_app(_app_settings.MCP_API_TOKEN))
+# Protected by JWT bearer token signed with SECRET_KEY (empty = dev/open mode)
+app.mount("/mcp", create_mcp_asgi_app(_app_settings.SECRET_KEY))
 
 # Serve React SPA (only when the built dist directory exists)
 if _FRONTEND_DIST.is_dir():
