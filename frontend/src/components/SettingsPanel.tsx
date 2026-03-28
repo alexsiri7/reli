@@ -264,6 +264,12 @@ function SettingsForm({
             onChange={setResponse}
           />
         </div>
+        <ModelCostSummary
+          contextModel={context}
+          reasoningModel={reasoning}
+          responseModel={response}
+          models={models}
+        />
       </div>
 
       <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
@@ -743,6 +749,16 @@ function formatCost(cost: number | null | undefined): string {
   return `$${cost.toFixed(2)}`
 }
 
+/** Format cost in per-1K-token units (more intuitive than per 1M) */
+function formatCostPer1K(costPerMillion: number | null | undefined): string {
+  if (costPerMillion == null) return '—'
+  const per1k = costPerMillion / 1000
+  if (per1k < 0.0001) return '<$0.0001'
+  if (per1k < 0.001) return `$${per1k.toFixed(4)}`
+  if (per1k < 0.01) return `$${per1k.toFixed(3)}`
+  return `$${per1k.toFixed(2)}`
+}
+
 function parseModelId(id: string): { provider: string; name: string } {
   const slash = id.indexOf('/')
   if (slash === -1) return { provider: '', name: id }
@@ -808,6 +824,72 @@ const MODEL_PRESETS: ModelPreset[] = [
     response: 'google/gemini-2.5-flash',
   },
 ]
+
+function ModelCostSummary({
+  contextModel,
+  reasoningModel,
+  responseModel,
+  models,
+}: {
+  contextModel: string
+  reasoningModel: string
+  responseModel: string
+  models: RequestyModel[]
+}) {
+  const modelMap = useMemo(() => {
+    const map = new Map<string, RequestyModel>()
+    for (const m of models) map.set(m.id, m)
+    return map
+  }, [models])
+
+  const ctx = modelMap.get(contextModel)
+  const rsn = modelMap.get(reasoningModel)
+  const rsp = modelMap.get(responseModel)
+
+  const hasCosts = ctx?.input_cost_per_million != null || rsn?.input_cost_per_million != null || rsp?.input_cost_per_million != null
+
+  if (!hasCosts) return null
+
+  const rows: { label: string; model: RequestyModel | undefined; id: string }[] = [
+    { label: 'Context', model: ctx, id: contextModel },
+    { label: 'Reasoning', model: rsn, id: reasoningModel },
+    { label: 'Response', model: rsp, id: responseModel },
+  ]
+
+  return (
+    <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Cost per 1K tokens</div>
+      <div className="space-y-1.5">
+        {rows.map(({ label, model, id }) => {
+          const { name } = parseModelId(id)
+          const displayName = model?.name ?? name
+          const inp = model?.input_cost_per_million
+          const out = model?.output_cost_per_million
+          const tier = model ? costTier(model) : 'unknown'
+          const ts = COST_TIER_STYLES[tier]
+          return (
+            <div key={label} className="flex items-center gap-2 text-xs">
+              <span className="w-16 text-gray-500 dark:text-gray-400 shrink-0">{label}</span>
+              <span className="flex-1 text-gray-700 dark:text-gray-300 truncate" title={id}>{displayName}</span>
+              {inp != null ? (
+                <span className="shrink-0 text-gray-500 dark:text-gray-400 tabular-nums">
+                  <span className="text-gray-700 dark:text-gray-300">{formatCostPer1K(inp)}</span>
+                  {' '}in
+                  {out != null && <> / <span className="text-gray-700 dark:text-gray-300">{formatCostPer1K(out)}</span> out</>}
+                </span>
+              ) : (
+                <span className="shrink-0 text-gray-400">—</span>
+              )}
+              <span className={`shrink-0 text-[9px] font-semibold uppercase px-1 py-0.5 rounded border ${ts.bg} ${ts.color}`}>
+                {ts.label}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 function ModelPicker({
   label,
