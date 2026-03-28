@@ -75,7 +75,11 @@ def _tool_names_in_order(actual_names: list[str], expected_names: list[str]) -> 
 
 
 async def _run_single_case(agent, case) -> tuple[bool, str]:
-    """Run a single eval case. Returns (passed, detail)."""
+    """Run a single eval case. Returns (passed, detail).
+
+    For multi-turn cases, all turns must pass. A turn with no expected
+    tool calls passes if the agent produces a response (even without tools).
+    """
     user_sim = UserSimulatorProvider().provide(case)
     invocations = await EvaluationGenerator._generate_inferences_from_root_agent(
         root_agent=agent,
@@ -85,19 +89,29 @@ async def _run_single_case(agent, case) -> tuple[bool, str]:
     if not invocations:
         return False, f"{case.eval_id}: no invocations returned"
 
-    for actual_inv, expected_inv in zip(invocations, case.conversation):
+    expected_turns = len(case.conversation)
+    if len(invocations) < expected_turns:
+        return False, (
+            f"{case.eval_id}: expected {expected_turns} turns, got {len(invocations)}"
+        )
+
+    for i, (actual_inv, expected_inv) in enumerate(zip(invocations, case.conversation)):
         actual_tools = get_all_tool_calls(actual_inv.intermediate_data)
         expected_tools = get_all_tool_calls(expected_inv.intermediate_data)
 
         actual_names: list[str] = [tc.name for tc in actual_tools if tc.name]
         expected_names: list[str] = [tc.name for tc in expected_tools if tc.name]
 
-        if _tool_names_in_order(actual_names, expected_names):
-            return True, f"{case.eval_id}: OK ({actual_names})"
-        else:
-            return False, f"{case.eval_id}: expected {expected_names}, got {actual_names}"
+        # If no tools expected, the turn passes as long as it ran
+        if not expected_names:
+            continue
 
-    return False, f"{case.eval_id}: no conversation turns"
+        if not _tool_names_in_order(actual_names, expected_names):
+            return False, (
+                f"{case.eval_id} turn {i + 1}: expected {expected_names}, got {actual_names}"
+            )
+
+    return True, f"{case.eval_id}: OK ({len(invocations)} turns)"
 
 
 async def _run_tool_name_eval(
@@ -149,6 +163,15 @@ async def test_reasoning_agent_create_thing() -> None:
     await _run_tool_name_eval(
         agent_module="eval.reasoning_agent.agent",
         test_file=str(EVAL_ROOT / "reasoning_agent" / "create_thing.test.json"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_reasoning_agent_multi_turn() -> None:
+    """Eval: reasoning agent — multi-turn conversation (catches thought_signature regressions)."""
+    await _run_tool_name_eval(
+        agent_module="eval.reasoning_agent.agent",
+        test_file=str(EVAL_ROOT / "reasoning_agent" / "multi_turn.test.json"),
     )
 
 
