@@ -25,6 +25,7 @@ from backend.mcp_server import (
     relationship_patterns_guide,
     search_things,
     thing_creation_guide,
+    thing_schema_reference,
     update_thing,
 )
 
@@ -660,6 +661,58 @@ class TestPromptResources:
         assert "overridable" in result.lower() or "override" in result.lower()
         assert "preference" in result.lower()
 
+    def test_thing_schema_reference_returns_string(self) -> None:
+        result = thing_schema_reference()
+        assert isinstance(result, str)
+        assert "Thing Schema Reference" in result
+
+    def test_thing_schema_reference_covers_all_fields(self) -> None:
+        result = thing_schema_reference()
+        for field in (
+            "title",
+            "type_hint",
+            "parent_id",
+            "checkin_date",
+            "priority",
+            "active",
+            "surface",
+            "data",
+            "open_questions",
+        ):
+            assert field in result, f"Missing field '{field}'"
+
+    def test_thing_schema_reference_covers_type_hints(self) -> None:
+        result = thing_schema_reference()
+        for hint in (
+            "task",
+            "note",
+            "idea",
+            "project",
+            "goal",
+            "person",
+            "place",
+            "event",
+            "preference",
+        ):
+            assert hint in result, f"Missing type_hint '{hint}'"
+
+    def test_thing_schema_reference_covers_confidence_levels(self) -> None:
+        result = thing_schema_reference()
+        assert "emerging" in result
+        assert "moderate" in result
+        assert "strong" in result
+        assert "confidence" in result
+
+    def test_thing_schema_reference_covers_relationship_types(self) -> None:
+        result = thing_schema_reference()
+        for rtype in ("parent-of", "child-of", "depends-on", "blocks", "related-to"):
+            assert rtype in result, f"Missing relationship type '{rtype}'"
+
+    def test_thing_schema_reference_covers_open_questions(self) -> None:
+        result = thing_schema_reference()
+        assert "open_questions" in result
+        assert "knowledge gap" in result.lower() or "unresolved" in result.lower()
+
     def test_prompts_registered_on_mcp_server(self) -> None:
         """Verify all prompts are registered on the FastMCP server instance."""
         import asyncio
@@ -670,6 +723,7 @@ class TestPromptResources:
         assert "relationship-patterns" in names
         assert "proactive-surfacing" in names
         assert "pa-behavior" in names
+        assert "thing-schema" in names
 
     def test_prompts_have_descriptions(self) -> None:
         """Each prompt must have a non-empty description."""
