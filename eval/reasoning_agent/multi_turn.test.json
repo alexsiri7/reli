@@ -1,0 +1,190 @@
+{
+  "eval_set_id": "reasoning-multi-turn",
+  "name": "Reasoning Agent — Multi-turn Conversation",
+  "description": "Tests that the reasoning agent handles follow-up messages correctly, including referencing Things created in previous turns. Catches thought_signature and history corruption regressions.",
+  "eval_cases": [
+    {
+      "eval_id": "create-then-update",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nI have a meeting with Tom next Tuesday\n</user_message>\n\nRelevant Things from database:\n[]"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Created meeting and Tom.\", \"briefing_mode\": false}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {"title": "Tom"},
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {"title": "Meeting with Tom"},
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "id": null,
+                "name": "create_thing",
+                "response": {"id": "eval-thing-0001", "title": "Tom", "type_hint": "person"}
+              },
+              {
+                "id": null,
+                "name": "create_thing",
+                "response": {"id": "eval-thing-0002", "title": "Meeting with Tom", "type_hint": "event"}
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        },
+        {
+          "invocation_id": "inv-2",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nActually make that Wednesday instead\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"eval-thing-0002\", \"title\": \"Meeting with Tom\", \"type_hint\": \"event\"}]"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Updated meeting date.\", \"briefing_mode\": false}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {"thing_id": "eval-thing-0002"},
+                "name": "update_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "id": null,
+                "name": "update_thing",
+                "response": {"id": "eval-thing-0002", "title": "Meeting with Tom"}
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "create-then-ask-about-it",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nRemember that my energy contract expires in June\n</user_message>\n\nRelevant Things from database:\n[]"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Created energy contract Thing.\", \"briefing_mode\": false}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": null,
+                "args": {"title": "Energy contract"},
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              }
+            ],
+            "tool_responses": [
+              {
+                "id": null,
+                "name": "create_thing",
+                "response": {"id": "eval-thing-0003", "title": "Energy contract", "type_hint": "task"}
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        },
+        {
+          "invocation_id": "inv-2",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Today's date: 2026-03-28 (Saturday)\n\n<user_message>\nWhen does my energy contract expire again?\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"eval-thing-0003\", \"title\": \"Energy contract\", \"type_hint\": \"task\", \"data\": {\"expiry\": \"June 2026\"}}]"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"questions_for_user\": [], \"priority_question\": \"\", \"reasoning_summary\": \"Answered from context.\", \"briefing_mode\": false}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "conversation_scenario": null,
+      "session_input": null,
+      "creation_timestamp": 0.0,
+      "rubrics": null,
+      "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}
