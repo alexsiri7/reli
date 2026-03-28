@@ -448,7 +448,14 @@ Look for:
 - User says "simpler", "shorter", "brief", "quick", "tldr" in a follow-up
 - User appears to be correcting Reli's response length or style
 
-For each detected pattern, describe it briefly (e.g., "avoids emoji",
+**Positive engagement signals** (reinforce existing patterns):
+- User expresses satisfaction after Reli's response: "thanks", "perfect", "exactly",
+  "that's helpful", "great", "love it", "exactly what I needed", "that was clear"
+- These signal the current communication style is appreciated
+- Add matching existing patterns to "reinforced" (the style is working)
+- Do NOT add new patterns from positive signals alone
+
+For each detected correction pattern, describe it briefly (e.g., "avoids emoji",
 "prefers concise responses", "no bullet points").
 
 Also look for contradictions — if the user explicitly reverses a prior preference

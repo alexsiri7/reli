@@ -673,3 +673,61 @@ class TestAggregateCommunicationStylePatterns:
         assert result.patterns_added == 0
         assert result.patterns_reinforced == 0
         assert result.patterns_removed == 0
+
+    @pytest.mark.asyncio
+    async def test_positive_engagement_reinforces_existing_patterns(self, patched_db):
+        """Positive signals ('thanks', 'perfect') reinforce existing established patterns."""
+        comm_data = {
+            "category": "reli_communication",
+            "patterns": [
+                {"pattern": "prefers concise responses", "confidence": "established", "observations": 3},
+                {"pattern": "no emoji", "confidence": "strong", "observations": 5},
+            ],
+        }
+        with db() as conn:
+            _insert_thing(conn, "pref-comm", "How user wants Reli to communicate", type_hint="preference", data=comm_data)
+            for i in range(MIN_INTERACTIONS + 2):
+                _insert_chat_message(conn, "user", f"Message {i}")
+                _insert_chat_message(conn, "assistant", f"Response {i}")
+            _insert_chat_message(conn, "user", "Perfect, thanks! Exactly what I needed.")
+
+        # LLM detects positive engagement and returns existing patterns as "reinforced"
+        llm_response = json.dumps({
+            "detected": [],
+            "reinforced": ["prefers concise responses", "no emoji"],
+            "contradicted": [],
+        })
+
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
+            result = await aggregate_communication_style_patterns()
+
+        assert result.patterns_reinforced == 2
+        assert result.patterns_added == 0
+        assert result.patterns_removed == 0
+
+        with db() as conn:
+            row = conn.execute("SELECT data FROM things WHERE id = 'pref-comm'").fetchone()
+        data = json.loads(row["data"])
+        pattern_map = {p["pattern"]: p for p in data["patterns"]}
+        assert pattern_map["prefers concise responses"]["observations"] == 4
+        assert pattern_map["no emoji"]["observations"] == 6
+        assert pattern_map["no emoji"]["confidence"] == "strong"
+
+    @pytest.mark.asyncio
+    async def test_positive_engagement_no_existing_preference_does_nothing(self, patched_db):
+        """Positive signals with no existing preferences should not create new ones."""
+        with db() as conn:
+            for i in range(MIN_INTERACTIONS + 2):
+                _insert_chat_message(conn, "user", f"Message {i}")
+                _insert_chat_message(conn, "assistant", f"Response {i}")
+            _insert_chat_message(conn, "user", "Thanks, that was helpful!")
+
+        # LLM finds nothing to detect or reinforce (no existing patterns)
+        llm_response = json.dumps({"detected": [], "reinforced": [], "contradicted": []})
+
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
+            result = await aggregate_communication_style_patterns()
+
+        assert result.patterns_added == 0
+        assert result.patterns_reinforced == 0
+        assert result.thing_id is None
