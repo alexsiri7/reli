@@ -5,6 +5,7 @@ Implements the MCP Authorization spec (https://modelcontextprotocol.io/specifica
   - GET  /.well-known/oauth-authorization-server (RFC 8414)
   - GET  /oauth/authorize  — redirect to Google, then back to client with auth code
   - POST /oauth/token      — exchange auth code + PKCE verifier for JWT
+  - POST /oauth/register   — dynamic client registration (RFC 7591)
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..config import settings
-from ..oauth_state import mcp_auth_codes, mcp_oauth_sessions
+from ..oauth_state import mcp_auth_codes, mcp_oauth_sessions, mcp_registered_clients
 from .auth import AUTH_SCOPES, GOOGLE_REDIRECT_URI, _client_config, _create_jwt, _upsert_user
 
 logger = logging.getLogger(__name__)
@@ -67,11 +68,58 @@ def authorization_server_metadata() -> JSONResponse:
         "issuer": base,
         "authorization_endpoint": f"{base}/oauth/authorize",
         "token_endpoint": f"{base}/oauth/token",
+        "registration_endpoint": f"{base}/oauth/register",
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code"],
         "code_challenge_methods_supported": ["S256"],
         "scopes_supported": ["mcp"],
     })
+
+
+# ---------------------------------------------------------------------------
+# RFC 7591: Dynamic Client Registration
+# ---------------------------------------------------------------------------
+
+
+@router.post("/oauth/register", include_in_schema=False)
+async def oauth_register(request: Request) -> JSONResponse:
+    """Register a new OAuth client dynamically (RFC 7591).
+
+    Single-tenant: accepts any registration request and stores the client
+    in memory. No approval flow needed.
+    """
+    body = await request.json()
+
+    client_id = str(uuid.uuid4())
+    client_secret = secrets.token_urlsafe(32)
+
+    client = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uris": body.get("redirect_uris", []),
+        "client_name": body.get("client_name", ""),
+        "grant_types": body.get("grant_types", ["authorization_code"]),
+        "response_types": body.get("response_types", ["code"]),
+        "token_endpoint_auth_method": body.get("token_endpoint_auth_method", "client_secret_post"),
+        "scope": body.get("scope", "mcp"),
+    }
+    mcp_registered_clients[client_id] = client
+
+    logger.info("MCP OAuth: registered client %s (%s)", client_id, client.get("client_name"))
+
+    return JSONResponse(
+        content={
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uris": client["redirect_uris"],
+            "client_name": client["client_name"],
+            "grant_types": client["grant_types"],
+            "response_types": client["response_types"],
+            "token_endpoint_auth_method": client["token_endpoint_auth_method"],
+            "scope": client["scope"],
+        },
+        status_code=201,
+    )
 
 
 # ---------------------------------------------------------------------------
