@@ -92,11 +92,6 @@ export function CommandPalette() {
 
   const [activeIdx, setActiveIdx] = useState(0)
 
-  // Reset active index when query changes
-  useEffect(() => {
-    setActiveIdx(0)
-  }, [query])
-
   // Focus input on open
   useEffect(() => {
     inputRef.current?.focus()
@@ -144,7 +139,7 @@ export function CommandPalette() {
             type="text"
             placeholder="Search commands…"
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => { setQuery(e.target.value); setActiveIdx(0) }}
             onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
           />
