@@ -1,5 +1,3 @@
-from sqlmodel import Session
-
 """Settings endpoints: per-user settings in DB with config.yaml fallback."""
 
 import logging
@@ -10,10 +8,11 @@ import httpx
 import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlmodel import Session, select
 
 from ..auth import require_user
 import backend.db_engine as _engine_mod
-from ..db_engine import _exec
+from ..db_models import UserSettingRecord
 from ..http_client import get_http_client
 
 logger = logging.getLogger(__name__)
@@ -141,11 +140,13 @@ def get_user_setting(user_id: str, key: str) -> str | None:
     if not user_id:
         return None
     with Session(_engine_mod.engine) as session:
-        row = _exec(session, 
-            "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
-            (user_id, key),
-        ).fetchone()
-    return row.value if row else None
+        record = session.exec(
+            select(UserSettingRecord).where(
+                UserSettingRecord.user_id == user_id,
+                UserSettingRecord.key == key,
+            )
+        ).first()
+    return record.value if record else None
 
 
 def get_user_settings_dict(user_id: str) -> dict[str, str]:
@@ -153,21 +154,33 @@ def get_user_settings_dict(user_id: str) -> dict[str, str]:
     if not user_id:
         return {}
     with Session(_engine_mod.engine) as session:
-        rows = _exec(session, 
-            "SELECT key, value FROM user_settings WHERE user_id = ?",
-            (user_id,),
-        ).fetchall()
-    return {row.key: row.value for row in rows}
+        records = session.exec(
+            select(UserSettingRecord).where(UserSettingRecord.user_id == user_id)
+        ).all()
+    return {r.key: r.value for r in records}
 
 
-def _set_user_setting(conn: Any, user_id: str, key: str, value: str) -> None:
+def _set_user_setting(session_or_conn: Any, user_id: str, key: str, value: str) -> None:
     """Upsert a single user setting."""
-    _exec(conn,
-        """INSERT INTO user_settings (user_id, key, value, updated_at)
-           VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP""",
-        (user_id, key, value),
-    )
+    from datetime import datetime, timezone
+
+    # Accept either a Session or legacy connection
+    sess: Session = session_or_conn  # type: ignore[assignment]
+    existing = sess.exec(
+        select(UserSettingRecord).where(
+            UserSettingRecord.user_id == user_id,
+            UserSettingRecord.key == key,
+        )
+    ).first()
+    now = datetime.now(timezone.utc)
+    if existing:
+        existing.value = value
+        existing.updated_at = now
+        sess.add(existing)
+    else:
+        record = UserSettingRecord(user_id=user_id, key=key, value=value, updated_at=now)
+        sess.add(record)
+    sess.commit()
 
 
 def get_user_chat_context_window(user_id: str) -> int:
