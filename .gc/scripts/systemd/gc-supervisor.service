@@ -1,0 +1,15 @@
+[Unit]
+Description=Gas City Supervisor
+After=network.target
+
+[Service]
+Type=simple
+User=asiri
+ExecStart=/home/asiri/go/bin/gc supervisor run
+Restart=always
+RestartSec=5
+Environment=HOME=/home/asiri
+Environment=PATH=/home/asiri/go/bin:/home/asiri/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target
