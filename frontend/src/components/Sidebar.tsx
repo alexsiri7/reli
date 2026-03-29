@@ -537,24 +537,26 @@ export function Sidebar() {
             </p>
           </div>
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setMainView(mainView === 'list' ? 'graph' : 'list')}
-              aria-label={mainView === 'graph' ? 'Switch to list view' : 'Switch to graph view'}
-              title={mainView === 'graph' ? 'List view' : 'Graph view'}
-              className={`p-1.5 rounded-lg transition-colors ${
-                mainView === 'graph'
-                  ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
-                  : 'text-gray-400 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'
-              }`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                {mainView === 'graph' ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zm9 0a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zm-4.5 9a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zM7.5 7.5h9M12 12.75v3" />
-                )}
-              </svg>
-            </button>
+            {mainView !== 'briefing' && (
+              <button
+                onClick={() => setMainView(mainView === 'graph' ? 'list' : 'graph')}
+                aria-label={mainView === 'graph' ? 'Switch to list view' : 'Switch to graph view'}
+                title={mainView === 'graph' ? 'List view' : 'Graph view'}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  mainView === 'graph'
+                    ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
+                    : 'text-gray-400 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  {mainView === 'graph' ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zm9 0a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zm-4.5 9a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zM7.5 7.5h9M12 12.75v3" />
+                  )}
+                </svg>
+              </button>
+            )}
             {currentUser && (
               <div className="relative" ref={userMenuRef}>
                 {currentUser.picture ? (
@@ -637,6 +639,32 @@ export function Sidebar() {
             )}
           </div>
         </div>
+
+        {/* View tabs: Briefing / All Things */}
+        {!isSearching && (
+          <div className="flex border-b border-gray-200 dark:border-gray-800 shrink-0">
+            <button
+              onClick={() => setMainView('briefing')}
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                mainView === 'briefing'
+                  ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400 -mb-px'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              Briefing
+            </button>
+            <button
+              onClick={() => setMainView(mainView === 'graph' ? 'graph' : 'list')}
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                mainView === 'list' || mainView === 'graph'
+                  ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400 -mb-px'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              All Things
+            </button>
+          </div>
+        )}
 
         {/* Search results */}
         {isSearching ? (
