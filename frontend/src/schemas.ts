@@ -18,7 +18,8 @@ export const ThingSchema = z.object({
   type_hint: z.string().nullable(),
   parent_id: z.string().nullable(),
   checkin_date: z.string().nullable(),
-  priority: z.number(),
+  priority: z.number().optional(),
+  importance: z.number(),
   active: z.boolean(),
   surface: z.boolean(),
   data: z.record(z.string(), z.unknown()).nullable(),
@@ -124,9 +125,21 @@ export const SweepFindingSchema = z.object({
   thing: ThingSchema.nullable(),
 })
 
+export const BriefingItemSchema = z.object({
+  thing: ThingSchema,
+  importance: z.number(),
+  urgency: z.number(),
+  score: z.number(),
+  reasons: z.array(z.string()),
+})
+
 export const BriefingResponseSchema = z.object({
-  things: z.array(ThingSchema).optional(),
+  the_one_thing: BriefingItemSchema.nullable().optional(),
+  secondary: z.array(BriefingItemSchema).optional(),
+  parking_lot: z.array(z.record(z.string(), z.unknown())).optional(),
   findings: z.array(SweepFindingSchema).optional(),
+  total: z.number().optional(),
+  stats: z.record(z.string(), z.number()).optional(),
 })
 
 // --- Morning Briefing ---

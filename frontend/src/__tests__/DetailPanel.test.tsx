@@ -24,6 +24,7 @@ const baseThing: Thing = {
   parent_id: null,
   checkin_date: null,
   priority: 2,
+  importance: 2,
   active: true,
   surface: true,
   data: null,
@@ -72,9 +73,9 @@ describe('DetailPanel', () => {
     expect(screen.getByText((_, el) => el?.textContent?.includes('task') && el?.classList?.contains('capitalize') || false)).toBeInTheDocument()
   })
 
-  it('renders priority label', () => {
+  it('renders importance label', () => {
     render(<DetailPanel />)
-    expect(screen.getByText(/High/)).toBeInTheDocument()
+    expect(screen.getByText(/Medium/)).toBeInTheDocument()
   })
 
   it('renders loading skeleton when loading', () => {

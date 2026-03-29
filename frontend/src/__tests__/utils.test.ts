@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { typeIcon, formatDate, priorityLabel, formatTimestamp, isOverdue } from '../utils'
+import { typeIcon, formatDate, importanceLabel, formatTimestamp, isOverdue } from '../utils'
 
 describe('typeIcon', () => {
   it('returns fallback icon for null hint', () => {
@@ -85,17 +85,17 @@ describe('formatDate', () => {
   })
 })
 
-describe('priorityLabel', () => {
-  it('returns labeled string for known priorities', () => {
-    expect(priorityLabel(1)).toBe('🔴 Critical')
-    expect(priorityLabel(2)).toBe('🟠 High')
-    expect(priorityLabel(3)).toBe('🟡 Medium')
-    expect(priorityLabel(4)).toBe('🔵 Low')
-    expect(priorityLabel(5)).toBe('⚪ None')
+describe('importanceLabel', () => {
+  it('returns labeled string for known importance levels', () => {
+    expect(importanceLabel(0)).toBe('🔴 Critical')
+    expect(importanceLabel(1)).toBe('🟠 High')
+    expect(importanceLabel(2)).toBe('🟡 Medium')
+    expect(importanceLabel(3)).toBe('🔵 Low')
+    expect(importanceLabel(4)).toBe('⚪ Backlog')
   })
 
-  it('returns fallback for unknown priority', () => {
-    expect(priorityLabel(99)).toBe('Priority 99')
+  it('returns fallback for unknown importance', () => {
+    expect(importanceLabel(99)).toBe('Importance 99')
   })
 })
 

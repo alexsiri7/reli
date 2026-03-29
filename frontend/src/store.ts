@@ -51,7 +51,8 @@ export interface Thing {
   type_hint: TypeHint | null
   parent_id: string | null
   checkin_date: string | null
-  priority: number
+  priority?: number
+  importance: number
   active: boolean
   surface: boolean
   data: Record<string, unknown> | null
@@ -773,7 +774,10 @@ export const useStore = create<ReliState>((set, get) => ({
       const res = await apiFetch(`${BASE}/briefing`)
       if (!res.ok) return
       const data = validateResponse(BriefingResponseSchema, await res.json(), '/briefing')
-      const things = data.things ?? []
+      // Extract Things from the importance × urgency scored response
+      const things: Thing[] = []
+      if (data.the_one_thing) things.push(data.the_one_thing.thing)
+      for (const item of data.secondary ?? []) things.push(item.thing)
       const findings = data.findings ?? []
       set({ briefing: things, findings })
       cacheBriefing(things, findings).catch(() => {})
