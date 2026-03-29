@@ -736,6 +736,12 @@ export function ChatPanel() {
   const prevScrollHeightRef = useRef<number>(0)
   const isLoadingOlderRef = useRef(false)
 
+  // Register focus function for keyboard shortcut (/)
+  const registerChatInputFocus = useStore(s => s.registerChatInputFocus)
+  useEffect(() => {
+    registerChatInputFocus(() => inputRef.current?.focus())
+  }, [registerChatInputFocus])
+
   // Scroll to bottom instantly on initial mount
   const hasMountScrolled = useRef(false)
   useEffect(() => {
