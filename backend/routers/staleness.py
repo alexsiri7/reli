@@ -1,11 +1,16 @@
-"""Staleness & neglect detection endpoint — batch summary for notifications."""
+"""Staleness & neglect detection endpoint -- batch summary for notifications."""
 
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
+from sqlmodel import Session, select
 
-from ..auth import require_user, user_filter
+from ..db_engine import get_session, user_filter_clause
+from ..db_models import ThingRecord
+
+from ..auth import require_user
 from ..database import db
+from ..auth import user_filter
 from ..models import (
     OverdueCheckin,
     StaleItem,
@@ -14,7 +19,7 @@ from ..models import (
 )
 from ..sweep import _parse_date_value
 from .settings import get_user_stale_threshold
-from .things import _row_to_thing
+from .things import _record_to_thing, _row_to_thing
 
 router = APIRouter(prefix="/staleness", tags=["staleness"])
 
@@ -25,25 +30,21 @@ def get_staleness_report(
         default=None,
         ge=1,
         le=365,
-        description="Override staleness threshold (days). Uses per-user setting if omitted.",
+        description="Override staleness threshold (days).",
     ),
     user_id: str = Depends(require_user),
 ) -> StalenessReport:
-    """Return a batch summary of stale and neglected Things.
-
-    Stale: active Things not updated within *stale_days*.
-    Neglected: stale Things that also have high priority or pending children.
-    Overdue check-ins: active Things whose checkin_date is in the past.
-    """
+    """Return a batch summary of stale and neglected Things."""
     today = date.today()
     threshold = stale_days if stale_days is not None else get_user_stale_threshold(user_id)
     cutoff = today.isoformat()
     stale_cutoff = (today - timedelta(days=threshold)).isoformat()
 
+    # Use raw SQL for the subquery (active_children count)
+    # TODO: convert to SQLModel query
     uf_sql, uf_params = user_filter(user_id)
 
     with db() as conn:
-        # Stale / neglected items
         stale_rows = conn.execute(
             f"""SELECT t.*,
                        (SELECT COUNT(*) FROM things c
@@ -55,7 +56,6 @@ def get_staleness_report(
             [stale_cutoff, *uf_params],
         ).fetchall()
 
-        # Overdue check-ins
         overdue_rows = conn.execute(
             f"""SELECT * FROM things
                 WHERE active = 1

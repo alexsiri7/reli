@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
 from ..auth import require_user, user_filter
-from ..database import db, get_latest_summary
+from ..database import db, get_latest_summary  # db still used for complex queries
 from ..models import (
     CallUsage,
     ChatMessage,

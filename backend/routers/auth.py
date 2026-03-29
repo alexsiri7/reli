@@ -13,8 +13,13 @@ from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from google_auth_oauthlib.flow import Flow
 
+from sqlmodel import Session
+
+import backend.db_engine as _engine_mod
+from ..db_models import UserRecord, ThingRecord
+
 from ..config import settings
-from ..database import db
+from ..database import db  # Still used for _create_user_thing until full migration
 from ..oauth_state import mcp_auth_codes, mcp_oauth_sessions
 from ..vector_store import upsert_thing
 
@@ -75,29 +80,40 @@ def _decode_jwt(token: str) -> dict[str, str]:
 
 def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> str:
     """Create or update a user from Google profile info. Returns user_id."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     user_id: str
-    with db() as conn:
-        row = conn.execute("SELECT id FROM users WHERE google_id = ?", (google_id,)).fetchone()
-        if row:
-            user_id = row["id"]
-            conn.execute(
-                "UPDATE users SET email = ?, name = ?, picture = ?, updated_at = ? WHERE id = ?",
-                (email, name, picture, now, user_id),
-            )
+    with Session(_engine_mod.engine) as session:
+        from sqlmodel import select
+        existing = session.exec(
+            select(UserRecord).where(UserRecord.google_id == google_id)
+        ).first()
+        if existing:
+            user_id = existing.id
+            existing.email = email
+            existing.name = name
+            existing.picture = picture
+            existing.updated_at = now
+            session.add(existing)
+            session.commit()
         else:
             user_id = f"u-{uuid.uuid4().hex[:12]}"
-            conn.execute(
-                """INSERT INTO users (id, email, google_id, name, picture, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (user_id, email, google_id, name, picture, now, now),
+            user_record = UserRecord(
+                id=user_id,
+                email=email,
+                google_id=google_id,
+                name=name,
+                picture=picture,
+                created_at=now,
+                updated_at=now,
             )
-            _create_user_thing(conn, user_id, name, email, google_id, now)
+            session.add(user_record)
+            session.commit()
+            _create_user_thing_sqlmodel(session, user_id, name, email, google_id, now)
     return user_id
 
 
 def _create_user_thing(conn: sqlite3.Connection, user_id: str, name: str, email: str, google_id: str, now: str) -> None:
-    """Create a Thing representing the user as their anchor node."""
+    """Create a Thing representing the user as their anchor node. Legacy sqlite3 version."""
     thing_id = str(uuid.uuid4())
     data_json = json.dumps({"email": email, "google_id": google_id})
     conn.execute(
@@ -113,6 +129,30 @@ def _create_user_thing(conn: sqlite3.Connection, user_id: str, name: str, email:
             upsert_thing(dict(row))
         except Exception:
             logger.warning("Failed to index user Thing %s in vector store", thing_id)
+
+
+def _create_user_thing_sqlmodel(
+    session: Session, user_id: str, name: str, email: str, google_id: str, now: datetime
+) -> None:
+    """Create a Thing representing the user as their anchor node. SQLModel version."""
+    record = ThingRecord(
+        title=name,
+        type_hint="person",
+        importance=2,
+        active=True,
+        surface=False,
+        data={"email": email, "google_id": google_id},
+        created_at=now,
+        updated_at=now,
+        user_id=user_id,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    try:
+        upsert_thing(record.model_dump())
+    except Exception:
+        logger.warning("Failed to index user Thing %s in vector store", record.id)
 
 
 @router.get("/google", summary="Start Google OAuth flow")
@@ -238,16 +278,16 @@ def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
     user_id = payload.get("sub")
-    with db() as conn:
-        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    if not row:
+    with Session(_engine_mod.engine) as session:
+        user = session.get(UserRecord, user_id)
+    if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
     return {
-        "id": row["id"],
-        "email": row["email"],
-        "name": row["name"],
-        "picture": row["picture"],
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "picture": user.picture,
     }
 
 
