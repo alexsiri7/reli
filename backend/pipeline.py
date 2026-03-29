@@ -8,7 +8,6 @@ tool (formerly a separate pipeline stage). The pipeline handles:
 
 import json
 import logging
-import sqlite3
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -19,7 +18,10 @@ from .agents import (
     UsageStats,
 )
 from .auth import user_filter
-from .database import db
+from sqlmodel import Session
+
+import backend.db_engine as _engine_mod
+from .db_engine import _exec
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
 from .reasoning_agent import run_reasoning_agent
@@ -90,41 +92,41 @@ def _parse_thing_open_questions(thing: dict[str, Any]) -> dict[str, Any]:
     return thing
 
 
-def _sql_things_count(conn: sqlite3.Connection) -> int:
+def _sql_things_count(session: Session) -> int:
     """Return total number of Things in SQLite."""
-    row = conn.execute("SELECT COUNT(*) as cnt FROM things").fetchone()
-    return row["cnt"] if row else 0
+    row = _exec(session, "SELECT COUNT(*) as cnt FROM things").fetchone()
+    return row.cnt if row else 0
 
 
-def _fetch_with_family(conn: sqlite3.Connection, seed_ids: list[str]) -> list[dict[str, Any]]:
+def _fetch_with_family(session: Session, seed_ids: list[str]) -> list[dict[str, Any]]:
     """Given seed Thing IDs, return those Things plus their parents, children, and related Things via relationships."""
     seen_ids: set[str] = set()
     results: list[dict] = []
 
-    def _add_row(row: sqlite3.Row) -> None:
-        if row["id"] not in seen_ids:
-            seen_ids.add(row["id"])
-            results.append(_parse_thing_open_questions(dict(row)))
+    def _add_row(row) -> None:  # type: ignore[type-arg]
+        if row.id not in seen_ids:
+            seen_ids.add(row.id)
+            results.append(_parse_thing_open_questions(row._asdict()))
 
     for thing_id in seed_ids:
-        row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+        row = _exec(session, "SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
         if row:
             _add_row(row)
-            if row["parent_id"]:
-                parent = conn.execute("SELECT * FROM things WHERE id = ?", (row["parent_id"],)).fetchone()
+            if row.parent_id:
+                parent = _exec(session, "SELECT * FROM things WHERE id = ?", (row.parent_id,)).fetchone()
                 if parent:
                     _add_row(parent)
-            children = conn.execute("SELECT * FROM things WHERE parent_id = ?", (thing_id,)).fetchall()
+            children = _exec(session, "SELECT * FROM things WHERE parent_id = ?", (thing_id,)).fetchall()
             for child in children:
                 _add_row(child)
-            rels = conn.execute(
+            rels = _exec(session, 
                 "SELECT * FROM thing_relationships WHERE from_thing_id = ? OR to_thing_id = ?",
                 (thing_id, thing_id),
             ).fetchall()
             for rel in rels:
-                other_id = rel["to_thing_id"] if rel["from_thing_id"] == thing_id else rel["from_thing_id"]
+                other_id = rel.to_thing_id if rel.from_thing_id == thing_id else rel.from_thing_id
                 if other_id not in seen_ids:
-                    other = conn.execute("SELECT * FROM things WHERE id = ?", (other_id,)).fetchone()
+                    other = _exec(session, "SELECT * FROM things WHERE id = ?", (other_id,)).fetchone()
                     if other:
                         _add_row(other)
 
@@ -132,7 +134,7 @@ def _fetch_with_family(conn: sqlite3.Connection, seed_ids: list[str]) -> list[di
 
 
 def _fetch_user_relationships(
-    conn: sqlite3.Connection,
+    session: Session,
     user_thing_id: str,
     search_queries: list[str],
     user_id: str = "",
@@ -141,7 +143,7 @@ def _fetch_user_relationships(
     if not user_thing_id or not search_queries:
         return []
 
-    rels = conn.execute(
+    rels = _exec(session, 
         "SELECT * FROM thing_relationships WHERE from_thing_id = ? OR to_thing_id = ?",
         (user_thing_id, user_thing_id),
     ).fetchall()
@@ -150,7 +152,7 @@ def _fetch_user_relationships(
 
     other_ids: list[str] = []
     for rel in rels:
-        other_id = rel["to_thing_id"] if rel["from_thing_id"] == user_thing_id else rel["from_thing_id"]
+        other_id = rel.to_thing_id if rel.from_thing_id == user_thing_id else rel.from_thing_id
         other_ids.append(other_id)
 
     if not other_ids:
@@ -178,25 +180,25 @@ def _fetch_user_relationships(
         " LIMIT 10"
     )
     params: list = [*other_ids, *uf_params, *like_params]
-    rows = conn.execute(sql, params).fetchall()
+    rows = _exec(session, sql, params).fetchall()
     logger.info(
         "User relationship search: %d edges, %d query-matched (queries=%r)",
         len(other_ids),
         len(rows),
         search_queries[:3],
     )
-    return [_parse_thing_open_questions(dict(r)) for r in rows]
+    return [_parse_thing_open_questions(r._asdict()) for r in rows]
 
 
-def _fetch_user_thing(conn: sqlite3.Connection, user_id: str) -> dict[str, Any] | None:
+def _fetch_user_thing(session: Session, user_id: str) -> dict[str, Any] | None:
     """Fetch the user's own Thing (type_hint='person', matching user_id)."""
     if not user_id:
         return None
-    row = conn.execute(
+    row = _exec(session, 
         "SELECT * FROM things WHERE user_id = ? AND type_hint = 'person' LIMIT 1",
         (user_id,),
     ).fetchone()
-    return _parse_thing_open_questions(dict(row)) if row else None
+    return _parse_thing_open_questions(row._asdict()) if row else None
 
 
 def _fetch_warm_context(
@@ -211,8 +213,8 @@ def _fetch_warm_context(
     reasoning agent recent context without needing a fetch_context tool call.
     """
     uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        rows = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        rows = _exec(session, 
             "SELECT applied_changes FROM chat_history"
             f" WHERE session_id = ? AND role = 'assistant'{uf_sql}"
             " ORDER BY id DESC LIMIT ?",
@@ -222,7 +224,7 @@ def _fetch_warm_context(
         thing_ids: list[str] = []
         seen: set[str] = set()
         for row in rows:
-            raw = row["applied_changes"]
+            raw = row.applied_changes
             if not raw:
                 continue
             try:
@@ -240,11 +242,11 @@ def _fetch_warm_context(
         if not thing_ids:
             return []
 
-        return _fetch_with_family(conn, thing_ids)
+        return _fetch_with_family(session, thing_ids)
 
 
 def _fetch_relevant_things(
-    conn: sqlite3.Connection,
+    session: Session,
     search_queries: list[str],
     filter_params: dict[str, Any],
     user_id: str = "",
@@ -254,14 +256,14 @@ def _fetch_relevant_things(
     type_hint = filter_params.get("type_hint")
     uf_sql, uf_params = user_filter(user_id)
 
-    user_thing = _fetch_user_thing(conn, user_id)
+    user_thing = _fetch_user_thing(session, user_id)
     seen_ids: set[str] = set()
     results: list[dict[str, Any]] = []
     if user_thing:
         seen_ids.add(user_thing["id"])
         results.append(user_thing)
 
-        user_rels = _fetch_user_relationships(conn, user_thing["id"], search_queries, user_id)
+        user_rels = _fetch_user_relationships(session, user_thing["id"], search_queries, user_id)
         for rel_thing in user_rels:
             if rel_thing["id"] not in seen_ids:
                 seen_ids.add(rel_thing["id"])
@@ -269,7 +271,7 @@ def _fetch_relevant_things(
 
     vc = vector_count()
     use_vector = vc >= VECTOR_SEARCH_THRESHOLD
-    sql_thing_count = _sql_things_count(conn)
+    sql_thing_count = _sql_things_count(session)
 
     logger.info(
         "Retrieval strategy: vector_count=%d, sql_things=%d, threshold=%d, use_vector=%s, active_only=%s, type_hint=%r",
@@ -309,12 +311,12 @@ def _fetch_relevant_things(
                 sql += " AND type_hint = ?"
                 params.append(type_hint)
             sql += " ORDER BY updated_at DESC LIMIT 20"
-            matches = conn.execute(sql, params).fetchall()
+            matches = _exec(session, sql, params).fetchall()
             logger.info("SQL LIKE query=%r matched %d rows", query, len(matches))
             for row in matches:
-                if row["id"] not in seen_sql:
-                    seen_sql.add(row["id"])
-                    seed_ids.append(row["id"])
+                if row.id not in seen_sql:
+                    seen_sql.add(row.id)
+                    seed_ids.append(row.id)
 
     # Preference boost: run a dedicated search for preference Things so they always
     # surface when their topic matches, ranked above entity Things.
@@ -343,10 +345,10 @@ def _fetch_relevant_things(
                 if active_only:
                     pref_sql += " AND active = 1"
                 pref_sql += " ORDER BY updated_at DESC LIMIT 10"
-                for row in conn.execute(pref_sql, pref_params_list).fetchall():
-                    if row["id"] not in pref_seen:
-                        pref_seen.add(row["id"])
-                        preference_ids.append(row["id"])
+                for row in _exec(session, pref_sql, pref_params_list).fetchall():
+                    if row.id not in pref_seen:
+                        pref_seen.add(row.id)
+                        preference_ids.append(row.id)
         if preference_ids:
             pref_set = set(preference_ids)
             seed_ids = preference_ids + [sid for sid in seed_ids if sid not in pref_set]
@@ -354,7 +356,7 @@ def _fetch_relevant_things(
 
     logger.info("Total seed IDs before hydration: %d", len(seed_ids))
 
-    family_results = _fetch_with_family(conn, seed_ids)
+    family_results = _fetch_with_family(session, seed_ids)
     logger.info("After family expansion: %d Things", len(family_results))
 
     for thing in family_results:
@@ -364,10 +366,10 @@ def _fetch_relevant_things(
 
     if len(results) < 5:
         recent_sql = "SELECT * FROM things WHERE active = 1" + uf_sql + " ORDER BY updated_at DESC LIMIT 10"
-        for row in conn.execute(recent_sql, uf_params).fetchall():
-            if row["id"] not in seen_ids:
-                seen_ids.add(row["id"])
-                results.append(_parse_thing_open_questions(dict(row)))
+        for row in _exec(session, recent_sql, uf_params).fetchall():
+            if row.id not in seen_ids:
+                seen_ids.add(row.id)
+                results.append(_parse_thing_open_questions(row._asdict()))
 
     # -----------------------------------------------------------------------
     # Preference boost: ensure preference Things matching the topic are
@@ -400,15 +402,15 @@ def _fetch_relevant_things(
             if active_only:
                 pref_sql += " AND active = 1"
             pref_sql += " ORDER BY updated_at DESC LIMIT 10"
-            for row in conn.execute(pref_sql, pref_params).fetchall():
-                if row["id"] not in {*pref_ids}:
-                    pref_ids.append(row["id"])
+            for row in _exec(session, pref_sql, pref_params).fetchall():
+                if row.id not in {*pref_ids}:
+                    pref_ids.append(row.id)
 
     if pref_ids:
         # Hydrate any preference Things not already in results
         new_pref_ids = [pid for pid in pref_ids if pid not in seen_ids]
         if new_pref_ids:
-            pref_things = _fetch_with_family(conn, new_pref_ids)
+            pref_things = _fetch_with_family(session, new_pref_ids)
             for t in pref_things:
                 if t["id"] not in seen_ids:
                     seen_ids.add(t["id"])

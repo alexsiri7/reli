@@ -13,7 +13,10 @@ import uuid
 from datetime import date, datetime, timezone
 
 from .auth import user_filter
-from .database import db
+from sqlmodel import Session
+
+import backend.db_engine as _engine_mod
+from .db_engine import _exec
 from .models import (
     BriefingPreferences,
     MorningBriefingContent,
@@ -67,17 +70,17 @@ def get_briefing_preferences(user_id: str) -> BriefingPreferences:
     if not user_id:
         return BriefingPreferences()
 
-    with db() as conn:
-        row = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        row = _exec(session, 
             "SELECT value FROM user_settings WHERE user_id = ? AND key = 'briefing_preferences'",
             (user_id,),
         ).fetchone()
 
-    if not row or not row["value"]:
+    if not row or not row.value:
         return BriefingPreferences()
 
     try:
-        data = json.loads(row["value"])
+        data = json.loads(row.value)
         return BriefingPreferences(**data)
     except (json.JSONDecodeError, TypeError, ValueError):
         return BriefingPreferences()
@@ -87,14 +90,15 @@ def save_briefing_preferences(user_id: str, prefs: BriefingPreferences) -> None:
     """Save briefing preferences to user_settings."""
     if not user_id:
         return  # No user to save for (legacy single-user mode)
-    with db() as conn:
-        conn.execute(
+    with Session(_engine_mod.engine) as session:
+        _exec(session,
             """INSERT INTO user_settings (user_id, key, value, updated_at)
                VALUES (?, 'briefing_preferences', ?, CURRENT_TIMESTAMP)
                ON CONFLICT(user_id, key) DO UPDATE SET
                  value = excluded.value, updated_at = CURRENT_TIMESTAMP""",
             (user_id, prefs.model_dump_json()),
         )
+        session.commit()
 
 
 def generate_morning_briefing(
@@ -119,9 +123,9 @@ def generate_morning_briefing(
     blockers: list[MorningBriefingItem] = []
     findings_list: list[MorningBriefingFinding] = []
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         # Fetch active things
-        thing_rows = conn.execute(
+        thing_rows = _exec(session, 
             f"""SELECT * FROM things
                WHERE active = 1{uf_sql}
                ORDER BY importance ASC, updated_at DESC""",
@@ -129,14 +133,14 @@ def generate_morning_briefing(
         ).fetchall()
 
         # Fetch relationships for blocking analysis
-        rel_rows = conn.execute(
+        rel_rows = _exec(session, 
             "SELECT from_thing_id, to_thing_id, relationship_type FROM thing_relationships"
         ).fetchall()
 
         # Fetch active sweep findings
         now = datetime.now(timezone.utc).isoformat()
         sf_uf_sql, sf_uf_params = user_filter(user_id, "sf")
-        finding_rows = conn.execute(
+        finding_rows = _exec(session, 
             f"""SELECT sf.id, sf.message, sf.priority, sf.thing_id,
                       t.title AS thing_title
                FROM sweep_findings sf
@@ -151,7 +155,7 @@ def generate_morning_briefing(
     # Build thing map
     thing_map: dict[str, dict] = {}
     for r in thing_rows:
-        thing_map[r["id"]] = dict(r)
+        thing_map[r.id] = r._asdict()
 
     active_ids = set(thing_map.keys())
 
@@ -159,9 +163,9 @@ def generate_morning_briefing(
     blocked_by: dict[str, set[str]] = {}
     blocks: dict[str, set[str]] = {}
     for r in rel_rows:
-        rtype = r["relationship_type"]
-        from_id = r["from_thing_id"]
-        to_id = r["to_thing_id"]
+        rtype = r.relationship_type
+        from_id = r.from_thing_id
+        to_id = r.to_thing_id
         if rtype == "depends-on":
             if from_id in active_ids and to_id in active_ids:
                 blocked_by.setdefault(from_id, set()).add(to_id)
@@ -313,11 +317,11 @@ def generate_morning_briefing(
         for r in finding_rows[: prefs.max_findings]:
             findings_list.append(
                 MorningBriefingFinding(
-                    id=r["id"],
-                    message=r["message"],
-                    priority=r["priority"],
-                    thing_id=r["thing_id"],
-                    thing_title=r["thing_title"],
+                    id=r.id,
+                    message=r.message,
+                    priority=r.priority,
+                    thing_id=r.thing_id,
+                    thing_title=r.thing_title,
                 )
             )
 
@@ -361,8 +365,8 @@ def store_morning_briefing(user_id: str, content: MorningBriefingContent, briefi
     briefing_id = f"mb-{uuid.uuid4().hex[:8]}"
     now = datetime.now(timezone.utc).isoformat()
 
-    with db() as conn:
-        conn.execute(
+    with Session(_engine_mod.engine) as session:
+        _exec(session, 
             """INSERT INTO morning_briefings (id, user_id, briefing_date, content, generated_at)
                VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(user_id, briefing_date) DO UPDATE SET
@@ -371,6 +375,7 @@ def store_morning_briefing(user_id: str, content: MorningBriefingContent, briefi
                  generated_at = excluded.generated_at""",
             (briefing_id, user_id or None, today.isoformat(), content.model_dump_json(), now),
         )
+        session.commit()
 
     logger.info(
         "Morning briefing stored: %s for user %s on %s", briefing_id, user_id[:8] if user_id else "legacy", today
@@ -386,15 +391,15 @@ def get_latest_morning_briefing(user_id: str, as_of: date | None = None) -> dict
     """
     uf_sql, uf_params = user_filter(user_id)
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         if as_of:
-            row = conn.execute(
+            row = _exec(session, 
                 f"""SELECT * FROM morning_briefings
                    WHERE briefing_date = ?{uf_sql}""",
                 [as_of.isoformat(), *uf_params],
             ).fetchone()
         else:
-            row = conn.execute(
+            row = _exec(session, 
                 f"""SELECT * FROM morning_briefings
                    WHERE 1=1{uf_sql}
                    ORDER BY briefing_date DESC
@@ -406,13 +411,13 @@ def get_latest_morning_briefing(user_id: str, as_of: date | None = None) -> dict
         return None
 
     try:
-        content = json.loads(row["content"])
+        content = json.loads(row.content)
     except (json.JSONDecodeError, TypeError):
         content = {}
 
     return {
-        "id": row["id"],
-        "briefing_date": row["briefing_date"],
+        "id": row.id,
+        "briefing_date": row.briefing_date,
         "content": content,
-        "generated_at": row["generated_at"],
+        "generated_at": row.generated_at,
     }

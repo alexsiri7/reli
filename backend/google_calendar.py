@@ -11,7 +11,10 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 from .config import settings
-from .database import db
+from sqlmodel import Session
+
+import backend.db_engine as _engine_mod
+from .db_engine import _exec
 from .token_encryption import decrypt_or_plaintext, encrypt
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
@@ -88,8 +91,8 @@ def _save_credentials(creds: Credentials, user_id: str = "") -> None:
     enc_refresh = encrypt(creds.refresh_token) if creds.refresh_token else None
     enc_secret = encrypt(creds.client_secret) if creds.client_secret else ""
 
-    with db() as conn:
-        conn.execute(
+    with Session(_engine_mod.engine) as session:
+        _exec(session, 
             """INSERT INTO google_tokens (user_id, service, access_token, refresh_token,
                token_uri, client_id, client_secret, expiry, scopes, updated_at)
                VALUES (?, 'calendar', ?, ?, ?, ?, ?, ?, ?, ?)
@@ -114,6 +117,7 @@ def _save_credentials(creds: Credentials, user_id: str = "") -> None:
                 now,
             ),
         )
+        session.commit()
 
 
 def _load_credentials(user_id: str = "") -> Credentials | None:
@@ -125,30 +129,30 @@ def _load_credentials(user_id: str = "") -> Credentials | None:
     """
     uid = user_id or None
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         if uid is None:
-            row = conn.execute("SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'").fetchone()
+            row = _exec(session, "SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'").fetchone()
         else:
-            row = conn.execute(
+            row = _exec(session, 
                 "SELECT * FROM google_tokens WHERE user_id = ? AND service = 'calendar'", (uid,)
             ).fetchone()
     if not row:
         return None
 
     # Decrypt sensitive fields (handles plaintext migration)
-    access_token, access_enc = decrypt_or_plaintext(row["access_token"]) if row["access_token"] else (None, True)
-    refresh_token, refresh_enc = decrypt_or_plaintext(row["refresh_token"]) if row["refresh_token"] else (None, True)
-    client_secret, secret_enc = decrypt_or_plaintext(row["client_secret"]) if row["client_secret"] else ("", True)
+    access_token, access_enc = decrypt_or_plaintext(row.access_token) if row.access_token else (None, True)
+    refresh_token, refresh_enc = decrypt_or_plaintext(row.refresh_token) if row.refresh_token else (None, True)
+    client_secret, secret_enc = decrypt_or_plaintext(row.client_secret) if row.client_secret else ("", True)
 
     creds = Credentials(
         token=access_token,
         refresh_token=refresh_token,
-        token_uri=row["token_uri"],
-        client_id=row["client_id"],
+        token_uri=row.token_uri,
+        client_id=row.client_id,
         client_secret=client_secret,
     )
-    if row["expiry"]:
-        creds.expiry = datetime.fromisoformat(row["expiry"]).replace(tzinfo=None)
+    if row.expiry:
+        creds.expiry = datetime.fromisoformat(row.expiry).replace(tzinfo=None)
 
     # Migrate: if any field was stored as plaintext, re-save encrypted
     if not (access_enc and refresh_enc and secret_enc):
@@ -180,11 +184,12 @@ def get_credentials(user_id: str = "") -> Credentials | None:
 def disconnect(user_id: str = "") -> None:
     """Remove stored credentials for the given user."""
     uid = user_id or None
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         if uid is None:
-            conn.execute("DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'")
+            _exec(session, "DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'")
         else:
-            conn.execute("DELETE FROM google_tokens WHERE user_id = ? AND service = 'calendar'", (uid,))
+            _exec(session, "DELETE FROM google_tokens WHERE user_id = ? AND service = 'calendar'", (uid,))
+        session.commit()
 
 
 def is_connected(user_id: str = "") -> bool:

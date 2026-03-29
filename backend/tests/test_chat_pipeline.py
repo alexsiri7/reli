@@ -4,6 +4,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import backend.db_engine as _engine_mod
+from sqlmodel import Session
+
 from backend.response_agent import ResponseResult
 
 # ---------------------------------------------------------------------------
@@ -280,23 +283,25 @@ class TestFetchUserRelationships:
                 ("rel-2", "user-1", "project-1", "works-on"),
             )
 
-            # Search for "Bob" — should only return sister, not project
-            results = _fetch_user_relationships(conn, "user-1", ["Bob"])
-            assert len(results) == 1
-            assert results[0]["id"] == "sister-1"
+        # Search for "Bob" — should only return sister, not project
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_user_relationships(session, "user-1", ["Bob"])
+        assert len(results) == 1
+        assert results[0]["id"] == "sister-1"
 
-            # Search for "Acme" — should only return project
-            results = _fetch_user_relationships(conn, "user-1", ["Acme"])
-            assert len(results) == 1
-            assert results[0]["id"] == "project-1"
+        # Search for "Acme" — should only return project
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_user_relationships(session, "user-1", ["Acme"])
+        assert len(results) == 1
+        assert results[0]["id"] == "project-1"
 
     def test_empty_queries_returns_nothing(self, patched_db):
         """No search queries means no relationship loading."""
         from backend.database import db
         from backend.pipeline import _fetch_user_relationships
 
-        with db() as conn:
-            results = _fetch_user_relationships(conn, "user-1", [])
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_user_relationships(session, "user-1", [])
             assert results == []
 
     def test_no_relationships_returns_empty(self, patched_db):
@@ -309,8 +314,9 @@ class TestFetchUserRelationships:
                 "INSERT INTO things (id, title, type_hint, importance, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
                 ("user-1", "Alice", "person", 2, 1, 1),
             )
-            results = _fetch_user_relationships(conn, "user-1", ["anything"])
-            assert results == []
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_user_relationships(session, "user-1", ["anything"])
+        assert results == []
 
     def test_recently_referenced_sorted_first(self, patched_db):
         """Things with recent last_referenced should appear before older ones."""
@@ -344,11 +350,12 @@ class TestFetchUserRelationships:
                 ("rel-2", "user-1", "task-new", "assigned"),
             )
 
-            results = _fetch_user_relationships(conn, "user-1", ["Task"])
-            assert len(results) == 2
-            # Recently referenced should come first
-            assert results[0]["id"] == "task-new"
-            assert results[1]["id"] == "task-old"
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_user_relationships(session, "user-1", ["Task"])
+        assert len(results) == 2
+        # Recently referenced should come first
+        assert results[0]["id"] == "task-new"
+        assert results[1]["id"] == "task-old"
 
 
 # ---------------------------------------------------------------------------
@@ -391,18 +398,19 @@ class TestPreferenceBoost:
                 ),
             )
 
+        with Session(_engine_mod.engine) as session:
             results = _fetch_relevant_things(
-                conn,
+                session,
                 ["meeting"],
                 {"active_only": True, "type_hint": None},
             )
 
-            # Both should be found
-            result_ids = [t["id"] for t in results]
-            assert "pref-1" in result_ids
-            assert "task-1" in result_ids
-            # Preference Thing should come first
-            assert result_ids.index("pref-1") < result_ids.index("task-1")
+        # Both should be found
+        result_ids = [t["id"] for t in results]
+        assert "pref-1" in result_ids
+        assert "task-1" in result_ids
+        # Preference Thing should come first
+        assert result_ids.index("pref-1") < result_ids.index("task-1")
 
     def test_preference_boost_with_no_preferences(self, patched_db):
         """When there are no preference Things, results are unchanged."""
@@ -415,14 +423,15 @@ class TestPreferenceBoost:
                 ("task-1", "Buy groceries", "task", 2, 1, 1),
             )
 
+        with Session(_engine_mod.engine) as session:
             results = _fetch_relevant_things(
-                conn,
+                session,
                 ["groceries"],
                 {"active_only": True, "type_hint": None},
             )
 
-            assert len(results) >= 1
-            assert any(t["id"] == "task-1" for t in results)
+        assert len(results) >= 1
+        assert any(t["id"] == "task-1" for t in results)
 
     def test_preference_boost_does_not_duplicate(self, patched_db):
         """Preference Things already in results are not duplicated."""
@@ -444,14 +453,15 @@ class TestPreferenceBoost:
                 ),
             )
 
+        with Session(_engine_mod.engine) as session:
             results = _fetch_relevant_things(
-                conn,
+                session,
                 ["travel cost"],
                 {"active_only": True, "type_hint": None},
             )
 
-            pref_count = sum(1 for t in results if t["id"] == "pref-1")
-            assert pref_count == 1
+        pref_count = sum(1 for t in results if t["id"] == "pref-1")
+        assert pref_count == 1
 
     def test_preference_ranked_first_via_vector(self, patched_db):
         """Preference Things from vector search appear first in results."""
@@ -471,9 +481,9 @@ class TestPreferenceBoost:
         import unittest.mock as mock
         with mock.patch("backend.pipeline.vector_count", return_value=5), \
              mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search):
-            with db() as conn:
+            with Session(_engine_mod.engine) as session:
                 results = _fetch_relevant_things(
-                    conn,
+                    session,
                     ["vacation"],
                     {"active_only": True, "type_hint": None},
                     user_id="",
@@ -502,9 +512,9 @@ class TestPreferenceBoost:
 
         with mock.patch("backend.pipeline.vector_count", return_value=5), \
              mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search):
-            with db() as conn:
+            with Session(_engine_mod.engine) as session:
                 _fetch_relevant_things(
-                    conn,
+                    session,
                     ["communication"],
                     {"active_only": True, "type_hint": "preference"},
                     user_id="",
@@ -534,9 +544,9 @@ class TestPreferenceBoost:
 
         with mock.patch("backend.pipeline.vector_count", return_value=5), \
              mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search):
-            with db() as conn:
+            with Session(_engine_mod.engine) as session:
                 results = _fetch_relevant_things(
-                    conn,
+                    session,
                     ["project"],
                     {"active_only": True, "type_hint": None},
                     user_id="",
