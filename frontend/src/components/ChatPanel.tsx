@@ -748,6 +748,13 @@ export function ChatPanel() {
   const prevScrollHeightRef = useRef<number>(0)
   const isLoadingOlderRef = useRef(false)
 
+  // Focus chat input on '/' shortcut event
+  useEffect(() => {
+    const handler = () => inputRef.current?.focus()
+    window.addEventListener('reli:focus-chat', handler)
+    return () => window.removeEventListener('reli:focus-chat', handler)
+  }, [])
+
   // Scroll to bottom instantly on initial mount
   const hasMountScrolled = useRef(false)
   useEffect(() => {

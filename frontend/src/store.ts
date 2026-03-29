@@ -402,8 +402,8 @@ interface ReliState {
   clearThingFilters: () => void
 
   // View mode
-  mainView: 'list' | 'graph'
-  setMainView: (view: 'list' | 'graph') => void
+  mainView: 'list' | 'graph' | 'calendar'
+  setMainView: (view: 'list' | 'graph' | 'calendar') => void
 
   // Chat mode (Hats)
   chatMode: ChatMode
@@ -476,6 +476,25 @@ interface ReliState {
     user_agent: string
     url: string
   }) => Promise<{ success: boolean; issueUrl?: string; error?: string }>
+
+  // Command palette
+  commandPaletteOpen: boolean
+  openCommandPalette: () => void
+  closeCommandPalette: () => void
+
+  // Quick-add dialog
+  quickAddOpen: boolean
+  openQuickAdd: () => void
+  closeQuickAdd: () => void
+
+  // Sidebar visibility (desktop)
+  sidebarOpen: boolean
+  setSidebarOpen: (open: boolean) => void
+  toggleSidebar: () => void
+
+  // Right panel view: chat or briefing
+  rightView: 'chat' | 'briefing'
+  toggleRightView: () => void
 }
 
 const HISTORY_PAGE_SIZE = 20
