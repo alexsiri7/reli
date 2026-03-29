@@ -384,6 +384,67 @@ class BriefingPreferences(BaseModel):
     max_findings: int = Field(default=10, ge=1, le=50)
 
 
+# ── Nudges ────────────────────────────────────────────────────────────────────
+
+
+class Nudge(BaseModel):
+    """A proactive nudge surfaced to the user based on approaching dates."""
+
+    id: str
+    nudge_type: str
+    message: str
+    thing_id: str | None = None
+    thing_title: str | None = None
+    thing_type_hint: str | None = None
+    days_away: int | None = None
+    primary_action_label: str | None = None
+
+
+# ── Weekly Digest ─────────────────────────────────────────────────────────────
+
+
+class WeeklyBriefingItem(BaseModel):
+    """A single item in a weekly digest section."""
+
+    thing_id: str
+    title: str
+    type_hint: str | None = None
+    detail: str | None = None
+
+
+class WeeklyBriefingConnection(BaseModel):
+    """A newly discovered connection between two things."""
+
+    from_title: str
+    to_title: str
+    relationship_type: str
+
+
+class WeeklyBriefingContent(BaseModel):
+    """The structured content of a weekly digest."""
+
+    summary: str
+    week_start: str
+    week_end: str
+    completed: list[WeeklyBriefingItem] = Field(default_factory=list)
+    upcoming: list[WeeklyBriefingItem] = Field(default_factory=list)
+    new_connections: list[WeeklyBriefingConnection] = Field(default_factory=list)
+    preferences_learned: list[str] = Field(default_factory=list)
+    open_questions: list[WeeklyBriefingItem] = Field(default_factory=list)
+    stats: dict[str, int] = Field(default_factory=dict)
+
+
+class WeeklyBriefing(BaseModel):
+    """A pre-generated weekly digest."""
+
+    id: str
+    week_start: str
+    content: WeeklyBriefingContent
+    generated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ── Personality Preferences ───────────────────────────────────────────────────
 
 

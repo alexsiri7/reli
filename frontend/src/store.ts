@@ -176,6 +176,49 @@ export interface BriefingPreferences {
   max_findings: number
 }
 
+export interface Nudge {
+  id: string
+  nudge_type: string
+  message: string
+  thing_id: string | null
+  thing_title: string | null
+  thing_type_hint: string | null
+  days_away: number | null
+  primary_action_label: string | null
+}
+
+export interface WeeklyBriefingItem {
+  thing_id: string
+  title: string
+  type_hint: string | null
+  detail: string | null
+}
+
+export interface WeeklyBriefingConnection {
+  from_title: string
+  to_title: string
+  relationship_type: string
+}
+
+export interface WeeklyBriefingContent {
+  summary: string
+  week_start: string
+  week_end: string
+  completed: WeeklyBriefingItem[]
+  upcoming: WeeklyBriefingItem[]
+  new_connections: WeeklyBriefingConnection[]
+  preferences_learned: string[]
+  open_questions: WeeklyBriefingItem[]
+  stats: Record<string, number>
+}
+
+export interface WeeklyBriefing {
+  id: string
+  week_start: string
+  content: WeeklyBriefingContent
+  generated_at: string
+}
+
 export interface CalendarEvent {
   id: string
   summary: string
@@ -352,6 +395,16 @@ interface ReliState {
   fetchMorningBriefing: () => Promise<void>
   fetchBriefingPreferences: () => Promise<void>
   updateBriefingPreferences: (prefs: BriefingPreferences) => Promise<void>
+
+  nudges: Nudge[]
+  nudgesLoading: boolean
+  fetchNudges: () => Promise<void>
+  dismissNudge: (nudgeId: string) => Promise<void>
+  stopNudgeType: (nudgeId: string) => Promise<void>
+
+  weeklyBriefing: WeeklyBriefing | null
+  weeklyBriefingLoading: boolean
+  fetchWeeklyBriefing: () => Promise<void>
 
   proactiveSurfaces: ProactiveSurface[]
   focusRecommendations: FocusRecommendation[]
@@ -563,6 +616,11 @@ export const useStore = create<ReliState>((set, get) => ({
   morningBriefingLoading: false,
   briefingPreferences: null,
 
+  nudges: [],
+  nudgesLoading: false,
+  weeklyBriefing: null,
+  weeklyBriefingLoading: false,
+
   fetchMorningBriefing: async () => {
     set({ morningBriefingLoading: true })
     try {
@@ -600,6 +658,52 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ briefingPreferences: data })
     } catch (e) {
       set({ error: String(e) })
+    }
+  },
+
+  fetchNudges: async () => {
+    set({ nudgesLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/nudges`)
+      if (!res.ok) return
+      const data = await res.json()
+      if (Array.isArray(data)) set({ nudges: data })
+    } catch {
+      // best-effort
+    } finally {
+      set({ nudgesLoading: false })
+    }
+  },
+
+  dismissNudge: async (nudgeId: string) => {
+    set(s => ({ nudges: s.nudges.filter(n => n.id !== nudgeId) }))
+    try {
+      await apiFetch(`${BASE}/nudges/${nudgeId}/dismiss`, { method: 'POST' })
+    } catch {
+      // best-effort
+    }
+  },
+
+  stopNudgeType: async (nudgeId: string) => {
+    set(s => ({ nudges: s.nudges.filter(n => n.id !== nudgeId) }))
+    try {
+      await apiFetch(`${BASE}/nudges/${nudgeId}/stop`, { method: 'POST' })
+    } catch {
+      // best-effort
+    }
+  },
+
+  fetchWeeklyBriefing: async () => {
+    set({ weeklyBriefingLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/briefing/weekly`)
+      if (!res.ok) return
+      const data = await res.json()
+      set({ weeklyBriefing: data })
+    } catch {
+      // best-effort
+    } finally {
+      set({ weeklyBriefingLoading: false })
     }
   },
 

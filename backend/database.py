@@ -405,6 +405,43 @@ def _migrate_connection_suggestions(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_conn_sugg_user ON connection_suggestions(user_id)")
 
 
+def _migrate_nudge_tables(conn: sqlite3.Connection) -> None:
+    """Create nudge_dismissals and nudge_suppressions tables."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS nudge_dismissals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            nudge_id TEXT NOT NULL,
+            dismissed_date TEXT NOT NULL,
+            UNIQUE(user_id, nudge_id, dismissed_date)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_nudge_dismissals_user ON nudge_dismissals(user_id, dismissed_date)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS nudge_suppressions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            nudge_type TEXT NOT NULL,
+            UNIQUE(user_id, nudge_type)
+        )
+    """)
+
+
+def _migrate_weekly_briefings(conn: sqlite3.Connection) -> None:
+    """Create weekly_briefings table."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS weekly_briefings (
+            id TEXT PRIMARY KEY,
+            user_id TEXT REFERENCES users(id),
+            week_start TEXT NOT NULL,
+            content TEXT NOT NULL,
+            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, week_start)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_weekly_briefings_user ON weekly_briefings(user_id, week_start)")
+
+
 def clean_orphan_relationships() -> tuple[int, list[str]]:
     """Delete relationships where from_thing_id or to_thing_id doesn't exist.
 
@@ -574,4 +611,6 @@ def init_db() -> None:
         _migrate_connection_suggestions(conn)
         _migrate_morning_briefings(conn)
         _migrate_conversation_summaries(conn)
+        _migrate_nudge_tables(conn)
+        _migrate_weekly_briefings(conn)
         _seed_thing_types(conn)
