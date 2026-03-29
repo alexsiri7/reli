@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { Thing, SweepFinding, FocusRecommendation, MorningBriefing } from '../store'
+import type { Thing, SweepFinding, FocusRecommendation, MorningBriefing, WeeklyBriefing } from '../store'
+import { NudgeBanner } from './NudgeBanner'
 import { typeIcon } from '../utils'
 import { CalendarSection } from './CalendarSection'
 import { ThingCard } from './ThingCard'
@@ -221,6 +222,103 @@ function MorningBriefingSection({ briefing }: { briefing: MorningBriefing }) {
   )
 }
 
+function WeeklyBriefingSection({ briefing }: { briefing: WeeklyBriefing }) {
+  const [expanded, setExpanded] = useState(false)
+  const c = briefing.content
+
+  const hasContent = c.completed.length > 0 || c.upcoming.length > 0 || c.new_connections.length > 0 || c.preferences_learned.length > 0 || c.open_questions.length > 0
+  if (!hasContent && !c.summary) return null
+
+  return (
+    <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+      <button
+        className="w-full flex items-center justify-between px-4 pb-1"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+          Weekly Digest
+        </h2>
+        <span className="text-xs text-gray-300 dark:text-gray-500">{expanded ? '\u25B2' : '\u25BC'}</span>
+      </button>
+
+      <p className="px-4 text-sm text-gray-600 dark:text-gray-300 leading-snug">{c.summary}</p>
+
+      {expanded && (
+        <div className="space-y-1 mt-1">
+          {c.upcoming.length > 0 && (
+            <div className="px-4">
+              <p className="text-xs font-medium text-amber-500 dark:text-amber-400 uppercase tracking-wider mb-0.5">Upcoming</p>
+              {c.upcoming.map(item => (
+                <div
+                  key={item.thing_id}
+                  className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  onClick={() => useStore.getState().openThingDetail(item.thing_id)}
+                  role="button"
+                >
+                  <span className="text-sm shrink-0">{typeIcon(item.type_hint)}</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-200 truncate flex-1">{item.title}</span>
+                  {item.detail && <span className="text-xs text-amber-500 dark:text-amber-400 shrink-0">{item.detail}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {c.completed.length > 0 && (
+            <div className="px-4">
+              <p className="text-xs font-medium text-emerald-500 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Completed</p>
+              {c.completed.map(item => (
+                <div
+                  key={item.thing_id}
+                  className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  onClick={() => useStore.getState().openThingDetail(item.thing_id)}
+                  role="button"
+                >
+                  <span className="text-emerald-400 text-xs shrink-0">{'\u2713'}</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-200 truncate flex-1">{item.title}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {c.new_connections.length > 0 && (
+            <div className="px-4">
+              <p className="text-xs font-medium text-blue-500 dark:text-blue-400 uppercase tracking-wider mb-0.5">New Connections</p>
+              {c.new_connections.map((conn, i) => (
+                <p key={i} className="text-sm text-gray-600 dark:text-gray-300 py-0.5 leading-snug">
+                  <span className="font-medium">{conn.from_title}</span>
+                  <span className="text-gray-400 dark:text-gray-500 mx-1">{'\u2192'}</span>
+                  <span className="font-medium">{conn.to_title}</span>
+                  {conn.relationship_type && <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">({conn.relationship_type})</span>}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {c.open_questions.length > 0 && (
+            <div className="px-4">
+              <p className="text-xs font-medium text-purple-500 dark:text-purple-400 uppercase tracking-wider mb-0.5">Open Questions</p>
+              {c.open_questions.map(item => (
+                <div
+                  key={item.thing_id}
+                  className="flex items-start gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  onClick={() => useStore.getState().openThingDetail(item.thing_id)}
+                  role="button"
+                >
+                  <span className="text-purple-400 text-xs mt-0.5 shrink-0">{'\u2753'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-700 dark:text-gray-200 truncate leading-snug">{item.title}</p>
+                    {item.detail && <p className="text-xs text-gray-400 dark:text-gray-500 leading-snug truncate">{item.detail}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function confidenceLabel(confidence: number): { label: string; className: string } {
   if (confidence >= 0.7) return { label: 'Strong', className: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950' }
   if (confidence >= 0.5) return { label: 'Moderate', className: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950' }
@@ -318,7 +416,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView })))
   const disclosure = useProgressiveDisclosure()
   const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -733,8 +831,20 @@ export function Sidebar() {
             {/* Google Calendar */}
             <CalendarSection />
 
+            {/* Nudges — time-sensitive proactive reminders */}
+            {nudges.length > 0 && (
+              <section className="px-3 pt-2 pb-1 border-b border-gray-100 dark:border-gray-800">
+                {nudges.map(nudge => (
+                  <NudgeBanner key={nudge.id} nudge={nudge} />
+                ))}
+              </section>
+            )}
+
             {/* Morning Briefing — pre-generated summary (meaningful at 5+ things) */}
             {disclosure.showBriefing && morningBriefing && <MorningBriefingSection briefing={morningBriefing} />}
+
+            {/* Weekly Digest */}
+            {weeklyBriefing && <WeeklyBriefingSection briefing={weeklyBriefing} />}
 
             {/* Daily Briefing — sweep findings + checkin-due things (meaningful at 5+ things) */}
             {disclosure.showBriefing && (findings.length > 0 || briefing.length > 0) && (
