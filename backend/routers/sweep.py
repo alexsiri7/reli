@@ -6,11 +6,12 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
-from ..auth import require_user, user_filter
-from ..db_engine import _exec
+from ..auth import require_user
+from ..db_engine import user_filter_clause
+from ..db_models import SweepRunRecord
 from ..sweep import (
     GapQuestionResult,
     PatternAggregationResult,
@@ -55,17 +56,16 @@ def list_sweep_runs(
     user_id: str = Depends(require_user),
 ) -> list[dict[str, Any]]:
     """Return recent sweep run history for the current user."""
-    uf_sql, uf_params = user_filter(user_id)
     with Session(_engine_mod.engine) as session:
-        rows = _exec(session, 
-            f"""SELECT * FROM sweep_runs
-               WHERE 1=1{uf_sql}
-               ORDER BY started_at DESC
-               LIMIT ?""",
-            (*uf_params, limit),
-        ).fetchall()
+        stmt = (
+            select(SweepRunRecord)
+            .where(user_filter_clause(SweepRunRecord.user_id, user_id))
+            .order_by(SweepRunRecord.started_at.desc())  # type: ignore[union-attr]
+            .limit(limit)
+        )
+        rows = session.exec(stmt).all()
 
-    return [row._asdict() for row in rows]
+    return [row.model_dump() for row in rows]
 
 
 @router.post("/gaps", summary="Detect incomplete Things and generate questions")
