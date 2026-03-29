@@ -11,11 +11,13 @@ from __future__ import annotations
 import json
 import logging
 import re
-import sqlite3
 from dataclasses import dataclass
 from datetime import date
 
-from .database import db
+from sqlalchemy import text
+from sqlmodel import Session
+
+import backend.db_engine as _engine_mod
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +101,7 @@ class ConflictAlert:
 
 
 def detect_blocking_chains(
-    conn: sqlite3.Connection,
+    session: Session,
     user_id: str = "",
     window_days: int = 14,
 ) -> list[ConflictAlert]:
@@ -109,8 +111,10 @@ def detect_blocking_chains(
     alerts: list[ConflictAlert] = []
 
     # Find all blocks/depends-on relationships between active Things
-    rows = conn.execute(
-        """SELECT r.from_thing_id, r.to_thing_id, r.relationship_type,
+    # TODO: convert to SQLModel query
+    rows = session.execute(
+        text(
+            """SELECT r.from_thing_id, r.to_thing_id, r.relationship_type,
                   bf.id as blocker_id, bf.title as blocker_title, bf.active as blocker_active,
                   bf.data as blocker_data, bf.checkin_date as blocker_checkin,
                   bt.id as blocked_id, bt.title as blocked_title, bt.active as blocked_active,
@@ -121,36 +125,37 @@ def detect_blocking_chains(
            WHERE r.relationship_type IN ('blocks', 'depends-on')
              AND bf.active = 1
              AND bt.active = 1"""
+        )
     ).fetchall()
 
     for row in rows:
-        rel_type = row["relationship_type"]
+        rel_type = row.relationship_type
         # For "blocks": from blocks to. For "depends-on": from depends on to (to is blocker).
         if rel_type == "blocks":
             blocker = {
-                "id": row["blocker_id"],
-                "title": row["blocker_title"],
-                "data": row["blocker_data"],
-                "checkin_date": row["blocker_checkin"],
+                "id": row.blocker_id,
+                "title": row.blocker_title,
+                "data": row.blocker_data,
+                "checkin_date": row.blocker_checkin,
             }
             blocked = {
-                "id": row["blocked_id"],
-                "title": row["blocked_title"],
-                "data": row["blocked_data"],
-                "checkin_date": row["blocked_checkin"],
+                "id": row.blocked_id,
+                "title": row.blocked_title,
+                "data": row.blocked_data,
+                "checkin_date": row.blocked_checkin,
             }
         else:  # depends-on: from depends on to
             blocked = {
-                "id": row["blocker_id"],
-                "title": row["blocker_title"],
-                "data": row["blocker_data"],
-                "checkin_date": row["blocker_checkin"],
+                "id": row.blocker_id,
+                "title": row.blocker_title,
+                "data": row.blocker_data,
+                "checkin_date": row.blocker_checkin,
             }
             blocker = {
-                "id": row["blocked_id"],
-                "title": row["blocked_title"],
-                "data": row["blocked_data"],
-                "checkin_date": row["blocked_checkin"],
+                "id": row.blocked_id,
+                "title": row.blocked_title,
+                "data": row.blocked_data,
+                "checkin_date": row.blocked_checkin,
             }
 
         blocked_dates = _extract_dates(blocked)
@@ -196,7 +201,7 @@ def detect_blocking_chains(
 
 
 def detect_schedule_overlaps(
-    conn: sqlite3.Connection,
+    session: Session,
     user_id: str = "",
 ) -> list[ConflictAlert]:
     """Find Things with overlapping date ranges that are related to each other."""
@@ -204,16 +209,19 @@ def detect_schedule_overlaps(
     alerts: list[ConflictAlert] = []
 
     # Get all active Things with date data
-    rows = conn.execute(
-        """SELECT id, title, data, checkin_date FROM things
+    # TODO: convert to SQLModel query
+    rows = session.execute(
+        text(
+            """SELECT id, title, data, checkin_date FROM things
            WHERE active = 1
              AND (data IS NOT NULL AND data != '{}' AND data != 'null')"""
+        )
     ).fetchall()
 
     # Build map of things with date ranges
     things_with_ranges: list[tuple[dict, date, date]] = []
     for row in rows:
-        thing = dict(row)
+        thing = row._asdict()
         dates = _extract_dates(thing)
         start, end = _get_date_range(dates)
         if start and end and start <= end:
@@ -230,16 +238,19 @@ def detect_schedule_overlaps(
     if not thing_ids:
         return alerts
 
-    ph = ",".join("?" for _ in thing_ids)
-    rels = conn.execute(
-        f"""SELECT from_thing_id, to_thing_id FROM thing_relationships
-            WHERE from_thing_id IN ({ph}) OR to_thing_id IN ({ph})""",
-        thing_ids + thing_ids,
+    ph = ",".join(f":id{i}" for i in range(len(thing_ids)))
+    params = {f"id{i}": tid for i, tid in enumerate(thing_ids)}
+    rels = session.execute(
+        text(
+            f"""SELECT from_thing_id, to_thing_id FROM thing_relationships
+            WHERE from_thing_id IN ({ph}) OR to_thing_id IN ({ph})"""
+        ),
+        params,
     ).fetchall()
 
     related_pairs: set[tuple[str, str]] = set()
     for rel in rels:
-        pair = tuple(sorted([rel["from_thing_id"], rel["to_thing_id"]]))
+        pair = tuple(sorted([rel.from_thing_id, rel.to_thing_id]))
         related_pairs.add(pair)  # type: ignore[arg-type]
 
     # Check overlaps between related Things
@@ -277,7 +288,7 @@ def detect_schedule_overlaps(
 
 
 def detect_deadline_conflicts(
-    conn: sqlite3.Connection,
+    session: Session,
     user_id: str = "",
 ) -> list[ConflictAlert]:
     """Find dependency chains where a dependency's deadline is after
@@ -285,8 +296,10 @@ def detect_deadline_conflicts(
     alerts: list[ConflictAlert] = []
 
     # Get depends-on relationships between active Things
-    rows = conn.execute(
-        """SELECT r.from_thing_id, r.to_thing_id, r.relationship_type,
+    # TODO: convert to SQLModel query
+    rows = session.execute(
+        text(
+            """SELECT r.from_thing_id, r.to_thing_id, r.relationship_type,
                   df.id as dep_id, df.title as dep_title,
                   df.data as dep_data, df.checkin_date as dep_checkin,
                   dt.id as depn_id, dt.title as depn_title,
@@ -297,36 +310,37 @@ def detect_deadline_conflicts(
            WHERE r.relationship_type IN ('depends-on', 'blocks')
              AND df.active = 1
              AND dt.active = 1"""
+        )
     ).fetchall()
 
     for row in rows:
-        rel_type = row["relationship_type"]
+        rel_type = row.relationship_type
         if rel_type == "depends-on":
             # from depends on to: "from" needs "to" to be done first
             dependent = {
-                "id": row["dep_id"],
-                "title": row["dep_title"],
-                "data": row["dep_data"],
-                "checkin_date": row["dep_checkin"],
+                "id": row.dep_id,
+                "title": row.dep_title,
+                "data": row.dep_data,
+                "checkin_date": row.dep_checkin,
             }
             dependency = {
-                "id": row["depn_id"],
-                "title": row["depn_title"],
-                "data": row["depn_data"],
-                "checkin_date": row["depn_checkin"],
+                "id": row.depn_id,
+                "title": row.depn_title,
+                "data": row.depn_data,
+                "checkin_date": row.depn_checkin,
             }
         else:  # blocks: from blocks to — "to" depends on "from"
             dependency = {
-                "id": row["dep_id"],
-                "title": row["dep_title"],
-                "data": row["dep_data"],
-                "checkin_date": row["dep_checkin"],
+                "id": row.dep_id,
+                "title": row.dep_title,
+                "data": row.dep_data,
+                "checkin_date": row.dep_checkin,
             }
             dependent = {
-                "id": row["depn_id"],
-                "title": row["depn_title"],
-                "data": row["depn_data"],
-                "checkin_date": row["depn_checkin"],
+                "id": row.depn_id,
+                "title": row.depn_title,
+                "data": row.depn_data,
+                "checkin_date": row.depn_checkin,
             }
 
         dependent_dates = _extract_dates(dependent)
@@ -364,11 +378,11 @@ def detect_all_conflicts(
     window_days: int = 14,
 ) -> list[ConflictAlert]:
     """Run all conflict detectors and return combined, deduplicated results."""
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         alerts = (
-            detect_blocking_chains(conn, user_id, window_days)
-            + detect_schedule_overlaps(conn, user_id)
-            + detect_deadline_conflicts(conn, user_id)
+            detect_blocking_chains(session, user_id, window_days)
+            + detect_schedule_overlaps(session, user_id)
+            + detect_deadline_conflicts(session, user_id)
         )
 
     # Deduplicate by (alert_type, sorted thing_ids)

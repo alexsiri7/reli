@@ -7,7 +7,9 @@ import uuid
 from datetime import date, timedelta
 
 import pytest
+from sqlmodel import Session
 
+import backend.db_engine as _engine_mod
 from backend.conflict_detector import (
     detect_all_conflicts,
     detect_blocking_chains,
@@ -57,8 +59,8 @@ class TestBlockingChains:
         blocker = _insert_thing("Code review")
         _insert_relationship(blocker, blocked, "blocks")
 
-        with db() as conn:
-            alerts = detect_blocking_chains(conn)
+        with Session(_engine_mod.engine) as session:
+            alerts = detect_blocking_chains(session)
 
         assert len(alerts) == 1
         assert alerts[0].alert_type == "blocking_chain"
@@ -73,8 +75,8 @@ class TestBlockingChains:
         dependency = _insert_thing("Build API")
         _insert_relationship(dependent, dependency, "depends-on")
 
-        with db() as conn:
-            alerts = detect_blocking_chains(conn)
+        with Session(_engine_mod.engine) as session:
+            alerts = detect_blocking_chains(session)
 
         assert len(alerts) == 1
         assert "Launch" in alerts[0].message
@@ -87,8 +89,8 @@ class TestBlockingChains:
         blocker = _insert_thing("Review", active=False)
         _insert_relationship(blocker, blocked, "blocks")
 
-        with db() as conn:
-            alerts = detect_blocking_chains(conn)
+        with Session(_engine_mod.engine) as session:
+            alerts = detect_blocking_chains(session)
 
         assert len(alerts) == 0
 
@@ -98,8 +100,8 @@ class TestBlockingChains:
         blocker = _insert_thing("Prerequisite Y")
         _insert_relationship(blocker, blocked, "blocks")
 
-        with db() as conn:
-            alerts = detect_blocking_chains(conn)
+        with Session(_engine_mod.engine) as session:
+            alerts = detect_blocking_chains(session)
 
         assert len(alerts) == 1
         assert alerts[0].severity == "info"
@@ -111,8 +113,8 @@ class TestBlockingChains:
         blocker = _insert_thing("Blocker")
         _insert_relationship(blocker, blocked, "blocks")
 
-        with db() as conn:
-            alerts = detect_blocking_chains(conn, window_days=14)
+        with Session(_engine_mod.engine) as session:
+            alerts = detect_blocking_chains(session, window_days=14)
 
         assert len(alerts) == 1
         assert alerts[0].severity == "critical"
@@ -131,8 +133,8 @@ class TestScheduleOverlaps:
         thing_b = _insert_thing("Meeting B", data={"start_date": start2, "end_date": end2})
         _insert_relationship(thing_a, thing_b, "related-to")
 
-        with db() as conn:
-            alerts = detect_schedule_overlaps(conn)
+        with Session(_engine_mod.engine) as session:
+            alerts = detect_schedule_overlaps(session)
 
         assert len(alerts) == 1
         assert alerts[0].alert_type == "schedule_overlap"
@@ -150,8 +152,8 @@ class TestScheduleOverlaps:
         thing_b = _insert_thing("Event B", data={"start_date": start2, "end_date": end2})
         _insert_relationship(thing_a, thing_b, "related-to")
 
-        with db() as conn:
-            alerts = detect_schedule_overlaps(conn)
+        with Session(_engine_mod.engine) as session:
+            alerts = detect_schedule_overlaps(session)
 
         assert len(alerts) == 0
 
@@ -163,8 +165,8 @@ class TestScheduleOverlaps:
         _insert_thing("Event A", data={"start_date": start1, "end_date": end1})
         _insert_thing("Event B", data={"start_date": start1, "end_date": end1})
 
-        with db() as conn:
-            alerts = detect_schedule_overlaps(conn)
+        with Session(_engine_mod.engine) as session:
+            alerts = detect_schedule_overlaps(session)
 
         assert len(alerts) == 0
 
@@ -179,8 +181,8 @@ class TestDeadlineConflicts:
         dependency = _insert_thing("API ready", data={"deadline": depn_deadline})
         _insert_relationship(dependent, dependency, "depends-on")
 
-        with db() as conn:
-            alerts = detect_deadline_conflicts(conn)
+        with Session(_engine_mod.engine) as session:
+            alerts = detect_deadline_conflicts(session)
 
         assert len(alerts) == 1
         assert alerts[0].alert_type == "deadline_conflict"
@@ -196,8 +198,8 @@ class TestDeadlineConflicts:
         dependency = _insert_thing("Build", data={"deadline": depn_deadline})
         _insert_relationship(dependent, dependency, "depends-on")
 
-        with db() as conn:
-            alerts = detect_deadline_conflicts(conn)
+        with Session(_engine_mod.engine) as session:
+            alerts = detect_deadline_conflicts(session)
 
         assert len(alerts) == 0
 
@@ -210,8 +212,8 @@ class TestDeadlineConflicts:
         blocked = _insert_thing("Main task", data={"deadline": blocked_deadline})
         _insert_relationship(blocker, blocked, "blocks")
 
-        with db() as conn:
-            alerts = detect_deadline_conflicts(conn)
+        with Session(_engine_mod.engine) as session:
+            alerts = detect_deadline_conflicts(session)
 
         assert len(alerts) == 1
         assert alerts[0].alert_type == "deadline_conflict"

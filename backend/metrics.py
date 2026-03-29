@@ -124,12 +124,16 @@ def _refresh_gauges() -> None:
 
     # SQLite stats (no connection pool — just counts)
     try:
-        from .database import db
+        from sqlalchemy import func
+        from sqlmodel import Session, select
 
-        with db() as conn:
-            things = conn.execute("SELECT COUNT(*) FROM things").fetchone()[0]
+        import backend.db_engine as _engine_mod
+        from .db_models import ThingRecord, UserRecord
+
+        with Session(_engine_mod.engine) as session:
+            things = session.exec(select(func.count()).select_from(ThingRecord)).one()
             DB_THINGS_COUNT.set(things)
-            users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            users = session.exec(select(func.count()).select_from(UserRecord)).one()
             DB_USERS_COUNT.set(users)
     except Exception:
         pass

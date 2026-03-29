@@ -117,8 +117,6 @@ def _thing_to_text(thing: dict[str, Any]) -> str:
     Includes title (repeated for weight), type, formatted data fields,
     and titles of related Things for relationship context.
     """
-    from .database import db
-
     parts: list[str] = []
     title = thing.get("title") or ""
     if title:
@@ -149,18 +147,25 @@ def _thing_to_text(thing: dict[str, Any]) -> str:
     thing_id = thing.get("id")
     if thing_id:
         try:
-            with db() as conn:
-                rows = conn.execute(
-                    "SELECT t.title, r.relationship_type"
-                    " FROM thing_relationships r"
-                    " JOIN things t ON t.id = CASE"
-                    "   WHEN r.from_thing_id = ? THEN r.to_thing_id"
-                    "   ELSE r.from_thing_id END"
-                    " WHERE r.from_thing_id = ? OR r.to_thing_id = ?",
-                    (thing_id, thing_id, thing_id),
+            from sqlalchemy import text as sa_text
+            from sqlmodel import Session
+
+            import backend.db_engine as _engine_mod
+
+            with Session(_engine_mod.engine) as session:
+                rows = session.execute(
+                    sa_text(
+                        "SELECT t.title, r.relationship_type"
+                        " FROM thing_relationships r"
+                        " JOIN things t ON t.id = CASE"
+                        "   WHEN r.from_thing_id = :tid THEN r.to_thing_id"
+                        "   ELSE r.from_thing_id END"
+                        " WHERE r.from_thing_id = :tid OR r.to_thing_id = :tid"
+                    ),
+                    {"tid": thing_id},
                 ).fetchall()
                 if rows:
-                    related = [f"{row['title']} ({row['relationship_type']})" for row in rows]
+                    related = [f"{row.title} ({row.relationship_type})" for row in rows]
                     parts.append("related to: " + ", ".join(related))
         except Exception as exc:
             logger.debug("Could not fetch relationships for thing %s: %s", thing_id, exc)
@@ -211,7 +216,10 @@ def reindex_all() -> int:
 
     Returns the number of Things re-indexed.
     """
-    from .database import db
+    from sqlmodel import Session, select
+
+    import backend.db_engine as _engine_mod
+    from .db_models import ThingRecord
 
     try:
         collection = _get_collection()
@@ -221,18 +229,18 @@ def reindex_all() -> int:
             collection.delete(ids=existing["ids"])
 
         # Fetch all things from the database
-        with db() as conn:
-            rows = conn.execute("SELECT * FROM things").fetchall()
+        with Session(_engine_mod.engine) as session:
+            records = session.exec(select(ThingRecord)).all()
 
-        if not rows:
+        if not records:
             return 0
 
         # Batch upsert
         ids: list[str] = []
         documents: list[str] = []
         metadatas: list[dict[str, str | int]] = []
-        for row in rows:
-            thing = dict(row)
+        for record in records:
+            thing = record.model_dump()
             ids.append(thing["id"])
             documents.append(_thing_to_text(thing))
             metadatas.append(
