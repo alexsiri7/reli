@@ -8,6 +8,7 @@ import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
 import { MergeSuggestions } from './MergeSuggestions'
 import { ConnectionSuggestions } from './ConnectionSuggestions'
+import { apiFetch } from '../api'
 
 const FINDING_TYPE_ICONS: Record<string, string> = {
   approaching_date: '\u23F0',
@@ -266,6 +267,87 @@ function PreferenceCard({ thing }: { thing: Thing }) {
   )
 }
 
+function QuickAddForm({ label, projects, onSave, onCancel }: {
+  label: string
+  projects: Thing[]
+  onSave: (title: string, checkinDate?: string, parentId?: string) => void
+  onCancel: () => void
+}) {
+  const [title, setTitle] = useState('')
+  const [checkinDate, setCheckinDate] = useState('')
+  const [parentId, setParentId] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && title.trim()) {
+      e.preventDefault()
+      onSave(title.trim(), checkinDate || undefined, parentId || undefined)
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      onCancel()
+    }
+  }, [title, checkinDate, parentId, onSave, onCancel])
+
+  return (
+    <div className="px-3 py-2 border-t border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/40 dark:bg-indigo-950/20">
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder={`${label} title…`}
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        onKeyDown={handleKeyDown}
+        className="w-full px-2 py-1.5 text-sm rounded border border-indigo-400 dark:border-indigo-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+      />
+      <div className="mt-1.5 flex gap-2">
+        <input
+          type="date"
+          value={checkinDate}
+          onChange={e => setCheckinDate(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          title="Check-in date (optional)"
+        />
+        {projects.length > 0 && (
+          <select
+            value={parentId}
+            onChange={e => setParentId(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          >
+            <option value="">No project</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.title}</option>
+            ))}
+          </select>
+        )}
+      </div>
+      <div className="mt-1.5 flex justify-between items-center">
+        <span className="text-[10px] text-gray-400 dark:text-gray-500">Enter to save · Esc to cancel</span>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => title.trim() && onSave(title.trim(), checkinDate || undefined, parentId || undefined)}
+            disabled={!title.trim()}
+            className="text-xs text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium disabled:opacity-40 transition-colors"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const SIDEBAR_MIN_WIDTH = 200
 const SIDEBAR_MAX_WIDTH = 500
 const SIDEBAR_DEFAULT_WIDTH = 288 // w-72
@@ -283,7 +365,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, fetchThings } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, fetchThings: s.fetchThings })))
   const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -340,6 +422,23 @@ export function Sidebar() {
   }, [snoozeFinding])
 
   const isSearching = searchQuery.trim().length > 0
+
+  const [quickAddType, setQuickAddType] = useState<string | null>(null)
+
+  const handleQuickAdd = useCallback(async (title: string, type: string, checkinDate?: string, parentId?: string) => {
+    const body: Record<string, unknown> = { title, type_hint: type }
+    if (checkinDate) body.checkin_date = checkinDate
+    if (parentId) body.parent_id = parentId
+    const res = await apiFetch('/api/things', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) {
+      setQuickAddType(null)
+      fetchThings()
+    }
+  }, [fetchThings])
 
   const handleSearchChange = useCallback((value: string) => {
     setSearchQuery(value)
@@ -882,6 +981,21 @@ export function Sidebar() {
               <span className="ml-auto text-[10px] font-normal tabular-nums">{group.items.length}</span>
             </h2>
             {group.items.map(t => <ThingCard key={t.id} thing={t} />)}
+            {quickAddType === group.type ? (
+              <QuickAddForm
+                label={group.label}
+                projects={things.filter(t => t.type_hint === 'project' && t.active)}
+                onSave={(title, checkinDate, parentId) => handleQuickAdd(title, group.type, checkinDate, parentId)}
+                onCancel={() => setQuickAddType(null)}
+              />
+            ) : (
+              <button
+                onClick={() => setQuickAddType(group.type)}
+                className="w-full text-left px-4 py-1 text-xs text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
+              >
+                + Add {group.label.replace(/s$/, '').toLowerCase()}
+              </button>
+            )}
           </section>
         ))}
 
