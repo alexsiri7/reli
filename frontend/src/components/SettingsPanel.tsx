@@ -5,6 +5,7 @@ import type { ModelSettings, UserSettings, UserProfileRelationship, RequestyMode
 import { useTheme, setTheme } from '../hooks/useTheme'
 import { ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
 import { RelationshipMiniGraph } from './RelationshipMiniGraph'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 
 export function SettingsPanel() {
   const {
@@ -317,6 +318,7 @@ function SettingsForm({
           />
         </div>
       </div>
+      <NotificationsSection />
       <VoiceSection />
       <ThemeSection />
       <ProactivitySection />
@@ -739,6 +741,126 @@ function ProactivitySection() {
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+function NotificationsSection() {
+  const { permission, prefs, requestPermission, updatePrefs } = usePushNotifications()
+  const supported = 'Notification' in window
+
+  if (!supported) return null
+
+  return (
+    <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Push Notifications</h3>
+      <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+        Get notified about calendar events and urgent tasks even when Reli is in the background.
+      </p>
+
+      {permission === 'denied' ? (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Notifications are blocked in your browser. Enable them in browser settings to use this feature.
+        </p>
+      ) : permission === 'default' ? (
+        <button
+          onClick={requestPermission}
+          className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+        >
+          Enable notifications
+        </button>
+      ) : (
+        <div className="space-y-2.5">
+          {/* Master toggle */}
+          <label className="flex items-center justify-between gap-3 cursor-pointer">
+            <span className="text-sm text-gray-700 dark:text-gray-300">Notifications enabled</span>
+            <button
+              role="switch"
+              aria-checked={prefs.enabled}
+              onClick={() => updatePrefs({ enabled: !prefs.enabled })}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                prefs.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                  prefs.enabled ? 'translate-x-4' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </label>
+
+          {prefs.enabled && (
+            <div className="ml-1 space-y-2 border-l-2 border-gray-100 dark:border-gray-700 pl-3">
+              {/* Calendar events */}
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <div>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Calendar events</span>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">30 minutes before each event</p>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={prefs.calendarEvents}
+                  onClick={() => updatePrefs({ calendarEvents: !prefs.calendarEvents })}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                    prefs.calendarEvents ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      prefs.calendarEvents ? 'translate-x-4' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </label>
+
+              {/* Urgent tasks */}
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <div>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Urgent task check-ins</span>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Overdue or approaching deadlines</p>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={prefs.urgentTasks}
+                  onClick={() => updatePrefs({ urgentTasks: !prefs.urgentTasks })}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                    prefs.urgentTasks ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      prefs.urgentTasks ? 'translate-x-4' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </label>
+
+              {/* Insights */}
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <div>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">High-priority insights</span>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Proactive suggestions from Reli</p>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={prefs.insights}
+                  onClick={() => updatePrefs({ insights: !prefs.insights })}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                    prefs.insights ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      prefs.insights ? 'translate-x-4' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </label>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

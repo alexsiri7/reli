@@ -10,6 +10,7 @@ import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { SettingsPanel } from './components/SettingsPanel'
 import { FeedbackDialog } from './components/FeedbackDialog'
+import { usePushNotifications } from './hooks/usePushNotifications'
 
 function App() {
   const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
@@ -40,6 +41,7 @@ function App() {
   )
 
   const { newVersionAvailable, dismiss, refresh } = useVersionCheck()
+  usePushNotifications()
 
   // Check auth on mount
   useEffect(() => {
