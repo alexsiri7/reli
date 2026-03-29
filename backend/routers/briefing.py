@@ -1,17 +1,18 @@
-from sqlmodel import Session
-
 """Daily briefing endpoint — combines checkin-due Things with sweep findings."""
 
 import json
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
+from sqlmodel import Session, select
 
-from ..auth import require_user, user_filter
+from ..auth import require_user
 import backend.db_engine as _engine_mod
-from ..db_engine import _exec
+from ..db_engine import user_filter_clause, user_filter_text
+from ..db_models import SweepFindingRecord, ThingRecord, ThingRelationshipRecord
 from ..models import (
     BriefingItem,
     BriefingPreferences,
@@ -37,9 +38,24 @@ from ..weekly_briefing import (
     get_latest_weekly_briefing,
     store_weekly_briefing,
 )
-from .things import _row_to_thing
+from .things import _record_to_thing, _row_to_thing
 
 router = APIRouter(prefix="/briefing", tags=["briefing"])
+
+
+def _record_to_finding(record: SweepFindingRecord, thing: Thing | None = None) -> SweepFinding:
+    return SweepFinding(
+        id=record.id,
+        thing_id=record.thing_id,
+        finding_type=record.finding_type,
+        message=record.message,
+        priority=record.priority,
+        dismissed=bool(record.dismissed),
+        created_at=record.created_at,
+        expires_at=record.expires_at,
+        snoozed_until=record.snoozed_until,
+        thing=thing,
+    )
 
 
 def _row_to_finding(row: Any, thing: Thing | None = None) -> SweepFinding:
@@ -62,36 +78,40 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
     """Return checkin-due Things and active sweep findings for the daily briefing."""
     target = as_of or date.today()
     cutoff = datetime.combine(target, datetime.max.time()).isoformat()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
-    uf_sql, uf_params = user_filter(user_id)
-    sf_uf_sql, sf_uf_params = user_filter(user_id, "sf")
+    uf_frag, uf_p = user_filter_text(user_id)
+    sf_uf_frag, sf_uf_p = user_filter_text(user_id, "sf", param_name="sf_uid")
 
     with Session(_engine_mod.engine) as session:
         # Things with checkin_date due today or earlier
-        thing_rows = _exec(session, 
-            f"""SELECT * FROM things
-               WHERE active = 1
-                 AND checkin_date IS NOT NULL
-                 AND checkin_date <= ?{uf_sql}
-               ORDER BY checkin_date ASC, importance ASC""",
-            [cutoff, *uf_params],
+        thing_rows = session.execute(
+            text(
+                f"""SELECT * FROM things
+                   WHERE active = true
+                     AND checkin_date IS NOT NULL
+                     AND checkin_date <= :cutoff{uf_frag}
+                   ORDER BY checkin_date ASC, importance ASC"""
+            ),
+            {"cutoff": cutoff, **uf_p},
         ).fetchall()
 
         # Active (not dismissed, not expired, not snoozed) sweep findings
-        finding_rows = _exec(session, 
-            f"""SELECT sf.*, t.id AS t_id, t.title AS t_title, t.type_hint AS t_type_hint,
-                      t.parent_id AS t_parent_id, t.checkin_date AS t_checkin_date,
-                      t.importance AS t_importance, t.active AS t_active, t.surface AS t_surface,
-                      t.data AS t_data, t.created_at AS t_created_at,
-                      t.updated_at AS t_updated_at, t.last_referenced AS t_last_referenced
-               FROM sweep_findings sf
-               LEFT JOIN things t ON sf.thing_id = t.id
-               WHERE sf.dismissed = 0
-                 AND (sf.expires_at IS NULL OR sf.expires_at > ?)
-                 AND (sf.snoozed_until IS NULL OR sf.snoozed_until <= ?){sf_uf_sql}
-               ORDER BY sf.priority ASC, sf.created_at DESC""",
-            [now, now, *sf_uf_params],
+        finding_rows = session.execute(
+            text(
+                f"""SELECT sf.*, t.id AS t_id, t.title AS t_title, t.type_hint AS t_type_hint,
+                          t.parent_id AS t_parent_id, t.checkin_date AS t_checkin_date,
+                          t.importance AS t_importance, t.active AS t_active, t.surface AS t_surface,
+                          t.data AS t_data, t.created_at AS t_created_at,
+                          t.updated_at AS t_updated_at, t.last_referenced AS t_last_referenced
+                   FROM sweep_findings sf
+                   LEFT JOIN things t ON sf.thing_id = t.id
+                   WHERE sf.dismissed = false
+                     AND (sf.expires_at IS NULL OR sf.expires_at > :now)
+                     AND (sf.snoozed_until IS NULL OR sf.snoozed_until <= :now){sf_uf_frag}
+                   ORDER BY sf.priority ASC, sf.created_at DESC"""
+            ),
+            {"now": now, **sf_uf_p},
         ).fetchall()
 
     things: list[Thing] = [_row_to_thing(r) for r in thing_rows]
@@ -120,18 +140,31 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
 
     # Build blocker graph for urgency computation
     with Session(_engine_mod.engine) as session:
-        rel_rows = _exec(session, 
-            """SELECT from_thing_id, to_thing_id, relationship_type
-               FROM thing_relationships
-               WHERE relationship_type IN ('blocks', 'depends-on')""",
-        ).fetchall()
-        all_active = _exec(session, 
-            f"SELECT id, importance, active FROM things WHERE active = 1{uf_sql}",
-            [*uf_params],
-        ).fetchall()
+        rel_rows = session.exec(
+            select(ThingRelationshipRecord).where(
+                ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"])  # type: ignore[union-attr]
+            )
+        ).all()
+        uf_things = user_filter_clause(ThingRecord.user_id, user_id)
+        all_active = session.exec(
+            select(ThingRecord).where(
+                ThingRecord.active == True,
+                uf_things,
+            )
+        ).all()
 
-    all_things_map = {r.id: r._asdict() for r in all_active}
-    blocker_graph = build_blocker_graph([r._asdict() for r in rel_rows])
+    all_things_map = {
+        r.id: {"id": r.id, "importance": r.importance, "active": r.active}
+        for r in all_active
+    }
+    blocker_graph = build_blocker_graph([
+        {
+            "from_thing_id": r.from_thing_id,
+            "to_thing_id": r.to_thing_id,
+            "relationship_type": r.relationship_type,
+        }
+        for r in rel_rows
+    ])
 
     # Score each thing
     scored: list[BriefingItem] = []
@@ -172,71 +205,78 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
 def create_finding(body: SweepFindingCreate, user_id: str = Depends(require_user)) -> SweepFinding:
     """Create a new sweep finding, optionally linked to a Thing."""
     finding_id = f"sf-{uuid.uuid4().hex[:8]}"
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
 
     with Session(_engine_mod.engine) as session:
         # Validate thing_id if provided
         if body.thing_id:
-            uf_sql, uf_params = user_filter(user_id)
-            row = _exec(session, f"SELECT id FROM things WHERE id = ?{uf_sql}", [body.thing_id, *uf_params]).fetchone()
-            if not row:
+            thing = session.exec(
+                select(ThingRecord).where(
+                    ThingRecord.id == body.thing_id,
+                    user_filter_clause(ThingRecord.user_id, user_id),
+                )
+            ).first()
+            if not thing:
                 raise HTTPException(status_code=404, detail=f"Thing {body.thing_id} not found")
 
-        _exec(session, 
-            """INSERT INTO sweep_findings
-               (id, thing_id, finding_type, message, priority, dismissed, created_at, expires_at, user_id)
-               VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)""",
-            (
-                finding_id,
-                body.thing_id,
-                body.finding_type,
-                body.message,
-                body.priority,
-                now,
-                body.expires_at,
-                user_id or None,
-            ),
+        record = SweepFindingRecord(
+            id=finding_id,
+            thing_id=body.thing_id,
+            finding_type=body.finding_type,
+            message=body.message,
+            priority=body.priority,
+            dismissed=False,
+            created_at=now,
+            expires_at=body.expires_at,
+            user_id=user_id or None,
         )
-
-        row = _exec(session, "SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
-
+        session.add(record)
         session.commit()
-    return _row_to_finding(row)
+        session.refresh(record)
+
+    return _record_to_finding(record)
 
 
 @router.patch("/findings/{finding_id}/dismiss", response_model=SweepFinding, summary="Dismiss a sweep finding")
 def dismiss_finding(finding_id: str, user_id: str = Depends(require_user)) -> SweepFinding:
     """Dismiss a sweep finding so it no longer appears in the daily briefing."""
-    uf_sql, uf_params = user_filter(user_id)
     with Session(_engine_mod.engine) as session:
-        row = _exec(session, f"SELECT * FROM sweep_findings WHERE id = ?{uf_sql}", [finding_id, *uf_params]).fetchone()
-        if not row:
+        record = session.exec(
+            select(SweepFindingRecord).where(
+                SweepFindingRecord.id == finding_id,
+                user_filter_clause(SweepFindingRecord.user_id, user_id),
+            )
+        ).first()
+        if not record:
             raise HTTPException(status_code=404, detail="Finding not found")
 
-        _exec(session, f"UPDATE sweep_findings SET dismissed = 1 WHERE id = ?{uf_sql}", [finding_id, *uf_params])
-        row = _exec(session, "SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
-
+        record.dismissed = True
+        session.add(record)
         session.commit()
-    return _row_to_finding(row)
+        session.refresh(record)
+
+    return _record_to_finding(record)
 
 
 @router.post("/findings/{finding_id}/snooze", response_model=SweepFinding, summary="Snooze a sweep finding")
 def snooze_finding(finding_id: str, body: SweepFindingSnooze, user_id: str = Depends(require_user)) -> SweepFinding:
     """Snooze a sweep finding — hide it from the daily briefing until the given date."""
-    uf_sql, uf_params = user_filter(user_id)
     with Session(_engine_mod.engine) as session:
-        row = _exec(session, f"SELECT * FROM sweep_findings WHERE id = ?{uf_sql}", [finding_id, *uf_params]).fetchone()
-        if not row:
+        record = session.exec(
+            select(SweepFindingRecord).where(
+                SweepFindingRecord.id == finding_id,
+                user_filter_clause(SweepFindingRecord.user_id, user_id),
+            )
+        ).first()
+        if not record:
             raise HTTPException(status_code=404, detail="Finding not found")
 
-        _exec(session, 
-            f"UPDATE sweep_findings SET snoozed_until = ? WHERE id = ?{uf_sql}",
-            [body.until.isoformat(), finding_id, *uf_params],
-        )
-        row = _exec(session, "SELECT * FROM sweep_findings WHERE id = ?", (finding_id,)).fetchone()
-
+        record.snoozed_until = body.until
+        session.add(record)
         session.commit()
-    return _row_to_finding(row)
+        session.refresh(record)
+
+    return _record_to_finding(record)
 
 
 @router.get("/morning", response_model=MorningBriefing, summary="Get morning briefing")
