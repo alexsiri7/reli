@@ -55,10 +55,10 @@ beforeEach(() => {
 })
 
 describe('DetailPanel', () => {
-  it('renders nothing when detailThingId is null', () => {
+  it('renders empty state when detailThingId is null', () => {
     storeState.detailThingId = null
-    const { container } = render(<DetailPanel />)
-    expect(container.innerHTML).toBe('')
+    render(<DetailPanel />)
+    expect(screen.getByText(/Click any Thing in the sidebar/)).toBeInTheDocument()
   })
 
   it('renders thing title', () => {

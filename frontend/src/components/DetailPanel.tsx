@@ -63,7 +63,14 @@ export function DetailPanel() {
     return groups
   }, [detailRelationships, detailThingId, things])
 
-  if (!detailThingId) return null
+  if (!detailThingId) return (
+    <div className="hidden md:flex w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 flex-col items-center justify-center gap-3 px-6 py-8 text-center bg-white dark:bg-gray-900">
+      <div className="text-4xl select-none">🔍</div>
+      <p className="text-sm text-gray-400 dark:text-gray-500 leading-relaxed">
+        Click any Thing in the sidebar to see its details and relationships.
+      </p>
+    </div>
+  )
 
   const thing = detailThing
   const canGoBack = detailHistory.length > 0

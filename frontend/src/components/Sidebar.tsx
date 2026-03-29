@@ -684,21 +684,27 @@ export function Sidebar() {
             {morningBriefing && <MorningBriefingSection briefing={morningBriefing} />}
 
             {/* Daily Briefing — sweep findings + checkin-due things */}
-            {(findings.length > 0 || briefing.length > 0) && (
-              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
-                  Daily Briefing
-                </h2>
+            <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+              <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+                Daily Briefing
+              </h2>
 
-                {/* Sweep findings */}
-                {findings.map(f => (
-                  <FindingCard key={f.id} finding={f} onDismiss={dismissFinding} onSnooze={handleSnooze} onAct={actOnFinding} />
-                ))}
+              {findings.length === 0 && briefing.length === 0 ? (
+                <p className="px-4 py-2 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+                  Your morning briefing shows up here once you have Things with check-in dates.
+                </p>
+              ) : (
+                <>
+                  {/* Sweep findings */}
+                  {findings.map(f => (
+                    <FindingCard key={f.id} finding={f} onDismiss={dismissFinding} onSnooze={handleSnooze} onAct={actOnFinding} />
+                  ))}
 
-                {/* Checkin-due things */}
-                {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
-              </section>
-            )}
+                  {/* Checkin-due things */}
+                  {briefing.map(t => <ThingCard key={t.id} thing={t} />)}
+                </>
+              )}
+            </section>
 
             {/* Focus Recommendations */}
             {focusRecommendations.length > 0 && (
@@ -896,16 +902,22 @@ export function Sidebar() {
         ))}
 
         {/* Preferences — learned behavioral patterns */}
-        {preferenceThings.length > 0 && (
-          <section className="py-2 border-t border-gray-100 dark:border-gray-800">
-            <h2 className="px-4 pb-1 text-xs font-semibold text-purple-400 dark:text-purple-400 uppercase tracking-widest flex items-center gap-1.5">
-              <span>⚙️</span>
-              <span>Preferences</span>
+        <section className="py-2 border-t border-gray-100 dark:border-gray-800">
+          <h2 className="px-4 pb-1 text-xs font-semibold text-purple-400 dark:text-purple-400 uppercase tracking-widest flex items-center gap-1.5">
+            <span>⚙️</span>
+            <span>Preferences</span>
+            {preferenceThings.length > 0 && (
               <span className="ml-auto text-[10px] font-normal tabular-nums text-gray-400">{preferenceThings.length}</span>
-            </h2>
-            {preferenceThings.map(t => <PreferenceCard key={t.id} thing={t} />)}
-          </section>
-        )}
+            )}
+          </h2>
+          {preferenceThings.length === 0 ? (
+            <p className="px-4 py-2 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+              As we talk, I'll learn how you like to work. You can always edit what I've picked up.
+            </p>
+          ) : (
+            preferenceThings.map(t => <PreferenceCard key={t.id} thing={t} />)
+          )}
+        </section>
 
             {/* Upcoming Check-ins */}
             {upcoming.length > 0 && (
@@ -921,8 +933,11 @@ export function Sidebar() {
             <GmailPanel />
 
             {!loading && things.length === 0 && (
-              <div className="px-4 py-6 text-sm text-gray-400 dark:text-gray-400 text-center">
-                Start by typing in the chat…
+              <div className="px-4 py-8 flex flex-col items-center text-center gap-3">
+                <div className="text-4xl select-none">🗂️</div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-[200px]">
+                  Things you mention in chat appear here — try telling me about a project.
+                </p>
               </div>
             )}
           </>
