@@ -11,6 +11,7 @@ on:
       - 'backend/response_agent.py'
       - 'backend/context_agent.py'
       - 'eval/**'
+      - 'prompts/**'
       - 'backend/tests/test_evals.py'
 
 jobs:
