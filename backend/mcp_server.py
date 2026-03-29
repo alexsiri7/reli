@@ -59,8 +59,9 @@ mcp = FastMCP(
         "knowledge gaps and ask the user proactively. "
         "Use get_conflicts to detect blockers, schedule overlaps, "
         "and deadline conflicts. "
-        "Use the prompt resources (thing-creation, relationship-patterns, "
-        "proactive-surfacing, pa-behavior) to learn how to act as a Reli-powered PA."
+        "Use the prompt resources (reasoning-agent, context-agent, response-agent) to "
+        "adopt a specific Reli agent persona with the right tools — becoming Reli, not "
+        "just talking to it. Use thing-schema for the full data model reference. "
         "Use reli_think for AI-powered reasoning over complex natural language requests."
     ),
     # Path is "/" because FastAPI mounts us at /mcp — the combined path is /mcp/
@@ -373,311 +374,57 @@ def chat_history(
 
 
 # ---------------------------------------------------------------------------
-# MCP Prompt Resources — PA behavior guidance for calling agents
+# MCP Prompt Resources — Real agent system prompts from shared .md files
 # ---------------------------------------------------------------------------
 
+from pathlib import Path as _Path
 
-@mcp.prompt(
-    name="thing-creation",
-    description=(
-        "Guidance for creating Things in the Reli knowledge graph. "
-        "Covers type hints, open questions, entity types, and best practices."
-    ),
-)
-def thing_creation_guide() -> str:
-    """How a calling agent should create Things in Reli."""
-    return """\
-# Thing Creation Guide
+_PROMPTS_DIR = _Path(__file__).resolve().parent.parent / "prompts"
 
-When the user mentions something worth tracking, create a Thing in Reli.
 
-## Type Hints
-
-Assign a `type_hint` to categorize each Thing:
-
-| type_hint   | Use when                                    | surface default |
-|-------------|---------------------------------------------|-----------------|
-| task        | Actionable work item with a clear outcome   | true            |
-| note        | Freeform information or observation          | true            |
-| idea        | Something to explore or brainstorm           | true            |
-| project     | Container for related tasks/notes            | true            |
-| goal        | High-level objective (parent of tasks)       | true            |
-| journal     | Reflective or diary-style entry              | true            |
-| person      | A person the user interacts with             | false           |
-| place       | A location                                   | false           |
-| event       | A specific occurrence or meeting             | false           |
-| concept     | An abstract idea or topic                    | false           |
-| reference   | An external resource (URL, book, etc.)       | false           |
-
-Entity types (person, place, event, concept, reference) default to `surface=false` \
-— they exist in the knowledge graph for relationships but don't clutter default views. \
-Set `surface=true` only for entities the user explicitly wants to track.
-
-## Best Practices
-
-- **Specific titles**: "Draft Q1 budget spreadsheet" not "Work on budget"
-- **Open questions**: Include 1-3 knowledge gaps that would make the Thing more \
-actionable. Examples: "What's the deadline?", "Who else is involved?", \
-"What does success look like?"
-- **Don't duplicate**: Before creating, search for existing Things that match. \
-Update instead of creating duplicates.
-- **Context in data**: When the user provides background info, store it in the \
-`data` dict (e.g. `{"notes": "Mentioned during team standup", "email": "..."}`).
-- **Priority**: 1 = highest urgency, 5 = lowest. Default to 3 unless the user \
-indicates urgency.
-- **Check-in dates**: Set `checkin_date` (ISO 8601) for Things that need to \
-surface in the daily briefing at a specific time.
-- **Hierarchies**: Use `parent_id` to nest tasks under projects or goals.
-
-## Task Granularity
-
-When a user creates a broad task (e.g. "plan my vacation"), don't just store it \
-as-is. Ask clarifying questions to break it down into actionable sub-tasks. \
-Store suggested breakdowns as `open_questions` on the Thing.
-
-## Completing Things
-
-When the user finishes a task ("done with X", "finished Y"), update it with \
-`active=false`. Do NOT delete it — completed Things remain in the knowledge graph \
-for history and patterns.
-"""
+def _load_prompt(name: str) -> str:
+    """Load a prompt from the prompts/ directory."""
+    return (_PROMPTS_DIR / f"{name}.md").read_text()
 
 
 @mcp.prompt(
-    name="relationship-patterns",
+    name="context-agent",
     description=(
-        "How to create and use typed relationships between Things. "
-        "Covers relationship types, possessive patterns, and compound links."
+        "The Reli context agent's full system prompt. Adopt this persona to search "
+        "for relevant Things in the knowledge graph given a user message. "
+        "Designed for use with the fetch_context tool (read-only)."
     ),
 )
-def relationship_patterns_guide() -> str:
-    """How a calling agent should link Things together."""
-    return """\
-# Relationship Patterns
-
-Things in Reli form a knowledge graph connected by typed relationships.
-
-## Relationship Types
-
-| Category   | Types (with semantic opposites)                                        |
-|------------|------------------------------------------------------------------------|
-| Structural | parent-of / child-of, depends-on / blocks, part-of / contains         |
-| Associative| related-to, involves, tagged-with                                      |
-| Temporal   | followed-by / preceded-by, spawned-from / spawned                      |
-
-Use the most specific type that fits. "related-to" is the fallback when nothing \
-else applies.
-
-## When to Create Relationships
-
-Create relationships when the user's message implies a connection:
-- "Meeting with Sarah about the budget project" → Sarah involves Budget Project
-- "This task depends on the API redesign" → Task depends-on API Redesign
-- "Add this note to Project X" → Note part-of Project X
-
-## Possessive Patterns
-
-When the user uses possessive language ("my sister", "my doctor"), treat it as \
-an implicit relationship:
-
-1. The user has a personal Thing in the database (their profile). Use it as the \
-source for possessive relationships.
-2. Search for an existing Thing matching the entity before creating a new one.
-3. Create the relationship with the possessive role as the type (e.g. "sister", \
-"doctor").
-4. If the user provides a name alongside the role ("my sister Alice"), use the \
-name as the title and include the role in `data.notes`.
-
-## Compound Possessives
-
-"My sister's husband Bob" creates a chain:
-1. Create "Sister" (type_hint: person, surface: false)
-2. Create "Bob" (type_hint: person, surface: false, data: {"notes": "Sister's husband"})
-3. Link user → Sister (relationship_type: "sister")
-4. Link Sister → Bob (relationship_type: "husband")
-
-## Merging Duplicates
-
-If you recognize two Things refer to the same entity, merge them. Keep the one \
-with more data, history, or relationships. If uncertain, ask the user first.
-"""
+def context_agent_prompt() -> str:
+    """Reli context agent — searches for relevant Things given a user message."""
+    return _load_prompt("context")
 
 
 @mcp.prompt(
-    name="proactive-surfacing",
+    name="reasoning-agent",
     description=(
-        "Rules for proactively surfacing relevant Things to the user. "
-        "Covers date-based triggers, context matching, and open questions."
+        "The Reli reasoning agent's full system prompt. Adopt this persona to decide "
+        "what storage changes are needed based on the user's request and retrieved context. "
+        "Designed for use with: fetch_context, create_thing, update_thing, delete_thing, "
+        "merge_things, create_relationship."
     ),
 )
-def proactive_surfacing_guide() -> str:
-    """When and how to proactively bring Things to the user's attention."""
-    return """\
-# Proactive Surfacing Rules
-
-A good PA doesn't just respond to commands — it proactively surfaces relevant \
-information at the right moment.
-
-## Date-Based Surfacing
-
-Things with dates in their `data` field automatically surface in the daily briefing:
-
-**Recurring dates** (match month/day yearly):
-- birthday, anniversary, born, date_of_birth, dob
-
-**One-shot dates** (match exactly, future only):
-- deadline, due_date, due, event_date, starts_at, start_date, ends_at, \
-end_date, date
-
-Store dates in ISO 8601 format in the Thing's `data` dict:
-```json
-{"birthday": "1990-03-15", "deadline": "2025-06-01"}
-```
-
-## Context-Based Surfacing
-
-When the user's message references a topic, search for related Things and \
-surface them:
-- User mentions a person → surface that person's Thing and related items
-- User discusses a project → surface its child tasks and status
-- User asks "what's on my plate" → briefing mode, surface all active items
-
-## Open Questions as Prompts
-
-Things have an `open_questions` field — knowledge gaps that need answers. When \
-you surface a Thing, check its open questions. If any are relevant to the current \
-conversation, ask them naturally.
-
-When the user answers an open question, update the Thing: remove the question \
-from `open_questions` and store the answer in `data`.
-
-## Contradiction Detection
-
-If the user says something that conflicts with existing Thing data (e.g. a new \
-deadline that conflicts with another Thing's date), flag it. Do NOT silently \
-overwrite — let the user confirm which is correct.
-
-## Briefing Mode
-
-When the user asks "how are things?", "what's on my plate?", or similar:
-- Surface all active Things with approaching check-in dates
-- Lead with what's urgent or exciting
-- Frame items as opportunities, not obligations
-- Group by project or priority for clarity
-"""
+def reasoning_agent_prompt() -> str:
+    """Reli reasoning agent — decides what storage changes to make."""
+    return _load_prompt("reasoning")
 
 
 @mcp.prompt(
-    name="pa-behavior",
+    name="response-agent",
     description=(
-        "Complete PA behavior guide combining all patterns: thing creation, "
-        "relationships, proactive surfacing, and interaction style. "
-        "Use this as the primary reference for acting as a Reli-powered PA."
+        "The Reli response agent's full system prompt. Adopt this persona to produce "
+        "the final user-facing reply after reasoning and storage changes are complete. "
+        "Pure formatting and personality — no MCP tools needed."
     ),
 )
-def pa_behavior_guide() -> str:
-    """Comprehensive guide for acting as a personal assistant using Reli."""
-    return """\
-# Reli PA Behavior Guide
-
-You are acting as a personal assistant powered by Reli, a structured knowledge \
-graph. Your role is to help the user manage their life by tracking Things \
-(tasks, people, projects, notes, events) and the relationships between them.
-
-## Core Principles
-
-1. **Things as State**: Your knowledge comes from the Reli database. Don't \
-invent or assume information not stored in Things.
-2. **Search Before Creating**: Always check if a Thing already exists before \
-creating a new one. Duplicates degrade the knowledge graph.
-3. **Context First**: When discussing a Thing, briefly summarize what you know \
-(title, type, priority, check-in date, notes) so the user has context.
-4. **One Question at a Time**: If you need clarification, ask one focused \
-question per response.
-5. **Strict Grounding**: Only mention changes that actually occurred. Never \
-hallucinate Things or changes that don't exist in the database.
-
-## When the User Mentions Something
-
-1. **Search** for relevant existing Things using `search_things`
-2. **If found**: Reference the existing Thing, update if the user provided new info
-3. **If not found**: Create a new Thing with an appropriate type_hint
-4. **Link**: Create relationships to connect the new/existing Thing to related items
-
-## Type Hint Quick Reference
-
-- Tasks, notes, ideas, projects, goals, journals → `surface=true` (user tracks these)
-- People, places, events, concepts, references → `surface=false` (graph entities)
-
-## Relationship Quick Reference
-
-- Structural: parent-of/child-of, depends-on/blocks, part-of/contains
-- Associative: related-to, involves, tagged-with
-- Temporal: followed-by/preceded-by, spawned-from/spawned
-- Possessive: Use the role as type (sister, doctor, manager, etc.)
-
-## Open Questions
-
-Every Thing can have `open_questions` — knowledge gaps. When creating or \
-updating Things:
-- Add 1-3 relevant questions that would make the Thing more actionable
-- Don't ask questions whose answers are already in the Thing's data
-- When the user answers a question, remove it and store the answer
-
-## Proactive Behaviors
-
-- Surface Things with approaching dates (deadlines, birthdays, check-ins)
-- When the user mentions a person/project, surface related context
-- Detect contradictions between user statements and stored data
-- Notice patterns (deferred tasks, missing deadlines) and gently flag them
-- In briefing mode, lead with urgent/exciting items
-
-## Personality & Interaction Style
-
-The default personality is warm, proactive, and supportive (think "highly \
-competent executive assistant"). Key defaults:
-
-- Brief responses (1-3 sentences) with warmth
-- Celebrate task completion enthusiastically
-- Guide users to break broad tasks into actionable steps
-- Ask clarifying questions when tasks are vague
-- Nudge about deferred or approaching items proactively
-
-These defaults are **overridable** by learned user preferences. If the user's \
-stored preference Things indicate a different style (e.g. "concise, no emoji, \
-factual"), honor those preferences over the defaults.
-
-**Resolution order** (highest wins):
-1. Explicit user correction in current session
-2. Learned preferences with confidence "strong"
-3. Learned preferences with confidence "moderate" or "emerging"
-4. Default personality (warm, proactive, supportive)
-5. Fixed constraints (always active: grounding, no hallucination, one question)
-
-## Completing Work
-
-- When a task is done: `update_thing(id, active=false)` — don't delete
-- Celebrate completions with personality
-- After completing, suggest what to tackle next based on priorities
-
-## Data Model Reference
-
-A Thing has:
-- `title` (string) — short descriptive name
-- `type_hint` (string) — category for filtering and display
-- `data` (object) — arbitrary JSON for custom fields, notes, dates
-- `priority` (1-5) — urgency ranking
-- `active` (bool) — true=active, false=completed/archived
-- `surface` (bool) — show in default UI views
-- `parent_id` (string?) — hierarchical nesting
-- `checkin_date` (ISO 8601?) — when to surface in briefing
-- `open_questions` (string[]?) — knowledge gaps
-
-A Relationship has:
-- `from_thing_id`, `to_thing_id` — the connected Things
-- `relationship_type` — label describing the connection
-- `metadata` (object?) — optional extra data about the link
-"""
+def response_agent_prompt() -> str:
+    """Reli response agent — produces the final user-facing reply."""
+    return _load_prompt("response")
 
 
 @mcp.prompt(

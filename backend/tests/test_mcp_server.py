@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from backend.mcp_server import (
     chat_history,
+    context_agent_prompt,
     create_relationship,
     create_thing,
     delete_relationship,
@@ -24,10 +25,8 @@ from backend.mcp_server import (
     list_relationships,
     mcp,
     merge_things,
-    pa_behavior_guide,
-    proactive_surfacing_guide,
-    relationship_patterns_guide,
-    thing_creation_guide,
+    reasoning_agent_prompt,
+    response_agent_prompt,
     thing_schema_reference,
     update_thing,
 )
@@ -613,100 +612,74 @@ class TestGetConflicts:
 
 
 class TestPromptResources:
-    """Tests for PA behavior prompt resources."""
+    """Tests for MCP prompt resources — real agent system prompts."""
 
-    def test_thing_creation_guide_returns_string(self) -> None:
-        result = thing_creation_guide()
+    def test_context_agent_prompt_returns_string(self) -> None:
+        result = context_agent_prompt()
         assert isinstance(result, str)
-        assert "Thing Creation Guide" in result
+        assert "Librarian" in result
 
-    def test_thing_creation_guide_covers_type_hints(self) -> None:
-        result = thing_creation_guide()
-        for hint in (
-            "task",
-            "note",
-            "idea",
-            "project",
-            "goal",
-            "person",
-            "place",
-            "event",
-        ):
+    def test_context_agent_prompt_covers_schema(self) -> None:
+        result = context_agent_prompt()
+        assert "search_queries" in result
+        assert "fetch_ids" in result
+        assert "needs_web_search" in result
+        assert "include_calendar" in result
+
+    def test_context_agent_prompt_covers_type_hints(self) -> None:
+        result = context_agent_prompt()
+        for hint in ("task", "note", "project", "person", "place", "event"):
             assert hint in result, f"Missing type_hint '{hint}'"
 
-    def test_thing_creation_guide_covers_open_questions(self) -> None:
-        result = thing_creation_guide()
+    def test_reasoning_agent_prompt_returns_string(self) -> None:
+        result = reasoning_agent_prompt()
+        assert isinstance(result, str)
+        assert "Reasoning Agent" in result
+
+    def test_reasoning_agent_prompt_covers_output_schema(self) -> None:
+        result = reasoning_agent_prompt()
+        assert "storage_changes" in result
+        assert "create" in result
+        assert "update" in result
+        assert "delete" in result
+        assert "merge" in result
+        assert "relationships" in result
+
+    def test_reasoning_agent_prompt_covers_entity_types(self) -> None:
+        result = reasoning_agent_prompt()
+        for hint in ("task", "note", "project", "person", "place", "event", "preference"):
+            assert hint in result, f"Missing entity type '{hint}'"
+
+    def test_reasoning_agent_prompt_covers_open_questions(self) -> None:
+        result = reasoning_agent_prompt()
         assert "open_questions" in result
 
-    def test_thing_creation_guide_covers_surface_defaults(self) -> None:
-        result = thing_creation_guide()
-        assert "surface" in result
-        assert "false" in result
-
-    def test_relationship_patterns_returns_string(self) -> None:
-        result = relationship_patterns_guide()
-        assert isinstance(result, str)
-        assert "Relationship Patterns" in result
-
-    def test_relationship_patterns_covers_types(self) -> None:
-        result = relationship_patterns_guide()
-        for rtype in (
-            "parent-of",
-            "child-of",
-            "depends-on",
-            "blocks",
-            "related-to",
-            "involves",
-        ):
-            assert rtype in result, f"Missing relationship type '{rtype}'"
-
-    def test_relationship_patterns_covers_possessive(self) -> None:
-        result = relationship_patterns_guide()
+    def test_reasoning_agent_prompt_covers_possessive_patterns(self) -> None:
+        result = reasoning_agent_prompt()
         assert "Possessive" in result
         assert "sister" in result
 
-    def test_proactive_surfacing_returns_string(self) -> None:
-        result = proactive_surfacing_guide()
+    def test_reasoning_agent_prompt_covers_relationships(self) -> None:
+        result = reasoning_agent_prompt()
+        for rtype in ("parent-of", "child-of", "depends-on", "blocks", "related-to", "involves"):
+            assert rtype in result, f"Missing relationship type '{rtype}'"
+
+    def test_response_agent_prompt_returns_string(self) -> None:
+        result = response_agent_prompt()
         assert isinstance(result, str)
-        assert "Proactive Surfacing" in result
+        assert "Voice of Reli" in result
 
-    def test_proactive_surfacing_covers_date_types(self) -> None:
-        result = proactive_surfacing_guide()
-        for key in ("birthday", "deadline", "due_date", "anniversary"):
-            assert key in result, f"Missing date key '{key}'"
+    def test_response_agent_prompt_covers_personality(self) -> None:
+        result = response_agent_prompt()
+        assert "personality" in result.lower() or "Personality" in result
 
-    def test_proactive_surfacing_covers_briefing_mode(self) -> None:
-        result = proactive_surfacing_guide()
-        assert "Briefing Mode" in result or "briefing" in result.lower()
+    def test_response_agent_prompt_covers_referenced_things(self) -> None:
+        result = response_agent_prompt()
+        assert "referenced_things" in result
 
-    def test_pa_behavior_returns_string(self) -> None:
-        result = pa_behavior_guide()
-        assert isinstance(result, str)
-        assert "PA Behavior Guide" in result
-
-    def test_pa_behavior_covers_core_principles(self) -> None:
-        result = pa_behavior_guide()
-        assert "Things as State" in result
-        assert "Search Before Creating" in result
-        assert "One Question at a Time" in result
-
-    def test_pa_behavior_covers_data_model(self) -> None:
-        result = pa_behavior_guide()
-        for field in (
-            "title",
-            "type_hint",
-            "data",
-            "priority",
-            "active",
-            "surface",
-            "open_questions",
-        ):
-            assert field in result, f"Missing data model field '{field}'"
-
-    def test_pa_behavior_covers_personality_overrides(self) -> None:
-        result = pa_behavior_guide()
-        assert "overridable" in result.lower() or "override" in result.lower()
-        assert "preference" in result.lower()
+    def test_response_agent_prompt_covers_briefing_mode(self) -> None:
+        result = response_agent_prompt()
+        assert "briefing_mode" in result or "Briefing mode" in result
 
     def test_thing_schema_reference_returns_string(self) -> None:
         result = thing_schema_reference()
@@ -766,10 +739,9 @@ class TestPromptResources:
 
         prompts = asyncio.run(mcp.list_prompts())
         names = {p.name for p in prompts}
-        assert "thing-creation" in names
-        assert "relationship-patterns" in names
-        assert "proactive-surfacing" in names
-        assert "pa-behavior" in names
+        assert "context-agent" in names
+        assert "reasoning-agent" in names
+        assert "response-agent" in names
         assert "thing-schema" in names
 
     def test_prompts_have_descriptions(self) -> None:
