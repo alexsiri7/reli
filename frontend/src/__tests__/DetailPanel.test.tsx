@@ -73,9 +73,9 @@ describe('DetailPanel', () => {
     expect(screen.getByText((_, el) => el?.textContent?.includes('task') && el?.classList?.contains('capitalize') || false)).toBeInTheDocument()
   })
 
-  it('renders priority label', () => {
+  it('renders importance label', () => {
     render(<DetailPanel />)
-    expect(screen.getByText(/High/)).toBeInTheDocument()
+    expect(screen.getByText(/Medium/)).toBeInTheDocument()
   })
 
   it('renders loading skeleton when loading', () => {
