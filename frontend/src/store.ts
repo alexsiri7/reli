@@ -383,6 +383,7 @@ interface ReliState {
   dismissFinding: (findingId: string) => Promise<void>
   snoozeFinding: (findingId: string, until: string) => Promise<void>
   actOnFinding: (finding: SweepFinding) => void
+  createThing: (data: { title: string; type_hint?: string | null }) => Promise<Thing | null>
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
   updateThing: (id: string, updates: Record<string, unknown>) => Promise<void>
   fetchHistory: () => Promise<void>
@@ -807,6 +808,23 @@ export const useStore = create<ReliState>((set, get) => ({
   actOnFinding: (finding: SweepFinding) => {
     if (finding.thing_id) {
       get().openThingDetail(finding.thing_id)
+    }
+  },
+
+  createThing: async ({ title, type_hint }: { title: string; type_hint?: string | null }) => {
+    try {
+      const res = await mutationFetch(`${BASE}/things`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, type_hint: type_hint ?? null }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const created: Thing = validateResponse(ThingSchema, await res.json(), '/things')
+      set(state => ({ things: [created, ...state.things] }))
+      return created
+    } catch (e) {
+      set({ error: String(e) })
+      return null
     }
   },
 
