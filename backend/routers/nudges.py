@@ -6,6 +6,7 @@ POST /nudges/{id}/stop    → suppress this nudge type permanently (preference s
 """
 
 import re
+import sqlite3
 from datetime import date
 
 from fastapi import APIRouter, Depends
@@ -65,7 +66,7 @@ def _days_until_recurring(target: date, today: date) -> int:
     return (today.replace(year=today.year + 1, month=target.month, day=target.day) - today).days
 
 
-def _build_nudge_from_surface(thing_row: object, date_key: str, reason: str, days: int) -> Nudge:
+def _build_nudge_from_surface(thing_row: sqlite3.Row, date_key: str, reason: str, days: int) -> Nudge:
     thing = _row_to_thing(thing_row)
     nudge_id = f"proactive_{thing.id}_{date_key}"
     action = None
