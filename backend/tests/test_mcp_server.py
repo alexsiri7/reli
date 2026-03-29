@@ -1053,3 +1053,29 @@ class TestTokenAuthMiddleware:
         resp = client.get("/", headers={"Authorization": "Bearer bad"})
         assert resp.status_code == 401
         assert "Bearer" in resp.headers.get("www-authenticate", "")
+
+
+def test_mcp_session_manager_initialized_during_lifespan(patched_db) -> None:
+    """Regression: MCP session manager task group must be started during app lifespan.
+
+    When MCP is mounted as a sub-app, Starlette does not trigger the sub-app's
+    lifespan. The main app lifespan must call session_manager.run() explicitly.
+    Without this, every MCP request raises RuntimeError: Task group is not initialized.
+    See GitHub issue #312 / Sentry RELI-ZO-H.
+    """
+    from backend.main import app
+    from backend.mcp_server import mcp
+
+    sm = mcp._session_manager
+    assert sm is not None, "Session manager must exist after streamable_http_app() is called"
+
+    # Reset state to simulate fresh production startup (test isolation: a previous
+    # test's lifespan may have already set _has_started=True and _task_group=None).
+    sm._has_started = False
+    sm._task_group = None
+
+    with TestClient(app):
+        assert sm._task_group is not None, (
+            "MCP session manager task group not initialized during app lifespan. "
+            "main.py lifespan must call session_manager.run()."
+        )
