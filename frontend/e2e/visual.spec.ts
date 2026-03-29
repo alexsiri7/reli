@@ -126,6 +126,7 @@ async function interceptApi(
 const SNAPSHOT_OPTS = { maxDiffPixelRatio: 0.02 }
 
 async function waitForApp(page: Page) {
+  // App renders aside in both desktop and mobile layout divs; wait for first one
   await page.waitForSelector('aside', { timeout: 20_000 })
   // Disable animations for deterministic snapshots
   await page.addStyleTag({
@@ -157,10 +158,11 @@ test.describe('Visual regression – reli frontend', () => {
     await page.goto('/')
     await waitForApp(page)
 
+    // Use .first() because the app renders aside in both desktop and mobile layout divs
     await expect(page.locator('aside').first()).toHaveScreenshot('sidebar-empty.png', {
       ...SNAPSHOT_OPTS,
       animations: 'disabled',
-      mask: [page.locator('aside p.text-xs').first()],
+      mask: [page.locator('aside').first().locator('p.text-xs')],
     })
   })
 
@@ -171,12 +173,13 @@ test.describe('Visual regression – reli frontend', () => {
     // Wait for Things to render
     await page.waitForSelector('aside h2', { timeout: 5_000 })
 
+    // Use .first() because the app renders aside in both desktop and mobile layout divs
     await expect(page.locator('aside').first()).toHaveScreenshot(
       'sidebar-with-things.png',
       {
         ...SNAPSHOT_OPTS,
         animations: 'disabled',
-        mask: [page.locator('aside p.text-xs').first()],
+        mask: [page.locator('aside').first().locator('p.text-xs')],
       }
     )
   })
