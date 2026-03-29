@@ -8,6 +8,7 @@ import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
 import { MergeSuggestions } from './MergeSuggestions'
 import { ConnectionSuggestions } from './ConnectionSuggestions'
+import { useProgressiveDisclosure } from '../hooks/useProgressiveDisclosure'
 
 const FINDING_TYPE_ICONS: Record<string, string> = {
   approaching_date: '\u23F0',
@@ -284,6 +285,7 @@ function loadSidebarWidth(): number {
 
 export function Sidebar() {
   const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
+  const disclosure = useProgressiveDisclosure()
   const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -537,6 +539,7 @@ export function Sidebar() {
             </p>
           </div>
           <div className="flex items-center gap-1.5">
+            {disclosure.showGraphView && (
             <button
               onClick={() => setMainView(mainView === 'list' ? 'graph' : 'list')}
               aria-label={mainView === 'graph' ? 'Switch to list view' : 'Switch to graph view'}
@@ -555,6 +558,7 @@ export function Sidebar() {
                 )}
               </svg>
             </button>
+            )}
             {currentUser && (
               <div className="relative" ref={userMenuRef}>
                 {currentUser.picture ? (
@@ -624,7 +628,7 @@ export function Sidebar() {
               onChange={e => handleSearchChange(e.target.value)}
               className="w-full pl-8 pr-7 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
             />
-            {searchQuery && (
+            {searchQuery ? (
               <button
                 onClick={() => handleSearchChange('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
@@ -634,6 +638,10 @@ export function Sidebar() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
+            ) : disclosure.showCommandPaletteHint && (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-300 dark:text-gray-600 font-mono select-none pointer-events-none">
+                ⌘K
+              </span>
             )}
           </div>
         </div>
@@ -670,11 +678,11 @@ export function Sidebar() {
             {/* Google Calendar */}
             <CalendarSection />
 
-            {/* Morning Briefing — pre-generated summary */}
-            {morningBriefing && <MorningBriefingSection briefing={morningBriefing} />}
+            {/* Morning Briefing — pre-generated summary (meaningful at 5+ things) */}
+            {disclosure.showBriefing && morningBriefing && <MorningBriefingSection briefing={morningBriefing} />}
 
-            {/* Daily Briefing — sweep findings + checkin-due things */}
-            {(findings.length > 0 || briefing.length > 0) && (
+            {/* Daily Briefing — sweep findings + checkin-due things (meaningful at 5+ things) */}
+            {disclosure.showBriefing && (findings.length > 0 || briefing.length > 0) && (
               <section className="py-2 border-b border-gray-100 dark:border-gray-800">
                 <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
                   Daily Briefing
@@ -690,8 +698,8 @@ export function Sidebar() {
               </section>
             )}
 
-            {/* Focus Recommendations */}
-            {focusRecommendations.length > 0 && (
+            {/* Focus Recommendations (priority board useful at 20+ things) */}
+            {disclosure.showFocusBoard && focusRecommendations.length > 0 && (
               <section className="py-2 border-b border-gray-100 dark:border-gray-800">
                 <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
                   Focus
@@ -702,11 +710,11 @@ export function Sidebar() {
               </section>
             )}
 
-            {/* Merge Suggestions */}
-            <MergeSuggestions />
+            {/* Merge Suggestions (relationship discovery at 10+ things) */}
+            {disclosure.showConnectionDiscovery && <MergeSuggestions />}
 
-            {/* Connection Suggestions */}
-            <ConnectionSuggestions />
+            {/* Connection Suggestions (relationship discovery at 10+ things) */}
+            {disclosure.showConnectionDiscovery && <ConnectionSuggestions />}
 
             {/* Conflict Alerts */}
             {conflictAlerts && conflictAlerts.length > 0 && (

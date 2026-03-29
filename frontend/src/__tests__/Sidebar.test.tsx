@@ -187,8 +187,10 @@ describe('Sidebar', () => {
 
   it('shows Daily Briefing section when briefing has items', () => {
     const overdueDate = '2026-01-01T00:00:00Z'
+    // showBriefing requires 5+ things
+    const fiveThings = Array.from({ length: 5 }, (_, i) => makeThing({ id: `t${i}`, title: `Thing ${i}` }))
     mockState = {
-      things: [],
+      things: fiveThings,
       briefing: [makeThing({ id: 'b1', title: 'Overdue Task', checkin_date: overdueDate })],
       loading: false,
       snoozeThing: vi.fn(),

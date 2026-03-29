@@ -18,6 +18,7 @@ type Msg = {
 
 const mockStore = {
   messages: [] as Msg[],
+  things: [] as unknown[],
   chatLoading: false,
   historyLoading: false,
   hasMoreHistory: false,
@@ -55,7 +56,13 @@ beforeEach(() => {
 })
 
 describe('ChatPanel', () => {
-  it('renders empty state prompt', () => {
+  it('renders onboarding empty state for new users (no things)', () => {
+    render(<ChatPanel />)
+    expect(screen.getByText('Welcome to Reli')).toBeInTheDocument()
+  })
+
+  it('renders empty state prompt for returning users (has things)', () => {
+    mockStore.things = [{}]
     render(<ChatPanel />)
     expect(screen.getByText("What's on your mind?")).toBeInTheDocument()
   })
