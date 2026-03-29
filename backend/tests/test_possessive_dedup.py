@@ -10,9 +10,9 @@ def _insert_thing(conn, title, type_hint="person", data=None):
     """Insert a Thing directly and return its id."""
     thing_id = str(uuid.uuid4())
     conn.execute(
-        """INSERT INTO things (id, title, type_hint, priority, active, surface, data,
+        """INSERT INTO things (id, title, type_hint, importance, active, surface, data,
            created_at, updated_at)
-           VALUES (?, ?, ?, 3, 1, 0, ?, datetime('now'), datetime('now'))""",
+           VALUES (?, ?, ?, 2, 1, 0, ?, datetime('now'), datetime('now'))""",
         (thing_id, title, type_hint, json.dumps(data) if data else None),
     )
     return thing_id

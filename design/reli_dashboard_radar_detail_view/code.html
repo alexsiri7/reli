@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Reli AI | The Atelier</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-surface-variant": "#c7c4d8",
+                        "on-secondary-container": "#00311f",
+                        "tertiary": "#ffb2b7",
+                        "error": "#ffb4ab",
+                        "on-primary-fixed-variant": "#3323cc",
+                        "background": "#0b1326",
+                        "on-tertiary-fixed-variant": "#92002a",
+                        "primary-container": "#4f46e5",
+                        "error-container": "#93000a",
+                        "inverse-on-surface": "#283044",
+                        "on-tertiary": "#67001b",
+                        "on-primary-container": "#dad7ff",
+                        "on-secondary-fixed-variant": "#005236",
+                        "surface-container": "#171f33",
+                        "primary": "#c3c0ff",
+                        "primary-fixed-dim": "#c3c0ff",
+                        "on-primary-fixed": "#0f0069",
+                        "outline-variant": "#464555",
+                        "surface-variant": "#2d3449",
+                        "primary-fixed": "#e2dfff",
+                        "tertiary-container": "#bf0f3c",
+                        "secondary-fixed": "#6ffbbe",
+                        "surface-tint": "#c3c0ff",
+                        "tertiary-fixed-dim": "#ffb2b7",
+                        "surface-container-low": "#131b2e",
+                        "outline": "#918fa1",
+                        "on-surface": "#dae2fd",
+                        "surface": "#0b1326",
+                        "secondary-fixed-dim": "#4edea3",
+                        "tertiary-fixed": "#ffdadb",
+                        "on-tertiary-container": "#ffd0d2",
+                        "surface-container-lowest": "#060e20",
+                        "inverse-surface": "#dae2fd",
+                        "on-background": "#dae2fd",
+                        "surface-dim": "#0b1326",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary": "#003824",
+                        "secondary": "#4edea3",
+                        "surface-bright": "#31394d",
+                        "on-tertiary-fixed": "#40000d",
+                        "secondary-container": "#00a572",
+                        "surface-container-high": "#222a3d",
+                        "on-secondary-fixed": "#002113",
+                        "surface-container-highest": "#2d3449",
+                        "inverse-primary": "#4d44e3",
+                        "on-primary": "#1d00a5",
+                        "on-error": "#690005"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body {
+            background-color: #0b1326;
+            color: #dae2fd;
+            font-family: 'Inter', sans-serif;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2d3449;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden antialiased">
+<!-- Left Sidebar: The Radar -->
+<aside class="w-[280px] bg-[#131b2e] flex flex-col h-full py-8 fixed left-0 top-0 z-40 border-r border-outline-variant/10 shadow-[20px_0_40px_rgba(0,0,0,0.4)]">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-sm" data-icon="radar">radar</span>
+</div>
+<div>
+<h1 class="text-lg font-bold text-slate-100 leading-tight">The Atelier</h1>
+<p class="text-[10px] uppercase tracking-widest text-slate-400 font-medium">Digital Curator</p>
+</div>
+</div>
+<!-- The One Thing Bold Card -->
+<div class="bg-primary-container p-4 rounded-xl mb-6 shadow-lg shadow-primary-container/20">
+<p class="text-[10px] font-bold text-on-primary-container/70 uppercase tracking-wider mb-1">The One Thing</p>
+<h3 class="text-white font-bold text-sm leading-tight">Book work holidays</h3>
+<div class="mt-3 flex justify-end">
+<span class="material-symbols-outlined text-white/80 text-xs" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+<!-- Navigation -->
+<nav class="space-y-1">
+<div class="flex items-center gap-3 text-slate-100 border-l-2 border-[#4F46E5] pl-4 py-2 bg-[#222a3d]/50 hover:translate-x-1 duration-200 cursor-pointer">
+<span class="material-symbols-outlined text-primary" data-icon="radar">radar</span>
+<span class="font-medium text-sm">The Radar</span>
+</div>
+<div class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 hover:bg-[#222a3d] transition-all hover:translate-x-1 duration-200 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="rocket_launch">rocket_launch</span>
+<span class="font-medium text-sm">Active Things</span>
+</div>
+<div class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 hover:bg-[#222a3d] transition-all hover:translate-x-1 duration-200 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="event_repeat">event_repeat</span>
+<span class="font-medium text-sm">Upcoming Check-ins</span>
+</div>
+</nav>
+</div>
+<div class="px-6 flex-1 overflow-y-auto space-y-6">
+<!-- Secondary Items -->
+<div class="space-y-3">
+<p class="text-[10px] font-bold text-outline uppercase tracking-widest px-1">Queued</p>
+<div class="flex items-center justify-between p-2 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer group">
+<div class="flex items-center gap-3">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary"></div>
+<span class="text-xs text-on-surface-variant group-hover:text-on-surface">Update OKRs</span>
+</div>
+</div>
+<div class="flex items-center justify-between p-2 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer group">
+<div class="flex items-center gap-3">
+<div class="w-1.5 h-1.5 rounded-full bg-tertiary"></div>
+<span class="text-xs text-on-surface-variant group-hover:text-on-surface">Call Sarah</span>
+</div>
+</div>
+</div>
+<!-- Compact Calendar -->
+<div class="p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
+<div class="flex justify-between items-center mb-3">
+<p class="text-[10px] font-bold text-on-surface-variant">October 2023</p>
+<div class="flex gap-2">
+<span class="material-symbols-outlined text-[14px] text-outline cursor-pointer" data-icon="chevron_left">chevron_left</span>
+<span class="material-symbols-outlined text-[14px] text-outline cursor-pointer" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<div class="grid grid-cols-7 gap-1 text-[9px] text-center text-outline">
+<span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span class="text-primary-container">S</span><span class="text-primary-container">S</span>
+<span class="p-1">21</span><span class="p-1">22</span><span class="p-1 bg-primary-container/20 text-primary-fixed rounded">23</span><span class="p-1">24</span><span class="p-1">25</span><span class="p-1">26</span><span class="p-1">27</span>
+</div>
+</div>
+</div>
+<div class="px-6 mt-auto pt-4 space-y-1">
+<div class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 transition-all cursor-pointer">
+<span class="material-symbols-outlined text-sm" data-icon="archive">archive</span>
+<span class="text-xs">Archive</span>
+</div>
+<div class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 transition-all cursor-pointer">
+<span class="material-symbols-outlined text-sm" data-icon="delete">delete</span>
+<span class="text-xs">Trash</span>
+</div>
+<button class="w-full mt-4 py-2 bg-surface-container-high hover:bg-surface-bright text-xs font-bold text-on-surface rounded transition-all border border-outline-variant/10">
+                New Thought
+            </button>
+</div>
+</aside>
+<!-- Main Content Cluster -->
+<main class="ml-[280px] mr-[400px] flex-1 h-full overflow-y-auto bg-surface">
+<!-- Top Nav Integration -->
+<header class="h-16 px-8 flex justify-between items-center sticky top-0 bg-surface/80 backdrop-blur-md z-30">
+<div class="flex items-center gap-6">
+<div class="flex gap-4">
+<span class="text-sm font-bold text-primary border-b-2 border-primary pb-1 cursor-pointer">List</span>
+<span class="text-sm text-slate-400 hover:text-slate-200 transition-colors cursor-pointer">Graph</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<span class="material-symbols-outlined text-slate-400 hover:text-slate-200 cursor-pointer p-2 rounded-full hover:bg-surface-container-high transition-all" data-icon="notifications">notifications</span>
+<div class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-surface"></div>
+</div>
+<span class="material-symbols-outlined text-slate-400 hover:text-slate-200 cursor-pointer p-2 rounded-full hover:bg-surface-container-high transition-all" data-icon="settings">settings</span>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/20 ml-2">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="close-up portrait of a professional man in a dark turtleneck looking thoughtfully into the distance with dramatic studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDv7S7XYGkUWRQKGy6A7bNZCe2xwpQB5vXF4RY0C_MkY6L72IHBOpes8MqEW7xDAETqKEQyWf0by3vmyANLnmVCf8Q99j7M_l2zaic_bQIOI1eFpCojGtkXMchSNEpc8YXkJOA0OC-qh42nOTVMF_omCPyxs-8bwRRT2L82h8zzl5q4qFYTiII9pUUyq8889kOe7HH5nUWg1DcDc5kUfcP0p6M3MZzpmUvEZ6pL_K6rQfNLTBZAP0KPSVYHHwU9-0iZH4SDfDSFL0f0"/>
+</div>
+</div>
+</header>
+<div class="px-12 py-10 max-w-4xl mx-auto">
+<!-- Project Header -->
+<div class="mb-12">
+<div class="flex items-center gap-3 mb-4">
+<span class="px-2 py-0.5 rounded bg-secondary-container text-[10px] font-bold text-white uppercase tracking-tighter">Project</span>
+<div class="flex items-center gap-1 text-on-surface-variant text-[11px] font-medium">
+<span class="material-symbols-outlined text-[14px]" data-icon="calendar_today">calendar_today</span>
+<span>Created Oct 12</span>
+</div>
+</div>
+<h2 class="text-4xl font-black tracking-tight text-on-surface mb-6">Website Redesign</h2>
+<div class="flex gap-8 items-center border-b border-outline-variant/10 pb-8">
+<div class="flex -space-x-2">
+<img alt="Sarah" class="w-7 h-7 rounded-full border-2 border-surface" data-alt="portrait of a young smiling professional woman with bright studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCGnJhZZomPkrYA6AQXd26KKHrRaDVY0gQSTDexgc_rtoRDFgIFaIxzWPxSwjxbK7x2oSbBqSNSpBhZ7QPHaCDpaAM2g8fATex3-Wb4P2UD5g1AjJdXZwt4tyRnptOIYteR1iihcDWzMSHqHCN67pA6tB4_UzTIeKjaBvJo57KxkIy6x-lAj7ujk9wc9c8HvzblxOYqMXYH1eurxS9MgoYPU6pyXdU0RlLPklalqTRBUaSH1w-2jI_xATMQhPhbvGMjexWiDftcqdDf"/>
+<div class="w-7 h-7 rounded-full border-2 border-surface bg-surface-container-high flex items-center justify-center text-[10px] font-bold text-primary">+2</div>
+</div>
+<div class="h-4 w-px bg-outline-variant/30"></div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-lg" data-icon="target">target</span>
+<span class="text-sm font-medium text-on-surface-variant">Q4 Growth Goals</span>
+</div>
+</div>
+</div>
+<!-- Notes Section -->
+<section class="mb-12">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="notes">notes</span>
+<h3 class="text-xs font-bold uppercase tracking-widest text-outline">Curator Notes</h3>
+</div>
+<div class="space-y-4 text-on-surface-variant leading-relaxed">
+<p>The transition to a headless CMS architecture is currently in progress. Sarah has flagged that the domain renewal for <code class="bg-surface-container-lowest px-1.5 py-0.5 rounded text-primary text-xs">reli-ai.com</code> needs to be completed by end of week.</p>
+<p>Focusing on the <strong>high-fidelity visual language</strong> to match the new editorial aesthetic. We need to ensure the bento-grid layout is responsive across all curated viewports.</p>
+</div>
+</section>
+<!-- Callout Card -->
+<div class="bg-tertiary-container/10 border-l-4 border-tertiary-container p-6 rounded-r-xl mb-12 flex gap-4">
+<span class="material-symbols-outlined text-tertiary-container" data-icon="help">help</span>
+<div>
+<h4 class="font-bold text-sm text-tertiary-fixed-dim mb-1 uppercase tracking-tight">Open Questions</h4>
+<p class="text-sm text-on-surface-variant">Do we have the finalized vector assets for the brand marks? Sarah mentioned a delay in the export from the design atelier.</p>
+</div>
+</div>
+<!-- Relationships & Grid -->
+<div class="grid grid-cols-2 gap-6 mb-12">
+<div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/5">
+<h4 class="text-[10px] font-bold text-outline uppercase tracking-widest mb-4">Nodes</h4>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-xs text-primary" data-icon="person">person</span>
+</div>
+<span class="text-xs font-medium">Sarah Jenkins</span>
+</div>
+<span class="text-[10px] text-outline">Lead Dev</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-xs text-secondary" data-icon="language">language</span>
+</div>
+<span class="text-xs font-medium">Domain Renewal</span>
+</div>
+<span class="text-[10px] text-error font-bold">Priority</span>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/5 relative overflow-hidden">
+<h4 class="text-[10px] font-bold text-outline uppercase tracking-widest mb-4">Connection Map</h4>
+<div class="h-24 w-full flex items-center justify-center opacity-40">
+<!-- Visual representation of a force graph -->
+<div class="relative w-full h-full">
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-primary rounded-full blur-[2px]"></div>
+<div class="absolute top-4 left-6 w-2 h-2 bg-secondary rounded-full"></div>
+<div class="absolute bottom-6 right-10 w-2 h-2 bg-tertiary rounded-full"></div>
+<svg class="absolute inset-0 w-full h-full stroke-outline-variant/30 stroke-1 fill-none">
+<line x1="50%" x2="20%" y1="50%" y2="20%"></line>
+<line x1="50%" x2="80%" y1="50%" y2="70%"></line>
+</svg>
+</div>
+</div>
+</div>
+</div>
+<!-- Activity Stream -->
+<section>
+<h3 class="text-xs font-bold uppercase tracking-widest text-outline mb-6">Activity Stream</h3>
+<div class="space-y-8 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-outline-variant/20">
+<div class="relative pl-10">
+<div class="absolute left-0 top-1 w-6 h-6 rounded-full bg-surface border-2 border-primary flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-[12px] text-primary" data-icon="edit">edit</span>
+</div>
+<p class="text-xs text-on-surface-variant leading-normal">
+<span class="font-bold text-on-surface">You</span> updated the project scope to include <strong>API documentation</strong>
+</p>
+<span class="text-[10px] text-outline block mt-1">2 hours ago</span>
+</div>
+<div class="relative pl-10">
+<div class="absolute left-0 top-1 w-6 h-6 rounded-full bg-surface border-2 border-secondary flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-[12px] text-secondary" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<p class="text-xs text-on-surface-variant leading-normal">
+<span class="font-bold text-on-surface">Reli AI</span> auto-summarized the last 4 stakeholder meetings
+                        </p>
+<span class="text-[10px] text-outline block mt-1">5 hours ago</span>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Right Panel: AI Briefing Mode -->
+<aside class="w-[400px] bg-surface-container-low border-l border-outline-variant/10 h-full fixed right-0 top-0 overflow-y-auto flex flex-col p-8 z-40">
+<div class="flex items-center justify-between mb-8">
+<h2 class="text-xl font-black tracking-tight text-on-surface">Daily briefing</h2>
+<div class="flex gap-2">
+<span class="material-symbols-outlined text-outline hover:text-on-surface cursor-pointer text-lg" data-icon="auto_awesome">auto_awesome</span>
+</div>
+</div>
+<div class="space-y-6 flex-1">
+<!-- AI Highlight Card -->
+<div class="bg-surface-container-highest p-6 rounded-2xl border border-primary/20 shadow-xl shadow-black/20">
+<div class="flex items-center gap-2 mb-4">
+<div class="px-2 py-0.5 bg-primary-container/20 rounded text-[9px] font-black text-primary uppercase tracking-tighter">Priority Focus</div>
+</div>
+<h3 class="text-lg font-bold text-on-surface mb-3">Complete the board report by 4 PM.</h3>
+<p class="text-xs text-on-surface-variant leading-relaxed">I've synthesized the 12 relevant email threads and financial spreadsheets into a draft. You just need to verify the final EBITDA projections.</p>
+<button class="mt-4 w-full py-2 bg-primary-container text-white text-xs font-bold rounded-lg hover:bg-primary-container/90 transition-all">Review Draft</button>
+</div>
+<!-- Sweep Findings -->
+<div class="space-y-4">
+<h4 class="text-[10px] font-bold text-outline uppercase tracking-widest px-1">Findings from sweep</h4>
+<!-- Finding Card 1 -->
+<div class="group bg-surface-container rounded-xl p-4 border border-outline-variant/5 hover:border-outline-variant/20 transition-all">
+<div class="flex justify-between items-start mb-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-secondary" data-icon="inventory_2">inventory_2</span>
+<span class="text-[10px] font-bold text-secondary uppercase tracking-tighter">Contract Alert</span>
+</div>
+<div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-xs text-outline hover:text-white cursor-pointer" data-icon="close">close</span>
+<span class="material-symbols-outlined text-xs text-outline hover:text-white cursor-pointer" data-icon="schedule">schedule</span>
+</div>
+</div>
+<p class="text-xs text-on-surface-variant mb-2">Service agreement for AWS is set to expire in 14 days. Renewal discount window closes tomorrow.</p>
+</div>
+<!-- Finding Card 2 -->
+<div class="group bg-surface-container rounded-xl p-4 border border-outline-variant/5 hover:border-outline-variant/20 transition-all">
+<div class="flex justify-between items-start mb-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-tertiary" data-icon="group">group</span>
+<span class="text-[10px] font-bold text-tertiary uppercase tracking-tighter">Team Sentiment</span>
+</div>
+<div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-xs text-outline hover:text-white cursor-pointer" data-icon="close">close</span>
+<span class="material-symbols-outlined text-xs text-outline hover:text-white cursor-pointer" data-icon="schedule">schedule</span>
+</div>
+</div>
+<p class="text-xs text-on-surface-variant mb-2">Recent Slack discussions suggest slight confusion regarding the new PTO policy.</p>
+</div>
+</div>
+</div>
+<!-- Stats Summary Footer -->
+<div class="mt-12 pt-8 border-t border-outline-variant/10">
+<div class="grid grid-cols-2 gap-4">
+<div class="p-4 bg-surface-container-lowest rounded-xl">
+<p class="text-[9px] text-outline font-bold uppercase tracking-widest mb-1">Focus Time</p>
+<p class="text-xl font-bold text-on-surface">4.2<span class="text-xs text-outline font-normal ml-1">hrs</span></p>
+</div>
+<div class="p-4 bg-surface-container-lowest rounded-xl">
+<p class="text-[9px] text-outline font-bold uppercase tracking-widest mb-1">Items Cleared</p>
+<p class="text-xl font-bold text-secondary">28</p>
+</div>
+</div>
+<div class="mt-6 flex items-center justify-center gap-2 text-primary font-bold text-[10px] cursor-pointer hover:underline uppercase tracking-widest">
+<span>View Full AI Audit</span>
+<span class="material-symbols-outlined text-[14px]" data-icon="north_east">north_east</span>
+</div>
+</div>
+</aside>
+</body></html>

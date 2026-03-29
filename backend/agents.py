@@ -443,7 +443,7 @@ def apply_storage_changes(
         oq_json = _json.dumps(open_questions) if open_questions else None
         conn.execute(
             """INSERT INTO things
-               (id, title, type_hint, parent_id, checkin_date, priority, active, surface, data,
+               (id, title, type_hint, parent_id, checkin_date, importance, active, surface, data,
                 open_questions, created_at, updated_at, user_id)
                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""",
             (
@@ -452,7 +452,7 @@ def apply_storage_changes(
                 type_hint,
                 item.get("parent_id"),
                 checkin,
-                item.get("priority", 3),
+                item.get("importance", item.get("priority", 2)),
                 surface,
                 data_json,
                 oq_json,
@@ -478,9 +478,12 @@ def apply_storage_changes(
             continue  # skip unknown IDs
 
         fields: dict[str, Any] = {}
-        for key in ("title", "type_hint", "parent_id", "checkin_date", "priority"):
+        for key in ("title", "type_hint", "parent_id", "checkin_date", "importance"):
             if key in changes:
                 fields[key] = changes[key]
+        # Accept legacy "priority" key from LLM output, map to importance
+        if "priority" in changes and "importance" not in changes:
+            fields["importance"] = changes["priority"]
         if "active" in changes:
             fields["active"] = int(bool(changes["active"]))
         if "surface" in changes:

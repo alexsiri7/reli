@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from .auth import user_filter
@@ -187,7 +187,7 @@ def chat_history(
 def create_thing(
     title: str,
     type_hint: str = "",
-    priority: int = 3,
+    importance: int = 2,
     checkin_date: str = "",
     surface: bool = True,
     data_json: str = "{}",
@@ -271,7 +271,7 @@ def create_thing(
 
         conn.execute(
             """INSERT INTO things
-               (id, title, type_hint, parent_id, checkin_date, priority,
+               (id, title, type_hint, parent_id, checkin_date, importance,
                 active, surface, data, open_questions, created_at,
                 updated_at, user_id)
                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""",
@@ -281,7 +281,7 @@ def create_thing(
                 type_hint or None,
                 None,
                 checkin_date or None,
-                priority,
+                importance,
                 int(effective_surface),
                 data_str,
                 oq_json,
@@ -308,7 +308,7 @@ def update_thing(
     title: str = "",
     active: bool | None = None,
     checkin_date: str = "",
-    priority: int | None = None,
+    importance: int | None = None,
     type_hint: str = "",
     surface: bool | None = None,
     data_json: str = "",
@@ -337,8 +337,8 @@ def update_thing(
             fields["active"] = int(bool(active))
         if checkin_date:
             fields["checkin_date"] = checkin_date
-        if priority is not None:
-            fields["priority"] = priority
+        if importance is not None:
+            fields["importance"] = importance
         if type_hint:
             fields["type_hint"] = type_hint
         if surface is not None:
@@ -757,31 +757,47 @@ def get_briefing(
     as_of: str | None = None,
     user_id: str = "",
 ) -> dict[str, Any]:
-    """Get daily briefing — checkin-due Things and active sweep findings.
+    """Get daily briefing using importance x urgency scoring.
 
-    Returns dict with 'date', 'checkin_items', 'findings', and 'total'.
+    Returns dict with 'the_one_thing', 'secondary', 'parking_lot',
+    'findings', 'total', and 'stats'.
     """
-    import json as _json
+    from .urgency import build_blocker_graph, compute_composite_score, compute_urgency
 
     target = date.fromisoformat(as_of) if as_of else date.today()
-    cutoff = datetime.combine(target, datetime.max.time()).isoformat()
+    # Use a 14-day horizon for checkin items
+    horizon = datetime.combine(target + timedelta(days=14), datetime.max.time()).isoformat()
     now = datetime.utcnow().isoformat()
 
     uf_sql, uf_params = user_filter(user_id)
     sf_uf_sql, sf_uf_params = user_filter(user_id, "sf")
 
     with db() as conn:
-        # Things with checkin_date due today or earlier
+        # Things with checkin_date within horizon (includes overdue)
         thing_rows = conn.execute(
             f"""SELECT * FROM things
                WHERE active = 1
                  AND checkin_date IS NOT NULL
                  AND checkin_date <= ?{uf_sql}
-               ORDER BY checkin_date ASC, priority ASC""",
-            [cutoff, *uf_params],
+               ORDER BY checkin_date ASC""",
+            [horizon, *uf_params],
         ).fetchall()
 
-        # Active (not dismissed, not expired, not snoozed) sweep findings
+        # All active things for blocker graph context
+        all_active = conn.execute(
+            f"""SELECT id, importance, active FROM things
+               WHERE active = 1{uf_sql}""",
+            [*uf_params],
+        ).fetchall()
+
+        # Relationships for blocker graph
+        rel_rows = conn.execute(
+            """SELECT from_thing_id, to_thing_id, relationship_type
+               FROM thing_relationships
+               WHERE relationship_type IN ('blocks', 'depends-on')""",
+        ).fetchall()
+
+        # Active sweep findings
         finding_rows = conn.execute(
             f"""SELECT sf.*
                FROM sweep_findings sf
@@ -792,14 +808,57 @@ def get_briefing(
             [now, now, *sf_uf_params],
         ).fetchall()
 
-    checkin_items = [dict(r) for r in thing_rows]
+        total_active = conn.execute(
+            f"SELECT COUNT(*) FROM things WHERE active = 1{uf_sql}",
+            [*uf_params],
+        ).fetchone()[0]
+
+    # Build blocker graph
+    all_things_map = {r["id"]: dict(r) for r in all_active}
+    blocker_graph = build_blocker_graph([dict(r) for r in rel_rows])
+
+    # Score each checkin-due thing
+    scored: list[dict[str, Any]] = []
+    for row in thing_rows:
+        thing = dict(row)
+        raw_imp = thing.get("importance")
+        imp = int(raw_imp) if raw_imp is not None else 2
+        urgency, reasons = compute_urgency(thing, target, blocker_graph, all_things_map)
+        composite = compute_composite_score(int(imp), urgency)
+        scored.append({
+            "thing": thing,
+            "importance": imp,
+            "urgency": round(urgency, 2),
+            "score": round(composite, 2),
+            "reasons": reasons,
+        })
+
+    scored.sort(key=lambda x: x["score"], reverse=True)
+
+    # Split into tiers
+    the_one_thing = scored[0] if scored else None
+    secondary = scored[1:6] if len(scored) > 1 else []
+    parking_lot = [
+        {"thing_id": s["thing"]["id"], "title": s["thing"]["title"],
+         "importance": s["importance"], "urgency": s["urgency"]}
+        for s in scored[6:]
+    ] if len(scored) > 6 else []
+
     findings = [dict(r) for r in finding_rows]
+    checkin_due = sum(1 for s in scored if s["urgency"] >= 0.25)
 
     return {
         "date": target.isoformat(),
-        "checkin_items": checkin_items,
+        "the_one_thing": the_one_thing,
+        "secondary": secondary,
+        "parking_lot": parking_lot,
         "findings": findings,
-        "total": len(checkin_items) + len(findings),
+        "total": len(scored) + len(findings),
+        "stats": {
+            "active_things": total_active,
+            "checkin_due": checkin_due,
+            "overdue": sum(1 for s in scored if "overdue" in " ".join(s["reasons"]).lower()),
+        },
     }
 
 
@@ -823,7 +882,7 @@ def get_open_questions(
                WHERE active = 1
                  AND open_questions IS NOT NULL
                  AND open_questions != '[]'{uf_sql}
-               ORDER BY priority ASC, updated_at DESC
+               ORDER BY importance ASC, updated_at DESC
                LIMIT ?""",
             [*uf_params, limit],
         ).fetchall()

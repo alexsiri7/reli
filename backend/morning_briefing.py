@@ -124,7 +124,7 @@ def generate_morning_briefing(
         thing_rows = conn.execute(
             f"""SELECT * FROM things
                WHERE active = 1{uf_sql}
-               ORDER BY priority ASC, updated_at DESC""",
+               ORDER BY importance ASC, updated_at DESC""",
             uf_params,
         ).fetchall()
 
@@ -183,15 +183,15 @@ def generate_morning_briefing(
             continue
 
         title = t["title"]
-        priority = t.get("priority", 3)
+        importance = t.get("importance", 2)
         score = 0.0
         reasons: list[str] = []
 
-        # Priority boost
-        priority_boost = (6 - priority) * 20
-        score += priority_boost
-        if priority <= 2:
-            reasons.append(f"High priority (P{priority})")
+        # Importance boost
+        importance_boost = (4 - importance) * 25
+        score += importance_boost
+        if importance <= 1:
+            reasons.append(f"High importance ({importance})")
 
         # Deadline urgency
         data_raw = t.get("data")

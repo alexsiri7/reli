@@ -10,9 +10,9 @@ def _insert_thing(conn, title, type_hint="task", data=None, open_questions=None)
     """Insert a Thing directly and return its id."""
     thing_id = str(uuid.uuid4())
     conn.execute(
-        """INSERT INTO things (id, title, type_hint, priority, active, surface, data,
+        """INSERT INTO things (id, title, type_hint, importance, active, surface, data,
            open_questions, created_at, updated_at)
-           VALUES (?, ?, ?, 3, 1, 1, ?, ?, datetime('now'), datetime('now'))""",
+           VALUES (?, ?, ?, 2, 1, 1, ?, ?, datetime('now'), datetime('now'))""",
         (
             thing_id,
             title,

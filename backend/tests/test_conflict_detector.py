@@ -32,8 +32,8 @@ def _insert_thing(
     with db() as conn:
         conn.execute(
             """INSERT INTO things
-               (id, title, type_hint, priority, active, surface, data, checkin_date, created_at, updated_at)
-               VALUES (?, ?, 'task', 3, ?, 1, ?, ?, datetime('now'), datetime('now'))""",
+               (id, title, type_hint, importance, active, surface, data, checkin_date, created_at, updated_at)
+               VALUES (?, ?, 'task', 2, ?, 1, ?, ?, datetime('now'), datetime('now'))""",
             (thing_id, title, int(active), json.dumps(data) if data else None, checkin_date),
         )
     return thing_id

@@ -30,7 +30,7 @@ def assert_thing_shape(obj: dict) -> None:
     assert obj["type_hint"] is None or isinstance(obj["type_hint"], str)
     assert obj["parent_id"] is None or isinstance(obj["parent_id"], str)
     assert obj["checkin_date"] is None or isinstance(obj["checkin_date"], str)
-    assert isinstance(obj["priority"], int)
+    assert isinstance(obj["importance"], int)
     assert isinstance(obj["active"], bool)
     assert isinstance(obj["surface"], bool)
     assert obj["data"] is None or isinstance(obj["data"], dict)
@@ -70,10 +70,11 @@ def assert_chat_response_shape(obj: dict) -> None:
 def assert_briefing_response_shape(obj: dict) -> None:
     """Validate obj matches BriefingResponse / frontend fetchBriefing expectations."""
     assert isinstance(obj["date"], str)
-    assert isinstance(obj["things"], list)
     assert isinstance(obj["total"], int)
-    for thing in obj["things"]:
-        assert_thing_shape(thing)
+    # New briefing shape: the_one_thing, secondary, parking_lot
+    assert "the_one_thing" in obj
+    assert isinstance(obj["secondary"], list)
+    assert isinstance(obj["parking_lot"], list)
 
 
 def assert_calendar_status_shape(obj: dict) -> None:
@@ -103,7 +104,7 @@ def assert_calendar_events_response_shape(obj: dict) -> None:
 
 def _create_thing(client, **overrides) -> dict:
     """Create a Thing and return the JSON response."""
-    payload = {"title": "Test Thing", "priority": 3, **overrides}
+    payload = {"title": "Test Thing", "importance": 2, **overrides}
     resp = client.post("/api/things", json=payload)
     assert resp.status_code == 201
     return resp.json()
@@ -148,7 +149,7 @@ class TestThingsContract:
             json={
                 "title": "New Contract Thing",
                 "type_hint": "task",
-                "priority": 2,
+                "importance": 1,
                 "data": {"key": "value"},
             },
         )
@@ -328,14 +329,15 @@ class TestBriefingContract:
         body = resp.json()
         assert_briefing_response_shape(body)
         assert body["total"] >= 1
-        assert len(body["things"]) == body["total"]
+        # The one thing should be set since we have a checkin-due item
+        assert body["the_one_thing"] is not None
 
     def test_briefing_things_have_thing_shape(self, client):
         _create_thing(client, title="Briefing Thing", checkin_date="2020-06-15T12:00:00")
         resp = client.get("/api/briefing?as_of=2020-06-15")
         body = resp.json()
-        for thing in body["things"]:
-            assert_thing_shape(thing)
+        if body["the_one_thing"]:
+            assert_thing_shape(body["the_one_thing"]["thing"])
 
 
 # ===========================================================================

@@ -439,8 +439,8 @@ Planning Mode Behavior:
 - Proactively suggest project structures with parent-child Thing hierarchies
 - When the user mentions a goal, create a project Thing and populate it with
   sub-tasks (type_hint="task") as children
-- Use priority levels deliberately: P1 for immediate next steps, P2 for
-  this-week items, P3 for backlog
+- Use importance levels deliberately: 0 for critical (blocks everything),
+  1 for high (would be bad to miss), 2 for medium, 3-4 for backlog
 - Set checkin_dates on tasks to create natural follow-up rhythms
 - Add thorough open_questions to surface unknowns early
 - Use reasoning_summary to explain your planning rationale
@@ -630,7 +630,7 @@ def _make_reasoning_tools(
     def create_thing(
         title: str,
         type_hint: str = "",
-        priority: int = 3,
+        importance: int = 2,
         checkin_date: str = "",
         surface: bool = True,
         data_json: str = "{}",
@@ -642,7 +642,7 @@ def _make_reasoning_tools(
             title: The Thing's title (required).
             type_hint: Category — task, note, idea, project, goal, journal,
                        person, place, event, concept, reference, preference.
-            priority: 1 (highest) to 5 (lowest), default 3.
+            importance: How bad if undone: 0 (critical) to 4 (backlog), default 2.
             checkin_date: ISO-8601 date string for check-in reminder, or empty.
             surface: Whether to show in sidebar. Entity types (person, place,
                      event, concept, reference) default to false.
@@ -657,7 +657,7 @@ def _make_reasoning_tools(
         result = shared_tools.create_thing(
             title=title,
             type_hint=type_hint,
-            priority=priority,
+            importance=importance,
             checkin_date=checkin_date,
             surface=surface,
             data_json=data_json,
@@ -677,7 +677,7 @@ def _make_reasoning_tools(
         title: str = "",
         active: bool | None = None,
         checkin_date: str = "",
-        priority: int | None = None,
+        importance: int | None = None,
         type_hint: str = "",
         surface: bool | None = None,
         data_json: str = "",
@@ -690,7 +690,7 @@ def _make_reasoning_tools(
             title: New title, or empty to keep current.
             active: Set to false to mark a task as done.
             checkin_date: New check-in date (ISO-8601), or empty to keep.
-            priority: New priority (1-5), or null to keep.
+            importance: How bad if undone: 0 (critical) to 4 (backlog), or null to keep.
             type_hint: New type_hint, or empty to keep.
             surface: New surface flag, or null to keep.
             data_json: JSON string with data fields to merge into existing
@@ -706,7 +706,7 @@ def _make_reasoning_tools(
             title=title,
             active=active,
             checkin_date=checkin_date,
-            priority=priority,
+            importance=importance,
             type_hint=type_hint,
             surface=surface,
             data_json=data_json,
@@ -1095,7 +1095,7 @@ WORKFLOW:
       "params": {
         "title": "...",
         "type_hint": "task|note|person|project|...",
-        "priority": 3,
+        "importance": 2,
         "data": {"key": "value"},
         "open_questions": ["..."],
         "surface": true,

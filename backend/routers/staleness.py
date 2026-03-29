@@ -76,8 +76,8 @@ def get_staleness_report(
         days_stale = (today - parsed).days if parsed else threshold
 
         active_children = row["active_children"] or 0
-        priority = row["priority"] or 3
-        is_neglected = priority <= 2 or active_children > 0
+        importance = row["importance"] if row["importance"] is not None else 2
+        is_neglected = importance <= 1 or active_children > 0
 
         if is_neglected:
             neglected_count += 1

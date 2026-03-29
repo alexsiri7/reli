@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Reli AI | Knowledge Graph</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-surface-variant": "#c7c4d8",
+              "on-secondary-container": "#00311f",
+              "tertiary": "#ffb2b7",
+              "error": "#ffb4ab",
+              "on-primary-fixed-variant": "#3323cc",
+              "background": "#0b1326",
+              "on-tertiary-fixed-variant": "#92002a",
+              "primary-container": "#4f46e5",
+              "error-container": "#93000a",
+              "inverse-on-surface": "#283044",
+              "on-tertiary": "#67001b",
+              "on-primary-container": "#dad7ff",
+              "on-secondary-fixed-variant": "#005236",
+              "surface-container": "#171f33",
+              "primary": "#c3c0ff",
+              "primary-fixed-dim": "#c3c0ff",
+              "on-primary-fixed": "#0f0069",
+              "outline-variant": "#464555",
+              "surface-variant": "#2d3449",
+              "primary-fixed": "#e2dfff",
+              "tertiary-container": "#bf0f3c",
+              "secondary-fixed": "#6ffbbe",
+              "surface-tint": "#c3c0ff",
+              "tertiary-fixed-dim": "#ffb2b7",
+              "surface-container-low": "#131b2e",
+              "outline": "#918fa1",
+              "on-surface": "#dae2fd",
+              "surface": "#0b1326",
+              "secondary-fixed-dim": "#4edea3",
+              "tertiary-fixed": "#ffdadb",
+              "on-tertiary-container": "#ffd0d2",
+              "surface-container-lowest": "#060e20",
+              "inverse-surface": "#dae2fd",
+              "on-background": "#dae2fd",
+              "surface-dim": "#0b1326",
+              "on-error-container": "#ffdad6",
+              "on-secondary": "#003824",
+              "secondary": "#4edea3",
+              "surface-bright": "#31394d",
+              "on-tertiary-fixed": "#40000d",
+              "secondary-container": "#00a572",
+              "surface-container-high": "#222a3d",
+              "on-secondary-fixed": "#002113",
+              "surface-container-highest": "#2d3449",
+              "inverse-primary": "#4d44e3",
+              "on-primary": "#1d00a5",
+              "on-error": "#690005"
+            },
+            fontFamily: {
+              "headline": ["Inter"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .graph-line {
+            stroke: #464555;
+            stroke-width: 1;
+            stroke-dasharray: 4;
+        }
+        .node-glow-indigo { filter: drop-shadow(0 0 8px rgba(79, 70, 229, 0.6)); }
+        .node-glow-emerald { filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.8)); }
+        .node-glow-teal { filter: drop-shadow(0 0 8px rgba(20, 184, 166, 0.6)); }
+        .node-glow-amber { filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.6)); }
+        .node-glow-rose { filter: drop-shadow(0 0 8px rgba(244, 63, 94, 0.6)); }
+    </style>
+</head>
+<body class="bg-background text-on-surface overflow-hidden">
+<!-- TopNavBar -->
+<header class="bg-[#0b1326] docked full-width top-0 z-50 font-['Inter'] antialiased tracking-tight">
+<div class="flex justify-between items-center w-full px-6 h-16 bg-[#131b2e]">
+<div class="flex items-center gap-8">
+<span class="text-xl font-black tracking-tighter text-[#4F46E5]">Reli AI</span>
+<div class="hidden md:flex items-center gap-6">
+<a class="text-slate-400 hover:text-slate-200 transition-colors" href="#">List</a>
+<a class="text-[#4F46E5] border-b-2 border-[#4F46E5] pb-1 font-bold" href="#">Graph</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden lg:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">search</span>
+<input class="bg-surface-container-high border-none rounded-full py-1.5 pl-10 pr-4 text-sm w-64 focus:ring-1 focus:ring-primary-container" placeholder="Search knowledge..." type="text"/>
+</div>
+<button class="p-2 text-slate-400 hover:bg-[#222a3d] transition-all duration-200 rounded-full">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-slate-400 hover:bg-[#222a3d] transition-all duration-200 rounded-full">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<img alt="User Profile" class="w-8 h-8 rounded-full border border-outline-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAZi7Q1KCAnB1SYJz5zsU5W5ecVAvcKfu58YK9g0PDYakez6wpIurSYUAI903MXZrJBnkHsc9IE3sk7J4e9f5QO-1H3H9KEEfNPwy0dLGzq73_hHhycVBo5aqkv-3g8Mp1rcg52PYV-LOwmjnOlwB2QRDE4zaYK8qCuGsJnuUeG9KzURnqdJ2r_uwAgeyaSmxniu3HGCPbV7aktDr91OrX6XncuPihijn361CkdXZb4VYIOjKMOezgnExLpFRI0GoUc5oUA74Ro7_60"/>
+</div>
+</div>
+</header>
+<div class="flex h-[calc(100vh-64px)] overflow-hidden">
+<!-- SideNavBar (Collapsed Representation) -->
+<aside class="bg-[#131b2e] fixed left-0 top-16 h-screen w-[280px] flex flex-col py-8 shadow-[20px_0_40px_rgba(0,0,0,0.4)] z-40 transition-transform duration-300">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-sm" data-icon="hub">hub</span>
+</div>
+<div>
+<h2 class="text-lg font-bold text-slate-100 leading-none">The Atelier</h2>
+<span class="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Digital Curator</span>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-2 space-y-1">
+<a class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 hover:bg-[#222a3d] transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="radar">radar</span>
+<span class="font-['Inter'] text-sm leading-relaxed">The Radar</span>
+</a>
+<a class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 hover:bg-[#222a3d] transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="rocket_launch">rocket_launch</span>
+<span class="font-['Inter'] text-sm leading-relaxed">Active Things</span>
+</a>
+<a class="flex items-center gap-3 text-slate-100 border-l-2 border-[#4F46E5] pl-4 py-2 bg-[#222a3d]/50" href="#">
+<span class="material-symbols-outlined" data-icon="event_repeat">event_repeat</span>
+<span class="font-['Inter'] text-sm leading-relaxed">Upcoming Check-ins</span>
+</a>
+</nav>
+<div class="mt-auto px-4 pb-16">
+<button class="w-full bg-[#4F46E5] text-white py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+                    New Thought
+                </button>
+<div class="mt-6 space-y-1">
+<a class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="archive">archive</span>
+<span class="font-['Inter'] text-sm">Archive</span>
+</a>
+<a class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="delete">delete</span>
+<span class="font-['Inter'] text-sm">Trash</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Content Area: Graph Canvas -->
+<main class="ml-[280px] flex-1 relative bg-background overflow-hidden">
+<!-- Graph Visualization (SVG Layer) -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none">
+<defs>
+<marker id="arrowhead" markerheight="7" markerwidth="10" orient="auto" refx="20" refy="3.5">
+<polygon fill="#464555" points="0 0, 10 3.5, 0 7"></polygon>
+</marker>
+</defs>
+<!-- Edges -->
+<g class="edges">
+<line class="graph-line" marker-end="url(#arrowhead)" x1="30%" x2="50%" y1="20%" y2="45%"></line>
+<line class="graph-line" marker-end="url(#arrowhead)" x1="50%" x2="70%" y1="45%" y2="30%"></line>
+<line class="graph-line" marker-end="url(#arrowhead)" x1="50%" x2="60%" y1="45%" y2="70%"></line>
+<line class="graph-line" marker-end="url(#arrowhead)" x1="20%" x2="50%" y1="60%" y2="45%"></line>
+<line class="graph-line" marker-end="url(#arrowhead)" x1="80%" x2="50%" y1="50%" y2="45%"></line>
+<line class="graph-line" marker-end="url(#arrowhead)" x1="30%" x2="15%" y1="20%" y2="15%"></line>
+</g>
+<!-- Relationship Labels -->
+<g class="labels font-['Inter'] text-[10px] fill-outline uppercase tracking-tighter">
+<text transform="rotate(25, 380, 320)" x="38%" y="32%">involves</text>
+<text transform="rotate(-15, 580, 380)" x="58%" y="38%">blocks</text>
+<text transform="rotate(35, 560, 580)" x="56%" y="58%">references</text>
+<text transform="rotate(-15, 340, 540)" x="34%" y="54%">owned by</text>
+</g>
+</svg>
+<!-- Nodes Layer (HTML for Interaction) -->
+<div class="absolute inset-0 z-10 p-8">
+<!-- Node: Task (Indigo) -->
+<div class="absolute top-[18%] left-[28%] group cursor-pointer">
+<div class="w-12 h-12 bg-primary-container rounded-full flex items-center justify-center border-4 border-background node-glow-indigo transition-transform group-hover:scale-110">
+<span class="material-symbols-outlined text-white text-xl" data-icon="task_alt">task_alt</span>
+</div>
+<span class="absolute top-full left-1/2 -translate-x-1/2 mt-2 text-xs font-bold text-on-surface whitespace-nowrap bg-surface-container/80 px-2 py-0.5 rounded backdrop-blur">System Audit</span>
+</div>
+<!-- Node: Project (Emerald) - SELECTED -->
+<div class="absolute top-[42%] left-[48%] group cursor-pointer z-20 scale-125">
+<div class="w-20 h-20 bg-secondary-container rounded-full flex items-center justify-center border-4 border-background node-glow-emerald outline outline-2 outline-secondary outline-offset-4">
+<span class="material-symbols-outlined text-white text-3xl" data-icon="architecture">architecture</span>
+</div>
+<span class="absolute top-full left-1/2 -translate-x-1/2 mt-3 text-sm font-black text-secondary whitespace-nowrap bg-surface-container/90 px-3 py-1 rounded backdrop-blur shadow-xl">Project: Aether Core</span>
+</div>
+<!-- Node: Person (Teal) -->
+<div class="absolute top-[28%] left-[68%] group cursor-pointer">
+<div class="w-14 h-14 bg-secondary-fixed-dim rounded-full flex items-center justify-center border-4 border-background node-glow-teal transition-transform group-hover:scale-110 overflow-hidden">
+<img alt="Lead Designer" class="w-full h-full object-cover" data-alt="Close up portrait of a smiling woman with glasses in a professional studio setting with soft indigo lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBzarqbqjN6WPgk7FFSL_uDhgj4j1QrZrs0RJ0vT9tnRdJtJr9DCI1GRvcE1tp5bpjtDYqyex2lUoQEtl7Z_XwPSa7QeydWej67qLZV91UuJS3agnF8pBFL7hbBJZaRicvc0zNZPLAL9S9Llt_pRpRPJT-Nf0OohbkiPOwaAAnGYszmhsKnPidc_J97DyPB06R7U9Gi5bh-YTg_N3z0hV-X6XE6JsH7r9a6bx65oXokNCBvj8zEZHoPvRy03Pv-qkxbi0CnRuG4IWdU"/>
+</div>
+<span class="absolute top-full left-1/2 -translate-x-1/2 mt-2 text-xs font-bold text-on-surface whitespace-nowrap bg-surface-container/80 px-2 py-0.5 rounded backdrop-blur">Sarah Vance</span>
+</div>
+<!-- Node: Place (Orange/Amber) -->
+<div class="absolute top-[68%] left-[58%] group cursor-pointer">
+<div class="w-16 h-16 bg-[#F59E0B] rounded-full flex items-center justify-center border-4 border-background node-glow-amber transition-transform group-hover:scale-110">
+<span class="material-symbols-outlined text-white text-2xl" data-icon="location_on">location_on</span>
+</div>
+<span class="absolute top-full left-1/2 -translate-x-1/2 mt-2 text-xs font-bold text-on-surface whitespace-nowrap bg-surface-container/80 px-2 py-0.5 rounded backdrop-blur">Helsinki Hub</span>
+</div>
+<!-- Node: Idea (Rose) -->
+<div class="absolute top-[58%] left-[18%] group cursor-pointer">
+<div class="w-10 h-10 bg-tertiary-container rounded-full flex items-center justify-center border-4 border-background node-glow-rose transition-transform group-hover:scale-110">
+<span class="material-symbols-outlined text-white text-lg" data-icon="lightbulb">lightbulb</span>
+</div>
+<span class="absolute top-full left-1/2 -translate-x-1/2 mt-2 text-xs font-bold text-on-surface whitespace-nowrap bg-surface-container/80 px-2 py-0.5 rounded backdrop-blur">Neural Mapping</span>
+</div>
+<!-- Node: Idea (Rose) -->
+<div class="absolute top-[48%] left-[78%] group cursor-pointer">
+<div class="w-12 h-12 bg-tertiary-container rounded-full flex items-center justify-center border-4 border-background node-glow-rose transition-transform group-hover:scale-110">
+<span class="material-symbols-outlined text-white text-xl" data-icon="psychology">psychology</span>
+</div>
+<span class="absolute top-full left-1/2 -translate-x-1/2 mt-2 text-xs font-bold text-on-surface whitespace-nowrap bg-surface-container/80 px-2 py-0.5 rounded backdrop-blur">Cognitive Flow</span>
+</div>
+<!-- Node: Task (Indigo) -->
+<div class="absolute top-[12%] left-[12%] group cursor-pointer">
+<div class="w-9 h-9 bg-primary-container rounded-full flex items-center justify-center border-4 border-background node-glow-indigo transition-transform group-hover:scale-110">
+<span class="material-symbols-outlined text-white text-base" data-icon="checklist">checklist</span>
+</div>
+<span class="absolute top-full left-1/2 -translate-x-1/2 mt-2 text-xs font-bold text-on-surface whitespace-nowrap bg-surface-container/80 px-2 py-0.5 rounded backdrop-blur">Setup Env</span>
+</div>
+</div>
+<!-- Floating Mini Detail Panel (Glassmorphism) -->
+<div class="absolute top-24 right-8 w-80 bg-surface-container-high/60 backdrop-blur-xl rounded-xl border border-outline-variant/30 shadow-2xl z-30 p-6">
+<div class="flex items-start justify-between mb-6">
+<div>
+<span class="bg-secondary-container/40 text-secondary text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">Active Project</span>
+<h3 class="text-xl font-headline font-extrabold text-on-surface mt-2 tracking-tight">Project: Aether Core</h3>
+</div>
+<button class="text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<div class="space-y-4">
+<div class="flex items-center gap-4">
+<div class="w-1 bg-secondary h-8 rounded-full"></div>
+<div class="flex-1">
+<p class="text-[10px] text-outline uppercase tracking-widest font-bold">Status</p>
+<p class="text-sm font-semibold">Accelerated Development</p>
+</div>
+</div>
+<div class="p-3 bg-surface-container-lowest/50 rounded-lg">
+<p class="text-[10px] text-outline uppercase tracking-widest font-bold mb-2">Connected Entities</p>
+<div class="flex -space-x-2">
+<img alt="Sarah" class="w-6 h-6 rounded-full border border-background" data-alt="portrait of lead designer sarah vance" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBEhl-FplY1-m7-HG9s1fVfViDpv5sQ2ZeAEbfJFMf24LthZs179TdTbhOmLxlB-ERZ_xMCuMGftKE1IwCkIq3GBP_GNASAdIZ1I0Ni3uWn7T-RsfDyVq71tg865TFlejwRWXVBGKCXTly4Xss8SlUUQgD6CgR8k-ZIhF_b6SUiJdynPVyK1xVpAKE1PDYN9zld9VBcR-BP1y4YLDbx_vCFhVBzp1CCtYzt8CSMO4e2gHfOcSlbBlqLYP0cLXv5dETTKDFmCD1kBnnL"/>
+<img alt="Mike" class="w-6 h-6 rounded-full border border-background" data-alt="portrait of engineer mike chen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEEL8xpnXhFNmV2MwN802V1igA5gYrD-WitZBn7ZSCdVnytqHmknk8w4s49-pr8NJ9zpGVstN_Fvenx1QPxOo-qHYhdtIAlKM0Dr2YusYj3lz7YRs8H--Kt6yu20jlb50hWnh5LJh-W5av5sNJSdRltqUvRVVkJ19B0RhzuEVr8-N56kxuF4cza1SkVA-7bqFDbsVBoaUTvvO3Eq_-foYdC2jMW8-A1dWKWfFYQOB1hMPeeq78r047jAZCcjVjXiV0N4GAEGyb_Yjz"/>
+<div class="w-6 h-6 rounded-full border border-background bg-surface-variant flex items-center justify-center text-[8px] font-bold">+4</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-3 pt-2">
+<button class="flex items-center justify-center gap-2 py-2 bg-surface-bright rounded-lg text-xs font-bold border border-outline-variant/20 hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-sm">open_in_new</span>
+                            Explore
+                        </button>
+<button class="flex items-center justify-center gap-2 py-2 bg-primary-container text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-sm" data-weight="fill">edit</span>
+                            Edit Node
+                        </button>
+</div>
+</div>
+</div>
+<!-- Zoom/Graph Controls -->
+<div class="absolute bottom-8 right-8 flex flex-col gap-2 z-30">
+<div class="bg-surface-container-high/80 backdrop-blur-md rounded-lg flex flex-col overflow-hidden border border-outline-variant/20">
+<button class="p-3 hover:bg-surface-bright transition-colors text-on-surface-variant border-b border-outline-variant/10">
+<span class="material-symbols-outlined">add</span>
+</button>
+<button class="p-3 hover:bg-surface-bright transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined">remove</span>
+</button>
+</div>
+<button class="p-3 bg-surface-container-high/80 backdrop-blur-md rounded-lg hover:bg-surface-bright transition-colors text-on-surface-variant border border-outline-variant/20">
+<span class="material-symbols-outlined">filter_center_focus</span>
+</button>
+</div>
+<!-- Graph Legend -->
+<div class="absolute bottom-8 left-8 bg-surface-container-low/40 backdrop-blur-md px-4 py-3 rounded-xl border border-outline-variant/10 z-30">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">Task</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary-container"></span>
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">Project</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary-fixed-dim"></span>
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">Person</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-[#F59E0B]"></span>
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">Place</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-container"></span>
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">Idea</span>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

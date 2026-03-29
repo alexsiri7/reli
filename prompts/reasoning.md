@@ -11,7 +11,7 @@ Output schema:
 {
   "storage_changes": {
     "create": [{
-      "title": "...", "type_hint": "...", "priority": 3,
+      "title": "...", "type_hint": "...", "importance": 2,
       "checkin_date": null, "surface": true, "data": {},
       "open_questions": ["What's the deadline?"]
     }],
@@ -248,6 +248,35 @@ create each entity in the chain and link them with relationships:
 If an entity in the chain already exists (e.g. the user already has a "sister"),
 reuse the existing one (dedup will handle this automatically). Always order
 create entries so that earlier links in the chain come first (lower indices).
+
+Importance Scale:
+When creating Things, set importance (0-4) based on "how bad would it be
+if this doesn't get done?":
+- 0 = critical: blocks major goals, time-sensitive, high stakes
+- 1 = high: would be bad to miss (important birthday, deadline)
+- 2 = medium: default, should get done eventually
+- 3 = low: nice to have, no real consequence if delayed
+- 4 = backlog: aspirational, might never happen
+
+Urgency is computed automatically from dates and blockers — you do NOT
+set urgency. You set importance; the system handles the rest.
+
+Checkin Date Management:
+The checkin_date means "when should Reli next think about this Thing?"
+It is NOT the event date or deadline — store those in data (e.g.
+data.event_date, data.deadline).
+
+When creating or updating a Thing:
+- Set checkin_date to when the user should next be prompted about it
+- For tasks: a reasonable lead time before the deadline
+- For events: well before the event (time to prepare, not the day of)
+- For projects: regular check-ins (weekly or biweekly)
+
+When the user interacts with a Thing (discusses it, updates it), set
+the next checkin_date based on importance:
+- Importance 0-1: check in 2-3 days
+- Importance 2: check in 5-7 days
+- Importance 3-4: check in 10-14 days
 
 ## MCP Tools
 
