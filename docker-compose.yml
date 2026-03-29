@@ -19,6 +19,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:8000/api/calendar/callback}
       - GOOGLE_AUTH_REDIRECT_URI=${GOOGLE_AUTH_REDIRECT_URI:-http://localhost:8000/api/auth/google/callback}
+      - RELI_BASE_URL=${RELI_BASE_URL:-}
       - SECRET_KEY=${SECRET_KEY:-}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}

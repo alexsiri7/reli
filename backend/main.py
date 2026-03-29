@@ -47,6 +47,7 @@ from .routers import (  # noqa: E402
     focus,
     gmail,
     mcp_oauth,
+    nudges,
     preferences,
     proactive,
     settings,
@@ -265,6 +266,7 @@ app.include_router(focus.router, prefix="/api", dependencies=_api_deps)
 app.include_router(staleness.router, prefix="/api", dependencies=_api_deps)
 app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
 app.include_router(connections.router, prefix="/api", dependencies=_api_deps)
+app.include_router(nudges.router, prefix="/api", dependencies=_api_deps)
 app.include_router(preferences.router, prefix="/api", dependencies=_api_deps)
 app.include_router(think.router, prefix="/api", dependencies=_api_deps)
 
@@ -326,10 +328,11 @@ app.mount("/mcp", create_mcp_asgi_app(_app_settings.MCP_API_TOKEN))
 
 # Redirect bare /mcp to /mcp/ so the mount catches it
 # (Starlette mount only matches /mcp/... not bare /mcp)
+# Use mcp_oauth._base_url() rather than request.url to avoid http:// scheme
+# when the app is running behind a TLS-terminating reverse proxy.
 @app.api_route("/mcp", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
 def mcp_redirect(request: Request) -> RedirectResponse:
-    url = str(request.url)
-    return RedirectResponse(url=url.rstrip("/") + "/", status_code=307)
+    return RedirectResponse(url=f"{mcp_oauth._base_url()}/mcp/", status_code=307)
 
 # Serve React SPA (only when the built dist directory exists)
 if _FRONTEND_DIST.is_dir():

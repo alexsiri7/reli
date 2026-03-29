@@ -177,6 +177,49 @@ export interface BriefingPreferences {
   max_findings: number
 }
 
+export interface Nudge {
+  id: string
+  nudge_type: string
+  message: string
+  thing_id: string | null
+  thing_title: string | null
+  thing_type_hint: string | null
+  days_away: number | null
+  primary_action_label: string | null
+}
+
+export interface WeeklyBriefingItem {
+  thing_id: string
+  title: string
+  type_hint: string | null
+  detail: string | null
+}
+
+export interface WeeklyBriefingConnection {
+  from_title: string
+  to_title: string
+  relationship_type: string
+}
+
+export interface WeeklyBriefingContent {
+  summary: string
+  week_start: string
+  week_end: string
+  completed: WeeklyBriefingItem[]
+  upcoming: WeeklyBriefingItem[]
+  new_connections: WeeklyBriefingConnection[]
+  preferences_learned: string[]
+  open_questions: WeeklyBriefingItem[]
+  stats: Record<string, number>
+}
+
+export interface WeeklyBriefing {
+  id: string
+  week_start: string
+  content: WeeklyBriefingContent
+  generated_at: string
+}
+
 export interface CalendarEvent {
   id: string
   summary: string
@@ -354,6 +397,16 @@ interface ReliState {
   fetchBriefingPreferences: () => Promise<void>
   updateBriefingPreferences: (prefs: BriefingPreferences) => Promise<void>
 
+  nudges: Nudge[]
+  nudgesLoading: boolean
+  fetchNudges: () => Promise<void>
+  dismissNudge: (nudgeId: string) => Promise<void>
+  stopNudgeType: (nudgeId: string) => Promise<void>
+
+  weeklyBriefing: WeeklyBriefing | null
+  weeklyBriefingLoading: boolean
+  fetchWeeklyBriefing: () => Promise<void>
+
   proactiveSurfaces: ProactiveSurface[]
   focusRecommendations: FocusRecommendation[]
   focusLoading: boolean
@@ -403,8 +456,8 @@ interface ReliState {
   clearThingFilters: () => void
 
   // View mode
-  mainView: 'list' | 'graph'
-  setMainView: (view: 'list' | 'graph') => void
+  mainView: 'list' | 'graph' | 'calendar'
+  setMainView: (view: 'list' | 'graph' | 'calendar') => void
 
   // Chat mode (Hats)
   chatMode: ChatMode
@@ -477,6 +530,24 @@ interface ReliState {
     user_agent: string
     url: string
   }) => Promise<{ success: boolean; issueUrl?: string; error?: string }>
+
+  // Command palette
+  commandPaletteOpen: boolean
+  openCommandPalette: () => void
+  closeCommandPalette: () => void
+
+  // Quick-add dialog
+  quickAddOpen: boolean
+  openQuickAdd: () => void
+  closeQuickAdd: () => void
+
+  // Sidebar visibility (desktop)
+  sidebarOpen: boolean
+  setSidebarOpen: (open: boolean) => void
+  toggleSidebar: () => void
+
+  // toggleRightView alias
+  toggleRightView: () => void
 }
 
 const HISTORY_PAGE_SIZE = 20
@@ -609,6 +680,11 @@ export const useStore = create<ReliState>((set, get) => ({
   morningBriefingLoading: false,
   briefingPreferences: null,
 
+  nudges: [],
+  nudgesLoading: false,
+  weeklyBriefing: null,
+  weeklyBriefingLoading: false,
+
   fetchMorningBriefing: async () => {
     set({ morningBriefingLoading: true })
     try {
@@ -646,6 +722,52 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ briefingPreferences: data })
     } catch (e) {
       set({ error: String(e) })
+    }
+  },
+
+  fetchNudges: async () => {
+    set({ nudgesLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/nudges`)
+      if (!res.ok) return
+      const data = await res.json()
+      if (Array.isArray(data)) set({ nudges: data })
+    } catch {
+      // best-effort
+    } finally {
+      set({ nudgesLoading: false })
+    }
+  },
+
+  dismissNudge: async (nudgeId: string) => {
+    set(s => ({ nudges: s.nudges.filter(n => n.id !== nudgeId) }))
+    try {
+      await apiFetch(`${BASE}/nudges/${nudgeId}/dismiss`, { method: 'POST' })
+    } catch {
+      // best-effort
+    }
+  },
+
+  stopNudgeType: async (nudgeId: string) => {
+    set(s => ({ nudges: s.nudges.filter(n => n.id !== nudgeId) }))
+    try {
+      await apiFetch(`${BASE}/nudges/${nudgeId}/stop`, { method: 'POST' })
+    } catch {
+      // best-effort
+    }
+  },
+
+  fetchWeeklyBriefing: async () => {
+    set({ weeklyBriefingLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/briefing/weekly`)
+      if (!res.ok) return
+      const data = await res.json()
+      set({ weeklyBriefing: data })
+    } catch {
+      // best-effort
+    } finally {
+      set({ weeklyBriefingLoading: false })
     }
   },
 
@@ -1459,6 +1581,24 @@ export const useStore = create<ReliState>((set, get) => ({
       get().fetchThings()
     } catch { /* best-effort */ }
   },
+
+  // Command palette
+  commandPaletteOpen: false,
+  openCommandPalette: () => set({ commandPaletteOpen: true }),
+  closeCommandPalette: () => set({ commandPaletteOpen: false }),
+
+  // Quick-add dialog
+  quickAddOpen: false,
+  openQuickAdd: () => set({ quickAddOpen: true }),
+  closeQuickAdd: () => set({ quickAddOpen: false }),
+
+  // Sidebar visibility (desktop)
+  sidebarOpen: typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
+
+  // toggleRightView alias
+  toggleRightView: () => set(s => ({ rightView: s.rightView === 'chat' ? 'briefing' : 'chat' })),
 
   // Feedback
   feedbackOpen: false,

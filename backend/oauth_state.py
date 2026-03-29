@@ -23,3 +23,8 @@ mcp_auth_codes: dict[str, dict] = {}
 #   response_types, token_endpoint_auth_method
 # }
 mcp_registered_clients: dict[str, dict] = {}
+
+# refresh_token -> {
+#   user_id, email, client_id, scope, expires_at
+# }
+mcp_refresh_tokens: dict[str, dict] = {}

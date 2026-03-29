@@ -44,6 +44,15 @@ let mockState: Record<string, unknown> = {
   setThingFilterQuery: vi.fn(),
   toggleThingFilterType: vi.fn(),
   clearThingFilters: vi.fn(),
+  nudges: [],
+  nudgesLoading: false,
+  dismissNudge: vi.fn(),
+  stopNudgeType: vi.fn(),
+  weeklyBriefing: null,
+  weeklyBriefingLoading: false,
+  fetchWeeklyBriefing: vi.fn(),
+  preferenceToasts: [],
+  dismissPreferenceToast: vi.fn(),
 }
 
 vi.mock('zustand/react/shallow', () => ({
@@ -138,6 +147,18 @@ const connectionDefaults = {
   openThingDetail: vi.fn(),
 }
 
+const nudgeDefaults = {
+  nudges: [],
+  nudgesLoading: false,
+  dismissNudge: vi.fn(),
+  stopNudgeType: vi.fn(),
+  weeklyBriefing: null,
+  weeklyBriefingLoading: false,
+  fetchWeeklyBriefing: vi.fn(),
+  preferenceToasts: [],
+  dismissPreferenceToast: vi.fn(),
+}
+
 const calendarDefaults = {
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [] as never[],
@@ -154,6 +175,7 @@ const calendarDefaults = {
   ...filterDefaults,
   ...mergeDefaults,
   ...connectionDefaults,
+  ...nudgeDefaults,
 }
 
 beforeEach(() => {

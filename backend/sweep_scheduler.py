@@ -185,6 +185,17 @@ async def _run_sweep_for_user(user_id: str) -> None:
                 logger.info("Morning briefing generated for user %s (no sweep candidates)", user_label)
             except Exception:
                 logger.exception("Failed to generate morning briefing for user %s", user_label)
+
+            # Generate weekly briefing on Mondays
+            try:
+                if datetime.now().weekday() == 0:  # 0 = Monday
+                    from .weekly_briefing import generate_weekly_briefing, store_weekly_briefing
+
+                    weekly_content = generate_weekly_briefing(user_id)
+                    store_weekly_briefing(user_id, weekly_content)
+                    logger.info("Weekly briefing generated for user %s (no sweep candidates)", user_label)
+            except Exception:
+                logger.exception("Failed to generate weekly briefing for user %s", user_label)
             return
 
         result = await reflect_on_candidates(candidates, user_id=user_id)
@@ -249,6 +260,17 @@ async def _run_sweep_for_user(user_id: str) -> None:
             logger.info("Morning briefing generated for user %s", user_label)
         except Exception:
             logger.exception("Failed to generate morning briefing for user %s", user_label)
+
+        # Generate weekly briefing on Mondays
+        try:
+            if datetime.now().weekday() == 0:  # 0 = Monday
+                from .weekly_briefing import generate_weekly_briefing, store_weekly_briefing
+
+                weekly_content = generate_weekly_briefing(user_id)
+                store_weekly_briefing(user_id, weekly_content)
+                logger.info("Weekly briefing generated for user %s", user_label)
+        except Exception:
+            logger.exception("Failed to generate weekly briefing for user %s", user_label)
     except Exception as exc:
         logger.exception("Sweep failed for user %s", user_id)
         _log_run(

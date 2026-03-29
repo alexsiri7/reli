@@ -4,7 +4,6 @@ After=network.target
 
 [Service]
 Type=simple
-User=asiri
 ExecStart=/home/asiri/go/bin/gc supervisor run
 Restart=always
 RestartSec=5

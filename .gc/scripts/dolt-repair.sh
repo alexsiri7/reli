@@ -69,7 +69,7 @@ for db_dir in "$DOLT_DIR"/*/; do
   # Check for checksum errors in dolt logs
   for logfile in "$CITY/dolt-server.log" "$CITY/.gc/runtime/packs/dolt/dolt.log" "$CITY/.beads/dolt-server.log"; do
     if [[ -f "$logfile" ]]; then
-      if tail -200 "$logfile" 2>/dev/null | grep -qi "checksum error.*$db_name\|connectionDb=$db_name.*checksum\|database.*$db_name.*corrupt"; then
+      if tail -200 "$logfile" 2>/dev/null | grep -qi "checksum error.*$db_name\|connectionDb=$db_name.*checksum\|database.*$db_name.*corrupt\|corrupted journal\|possible data loss.*journal"; then
         has_checksum_error=true
         break
       fi
@@ -232,18 +232,42 @@ echo "  Backup: $BACKUP_DIR"
 echo "  Log: $LOGFILE"
 log "Databases repaired: ${#CORRUPTED_DBS[@]}, Failures: $REPAIR_FAILURES"
 
-# 3i. Note about agents
-echo ""
-info "Killed agent sessions will be restarted by the controller reconciliation loop."
-
 if (( REPAIR_FAILURES > 0 )); then
   echo ""
   echo -e "${RED}${REPAIR_FAILURES} repair(s) failed. Check log: $LOGFILE${RST}"
   log "Completed with $REPAIR_FAILURES failures"
   exit 1
-else
-  echo ""
-  echo -e "${GRN}Repair complete. All databases restored.${RST}"
-  log "Repair completed successfully"
-  exit 0
 fi
+
+# === 4. POST-REPAIR RECOVERY ===
+# All agents lost context. Wait for controller, then run flow enforcement.
+echo ""
+echo "=== POST-REPAIR RECOVERY ==="
+log "Starting post-repair recovery..."
+
+# 4a. Wait for controller to restart agents (2 patrol cycles = ~60s)
+info "Waiting 60s for controller to restart agents..."
+log "Waiting for controller reconciliation..."
+sleep 60
+
+# 4b. Verify Dolt is serving queries
+info "Verifying Dolt connectivity..."
+if timeout 10s bd list --type=session --json --limit=1 &>/dev/null; then
+  ok "Dolt responding to queries"
+  log "Dolt query check passed"
+else
+  fail "Dolt not responding after repair — manual intervention needed"
+  log "FAIL: Dolt not responding post-repair"
+  exit 1
+fi
+
+# 4c. Run health.sh --fix to enforce work flow
+# This handles: orphaned beads, unmerged PRs, unslung issues, stuck agents
+info "Running health.sh --fix for work flow recovery..."
+log "Running health.sh --fix..."
+"$CITY/scripts/health.sh" --fix 2>&1 | tee -a "$LOGFILE" || true
+
+echo ""
+echo -e "${GRN}Repair and recovery complete. All databases restored. Work resumption in progress.${RST}"
+log "Repair and recovery completed successfully"
+exit 0

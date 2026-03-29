@@ -1,0 +1,9 @@
+[Unit]
+Description=Gas City Dolt Maintenance Timer (hourly)
+
+[Timer]
+OnBootSec=300
+OnUnitActiveSec=3600
+
+[Install]
+WantedBy=timers.target

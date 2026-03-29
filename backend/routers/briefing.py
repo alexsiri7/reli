@@ -22,6 +22,8 @@ from ..models import (
     SweepFindingCreate,
     SweepFindingSnooze,
     Thing,
+    WeeklyBriefing,
+    WeeklyBriefingContent,
 )
 from ..morning_briefing import (
     generate_morning_briefing,
@@ -29,6 +31,11 @@ from ..morning_briefing import (
     get_latest_morning_briefing,
     save_briefing_preferences,
     store_morning_briefing,
+)
+from ..weekly_briefing import (
+    generate_weekly_briefing,
+    get_latest_weekly_briefing,
+    store_weekly_briefing,
 )
 from .things import _row_to_thing
 
@@ -269,3 +276,32 @@ def update_preferences(body: BriefingPreferences, user_id: str = Depends(require
     """Update the user's morning briefing preferences."""
     save_briefing_preferences(user_id, body)
     return body
+
+
+@router.get("/weekly", response_model=WeeklyBriefing, summary="Get weekly digest")
+def get_weekly_briefing(user_id: str = Depends(require_user)) -> WeeklyBriefing:
+    """Return the weekly digest for the current week.
+
+    Generates on-the-fly if no stored digest exists for this week.
+    """
+    result = get_latest_weekly_briefing(user_id)
+
+    # Generate if missing or stale (not from this week)
+    today = date.today()
+    from datetime import timedelta
+    current_week_start = today - timedelta(days=today.weekday())
+
+    if not result or result["week_start"] != current_week_start.isoformat():
+        content = generate_weekly_briefing(user_id, week_start=current_week_start)
+        store_weekly_briefing(user_id, content)
+        result = get_latest_weekly_briefing(user_id)
+
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to generate weekly briefing")
+
+    return WeeklyBriefing(
+        id=result["id"],
+        week_start=result["week_start"],
+        content=WeeklyBriefingContent(**result["content"]),
+        generated_at=result["generated_at"],
+    )

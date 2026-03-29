@@ -21,8 +21,8 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..config import settings
-from ..oauth_state import mcp_auth_codes, mcp_oauth_sessions, mcp_registered_clients
-from .auth import AUTH_SCOPES, GOOGLE_REDIRECT_URI, _client_config, _create_jwt, _upsert_user
+from ..oauth_state import mcp_auth_codes, mcp_oauth_sessions, mcp_refresh_tokens, mcp_registered_clients
+from .auth import AUTH_SCOPES, GOOGLE_REDIRECT_URI, JWT_EXPIRY_SECONDS, _client_config, _create_jwt, _upsert_user
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ def authorization_server_metadata() -> JSONResponse:
         "token_endpoint": f"{base}/oauth/token",
         "registration_endpoint": f"{base}/oauth/register",
         "response_types_supported": ["code"],
-        "grant_types_supported": ["authorization_code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
         "scopes_supported": ["mcp"],
     })
@@ -181,15 +181,51 @@ def oauth_authorize(
 # ---------------------------------------------------------------------------
 
 
+REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
+
+
+def _issue_token_response(user_id: str, email: str, client_id: str, scope: str) -> JSONResponse:
+    """Create an access token + refresh token and return the RFC 6749 token response."""
+    access_token = _create_jwt(user_id, email)
+
+    refresh_token = secrets.token_urlsafe(32)
+    mcp_refresh_tokens[refresh_token] = {
+        "user_id": user_id,
+        "email": email,
+        "client_id": client_id,
+        "scope": scope,
+        "expires_at": datetime.now(timezone.utc) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
+    }
+
+    return JSONResponse({
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": JWT_EXPIRY_SECONDS,
+        "refresh_token": refresh_token,
+        "scope": scope,
+    })
+
+
 @router.post("/oauth/token", include_in_schema=False)
 async def oauth_token(
     grant_type: str = Form(...),
-    code: str = Form(...),
-    redirect_uri: str = Form(...),
+    code: str = Form(default=""),
+    redirect_uri: str = Form(default=""),
     client_id: str = Form(default=""),
     code_verifier: str = Form(default=""),
+    refresh_token: str = Form(default=""),
 ) -> JSONResponse:
-    """Exchange authorization code + PKCE verifier for a JWT bearer token."""
+    """Exchange authorization code or refresh token for a JWT bearer token."""
+    if grant_type == "refresh_token":
+        if not refresh_token:
+            raise HTTPException(status_code=400, detail="refresh_token is required")
+        session = mcp_refresh_tokens.pop(refresh_token, None)
+        if not session:
+            raise HTTPException(status_code=400, detail="Invalid or expired refresh_token")
+        if datetime.now(timezone.utc) > session["expires_at"]:
+            raise HTTPException(status_code=400, detail="Refresh token expired")
+        return _issue_token_response(session["user_id"], session["email"], session["client_id"], session["scope"])
+
     if grant_type != "authorization_code":
         raise HTTPException(status_code=400, detail="Unsupported grant_type")
 
@@ -211,8 +247,9 @@ async def oauth_token(
         if computed != session["code_challenge"]:
             raise HTTPException(status_code=400, detail="PKCE verification failed")
 
-    token = _create_jwt(session["user_id"], session["email"])
-    return JSONResponse({
-        "access_token": token,
-        "token_type": "bearer",
-    })
+    return _issue_token_response(
+        session["user_id"],
+        session["email"],
+        client_id,
+        session.get("scope", "mcp"),
+    )

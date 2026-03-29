@@ -6,6 +6,7 @@ import { ChatPanel } from './components/ChatPanel'
 import { DetailPanel } from './components/DetailPanel'
 import { BriefingPanel } from './components/BriefingPanel'
 import GraphView from './components/GraphView'
+import { CalendarView } from './components/CalendarView'
 import { LoginPage } from './components/LoginPage'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
@@ -15,7 +16,7 @@ import { usePushNotifications } from './hooks/usePushNotifications'
 import { PreferenceToast } from './components/PreferenceToast'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, rightView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, rightView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges, fetchWeeklyBriefing, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
@@ -39,6 +40,8 @@ function App() {
       fetchConnectionSuggestions: s.fetchConnectionSuggestions,
       fetchUserSettings: s.fetchUserSettings,
       fetchMorningBriefing: s.fetchMorningBriefing,
+      fetchNudges: s.fetchNudges,
+      fetchWeeklyBriefing: s.fetchWeeklyBriefing,
       error: s.error,
     }))
   )
@@ -67,6 +70,8 @@ function App() {
     fetchConnectionSuggestions()
     fetchUserSettings()
     fetchMorningBriefing()
+    fetchNudges()
+    fetchWeeklyBriefing()
     const interval = setInterval(() => { fetchThings(); fetchBriefing(); fetchProactiveSurfaces(); fetchFocusRecommendations(); fetchConflictAlerts() }, 30_000)
 
     // Handle OAuth callback redirect
@@ -77,7 +82,7 @@ function App() {
     }
 
     return () => clearInterval(interval)
-  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing])
+  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges, fetchWeeklyBriefing])
 
   // Show nothing while checking auth
   if (!authChecked) {
@@ -124,6 +129,8 @@ function App() {
         <Sidebar />
         {mainView === 'graph' ? (
           <GraphView />
+        ) : mainView === 'calendar' ? (
+          <CalendarView />
         ) : (
           <>
             <DetailPanel />
