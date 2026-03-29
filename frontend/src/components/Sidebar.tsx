@@ -404,15 +404,16 @@ export function Sidebar() {
     return () => document.removeEventListener('mousedown', handler)
   }, [filterDropdownOpen])
 
-  const isOpen = sidebarOpen
-  const setIsOpen = setSidebarOpen
+  const [isOpen, setIsOpen] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true
+  )
 
   useEffect(() => {
     const mql = window.matchMedia('(min-width: 768px)')
-    const handler = (e: MediaQueryListEvent) => { if (!e.matches) setSidebarOpen(false) }
+    const handler = (e: MediaQueryListEvent) => setIsOpen(e.matches)
     mql.addEventListener('change', handler)
     return () => mql.removeEventListener('change', handler)
-  }, [setSidebarOpen])
+  }, [])
 
   const upcoming = things
     .filter(t => t.checkin_date != null)
