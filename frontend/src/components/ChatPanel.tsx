@@ -7,6 +7,7 @@ import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInpu
 import { useTTS, ttsSupported } from '../hooks/useTTS'
 import { useNetworkStatus } from '../hooks/useNetworkStatus'
 import { useProgressiveDisclosure } from '../hooks/useProgressiveDisclosure'
+import { NudgeBanner } from './NudgeBanner'
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso)
@@ -813,6 +814,9 @@ export function ChatPanel() {
           <NerdStatsIcon stats={sessionStats} />
         </div>
       </div>
+
+      {/* Nudge banners */}
+      <NudgeBanner />
 
       {/* Messages */}
       <div
