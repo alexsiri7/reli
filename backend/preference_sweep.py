@@ -273,8 +273,8 @@ async def aggregate_preference_patterns(
     from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
 
     with Session(_engine_mod.engine) as session:
-        interactions = _fetch_recent_interactions(conn, user_id)
-        existing_preferences = _fetch_existing_preferences(conn, user_id)
+        interactions = _fetch_recent_interactions(session, user_id)
+        existing_preferences = _fetch_existing_preferences(session, user_id)
 
     if len(interactions) < MIN_INTERACTIONS:
         logger.info(
@@ -521,8 +521,8 @@ async def aggregate_communication_style_patterns(
     from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
 
     with Session(_engine_mod.engine) as session:
-        interactions = _fetch_recent_interactions(conn, user_id)
-        existing_things = _fetch_communication_style_things(conn, user_id)
+        interactions = _fetch_recent_interactions(session, user_id)
+        existing_things = _fetch_communication_style_things(session, user_id)
 
     if len(interactions) < MIN_INTERACTIONS:
         logger.info(

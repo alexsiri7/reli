@@ -11,7 +11,7 @@ from sqlalchemy import func, text
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
-from ..db_engine import get_session, user_filter_clause
+from ..db_engine import _exec, get_session, user_filter_clause
 from ..db_models import ThingRecord, ThingRelationshipRecord, ThingTypeRecord
 from ..db_models import MergeHistoryRecord as MergeHistoryDBRecord
 
@@ -89,7 +89,7 @@ def _row_to_thing(row: Any) -> Thing:
     if isinstance(row, ThingRecord):
         return _record_to_thing(row)
     # Legacy sqlite3.Row handling
-    data = row["data"]
+    data = row.data
     while isinstance(data, str) and data:
         try:
             data = json.loads(data)
@@ -99,17 +99,17 @@ def _row_to_thing(row: Any) -> Thing:
         data = None
     surface = True
     try:
-        surface = bool(row["surface"]) if row["surface"] is not None else True
+        surface = bool(row.surface) if row.surface is not None else True
     except (IndexError, KeyError):
         pass
     last_referenced = None
     try:
-        last_referenced = _parse_dt(row["last_referenced"])
+        last_referenced = _parse_dt(row.last_referenced)
     except (IndexError, KeyError):
         pass
     open_questions = None
     try:
-        raw_oq = row["open_questions"]
+        raw_oq = row.open_questions
         if raw_oq:
             oq = raw_oq
             while isinstance(oq, str):
@@ -122,17 +122,17 @@ def _row_to_thing(row: Any) -> Thing:
     except (IndexError, KeyError):
         pass
     return Thing(
-        id=row["id"],
-        title=row["title"],
-        type_hint=row["type_hint"],
-        parent_id=row["parent_id"],
-        checkin_date=_parse_dt(row["checkin_date"]),
-        importance=row["importance"],
-        active=bool(row["active"]),
+        id=row.id,
+        title=row.title,
+        type_hint=row.type_hint,
+        parent_id=row.parent_id,
+        checkin_date=_parse_dt(row.checkin_date),
+        importance=row.importance,
+        active=bool(row.active),
         surface=surface,
         data=data,
-        created_at=_parse_dt(row["created_at"]) or datetime.min,
-        updated_at=_parse_dt(row["updated_at"]) or datetime.min,
+        created_at=_parse_dt(row.created_at) or datetime.min,
+        updated_at=_parse_dt(row.updated_at) or datetime.min,
         last_referenced=last_referenced,
         open_questions=open_questions,
     )
@@ -181,7 +181,7 @@ def get_user_thing(
     # Fetch relationships with resolved titles using raw SQL for the complex JOIN
     # TODO: convert to SQLModel query
     conn = session.connection()
-    rel_rows = conn.execute(
+    rel_rows = _exec(session, 
         text(
             "SELECT r.id, r.relationship_type, r.from_thing_id, r.to_thing_id, "
             "  CASE WHEN r.from_thing_id = :tid THEN t_to.title ELSE t_from.title END AS related_title, "
@@ -243,9 +243,8 @@ def search_things(
 
     # Complex UNION query - use raw SQL
     # TODO: convert to SQLModel query
-    from ..database import db
     pattern = f"%{q}%"
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         filters = ""
         filter_params: list[str | int] = []
         uf_sql, uf_params = user_filter(user_id, "t")
@@ -292,7 +291,7 @@ def search_things(
             " LIMIT ?"
         )
         params = [*direct_params, *rel_params, limit]
-        rows = conn.execute(sql, params).fetchall()
+        rows = _exec(session, sql, params).fetchall()
 
     return [_row_to_thing(r) for r in rows]
 
@@ -321,10 +320,10 @@ def list_things(
     # Compute child stats for project-type things
     project_ids = [t.id for t in things if t.type_hint == "project"]
     if project_ids:
-        from ..database import db
-        with db() as conn:
+        import backend.db_engine as _engine_mod
+        with Session(_engine_mod.engine) as session:
             placeholders = ",".join("?" * len(project_ids))
-            child_rows = conn.execute(
+            child_rows = _exec(session, 
                 f"SELECT parent_id,"
                 f" COUNT(*) as children_count,"
                 f" SUM(CASE WHEN active = 0 THEN 1 ELSE 0 END) as completed_count"
@@ -332,7 +331,7 @@ def list_things(
                 f" GROUP BY parent_id",
                 project_ids,
             ).fetchall()
-            stats = {r["parent_id"]: (r["children_count"], r["completed_count"]) for r in child_rows}
+            stats = {r.parent_id: (r.children_count, r.completed_count) for r in child_rows}
             for t in things:
                 if t.type_hint == "project":
                     counts = stats.get(t.id, (0, 0))
@@ -350,17 +349,17 @@ def get_graph(
     """Return all active Things and relationships as nodes and edges."""
     # Complex JOIN with thing_types - use raw SQL for now
     # TODO: convert to SQLModel query
-    from ..database import db
-    with db() as conn:
+    import backend.db_engine as _engine_mod
+    with Session(_engine_mod.engine) as session:
         uf_sql, uf_params = user_filter(user_id, "t")
-        node_rows = conn.execute(
+        node_rows = _exec(session, 
             "SELECT t.id, t.title, t.type_hint, tt.icon"
             " FROM things t"
             " LEFT JOIN thing_types tt ON t.type_hint = tt.name"
             " WHERE t.active = 1" + uf_sql,
             uf_params,
         ).fetchall()
-        edge_rows = conn.execute(
+        edge_rows = _exec(session, 
             "SELECT r.id, r.from_thing_id, r.to_thing_id, r.relationship_type"
             " FROM thing_relationships r"
             " JOIN things t ON r.from_thing_id = t.id"
@@ -368,14 +367,14 @@ def get_graph(
             uf_params,
         ).fetchall()
 
-    nodes = [GraphNode(id=r["id"], title=r["title"], type_hint=r["type_hint"], icon=r["icon"]) for r in node_rows]
+    nodes = [GraphNode(id=r.id, title=r.title, type_hint=r.type_hint, icon=r.icon) for r in node_rows]
     active_ids = {n.id for n in nodes}
     edges = [
         GraphEdge(
-            id=r["id"], source=r["from_thing_id"], target=r["to_thing_id"], relationship_type=r["relationship_type"]
+            id=r.id, source=r.from_thing_id, target=r.to_thing_id, relationship_type=r.relationship_type
         )
         for r in edge_rows
-        if r["to_thing_id"] in active_ids
+        if r.to_thing_id in active_ids
     ]
     return GraphResponse(nodes=nodes, edges=edges)
 
@@ -724,9 +723,9 @@ def get_orphan_relationships(
     """Return relationships where from_thing_id or to_thing_id doesn't exist."""
     # Complex NOT IN subquery - use raw SQL
     # TODO: convert to SQLModel query
-    from ..database import db
-    with db() as conn:
-        rows = conn.execute(
+    import backend.db_engine as _engine_mod
+    with Session(_engine_mod.engine) as session:
+        rows = _exec(session, 
             "SELECT r.* FROM thing_relationships r"
             " WHERE r.from_thing_id NOT IN (SELECT id FROM things)"
             "    OR r.to_thing_id NOT IN (SELECT id FROM things)"
@@ -744,8 +743,8 @@ def cleanup_orphan_relationships(user_id: str = Depends(require_user)) -> Orphan
 # -- Relationships --
 
 def _parse_rel_row(row: Any) -> Relationship:
-    """Convert a sqlite3.Row or similar to a Relationship response model."""
-    meta = row["metadata"] if hasattr(row, "__getitem__") else getattr(row, "metadata_", None)
+    """Convert a Row or SQLModel record to a Relationship response model."""
+    meta = getattr(row, "metadata_", None) or getattr(row, "metadata", None)
     if isinstance(meta, str) and meta:
         try:
             meta = json.loads(meta)
@@ -753,12 +752,12 @@ def _parse_rel_row(row: Any) -> Relationship:
             meta = None
     if isinstance(meta, str):
         meta = None
-    created_at = row["created_at"] if hasattr(row, "__getitem__") else getattr(row, "created_at", None)
+    created_at = getattr(row, "created_at", None)
     return Relationship(
-        id=row["id"] if hasattr(row, "__getitem__") else row.id,
-        from_thing_id=row["from_thing_id"] if hasattr(row, "__getitem__") else row.from_thing_id,
-        to_thing_id=row["to_thing_id"] if hasattr(row, "__getitem__") else row.to_thing_id,
-        relationship_type=row["relationship_type"] if hasattr(row, "__getitem__") else row.relationship_type,
+        id=row.id,
+        from_thing_id=row.from_thing_id,
+        to_thing_id=row.to_thing_id,
+        relationship_type=row.relationship_type,
         metadata=meta,
         created_at=_parse_dt(created_at) if isinstance(created_at, str) else (created_at or datetime.min),
     )

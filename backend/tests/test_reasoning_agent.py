@@ -53,14 +53,13 @@ class TestMakeReasoningTools:
     def _get_tools(self, user_id: str = "test-user"):
         """Create tools with all DB operations mocked."""
         with (
-            patch("backend.reasoning_agent.db") as mock_db,
             patch("backend.tools.upsert_thing"),
             patch("backend.tools.vs_delete"),
         ):
             from backend.reasoning_agent import _make_reasoning_tools
 
             tools, applied, _fetched = _make_reasoning_tools(user_id)
-            return tools, applied, mock_db
+            return tools, applied, None
 
     def test_returns_seven_tools(self):
         tools, applied, _ = self._get_tools()

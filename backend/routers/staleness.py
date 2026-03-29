@@ -9,7 +9,8 @@ from ..db_engine import get_session, user_filter_clause
 from ..db_models import ThingRecord
 
 from ..auth import require_user
-from ..database import db
+import backend.db_engine as _engine_mod
+from ..db_engine import _exec
 from ..auth import user_filter
 from ..models import (
     OverdueCheckin,
@@ -44,8 +45,8 @@ def get_staleness_report(
     # TODO: convert to SQLModel query
     uf_sql, uf_params = user_filter(user_id)
 
-    with db() as conn:
-        stale_rows = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        stale_rows = _exec(session, 
             f"""SELECT t.*,
                        (SELECT COUNT(*) FROM things c
                         WHERE c.parent_id = t.id AND c.active = 1) AS active_children
@@ -56,7 +57,7 @@ def get_staleness_report(
             [stale_cutoff, *uf_params],
         ).fetchall()
 
-        overdue_rows = conn.execute(
+        overdue_rows = _exec(session, 
             f"""SELECT * FROM things
                 WHERE active = 1
                   AND checkin_date IS NOT NULL
@@ -71,12 +72,12 @@ def get_staleness_report(
 
     for row in stale_rows:
         thing = _row_to_thing(row)
-        updated = row["updated_at"] or ""
+        updated = row.updated_at or ""
         parsed = _parse_date_value(updated)
         days_stale = (today - parsed).days if parsed else threshold
 
-        active_children = row["active_children"] or 0
-        importance = row["importance"] if row["importance"] is not None else 2
+        active_children = row.active_children or 0
+        importance = row.importance if row.importance is not None else 2
         is_neglected = importance <= 1 or active_children > 0
 
         if is_neglected:
@@ -96,7 +97,7 @@ def get_staleness_report(
     overdue_list: list[OverdueCheckin] = []
     for row in overdue_rows:
         thing = _row_to_thing(row)
-        parsed = _parse_date_value(row["checkin_date"])
+        parsed = _parse_date_value(row.checkin_date)
         days_overdue = (today - parsed).days if parsed else 1
         overdue_list.append(OverdueCheckin(thing=thing, days_overdue=days_overdue))
 

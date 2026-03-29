@@ -1,3 +1,5 @@
+from sqlmodel import Session
+
 """Settings endpoints: per-user settings in DB with config.yaml fallback."""
 
 import logging
@@ -10,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..auth import require_user
-from ..database import db
+import backend.db_engine as _engine_mod
+from ..db_engine import _exec
 from ..http_client import get_http_client
 
 logger = logging.getLogger(__name__)
@@ -137,29 +140,29 @@ def get_user_setting(user_id: str, key: str) -> str | None:
     """Read a single user setting from the DB. Returns None if not set."""
     if not user_id:
         return None
-    with db() as conn:
-        row = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        row = _exec(session, 
             "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
             (user_id, key),
         ).fetchone()
-    return row["value"] if row else None
+    return row.value if row else None
 
 
 def get_user_settings_dict(user_id: str) -> dict[str, str]:
     """Read all settings for a user from the DB."""
     if not user_id:
         return {}
-    with db() as conn:
-        rows = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        rows = _exec(session, 
             "SELECT key, value FROM user_settings WHERE user_id = ?",
             (user_id,),
         ).fetchall()
-    return {row["key"]: row["value"] for row in rows}
+    return {row.key: row.value for row in rows}
 
 
 def _set_user_setting(conn: Any, user_id: str, key: str, value: str) -> None:
     """Upsert a single user setting."""
-    conn.execute(
+    _exec(session, 
         """INSERT INTO user_settings (user_id, key, value, updated_at)
            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
            ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP""",
@@ -307,7 +310,7 @@ def update_settings(
     """Update model settings. With auth: saves per-user. Without auth: writes config.yaml."""
     if user_id:
         # Per-user: save to DB
-        with db() as conn:
+        with Session(_engine_mod.engine) as session:
             if body.context is not None:
                 _set_user_setting(conn, user_id, "context_model", body.context)
             if body.reasoning is not None:
@@ -400,7 +403,7 @@ def update_user_settings(
         raise HTTPException(status_code=401, detail="Authentication required for user settings")
 
     _VALID_PROACTIVITY = {"off", "low", "medium", "high"}
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         for field_name in _VALID_KEYS:
             val = getattr(body, field_name, None)
             if val is not None:

@@ -3,7 +3,6 @@
 import json
 import logging
 import secrets
-import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -19,7 +18,8 @@ import backend.db_engine as _engine_mod
 from ..db_models import UserRecord, ThingRecord
 
 from ..config import settings
-from ..database import db  # Still used for _create_user_thing until full migration
+import backend.db_engine as _engine_mod
+from ..db_engine import _exec
 from ..oauth_state import mcp_auth_codes, mcp_oauth_sessions
 from ..vector_store import upsert_thing
 
@@ -112,21 +112,21 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
     return user_id
 
 
-def _create_user_thing(conn: sqlite3.Connection, user_id: str, name: str, email: str, google_id: str, now: str) -> None:
+def _create_user_thing(session: Session, user_id: str, name: str, email: str, google_id: str, now: str) -> None:
     """Create a Thing representing the user as their anchor node. Legacy sqlite3 version."""
     thing_id = str(uuid.uuid4())
     data_json = json.dumps({"email": email, "google_id": google_id})
-    conn.execute(
+    _exec(session, 
         """INSERT INTO things
            (id, title, type_hint, parent_id, checkin_date, importance, active, surface,
             data, open_questions, created_at, updated_at, user_id)
            VALUES (?, ?, 'person', NULL, NULL, 2, 1, 0, ?, NULL, ?, ?, ?)""",
         (thing_id, name, data_json, now, now, user_id),
     )
-    row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
+    row = _exec(session, "SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
     if row:
         try:
-            upsert_thing(dict(row))
+            upsert_thing(row._asdict())
         except Exception:
             logger.warning("Failed to index user Thing %s in vector store", thing_id)
 

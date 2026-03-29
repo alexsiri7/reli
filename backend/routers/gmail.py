@@ -1,3 +1,5 @@
+from sqlmodel import Session
+
 """Gmail read-only integration: OAuth2 flow and message endpoints."""
 
 import base64
@@ -13,7 +15,8 @@ from pydantic import BaseModel
 
 from ..auth import require_user
 from ..config import settings
-from ..database import db
+import backend.db_engine as _engine_mod
+from ..db_engine import _exec
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
 
@@ -68,8 +71,8 @@ def _save_token(creds: Any, user_id: str = "") -> None:
     now = datetime.now(timezone.utc).isoformat()
     uid = user_id or None  # Store NULL when auth is disabled (empty string)
 
-    with db() as conn:
-        conn.execute(
+    with Session(_engine_mod.engine) as session:
+        _exec(session, 
             """INSERT INTO google_tokens (user_id, service, access_token, refresh_token,
                token_uri, client_id, client_secret, expiry, scopes, updated_at)
                VALUES (?, 'gmail', ?, ?, ?, ?, ?, ?, ?, ?)
@@ -96,6 +99,7 @@ def _save_token(creds: Any, user_id: str = "") -> None:
         )
 
 
+        session.commit()
 def _load_creds(user_id: str = "") -> Any:
     """Load and refresh credentials. Returns None if not connected.
 
@@ -108,22 +112,22 @@ def _load_creds(user_id: str = "") -> Any:
     uid = user_id or None
 
     # Try DB first — match by user_id (NULL when auth disabled)
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         if uid is None:
-            row = conn.execute("SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'").fetchone()
+            row = _exec(session, "SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'").fetchone()
         else:
-            row = conn.execute("SELECT * FROM google_tokens WHERE user_id = ? AND service = 'gmail'", (uid,)).fetchone()
+            row = _exec(session, "SELECT * FROM google_tokens WHERE user_id = ? AND service = 'gmail'", (uid,)).fetchone()
 
     if row:
         creds = Credentials(
-            token=row["access_token"],
-            refresh_token=row["refresh_token"],
-            token_uri=row["token_uri"],
-            client_id=row["client_id"],
-            client_secret=row["client_secret"],
+            token=row.access_token,
+            refresh_token=row.refresh_token,
+            token_uri=row.token_uri,
+            client_id=row.client_id,
+            client_secret=row.client_secret,
         )
-        if row["expiry"]:
-            creds.expiry = datetime.fromisoformat(row["expiry"]).replace(tzinfo=None)
+        if row.expiry:
+            creds.expiry = datetime.fromisoformat(row.expiry).replace(tzinfo=None)
     elif TOKEN_PATH.exists():
         # Migrate legacy file-based token to DB
         creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), GMAIL_SCOPES)
@@ -284,11 +288,12 @@ def gmail_callback(
 def gmail_disconnect(user_id: str = Depends(require_user)) -> None:
     """Remove stored Gmail credentials for the current user."""
     uid = user_id or None
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         if uid is None:
-            conn.execute("DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'")
+            _exec(session, "DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'")
         else:
-            conn.execute("DELETE FROM google_tokens WHERE user_id = ? AND service = 'gmail'", (uid,))
+            _exec(session, "DELETE FROM google_tokens WHERE user_id = ? AND service = 'gmail'", (uid,))
+        session.commit()
     # Also clean up legacy file if it exists
     if TOKEN_PATH.exists():
         TOKEN_PATH.unlink()

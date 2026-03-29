@@ -16,11 +16,8 @@ from sqlalchemy import text
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
-from .db_engine import user_filter_clause
+from .db_engine import _exec, user_filter_clause
 from .db_models import ThingRecord, ThingRelationshipRecord, MergeHistoryRecord as MergeHistoryDBRecord, ChatHistoryRecord
-# Keep db import for test backward compat (tests patch backend.tools.db).
-# TODO: remove once all tests are updated to use patched_db fixture.
-from .database import db  # noqa: F401
 from .vector_store import delete_thing as vs_delete
 from .vector_store import upsert_thing
 
@@ -90,14 +87,10 @@ def fetch_context(
     seen_ids: set[str] = set()
     results: list[dict[str, Any]] = []
 
-    # _fetch_relevant_things and _fetch_with_family still use raw sqlite3 connections
-    # (pipeline.py not yet converted). Use the legacy db() for these calls.
-    from .database import db
-
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         if search_queries:
             things = _fetch_relevant_things(
-                conn,
+                session,
                 search_queries,
                 filter_params,
                 user_id=user_id,
@@ -109,7 +102,7 @@ def fetch_context(
 
         if fetch_ids:
             id_things = _fetch_with_family(
-                conn,
+                session,
                 [tid for tid in fetch_ids if tid not in seen_ids],
             )
             for t in id_things:
@@ -122,7 +115,7 @@ def fetch_context(
         if results:
             ids = [t["id"] for t in results]
             ph = ",".join("?" for _ in ids)
-            rel_rows = conn.execute(
+            rel_rows = _exec(session, 
                 f"SELECT from_thing_id, to_thing_id, relationship_type "
                 f"FROM thing_relationships "
                 f"WHERE from_thing_id IN ({ph}) OR to_thing_id IN ({ph})",
@@ -135,7 +128,7 @@ def fetch_context(
             now = datetime.now(timezone.utc).isoformat()
             ids = [t["id"] for t in results]
             ph = ",".join("?" for _ in ids)
-            conn.execute(
+            _exec(session, 
                 f"UPDATE things SET last_referenced = ? WHERE id IN ({ph})",
                 [now] + ids,
             )
@@ -636,10 +629,9 @@ def search_things(
     # Keep as raw SQL for now.
     # TODO: convert to SQLModel query
     from .auth import user_filter
-    from .database import db
 
     pattern = f"%{query}%"
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         filters = ""
         filter_params: list[str | int] = []
         uf_sql, uf_params = user_filter(user_id, "t")
@@ -688,7 +680,7 @@ def search_things(
             " LIMIT ?"
         )
         params = [*direct_params, *rel_params, limit]
-        rows = conn.execute(sql, params).fetchall()
+        rows = _exec(session, sql, params).fetchall()
 
     return [dict(r) for r in rows]
 
