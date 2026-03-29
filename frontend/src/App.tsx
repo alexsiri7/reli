@@ -12,14 +12,17 @@ import { OfflineIndicator } from './components/OfflineIndicator'
 import { SettingsPanel } from './components/SettingsPanel'
 import { FeedbackDialog } from './components/FeedbackDialog'
 import { usePushNotifications } from './hooks/usePushNotifications'
+import { CommandPalette } from './components/CommandPalette'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, rightView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, feedbackOpen, commandPaletteOpen, openCommandPalette, mainView, mobileView, setMobileView, rightView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
       settingsOpen: s.settingsOpen,
       feedbackOpen: s.feedbackOpen,
+      commandPaletteOpen: s.commandPaletteOpen,
+      openCommandPalette: s.openCommandPalette,
       mainView: s.mainView,
       mobileView: s.mobileView,
       setMobileView: s.setMobileView,
@@ -77,6 +80,18 @@ function App() {
 
     return () => clearInterval(interval)
   }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing])
+
+  // Cmd+K / Ctrl+K opens command palette
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        openCommandPalette()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [openCommandPalette])
 
   // Show nothing while checking auth
   if (!authChecked) {
@@ -187,6 +202,7 @@ function App() {
       </nav>
       {settingsOpen && <SettingsPanel />}
       {feedbackOpen && <FeedbackDialog />}
+      {commandPaletteOpen && <CommandPalette />}
     </div>
   )
 }
