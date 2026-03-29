@@ -1,0 +1,10 @@
+[Unit]
+Description=Gas City Health Check
+
+[Service]
+Type=oneshot
+User=asiri
+WorkingDirectory=/mnt/ext-fast/gc
+ExecStart=/mnt/ext-fast/gc/scripts/health.sh --fix
+Environment=HOME=/home/asiri
+Environment=PATH=/home/asiri/go/bin:/home/asiri/.local/bin:/usr/local/bin:/usr/bin:/bin
