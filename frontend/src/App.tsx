@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar'
 import { ChatPanel } from './components/ChatPanel'
 import { DetailPanel } from './components/DetailPanel'
 import GraphView from './components/GraphView'
+import { BriefingPanel } from './components/BriefingPanel'
 import { LoginPage } from './components/LoginPage'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
@@ -119,6 +120,11 @@ function App() {
         <Sidebar />
         {mainView === 'graph' ? (
           <GraphView />
+        ) : mainView === 'briefing' ? (
+          <>
+            <BriefingPanel />
+            <ChatPanel />
+          </>
         ) : (
           <>
             <DetailPanel />
@@ -129,7 +135,7 @@ function App() {
       {/* Mobile: show one panel at a time based on mobileView */}
       <div className="contents md:hidden">
         <div className={`flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden ${mobileView === 'things' ? '' : 'hidden'}`}>
-          <Sidebar />
+          {mainView === 'briefing' ? <BriefingPanel /> : <Sidebar />}
         </div>
         <div className={`flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden ${mobileView === 'chat' ? '' : 'hidden'}`}>
           <ChatPanel />
