@@ -52,7 +52,9 @@ function loadStopped(): Set<string> {
 function saveStopped(stopped: Set<string>) {
   try {
     localStorage.setItem(STOPPED_KEY, JSON.stringify(Array.from(stopped)))
-  } catch {}
+  } catch {
+    // storage full or blocked — ignore
+  }
 }
 
 function nudgeId(s: ProactiveSurface): string {
