@@ -517,3 +517,63 @@ class ConnectionSuggestionAccept(BaseModel):
     """Accept a connection suggestion, optionally overriding the relationship type."""
 
     relationship_type: str | None = Field(default=None, description="Override the suggested relationship type")
+
+
+# ── Weekly Digest ─────────────────────────────────────────────────────────────
+
+
+class WeeklyDigestItem(BaseModel):
+    """A single item in a weekly digest section."""
+
+    thing_id: str
+    title: str
+    note: str | None = None
+
+
+class WeeklyDigestContent(BaseModel):
+    """Content of a generated weekly digest."""
+
+    summary: str
+    week_start: str
+    week_end: str
+    completed: list[WeeklyDigestItem] = Field(default_factory=list)
+    preferences_learned: list[WeeklyDigestItem] = Field(default_factory=list)
+    upcoming: list[WeeklyDigestItem] = Field(default_factory=list)
+    open_questions: list[str] = Field(default_factory=list)
+    stats: dict[str, int] = Field(default_factory=dict)
+
+
+class WeeklyDigestResponse(BaseModel):
+    """API response wrapping a stored weekly digest."""
+
+    id: str
+    week_start: str
+    content: WeeklyDigestContent
+    generated_at: str
+
+
+# ── Nudge Dismissal ───────────────────────────────────────────────────────────
+
+
+class NudgeDismissRequest(BaseModel):
+    """Request to dismiss a proactive nudge."""
+
+    thing_id: str
+    date_key: str
+
+
+class NudgeStopRequest(BaseModel):
+    """Request to stop a type of proactive nudge (negative preference signal)."""
+
+    thing_id: str
+    date_key: str
+    reason: str | None = None
+
+
+# ── Preference Feedback ───────────────────────────────────────────────────────
+
+
+class PreferenceFeedback(BaseModel):
+    """User feedback on a learned preference."""
+
+    confirmed: bool  # True = "That's right", False = "Not really"

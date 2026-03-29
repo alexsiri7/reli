@@ -6,6 +6,9 @@ import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported } from '../hooks/useTTS'
 import { useNetworkStatus } from '../hooks/useNetworkStatus'
+import { NudgeBanner } from './NudgeBanner'
+import { PreferenceToastContainer, type PreferenceToastData } from './PreferenceToast'
+import { WeeklyDigest } from './WeeklyDigest'
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso)
@@ -706,7 +709,7 @@ function InteractionStyleSelector({ style, onChange }: { style: InteractionStyle
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, openWeeklyDigest } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -719,8 +722,35 @@ export function ChatPanel() {
       setChatMode: s.setChatMode,
       interactionStyle: s.interactionStyle,
       setInteractionStyle: s.setInteractionStyle,
+      openWeeklyDigest: s.openWeeklyDigest,
     }))
   )
+
+  const [preferenceToasts, setPreferenceToasts] = useState<PreferenceToastData[]>([])
+  const dismissPreferenceToast = useCallback((id: string) => {
+    setPreferenceToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+
+  // Detect preference-related messages to show preference toasts
+  useEffect(() => {
+    const last = messages[messages.length - 1]
+    if (!last || last.role !== 'assistant') return
+    // Look for preference learning signals in applied_changes
+    const changes = last.applied_changes as AppliedChanges | null
+    if (!changes) return
+    const newPrefs = [...(changes.created ?? []), ...(changes.updated ?? [])].filter(
+      c => (c as { type_hint?: string }).type_hint === 'preference'
+    )
+    if (newPrefs.length === 0) return
+    const first = newPrefs[0]
+    if (!first) return
+    const toastId = `pref-${Date.now()}`
+    const name = first.title ?? 'preference'
+    setPreferenceToasts(prev => [
+      ...prev,
+      { id: toastId, message: `Learned: ${name}`, thingId: first.id },
+    ])
+  }, [messages])
   const { isOnline } = useNetworkStatus()
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -796,11 +826,21 @@ export function ChatPanel() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={openWeeklyDigest}
+            className="text-xs text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+            title="Weekly Digest"
+          >
+            📋
+          </button>
           <InteractionStyleSelector style={interactionStyle} onChange={setInteractionStyle} />
           <ModeToggle mode={chatMode} onChange={setChatMode} />
           <NerdStatsIcon stats={sessionStats} />
         </div>
       </div>
+
+      {/* Nudge banner */}
+      <NudgeBanner />
 
       {/* Messages */}
       <div
@@ -888,6 +928,12 @@ export function ChatPanel() {
           Enter to send · Shift+Enter for new line{speechRecognitionSupported ? ' · 🎤 for voice' : ''}
         </p>
       </div>
+
+      {/* Preference toasts */}
+      <PreferenceToastContainer toasts={preferenceToasts} onDismiss={dismissPreferenceToast} />
+
+      {/* Weekly digest modal */}
+      <WeeklyDigest />
     </div>
   )
 }

@@ -405,6 +405,37 @@ def _migrate_connection_suggestions(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_conn_sugg_user ON connection_suggestions(user_id)")
 
 
+def _migrate_weekly_digests(conn: sqlite3.Connection) -> None:
+    """Create weekly_digests table for digest storage."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS weekly_digests (
+            id TEXT PRIMARY KEY,
+            user_id TEXT REFERENCES users(id),
+            week_start TEXT NOT NULL,
+            content JSON NOT NULL,
+            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, week_start)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_weekly_digests_user ON weekly_digests(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_weekly_digests_week ON weekly_digests(week_start)")
+
+
+def _migrate_nudge_dismissals(conn: sqlite3.Connection) -> None:
+    """Create nudge_dismissals table to track per-user nudge dismiss/stop actions."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS nudge_dismissals (
+            id TEXT PRIMARY KEY,
+            user_id TEXT REFERENCES users(id),
+            thing_id TEXT NOT NULL,
+            date_key TEXT NOT NULL,
+            action TEXT NOT NULL DEFAULT 'dismiss',
+            dismissed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_nudge_dismissals_user ON nudge_dismissals(user_id, dismissed_at)")
+
+
 def clean_orphan_relationships() -> tuple[int, list[str]]:
     """Delete relationships where from_thing_id or to_thing_id doesn't exist.
 
@@ -574,4 +605,6 @@ def init_db() -> None:
         _migrate_connection_suggestions(conn)
         _migrate_morning_briefings(conn)
         _migrate_conversation_summaries(conn)
+        _migrate_weekly_digests(conn)
+        _migrate_nudge_dismissals(conn)
         _seed_thing_types(conn)

@@ -106,6 +106,30 @@ export interface ProactiveSurface {
   days_away: number
 }
 
+export interface WeeklyDigestItem {
+  thing_id: string
+  title: string
+  note: string | null
+}
+
+export interface WeeklyDigestContent {
+  summary: string
+  week_start: string
+  week_end: string
+  completed: WeeklyDigestItem[]
+  preferences_learned: WeeklyDigestItem[]
+  upcoming: WeeklyDigestItem[]
+  open_questions: string[]
+  stats: Record<string, number>
+}
+
+export interface WeeklyDigest {
+  id: string
+  week_start: string
+  content: WeeklyDigestContent
+  generated_at: string
+}
+
 export interface FocusRecommendation {
   thing: Thing
   score: number
@@ -465,6 +489,19 @@ interface ReliState {
     user_agent: string
     url: string
   }) => Promise<{ success: boolean; issueUrl?: string; error?: string }>
+
+  // Nudge dismissals (client-side session state)
+  dismissedNudgeKeys: Set<string>
+  dismissNudge: (thingId: string, dateKey: string) => Promise<void>
+  stopNudge: (thingId: string, dateKey: string) => Promise<void>
+
+  // Weekly digest
+  weeklyDigest: WeeklyDigest | null
+  weeklyDigestLoading: boolean
+  weeklyDigestOpen: boolean
+  fetchWeeklyDigest: () => Promise<void>
+  openWeeklyDigest: () => void
+  closeWeeklyDigest: () => void
 }
 
 const HISTORY_PAGE_SIZE = 20
@@ -606,6 +643,11 @@ export const useStore = create<ReliState>((set, get) => ({
   conflictAlerts: [],
   searchResults: [],
   searchLoading: false,
+
+  dismissedNudgeKeys: new Set<string>(),
+  weeklyDigest: null,
+  weeklyDigestLoading: false,
+  weeklyDigestOpen: false,
 
   // Detail panel
   detailThingId: null,
@@ -1402,4 +1444,43 @@ export const useStore = create<ReliState>((set, get) => ({
       return { success: false, error: String(e) }
     }
   },
+
+  // Nudge dismissals
+  dismissNudge: async (thingId: string, dateKey: string) => {
+    const key = `${thingId}:${dateKey}`
+    set(s => ({ dismissedNudgeKeys: new Set([...s.dismissedNudgeKeys, key]) }))
+    apiFetch(`${BASE}/proactive/dismiss`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ thing_id: thingId, date_key: dateKey }),
+    }).catch(() => {})
+  },
+
+  stopNudge: async (thingId: string, dateKey: string) => {
+    const key = `${thingId}:${dateKey}`
+    set(s => ({ dismissedNudgeKeys: new Set([...s.dismissedNudgeKeys, key]) }))
+    apiFetch(`${BASE}/proactive/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ thing_id: thingId, date_key: dateKey }),
+    }).catch(() => {})
+  },
+
+  // Weekly digest
+  fetchWeeklyDigest: async () => {
+    set({ weeklyDigestLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/digest/latest`)
+      if (!res.ok) return
+      const data = await res.json()
+      set({ weeklyDigest: data as WeeklyDigest })
+    } catch {
+      // best-effort
+    } finally {
+      set({ weeklyDigestLoading: false })
+    }
+  },
+
+  openWeeklyDigest: () => set({ weeklyDigestOpen: true }),
+  closeWeeklyDigest: () => set({ weeklyDigestOpen: false }),
 }))

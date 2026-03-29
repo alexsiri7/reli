@@ -1,13 +1,14 @@
 """Proactive surfaces — surface time-relevant entities in the sidebar."""
 
 import re
-from datetime import date
+import uuid
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
 
 from ..auth import require_user, user_filter
 from ..database import db
-from ..models import ProactiveSurface
+from ..models import NudgeDismissRequest, NudgeStopRequest, ProactiveSurface
 from .things import _row_to_thing
 
 router = APIRouter(prefix="/proactive", tags=["proactive"])
@@ -141,3 +142,35 @@ def get_proactive_surfaces(
     # Sort: soonest first, then alphabetically by title.
     surfaces.sort(key=lambda s: (s.days_away, s.thing.title))
     return surfaces
+
+
+@router.post("/dismiss", status_code=204, summary="Dismiss a nudge")
+def dismiss_nudge(
+    body: NudgeDismissRequest,
+    user_id: str = Depends(require_user),
+) -> None:
+    """Record that the user dismissed a proactive nudge."""
+    now = datetime.now(timezone.utc).isoformat()
+    dismissal_id = f"nd-{uuid.uuid4().hex[:8]}"
+    with db() as conn:
+        conn.execute(
+            """INSERT INTO nudge_dismissals (id, user_id, thing_id, date_key, action, dismissed_at)
+               VALUES (?, ?, ?, ?, 'dismiss', ?)""",
+            (dismissal_id, user_id, body.thing_id, body.date_key, now),
+        )
+
+
+@router.post("/stop", status_code=204, summary="Stop a nudge type (negative preference signal)")
+def stop_nudge(
+    body: NudgeStopRequest,
+    user_id: str = Depends(require_user),
+) -> None:
+    """Record a negative preference signal — the user wants fewer nudges of this type."""
+    now = datetime.now(timezone.utc).isoformat()
+    dismissal_id = f"nd-{uuid.uuid4().hex[:8]}"
+    with db() as conn:
+        conn.execute(
+            """INSERT INTO nudge_dismissals (id, user_id, thing_id, date_key, action, dismissed_at)
+               VALUES (?, ?, ?, ?, 'stop', ?)""",
+            (dismissal_id, user_id, body.thing_id, body.date_key, now),
+        )

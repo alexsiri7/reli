@@ -21,6 +21,7 @@ from ..models import (
     MergeSuggestion,
     MergeSuggestionThing,
     OrphanCleanupResult,
+    PreferenceFeedback,
     Relationship,
     RelationshipCreate,
     Thing,
@@ -817,3 +818,46 @@ def delete_relationship(rel_id: str) -> None:
         if not row:
             raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
         conn.execute("DELETE FROM thing_relationships WHERE id = ?", (rel_id,))
+
+
+@router.post("/{thing_id}/preference-feedback", status_code=204, summary="Submit feedback on a learned preference")
+def preference_feedback(
+    thing_id: str,
+    body: PreferenceFeedback,
+    user_id: str = Depends(require_user),
+) -> None:
+    """Update confidence of a preference Thing based on user feedback.
+
+    confirmed=True  → strengthen confidence (cap at 1.0)
+    confirmed=False → weaken confidence; deactivate if it drops below threshold
+    """
+    uf_sql, uf_params = user_filter(user_id)
+    now = datetime.now(timezone.utc).isoformat()
+
+    with db() as conn:
+        row = conn.execute(
+            f"SELECT id, data FROM things WHERE id = ? AND type_hint = 'preference'{uf_sql}",
+            [thing_id, *uf_params],
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Preference not found")
+
+        try:
+            data: dict = json.loads(row["data"]) if row["data"] else {}
+        except (json.JSONDecodeError, TypeError):
+            data = {}
+
+        confidence: float = float(data.get("confidence", 0.5))
+
+        if body.confirmed:
+            confidence = min(1.0, confidence + 0.15)
+        else:
+            confidence = max(0.0, confidence - 0.25)
+
+        data["confidence"] = round(confidence, 4)
+        new_active = confidence >= 0.1  # deactivate if very weak
+
+        conn.execute(
+            "UPDATE things SET data = ?, active = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(data), 1 if new_active else 0, now, thing_id),
+        )
