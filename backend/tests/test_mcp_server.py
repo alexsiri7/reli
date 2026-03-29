@@ -1041,6 +1041,28 @@ class TestSessionManagerRestart:
     run() on the next startup, leaving _task_group = None.
     """
 
+    def test_session_manager_initialized_during_lifespan(self, patched_db) -> None:
+        """Verify that the session manager task group is non-None during app startup.
+
+        Regression for GH#312: when MCP is mounted as a sub-app, Starlette does
+        not trigger the sub-app's lifespan, so main.py must call run() explicitly.
+        """
+        from backend.main import app
+        from backend.mcp_server import mcp
+
+        sm = mcp._session_manager
+        assert sm is not None, "Session manager must exist"
+
+        # Reset to simulate a fresh startup (previous tests may have set _has_started).
+        sm._has_started = False
+        sm._task_group = None
+
+        with TestClient(app):
+            assert sm._task_group is not None, (
+                "MCP session manager task group not initialized during app lifespan. "
+                "main.py lifespan must call session_manager.run()."
+            )
+
     def test_session_manager_restarts_after_previous_run(self, patched_db) -> None:
         """Verify that a second TestClient (= second lifespan) still serves MCP."""
         from backend.main import app
