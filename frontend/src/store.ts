@@ -414,8 +414,12 @@ interface ReliState {
   setInteractionStyle: (style: InteractionStyle) => void
 
   // Mobile navigation
-  mobileView: 'things' | 'chat'
-  setMobileView: (view: 'things' | 'chat') => void
+  mobileView: 'things' | 'chat' | 'briefing'
+  setMobileView: (view: 'things' | 'chat' | 'briefing') => void
+
+  // Right panel view (desktop)
+  rightView: 'chat' | 'briefing'
+  setRightView: (view: 'chat' | 'briefing') => void
 
   // Settings
   settingsOpen: boolean
@@ -1133,8 +1137,12 @@ export const useStore = create<ReliState>((set, get) => ({
   },
 
   // Mobile navigation
-  mobileView: 'things',
+  mobileView: 'briefing',
   setMobileView: (view) => set({ mobileView: view }),
+
+  // Right panel view (desktop) — briefing is the default landing
+  rightView: 'briefing',
+  setRightView: (view) => set({ rightView: view }),
 
   // Settings
   settingsOpen: false,

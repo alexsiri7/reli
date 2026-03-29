@@ -8,6 +8,7 @@ import { ThingCard } from './ThingCard'
 import { GmailPanel } from './GmailPanel'
 import { MergeSuggestions } from './MergeSuggestions'
 import { ConnectionSuggestions } from './ConnectionSuggestions'
+import { useProgressiveDisclosure } from '../hooks/useProgressiveDisclosure'
 
 const FINDING_TYPE_ICONS: Record<string, string> = {
   approaching_date: '\u23F0',
@@ -283,7 +284,8 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView })))
+  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView })))
+  const disclosure = useProgressiveDisclosure()
   const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -537,6 +539,28 @@ export function Sidebar() {
             </p>
           </div>
           <div className="flex items-center gap-1.5">
+            {/* Briefing / Chat toggle */}
+            <button
+              onClick={() => setRightView(rightView === 'briefing' ? 'chat' : 'briefing')}
+              aria-label={rightView === 'briefing' ? 'Switch to Chat' : 'Switch to Briefing'}
+              title={rightView === 'briefing' ? 'Chat' : 'Briefing'}
+              className={`p-1.5 rounded-lg transition-colors ${
+                rightView === 'briefing'
+                  ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
+                  : 'text-gray-400 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'
+              }`}
+            >
+              {rightView === 'briefing' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+                </svg>
+              )}
+            </button>
+            {disclosure.showGraphView && (
             <button
               onClick={() => setMainView(mainView === 'list' ? 'graph' : 'list')}
               aria-label={mainView === 'graph' ? 'Switch to list view' : 'Switch to graph view'}
@@ -555,6 +579,7 @@ export function Sidebar() {
                 )}
               </svg>
             </button>
+            )}
             {currentUser && (
               <div className="relative" ref={userMenuRef}>
                 {currentUser.picture ? (
@@ -624,7 +649,7 @@ export function Sidebar() {
               onChange={e => handleSearchChange(e.target.value)}
               className="w-full pl-8 pr-7 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
             />
-            {searchQuery && (
+            {searchQuery ? (
               <button
                 onClick={() => handleSearchChange('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
@@ -634,6 +659,10 @@ export function Sidebar() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
+            ) : disclosure.showCommandPaletteHint && (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-300 dark:text-gray-600 font-mono select-none pointer-events-none">
+                ⌘K
+              </span>
             )}
           </div>
         </div>
@@ -670,11 +699,11 @@ export function Sidebar() {
             {/* Google Calendar */}
             <CalendarSection />
 
-            {/* Morning Briefing — pre-generated summary */}
-            {morningBriefing && <MorningBriefingSection briefing={morningBriefing} />}
+            {/* Morning Briefing — pre-generated summary (meaningful at 5+ things) */}
+            {disclosure.showBriefing && morningBriefing && <MorningBriefingSection briefing={morningBriefing} />}
 
-            {/* Daily Briefing — sweep findings + checkin-due things */}
-            {(findings.length > 0 || briefing.length > 0) && (
+            {/* Daily Briefing — sweep findings + checkin-due things (meaningful at 5+ things) */}
+            {disclosure.showBriefing && (findings.length > 0 || briefing.length > 0) && (
               <section className="py-2 border-b border-gray-100 dark:border-gray-800">
                 <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
                   Daily Briefing
@@ -690,8 +719,8 @@ export function Sidebar() {
               </section>
             )}
 
-            {/* Focus Recommendations */}
-            {focusRecommendations.length > 0 && (
+            {/* Focus Recommendations (priority board useful at 20+ things) */}
+            {disclosure.showFocusBoard && focusRecommendations.length > 0 && (
               <section className="py-2 border-b border-gray-100 dark:border-gray-800">
                 <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
                   Focus
@@ -702,11 +731,11 @@ export function Sidebar() {
               </section>
             )}
 
-            {/* Merge Suggestions */}
-            <MergeSuggestions />
+            {/* Merge Suggestions (relationship discovery at 10+ things) */}
+            {disclosure.showConnectionDiscovery && <MergeSuggestions />}
 
-            {/* Connection Suggestions */}
-            <ConnectionSuggestions />
+            {/* Connection Suggestions (relationship discovery at 10+ things) */}
+            {disclosure.showConnectionDiscovery && <ConnectionSuggestions />}
 
             {/* Conflict Alerts */}
             {conflictAlerts && conflictAlerts.length > 0 && (
