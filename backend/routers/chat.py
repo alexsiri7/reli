@@ -1,20 +1,21 @@
-from sqlmodel import Session
-
 """Chat history endpoints and the multi-agent chat pipeline."""
 
 import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func, text
+from sqlmodel import Session, select
 
-from ..auth import require_user, user_filter
+from ..auth import require_user
 import backend.db_engine as _engine_mod
-from ..db_engine import _exec
+from ..db_engine import user_filter_clause, user_filter_text
+from ..db_models import ChatHistoryRecord, ChatMessageUsageRecord, UsageLogRecord
 from ..database import get_latest_summary
 from ..models import (
     CallUsage,
@@ -41,6 +42,38 @@ def _parse_dt(val: str | None) -> datetime | None:
     if isinstance(val, datetime):
         return val
     return datetime.fromisoformat(val)
+
+
+def _record_to_msg(record: ChatHistoryRecord, usage_records: list[ChatMessageUsageRecord] | None = None) -> ChatMessage:
+    changes = record.applied_changes
+    if isinstance(changes, str):
+        changes = json.loads(changes) if changes else None
+    per_call_usage: list[CallUsage] = []
+    if usage_records:
+        per_call_usage = [
+            CallUsage(
+                model=u.model,
+                prompt_tokens=u.prompt_tokens,
+                completion_tokens=u.completion_tokens,
+                cost_usd=u.cost_usd,
+            )
+            for u in usage_records
+        ]
+    elif isinstance(changes, dict) and "per_call_usage" in changes:
+        per_call_usage = [CallUsage(**c) for c in changes["per_call_usage"]]
+    return ChatMessage(
+        id=record.id,
+        session_id=record.session_id,
+        role=record.role,
+        content=record.content,
+        applied_changes=changes,
+        prompt_tokens=record.prompt_tokens or 0,
+        completion_tokens=record.completion_tokens or 0,
+        cost_usd=record.cost_usd or 0.0,
+        model=record.model,
+        per_call_usage=per_call_usage,
+        timestamp=record.timestamp or datetime.min,
+    )
 
 
 def _row_to_msg(row: Any, usage_rows: Any = None) -> ChatMessage:
@@ -84,33 +117,32 @@ def get_history(
     user_id: str = Depends(require_user),
 ) -> list[ChatMessage]:
     """Retrieve chat messages for a session, ordered chronologically. Supports cursor-based pagination via `before`."""
-    uf_sql, uf_params = user_filter(user_id)
     with Session(_engine_mod.engine) as session:
+        stmt = select(ChatHistoryRecord).where(
+            ChatHistoryRecord.session_id == session_id,
+            user_filter_clause(ChatHistoryRecord.user_id, user_id),
+        )
         if before is not None:
-            rows = _exec(session, 
-                f"SELECT * FROM chat_history WHERE session_id = ? AND id < ?{uf_sql} ORDER BY id DESC LIMIT ?",
-                [session_id, before, *uf_params, limit],
-            ).fetchall()
+            stmt = stmt.where(ChatHistoryRecord.id < before)
+            stmt = stmt.order_by(ChatHistoryRecord.id.desc()).limit(limit)  # type: ignore[union-attr]
+            records = list(session.exec(stmt).all())
         else:
-            rows = _exec(session, 
-                f"SELECT * FROM chat_history WHERE session_id = ?{uf_sql} ORDER BY id DESC LIMIT ?",
-                [session_id, *uf_params, limit],
-            ).fetchall()
-            rows = list(reversed(rows))
+            stmt = stmt.order_by(ChatHistoryRecord.id.desc()).limit(limit)  # type: ignore[union-attr]
+            records = list(reversed(session.exec(stmt).all()))
 
         # Fetch per-call usage from chat_message_usage table
-        msg_ids = [r.id for r in rows]
-        usage_by_msg: dict[int, list[Any]] = {}
+        msg_ids = [r.id for r in records]
+        usage_by_msg: dict[int, list[ChatMessageUsageRecord]] = {}
         if msg_ids:
-            placeholders = ",".join("?" for _ in msg_ids)
-            usage_rows = _exec(session, 
-                f"SELECT * FROM chat_message_usage WHERE chat_message_id IN ({placeholders}) ORDER BY id",
-                msg_ids,
-            ).fetchall()
-            for u in usage_rows:
+            usage_records = session.exec(
+                select(ChatMessageUsageRecord)
+                .where(ChatMessageUsageRecord.chat_message_id.in_(msg_ids))  # type: ignore[union-attr]
+                .order_by(ChatMessageUsageRecord.id)  # type: ignore[arg-type]
+            ).all()
+            for u in usage_records:
                 usage_by_msg.setdefault(u.chat_message_id, []).append(u)
 
-    return [_row_to_msg(r, usage_by_msg.get(r.id)) for r in rows]
+    return [_record_to_msg(r, usage_by_msg.get(r.id)) for r in records]
 
 
 @router.post(
@@ -118,15 +150,19 @@ def get_history(
 )
 def append_message(body: ChatMessageCreate, user_id: str = Depends(require_user)) -> ChatMessage:
     """Append a single chat message to a session's history."""
-    changes_json = json.dumps(body.applied_changes) if body.applied_changes is not None else None
+    changes_json = body.applied_changes  # SQLModel handles JSON serialization
     with Session(_engine_mod.engine) as session:
-        cursor = _exec(session, 
-            "INSERT INTO chat_history (session_id, role, content, applied_changes, user_id) VALUES (?, ?, ?, ?, ?)",
-            (body.session_id, body.role, body.content, changes_json, user_id or None),
+        record = ChatHistoryRecord(
+            session_id=body.session_id,
+            role=body.role,
+            content=body.content,
+            applied_changes=changes_json,
+            user_id=user_id or None,
         )
-        row = _exec(session, "SELECT * FROM chat_history WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        session.add(record)
         session.commit()
-    return _row_to_msg(row)
+        session.refresh(record)
+    return _record_to_msg(record)
 
 
 @router.delete(
@@ -134,12 +170,18 @@ def append_message(body: ChatMessageCreate, user_id: str = Depends(require_user)
 )
 def delete_history(session_id: str, user_id: str = Depends(require_user)) -> None:
     """Delete all messages in a chat session."""
-    uf_sql, uf_params = user_filter(user_id)
     with Session(_engine_mod.engine) as session:
-        result = _exec(session, f"DELETE FROM chat_history WHERE session_id = ?{uf_sql}", [session_id, *uf_params])
+        records = session.exec(
+            select(ChatHistoryRecord).where(
+                ChatHistoryRecord.session_id == session_id,
+                user_filter_clause(ChatHistoryRecord.user_id, user_id),
+            )
+        ).all()
+        if not records:
+            raise HTTPException(status_code=404, detail=f"No chat history found for session '{session_id}'")
+        for rec in records:
+            session.delete(rec)
         session.commit()
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail=f"No chat history found for session '{session_id}'")
 
 
 @router.post("/migrate-session", status_code=status.HTTP_200_OK, summary="Migrate chat history to a new session ID")
@@ -147,18 +189,31 @@ def migrate_session(body: MigrateSessionRequest, user_id: str = Depends(require_
     """Migrate all chat history and usage records from old_session_id to new_session_id for the current user."""
     if body.old_session_id == body.new_session_id:
         return {"migrated": 0}
-    uf_sql, uf_params = user_filter(user_id)
     with Session(_engine_mod.engine) as session:
-        chat_result = _exec(session, 
-            f"UPDATE chat_history SET session_id = ? WHERE session_id = ?{uf_sql}",
-            [body.new_session_id, body.old_session_id, *uf_params],
-        )
-        usage_result = _exec(session, 
-            f"UPDATE usage_log SET session_id = ? WHERE session_id = ?{uf_sql}",
-            [body.new_session_id, body.old_session_id, *uf_params],
-        )
+        # Migrate chat history
+        chat_records = session.exec(
+            select(ChatHistoryRecord).where(
+                ChatHistoryRecord.session_id == body.old_session_id,
+                user_filter_clause(ChatHistoryRecord.user_id, user_id),
+            )
+        ).all()
+        for rec in chat_records:
+            rec.session_id = body.new_session_id
+            session.add(rec)
+
+        # Migrate usage log
+        usage_records = session.exec(
+            select(UsageLogRecord).where(
+                UsageLogRecord.session_id == body.old_session_id,
+                user_filter_clause(UsageLogRecord.user_id, user_id),
+            )
+        ).all()
+        for rec in usage_records:
+            rec.session_id = body.new_session_id
+            session.add(rec)
+
         session.commit()
-    return {"migrated": chat_result.rowcount + usage_result.rowcount}
+    return {"migrated": len(chat_records) + len(usage_records)}
 
 
 # ---------------------------------------------------------------------------
@@ -256,14 +311,17 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
         latest_summary = get_latest_summary(user_id)
         if latest_summary:
             with Session(_engine_mod.engine) as session:
-                rows = _exec(session, 
-                    "SELECT role, content, applied_changes FROM chat_history"
-                    " WHERE session_id = ? AND id > ?"
-                    " ORDER BY timestamp ASC LIMIT ?",
-                    (session_id, latest_summary["messages_summarized_up_to"], history_limit),
-                ).fetchall()
+                records = session.exec(
+                    select(ChatHistoryRecord)
+                    .where(
+                        ChatHistoryRecord.session_id == session_id,
+                        ChatHistoryRecord.id > latest_summary["messages_summarized_up_to"],
+                    )
+                    .order_by(ChatHistoryRecord.timestamp)
+                    .limit(history_limit)
+                ).all()
             messages = []
-            for r in rows:
+            for r in records:
                 entry: dict[str, Any] = {"role": r.role, "content": r.content or ""}
                 if r.role == "assistant":
                     ctx = _extract_thing_context(r.applied_changes)
@@ -277,13 +335,14 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
 
     # Fallback: raw history (no summary available or no user_id)
     with Session(_engine_mod.engine) as session:
-        rows = _exec(session, 
-            "SELECT role, content, applied_changes FROM chat_history"
-            " WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
-            (session_id, history_limit),
-        ).fetchall()
+        records = session.exec(
+            select(ChatHistoryRecord)
+            .where(ChatHistoryRecord.session_id == session_id)
+            .order_by(ChatHistoryRecord.timestamp)
+            .limit(history_limit)
+        ).all()
     result = []
-    for r in rows:
+    for r in records:
         entry = {"role": r.role, "content": r.content or ""}
         if r.role == "assistant":
             ctx = _extract_thing_context(r.applied_changes)
@@ -328,39 +387,38 @@ def _persist_exchange(
         applied_with_sources["gmail_context"] = result.gmail_context
     if result.calendar_events:
         applied_with_sources["calendar_events"] = result.calendar_events
-    changes_json = json.dumps(applied_with_sources)
 
     with Session(_engine_mod.engine) as session:
-        _exec(session, 
-            "INSERT INTO chat_history (session_id, role, content, applied_changes, user_id) VALUES (?, ?, ?, ?, ?)",
-            (session_id, "user", message, None, user_id or None),
+        # Insert user message
+        user_record = ChatHistoryRecord(
+            session_id=session_id,
+            role="user",
+            content=message,
+            applied_changes=None,
+            user_id=user_id or None,
         )
-        cursor = _exec(session, 
-            "INSERT INTO chat_history"
-            " (session_id, role, content, applied_changes,"
-            " prompt_tokens, completion_tokens, cost_usd, api_calls, model, user_id)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                session_id,
-                "assistant",
-                reply,
-                changes_json,
-                usage.prompt_tokens,
-                usage.completion_tokens,
-                usage.cost_usd,
-                usage.api_calls,
-                usage.model,
-                user_id or None,
-            ),
+        session.add(user_record)
+
+        # Insert assistant message
+        assistant_record = ChatHistoryRecord(
+            session_id=session_id,
+            role="assistant",
+            content=reply,
+            applied_changes=applied_with_sources,
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            cost_usd=usage.cost_usd,
+            api_calls=usage.api_calls,
+            model=usage.model,
+            user_id=user_id or None,
         )
-        assistant_msg_id = cursor.lastrowid
+        session.add(assistant_record)
+        session.flush()  # Get the ID for the assistant message
 
         # Insert per-call usage into chat_message_usage for structured retrieval
         num_calls = len(usage.calls)
         stage_labels: list[str | None] = []
         if num_calls >= 1:
-            # Last call is response, all others are reasoning
-            # (reasoning agent may make multiple calls due to tool use)
             for _ in range(max(0, num_calls - 1)):
                 stage_labels.append("reasoning")
             stage_labels.append("response")
@@ -368,20 +426,27 @@ def _persist_exchange(
             stage_labels.append(None)
         for i, call in enumerate(usage.calls):
             stage = stage_labels[i] if i < len(stage_labels) else None
-            _exec(session, 
-                "INSERT INTO chat_message_usage"
-                " (chat_message_id, stage, model, prompt_tokens, completion_tokens, cost_usd)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (assistant_msg_id, stage, call.model, call.prompt_tokens, call.completion_tokens, call.cost_usd),
+            usage_record = ChatMessageUsageRecord(
+                chat_message_id=assistant_record.id,
+                stage=stage,
+                model=call.model,
+                prompt_tokens=call.prompt_tokens,
+                completion_tokens=call.completion_tokens,
+                cost_usd=call.cost_usd,
             )
+            session.add(usage_record)
 
         # Insert per-call usage records into usage_log for daily aggregation
         for call in usage.calls:
-            _exec(session, 
-                "INSERT INTO usage_log (session_id, model, prompt_tokens, completion_tokens, cost_usd, user_id)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (session_id, call.model, call.prompt_tokens, call.completion_tokens, call.cost_usd, user_id or None),
+            log_record = UsageLogRecord(
+                session_id=session_id,
+                model=call.model,
+                prompt_tokens=call.prompt_tokens,
+                completion_tokens=call.completion_tokens,
+                cost_usd=call.cost_usd,
+                user_id=user_id or None,
             )
+            session.add(log_record)
 
         session.commit()
     return applied_with_sources
@@ -389,7 +454,7 @@ def _persist_exchange(
 
 @router.post("", response_model=ChatResponse, summary="Send a message through the multi-agent pipeline")
 async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatResponse:
-    """4-stage pipeline: Context → Retrieve → Reasoning → Validate → Respond."""
+    """4-stage pipeline: Context -> Retrieve -> Reasoning -> Validate -> Respond."""
     session_id = body.session_id
     message = body.message
     mode = body.mode if body.mode in ("normal", "planning") else "normal"
@@ -511,21 +576,25 @@ def _sse(event: str, data: Any) -> str:  # noqa: ANN401
 def _compute_daily_usage(user_id: str = "") -> SessionUsage:
     """Aggregate usage stats for today (since midnight local time)."""
     today_start = datetime.combine(date.today(), datetime.min.time()).isoformat()
-    uf_sql, uf_params = user_filter(user_id)
+    uf_frag, uf_p = user_filter_text(user_id)
     with Session(_engine_mod.engine) as session:
-        totals_row = _exec(session, 
-            "SELECT COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
-            "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
-            f"FROM usage_log WHERE timestamp >= ?{uf_sql}",
-            [today_start, *uf_params],
+        totals_row = session.execute(
+            text(
+                "SELECT COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
+                "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
+                f"FROM usage_log WHERE timestamp >= :today_start{uf_frag}"
+            ),
+            {"today_start": today_start, **uf_p},
         ).fetchone()
 
-        model_rows = _exec(session, 
-            "SELECT model, COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
-            "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
-            f"FROM usage_log WHERE timestamp >= ?{uf_sql} "
-            "GROUP BY model ORDER BY cost DESC",
-            [today_start, *uf_params],
+        model_rows = session.execute(
+            text(
+                "SELECT model, COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
+                "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
+                f"FROM usage_log WHERE timestamp >= :today_start{uf_frag} "
+                "GROUP BY model ORDER BY cost DESC"
+            ),
+            {"today_start": today_start, **uf_p},
         ).fetchall()
 
     per_model = [
