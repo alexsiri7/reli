@@ -266,6 +266,59 @@ function PreferenceCard({ thing }: { thing: Thing }) {
   )
 }
 
+function CollapsibleTypeSection({
+  type, label, icon, items, isTask,
+}: {
+  type: string
+  label: string
+  icon: string
+  items: Thing[]
+  isTask?: boolean
+}) {
+  const storageKey = `reli-sidebar-section-${type}`
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(storageKey) === 'true' } catch { return false }
+  })
+
+  const toggle = useCallback(() => {
+    setCollapsed(c => {
+      const next = !c
+      try { localStorage.setItem(storageKey, String(next)) } catch { /* ignore */ }
+      return next
+    })
+  }, [storageKey])
+
+  const activeTasks = isTask ? items.filter(t => t.active !== false) : items
+  const completedTasks = isTask ? items.filter(t => t.active === false) : []
+  const totalCount = items.length
+
+  return (
+    <section className="border-t border-gray-100 dark:border-gray-800">
+      <button
+        onClick={toggle}
+        className="w-full flex items-center gap-1.5 px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
+        aria-expanded={!collapsed}
+      >
+        <span className="shrink-0">{icon}</span>
+        <span className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest flex-1">{label}</span>
+        <span className="text-[10px] font-normal tabular-nums text-gray-400 dark:text-gray-400 mr-1">{totalCount}</span>
+        <span className="text-[9px] text-gray-300 dark:text-gray-600">{collapsed ? '▼' : '▲'}</span>
+      </button>
+      <div
+        className="overflow-hidden transition-[max-height] duration-200 ease-in-out"
+        style={{ maxHeight: collapsed ? 0 : 9999 }}
+      >
+        {activeTasks.map(t => <ThingCard key={t.id} thing={t} />)}
+        {completedTasks.length > 0 && (
+          <div className="opacity-50 mt-1">
+            {completedTasks.map(t => <ThingCard key={t.id} thing={t} completed />)}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 const SIDEBAR_MIN_WIDTH = 200
 const SIDEBAR_MAX_WIDTH = 500
 const SIDEBAR_DEFAULT_WIDTH = 288 // w-72
@@ -405,13 +458,14 @@ export function Sidebar() {
 
   // Group active things by type, excluding children of projects (shown under parent)
   const activeGroups = useMemo(() => {
-    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal', 'preference'] as const
+    const TYPE_ORDER = ['task', 'project', 'person', 'idea', 'note', 'goal', 'journal', 'preference'] as const
     const FALLBACK_LABELS: Record<string, string> = {
-      project: 'Projects',
-      goal: 'Goals',
       task: 'Tasks',
-      note: 'Notes',
+      project: 'Projects',
+      person: 'People',
       idea: 'Ideas',
+      note: 'Notes',
+      goal: 'Goals',
       journal: 'Journal',
       preference: 'Preferences',
     }
@@ -873,16 +927,16 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* Active Things grouped by type */}
+        {/* Active Things grouped by type — collapsible sections */}
         {activeGroups.map(group => (
-          <section key={group.type} className="py-2 border-t border-gray-100 dark:border-gray-800">
-            <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-              <span>{group.icon}</span>
-              <span>{group.label}</span>
-              <span className="ml-auto text-[10px] font-normal tabular-nums">{group.items.length}</span>
-            </h2>
-            {group.items.map(t => <ThingCard key={t.id} thing={t} />)}
-          </section>
+          <CollapsibleTypeSection
+            key={group.type}
+            type={group.type}
+            label={group.label}
+            icon={group.icon}
+            items={group.items}
+            isTask={group.type === 'task'}
+          />
         ))}
 
         {/* Preferences — learned behavioral patterns */}

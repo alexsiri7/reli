@@ -5,6 +5,7 @@ import { formatDate, isOverdue, typeIcon } from '../utils'
 
 interface Props {
   thing: Thing
+  completed?: boolean
 }
 
 function snoozeDate(days: number): string {
@@ -14,7 +15,7 @@ function snoozeDate(days: number): string {
   return d.toISOString()
 }
 
-export function ThingCard({ thing }: Props) {
+export function ThingCard({ thing, completed }: Props) {
   const snoozeThing = useStore(s => s.snoozeThing)
   const thingTypes = useStore(s => s.thingTypes)
   const openThingDetail = useStore(s => s.openThingDetail)
@@ -39,7 +40,7 @@ export function ThingCard({ thing }: Props) {
           {typeIcon(thing.type_hint, thingTypes)}
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
+          <p className={`text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug${completed ? ' line-through' : ''}`}>
             {thing.title}
           </p>
           {dateLabel && (
