@@ -8,6 +8,10 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlmodel import Session, or_, select
+
+from ..db_engine import get_session
+from ..db_models import ThingRecord
 
 from ..auth import require_user, user_filter
 from ..database import clean_orphan_relationships, db
@@ -427,14 +431,21 @@ def list_merge_history(
 
 
 @router.get("/{thing_id}", response_model=Thing, summary="Get a Thing")
-def get_thing(thing_id: str, user_id: str = Depends(require_user)) -> Thing:
+def get_thing(
+    thing_id: str,
+    user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> Thing:
     """Retrieve a single Thing by ID."""
-    uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
-    if not row:
+    stmt = select(ThingRecord).where(ThingRecord.id == thing_id)
+    if user_id:
+        stmt = stmt.where(
+            or_(ThingRecord.user_id == user_id, ThingRecord.user_id.is_(None))  # type: ignore[union-attr]
+        )
+    record = session.exec(stmt).first()
+    if not record:
         raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
-    return _row_to_thing(row)
+    return Thing.model_validate(record, from_attributes=True)
 
 
 @router.patch("/{thing_id}", response_model=Thing, summary="Update a Thing")

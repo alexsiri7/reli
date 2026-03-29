@@ -37,9 +37,26 @@ def tmp_db_path(tmp_path: Path) -> Path:
 def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Patch the database module to use a temp SQLite file."""
     import backend.database as db_module
+    import backend.db_engine as engine_module
+    from sqlmodel import Session, create_engine
 
     monkeypatch.setattr(db_module, "DB_PATH", tmp_db_path)
     db_module.init_db()
+
+    # Patch SQLModel engine to use the same temp DB
+    test_engine = create_engine(
+        f"sqlite:///{tmp_db_path}",
+        connect_args={"check_same_thread": False},
+    )
+    monkeypatch.setattr(engine_module, "engine", test_engine)
+
+    # Override get_session to use the test engine
+    def _test_get_session():
+        with Session(test_engine) as session:
+            yield session
+
+    monkeypatch.setattr(engine_module, "get_session", _test_get_session)
+
     return tmp_db_path
 
 

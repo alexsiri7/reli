@@ -68,6 +68,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_tracing()
     init_db()
     clean_orphan_relationships()
+
+    # Initialize SQLModel tables (no-op if they already exist from sqlite3 init).
+    from .db_engine import init_sqlmodel_tables
+    from . import db_models as _db_models  # noqa: F811 — register table metadata
+
+    init_sqlmodel_tables()
     start_scheduler()
 
     # Start MCP session manager (required for streamable HTTP transport).
