@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "outline-variant": "#464555",
+                        "on-tertiary-container": "#ffd0d2",
+                        "tertiary-fixed": "#ffdadb",
+                        "primary-container": "#4f46e5",
+                        "on-surface": "#dae2fd",
+                        "on-tertiary-fixed-variant": "#92002a",
+                        "primary": "#c3c0ff",
+                        "on-background": "#dae2fd",
+                        "surface-tint": "#c3c0ff",
+                        "secondary-container": "#00a572",
+                        "on-secondary-fixed": "#002113",
+                        "on-tertiary-fixed": "#40000d",
+                        "surface-variant": "#2d3449",
+                        "surface-container": "#171f33",
+                        "on-primary-fixed": "#0f0069",
+                        "background": "#0b1326",
+                        "on-secondary-fixed-variant": "#005236",
+                        "secondary-fixed-dim": "#4edea3",
+                        "inverse-primary": "#4d44e3",
+                        "on-primary-container": "#dad7ff",
+                        "tertiary-fixed-dim": "#ffb2b7",
+                        "secondary-fixed": "#6ffbbe",
+                        "inverse-on-surface": "#283044",
+                        "outline": "#918fa1",
+                        "on-surface-variant": "#c7c4d8",
+                        "surface-container-high": "#222a3d",
+                        "on-secondary": "#003824",
+                        "on-error-container": "#ffdad6",
+                        "on-primary": "#1d00a5",
+                        "surface-container-lowest": "#060e20",
+                        "surface-bright": "#31394d",
+                        "secondary": "#4edea3",
+                        "primary-fixed-dim": "#c3c0ff",
+                        "error-container": "#93000a",
+                        "on-error": "#690005",
+                        "surface-container-highest": "#2d3449",
+                        "error": "#ffb4ab",
+                        "surface": "#0b1326",
+                        "on-secondary-container": "#00311f",
+                        "tertiary-container": "#bf0f3c",
+                        "tertiary": "#ffb2b7",
+                        "inverse-surface": "#dae2fd",
+                        "surface-dim": "#0b1326",
+                        "surface-container-low": "#131b2e",
+                        "primary-fixed": "#e2dfff",
+                        "on-tertiary": "#67001b",
+                        "on-primary-fixed-variant": "#3323cc"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0b1326;
+            color: #dae2fd;
+            -webkit-font-smoothing: antialiased;
+        }
+        .obsidian-glass {
+            background: rgba(34, 42, 61, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .accent-gradient-text {
+            background: linear-gradient(135deg, #4f46e5, #c3c0ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body selection:bg-primary-container selection:text-on-primary-container overflow-x-hidden">
+<!-- TopAppBar -->
+<header class="bg-[#0b1326] fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 shadow-none">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-white/5">
+<img class="w-full h-full object-cover" data-alt="Close-up professional portrait of a man with soft studio lighting and a clean dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3S3WwkV9L1qjepioud-v3zHQ6YBpEoBxjgorqyzW1Y6kuPwZ6vZylJO9bKc51NJqXdUNL45JcUoLVQ6FqcIA0oJRVL0la3LCrIHi693qTBdpOmlg8TYOX6v1VVnp4mRmKUV6vehQtfizdxfoCvywADbjVWeUtKNXNzRQxgt0mDKjv90HD9ZhalIsSr9J9qIESf1t7FfG4dswMFAwEqCXk502LjR1Jd39xf4eMq4dsbOOV03Q0t4VQZ_pf5G011KIq5_W32xwTyEeo"/>
+</div>
+<span class="font-['Inter'] font-black tracking-tight text-2xl text-slate-100">Reli</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-500 hover:text-[#4F46E5] transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</header>
+<main class="pt-24 pb-32 px-6 max-w-lg mx-auto">
+<!-- Greeting Section -->
+<section class="mb-10">
+<h1 class="text-4xl font-black tracking-tighter text-on-surface mb-1">Good Morning</h1>
+<p class="text-on-surface-variant font-medium opacity-80 uppercase tracking-[0.2em] text-[10px]">Wednesday, Oct 24</p>
+</section>
+<!-- The One Thing (Hero Card) -->
+<section class="mb-12">
+<div class="relative overflow-hidden rounded-full p-8 bg-surface-container-high shadow-2xl border-l-4 border-primary">
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-8xl" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+<div class="relative z-10">
+<label class="text-[10px] font-bold uppercase tracking-widest text-primary mb-3 block">The One Thing</label>
+<h2 class="text-2xl font-bold leading-tight text-on-surface mb-4">Complete the Final Quarterly Review for the Strategy Board</h2>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-sm">schedule</span>
+<span class="text-sm text-on-surface-variant">Due in 4 hours</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Sweep Findings (Bento-style Grid) -->
+<section class="mb-12">
+<div class="flex justify-between items-end mb-6">
+<h3 class="text-lg font-bold tracking-tight">Sweep Findings</h3>
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">AI Generated Insights</span>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<!-- Large Card -->
+<div class="col-span-2 p-6 rounded-xl bg-surface-container-low border-l-2 border-secondary">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-secondary">inventory_2</span>
+<span class="text-[10px] font-bold text-secondary-fixed-dim bg-on-secondary/30 px-2 py-0.5 rounded">Actionable</span>
+</div>
+<h4 class="font-bold text-on-surface mb-2">3 Inactive Subscriptions Found</h4>
+<p class="text-sm text-on-surface-variant leading-relaxed">The AI detected Recurring payments for tools not used in 60 days. Potential saving: $42/mo.</p>
+</div>
+<!-- Small Card 1 -->
+<div class="p-5 rounded-xl bg-surface-container-low border-l-2 border-on-tertiary-fixed-variant">
+<div class="mb-4">
+<span class="material-symbols-outlined text-tertiary">summarize</span>
+</div>
+<h4 class="font-bold text-on-surface mb-1 text-sm">Briefing Update</h4>
+<p class="text-xs text-on-surface-variant leading-relaxed">21 emails summarized into 3 key bullet points.</p>
+</div>
+<!-- Small Card 2 -->
+<div class="p-5 rounded-xl bg-surface-container-low border-l-2 border-secondary-fixed">
+<div class="mb-4">
+<span class="material-symbols-outlined text-secondary-fixed-dim">chat_bubble</span>
+</div>
+<h4 class="font-bold text-on-surface mb-1 text-sm">Slack Triage</h4>
+<p class="text-xs text-on-surface-variant leading-relaxed">Urgent mention from Alex in #product-sync detected.</p>
+</div>
+</div>
+</section>
+<!-- Brief Stats -->
+<section class="grid grid-cols-2 gap-8 py-8 border-t border-white/5">
+<div class="text-center">
+<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Items Cleared</p>
+<p class="text-3xl font-black accent-gradient-text">14</p>
+</div>
+<div class="text-center">
+<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Focus Time</p>
+<p class="text-3xl font-black accent-gradient-text">3.2<span class="text-sm font-medium ml-1">h</span></p>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 pb-safe bg-[#0b1326]/80 backdrop-blur-xl border-t border-white/5 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+<div class="flex justify-around items-center h-20 px-8">
+<!-- Navigation Item: Things -->
+<a class="flex flex-col items-center justify-center text-slate-500 hover:text-slate-200 transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1">inventory_2</span>
+<span class="font-['Inter'] text-[10px] font-bold uppercase tracking-widest">Things</span>
+</a>
+<!-- Navigation Item: Chat -->
+<a class="flex flex-col items-center justify-center text-slate-500 hover:text-slate-200 transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1">chat_bubble</span>
+<span class="font-['Inter'] text-[10px] font-bold uppercase tracking-widest">Chat</span>
+</a>
+<!-- Navigation Item: Briefing (Active) -->
+<a class="flex flex-col items-center justify-center text-[#4F46E5] relative after:content-[''] after:absolute after:-top-2 after:w-1 after:h-1 after:bg-[#4F46E5] after:rounded-full active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">summarize</span>
+<span class="font-['Inter'] text-[10px] font-bold uppercase tracking-widest">Briefing</span>
+</a>
+</div>
+</nav>
+</body></html>

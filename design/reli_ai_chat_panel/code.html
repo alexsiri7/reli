@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Reli AI - The Atelier</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-surface-variant": "#c7c4d8",
+                        "on-secondary-container": "#00311f",
+                        "tertiary": "#ffb2b7",
+                        "error": "#ffb4ab",
+                        "on-primary-fixed-variant": "#3323cc",
+                        "background": "#0b1326",
+                        "on-tertiary-fixed-variant": "#92002a",
+                        "primary-container": "#4f46e5",
+                        "error-container": "#93000a",
+                        "inverse-on-surface": "#283044",
+                        "on-tertiary": "#67001b",
+                        "on-primary-container": "#dad7ff",
+                        "on-secondary-fixed-variant": "#005236",
+                        "surface-container": "#171f33",
+                        "primary": "#c3c0ff",
+                        "primary-fixed-dim": "#c3c0ff",
+                        "on-primary-fixed": "#0f0069",
+                        "outline-variant": "#464555",
+                        "surface-variant": "#2d3449",
+                        "primary-fixed": "#e2dfff",
+                        "tertiary-container": "#bf0f3c",
+                        "secondary-fixed": "#6ffbbe",
+                        "surface-tint": "#c3c0ff",
+                        "tertiary-fixed-dim": "#ffb2b7",
+                        "surface-container-low": "#131b2e",
+                        "outline": "#918fa1",
+                        "on-surface": "#dae2fd",
+                        "surface": "#0b1326",
+                        "secondary-fixed-dim": "#4edea3",
+                        "tertiary-fixed": "#ffdadb",
+                        "on-tertiary-container": "#ffd0d2",
+                        "surface-container-lowest": "#060e20",
+                        "inverse-surface": "#dae2fd",
+                        "on-background": "#dae2fd",
+                        "surface-dim": "#0b1326",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary": "#003824",
+                        "secondary": "#4edea3",
+                        "surface-bright": "#31394d",
+                        "on-tertiary-fixed": "#40000d",
+                        "secondary-container": "#00a572",
+                        "surface-container-high": "#222a3d",
+                        "on-secondary-fixed": "#002113",
+                        "surface-container-highest": "#2d3449",
+                        "inverse-primary": "#4d44e3",
+                        "on-primary": "#1d00a5",
+                        "on-error": "#690005"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0b1326;
+            color: #dae2fd;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #222a3d;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="font-body selection:bg-primary/30">
+<div class="flex h-screen overflow-hidden">
+<!-- SideNavBar Component -->
+<aside class="fixed left-0 top-0 h-screen w-[280px] bg-[#131b2e] flex flex-col h-full py-8 shadow-[20px_0_40px_rgba(0,0,0,0.4)] z-40">
+<div class="px-6 mb-10 flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container" data-icon="rocket_launch">rocket_launch</span>
+</div>
+<div>
+<h1 class="text-lg font-bold text-slate-100 leading-none">The Atelier</h1>
+<p class="text-[10px] uppercase tracking-widest text-slate-500 mt-1">Digital Curator</p>
+</div>
+</div>
+<div class="px-4 mb-6">
+<button class="w-full bg-primary-container py-3 px-4 rounded-xl text-on-primary-container font-semibold flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all active:scale-95 duration-100">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+<span>New Thought</span>
+</button>
+</div>
+<nav class="flex-1 space-y-1">
+<div class="flex items-center gap-3 text-slate-100 border-l-2 border-[#4F46E5] pl-4 py-2 bg-[#222a3d]/50 cursor-pointer hover:bg-[#222a3d] transition-all duration-200">
+<span class="material-symbols-outlined" data-icon="radar">radar</span>
+<span class="font-medium">The Radar</span>
+</div>
+<div class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 hover:bg-[#222a3d] transition-all duration-200 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="rocket_launch">rocket_launch</span>
+<span>Active Things</span>
+</div>
+<div class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 hover:bg-[#222a3d] transition-all duration-200 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="event_repeat">event_repeat</span>
+<span>Upcoming Check-ins</span>
+</div>
+</nav>
+<div class="mt-auto pt-8 space-y-1">
+<div class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 hover:bg-[#222a3d] transition-all cursor-pointer">
+<span class="material-symbols-outlined" data-icon="archive">archive</span>
+<span class="text-xs">Archive</span>
+</div>
+<div class="flex items-center gap-3 text-slate-400 pl-4 py-2 hover:text-slate-200 hover:bg-[#222a3d] transition-all cursor-pointer">
+<span class="material-symbols-outlined" data-icon="delete">delete</span>
+<span class="text-xs">Trash</span>
+</div>
+</div>
+</aside>
+<!-- Middle Panel: Content Context -->
+<main class="ml-[280px] mr-[400px] flex-1 flex flex-col bg-background overflow-y-auto">
+<!-- Header for Middle Panel -->
+<header class="h-16 flex items-center justify-between px-10 border-b border-white/5 bg-background/50 backdrop-blur-md sticky top-0 z-30">
+<div class="flex items-center gap-4">
+<span class="text-xs font-bold tracking-[0.2em] text-slate-500 uppercase">Current Focus</span>
+</div>
+<div class="flex items-center gap-6">
+<span class="material-symbols-outlined text-slate-400 cursor-pointer hover:text-white" data-icon="search">search</span>
+<span class="material-symbols-outlined text-slate-400 cursor-pointer hover:text-white" data-icon="notifications">notifications</span>
+</div>
+</header>
+<section class="p-12 max-w-4xl mx-auto w-full">
+<!-- Selected Item: Client Meeting -->
+<div class="mb-12">
+<div class="flex items-center gap-3 mb-4">
+<div class="h-2 w-2 rounded-full bg-on-tertiary-fixed-variant shadow-[0_0_8px_rgba(146,0,42,0.6)]"></div>
+<span class="text-xs font-bold uppercase tracking-widest text-on-tertiary-fixed-variant">Meeting · Scheduled</span>
+</div>
+<h2 class="text-5xl font-black text-on-surface tracking-tighter mb-8 leading-[1.1]">Client Meeting</h2>
+<!-- Bento Layout for Details -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Agenda Card -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-high p-8 rounded-xl relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl" data-icon="description">description</span>
+</div>
+<h3 class="text-sm font-bold uppercase tracking-wider text-primary mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="list_alt">list_alt</span>
+                                Agenda
+                            </h3>
+<ul class="space-y-4 text-on-surface-variant leading-relaxed">
+<li class="flex items-start gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></span>
+<span>Q3 Performance Review and Strategic Pivot</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></span>
+<span>Review of Sarah's proposed creative direction for the "Zenith" campaign</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></span>
+<span>Resource allocation for upcoming product launch event</span>
+</li>
+</ul>
+</div>
+<!-- Contact Card -->
+<div class="col-span-12 lg:col-span-4 bg-surface-container-low p-8 rounded-xl flex flex-col items-center justify-center text-center border border-white/5">
+<img alt="Sarah Contact" class="w-20 h-20 rounded-full mb-4 ring-2 ring-primary/20" data-alt="Close-up portrait of a professional woman with a friendly expression in a modern office environment, soft natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1H9DO5jtObeHimEsvXUdqo72tx3EgQWNKFhhb4Az3FffkeDed7wnYd2XWDC1YvilFTINV8Dl39-GJNbfgGEVDnd_Ci4sWl36uz9LdrlDbrT3O3E1spuoAGqMgBaByEMfn3sjbfmfe5s0QpxbAQNtdF-QwFpmGAPlAHYTLX8o1Uj2VvJOpX7vqPMRD2gSAlCATx8el1JLjGOj_rurQ2n_k3eki1qmgoBUoDuvRjY4g0m5MNGQyEkNzjDsWzZeI7fyxhEn6ClQtI174"/>
+<h4 class="font-bold text-lg text-on-surface">Sarah Mitchell</h4>
+<p class="text-xs text-on-surface-variant mb-6">Lead Designer, Studio Apex</p>
+<div class="flex gap-2">
+<button class="p-2 rounded-lg bg-surface-container-highest text-primary hover:bg-primary hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="mail">mail</span>
+</button>
+<button class="p-2 rounded-lg bg-surface-container-highest text-primary hover:bg-primary hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="call">call</span>
+</button>
+</div>
+</div>
+<!-- Quick Action Card -->
+<div class="col-span-12 bg-surface-container-highest/30 p-6 rounded-xl border-l-4 border-secondary flex items-center justify-between">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-secondary" data-icon="auto_awesome">auto_awesome</span>
+<div>
+<p class="text-sm font-semibold">Reli Suggestion</p>
+<p class="text-xs text-on-surface-variant">Should I prepare a summary of the Zenith campaign metrics for this meeting?</p>
+</div>
+</div>
+<button class="px-4 py-2 text-xs font-bold uppercase tracking-widest text-secondary border border-secondary/30 rounded hover:bg-secondary/10 transition-colors">
+                                Prepare Now
+                            </button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Right Panel: AI Chat Interface -->
+<aside class="fixed right-0 top-0 h-screen w-[400px] bg-surface-container-low flex flex-col shadow-[-20px_0_40px_rgba(0,0,0,0.2)] z-40">
+<!-- Chat Header -->
+<div class="p-6 h-16 flex items-center border-b border-white/5 bg-surface-container-low/80 backdrop-blur-md">
+<span class="material-symbols-outlined text-primary mr-3" data-icon="bubble_chart">bubble_chart</span>
+<h3 class="font-bold text-slate-100">Reli Assistant</h3>
+<div class="ml-auto flex gap-3">
+<span class="material-symbols-outlined text-slate-500 text-sm cursor-pointer" data-icon="open_in_full">open_in_full</span>
+<span class="material-symbols-outlined text-slate-500 text-sm cursor-pointer" data-icon="more_vert">more_vert</span>
+</div>
+</div>
+<!-- Messages Stream -->
+<div class="flex-1 overflow-y-auto p-6 space-y-8">
+<!-- AI Message -->
+<div class="flex flex-col items-start max-w-[90%]">
+<div class="text-[10px] uppercase font-bold tracking-widest text-primary mb-2 opacity-60">Reli · 10:42 AM</div>
+<div class="border-l-4 border-primary pl-4 py-1 text-sm leading-relaxed text-on-surface-variant">
+                        Hello! I've analyzed your schedule for today. The <span class="text-on-surface font-semibold">Client Meeting</span> is approaching. Would you like me to draft an follow-up task list for Sarah now, or after the session?
+                    </div>
+</div>
+<!-- User Message -->
+<div class="flex flex-col items-end self-end max-w-[85%]">
+<div class="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-2 opacity-60">You</div>
+<div class="bg-surface-container-high p-4 rounded-xl rounded-tr-none text-sm text-on-surface">
+                        Please add a new task: "Follow up with Sarah regarding the campaign budget".
+                    </div>
+</div>
+<!-- AI Response with Diff Card -->
+<div class="flex flex-col items-start max-w-[90%]">
+<div class="text-[10px] uppercase font-bold tracking-widest text-primary mb-2 opacity-60">Reli · 10:45 AM</div>
+<div class="border-l-4 border-primary pl-4 py-1 text-sm leading-relaxed text-on-surface-variant mb-4">
+                        Understood. I've added that to your active task list. Here is the confirmation:
+                    </div>
+<!-- Compact Diff Card -->
+<div class="w-full bg-surface-container-highest/50 rounded-lg p-4 border border-white/5">
+<div class="flex items-center gap-2 mb-3">
+<span class="material-symbols-outlined text-secondary text-sm" data-icon="check_circle">check_circle</span>
+<span class="text-xs font-bold text-slate-300">Action Applied</span>
+</div>
+<div class="space-y-2">
+<div class="flex items-center gap-2 bg-secondary/10 p-2 rounded text-xs text-secondary border border-secondary/20">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+<span>Task: Follow up with Sarah regarding budget</span>
+</div>
+<div class="flex items-center gap-2 text-[10px] text-slate-500 px-2">
+<span class="material-symbols-outlined text-[12px]" data-icon="sell">sell</span>
+<span>Project: Zenith Campaign</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Chat Bottom Context & Input -->
+<div class="p-6 bg-surface-container-low border-t border-white/5">
+<!-- Relevance Chips -->
+<div class="flex flex-wrap gap-2 mb-6">
+<div class="px-3 py-1 bg-surface-container-high rounded-full text-[10px] font-bold text-on-surface-variant border border-white/5 flex items-center gap-1.5 hover:bg-surface-bright transition-colors cursor-pointer">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> Sarah Mitchell
+                    </div>
+<div class="px-3 py-1 bg-surface-container-high rounded-full text-[10px] font-bold text-on-surface-variant border border-white/5 flex items-center gap-1.5 hover:bg-surface-bright transition-colors cursor-pointer">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Budget Docs
+                    </div>
+<div class="px-3 py-1 bg-surface-container-high rounded-full text-[10px] font-bold text-on-surface-variant border border-white/5 flex items-center gap-1.5 hover:bg-surface-bright transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[12px]" data-icon="add">add</span> More Context
+                    </div>
+</div>
+<!-- Message Input Area -->
+<div class="relative group">
+<textarea class="w-full bg-surface-container-highest border-none rounded-2xl p-4 pr-12 text-sm text-on-surface placeholder:text-slate-600 focus:ring-1 focus:ring-primary/40 resize-none h-24 transition-all group-hover:bg-surface-bright" placeholder="Type a message or use voice command..."></textarea>
+<div class="absolute bottom-4 right-4 flex items-center gap-2">
+<button class="p-2 text-slate-500 hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="mic">mic</span>
+</button>
+<button class="p-2 bg-primary-container text-on-primary-container rounded-lg shadow-lg hover:shadow-primary/20 active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="send">send</span>
+</button>
+</div>
+</div>
+<p class="text-[10px] text-center text-slate-600 mt-4 font-medium tracking-tight">Reli AI can assist with creative workflows and system automation.</p>
+</div>
+</aside>
+</div>
+</body></html>
