@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -373,8 +374,50 @@ def chat_history(
 
 
 # ---------------------------------------------------------------------------
-# MCP Prompt Resources — PA behavior guidance for calling agents
+# MCP Prompt Resources — expose real agent prompts from shared .md files
 # ---------------------------------------------------------------------------
+
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
+
+
+@mcp.prompt(
+    name="context-agent",
+    description=(
+        "The context agent's system prompt: how to search for relevant Things "
+        "based on a user message. Use this prompt to adopt the Librarian persona "
+        "for read-only context retrieval. Designed to work with: fetch_context."
+    ),
+)
+def context_agent_prompt() -> str:
+    """Context agent system prompt — search parameters from natural language."""
+    return (_PROMPTS_DIR / "context-agent.md").read_text()
+
+
+@mcp.prompt(
+    name="reasoning-agent",
+    description=(
+        "The reasoning agent's full system prompt: how to decide what to create, "
+        "update, delete, or link in the knowledge graph. Use this prompt to adopt "
+        "the Reasoning Agent persona. Designed to work with: fetch_context, "
+        "create_thing, update_thing, delete_thing, merge_things, create_relationship."
+    ),
+)
+def reasoning_agent_prompt() -> str:
+    """Reasoning agent system prompt — storage change decisions from context."""
+    return (_PROMPTS_DIR / "reasoning-agent.md").read_text()
+
+
+@mcp.prompt(
+    name="response-agent",
+    description=(
+        "The response agent's base system prompt: how to talk to the user after "
+        "changes are applied. Warm, concise, personality-driven. Use this prompt "
+        "to adopt the Voice of Reli persona. No tools required — pure formatting."
+    ),
+)
+def response_agent_prompt() -> str:
+    """Response agent base system prompt — user-facing replies with personality."""
+    return (_PROMPTS_DIR / "response-agent.md").read_text()
 
 
 @mcp.prompt(
