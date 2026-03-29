@@ -6,6 +6,7 @@ import { ChatPanel } from './components/ChatPanel'
 import { DetailPanel } from './components/DetailPanel'
 import { BriefingPanel } from './components/BriefingPanel'
 import GraphView from './components/GraphView'
+import { CalendarView } from './components/CalendarView'
 import { LoginPage } from './components/LoginPage'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
@@ -128,6 +129,8 @@ function App() {
         <Sidebar />
         {mainView === 'graph' ? (
           <GraphView />
+        ) : mainView === 'calendar' ? (
+          <CalendarView />
         ) : (
           <>
             <DetailPanel />
