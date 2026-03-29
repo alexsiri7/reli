@@ -17,10 +17,15 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from sqlmodel import Session
+from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
-from .db_engine import _exec
+from .db_engine import user_filter_clause
+from .db_models import (
+    ConnectionSuggestionRecord,
+    ThingRecord,
+    ThingRelationshipRecord,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,25 +83,26 @@ def find_connection_candidates(
 
     # Get all active Things
     with Session(_engine_mod.engine) as session:
+        thing_stmt = select(ThingRecord).where(ThingRecord.active == True)
         if user_id:
-            things = _exec(session, 
-                "SELECT id, title, type_hint FROM things WHERE active = 1 AND (user_id = ? OR user_id IS NULL)",
-                (user_id,),
-            ).fetchall()
-        else:
-            things = _exec(session, "SELECT id, title, type_hint FROM things WHERE active = 1").fetchall()
+            thing_stmt = thing_stmt.where(
+                user_filter_clause(ThingRecord.user_id, user_id)
+            )
+        things = session.exec(thing_stmt).all()
 
         # Build set of existing relationships (both directions)
-        rel_rows = _exec(session, "SELECT from_thing_id, to_thing_id FROM thing_relationships").fetchall()
+        rel_rows = session.exec(select(ThingRelationshipRecord)).all()
         existing_rels: set[tuple[str, str]] = set()
         for row in rel_rows:
             existing_rels.add((row.from_thing_id, row.to_thing_id))
             existing_rels.add((row.to_thing_id, row.from_thing_id))
 
         # Build set of existing pending/deferred suggestions
-        sugg_rows = _exec(session, 
-            "SELECT from_thing_id, to_thing_id FROM connection_suggestions WHERE status IN ('pending', 'deferred')"
-        ).fetchall()
+        sugg_rows = session.exec(
+            select(ConnectionSuggestionRecord).where(
+                ConnectionSuggestionRecord.status.in_(["pending", "deferred"])  # type: ignore[union-attr]
+            )
+        ).all()
         existing_suggestions: set[tuple[str, str]] = set()
         for row in sugg_rows:
             existing_suggestions.add((row.from_thing_id, row.to_thing_id))
@@ -104,12 +110,14 @@ def find_connection_candidates(
 
         # Also exclude parent-child relationships
         parent_pairs: set[tuple[str, str]] = set()
-        parent_rows = _exec(session, "SELECT id, parent_id FROM things WHERE parent_id IS NOT NULL").fetchall()
+        parent_rows = session.exec(
+            select(ThingRecord).where(ThingRecord.parent_id.is_not(None))  # type: ignore[union-attr]
+        ).all()
         for row in parent_rows:
-            parent_pairs.add((row.id, row.parent_id))
-            parent_pairs.add((row.parent_id, row.id))
+            parent_pairs.add((row.id, row.parent_id))  # type: ignore[arg-type]
+            parent_pairs.add((row.parent_id, row.id))  # type: ignore[arg-type]
 
-    thing_map = {t._asdict()["id"]: t._asdict() for t in things}
+    thing_map = {t.id: {"id": t.id, "title": t.title, "type_hint": t.type_hint} for t in things}
     seen_pairs: set[tuple[str, str]] = set()
     candidates: list[ConnectionCandidate] = []
 
@@ -306,16 +314,21 @@ async def validate_candidates(
             sugg_id = f"cs-{uuid.uuid4().hex[:8]}"
 
             # Determine user_id from one of the things
-            user_row = _exec(session, "SELECT user_id FROM things WHERE id = ?", (from_id,)).fetchone()
-            user_id = user_row.user_id if user_row else None
+            from_thing = session.get(ThingRecord, from_id)
+            user_id = from_thing.user_id if from_thing else None
 
-            _exec(session, 
-                """INSERT INTO connection_suggestions
-                   (id, from_thing_id, to_thing_id, suggested_relationship_type,
-                    reason, confidence, status, created_at, user_id)
-                   VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)""",
-                (sugg_id, from_id, to_id, rel_type, reason, confidence, now, user_id),
+            suggestion = ConnectionSuggestionRecord(
+                id=sugg_id,
+                from_thing_id=from_id,
+                to_thing_id=to_id,
+                suggested_relationship_type=rel_type,
+                reason=reason,
+                confidence=confidence,
+                status="pending",
+                created_at=datetime.fromisoformat(now),
+                user_id=user_id,
             )
+            session.add(suggestion)
             created.append(
                 {
                     "id": sugg_id,

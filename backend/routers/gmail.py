@@ -1,5 +1,3 @@
-from sqlmodel import Session
-
 """Gmail read-only integration: OAuth2 flow and message endpoints."""
 
 import base64
@@ -12,11 +10,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from sqlmodel import Session, select
 
 from ..auth import require_user
 from ..config import settings
 import backend.db_engine as _engine_mod
-from ..db_engine import _exec
+from ..db_models import GoogleTokenRecord
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
 
@@ -68,36 +67,50 @@ def _save_token(creds: Any, user_id: str = "") -> None:
     """Persist OAuth2 credentials to the google_tokens table."""
     expiry_str = creds.expiry.isoformat() if creds.expiry else None
     scopes_str = json.dumps(list(creds.scopes)) if creds.scopes else None
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     uid = user_id or None  # Store NULL when auth is disabled (empty string)
 
     with Session(_engine_mod.engine) as session:
-        _exec(session, 
-            """INSERT INTO google_tokens (user_id, service, access_token, refresh_token,
-               token_uri, client_id, client_secret, expiry, scopes, updated_at)
-               VALUES (?, 'gmail', ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(user_id, service) DO UPDATE SET
-               access_token=excluded.access_token,
-               refresh_token=COALESCE(excluded.refresh_token, google_tokens.refresh_token),
-               token_uri=excluded.token_uri,
-               client_id=excluded.client_id,
-               client_secret=excluded.client_secret,
-               expiry=excluded.expiry,
-               scopes=excluded.scopes,
-               updated_at=excluded.updated_at""",
-            (
-                uid,
-                creds.token,
-                creds.refresh_token,
-                creds.token_uri,
-                creds.client_id,
-                creds.client_secret,
-                expiry_str,
-                scopes_str,
-                now,
-            ),
-        )
+        # Find existing token by user_id + service
+        if uid is None:
+            existing = session.exec(
+                select(GoogleTokenRecord).where(
+                    GoogleTokenRecord.user_id.is_(None),  # type: ignore[union-attr]
+                    GoogleTokenRecord.service == "gmail",
+                )
+            ).first()
+        else:
+            existing = session.exec(
+                select(GoogleTokenRecord).where(
+                    GoogleTokenRecord.user_id == uid,
+                    GoogleTokenRecord.service == "gmail",
+                )
+            ).first()
 
+        if existing:
+            existing.access_token = creds.token
+            existing.refresh_token = creds.refresh_token or existing.refresh_token
+            existing.token_uri = creds.token_uri
+            existing.client_id = creds.client_id
+            existing.client_secret = creds.client_secret
+            existing.expiry = expiry_str
+            existing.scopes = scopes_str
+            existing.updated_at = now
+            session.add(existing)
+        else:
+            record = GoogleTokenRecord(
+                user_id=uid,
+                service="gmail",
+                access_token=creds.token,
+                refresh_token=creds.refresh_token,
+                token_uri=creds.token_uri,
+                client_id=creds.client_id,
+                client_secret=creds.client_secret,
+                expiry=expiry_str,
+                scopes=scopes_str,
+                updated_at=now,
+            )
+            session.add(record)
 
         session.commit()
 def _load_creds(user_id: str = "") -> Any:
@@ -114,9 +127,19 @@ def _load_creds(user_id: str = "") -> Any:
     # Try DB first — match by user_id (NULL when auth disabled)
     with Session(_engine_mod.engine) as session:
         if uid is None:
-            row = _exec(session, "SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'").fetchone()
+            row = session.exec(
+                select(GoogleTokenRecord).where(
+                    GoogleTokenRecord.user_id.is_(None),  # type: ignore[union-attr]
+                    GoogleTokenRecord.service == "gmail",
+                )
+            ).first()
         else:
-            row = _exec(session, "SELECT * FROM google_tokens WHERE user_id = ? AND service = 'gmail'", (uid,)).fetchone()
+            row = session.exec(
+                select(GoogleTokenRecord).where(
+                    GoogleTokenRecord.user_id == uid,
+                    GoogleTokenRecord.service == "gmail",
+                )
+            ).first()
 
     if row:
         creds = Credentials(
@@ -290,9 +313,21 @@ def gmail_disconnect(user_id: str = Depends(require_user)) -> None:
     uid = user_id or None
     with Session(_engine_mod.engine) as session:
         if uid is None:
-            _exec(session, "DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'gmail'")
+            records = session.exec(
+                select(GoogleTokenRecord).where(
+                    GoogleTokenRecord.user_id.is_(None),  # type: ignore[union-attr]
+                    GoogleTokenRecord.service == "gmail",
+                )
+            ).all()
         else:
-            _exec(session, "DELETE FROM google_tokens WHERE user_id = ? AND service = 'gmail'", (uid,))
+            records = session.exec(
+                select(GoogleTokenRecord).where(
+                    GoogleTokenRecord.user_id == uid,
+                    GoogleTokenRecord.service == "gmail",
+                )
+            ).all()
+        for rec in records:
+            session.delete(rec)
         session.commit()
     # Also clean up legacy file if it exists
     if TOKEN_PATH.exists():

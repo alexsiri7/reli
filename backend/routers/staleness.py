@@ -3,15 +3,14 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import text
 from sqlmodel import Session, select
 
-from ..db_engine import get_session, user_filter_clause
+from ..db_engine import get_session, user_filter_clause, user_filter_text
 from ..db_models import ThingRecord
 
 from ..auth import require_user
 import backend.db_engine as _engine_mod
-from ..db_engine import _exec
-from ..auth import user_filter
 from ..models import (
     OverdueCheckin,
     StaleItem,
@@ -41,29 +40,32 @@ def get_staleness_report(
     cutoff = today.isoformat()
     stale_cutoff = (today - timedelta(days=threshold)).isoformat()
 
-    # Use raw SQL for the subquery (active_children count)
-    # TODO: convert to SQLModel query
-    uf_sql, uf_params = user_filter(user_id)
+    uf_frag, uf_params = user_filter_text(user_id, "t")
 
     with Session(_engine_mod.engine) as session:
-        stale_rows = _exec(session, 
-            f"""SELECT t.*,
-                       (SELECT COUNT(*) FROM things c
-                        WHERE c.parent_id = t.id AND c.active = 1) AS active_children
-                FROM things t
-                WHERE t.active = 1
-                  AND t.updated_at < ?{uf_sql}
-                ORDER BY t.updated_at ASC""",
-            [stale_cutoff, *uf_params],
+        stale_rows = session.execute(
+            text(
+                f"""SELECT t.*,
+                           (SELECT COUNT(*) FROM things c
+                            WHERE c.parent_id = t.id AND c.active = true) AS active_children
+                    FROM things t
+                    WHERE t.active = true
+                      AND t.updated_at < :stale_cutoff{uf_frag}
+                    ORDER BY t.updated_at ASC"""
+            ),
+            {"stale_cutoff": stale_cutoff, **uf_params},
         ).fetchall()
 
-        overdue_rows = _exec(session, 
-            f"""SELECT * FROM things
-                WHERE active = 1
-                  AND checkin_date IS NOT NULL
-                  AND DATE(checkin_date) < ?{uf_sql}
-                ORDER BY checkin_date ASC""",
-            [cutoff, *uf_params],
+        uf_frag2, uf_params2 = user_filter_text(user_id)
+        overdue_rows = session.execute(
+            text(
+                f"""SELECT * FROM things
+                    WHERE active = true
+                      AND checkin_date IS NOT NULL
+                      AND DATE(checkin_date) < :cutoff_date{uf_frag2}
+                    ORDER BY checkin_date ASC"""
+            ),
+            {"cutoff_date": cutoff, **uf_params2},
         ).fetchall()
 
     stale_items: list[StaleItem] = []

@@ -16,7 +16,7 @@ from sqlalchemy import text
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
-from .db_engine import _exec, user_filter_clause
+from .db_engine import user_filter_clause
 from .db_models import ThingRecord, ThingRelationshipRecord, MergeHistoryRecord as MergeHistoryDBRecord, ChatHistoryRecord
 from .vector_store import delete_thing as vs_delete
 from .vector_store import upsert_thing
@@ -114,24 +114,31 @@ def fetch_context(
         relationships: list[dict[str, Any]] = []
         if results:
             ids = [t["id"] for t in results]
-            ph = ",".join("?" for _ in ids)
-            rel_rows = _exec(session, 
-                f"SELECT from_thing_id, to_thing_id, relationship_type "
-                f"FROM thing_relationships "
-                f"WHERE from_thing_id IN ({ph}) OR to_thing_id IN ({ph})",
-                ids + ids,
-            ).fetchall()
-            relationships = [dict(r) for r in rel_rows]
+            rel_stmt = select(ThingRelationshipRecord).where(
+                or_(
+                    ThingRelationshipRecord.from_thing_id.in_(ids),  # type: ignore[union-attr]
+                    ThingRelationshipRecord.to_thing_id.in_(ids),  # type: ignore[union-attr]
+                )
+            )
+            rel_rows = session.exec(rel_stmt).all()
+            relationships = [
+                {
+                    "from_thing_id": r.from_thing_id,
+                    "to_thing_id": r.to_thing_id,
+                    "relationship_type": r.relationship_type,
+                }
+                for r in rel_rows
+            ]
 
         # Update last_referenced timestamp
         if results:
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(timezone.utc)
             ids = [t["id"] for t in results]
-            ph = ",".join("?" for _ in ids)
-            _exec(session, 
-                f"UPDATE things SET last_referenced = ? WHERE id IN ({ph})",
-                [now] + ids,
-            )
+            for thing_rec in session.exec(
+                select(ThingRecord).where(ThingRecord.id.in_(ids))  # type: ignore[union-attr]
+            ).all():
+                thing_rec.last_referenced = now
+                session.add(thing_rec)
 
     return {
         "things": results,
@@ -625,64 +632,52 @@ def search_things(
     if not query.strip():
         return []
 
-    # This query is complex (UNION, subqueries, GROUP BY, LIKE on JSON columns).
-    # Keep as raw SQL for now.
-    # TODO: convert to SQLModel query
-    from .auth import user_filter
+    from .db_engine import user_filter_text
 
     pattern = f"%{query}%"
     with Session(_engine_mod.engine) as session:
-        filters = ""
-        filter_params: list[str | int] = []
-        uf_sql, uf_params = user_filter(user_id, "t")
-        filters += uf_sql
-        filter_params.extend(uf_params)
+        # Build user filter for Postgres named params
+        uf_frag, uf_params = user_filter_text(user_id, "t")
+
+        filters = uf_frag
+        params: dict[str, Any] = {**uf_params, "pattern": pattern, "lim": limit}
         if active_only:
-            filters += " AND t.active = 1"
+            filters += " AND t.active = true"
         if type_hint:
-            filters += " AND t.type_hint = ?"
-            filter_params.append(type_hint)
+            filters += " AND t.type_hint = :type_hint"
+            params["type_hint"] = type_hint
 
-        direct_params: list[str | int] = [pattern, pattern, pattern, *filter_params]
-        direct_sql = (
-            "SELECT t.*, 1 AS _rank FROM things t"
-            " WHERE (t.title LIKE ? OR t.data LIKE ? OR t.type_hint LIKE ?)" + filters
-        )
-
-        rel_sql = (
-            "SELECT t.*, 2 AS _rank FROM things t"
-            " WHERE t.id IN ("
-            "   SELECT r.to_thing_id FROM thing_relationships r"
-            "   JOIN things m ON r.from_thing_id = m.id"
-            "   WHERE m.title LIKE ? OR m.data LIKE ?"
-            "   UNION"
-            "   SELECT r.from_thing_id FROM thing_relationships r"
-            "   JOIN things m ON r.to_thing_id = m.id"
-            "   WHERE m.title LIKE ? OR m.data LIKE ?"
-            "   UNION"
-            "   SELECT r.from_thing_id FROM thing_relationships r"
-            "   WHERE r.relationship_type LIKE ?"
-            "   UNION"
-            "   SELECT r.to_thing_id FROM thing_relationships r"
-            "   WHERE r.relationship_type LIKE ?"
-            " )" + filters
-        )
-        rel_params: list[str | int] = [pattern, pattern, pattern, pattern, pattern, pattern, *filter_params]
-
-        sql = (
-            "SELECT * FROM ("
-            f"  {direct_sql}"
-            f"  UNION ALL"
-            f"  {rel_sql}"
+        # Postgres requires all columns in GROUP BY or use DISTINCT ON.
+        # Use DISTINCT ON(id) with a subquery rank approach instead.
+        sql = text(
+            "SELECT DISTINCT ON (sub.id) sub.* FROM ("
+            "  SELECT t.*, 1 AS _rank FROM things t"
+            "  WHERE (t.title LIKE :pattern OR CAST(t.data AS TEXT) LIKE :pattern"
+            "         OR t.type_hint LIKE :pattern)" + filters +
+            "  UNION ALL"
+            "  SELECT t.*, 2 AS _rank FROM things t"
+            "  WHERE t.id IN ("
+            "    SELECT r.to_thing_id FROM thing_relationships r"
+            "    JOIN things m ON r.from_thing_id = m.id"
+            "    WHERE m.title LIKE :pattern OR CAST(m.data AS TEXT) LIKE :pattern"
+            "    UNION"
+            "    SELECT r.from_thing_id FROM thing_relationships r"
+            "    JOIN things m ON r.to_thing_id = m.id"
+            "    WHERE m.title LIKE :pattern OR CAST(m.data AS TEXT) LIKE :pattern"
+            "    UNION"
+            "    SELECT r.from_thing_id FROM thing_relationships r"
+            "    WHERE r.relationship_type LIKE :pattern"
+            "    UNION"
+            "    SELECT r.to_thing_id FROM thing_relationships r"
+            "    WHERE r.relationship_type LIKE :pattern"
+            "  )" + filters +
             ") sub"
-            " GROUP BY sub.id"
-            " ORDER BY MIN(sub._rank), sub.updated_at DESC"
-            " LIMIT ?"
+            " ORDER BY sub.id, sub._rank, sub.updated_at DESC"
+            " LIMIT :lim"
         )
-        params = [*direct_params, *rel_params, limit]
-        rows = _exec(session, sql, params).fetchall()
+        rows = session.execute(sql, params).fetchall()
 
-    return [dict(r) for r in rows]
+    return [dict(r._mapping) for r in rows]
 
 
 # ---------------------------------------------------------------------------

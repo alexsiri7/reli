@@ -10,11 +10,11 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-from .config import settings
-from sqlmodel import Session
+from sqlmodel import Session, select
 
+from .config import settings
 import backend.db_engine as _engine_mod
-from .db_engine import _exec
+from .db_models import GoogleTokenRecord
 from .token_encryption import decrypt_or_plaintext, encrypt
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
@@ -92,31 +92,41 @@ def _save_credentials(creds: Credentials, user_id: str = "") -> None:
     enc_secret = encrypt(creds.client_secret) if creds.client_secret else ""
 
     with Session(_engine_mod.engine) as session:
-        _exec(session, 
-            """INSERT INTO google_tokens (user_id, service, access_token, refresh_token,
-               token_uri, client_id, client_secret, expiry, scopes, updated_at)
-               VALUES (?, 'calendar', ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(user_id, service) DO UPDATE SET
-               access_token=excluded.access_token,
-               refresh_token=COALESCE(excluded.refresh_token, google_tokens.refresh_token),
-               token_uri=excluded.token_uri,
-               client_id=excluded.client_id,
-               client_secret=excluded.client_secret,
-               expiry=excluded.expiry,
-               scopes=excluded.scopes,
-               updated_at=excluded.updated_at""",
-            (
-                uid,
-                enc_access,
-                enc_refresh,
-                creds.token_uri,
-                creds.client_id,
-                enc_secret,
-                expiry_str,
-                scopes_str,
-                now,
-            ),
+        # Find existing token record
+        stmt = select(GoogleTokenRecord).where(
+            GoogleTokenRecord.service == "calendar",
         )
+        if uid is None:
+            stmt = stmt.where(GoogleTokenRecord.user_id.is_(None))  # type: ignore[union-attr]
+        else:
+            stmt = stmt.where(GoogleTokenRecord.user_id == uid)
+        existing = session.exec(stmt).first()
+
+        if existing:
+            existing.access_token = enc_access or ""
+            if enc_refresh is not None:
+                existing.refresh_token = enc_refresh
+            existing.token_uri = creds.token_uri
+            existing.client_id = creds.client_id
+            existing.client_secret = enc_secret
+            existing.expiry = expiry_str
+            existing.scopes = scopes_str
+            existing.updated_at = datetime.now(timezone.utc)
+            session.add(existing)
+        else:
+            record = GoogleTokenRecord(
+                user_id=uid,
+                service="calendar",
+                access_token=enc_access or "",
+                refresh_token=enc_refresh,
+                token_uri=creds.token_uri,
+                client_id=creds.client_id,
+                client_secret=enc_secret,
+                expiry=expiry_str,
+                scopes=scopes_str,
+                updated_at=datetime.now(timezone.utc),
+            )
+            session.add(record)
         session.commit()
 
 
@@ -130,12 +140,14 @@ def _load_credentials(user_id: str = "") -> Credentials | None:
     uid = user_id or None
 
     with Session(_engine_mod.engine) as session:
+        stmt = select(GoogleTokenRecord).where(
+            GoogleTokenRecord.service == "calendar",
+        )
         if uid is None:
-            row = _exec(session, "SELECT * FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'").fetchone()
+            stmt = stmt.where(GoogleTokenRecord.user_id.is_(None))  # type: ignore[union-attr]
         else:
-            row = _exec(session, 
-                "SELECT * FROM google_tokens WHERE user_id = ? AND service = 'calendar'", (uid,)
-            ).fetchone()
+            stmt = stmt.where(GoogleTokenRecord.user_id == uid)
+        row = session.exec(stmt).first()
     if not row:
         return None
 
@@ -185,10 +197,15 @@ def disconnect(user_id: str = "") -> None:
     """Remove stored credentials for the given user."""
     uid = user_id or None
     with Session(_engine_mod.engine) as session:
+        stmt = select(GoogleTokenRecord).where(
+            GoogleTokenRecord.service == "calendar",
+        )
         if uid is None:
-            _exec(session, "DELETE FROM google_tokens WHERE user_id IS NULL AND service = 'calendar'")
+            stmt = stmt.where(GoogleTokenRecord.user_id.is_(None))  # type: ignore[union-attr]
         else:
-            _exec(session, "DELETE FROM google_tokens WHERE user_id = ? AND service = 'calendar'", (uid,))
+            stmt = stmt.where(GoogleTokenRecord.user_id == uid)
+        for rec in session.exec(stmt).all():
+            session.delete(rec)
         session.commit()
 
 

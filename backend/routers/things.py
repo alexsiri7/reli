@@ -11,11 +11,11 @@ from sqlalchemy import func, text
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
-from ..db_engine import _exec, get_session, user_filter_clause
+from ..db_engine import get_session, user_filter_clause, user_filter_text
 from ..db_models import ThingRecord, ThingRelationshipRecord, ThingTypeRecord
 from ..db_models import MergeHistoryRecord as MergeHistoryDBRecord
 
-from ..auth import require_user, user_filter
+from ..auth import require_user
 from ..database import clean_orphan_relationships
 from ..models import (
     GraphEdge,
@@ -179,9 +179,7 @@ def get_user_thing(
     thing_id = thing.id
 
     # Fetch relationships with resolved titles using raw SQL for the complex JOIN
-    # TODO: convert to SQLModel query
-    conn = session.connection()
-    rel_rows = _exec(session, 
+    rel_rows = session.execute(
         text(
             "SELECT r.id, r.relationship_type, r.from_thing_id, r.to_thing_id, "
             "  CASE WHEN r.from_thing_id = :tid THEN t_to.title ELSE t_from.title END AS related_title, "
@@ -241,57 +239,48 @@ def search_things(
     if not q.strip():
         return []
 
-    # Complex UNION query - use raw SQL
-    # TODO: convert to SQLModel query
+    # Complex UNION query -- use text() with named params for Postgres compat
     pattern = f"%{q}%"
-    with Session(_engine_mod.engine) as session:
-        filters = ""
-        filter_params: list[str | int] = []
-        uf_sql, uf_params = user_filter(user_id, "t")
-        filters += uf_sql
-        filter_params.extend(uf_params)
-        if active_only:
-            filters += " AND t.active = 1"
-        if type_hint:
-            filters += " AND t.type_hint = ?"
-            filter_params.append(type_hint)
+    uf_frag, uf_p = user_filter_text(user_id, "t")
+    filters = uf_frag
+    params: dict[str, Any] = {**uf_p, "pattern": pattern, "qlimit": limit}
+    if active_only:
+        filters += " AND t.active = true"
+    if type_hint:
+        filters += " AND t.type_hint = :type_hint"
+        params["type_hint"] = type_hint
 
-        direct_params: list[str | int] = [pattern, pattern, pattern, *filter_params]
-        direct_sql = (
-            "SELECT t.*, 1 AS _rank FROM things t"
-            " WHERE (t.title LIKE ? OR t.data LIKE ? OR t.type_hint LIKE ?)" + filters
-        )
-        rel_sql = (
-            "SELECT t.*, 2 AS _rank FROM things t"
-            " WHERE t.id IN ("
-            "   SELECT r.to_thing_id FROM thing_relationships r"
-            "   JOIN things m ON r.from_thing_id = m.id"
-            "   WHERE m.title LIKE ? OR m.data LIKE ?"
-            "   UNION"
-            "   SELECT r.from_thing_id FROM thing_relationships r"
-            "   JOIN things m ON r.to_thing_id = m.id"
-            "   WHERE m.title LIKE ? OR m.data LIKE ?"
-            "   UNION"
-            "   SELECT r.from_thing_id FROM thing_relationships r"
-            "   WHERE r.relationship_type LIKE ?"
-            "   UNION"
-            "   SELECT r.to_thing_id FROM thing_relationships r"
-            "   WHERE r.relationship_type LIKE ?"
-            " )" + filters
-        )
-        rel_params: list[str | int] = [pattern, pattern, pattern, pattern, pattern, pattern, *filter_params]
-        sql = (
-            "SELECT * FROM ("
-            f"  {direct_sql}"
-            f"  UNION ALL"
-            f"  {rel_sql}"
-            ") sub"
-            " GROUP BY sub.id"
-            " ORDER BY MIN(sub._rank), sub.updated_at DESC"
-            " LIMIT ?"
-        )
-        params = [*direct_params, *rel_params, limit]
-        rows = _exec(session, sql, params).fetchall()
+    sql = text(
+        "SELECT * FROM ("
+        "  SELECT t.*, 1 AS _rank FROM things t"
+        "   WHERE (t.title LIKE :pattern OR CAST(t.data AS TEXT) LIKE :pattern OR t.type_hint LIKE :pattern)" + filters +
+        "  UNION ALL"
+        "  SELECT t.*, 2 AS _rank FROM things t"
+        "   WHERE t.id IN ("
+        "     SELECT r.to_thing_id FROM thing_relationships r"
+        "     JOIN things m ON r.from_thing_id = m.id"
+        "     WHERE m.title LIKE :pattern OR CAST(m.data AS TEXT) LIKE :pattern"
+        "     UNION"
+        "     SELECT r.from_thing_id FROM thing_relationships r"
+        "     JOIN things m ON r.to_thing_id = m.id"
+        "     WHERE m.title LIKE :pattern OR CAST(m.data AS TEXT) LIKE :pattern"
+        "     UNION"
+        "     SELECT r.from_thing_id FROM thing_relationships r"
+        "     WHERE r.relationship_type LIKE :pattern"
+        "     UNION"
+        "     SELECT r.to_thing_id FROM thing_relationships r"
+        "     WHERE r.relationship_type LIKE :pattern"
+        "   )" + filters +
+        ") sub"
+        " GROUP BY sub.id, sub.title, sub.type_hint, sub.parent_id,"
+        "   sub.checkin_date, sub.priority, sub.importance, sub.active,"
+        "   sub.surface, sub.data, sub.open_questions, sub.created_at,"
+        "   sub.updated_at, sub.last_referenced, sub.user_id"
+        " ORDER BY MIN(sub._rank), sub.updated_at DESC"
+        " LIMIT :qlimit"
+    )
+    with Session(_engine_mod.engine) as sess:
+        rows = sess.execute(sql, params).fetchall()
 
     return [_row_to_thing(r) for r in rows]
 
@@ -320,23 +309,23 @@ def list_things(
     # Compute child stats for project-type things
     project_ids = [t.id for t in things if t.type_hint == "project"]
     if project_ids:
-        import backend.db_engine as _engine_mod
-        with Session(_engine_mod.engine) as session:
-            placeholders = ",".join("?" * len(project_ids))
-            child_rows = _exec(session, 
-                f"SELECT parent_id,"
-                f" COUNT(*) as children_count,"
-                f" SUM(CASE WHEN active = 0 THEN 1 ELSE 0 END) as completed_count"
-                f" FROM things WHERE parent_id IN ({placeholders})"
-                f" GROUP BY parent_id",
-                project_ids,
-            ).fetchall()
-            stats = {r.parent_id: (r.children_count, r.completed_count) for r in child_rows}
-            for t in things:
-                if t.type_hint == "project":
-                    counts = stats.get(t.id, (0, 0))
-                    t.children_count = counts[0]
-                    t.completed_count = counts[1]
+        from sqlalchemy import case as sa_case
+        child_stmt = (
+            select(
+                ThingRecord.parent_id,
+                func.count().label("children_count"),
+                func.sum(sa_case((ThingRecord.active == False, 1), else_=0)).label("completed_count"),
+            )
+            .where(ThingRecord.parent_id.in_(project_ids))  # type: ignore[union-attr]
+            .group_by(ThingRecord.parent_id)
+        )
+        child_rows = session.execute(child_stmt).fetchall()
+        stats = {r.parent_id: (r.children_count, r.completed_count or 0) for r in child_rows}
+        for t in things:
+            if t.type_hint == "project":
+                counts = stats.get(t.id, (0, 0))
+                t.children_count = counts[0]
+                t.completed_count = counts[1]
 
     return things
 
@@ -347,24 +336,26 @@ def get_graph(
     session: Session = Depends(get_session),
 ) -> GraphResponse:
     """Return all active Things and relationships as nodes and edges."""
-    # Complex JOIN with thing_types - use raw SQL for now
-    # TODO: convert to SQLModel query
-    import backend.db_engine as _engine_mod
+    # Complex JOIN with thing_types -- use text() for the LEFT JOIN
+    uf_frag, uf_p = user_filter_text(user_id, "t")
     with Session(_engine_mod.engine) as session:
-        uf_sql, uf_params = user_filter(user_id, "t")
-        node_rows = _exec(session, 
-            "SELECT t.id, t.title, t.type_hint, tt.icon"
-            " FROM things t"
-            " LEFT JOIN thing_types tt ON t.type_hint = tt.name"
-            " WHERE t.active = 1" + uf_sql,
-            uf_params,
+        node_rows = session.execute(
+            text(
+                "SELECT t.id, t.title, t.type_hint, tt.icon"
+                " FROM things t"
+                " LEFT JOIN thing_types tt ON t.type_hint = tt.name"
+                " WHERE t.active = true" + uf_frag
+            ),
+            uf_p,
         ).fetchall()
-        edge_rows = _exec(session, 
-            "SELECT r.id, r.from_thing_id, r.to_thing_id, r.relationship_type"
-            " FROM thing_relationships r"
-            " JOIN things t ON r.from_thing_id = t.id"
-            " WHERE t.active = 1" + uf_sql,
-            uf_params,
+        edge_rows = session.execute(
+            text(
+                "SELECT r.id, r.from_thing_id, r.to_thing_id, r.relationship_type"
+                " FROM thing_relationships r"
+                " JOIN things t ON r.from_thing_id = t.id"
+                " WHERE t.active = true" + uf_frag
+            ),
+            uf_p,
         ).fetchall()
 
     nodes = [GraphNode(id=r.id, title=r.title, type_hint=r.type_hint, icon=r.icon) for r in node_rows]
@@ -721,16 +712,15 @@ def get_orphan_relationships(
     session: Session = Depends(get_session),
 ) -> list[Relationship]:
     """Return relationships where from_thing_id or to_thing_id doesn't exist."""
-    # Complex NOT IN subquery - use raw SQL
-    # TODO: convert to SQLModel query
-    import backend.db_engine as _engine_mod
-    with Session(_engine_mod.engine) as session:
-        rows = _exec(session, 
-            "SELECT r.* FROM thing_relationships r"
-            " WHERE r.from_thing_id NOT IN (SELECT id FROM things)"
-            "    OR r.to_thing_id NOT IN (SELECT id FROM things)"
-        ).fetchall()
-    return [_parse_rel_row(r) for r in rows]
+    thing_ids = select(ThingRecord.id)
+    stmt = select(ThingRelationshipRecord).where(
+        or_(
+            ThingRelationshipRecord.from_thing_id.not_in(thing_ids),  # type: ignore[union-attr]
+            ThingRelationshipRecord.to_thing_id.not_in(thing_ids),  # type: ignore[union-attr]
+        )
+    )
+    rows = session.exec(stmt).all()
+    return [_record_to_rel(r) for r in rows]
 
 
 @router.post("/relationships/cleanup", response_model=OrphanCleanupResult, summary="Delete orphan relationships")
