@@ -43,7 +43,7 @@ def _parse_dt(val: str | None) -> datetime | None:
     return datetime.fromisoformat(val)
 
 
-def _row_to_msg(row, usage_rows=None) -> ChatMessage:
+def _row_to_msg(row: Any, usage_rows: Any = None) -> ChatMessage:
     changes = row.applied_changes
     if isinstance(changes, str):
         changes = json.loads(changes) if changes else None
@@ -100,7 +100,7 @@ def get_history(
 
         # Fetch per-call usage from chat_message_usage table
         msg_ids = [r.id for r in rows]
-        usage_by_msg: dict[int, list[sqlite3.Row]] = {}
+        usage_by_msg: dict[int, list[Any]] = {}
         if msg_ids:
             placeholders = ",".join("?" for _ in msg_ids)
             usage_rows = _exec(session, 

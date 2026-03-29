@@ -967,8 +967,8 @@ async def run_reasoning_agent(
                 # Get a raw DBAPI connection from the SQLModel engine
                 with _engine_mod.engine.connect() as sa_conn:
                     raw_conn = sa_conn.connection
-                    raw_conn.row_factory = __import__('sqlite3').Row
-                    applied = apply_storage_changes(storage_changes, raw_conn, user_id=user_id)
+                    raw_conn.row_factory = __import__('sqlite3').Row  # type: ignore[attr-defined]
+                    applied = apply_storage_changes(storage_changes, raw_conn, user_id=user_id)  # type: ignore[arg-type]
                     sa_conn.commit()
                 return _build_result(result, applied)
         except Exception as exc:

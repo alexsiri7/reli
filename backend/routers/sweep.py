@@ -78,7 +78,7 @@ async def run_gap_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
     open_questions on each Thing.
     """
     with Session(_engine_mod.engine) as session:
-        candidates = find_incomplete_things(conn, user_id=user_id)
+        candidates = find_incomplete_things(session, user_id=user_id)
 
     result: GapQuestionResult = await generate_gap_questions(candidates, user_id=user_id)
 

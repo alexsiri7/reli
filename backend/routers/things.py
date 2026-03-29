@@ -221,8 +221,8 @@ def get_open_questions(
         ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
         user_filter_clause(ThingRecord.user_id, user_id),
     ).order_by(
-        ThingRecord.importance.asc(),  # type: ignore[union-attr]
-        ThingRecord.updated_at.desc(),  # type: ignore[union-attr]
+        ThingRecord.importance.asc(),  # type: ignore[attr-defined]
+        ThingRecord.updated_at.desc(),  # type: ignore[attr-defined]
     ).limit(limit)
     records = session.exec(stmt).all()
     return [_record_to_thing(r) for r in records if r.open_questions]
@@ -311,8 +311,8 @@ def list_things(
     if active_only:
         stmt = stmt.where(ThingRecord.active == True)
     stmt = stmt.order_by(
-        ThingRecord.checkin_date.asc(),  # type: ignore[union-attr]
-        ThingRecord.importance.asc(),  # type: ignore[union-attr]
+        ThingRecord.checkin_date.asc(),  # type: ignore[union-attr, attr-defined]
+        ThingRecord.importance.asc(),  # type: ignore[attr-defined]
     ).limit(limit).offset(offset)
     records = session.exec(stmt).all()
     things = [_record_to_thing(r) for r in records]
@@ -434,7 +434,7 @@ def list_merge_history(
     )
     if thing_id:
         stmt = stmt.where(MergeHistoryDBRecord.keep_id == thing_id)
-    stmt = stmt.order_by(MergeHistoryDBRecord.created_at.desc()).limit(limit)  # type: ignore[union-attr]
+    stmt = stmt.order_by(MergeHistoryDBRecord.created_at.desc()).limit(limit)  # type: ignore[union-attr, attr-defined]
     records = session.exec(stmt).all()
     return [
         MergeHistoryRecord(
@@ -759,7 +759,7 @@ def _parse_rel_row(row: Any) -> Relationship:
         to_thing_id=row.to_thing_id,
         relationship_type=row.relationship_type,
         metadata=meta,
-        created_at=_parse_dt(created_at) if isinstance(created_at, str) else (created_at or datetime.min),
+        created_at=_parse_dt(created_at) if isinstance(created_at, str) else (created_at or datetime.min),  # type: ignore[arg-type]
     )
 
 

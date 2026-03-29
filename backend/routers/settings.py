@@ -162,7 +162,7 @@ def get_user_settings_dict(user_id: str) -> dict[str, str]:
 
 def _set_user_setting(conn: Any, user_id: str, key: str, value: str) -> None:
     """Upsert a single user setting."""
-    _exec(session, 
+    _exec(conn,
         """INSERT INTO user_settings (user_id, key, value, updated_at)
            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
            ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP""",
@@ -312,14 +312,14 @@ def update_settings(
         # Per-user: save to DB
         with Session(_engine_mod.engine) as session:
             if body.context is not None:
-                _set_user_setting(conn, user_id, "context_model", body.context)
+                _set_user_setting(session, user_id, "context_model", body.context)
             if body.reasoning is not None:
-                _set_user_setting(conn, user_id, "reasoning_model", body.reasoning)
+                _set_user_setting(session, user_id, "reasoning_model", body.reasoning)
             if body.response is not None:
-                _set_user_setting(conn, user_id, "response_model", body.response)
+                _set_user_setting(session, user_id, "response_model", body.response)
             if body.chat_context_window is not None:
                 clamped = max(1, min(body.chat_context_window, 50))
-                _set_user_setting(conn, user_id, "chat_context_window", str(clamped))
+                _set_user_setting(session, user_id, "chat_context_window", str(clamped))
 
         return get_settings(user_id)
 
@@ -420,6 +420,6 @@ def update_user_settings(
                 elif field_name == "interaction_style":
                     if val not in VALID_INTERACTION_STYLES:
                         continue
-                _set_user_setting(conn, user_id, field_name, str(val))
+                _set_user_setting(session, user_id, field_name, str(val))
 
     return get_user_settings_endpoint(user_id)

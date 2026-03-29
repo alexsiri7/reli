@@ -38,7 +38,7 @@ def _resolve_api_token_user() -> str:
     try:
         with Session(_engine_mod.engine) as session:
             record = session.exec(
-                select(UserRecord).order_by(UserRecord.created_at).limit(1)
+                select(UserRecord).order_by(UserRecord.created_at).limit(1)  # type: ignore[arg-type]
             ).first()
             return record.id if record else ""
     except Exception:

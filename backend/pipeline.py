@@ -103,7 +103,7 @@ def _fetch_with_family(session: Session, seed_ids: list[str]) -> list[dict[str, 
     seen_ids: set[str] = set()
     results: list[dict] = []
 
-    def _add_row(row) -> None:  # type: ignore[type-arg]
+    def _add_row(row: Any) -> None:
         if row.id not in seen_ids:
             seen_ids.add(row.id)
             results.append(_parse_thing_open_questions(row._asdict()))

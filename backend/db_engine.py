@@ -43,7 +43,7 @@ def get_session() -> Generator[Session, None, None]:
         yield session
 
 
-def user_filter_clause(user_id_column: InstrumentedAttribute, user_id: str):
+def user_filter_clause(user_id_column: Any, user_id: str) -> Any:
     """Return a SQLAlchemy filter clause equivalent to the legacy ``user_filter()`` helper.
 
     When *user_id* is empty (auth disabled), returns ``True`` (no filtering).
@@ -61,7 +61,7 @@ def user_filter_clause(user_id_column: InstrumentedAttribute, user_id: str):
     return or_(user_id_column == user_id, user_id_column.is_(None))  # type: ignore[union-attr]
 
 
-def _exec(session: "Session", sql: str, params: list | tuple = ()) -> Any:
+def _exec(session: "Session", sql: Any, params: Any = ()) -> Any:
     """Execute raw SQL via a SQLModel session, converting positional ``?`` params
     to SQLAlchemy ``:param`` style.
 

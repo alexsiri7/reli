@@ -77,7 +77,7 @@ def _compute_recommendations(
         thing_stmt = select(ThingRecord).where(
             ThingRecord.active == True,
             user_filter_clause(ThingRecord.user_id, user_id),
-        ).order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())  # type: ignore[union-attr]
+        ).order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())  # type: ignore[union-attr, attr-defined]
         thing_records = session.exec(thing_stmt).all()
 
         rel_records = session.exec(

@@ -170,11 +170,11 @@ def chat_history(
         if cross_session and user_id:
             stmt = stmt.where(ChatHistoryRecord.user_id == user_id)
             if search_query and search_query.strip():
-                stmt = stmt.where(ChatHistoryRecord.content.contains(search_query.strip()))
+                stmt = stmt.where(ChatHistoryRecord.content.contains(search_query.strip()))  # type: ignore[attr-defined]
         else:
             stmt = stmt.where(ChatHistoryRecord.session_id == session_id)
             if search_query and search_query.strip():
-                stmt = stmt.where(ChatHistoryRecord.content.contains(search_query.strip()))
+                stmt = stmt.where(ChatHistoryRecord.content.contains(search_query.strip()))  # type: ignore[attr-defined]
 
         stmt = stmt.order_by(ChatHistoryRecord.id.desc()).limit(n)  # type: ignore[union-attr]
         rows = session.exec(stmt).all()
@@ -753,7 +753,7 @@ def get_briefing(
         thing_stmt = select(ThingRecord).where(
             ThingRecord.active == True,
             ThingRecord.checkin_date.is_not(None),  # type: ignore[union-attr]
-            ThingRecord.checkin_date <= horizon,
+            ThingRecord.checkin_date <= horizon,  # type: ignore[operator]
             user_filter_clause(ThingRecord.user_id, user_id),
         ).order_by(ThingRecord.checkin_date.asc())  # type: ignore[union-attr]
         thing_rows = session.exec(thing_stmt).all()
@@ -767,7 +767,7 @@ def get_briefing(
 
         # Relationships for blocker graph
         rel_stmt = select(ThingRelationshipRecord).where(
-            ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"])
+            ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"])  # type: ignore[attr-defined]
         )
         rel_rows = session.exec(rel_stmt).all()
 
@@ -775,10 +775,10 @@ def get_briefing(
         from .db_models import SweepFindingRecord
         finding_stmt = select(SweepFindingRecord).where(
             SweepFindingRecord.dismissed == False,
-            or_(SweepFindingRecord.expires_at.is_(None), SweepFindingRecord.expires_at > now),  # type: ignore[union-attr]
-            or_(SweepFindingRecord.snoozed_until.is_(None), SweepFindingRecord.snoozed_until <= now),  # type: ignore[union-attr]
+            or_(SweepFindingRecord.expires_at.is_(None), SweepFindingRecord.expires_at > now),  # type: ignore[union-attr, operator]
+            or_(SweepFindingRecord.snoozed_until.is_(None), SweepFindingRecord.snoozed_until <= now),  # type: ignore[union-attr, operator]
             user_filter_clause(SweepFindingRecord.user_id, user_id),
-        ).order_by(SweepFindingRecord.priority.asc(), SweepFindingRecord.created_at.desc())  # type: ignore[union-attr]
+        ).order_by(SweepFindingRecord.priority.asc(), SweepFindingRecord.created_at.desc())  # type: ignore[union-attr, attr-defined]
         finding_rows = session.exec(finding_stmt).all()
 
         total_active_stmt = select(ThingRecord).where(
@@ -860,8 +860,8 @@ def get_open_questions(
             ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
             user_filter_clause(ThingRecord.user_id, user_id),
         ).order_by(
-            ThingRecord.importance.asc(),  # type: ignore[union-attr]
-            ThingRecord.updated_at.desc(),  # type: ignore[union-attr]
+            ThingRecord.importance.asc(),  # type: ignore[union-attr, attr-defined]
+            ThingRecord.updated_at.desc(),  # type: ignore[union-attr, attr-defined]
         ).limit(limit)
         records = session.exec(stmt).all()
 

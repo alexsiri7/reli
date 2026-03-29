@@ -51,7 +51,7 @@ def _get_all_user_ids() -> list[str]:
     from .db_models import UserRecord
 
     with Session(_engine_mod.engine) as session:
-        records = session.exec(select(UserRecord).order_by(UserRecord.created_at)).all()
+        records = session.exec(select(UserRecord).order_by(UserRecord.created_at)).all()  # type: ignore[arg-type]
     if not records:
         return [""]  # No users — run in legacy single-user mode
     return [r.id for r in records]
