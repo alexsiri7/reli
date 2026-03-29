@@ -97,7 +97,80 @@ def save_briefing_preferences(user_id: str, prefs: BriefingPreferences) -> None:
         )
 
 
-def generate_morning_briefing(
+async def generate_natural_language_summary(
+    priorities: list[MorningBriefingItem],
+    overdue: list[MorningBriefingItem],
+    blockers: list[MorningBriefingItem],
+    findings: list[MorningBriefingFinding],
+    personality_patterns: list[dict],
+) -> str:
+    """Generate a natural language briefing summary using the response agent.
+
+    Produces a 1-2 sentence conversational summary that references specific
+    items by name. Falls back to a generic summary if the LLM call fails.
+    Tone adapts to user personality patterns if any have been learned.
+    """
+    if not (priorities or overdue or blockers or findings):
+        return "Everything looks clear today — nothing urgent on the agenda."
+
+    from .agents import REQUESTY_RESPONSE_MODEL, _build_personality_overlay
+    from .llm import acomplete
+
+    # Build concise item lists for the prompt
+    lines: list[str] = []
+    if overdue:
+        items = ", ".join(
+            f'"{o.title}" ({o.days_overdue}d overdue)' for o in overdue[:3]
+        )
+        lines.append(f"Overdue: {items}")
+    if priorities:
+        items = ", ".join(f'"{p.title}"' for p in priorities[:5])
+        lines.append(f"Top priorities: {items}")
+    if blockers:
+        items = ", ".join(f'"{b.title}"' for b in blockers[:3])
+        lines.append(f"Blocked items: {items}")
+    if findings:
+        items = ", ".join(f'"{f.message}"' for f in findings[:3])
+        lines.append(f"Sweep findings: {items}")
+
+    item_text = "\n".join(lines)
+    personality_overlay = _build_personality_overlay(personality_patterns)
+
+    system = (
+        "You write natural language briefing summaries for a personal assistant app. "
+        "Write 1-2 sentences summarizing what's on the user's plate today. "
+        "Be specific — mention items by name. "
+        "Don't start with 'Good morning' or 'You have N items.' Use conversational tone.\n"
+        "Examples:\n"
+        '- "Busy day — you\'ve got the dentist at 2pm and the proposal draft is due."\n'
+        '- "The Q3 report is overdue and blocking two other things; probably worth tackling first."\n'
+        '- "Looks like a lighter day, though the expense report has been sitting for a while."'
+        f"{personality_overlay}"
+    )
+    user_msg = f"Today's briefing items:\n{item_text}\n\nWrite the summary:"
+
+    try:
+        response = await acomplete(
+            [{"role": "system", "content": system}, {"role": "user", "content": user_msg}],
+            model=REQUESTY_RESPONSE_MODEL,
+            max_tokens=120,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception:
+        logger.exception("Failed to generate natural language briefing summary; using fallback")
+        parts: list[str] = []
+        if priorities:
+            parts.append(f"{len(priorities)} priorit{'y' if len(priorities) == 1 else 'ies'}")
+        if overdue:
+            parts.append(f"{len(overdue)} overdue item{'s' if len(overdue) != 1 else ''}")
+        if blockers:
+            parts.append(f"{len(blockers)} blocked item{'s' if len(blockers) != 1 else ''}")
+        if findings:
+            parts.append(f"{len(findings)} sweep finding{'s' if len(findings) != 1 else ''}")
+        return f"You have {', '.join(parts)} today." if parts else "Everything looks clear."
+
+
+async def generate_morning_briefing(
     user_id: str,
     target_date: date | None = None,
 ) -> MorningBriefingContent:
@@ -321,21 +394,13 @@ def generate_morning_briefing(
                 )
             )
 
-    # Build summary
-    parts = []
-    if priorities:
-        parts.append(f"{len(priorities)} top priorit{'y' if len(priorities) == 1 else 'ies'}")
-    if overdue:
-        parts.append(f"{len(overdue)} overdue item{'s' if len(overdue) != 1 else ''}")
-    if blockers:
-        parts.append(f"{len(blockers)} blocked item{'s' if len(blockers) != 1 else ''}")
-    if findings_list:
-        parts.append(f"{len(findings_list)} sweep finding{'s' if len(findings_list) != 1 else ''}")
+    # Generate natural language summary using the response agent
+    from .agents import load_personality_preferences
 
-    if parts:
-        summary = f"Good morning! You have {', '.join(parts)}."
-    else:
-        summary = "Good morning! Everything looks clear today."
+    personality_patterns = load_personality_preferences(user_id)
+    summary = await generate_natural_language_summary(
+        priorities, overdue, blockers, findings_list, personality_patterns
+    )
 
     stats = {
         "total_active": len([t for t in thing_map.values() if t.get("type_hint") not in skip_types]),

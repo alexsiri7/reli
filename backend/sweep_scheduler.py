@@ -170,7 +170,7 @@ async def _run_sweep_for_user(user_id: str) -> None:
             try:
                 from .morning_briefing import generate_morning_briefing, store_morning_briefing
 
-                content = generate_morning_briefing(user_id)
+                content = await generate_morning_briefing(user_id)
                 store_morning_briefing(user_id, content)
                 logger.info("Morning briefing generated for user %s (no sweep candidates)", user_label)
             except Exception:

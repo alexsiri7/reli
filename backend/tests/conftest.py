@@ -44,6 +44,27 @@ def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 # ---------------------------------------------------------------------------
+# Morning briefing LLM mock
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def mock_briefing_summary():
+    """Mock LLM-based summary generation in morning briefings.
+
+    Prevents tests from hitting the actual LLM API while keeping the rest of
+    the briefing generation logic intact.
+    """
+    from unittest.mock import AsyncMock
+
+    with patch(
+        "backend.morning_briefing.generate_natural_language_summary",
+        new=AsyncMock(return_value="Here's your briefing summary."),
+    ):
+        yield
+
+
+# ---------------------------------------------------------------------------
 # Vector store mock
 # ---------------------------------------------------------------------------
 

@@ -182,7 +182,7 @@ def snooze_finding(finding_id: str, body: SweepFindingSnooze, user_id: str = Dep
 
 
 @router.get("/morning", response_model=MorningBriefing, summary="Get morning briefing")
-def get_morning_briefing(as_of: date | None = None, user_id: str = Depends(require_user)) -> MorningBriefing:
+async def get_morning_briefing(as_of: date | None = None, user_id: str = Depends(require_user)) -> MorningBriefing:
     """Return the latest pre-generated morning briefing.
 
     If no pre-generated briefing exists, generates one on-the-fly.
@@ -192,7 +192,7 @@ def get_morning_briefing(as_of: date | None = None, user_id: str = Depends(requi
     if not result:
         # Generate on-the-fly if no stored briefing exists
         target = as_of or date.today()
-        content = generate_morning_briefing(user_id, target_date=target)
+        content = await generate_morning_briefing(user_id, target_date=target)
         store_morning_briefing(user_id, content, briefing_date=target)
         result = get_latest_morning_briefing(user_id, as_of=target)
 
