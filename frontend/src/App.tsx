@@ -124,6 +124,8 @@ function App() {
         <Sidebar />
         {mainView === 'graph' ? (
           <GraphView />
+        ) : mainView === 'briefing' ? (
+          <BriefingPanel />
         ) : (
           <>
             <DetailPanel />
