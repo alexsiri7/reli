@@ -1,9 +1,9 @@
 [Unit]
-Description=Gas City Health Check
+Description=Gas City Dolt Maintenance (gc, cleanup)
 
 [Service]
 Type=oneshot
 WorkingDirectory=/mnt/ext-fast/gc
-ExecStart=/usr/bin/python3 /mnt/ext-fast/gc/scripts/health.py --fix
+ExecStart=/mnt/ext-fast/gc/scripts/dolt-maintenance.sh
 Environment=HOME=/home/asiri
 Environment=PATH=/home/asiri/go/bin:/home/asiri/.local/bin:/usr/local/bin:/usr/bin:/bin
