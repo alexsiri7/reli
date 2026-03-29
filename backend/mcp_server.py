@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -377,9 +378,7 @@ def chat_history(
 # MCP Prompt Resources — Real agent system prompts from shared .md files
 # ---------------------------------------------------------------------------
 
-from pathlib import Path as _Path
-
-_PROMPTS_DIR = _Path(__file__).resolve().parent.parent / "prompts"
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
 def _load_prompt(name: str) -> str:
@@ -397,7 +396,7 @@ def _load_prompt(name: str) -> str:
 )
 def context_agent_prompt() -> str:
     """Reli context agent — searches for relevant Things given a user message."""
-    return _load_prompt("context")
+    return _load_prompt("context-agent")
 
 
 @mcp.prompt(
@@ -411,7 +410,7 @@ def context_agent_prompt() -> str:
 )
 def reasoning_agent_prompt() -> str:
     """Reli reasoning agent — decides what storage changes to make."""
-    return _load_prompt("reasoning")
+    return _load_prompt("reasoning-agent")
 
 
 @mcp.prompt(
@@ -424,7 +423,7 @@ def reasoning_agent_prompt() -> str:
 )
 def response_agent_prompt() -> str:
     """Reli response agent — produces the final user-facing reply."""
-    return _load_prompt("response")
+    return _load_prompt("response-agent")
 
 
 @mcp.prompt(

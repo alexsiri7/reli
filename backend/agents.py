@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
-_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
 def _load_prompt(name: str) -> str:
@@ -255,7 +255,7 @@ def _with_current_date(prompt: str) -> str:
 # Stage 1: Context Agent
 # ---------------------------------------------------------------------------
 
-CONTEXT_AGENT_SYSTEM = _load_prompt("context")
+CONTEXT_AGENT_SYSTEM = _load_prompt("context-agent")
 
 
 async def _chat_ollama(
@@ -285,14 +285,14 @@ async def _chat_ollama(
 # Stage 1b: Context Agent Refinement (iterative loop)
 # ---------------------------------------------------------------------------
 
-CONTEXT_REFINEMENT_SYSTEM = _load_prompt("context-refinement")
+CONTEXT_REFINEMENT_SYSTEM = _load_prompt("context-refinement-agent")
 
 
 # ---------------------------------------------------------------------------
 # Stage 2: Reasoning Agent (uses thinking model via REQUESTY_REASONING_MODEL)
 # ---------------------------------------------------------------------------
 
-REASONING_AGENT_SYSTEM = _load_prompt("reasoning")
+REASONING_AGENT_SYSTEM = _load_prompt("reasoning-agent")
 
 
 # ---------------------------------------------------------------------------
@@ -723,7 +723,7 @@ def apply_storage_changes(
 # Stage 4: Response Agent
 # ---------------------------------------------------------------------------
 
-RESPONSE_AGENT_SYSTEM = _load_prompt("response")
+RESPONSE_AGENT_SYSTEM = _load_prompt("response-agent")
 
 
 _RESPONSE_COACH_OVERLAY = """
