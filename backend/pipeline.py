@@ -17,11 +17,12 @@ from .agents import (
     REQUESTY_RESPONSE_MODEL,
     UsageStats,
 )
-from .auth import user_filter
-from sqlmodel import Session
+from sqlalchemy import String, cast, func
+from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
-from .db_engine import _exec
+from .db_engine import user_filter_clause
+from .db_models import ChatHistoryRecord, ThingRecord, ThingRelationshipRecord
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
 from .reasoning_agent import run_reasoning_agent
@@ -93,9 +94,9 @@ def _parse_thing_open_questions(thing: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sql_things_count(session: Session) -> int:
-    """Return total number of Things in SQLite."""
-    row = _exec(session, "SELECT COUNT(*) as cnt FROM things").fetchone()
-    return row.cnt if row else 0
+    """Return total number of Things in the database."""
+    result = session.execute(select(func.count()).select_from(ThingRecord)).scalar()
+    return result or 0
 
 
 def _fetch_with_family(session: Session, seed_ids: list[str]) -> list[dict[str, Any]]:
@@ -103,32 +104,38 @@ def _fetch_with_family(session: Session, seed_ids: list[str]) -> list[dict[str, 
     seen_ids: set[str] = set()
     results: list[dict] = []
 
-    def _add_row(row: Any) -> None:
-        if row.id not in seen_ids:
-            seen_ids.add(row.id)
-            results.append(_parse_thing_open_questions(row._asdict()))
+    def _add_record(rec: ThingRecord) -> None:
+        if rec.id not in seen_ids:
+            seen_ids.add(rec.id)
+            results.append(_parse_thing_open_questions(rec.model_dump()))
 
     for thing_id in seed_ids:
-        row = _exec(session, "SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
-        if row:
-            _add_row(row)
-            if row.parent_id:
-                parent = _exec(session, "SELECT * FROM things WHERE id = ?", (row.parent_id,)).fetchone()
+        rec = session.get(ThingRecord, thing_id)
+        if rec:
+            _add_record(rec)
+            if rec.parent_id:
+                parent = session.get(ThingRecord, rec.parent_id)
                 if parent:
-                    _add_row(parent)
-            children = _exec(session, "SELECT * FROM things WHERE parent_id = ?", (thing_id,)).fetchall()
+                    _add_record(parent)
+            children = session.exec(
+                select(ThingRecord).where(ThingRecord.parent_id == thing_id)
+            ).all()
             for child in children:
-                _add_row(child)
-            rels = _exec(session, 
-                "SELECT * FROM thing_relationships WHERE from_thing_id = ? OR to_thing_id = ?",
-                (thing_id, thing_id),
-            ).fetchall()
+                _add_record(child)
+            rels = session.exec(
+                select(ThingRelationshipRecord).where(
+                    or_(
+                        ThingRelationshipRecord.from_thing_id == thing_id,
+                        ThingRelationshipRecord.to_thing_id == thing_id,
+                    )
+                )
+            ).all()
             for rel in rels:
                 other_id = rel.to_thing_id if rel.from_thing_id == thing_id else rel.from_thing_id
                 if other_id not in seen_ids:
-                    other = _exec(session, "SELECT * FROM things WHERE id = ?", (other_id,)).fetchone()
+                    other = session.get(ThingRecord, other_id)
                     if other:
-                        _add_row(other)
+                        _add_record(other)
 
     return results
 
@@ -143,10 +150,14 @@ def _fetch_user_relationships(
     if not user_thing_id or not search_queries:
         return []
 
-    rels = _exec(session, 
-        "SELECT * FROM thing_relationships WHERE from_thing_id = ? OR to_thing_id = ?",
-        (user_thing_id, user_thing_id),
-    ).fetchall()
+    rels = session.exec(
+        select(ThingRelationshipRecord).where(
+            or_(
+                ThingRelationshipRecord.from_thing_id == user_thing_id,
+                ThingRelationshipRecord.to_thing_id == user_thing_id,
+            )
+        )
+    ).all()
     if not rels:
         return []
 
@@ -158,47 +169,51 @@ def _fetch_user_relationships(
     if not other_ids:
         return []
 
-    placeholders = ",".join("?" for _ in other_ids)
-    uf_sql, uf_params = user_filter(user_id)
-
-    like_clauses: list[str] = []
-    like_params: list[str] = []
+    # Build LIKE filter conditions for search queries
+    like_conditions = []
     for query in search_queries[:3]:
         pattern = f"%{query}%"
-        like_clauses.append("(title LIKE ? OR data LIKE ?)")
-        like_params.extend([pattern, pattern])
+        like_conditions.append(
+            or_(
+                ThingRecord.title.like(pattern),  # type: ignore[union-attr]
+                cast(ThingRecord.data, String).like(pattern),
+            )
+        )
 
-    query_filter = " OR ".join(like_clauses)
-    sql = (
-        f"SELECT * FROM things WHERE id IN ({placeholders})"
-        f"{uf_sql}"
-        f" AND ({query_filter})"
-        " ORDER BY"
-        " CASE WHEN last_referenced IS NOT NULL THEN 0 ELSE 1 END,"
-        " last_referenced DESC,"
-        " updated_at DESC"
-        " LIMIT 10"
+    stmt = (
+        select(ThingRecord)
+        .where(
+            ThingRecord.id.in_(other_ids),  # type: ignore[union-attr]
+            user_filter_clause(ThingRecord.user_id, user_id),
+            or_(*like_conditions),
+        )
+        .order_by(
+            # NULL last_referenced sorts after non-NULL
+            ThingRecord.last_referenced.desc().nulls_last(),  # type: ignore[union-attr]
+            ThingRecord.updated_at.desc(),  # type: ignore[union-attr]
+        )
+        .limit(10)
     )
-    params: list = [*other_ids, *uf_params, *like_params]
-    rows = _exec(session, sql, params).fetchall()
+    rows = session.exec(stmt).all()
     logger.info(
         "User relationship search: %d edges, %d query-matched (queries=%r)",
         len(other_ids),
         len(rows),
         search_queries[:3],
     )
-    return [_parse_thing_open_questions(r._asdict()) for r in rows]
+    return [_parse_thing_open_questions(r.model_dump()) for r in rows]
 
 
 def _fetch_user_thing(session: Session, user_id: str) -> dict[str, Any] | None:
     """Fetch the user's own Thing (type_hint='person', matching user_id)."""
     if not user_id:
         return None
-    row = _exec(session, 
-        "SELECT * FROM things WHERE user_id = ? AND type_hint = 'person' LIMIT 1",
-        (user_id,),
-    ).fetchone()
-    return _parse_thing_open_questions(row._asdict()) if row else None
+    stmt = select(ThingRecord).where(
+        ThingRecord.user_id == user_id,
+        ThingRecord.type_hint == "person",
+    ).limit(1)
+    rec = session.exec(stmt).first()
+    return _parse_thing_open_questions(rec.model_dump()) if rec else None
 
 
 def _fetch_warm_context(
@@ -212,14 +227,18 @@ def _fetch_warm_context(
     then fetches their current state from the database. This gives the
     reasoning agent recent context without needing a fetch_context tool call.
     """
-    uf_sql, uf_params = user_filter(user_id)
     with Session(_engine_mod.engine) as session:
-        rows = _exec(session, 
-            "SELECT applied_changes FROM chat_history"
-            f" WHERE session_id = ? AND role = 'assistant'{uf_sql}"
-            " ORDER BY id DESC LIMIT ?",
-            [session_id, *uf_params, n_messages],
-        ).fetchall()
+        stmt = (
+            select(ChatHistoryRecord.applied_changes)
+            .where(
+                ChatHistoryRecord.session_id == session_id,
+                ChatHistoryRecord.role == "assistant",
+                user_filter_clause(ChatHistoryRecord.user_id, user_id),
+            )
+            .order_by(ChatHistoryRecord.id.desc())  # type: ignore[union-attr]
+            .limit(n_messages)
+        )
+        rows = session.execute(stmt).fetchall()
 
         thing_ids: list[str] = []
         seen: set[str] = set()
@@ -254,7 +273,6 @@ def _fetch_relevant_things(
     """Retrieve relevant Things using vector search (>=500 Things) or SQL LIKE fallback (<500)."""
     active_only = filter_params.get("active_only", True)
     type_hint = filter_params.get("type_hint")
-    uf_sql, uf_params = user_filter(user_id)
 
     user_thing = _fetch_user_thing(session, user_id)
     seen_ids: set[str] = set()
@@ -301,17 +319,19 @@ def _fetch_relevant_things(
         seen_sql: set[str] = set()
         for query in search_queries[:3]:
             pattern = f"%{query}%"
-            sql = "SELECT id FROM things WHERE (title LIKE ? OR data LIKE ?)"
-            params: list = [pattern, pattern]
-            sql += uf_sql
-            params.extend(uf_params)
+            stmt = select(ThingRecord.id).where(
+                or_(
+                    ThingRecord.title.like(pattern),  # type: ignore[union-attr]
+                    cast(ThingRecord.data, String).like(pattern),
+                ),
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
             if active_only:
-                sql += " AND active = 1"
+                stmt = stmt.where(ThingRecord.active == True)
             if type_hint:
-                sql += " AND type_hint = ?"
-                params.append(type_hint)
-            sql += " ORDER BY updated_at DESC LIMIT 20"
-            matches = _exec(session, sql, params).fetchall()
+                stmt = stmt.where(ThingRecord.type_hint == type_hint)
+            stmt = stmt.order_by(ThingRecord.updated_at.desc()).limit(20)  # type: ignore[union-attr]
+            matches = session.execute(stmt).fetchall()
             logger.info("SQL LIKE query=%r matched %d rows", query, len(matches))
             for row in matches:
                 if row.id not in seen_sql:
@@ -335,17 +355,18 @@ def _fetch_relevant_things(
             pref_seen: set[str] = set()
             for query in search_queries[:3]:
                 pattern = f"%{query}%"
-                pref_sql = (
-                    "SELECT id FROM things WHERE type_hint = 'preference'"
-                    " AND (title LIKE ? OR data LIKE ?)"
+                pref_stmt = select(ThingRecord.id).where(
+                    ThingRecord.type_hint == "preference",
+                    or_(
+                        ThingRecord.title.like(pattern),  # type: ignore[union-attr]
+                        cast(ThingRecord.data, String).like(pattern),
+                    ),
+                    user_filter_clause(ThingRecord.user_id, user_id),
                 )
-                pref_params_list: list = [pattern, pattern]
-                pref_sql += uf_sql
-                pref_params_list.extend(uf_params)
                 if active_only:
-                    pref_sql += " AND active = 1"
-                pref_sql += " ORDER BY updated_at DESC LIMIT 10"
-                for row in _exec(session, pref_sql, pref_params_list).fetchall():
+                    pref_stmt = pref_stmt.where(ThingRecord.active == True)
+                pref_stmt = pref_stmt.order_by(ThingRecord.updated_at.desc()).limit(10)  # type: ignore[union-attr]
+                for row in session.execute(pref_stmt).fetchall():
                     if row.id not in pref_seen:
                         pref_seen.add(row.id)
                         preference_ids.append(row.id)
@@ -365,11 +386,19 @@ def _fetch_relevant_things(
             results.append(thing)
 
     if len(results) < 5:
-        recent_sql = "SELECT * FROM things WHERE active = 1" + uf_sql + " ORDER BY updated_at DESC LIMIT 10"
-        for row in _exec(session, recent_sql, uf_params).fetchall():
-            if row.id not in seen_ids:
-                seen_ids.add(row.id)
-                results.append(_parse_thing_open_questions(row._asdict()))
+        recent_stmt = (
+            select(ThingRecord)
+            .where(
+                ThingRecord.active == True,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+            .order_by(ThingRecord.updated_at.desc())  # type: ignore[union-attr]
+            .limit(10)
+        )
+        for rec in session.exec(recent_stmt).all():
+            if rec.id not in seen_ids:
+                seen_ids.add(rec.id)
+                results.append(_parse_thing_open_questions(rec.model_dump()))
 
     # -----------------------------------------------------------------------
     # Preference boost: ensure preference Things matching the topic are
@@ -395,14 +424,18 @@ def _fetch_relevant_things(
         # SQL fallback for preference Things
         for query in search_queries[:3]:
             pattern = f"%{query}%"
-            pref_sql = "SELECT id FROM things WHERE type_hint = 'preference' AND (title LIKE ? OR data LIKE ?)"
-            pref_params: list = [pattern, pattern]
-            pref_sql += uf_sql
-            pref_params.extend(uf_params)
+            pref_stmt2 = select(ThingRecord.id).where(
+                ThingRecord.type_hint == "preference",
+                or_(
+                    ThingRecord.title.like(pattern),  # type: ignore[union-attr]
+                    cast(ThingRecord.data, String).like(pattern),
+                ),
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
             if active_only:
-                pref_sql += " AND active = 1"
-            pref_sql += " ORDER BY updated_at DESC LIMIT 10"
-            for row in _exec(session, pref_sql, pref_params).fetchall():
+                pref_stmt2 = pref_stmt2.where(ThingRecord.active == True)
+            pref_stmt2 = pref_stmt2.order_by(ThingRecord.updated_at.desc()).limit(10)  # type: ignore[union-attr]
+            for row in session.execute(pref_stmt2).fetchall():
                 if row.id not in {*pref_ids}:
                     pref_ids.append(row.id)
 
