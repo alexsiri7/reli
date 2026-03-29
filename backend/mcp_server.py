@@ -299,7 +299,7 @@ def get_briefing(as_of: str | None = None) -> dict[str, Any]:
     Returns machine-readable data for the PA to decide what to surface. Response
     structure:
       - date: ISO 8601 date the briefing is for.
-      - things: Things with approaching checkin dates (the user asked to be
+      - checkin_items: Things with approaching checkin dates (the user asked to be
         reminded on/before this date). Each has a ``checkin_date`` field.
       - findings: Active sweep findings. Each has a ``finding_type`` field:
           - ``approaching_date``: Something time-sensitive within 7 days.
@@ -308,8 +308,9 @@ def get_briefing(as_of: str | None = None) -> dict[str, Any]:
           - ``overdue_checkin``: Thing whose checkin_date is in the past.
           - ``cross_project_resource_conflict``: Person involved in multiple stale projects.
         Each finding also has ``message`` (human-readable summary), ``priority``
-        (0=critical → 4=backlog), and an optional linked ``thing`` object.
-      - total: Total count of things + findings.
+        (0=critical → 4=backlog), and ``thing_id`` (ID of the linked Thing, if any).
+        Use ``get_thing(thing_id)`` to fetch full Thing details when needed.
+      - total: Total count of checkin_items + findings.
 
     Returns empty lists (total=0) if no sweep has run or nothing needs attention.
 
