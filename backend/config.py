@@ -96,6 +96,17 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
 
+    # --- Database URL (SQLModel/SQLAlchemy) ---
+    # When set, used directly (e.g. postgresql://user:pass@host/db for Supabase).
+    # When empty, derived as sqlite:///DATA_DIR/reli.db.
+    DATABASE_URL: str = ""
+
+    @property
+    def database_url(self) -> str:
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
+        return f"sqlite:///{Path(self.DATA_DIR) / 'reli.db'}"
+
     @model_validator(mode="after")
     def _validate_supabase_config(self) -> "Settings":
         if self.STORAGE_BACKEND == "supabase":
