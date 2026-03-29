@@ -745,6 +745,17 @@ export function ChatPanel() {
     inputRef.current?.focus()
   }, [])
   const { listening, toggleListening } = useVoiceInput(handleTranscript)
+
+  // Listen for global focus-chat events (keyboard shortcut / command palette)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { prefill?: string } | undefined
+      if (detail?.prefill) setInput(prev => prev || detail.prefill!)
+      inputRef.current?.focus()
+    }
+    window.addEventListener('reli:focus-chat', handler)
+    return () => window.removeEventListener('reli:focus-chat', handler)
+  }, [])
   const prevScrollHeightRef = useRef<number>(0)
   const isLoadingOlderRef = useRef(false)
 

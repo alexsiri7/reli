@@ -6,6 +6,8 @@ import { ChatPanel } from './components/ChatPanel'
 import { DetailPanel } from './components/DetailPanel'
 import { BriefingPanel } from './components/BriefingPanel'
 import GraphView from './components/GraphView'
+import { CalendarView } from './components/CalendarView'
+import { CommandPalette } from './components/CommandPalette'
 import { LoginPage } from './components/LoginPage'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
@@ -15,16 +17,19 @@ import { usePushNotifications } from './hooks/usePushNotifications'
 import { PreferenceToast } from './components/PreferenceToast'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, feedbackOpen, mainView, mobileView, setMobileView, rightView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, feedbackOpen, commandPaletteOpen, mainView, mobileView, setMobileView, setMainView, openCommandPalette, rightView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
       settingsOpen: s.settingsOpen,
       feedbackOpen: s.feedbackOpen,
+      commandPaletteOpen: s.commandPaletteOpen,
       mainView: s.mainView,
       mobileView: s.mobileView,
       setMobileView: s.setMobileView,
       rightView: s.rightView,
+      setMainView: s.setMainView,
+      openCommandPalette: s.openCommandPalette,
       fetchCurrentUser: s.fetchCurrentUser,
       fetchThingTypes: s.fetchThingTypes,
       fetchThings: s.fetchThings,
@@ -45,6 +50,49 @@ function App() {
 
   const { newVersionAvailable, dismiss, refresh } = useVersionCheck()
   usePushNotifications()
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    if (!currentUser) return
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey
+      const target = e.target as HTMLElement
+      const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+
+      // Cmd/Ctrl+K — command palette (always, even in inputs)
+      if (mod && e.key === 'k') {
+        e.preventDefault()
+        openCommandPalette()
+        return
+      }
+      // Cmd/Ctrl+N — new thing via chat
+      if (mod && e.key === 'n') {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('reli:focus-chat', { detail: { prefill: 'Add a new ' } }))
+        return
+      }
+      // Cmd/Ctrl+B — toggle sidebar
+      if (mod && e.key === 'b') {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('reli:toggle-sidebar'))
+        return
+      }
+      // Cmd/Ctrl+. — toggle briefing/chat view
+      if (mod && e.key === '.') {
+        e.preventDefault()
+        setMainView(mainView === 'list' ? 'graph' : 'list')
+        return
+      }
+      // / — focus chat input (only when not already typing)
+      if (e.key === '/' && !inInput && !mod) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('reli:focus-chat'))
+        return
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [currentUser, mainView, openCommandPalette, setMainView])
 
   // Check auth on mount
   useEffect(() => {
@@ -124,6 +172,8 @@ function App() {
         <Sidebar />
         {mainView === 'graph' ? (
           <GraphView />
+        ) : mainView === 'calendar' ? (
+          <CalendarView />
         ) : (
           <>
             <DetailPanel />
@@ -189,6 +239,7 @@ function App() {
       {settingsOpen && <SettingsPanel />}
       {feedbackOpen && <FeedbackDialog />}
       <PreferenceToast />
+      {commandPaletteOpen && <CommandPalette />}
     </div>
   )
 }

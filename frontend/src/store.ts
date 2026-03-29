@@ -402,8 +402,8 @@ interface ReliState {
   clearThingFilters: () => void
 
   // View mode
-  mainView: 'list' | 'graph'
-  setMainView: (view: 'list' | 'graph') => void
+  mainView: 'list' | 'graph' | 'calendar'
+  setMainView: (view: 'list' | 'graph' | 'calendar') => void
 
   // Chat mode (Hats)
   chatMode: ChatMode
@@ -465,6 +465,11 @@ interface ReliState {
 
   // Preference feedback
   submitPreferenceFeedback: (thingId: string, accurate: boolean) => Promise<void>
+
+  // Command palette
+  commandPaletteOpen: boolean
+  openCommandPalette: () => void
+  closeCommandPalette: () => void
 
   // Feedback
   feedbackOpen: boolean
@@ -1455,6 +1460,11 @@ export const useStore = create<ReliState>((set, get) => ({
       get().fetchThings()
     } catch { /* best-effort */ }
   },
+
+  // Command palette
+  commandPaletteOpen: false,
+  openCommandPalette: () => set({ commandPaletteOpen: true }),
+  closeCommandPalette: () => set({ commandPaletteOpen: false }),
 
   // Feedback
   feedbackOpen: false,
