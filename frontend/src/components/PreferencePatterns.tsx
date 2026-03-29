@@ -161,7 +161,7 @@ export function PreferencePatterns({ thingId, data }: { thingId: string; data: R
 
       {patterns.length === 0 && !adding && (
         <p className="text-xs text-gray-400 dark:text-gray-500 italic px-2">
-          No patterns learned yet. Reli learns preferences from your conversations.
+          As we talk, I'll learn how you like to work. You can always edit what I've picked up.
         </p>
       )}
 
