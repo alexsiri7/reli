@@ -821,9 +821,9 @@ def get_briefing(
     scored: list[dict[str, Any]] = []
     for row in thing_rows:
         thing = dict(row)
-        imp = thing.get("importance") if thing.get("importance") is not None else 2
+        imp: int = thing.get("importance") if thing.get("importance") is not None else 2
         urgency, reasons = compute_urgency(thing, target, blocker_graph, all_things_map)
-        composite = compute_composite_score(imp, urgency)
+        composite = compute_composite_score(int(imp), urgency)
         scored.append({
             "thing": thing,
             "importance": imp,

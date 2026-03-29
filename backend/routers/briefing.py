@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..auth import require_user, user_filter
 from ..database import db
 from ..models import (
+    BriefingItem,
     BriefingPreferences,
     BriefingResponse,
     MorningBriefing,
@@ -123,27 +124,27 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
     blocker_graph = build_blocker_graph([dict(r) for r in rel_rows])
 
     # Score each thing
-    scored = []
+    scored: list[BriefingItem] = []
     for thing in things:
         thing_dict = thing.model_dump()
-        imp = thing.importance if thing.importance is not None else 2
+        imp: int = thing.importance if thing.importance is not None else 2
         urgency, reasons = compute_urgency(thing_dict, target, blocker_graph, all_things_map)
         composite = compute_composite_score(imp, urgency)
-        scored.append({
-            "thing": thing_dict,
-            "importance": imp,
-            "urgency": round(urgency, 2),
-            "score": round(composite, 2),
-            "reasons": reasons,
-        })
+        scored.append(BriefingItem(
+            thing=thing_dict,
+            importance=imp,
+            urgency=round(urgency, 2),
+            score=round(composite, 2),
+            reasons=reasons,
+        ))
 
-    scored.sort(key=lambda x: x["score"], reverse=True)
+    scored.sort(key=lambda x: x.score, reverse=True)
 
     the_one_thing = scored[0] if scored else None
     secondary = scored[1:6] if len(scored) > 1 else []
-    parking_lot = [
-        {"thing_id": s["thing"]["id"], "title": s["thing"]["title"],
-         "importance": s["importance"], "urgency": s["urgency"]}
+    parking_lot: list[dict[str, Any]] = [
+        {"thing_id": s.thing["id"], "title": s.thing["title"],
+         "importance": s.importance, "urgency": s.urgency}
         for s in scored[6:]
     ] if len(scored) > 6 else []
 
