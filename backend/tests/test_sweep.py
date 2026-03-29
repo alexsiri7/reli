@@ -665,6 +665,23 @@ class TestGenerateGapQuestions:
         questions = json.loads(row["open_questions"])
         assert len(questions) >= 1
 
+    def test_no_ambiguous_user_id_with_join(self, patched_db):
+        """Regression: find_information_gaps must not raise OperationalError: ambiguous column name: user_id
+        when called with a user_id and the project-with-children JOIN query executes."""
+        today = date.today()
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO users (id, email, name, google_id) VALUES ('u-test', 'test@example.com', 'Test', 'g-test')"
+            )
+            _insert_thing(conn, "proj1", "My Project", type_hint="project")
+            _insert_thing(conn, "task1", "Child Task", parent_id="proj1")
+            conn.execute("UPDATE things SET user_id = 'u-test' WHERE id IN ('proj1', 'task1')")
+        with db() as conn:
+            # This must not raise OperationalError: ambiguous column name: user_id
+            results = find_information_gaps(conn, today, min_age_days=0, user_id="u-test")
+        proj_gaps = [r for r in results if r.thing_id == "proj1"]
+        assert any(r.extra.get("gap_type") == "no_deadline_project" for r in proj_gaps)
+
 
 # ---------------------------------------------------------------------------
 # collect_candidates integration

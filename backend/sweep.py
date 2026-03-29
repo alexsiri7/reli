@@ -596,6 +596,7 @@ def find_information_gaps(
     today = today or date.today()
     age_cutoff = (today - timedelta(days=min_age_days)).isoformat()
     uf_sql, uf_params = user_filter(user_id)
+    uf_sql_p, uf_params_p = user_filter(user_id, "p")
 
     candidates: list[SweepCandidate] = []
 
@@ -630,10 +631,10 @@ def find_information_gaps(
            WHERE p.active = 1
              AND p.type_hint = 'project'
              AND p.checkin_date IS NULL
-             AND (p.open_questions IS NULL OR p.open_questions = '[]' OR p.open_questions = 'null'){uf_sql}
+             AND (p.open_questions IS NULL OR p.open_questions = '[]' OR p.open_questions = 'null'){uf_sql_p}
            GROUP BY p.id
            HAVING child_count > 0""",
-        uf_params,
+        uf_params_p,
     ).fetchall()
     for row in proj_rows:
         # Check data JSON for deadline/due_date fields
