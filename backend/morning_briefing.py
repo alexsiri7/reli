@@ -12,11 +12,18 @@ import re
 import uuid
 from datetime import date, datetime, timezone
 
-from .auth import user_filter
-from sqlmodel import Session
+from sqlalchemy import text
+from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
-from .db_engine import _exec
+from .db_engine import user_filter_clause
+from .db_models import (
+    MorningBriefingRecord,
+    SweepFindingRecord,
+    ThingRecord,
+    ThingRelationshipRecord,
+    UserSettingRecord,
+)
 from .models import (
     BriefingPreferences,
     MorningBriefingContent,
@@ -71,10 +78,11 @@ def get_briefing_preferences(user_id: str) -> BriefingPreferences:
         return BriefingPreferences()
 
     with Session(_engine_mod.engine) as session:
-        row = _exec(session, 
-            "SELECT value FROM user_settings WHERE user_id = ? AND key = 'briefing_preferences'",
-            (user_id,),
-        ).fetchone()
+        stmt = select(UserSettingRecord).where(
+            UserSettingRecord.user_id == user_id,
+            UserSettingRecord.key == "briefing_preferences",
+        )
+        row = session.exec(stmt).first()
 
     if not row or not row.value:
         return BriefingPreferences()
@@ -90,14 +98,26 @@ def save_briefing_preferences(user_id: str, prefs: BriefingPreferences) -> None:
     """Save briefing preferences to user_settings."""
     if not user_id:
         return  # No user to save for (legacy single-user mode)
+    now = datetime.now(timezone.utc)
     with Session(_engine_mod.engine) as session:
-        _exec(session,
-            """INSERT INTO user_settings (user_id, key, value, updated_at)
-               VALUES (?, 'briefing_preferences', ?, CURRENT_TIMESTAMP)
-               ON CONFLICT(user_id, key) DO UPDATE SET
-                 value = excluded.value, updated_at = CURRENT_TIMESTAMP""",
-            (user_id, prefs.model_dump_json()),
-        )
+        existing = session.exec(
+            select(UserSettingRecord).where(
+                UserSettingRecord.user_id == user_id,
+                UserSettingRecord.key == "briefing_preferences",
+            )
+        ).first()
+        if existing:
+            existing.value = prefs.model_dump_json()
+            existing.updated_at = now
+            session.add(existing)
+        else:
+            record = UserSettingRecord(
+                user_id=user_id,
+                key="briefing_preferences",
+                value=prefs.model_dump_json(),
+                updated_at=now,
+            )
+            session.add(record)
         session.commit()
 
 
@@ -116,8 +136,6 @@ def generate_morning_briefing(
     today = target_date or date.today()
     prefs = get_briefing_preferences(user_id)
 
-    uf_sql, uf_params = user_filter(user_id)
-
     priorities: list[MorningBriefingItem] = []
     overdue: list[MorningBriefingItem] = []
     blockers: list[MorningBriefingItem] = []
@@ -125,47 +143,50 @@ def generate_morning_briefing(
 
     with Session(_engine_mod.engine) as session:
         # Fetch active things
-        thing_rows = _exec(session, 
-            f"""SELECT * FROM things
-               WHERE active = 1{uf_sql}
-               ORDER BY importance ASC, updated_at DESC""",
-            uf_params,
-        ).fetchall()
+        thing_stmt = select(ThingRecord).where(
+            ThingRecord.active == True,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        ).order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())  # type: ignore[union-attr]
+        thing_rows = session.exec(thing_stmt).all()
 
         # Fetch relationships for blocking analysis
-        rel_rows = _exec(session, 
-            "SELECT from_thing_id, to_thing_id, relationship_type FROM thing_relationships"
-        ).fetchall()
+        rel_rows = session.exec(select(ThingRelationshipRecord)).all()
 
-        # Fetch active sweep findings
-        now = datetime.now(timezone.utc).isoformat()
-        sf_uf_sql, sf_uf_params = user_filter(user_id, "sf")
-        finding_rows = _exec(session, 
-            f"""SELECT sf.id, sf.message, sf.priority, sf.thing_id,
-                      t.title AS thing_title
-               FROM sweep_findings sf
-               LEFT JOIN things t ON sf.thing_id = t.id
-               WHERE sf.dismissed = 0
-                 AND (sf.expires_at IS NULL OR sf.expires_at > ?)
-                 AND (sf.snoozed_until IS NULL OR sf.snoozed_until <= ?){sf_uf_sql}
-               ORDER BY sf.priority ASC, sf.created_at DESC""",
-            [now, now, *sf_uf_params],
-        ).fetchall()
+        # Fetch active sweep findings (with thing title via join)
+        now_dt = datetime.now(timezone.utc)
+        finding_stmt = (
+            select(
+                SweepFindingRecord.id,
+                SweepFindingRecord.message,
+                SweepFindingRecord.priority,
+                SweepFindingRecord.thing_id,
+                ThingRecord.title.label("thing_title"),  # type: ignore[union-attr]
+            )
+            .outerjoin(ThingRecord, SweepFindingRecord.thing_id == ThingRecord.id)
+            .where(
+                SweepFindingRecord.dismissed == False,
+                or_(SweepFindingRecord.expires_at.is_(None), SweepFindingRecord.expires_at > now_dt),  # type: ignore[union-attr]
+                or_(SweepFindingRecord.snoozed_until.is_(None), SweepFindingRecord.snoozed_until <= now_dt),  # type: ignore[union-attr]
+                user_filter_clause(SweepFindingRecord.user_id, user_id),
+            )
+            .order_by(SweepFindingRecord.priority.asc(), SweepFindingRecord.created_at.desc())  # type: ignore[union-attr]
+        )
+        finding_rows = session.execute(finding_stmt).fetchall()
 
     # Build thing map
     thing_map: dict[str, dict] = {}
     for r in thing_rows:
-        thing_map[r.id] = r._asdict()
+        thing_map[r.id] = r.model_dump()
 
     active_ids = set(thing_map.keys())
 
     # Build blocking graph
     blocked_by: dict[str, set[str]] = {}
     blocks: dict[str, set[str]] = {}
-    for r in rel_rows:
-        rtype = r.relationship_type
-        from_id = r.from_thing_id
-        to_id = r.to_thing_id
+    for rel in rel_rows:
+        rtype = rel.relationship_type
+        from_id = rel.from_thing_id
+        to_id = rel.to_thing_id
         if rtype == "depends-on":
             if from_id in active_ids and to_id in active_ids:
                 blocked_by.setdefault(from_id, set()).add(to_id)
@@ -366,15 +387,31 @@ def store_morning_briefing(user_id: str, content: MorningBriefingContent, briefi
     now = datetime.now(timezone.utc).isoformat()
 
     with Session(_engine_mod.engine) as session:
-        _exec(session, 
-            """INSERT INTO morning_briefings (id, user_id, briefing_date, content, generated_at)
-               VALUES (?, ?, ?, ?, ?)
-               ON CONFLICT(user_id, briefing_date) DO UPDATE SET
-                 id = excluded.id,
-                 content = excluded.content,
-                 generated_at = excluded.generated_at""",
-            (briefing_id, user_id or None, today.isoformat(), content.model_dump_json(), now),
+        # Upsert: check if briefing for this user+date exists
+        uid = user_id or None
+        stmt = select(MorningBriefingRecord).where(
+            MorningBriefingRecord.briefing_date == today.isoformat(),
         )
+        if uid is None:
+            stmt = stmt.where(MorningBriefingRecord.user_id.is_(None))  # type: ignore[union-attr]
+        else:
+            stmt = stmt.where(MorningBriefingRecord.user_id == uid)
+        existing = session.exec(stmt).first()
+
+        if existing:
+            existing.id = briefing_id
+            existing.content = json.loads(content.model_dump_json())
+            existing.generated_at = datetime.fromisoformat(now)
+            session.add(existing)
+        else:
+            record = MorningBriefingRecord(
+                id=briefing_id,
+                user_id=uid,
+                briefing_date=today.isoformat(),
+                content=json.loads(content.model_dump_json()),
+                generated_at=datetime.fromisoformat(now),
+            )
+            session.add(record)
         session.commit()
 
     logger.info(
@@ -389,31 +426,20 @@ def get_latest_morning_briefing(user_id: str, as_of: date | None = None) -> dict
     If as_of is specified, returns the briefing for that specific date.
     Otherwise, returns the most recent briefing.
     """
-    uf_sql, uf_params = user_filter(user_id)
-
     with Session(_engine_mod.engine) as session:
+        stmt = select(MorningBriefingRecord).where(
+            user_filter_clause(MorningBriefingRecord.user_id, user_id),
+        )
         if as_of:
-            row = _exec(session, 
-                f"""SELECT * FROM morning_briefings
-                   WHERE briefing_date = ?{uf_sql}""",
-                [as_of.isoformat(), *uf_params],
-            ).fetchone()
+            stmt = stmt.where(MorningBriefingRecord.briefing_date == as_of.isoformat())
         else:
-            row = _exec(session, 
-                f"""SELECT * FROM morning_briefings
-                   WHERE 1=1{uf_sql}
-                   ORDER BY briefing_date DESC
-                   LIMIT 1""",
-                uf_params,
-            ).fetchone()
+            stmt = stmt.order_by(MorningBriefingRecord.briefing_date.desc()).limit(1)  # type: ignore[union-attr]
+        row = session.exec(stmt).first()
 
     if not row:
         return None
 
-    try:
-        content = json.loads(row.content)
-    except (json.JSONDecodeError, TypeError):
-        content = {}
+    content = row.content if isinstance(row.content, dict) else {}
 
     return {
         "id": row.id,
