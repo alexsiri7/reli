@@ -1098,7 +1098,7 @@ def dismiss_stale_findings(user_id: str = "") -> int:
         )
         total += cur.rowcount
 
-    return total
+    return int(total)
 
 
 def _fetch_active_findings(user_id: str = "") -> list[dict]:
