@@ -17,7 +17,10 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from .database import db
+from sqlmodel import Session
+
+import backend.db_engine as _engine_mod
+from .db_engine import _exec
 
 logger = logging.getLogger(__name__)
 
@@ -74,39 +77,39 @@ def find_connection_candidates(
         return []
 
     # Get all active Things
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         if user_id:
-            things = conn.execute(
+            things = _exec(session, 
                 "SELECT id, title, type_hint FROM things WHERE active = 1 AND (user_id = ? OR user_id IS NULL)",
                 (user_id,),
             ).fetchall()
         else:
-            things = conn.execute("SELECT id, title, type_hint FROM things WHERE active = 1").fetchall()
+            things = _exec(session, "SELECT id, title, type_hint FROM things WHERE active = 1").fetchall()
 
         # Build set of existing relationships (both directions)
-        rel_rows = conn.execute("SELECT from_thing_id, to_thing_id FROM thing_relationships").fetchall()
+        rel_rows = _exec(session, "SELECT from_thing_id, to_thing_id FROM thing_relationships").fetchall()
         existing_rels: set[tuple[str, str]] = set()
         for row in rel_rows:
-            existing_rels.add((row["from_thing_id"], row["to_thing_id"]))
-            existing_rels.add((row["to_thing_id"], row["from_thing_id"]))
+            existing_rels.add((row.from_thing_id, row.to_thing_id))
+            existing_rels.add((row.to_thing_id, row.from_thing_id))
 
         # Build set of existing pending/deferred suggestions
-        sugg_rows = conn.execute(
+        sugg_rows = _exec(session, 
             "SELECT from_thing_id, to_thing_id FROM connection_suggestions WHERE status IN ('pending', 'deferred')"
         ).fetchall()
         existing_suggestions: set[tuple[str, str]] = set()
         for row in sugg_rows:
-            existing_suggestions.add((row["from_thing_id"], row["to_thing_id"]))
-            existing_suggestions.add((row["to_thing_id"], row["from_thing_id"]))
+            existing_suggestions.add((row.from_thing_id, row.to_thing_id))
+            existing_suggestions.add((row.to_thing_id, row.from_thing_id))
 
         # Also exclude parent-child relationships
         parent_pairs: set[tuple[str, str]] = set()
-        parent_rows = conn.execute("SELECT id, parent_id FROM things WHERE parent_id IS NOT NULL").fetchall()
+        parent_rows = _exec(session, "SELECT id, parent_id FROM things WHERE parent_id IS NOT NULL").fetchall()
         for row in parent_rows:
-            parent_pairs.add((row["id"], row["parent_id"]))
-            parent_pairs.add((row["parent_id"], row["id"]))
+            parent_pairs.add((row.id, row.parent_id))
+            parent_pairs.add((row.parent_id, row.id))
 
-    thing_map = {dict(t)["id"]: dict(t) for t in things}
+    thing_map = {t._asdict()["id"]: t._asdict() for t in things}
     seen_pairs: set[tuple[str, str]] = set()
     candidates: list[ConnectionCandidate] = []
 
@@ -122,8 +125,8 @@ def find_connection_candidates(
         where = {"$and": filters}
 
     for thing in things:
-        thing_id = thing["id"]
-        thing_title = thing["title"]
+        thing_id = thing.id
+        thing_title = thing.title
 
         try:
             results = collection.query(
@@ -171,9 +174,9 @@ def find_connection_candidates(
                     from_thing_id=thing_id,
                     from_thing_title=thing_title,
                     to_thing_id=match_id,
-                    to_thing_title=match_thing["title"],
+                    to_thing_title=match_thing.get("title", ""),
                     distance=distance,
-                    from_type_hint=thing["type_hint"],
+                    from_type_hint=thing.type_hint,
                     to_type_hint=match_thing.get("type_hint"),
                 )
             )
@@ -270,7 +273,7 @@ async def validate_candidates(
     now = datetime.now(timezone.utc).isoformat()
     created: list[dict] = []
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         for c in raw_connections:
             if not isinstance(c, dict):
                 continue
@@ -303,10 +306,10 @@ async def validate_candidates(
             sugg_id = f"cs-{uuid.uuid4().hex[:8]}"
 
             # Determine user_id from one of the things
-            user_row = conn.execute("SELECT user_id FROM things WHERE id = ?", (from_id,)).fetchone()
-            user_id = user_row["user_id"] if user_row else None
+            user_row = _exec(session, "SELECT user_id FROM things WHERE id = ?", (from_id,)).fetchone()
+            user_id = user_row.user_id if user_row else None
 
-            conn.execute(
+            _exec(session, 
                 """INSERT INTO connection_suggestions
                    (id, from_thing_id, to_thing_id, suggested_relationship_type,
                     reason, confidence, status, created_at, user_id)
@@ -323,6 +326,7 @@ async def validate_candidates(
                     "confidence": confidence,
                 }
             )
+        session.commit()
 
     return ConnectionSweepResult(
         candidates_found=len(candidates),

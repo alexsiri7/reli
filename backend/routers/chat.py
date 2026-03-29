@@ -1,9 +1,10 @@
+from sqlmodel import Session
+
 """Chat history endpoints and the multi-agent chat pipeline."""
 
 import asyncio
 import json
 import logging
-import sqlite3
 from collections.abc import AsyncIterator
 from datetime import date, datetime
 from typing import Any
@@ -12,7 +13,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
 from ..auth import require_user, user_filter
-from ..database import db, get_latest_summary
+import backend.db_engine as _engine_mod
+from ..db_engine import _exec
+from ..database import get_latest_summary
 from ..models import (
     CallUsage,
     ChatMessage,
@@ -40,8 +43,8 @@ def _parse_dt(val: str | None) -> datetime | None:
     return datetime.fromisoformat(val)
 
 
-def _row_to_msg(row: sqlite3.Row, usage_rows: list[sqlite3.Row] | None = None) -> ChatMessage:
-    changes = row["applied_changes"]
+def _row_to_msg(row: Any, usage_rows: Any = None) -> ChatMessage:
+    changes = row.applied_changes
     if isinstance(changes, str):
         changes = json.loads(changes) if changes else None
     # Prefer per-call usage from the dedicated table; fall back to applied_changes JSON
@@ -49,27 +52,27 @@ def _row_to_msg(row: sqlite3.Row, usage_rows: list[sqlite3.Row] | None = None) -
     if usage_rows:
         per_call_usage = [
             CallUsage(
-                model=u["model"],
-                prompt_tokens=u["prompt_tokens"],
-                completion_tokens=u["completion_tokens"],
-                cost_usd=u["cost_usd"],
+                model=u.model,
+                prompt_tokens=u.prompt_tokens,
+                completion_tokens=u.completion_tokens,
+                cost_usd=u.cost_usd,
             )
             for u in usage_rows
         ]
     elif isinstance(changes, dict) and "per_call_usage" in changes:
         per_call_usage = [CallUsage(**c) for c in changes["per_call_usage"]]
     return ChatMessage(
-        id=row["id"],
-        session_id=row["session_id"],
-        role=row["role"],
-        content=row["content"],
+        id=row.id,
+        session_id=row.session_id,
+        role=row.role,
+        content=row.content,
         applied_changes=changes,
-        prompt_tokens=row["prompt_tokens"] or 0,
-        completion_tokens=row["completion_tokens"] or 0,
-        cost_usd=row["cost_usd"] or 0.0,
-        model=row["model"],
+        prompt_tokens=row.prompt_tokens or 0,
+        completion_tokens=row.completion_tokens or 0,
+        cost_usd=row.cost_usd or 0.0,
+        model=row.model,
         per_call_usage=per_call_usage,
-        timestamp=_parse_dt(row["timestamp"]) or datetime.min,
+        timestamp=_parse_dt(row.timestamp) or datetime.min,
     )
 
 
@@ -82,32 +85,32 @@ def get_history(
 ) -> list[ChatMessage]:
     """Retrieve chat messages for a session, ordered chronologically. Supports cursor-based pagination via `before`."""
     uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         if before is not None:
-            rows = conn.execute(
+            rows = _exec(session, 
                 f"SELECT * FROM chat_history WHERE session_id = ? AND id < ?{uf_sql} ORDER BY id DESC LIMIT ?",
                 [session_id, before, *uf_params, limit],
             ).fetchall()
         else:
-            rows = conn.execute(
+            rows = _exec(session, 
                 f"SELECT * FROM chat_history WHERE session_id = ?{uf_sql} ORDER BY id DESC LIMIT ?",
                 [session_id, *uf_params, limit],
             ).fetchall()
             rows = list(reversed(rows))
 
         # Fetch per-call usage from chat_message_usage table
-        msg_ids = [r["id"] for r in rows]
-        usage_by_msg: dict[int, list[sqlite3.Row]] = {}
+        msg_ids = [r.id for r in rows]
+        usage_by_msg: dict[int, list[Any]] = {}
         if msg_ids:
             placeholders = ",".join("?" for _ in msg_ids)
-            usage_rows = conn.execute(
+            usage_rows = _exec(session, 
                 f"SELECT * FROM chat_message_usage WHERE chat_message_id IN ({placeholders}) ORDER BY id",
                 msg_ids,
             ).fetchall()
             for u in usage_rows:
-                usage_by_msg.setdefault(u["chat_message_id"], []).append(u)
+                usage_by_msg.setdefault(u.chat_message_id, []).append(u)
 
-    return [_row_to_msg(r, usage_by_msg.get(r["id"])) for r in rows]
+    return [_row_to_msg(r, usage_by_msg.get(r.id)) for r in rows]
 
 
 @router.post(
@@ -116,12 +119,13 @@ def get_history(
 def append_message(body: ChatMessageCreate, user_id: str = Depends(require_user)) -> ChatMessage:
     """Append a single chat message to a session's history."""
     changes_json = json.dumps(body.applied_changes) if body.applied_changes is not None else None
-    with db() as conn:
-        cursor = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        cursor = _exec(session, 
             "INSERT INTO chat_history (session_id, role, content, applied_changes, user_id) VALUES (?, ?, ?, ?, ?)",
             (body.session_id, body.role, body.content, changes_json, user_id or None),
         )
-        row = conn.execute("SELECT * FROM chat_history WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        row = _exec(session, "SELECT * FROM chat_history WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        session.commit()
     return _row_to_msg(row)
 
 
@@ -131,8 +135,9 @@ def append_message(body: ChatMessageCreate, user_id: str = Depends(require_user)
 def delete_history(session_id: str, user_id: str = Depends(require_user)) -> None:
     """Delete all messages in a chat session."""
     uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        result = conn.execute(f"DELETE FROM chat_history WHERE session_id = ?{uf_sql}", [session_id, *uf_params])
+    with Session(_engine_mod.engine) as session:
+        result = _exec(session, f"DELETE FROM chat_history WHERE session_id = ?{uf_sql}", [session_id, *uf_params])
+        session.commit()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail=f"No chat history found for session '{session_id}'")
 
@@ -143,15 +148,16 @@ def migrate_session(body: MigrateSessionRequest, user_id: str = Depends(require_
     if body.old_session_id == body.new_session_id:
         return {"migrated": 0}
     uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        chat_result = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        chat_result = _exec(session, 
             f"UPDATE chat_history SET session_id = ? WHERE session_id = ?{uf_sql}",
             [body.new_session_id, body.old_session_id, *uf_params],
         )
-        usage_result = conn.execute(
+        usage_result = _exec(session, 
             f"UPDATE usage_log SET session_id = ? WHERE session_id = ?{uf_sql}",
             [body.new_session_id, body.old_session_id, *uf_params],
         )
+        session.commit()
     return {"migrated": chat_result.rowcount + usage_result.rowcount}
 
 
@@ -249,8 +255,8 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
     if user_id:
         latest_summary = get_latest_summary(user_id)
         if latest_summary:
-            with db() as conn:
-                rows = conn.execute(
+            with Session(_engine_mod.engine) as session:
+                rows = _exec(session, 
                     "SELECT role, content, applied_changes FROM chat_history"
                     " WHERE session_id = ? AND id > ?"
                     " ORDER BY timestamp ASC LIMIT ?",
@@ -258,9 +264,9 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
                 ).fetchall()
             messages = []
             for r in rows:
-                entry: dict[str, Any] = {"role": r["role"], "content": r["content"] or ""}
-                if r["role"] == "assistant":
-                    ctx = _extract_thing_context(r["applied_changes"])
+                entry: dict[str, Any] = {"role": r.role, "content": r.content or ""}
+                if r.role == "assistant":
+                    ctx = _extract_thing_context(r.applied_changes)
                     entry.update(ctx)
                 messages.append(entry)
             # Prepend summary as context
@@ -270,17 +276,17 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
             ]
 
     # Fallback: raw history (no summary available or no user_id)
-    with db() as conn:
-        rows = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        rows = _exec(session, 
             "SELECT role, content, applied_changes FROM chat_history"
             " WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
             (session_id, history_limit),
         ).fetchall()
     result = []
     for r in rows:
-        entry = {"role": r["role"], "content": r["content"] or ""}
-        if r["role"] == "assistant":
-            ctx = _extract_thing_context(r["applied_changes"])
+        entry = {"role": r.role, "content": r.content or ""}
+        if r.role == "assistant":
+            ctx = _extract_thing_context(r.applied_changes)
             entry.update(ctx)
         result.append(entry)
     return result
@@ -324,12 +330,12 @@ def _persist_exchange(
         applied_with_sources["calendar_events"] = result.calendar_events
     changes_json = json.dumps(applied_with_sources)
 
-    with db() as conn:
-        conn.execute(
+    with Session(_engine_mod.engine) as session:
+        _exec(session, 
             "INSERT INTO chat_history (session_id, role, content, applied_changes, user_id) VALUES (?, ?, ?, ?, ?)",
             (session_id, "user", message, None, user_id or None),
         )
-        cursor = conn.execute(
+        cursor = _exec(session, 
             "INSERT INTO chat_history"
             " (session_id, role, content, applied_changes,"
             " prompt_tokens, completion_tokens, cost_usd, api_calls, model, user_id)"
@@ -362,7 +368,7 @@ def _persist_exchange(
             stage_labels.append(None)
         for i, call in enumerate(usage.calls):
             stage = stage_labels[i] if i < len(stage_labels) else None
-            conn.execute(
+            _exec(session, 
                 "INSERT INTO chat_message_usage"
                 " (chat_message_id, stage, model, prompt_tokens, completion_tokens, cost_usd)"
                 " VALUES (?, ?, ?, ?, ?, ?)",
@@ -371,12 +377,13 @@ def _persist_exchange(
 
         # Insert per-call usage records into usage_log for daily aggregation
         for call in usage.calls:
-            conn.execute(
+            _exec(session, 
                 "INSERT INTO usage_log (session_id, model, prompt_tokens, completion_tokens, cost_usd, user_id)"
                 " VALUES (?, ?, ?, ?, ?, ?)",
                 (session_id, call.model, call.prompt_tokens, call.completion_tokens, call.cost_usd, user_id or None),
             )
 
+        session.commit()
     return applied_with_sources
 
 
@@ -505,15 +512,15 @@ def _compute_daily_usage(user_id: str = "") -> SessionUsage:
     """Aggregate usage stats for today (since midnight local time)."""
     today_start = datetime.combine(date.today(), datetime.min.time()).isoformat()
     uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        totals_row = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        totals_row = _exec(session, 
             "SELECT COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
             "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
             f"FROM usage_log WHERE timestamp >= ?{uf_sql}",
             [today_start, *uf_params],
         ).fetchone()
 
-        model_rows = conn.execute(
+        model_rows = _exec(session, 
             "SELECT model, COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
             "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
             f"FROM usage_log WHERE timestamp >= ?{uf_sql} "
@@ -523,22 +530,22 @@ def _compute_daily_usage(user_id: str = "") -> SessionUsage:
 
     per_model = [
         ModelUsage(
-            model=r["model"],
-            prompt_tokens=r["pt"],
-            completion_tokens=r["ct"],
-            total_tokens=r["pt"] + r["ct"],
-            api_calls=r["calls"],
-            cost_usd=round(r["cost"], 6),
+            model=r.model,
+            prompt_tokens=r.pt,
+            completion_tokens=r.ct,
+            total_tokens=r.pt + r.ct,
+            api_calls=r.calls,
+            cost_usd=round(r.cost, 6),
         )
         for r in model_rows
     ]
 
     return SessionUsage(
-        prompt_tokens=totals_row["pt"],
-        completion_tokens=totals_row["ct"],
-        total_tokens=totals_row["pt"] + totals_row["ct"],
-        api_calls=totals_row["calls"],
-        cost_usd=round(totals_row["cost"], 6),
+        prompt_tokens=totals_row.pt,
+        completion_tokens=totals_row.ct,
+        total_tokens=totals_row.pt + totals_row.ct,
+        api_calls=totals_row.calls,
+        cost_usd=round(totals_row.cost, 6),
         per_model=per_model,
     )
 

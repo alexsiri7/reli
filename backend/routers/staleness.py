@@ -1,11 +1,17 @@
-"""Staleness & neglect detection endpoint — batch summary for notifications."""
+"""Staleness & neglect detection endpoint -- batch summary for notifications."""
 
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
+from sqlmodel import Session, select
 
-from ..auth import require_user, user_filter
-from ..database import db
+from ..db_engine import get_session, user_filter_clause
+from ..db_models import ThingRecord
+
+from ..auth import require_user
+import backend.db_engine as _engine_mod
+from ..db_engine import _exec
+from ..auth import user_filter
 from ..models import (
     OverdueCheckin,
     StaleItem,
@@ -14,7 +20,7 @@ from ..models import (
 )
 from ..sweep import _parse_date_value
 from .settings import get_user_stale_threshold
-from .things import _row_to_thing
+from .things import _record_to_thing, _row_to_thing
 
 router = APIRouter(prefix="/staleness", tags=["staleness"])
 
@@ -25,26 +31,22 @@ def get_staleness_report(
         default=None,
         ge=1,
         le=365,
-        description="Override staleness threshold (days). Uses per-user setting if omitted.",
+        description="Override staleness threshold (days).",
     ),
     user_id: str = Depends(require_user),
 ) -> StalenessReport:
-    """Return a batch summary of stale and neglected Things.
-
-    Stale: active Things not updated within *stale_days*.
-    Neglected: stale Things that also have high priority or pending children.
-    Overdue check-ins: active Things whose checkin_date is in the past.
-    """
+    """Return a batch summary of stale and neglected Things."""
     today = date.today()
     threshold = stale_days if stale_days is not None else get_user_stale_threshold(user_id)
     cutoff = today.isoformat()
     stale_cutoff = (today - timedelta(days=threshold)).isoformat()
 
+    # Use raw SQL for the subquery (active_children count)
+    # TODO: convert to SQLModel query
     uf_sql, uf_params = user_filter(user_id)
 
-    with db() as conn:
-        # Stale / neglected items
-        stale_rows = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        stale_rows = _exec(session, 
             f"""SELECT t.*,
                        (SELECT COUNT(*) FROM things c
                         WHERE c.parent_id = t.id AND c.active = 1) AS active_children
@@ -55,8 +57,7 @@ def get_staleness_report(
             [stale_cutoff, *uf_params],
         ).fetchall()
 
-        # Overdue check-ins
-        overdue_rows = conn.execute(
+        overdue_rows = _exec(session, 
             f"""SELECT * FROM things
                 WHERE active = 1
                   AND checkin_date IS NOT NULL
@@ -71,12 +72,12 @@ def get_staleness_report(
 
     for row in stale_rows:
         thing = _row_to_thing(row)
-        updated = row["updated_at"] or ""
+        updated = row.updated_at or ""
         parsed = _parse_date_value(updated)
         days_stale = (today - parsed).days if parsed else threshold
 
-        active_children = row["active_children"] or 0
-        importance = row["importance"] if row["importance"] is not None else 2
+        active_children = row.active_children or 0
+        importance = row.importance if row.importance is not None else 2
         is_neglected = importance <= 1 or active_children > 0
 
         if is_neglected:
@@ -96,7 +97,7 @@ def get_staleness_report(
     overdue_list: list[OverdueCheckin] = []
     for row in overdue_rows:
         thing = _row_to_thing(row)
-        parsed = _parse_date_value(row["checkin_date"])
+        parsed = _parse_date_value(row.checkin_date)
         days_overdue = (today - parsed).days if parsed else 1
         overdue_list.append(OverdueCheckin(thing=thing, days_overdue=days_overdue))
 

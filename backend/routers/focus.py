@@ -1,4 +1,4 @@
-"""Focus recommendations — prioritized list of Things the user should focus on."""
+"""Focus recommendations -- prioritized list of Things the user should focus on."""
 
 from __future__ import annotations
 
@@ -7,28 +7,25 @@ from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
+from sqlmodel import Session, select
 
-from ..auth import require_user, user_filter
-from ..database import db
+import backend.db_engine as _engine_mod
+from ..db_engine import user_filter_clause
+from ..db_models import ThingRecord, ThingRelationshipRecord
+
+from ..auth import require_user
 from ..google_calendar import fetch_upcoming_events
 from ..google_calendar import is_connected as calendar_connected
 from ..models import FocusRecommendation, FocusResponse, Thing
-from .things import _row_to_thing
+from .things import _record_to_thing
 
 router = APIRouter(prefix="/focus", tags=["focus"])
 
-# Date parsing (shared logic with sweep/proactive)
+# Date parsing
 _RECURRING_KEYS = {"birthday", "anniversary", "born", "date_of_birth", "dob"}
 _ONESHOT_KEYS = {
-    "deadline",
-    "due_date",
-    "due",
-    "event_date",
-    "starts_at",
-    "start_date",
-    "ends_at",
-    "end_date",
-    "date",
+    "deadline", "due_date", "due", "event_date", "starts_at",
+    "start_date", "ends_at", "end_date", "date",
 }
 _ALL_DATE_KEYS = _RECURRING_KEYS | _ONESHOT_KEYS
 _DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
@@ -46,7 +43,6 @@ def _parse_date(value: object) -> date | None:
 
 
 def _earliest_deadline(data: dict | None) -> date | None:
-    """Extract the earliest deadline/due date from a Thing's data dict."""
     if not data:
         return None
     earliest: date | None = None
@@ -61,7 +57,6 @@ def _earliest_deadline(data: dict | None) -> date | None:
 
 
 def _days_stale(updated_at: str | None, today: date) -> int:
-    """Return the number of days since the Thing was last updated."""
     if not updated_at:
         return 0
     parsed = _parse_date(updated_at)
@@ -77,34 +72,29 @@ def _compute_recommendations(
 ) -> FocusResponse:
     """Analyze the thing graph and produce a scored, prioritized focus list."""
     today = today or date.today()
-    uf_sql, uf_params = user_filter(user_id)
 
-    with db() as conn:
-        # Fetch active things (surfaced or with checkin/priority signals)
-        thing_rows = conn.execute(
-            f"""SELECT * FROM things
-               WHERE active = 1{uf_sql}
-               ORDER BY importance ASC, updated_at DESC""",
-            uf_params,
-        ).fetchall()
+    with Session(_engine_mod.engine) as session:
+        thing_stmt = select(ThingRecord).where(
+            ThingRecord.active == True,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        ).order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())  # type: ignore[union-attr, attr-defined]
+        thing_records = session.exec(thing_stmt).all()
 
-        # Fetch all relationships for blocking analysis
-        rel_rows = conn.execute(
-            "SELECT from_thing_id, to_thing_id, relationship_type FROM thing_relationships"
-        ).fetchall()
+        rel_records = session.exec(
+            select(ThingRelationshipRecord)
+        ).all()
 
-    things = [_row_to_thing(r) for r in thing_rows]
+    things = [_record_to_thing(r) for r in thing_records]
     thing_map: dict[str, Thing] = {t.id: t for t in things}
     active_ids = set(thing_map.keys())
 
-    # Build blocking graph: thing_id -> set of thing_ids that block it
+    # Build blocking graph
     blocked_by: dict[str, set[str]] = {}
     blocks: dict[str, set[str]] = {}
-    for r in rel_rows:
-        rtype = r["relationship_type"]
-        from_id = r["from_thing_id"]
-        to_id = r["to_thing_id"]
-        # "depends-on" means from_thing depends on to_thing (to_thing blocks from_thing)
+    for r in rel_records:
+        rtype = r.relationship_type
+        from_id = r.from_thing_id
+        to_id = r.to_thing_id
         if rtype == "depends-on":
             if from_id in active_ids and to_id in active_ids:
                 blocked_by.setdefault(from_id, set()).add(to_id)
@@ -114,7 +104,7 @@ def _compute_recommendations(
                 blocked_by.setdefault(to_id, set()).add(from_id)
                 blocks.setdefault(from_id, set()).add(to_id)
 
-    # Try to get calendar events for calendar-awareness
+    # Calendar awareness
     calendar_events: list[dict[str, Any]] = []
     has_calendar = False
     try:
@@ -124,7 +114,6 @@ def _compute_recommendations(
     except Exception:
         pass
 
-    # Build a set of today's calendar event summaries (lowercased) for matching
     busy_today_summaries: set[str] = set()
     for evt in calendar_events:
         start_str = evt.get("start", "")
@@ -134,11 +123,9 @@ def _compute_recommendations(
             if summary:
                 busy_today_summaries.add(summary)
 
-    # Score each thing
     scored: list[tuple[float, Thing, list[str]]] = []
 
     for thing in things:
-        # Skip entity types that aren't actionable tasks
         if thing.type_hint in ("person", "place", "concept", "reference", "preference"):
             continue
 
@@ -146,13 +133,11 @@ def _compute_recommendations(
         reasons: list[str] = []
         is_blocked = thing.id in blocked_by
 
-        # 1. Importance (0=highest, 4=lowest) — strong signal
-        importance_boost = (4 - thing.importance) * 25  # 0=100, 1=75, 2=50, 3=25, 4=0
+        importance_boost = (4 - thing.importance) * 25
         score += importance_boost
         if thing.importance <= 1:
             reasons.append(f"High importance ({thing.importance})")
 
-        # 2. Deadline urgency
         deadline = _earliest_deadline(thing.data)
         if deadline:
             days_until = (deadline - today).days
@@ -172,7 +157,6 @@ def _compute_recommendations(
                 score += 40
                 reasons.append(f"Due in {days_until}d")
 
-        # 3. Checkin date
         if thing.checkin_date:
             checkin = _parse_date(str(thing.checkin_date))
             if checkin:
@@ -190,9 +174,7 @@ def _compute_recommendations(
                     score += 25
                     reasons.append(f"Check-in in {days_until_checkin}d")
 
-        # 4. Blocked/unblocked status
         if is_blocked:
-            # Blocked things should be deprioritized
             score -= 80
             blocker_titles = [thing_map[bid].title for bid in blocked_by[thing.id] if bid in thing_map]
             if blocker_titles:
@@ -200,12 +182,10 @@ def _compute_recommendations(
             else:
                 reasons.append("Blocked by dependencies")
         elif thing.id in blocks:
-            # Things that unblock others should be prioritized
             unblocks_count = len(blocks[thing.id])
             score += unblocks_count * 30
             reasons.append(f"Unblocks {unblocks_count} other item{'s' if unblocks_count != 1 else ''}")
 
-        # 5. Staleness — moderate boost for things that need attention
         stale_days = _days_stale(
             thing.updated_at.isoformat() if isinstance(thing.updated_at, datetime) else str(thing.updated_at),
             today,
@@ -217,7 +197,6 @@ def _compute_recommendations(
             score += 15
             reasons.append(f"Untouched for {stale_days}d")
 
-        # 6. Recently referenced — slight boost for momentum
         if thing.last_referenced:
             ref_date = _parse_date(str(thing.last_referenced))
             if ref_date:
@@ -228,16 +207,13 @@ def _compute_recommendations(
                 elif days_since_ref <= 3:
                     score += 8
 
-        # 7. Open questions — things with unanswered questions need attention
         if thing.open_questions and len(thing.open_questions) > 0:
             score += 10
             reasons.append(f"{len(thing.open_questions)} open question{'s' if len(thing.open_questions) != 1 else ''}")
 
-        # 8. Calendar awareness — boost things related to today's events
         if has_calendar and busy_today_summaries:
             title_lower = thing.title.lower()
             for summary in busy_today_summaries:
-                # Simple keyword overlap check
                 if (
                     summary in title_lower
                     or title_lower in summary
@@ -247,19 +223,16 @@ def _compute_recommendations(
                     reasons.append("Related to today's calendar")
                     break
 
-        # 9. Type-based adjustments
         if thing.type_hint == "task":
-            score += 5  # Tasks are inherently more actionable
+            score += 5
         elif thing.type_hint == "goal":
             score += 3
 
-        # Only include if there's at least some signal
         if score > 0 or reasons:
             if not reasons:
                 reasons.append("Active item")
             scored.append((score, thing, reasons))
 
-    # Sort by score descending
     scored.sort(key=lambda x: -x[0])
 
     recommendations: list[FocusRecommendation] = []
@@ -285,5 +258,5 @@ def get_focus_recommendations(
     limit: int = Query(10, ge=1, le=50, description="Max recommendations to return"),
     user_id: str = Depends(require_user),
 ) -> FocusResponse:
-    """Analyze the thing graph and return a prioritized focus list with reasoning."""
+    """Analyze the thing graph and return a prioritized focus list."""
     return _compute_recommendations(user_id=user_id, limit=limit)

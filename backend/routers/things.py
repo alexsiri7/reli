@@ -1,20 +1,22 @@
 """CRUD endpoints for Things."""
 
 import json
-import sqlite3
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import func, text
 from sqlmodel import Session, or_, select
 
-from ..db_engine import get_session
-from ..db_models import ThingRecord
+import backend.db_engine as _engine_mod
+from ..db_engine import _exec, get_session, user_filter_clause
+from ..db_models import ThingRecord, ThingRelationshipRecord, ThingTypeRecord
+from ..db_models import MergeHistoryRecord as MergeHistoryDBRecord
 
 from ..auth import require_user, user_filter
-from ..database import clean_orphan_relationships, db
+from ..database import clean_orphan_relationships
 from ..models import (
     GraphEdge,
     GraphNode,
@@ -45,10 +47,49 @@ def _parse_dt(val: str | None) -> datetime | None:
     return datetime.fromisoformat(val)
 
 
-def _row_to_thing(row: sqlite3.Row) -> Thing:
-    data = row["data"]
-    # SQLite data may be double-encoded (string containing JSON string).
-    # Unwrap until we get a dict/list/None or a non-JSON string.
+def _record_to_thing(record: ThingRecord) -> Thing:
+    """Convert a ThingRecord (SQLModel) to a Thing (Pydantic response model)."""
+    # Handle data: SQLAlchemy JSON type auto-deserializes, but may have edge cases
+    data = record.data
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = None
+
+    open_questions = record.open_questions
+    if isinstance(open_questions, str):
+        try:
+            oq = json.loads(open_questions)
+            open_questions = oq if isinstance(oq, list) else None
+        except (json.JSONDecodeError, ValueError):
+            open_questions = None
+
+    return Thing(
+        id=record.id,
+        title=record.title,
+        type_hint=record.type_hint,
+        parent_id=record.parent_id,
+        checkin_date=record.checkin_date,
+        importance=record.importance,
+        active=bool(record.active),
+        surface=bool(record.surface) if record.surface is not None else True,
+        data=data if isinstance(data, dict) else None,
+        created_at=record.created_at or datetime.min,
+        updated_at=record.updated_at or datetime.min,
+        last_referenced=record.last_referenced,
+        open_questions=open_questions if isinstance(open_questions, list) else None,
+    )
+
+
+# Keep _row_to_thing for backward compat (imported by other modules)
+def _row_to_thing(row: Any) -> Thing:
+    """Convert a sqlite3.Row to a Thing response model. Legacy compat wrapper."""
+    import sqlite3
+    if isinstance(row, ThingRecord):
+        return _record_to_thing(row)
+    # Legacy sqlite3.Row handling
+    data = row.data
     while isinstance(data, str) and data:
         try:
             data = json.loads(data)
@@ -56,22 +97,19 @@ def _row_to_thing(row: sqlite3.Row) -> Thing:
             break
     if isinstance(data, str):
         data = None
-    # Handle surface column (may be missing in older DBs before migration runs)
     surface = True
     try:
-        surface = bool(row["surface"]) if row["surface"] is not None else True
+        surface = bool(row.surface) if row.surface is not None else True
     except (IndexError, KeyError):
         pass
-
     last_referenced = None
     try:
-        last_referenced = _parse_dt(row["last_referenced"])
+        last_referenced = _parse_dt(row.last_referenced)
     except (IndexError, KeyError):
         pass
-
     open_questions = None
     try:
-        raw_oq = row["open_questions"]
+        raw_oq = row.open_questions
         if raw_oq:
             oq = raw_oq
             while isinstance(oq, str):
@@ -83,19 +121,18 @@ def _row_to_thing(row: sqlite3.Row) -> Thing:
                 open_questions = oq
     except (IndexError, KeyError):
         pass
-
     return Thing(
-        id=row["id"],
-        title=row["title"],
-        type_hint=row["type_hint"],
-        parent_id=row["parent_id"],
-        checkin_date=_parse_dt(row["checkin_date"]),
-        importance=row["importance"],
-        active=bool(row["active"]),
+        id=row.id,
+        title=row.title,
+        type_hint=row.type_hint,
+        parent_id=row.parent_id,
+        checkin_date=_parse_dt(row.checkin_date),
+        importance=row.importance,
+        active=bool(row.active),
         surface=surface,
         data=data,
-        created_at=_parse_dt(row["created_at"]) or datetime.min,
-        updated_at=_parse_dt(row["updated_at"]) or datetime.min,
+        created_at=_parse_dt(row.created_at) or datetime.min,
+        updated_at=_parse_dt(row.updated_at) or datetime.min,
         last_referenced=last_referenced,
         open_questions=open_questions,
     )
@@ -103,68 +140,71 @@ def _row_to_thing(row: sqlite3.Row) -> Thing:
 
 class UserProfileResponse(BaseModel):
     """The user's anchor Thing with its relationships."""
-
     thing: Thing
     relationships: list[Relationship]
-
     model_config = {"from_attributes": True}
 
 
 class UserProfileRelationship(BaseModel):
     """A relationship resolved with the related Thing's title."""
-
     id: str
     relationship_type: str
-    direction: str  # "outgoing" or "incoming"
+    direction: str
     related_thing_id: str
     related_thing_title: str
 
 
 class UserProfileDetail(BaseModel):
     """The user's anchor Thing with resolved relationships."""
-
     thing: Thing
     relationships: list[UserProfileRelationship]
 
 
 @router.get("/me", response_model=UserProfileDetail, summary="Get the current user's profile Thing")
-def get_user_thing(user_id: str = Depends(require_user)) -> UserProfileDetail:
+def get_user_thing(
+    user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> UserProfileDetail:
     """Return the user's anchor Thing (created at sign-up) with resolved relationships."""
-    with db() as conn:
-        uf_sql, uf_params = user_filter(user_id)
-        row = conn.execute(
-            "SELECT * FROM things WHERE surface = 0 AND type_hint = 'person'" + uf_sql,
-            uf_params,
-        ).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="User profile Thing not found")
+    stmt = select(ThingRecord).where(
+        ThingRecord.surface == False,
+        ThingRecord.type_hint == "person",
+        user_filter_clause(ThingRecord.user_id, user_id),
+    )
+    record = session.exec(stmt).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="User profile Thing not found")
 
-        thing = _row_to_thing(row)
-        thing_id = thing.id
+    thing = _record_to_thing(record)
+    thing_id = thing.id
 
-        # Fetch relationships with resolved titles
-        rel_rows = conn.execute(
-            "SELECT r.*, "
-            "  CASE WHEN r.from_thing_id = ? THEN t_to.title ELSE t_from.title END AS related_title,"
-            "  CASE WHEN r.from_thing_id = ? THEN t_to.id ELSE t_from.id END AS related_id,"
-            "  CASE WHEN r.from_thing_id = ? THEN 'outgoing' ELSE 'incoming' END AS direction"
-            " FROM thing_relationships r"
-            " LEFT JOIN things t_from ON r.from_thing_id = t_from.id"
-            " LEFT JOIN things t_to ON r.to_thing_id = t_to.id"
-            " WHERE r.from_thing_id = ? OR r.to_thing_id = ?",
-            (thing_id, thing_id, thing_id, thing_id, thing_id),
-        ).fetchall()
+    # Fetch relationships with resolved titles using raw SQL for the complex JOIN
+    # TODO: convert to SQLModel query
+    conn = session.connection()
+    rel_rows = _exec(session, 
+        text(
+            "SELECT r.id, r.relationship_type, r.from_thing_id, r.to_thing_id, "
+            "  CASE WHEN r.from_thing_id = :tid THEN t_to.title ELSE t_from.title END AS related_title, "
+            "  CASE WHEN r.from_thing_id = :tid THEN t_to.id ELSE t_from.id END AS related_id, "
+            "  CASE WHEN r.from_thing_id = :tid THEN 'outgoing' ELSE 'incoming' END AS direction "
+            " FROM thing_relationships r "
+            " LEFT JOIN things t_from ON r.from_thing_id = t_from.id "
+            " LEFT JOIN things t_to ON r.to_thing_id = t_to.id "
+            " WHERE r.from_thing_id = :tid OR r.to_thing_id = :tid"
+        ),
+        {"tid": thing_id},
+    ).fetchall()
 
-        relationships = [
-            UserProfileRelationship(
-                id=r["id"],
-                relationship_type=r["relationship_type"],
-                direction=r["direction"],
-                related_thing_id=r["related_id"] or "",
-                related_thing_title=r["related_title"] or "Unknown",
-            )
-            for r in rel_rows
-        ]
+    relationships = [
+        UserProfileRelationship(
+            id=r.id,
+            relationship_type=r.relationship_type,
+            direction=r.direction,
+            related_thing_id=r.related_id or "",
+            related_thing_title=r.related_title or "Unknown",
+        )
+        for r in rel_rows
+    ]
 
     return UserProfileDetail(thing=thing, relationships=relationships)
 
@@ -173,37 +213,38 @@ def get_user_thing(user_id: str = Depends(require_user)) -> UserProfileDetail:
 def get_open_questions(
     limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
     user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
 ) -> list[Thing]:
-    """Return active Things that have non-empty open_questions arrays, ordered by importance then recency."""
-    uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        rows = conn.execute(
-            f"""SELECT * FROM things
-               WHERE active = 1
-                 AND open_questions IS NOT NULL
-                 AND open_questions != '[]'{uf_sql}
-               ORDER BY importance ASC, updated_at DESC
-               LIMIT ?""",
-            [*uf_params, limit],
-        ).fetchall()
-    return [_row_to_thing(r) for r in rows]
+    """Return active Things that have non-empty open_questions arrays."""
+    stmt = select(ThingRecord).where(
+        ThingRecord.active == True,
+        ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
+        user_filter_clause(ThingRecord.user_id, user_id),
+    ).order_by(
+        ThingRecord.importance.asc(),  # type: ignore[attr-defined]
+        ThingRecord.updated_at.desc(),  # type: ignore[attr-defined]
+    ).limit(limit)
+    records = session.exec(stmt).all()
+    return [_record_to_thing(r) for r in records if r.open_questions]
 
 
 @router.get("/search", response_model=list[Thing], summary="Search Things across the full graph")
 def search_things(
-    q: str = Query("", description="Free-text search query matched against title, data, type_hint, and relationships"),
+    q: str = Query("", description="Free-text search query"),
     active_only: bool = Query(False, description="Filter to active Things only"),
-    type_hint: str | None = Query(None, description="Filter by type_hint (e.g. 'task', 'project', 'person')"),
+    type_hint: str | None = Query(None, description="Filter by type_hint"),
     limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
     user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
 ) -> list[Thing]:
     """Search Things by text query across title, data, type_hint, and related Things."""
     if not q.strip():
         return []
 
+    # Complex UNION query - use raw SQL
+    # TODO: convert to SQLModel query
     pattern = f"%{q}%"
-    with db() as conn:
-        # Build a WHERE filter applied to all branches of the UNION
+    with Session(_engine_mod.engine) as session:
         filters = ""
         filter_params: list[str | int] = []
         uf_sql, uf_params = user_filter(user_id, "t")
@@ -215,15 +256,11 @@ def search_things(
             filters += " AND t.type_hint = ?"
             filter_params.append(type_hint)
 
-        # Direct matches on title, data, or type_hint
         direct_params: list[str | int] = [pattern, pattern, pattern, *filter_params]
         direct_sql = (
             "SELECT t.*, 1 AS _rank FROM things t"
             " WHERE (t.title LIKE ? OR t.data LIKE ? OR t.type_hint LIKE ?)" + filters
         )
-
-        # Things connected via relationships to directly matching Things,
-        # or connected by a relationship whose type matches the query
         rel_sql = (
             "SELECT t.*, 2 AS _rank FROM things t"
             " WHERE t.id IN ("
@@ -243,8 +280,6 @@ def search_things(
             " )" + filters
         )
         rel_params: list[str | int] = [pattern, pattern, pattern, pattern, pattern, pattern, *filter_params]
-
-        # Combine with deduplication: direct matches first, then related
         sql = (
             "SELECT * FROM ("
             f"  {direct_sql}"
@@ -256,7 +291,7 @@ def search_things(
             " LIMIT ?"
         )
         params = [*direct_params, *rel_params, limit]
-        rows = conn.execute(sql, params).fetchall()
+        rows = _exec(session, sql, params).fetchall()
 
     return [_row_to_thing(r) for r in rows]
 
@@ -267,28 +302,28 @@ def list_things(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
 ) -> list[Thing]:
-    """List all Things with optional filtering and pagination. Projects include child counts."""
-    with db() as conn:
-        where = "WHERE 1=1"
-        params: list[str | int] = []
-        uf_sql, uf_params = user_filter(user_id)
-        where += uf_sql
-        params.extend(uf_params)
-        if active_only:
-            where += " AND active = 1"
-        params.extend([limit, offset])
-        rows = conn.execute(
-            f"SELECT * FROM things {where} ORDER BY checkin_date ASC, importance ASC LIMIT ? OFFSET ?",
-            params,
-        ).fetchall()
-        things = [_row_to_thing(r) for r in rows]
+    """List all Things with optional filtering and pagination."""
+    stmt = select(ThingRecord).where(
+        user_filter_clause(ThingRecord.user_id, user_id),
+    )
+    if active_only:
+        stmt = stmt.where(ThingRecord.active == True)
+    stmt = stmt.order_by(
+        ThingRecord.checkin_date.asc(),  # type: ignore[union-attr, attr-defined]
+        ThingRecord.importance.asc(),  # type: ignore[attr-defined]
+    ).limit(limit).offset(offset)
+    records = session.exec(stmt).all()
+    things = [_record_to_thing(r) for r in records]
 
-        # Compute child stats for project-type things
-        project_ids = [t.id for t in things if t.type_hint == "project"]
-        if project_ids:
+    # Compute child stats for project-type things
+    project_ids = [t.id for t in things if t.type_hint == "project"]
+    if project_ids:
+        import backend.db_engine as _engine_mod
+        with Session(_engine_mod.engine) as session:
             placeholders = ",".join("?" * len(project_ids))
-            child_rows = conn.execute(
+            child_rows = _exec(session, 
                 f"SELECT parent_id,"
                 f" COUNT(*) as children_count,"
                 f" SUM(CASE WHEN active = 0 THEN 1 ELSE 0 END) as completed_count"
@@ -296,7 +331,7 @@ def list_things(
                 f" GROUP BY parent_id",
                 project_ids,
             ).fetchall()
-            stats = {r["parent_id"]: (r["children_count"], r["completed_count"]) for r in child_rows}
+            stats = {r.parent_id: (r.children_count, r.completed_count) for r in child_rows}
             for t in things:
                 if t.type_hint == "project":
                     counts = stats.get(t.id, (0, 0))
@@ -306,19 +341,25 @@ def list_things(
     return things
 
 
-@router.get("/graph", response_model=GraphResponse, summary="Get Things as a graph of nodes and edges")
-def get_graph(user_id: str = Depends(require_user)) -> GraphResponse:
-    """Return all active Things and relationships as nodes and edges, avoiding N+1 queries."""
-    with db() as conn:
+@router.get("/graph", response_model=GraphResponse, summary="Get Things as a graph")
+def get_graph(
+    user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> GraphResponse:
+    """Return all active Things and relationships as nodes and edges."""
+    # Complex JOIN with thing_types - use raw SQL for now
+    # TODO: convert to SQLModel query
+    import backend.db_engine as _engine_mod
+    with Session(_engine_mod.engine) as session:
         uf_sql, uf_params = user_filter(user_id, "t")
-        node_rows = conn.execute(
+        node_rows = _exec(session, 
             "SELECT t.id, t.title, t.type_hint, tt.icon"
             " FROM things t"
             " LEFT JOIN thing_types tt ON t.type_hint = tt.name"
             " WHERE t.active = 1" + uf_sql,
             uf_params,
         ).fetchall()
-        edge_rows = conn.execute(
+        edge_rows = _exec(session, 
             "SELECT r.id, r.from_thing_id, r.to_thing_id, r.relationship_type"
             " FROM thing_relationships r"
             " JOIN things t ON r.from_thing_id = t.id"
@@ -326,62 +367,55 @@ def get_graph(user_id: str = Depends(require_user)) -> GraphResponse:
             uf_params,
         ).fetchall()
 
-    nodes = [GraphNode(id=r["id"], title=r["title"], type_hint=r["type_hint"], icon=r["icon"]) for r in node_rows]
+    nodes = [GraphNode(id=r.id, title=r.title, type_hint=r.type_hint, icon=r.icon) for r in node_rows]
     active_ids = {n.id for n in nodes}
     edges = [
         GraphEdge(
-            id=r["id"], source=r["from_thing_id"], target=r["to_thing_id"], relationship_type=r["relationship_type"]
+            id=r.id, source=r.from_thing_id, target=r.to_thing_id, relationship_type=r.relationship_type
         )
         for r in edge_rows
-        if r["to_thing_id"] in active_ids
+        if r.to_thing_id in active_ids
     ]
     return GraphResponse(nodes=nodes, edges=edges)
 
 
 @router.post("", response_model=Thing, status_code=status.HTTP_201_CREATED, summary="Create a Thing")
-def create_thing(body: ThingCreate, background_tasks: BackgroundTasks, user_id: str = Depends(require_user)) -> Thing:
+def create_thing(
+    body: ThingCreate,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> Thing:
     """Create a new Thing and index it for vector search."""
-    thing_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-    data_json = json.dumps(body.data) if body.data is not None else None
-    checkin = body.checkin_date.isoformat() if body.checkin_date else None
-    oq_json = json.dumps(body.open_questions) if body.open_questions is not None else None
+    now = datetime.now(timezone.utc)
 
     if body.parent_id:
-        with db() as conn:
-            parent = conn.execute("SELECT id FROM things WHERE id = ?", (body.parent_id,)).fetchone()
+        parent = session.get(ThingRecord, body.parent_id)
         if not parent:
             raise HTTPException(status_code=404, detail=f"Parent thing '{body.parent_id}' not found")
 
-    with db() as conn:
-        conn.execute(
-            "INSERT INTO things"
-            " (id, title, type_hint, parent_id, checkin_date, importance, active, surface, data,"
-            " open_questions, created_at, updated_at, user_id)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                thing_id,
-                body.title,
-                body.type_hint,
-                body.parent_id,
-                checkin,
-                body.importance,
-                int(body.active),
-                int(body.surface),
-                data_json,
-                oq_json,
-                now,
-                now,
-                user_id or None,
-            ),
-        )
-        row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
-    background_tasks.add_task(upsert_thing, dict(row))
-    return _row_to_thing(row)
+    record = ThingRecord(
+        title=body.title,
+        type_hint=body.type_hint,
+        parent_id=body.parent_id,
+        checkin_date=body.checkin_date,
+        importance=body.importance,
+        active=body.active,
+        surface=body.surface,
+        data=body.data,
+        open_questions=body.open_questions,
+        created_at=now,
+        updated_at=now,
+        user_id=user_id or None,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    background_tasks.add_task(upsert_thing, record.model_dump())
+    return _record_to_thing(record)
 
 
-# ── Merge history ────────────────────────────────────────────────────────────
-
+# -- Merge history --
 
 @router.get(
     "/merge-history",
@@ -392,42 +426,30 @@ def list_merge_history(
     thing_id: str | None = Query(None, description="Filter by kept Thing ID"),
     limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
     user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
 ) -> list[MergeHistoryRecord]:
-    """Return merge history records, newest first. Optionally filter by the kept Thing."""
-    uf_sql, uf_params = user_filter(user_id, "mh")
-    where = "WHERE 1=1" + uf_sql
-    params: list[str | int] = list(uf_params)
+    """Return merge history records, newest first."""
+    stmt = select(MergeHistoryDBRecord).where(
+        user_filter_clause(MergeHistoryDBRecord.user_id, user_id),
+    )
     if thing_id:
-        where += " AND mh.keep_id = ?"
-        params.append(thing_id)
-    params.append(limit)
-    with db() as conn:
-        rows = conn.execute(
-            f"SELECT mh.* FROM merge_history mh {where} ORDER BY mh.created_at DESC LIMIT ?",
-            params,
-        ).fetchall()
-    results = []
-    for r in rows:
-        md = r["merged_data"]
-        if isinstance(md, str) and md:
-            try:
-                md = json.loads(md)
-            except (json.JSONDecodeError, ValueError):
-                md = None
-        results.append(
-            MergeHistoryRecord(
-                id=r["id"],
-                keep_id=r["keep_id"],
-                remove_id=r["remove_id"],
-                keep_title=r["keep_title"],
-                remove_title=r["remove_title"],
-                merged_data=md,
-                triggered_by=r["triggered_by"],
-                user_id=r["user_id"],
-                created_at=_parse_dt(r["created_at"]) or datetime.min,
-            )
+        stmt = stmt.where(MergeHistoryDBRecord.keep_id == thing_id)
+    stmt = stmt.order_by(MergeHistoryDBRecord.created_at.desc()).limit(limit)  # type: ignore[union-attr, attr-defined]
+    records = session.exec(stmt).all()
+    return [
+        MergeHistoryRecord(
+            id=r.id,
+            keep_id=r.keep_id,
+            remove_id=r.remove_id,
+            keep_title=r.keep_title,
+            remove_title=r.remove_title,
+            merged_data=r.merged_data,
+            triggered_by=r.triggered_by,
+            user_id=r.user_id,
+            created_at=r.created_at or datetime.min,
         )
-    return results
+        for r in records
+    ]
 
 
 @router.get("/{thing_id}", response_model=Thing, summary="Get a Thing")
@@ -437,104 +459,110 @@ def get_thing(
     session: Session = Depends(get_session),
 ) -> Thing:
     """Retrieve a single Thing by ID."""
-    stmt = select(ThingRecord).where(ThingRecord.id == thing_id)
-    if user_id:
-        stmt = stmt.where(
-            or_(ThingRecord.user_id == user_id, ThingRecord.user_id.is_(None))  # type: ignore[union-attr]
-        )
+    stmt = select(ThingRecord).where(
+        ThingRecord.id == thing_id,
+        user_filter_clause(ThingRecord.user_id, user_id),
+    )
     record = session.exec(stmt).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
-    return Thing.model_validate(record, from_attributes=True)
+    return _record_to_thing(record)
 
 
 @router.patch("/{thing_id}", response_model=Thing, summary="Update a Thing")
 def update_thing(
-    thing_id: str, body: ThingUpdate, background_tasks: BackgroundTasks, user_id: str = Depends(require_user)
+    thing_id: str,
+    body: ThingUpdate,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
 ) -> Thing:
     """Partially update a Thing. Only provided fields are changed."""
-    uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
+    stmt = select(ThingRecord).where(
+        ThingRecord.id == thing_id,
+        user_filter_clause(ThingRecord.user_id, user_id),
+    )
+    record = session.exec(stmt).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
 
-        if body.parent_id is not None:
-            if body.parent_id == thing_id:
-                raise HTTPException(status_code=422, detail="A Thing cannot be its own parent")
-            parent = conn.execute("SELECT id FROM things WHERE id = ?", (body.parent_id,)).fetchone()
-            if not parent:
-                raise HTTPException(status_code=404, detail=f"Parent thing '{body.parent_id}' not found")
+    if body.parent_id is not None:
+        if body.parent_id == thing_id:
+            raise HTTPException(status_code=422, detail="A Thing cannot be its own parent")
+        parent = session.get(ThingRecord, body.parent_id)
+        if not parent:
+            raise HTTPException(status_code=404, detail=f"Parent thing '{body.parent_id}' not found")
 
-        fields: dict[str, Any] = {}
-        if body.title is not None:
-            fields["title"] = body.title
-        if body.type_hint is not None:
-            fields["type_hint"] = body.type_hint
-        if body.parent_id is not None:
-            fields["parent_id"] = body.parent_id
-        if body.checkin_date is not None:
-            fields["checkin_date"] = body.checkin_date.isoformat()
-        if body.importance is not None:
-            fields["importance"] = body.importance
-        if body.active is not None:
-            fields["active"] = int(body.active)
-        if body.surface is not None:
-            fields["surface"] = int(body.surface)
-        if body.data is not None:
-            fields["data"] = json.dumps(body.data)
-        if body.open_questions is not None:
-            fields["open_questions"] = json.dumps(body.open_questions)
-        fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+    if body.title is not None:
+        record.title = body.title
+    if body.type_hint is not None:
+        record.type_hint = body.type_hint
+    if body.parent_id is not None:
+        record.parent_id = body.parent_id
+    if body.checkin_date is not None:
+        record.checkin_date = body.checkin_date
+    if body.importance is not None:
+        record.importance = body.importance
+    if body.active is not None:
+        record.active = body.active
+    if body.surface is not None:
+        record.surface = body.surface
+    if body.data is not None:
+        record.data = body.data
+    if body.open_questions is not None:
+        record.open_questions = body.open_questions
+    record.updated_at = datetime.now(timezone.utc)
 
-        set_clause = ", ".join(f"{k} = ?" for k in fields)
-        values = list(fields.values()) + [thing_id]
-        conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
-        row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
-    background_tasks.add_task(upsert_thing, dict(row))
-    return _row_to_thing(row)
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    background_tasks.add_task(upsert_thing, record.model_dump())
+    return _record_to_thing(record)
 
 
 @router.delete("/{thing_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a Thing")
-def delete_thing(thing_id: str, background_tasks: BackgroundTasks, user_id: str = Depends(require_user)) -> None:
+def delete_thing(
+    thing_id: str,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> None:
     """Delete a Thing and remove it from the vector index."""
-    uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        row = conn.execute(f"SELECT id FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
-        conn.execute(f"DELETE FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params])
+    stmt = select(ThingRecord).where(
+        ThingRecord.id == thing_id,
+        user_filter_clause(ThingRecord.user_id, user_id),
+    )
+    record = session.exec(stmt).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
+    session.delete(record)
+    session.commit()
     background_tasks.add_task(vs_delete, thing_id)
 
 
 @router.post("/reindex", summary="Re-embed all Things with the current embedding model")
 def reindex_things(user_id: str = Depends(require_user)) -> dict[str, int]:
-    """Rebuild the vector search index for all Things. Returns the count of re-indexed items."""
+    """Rebuild the vector search index for all Things."""
     count = reindex_all()
     return {"reindexed": count}
 
 
-# ── Merge suggestions & execution ───────────────────────────────────────────
-
+# -- Merge suggestions & execution --
 
 def _normalize(title: str) -> str:
-    """Lowercase, strip articles and possessives for comparison."""
     t = title.lower().strip()
     for prefix in ("my ", "the ", "a ", "an "):
         if t.startswith(prefix):
-            t = t[len(prefix) :]
+            t = t[len(prefix):]
     return t
 
 
 def _titles_similar(a: str, b: str) -> str | None:
-    """Return a reason string if two titles look like duplicates, else None."""
     na, nb = _normalize(a), _normalize(b)
     if not na or not nb:
         return None
-    # Exact match after normalization
     if na == nb:
         return f'Same name: "{a}" and "{b}"'
-    # One is a prefix/substring of the other (for short names)
     shorter, longer = (na, nb) if len(na) <= len(nb) else (nb, na)
     if len(shorter) >= 3 and shorter in longer:
         return f'Similar names: "{a}" and "{b}"'
@@ -547,22 +575,20 @@ def _titles_similar(a: str, b: str) -> str | None:
     summary="Detect potential duplicate Things",
 )
 def get_merge_suggestions(
-    limit: int = Query(10, ge=1, le=50, description="Maximum suggestions to return"),
+    limit: int = Query(10, ge=1, le=50),
     user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
 ) -> list[MergeSuggestion]:
-    """Find pairs of active Things with similar titles that may be duplicates."""
-    with db() as conn:
-        uf_sql, uf_params = user_filter(user_id)
-        rows = conn.execute(
-            "SELECT id, title, type_hint FROM things WHERE active = 1" + uf_sql + " ORDER BY title",
-            uf_params,
-        ).fetchall()
+    """Find pairs of active Things with similar titles."""
+    stmt = select(ThingRecord).where(
+        ThingRecord.active == True,
+        user_filter_clause(ThingRecord.user_id, user_id),
+    ).order_by(ThingRecord.title)
+    records = session.exec(stmt).all()
 
-    # Also check shared relationships between pairs
     suggestions: list[MergeSuggestion] = []
     seen_pairs: set[tuple[str, str]] = set()
-
-    things_list = [(r["id"], r["title"], r["type_hint"]) for r in rows]
+    things_list = [(r.id, r.title, r.type_hint) for r in records]
 
     for i, (id_a, title_a, type_a) in enumerate(things_list):
         for j in range(i + 1, len(things_list)):
@@ -574,7 +600,6 @@ def get_merge_suggestions(
             if pair in seen_pairs:
                 continue
             seen_pairs.add(pair)
-            # Boost reason if same type
             if type_a and type_a == type_b:
                 reason += f" (both {type_a})"
             suggestions.append(
@@ -592,134 +617,93 @@ def get_merge_suggestions(
     return suggestions
 
 
-@router.post(
-    "/merge",
-    response_model=MergeResult,
-    summary="Merge two Things",
-)
+@router.post("/merge", response_model=MergeResult, summary="Merge two Things")
 def merge_things(
     body: MergeRequest,
     background_tasks: BackgroundTasks,
     user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
 ) -> MergeResult:
-    """Merge remove_id into keep_id: transfer relationships, merge data, delete duplicate."""
-    uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        keep_row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [body.keep_id, *uf_params]).fetchone()
-        remove_row = conn.execute(f"SELECT * FROM things WHERE id = ?{uf_sql}", [body.remove_id, *uf_params]).fetchone()
-        if not keep_row:
-            raise HTTPException(status_code=404, detail=f"Thing '{body.keep_id}' not found")
-        if not remove_row:
-            raise HTTPException(status_code=404, detail=f"Thing '{body.remove_id}' not found")
-        if body.keep_id == body.remove_id:
-            raise HTTPException(status_code=422, detail="Cannot merge a Thing with itself")
-
-        now = datetime.now(timezone.utc).isoformat()
-
-        # 1. Merge data dicts
-        existing_data = keep_row["data"]
-        try:
-            old_data = json.loads(existing_data) if isinstance(existing_data, str) and existing_data else {}
-        except (json.JSONDecodeError, ValueError):
-            old_data = {}
-        remove_data_raw = remove_row["data"]
-        try:
-            remove_data = json.loads(remove_data_raw) if isinstance(remove_data_raw, str) and remove_data_raw else {}
-        except (json.JSONDecodeError, ValueError):
-            remove_data = {}
-        if remove_data:
-            combined = {**remove_data, **old_data}  # keep_row data takes priority
-            conn.execute(
-                "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
-                (json.dumps(combined), now, body.keep_id),
-            )
-
-        # 2. Transfer open_questions
-        keep_oq_raw = keep_row["open_questions"]
-        remove_oq_raw = remove_row["open_questions"]
-        try:
-            keep_oq = json.loads(keep_oq_raw) if isinstance(keep_oq_raw, str) and keep_oq_raw else []
-        except (json.JSONDecodeError, ValueError):
-            keep_oq = []
-        try:
-            remove_oq = json.loads(remove_oq_raw) if isinstance(remove_oq_raw, str) and remove_oq_raw else []
-        except (json.JSONDecodeError, ValueError):
-            remove_oq = []
-        if remove_oq:
-            existing_set = set(keep_oq)
-            for q in remove_oq:
-                if q not in existing_set:
-                    keep_oq.append(q)
-                    existing_set.add(q)
-            conn.execute(
-                "UPDATE things SET open_questions = ?, updated_at = ? WHERE id = ?",
-                (json.dumps(keep_oq), now, body.keep_id),
-            )
-
-        # 3. Re-point relationships
-        conn.execute(
-            "UPDATE thing_relationships SET from_thing_id = ? WHERE from_thing_id = ?",
-            (body.keep_id, body.remove_id),
+    """Merge remove_id into keep_id."""
+    keep_rec = session.exec(
+        select(ThingRecord).where(
+            ThingRecord.id == body.keep_id,
+            user_filter_clause(ThingRecord.user_id, user_id),
         )
-        conn.execute(
-            "UPDATE thing_relationships SET to_thing_id = ? WHERE to_thing_id = ?",
-            (body.keep_id, body.remove_id),
+    ).first()
+    remove_rec = session.exec(
+        select(ThingRecord).where(
+            ThingRecord.id == body.remove_id,
+            user_filter_clause(ThingRecord.user_id, user_id),
         )
-        # Clean up self-referential relationships
-        conn.execute(
-            "DELETE FROM thing_relationships WHERE from_thing_id = ? AND to_thing_id = ?",
-            (body.keep_id, body.keep_id),
-        )
+    ).first()
+    if not keep_rec:
+        raise HTTPException(status_code=404, detail=f"Thing '{body.keep_id}' not found")
+    if not remove_rec:
+        raise HTTPException(status_code=404, detail=f"Thing '{body.remove_id}' not found")
+    if body.keep_id == body.remove_id:
+        raise HTTPException(status_code=422, detail="Cannot merge a Thing with itself")
 
-        # 4. Re-parent children of the removed thing
-        conn.execute(
-            "UPDATE things SET parent_id = ? WHERE parent_id = ?",
-            (body.keep_id, body.remove_id),
-        )
+    now = datetime.now(timezone.utc)
+    keep_title = keep_rec.title
+    remove_title = remove_rec.title
 
-        # 5. Delete the duplicate
-        conn.execute("DELETE FROM things WHERE id = ?", (body.remove_id,))
+    # 1. Merge data dicts
+    old_data = keep_rec.data if isinstance(keep_rec.data, dict) else {}
+    remove_data = remove_rec.data if isinstance(remove_rec.data, dict) else {}
+    if remove_data:
+        keep_rec.data = {**remove_data, **old_data}
 
-        keep_title = keep_row["title"]
-        remove_title = remove_row["title"]
+    # 2. Transfer open_questions
+    keep_oq = keep_rec.open_questions if isinstance(keep_rec.open_questions, list) else []
+    remove_oq = remove_rec.open_questions if isinstance(remove_rec.open_questions, list) else []
+    if remove_oq:
+        existing_set = set(keep_oq)
+        for q in remove_oq:
+            if q not in existing_set:
+                keep_oq.append(q)
+                existing_set.add(q)
+        keep_rec.open_questions = keep_oq
 
-        # 6. Record merge history
-        existing_data_raw = keep_row["data"]
-        try:
-            keep_data = (
-                json.loads(existing_data_raw) if isinstance(existing_data_raw, str) and existing_data_raw else {}
-            )
-        except (json.JSONDecodeError, ValueError):
-            keep_data = {}
-        remove_data_raw = remove_row["data"]
-        try:
-            rem_data = json.loads(remove_data_raw) if isinstance(remove_data_raw, str) and remove_data_raw else {}
-        except (json.JSONDecodeError, ValueError):
-            rem_data = {}
-        merged_snapshot = {**rem_data, **keep_data}
-        conn.execute(
-            "INSERT INTO merge_history (id, keep_id, remove_id, keep_title, remove_title,"
-            " merged_data, triggered_by, user_id, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                str(uuid.uuid4()),
-                body.keep_id,
-                body.remove_id,
-                keep_title,
-                remove_title,
-                json.dumps(merged_snapshot) if merged_snapshot else None,
-                "api",
-                user_id or None,
-                now,
-            ),
-        )
+    keep_rec.updated_at = now
 
-        # 7. Re-embed the kept thing
-        updated = conn.execute("SELECT * FROM things WHERE id = ?", (body.keep_id,)).fetchone()
+    # 3. Re-point relationships
+    for rel in session.exec(select(ThingRelationshipRecord).where(ThingRelationshipRecord.from_thing_id == body.remove_id)).all():
+        rel.from_thing_id = body.keep_id
+    for rel in session.exec(select(ThingRelationshipRecord).where(ThingRelationshipRecord.to_thing_id == body.remove_id)).all():
+        rel.to_thing_id = body.keep_id
+    for rel in session.exec(select(ThingRelationshipRecord).where(
+        ThingRelationshipRecord.from_thing_id == body.keep_id,
+        ThingRelationshipRecord.to_thing_id == body.keep_id,
+    )).all():
+        session.delete(rel)
+
+    # 4. Re-parent children
+    for child in session.exec(select(ThingRecord).where(ThingRecord.parent_id == body.remove_id)).all():
+        child.parent_id = body.keep_id
+
+    # 5. Delete the duplicate
+    session.delete(remove_rec)
+
+    # 6. Record merge history
+    merged_snapshot = {**remove_data, **(keep_rec.data if isinstance(keep_rec.data, dict) else {})}
+    merge_record = MergeHistoryDBRecord(
+        id=str(uuid.uuid4()),
+        keep_id=body.keep_id,
+        remove_id=body.remove_id,
+        keep_title=keep_title,
+        remove_title=remove_title,
+        merged_data=merged_snapshot if merged_snapshot else None,
+        triggered_by="api",
+        user_id=user_id or None,
+        created_at=now,
+    )
+    session.add(merge_record)
+    session.commit()
+    session.refresh(keep_rec)
 
     background_tasks.add_task(vs_delete, body.remove_id)
-    if updated:
-        background_tasks.add_task(upsert_thing, dict(updated))
+    background_tasks.add_task(upsert_thing, keep_rec.model_dump())
 
     return MergeResult(
         keep_id=body.keep_id,
@@ -729,18 +713,19 @@ def merge_things(
     )
 
 
-# ── Orphan relationship management ──────────────────────────────────────────
+# -- Orphan relationship management --
 
-
-@router.get(
-    "/relationships/orphans",
-    response_model=list[Relationship],
-    summary="Find orphan relationships",
-)
-def get_orphan_relationships(user_id: str = Depends(require_user)) -> list[Relationship]:
-    """Return relationships where from_thing_id or to_thing_id doesn't exist in the things table."""
-    with db() as conn:
-        rows = conn.execute(
+@router.get("/relationships/orphans", response_model=list[Relationship], summary="Find orphan relationships")
+def get_orphan_relationships(
+    user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> list[Relationship]:
+    """Return relationships where from_thing_id or to_thing_id doesn't exist."""
+    # Complex NOT IN subquery - use raw SQL
+    # TODO: convert to SQLModel query
+    import backend.db_engine as _engine_mod
+    with Session(_engine_mod.engine) as session:
+        rows = _exec(session, 
             "SELECT r.* FROM thing_relationships r"
             " WHERE r.from_thing_id NOT IN (SELECT id FROM things)"
             "    OR r.to_thing_id NOT IN (SELECT id FROM things)"
@@ -748,22 +733,18 @@ def get_orphan_relationships(user_id: str = Depends(require_user)) -> list[Relat
     return [_parse_rel_row(r) for r in rows]
 
 
-@router.post(
-    "/relationships/cleanup",
-    response_model=OrphanCleanupResult,
-    summary="Delete orphan relationships",
-)
+@router.post("/relationships/cleanup", response_model=OrphanCleanupResult, summary="Delete orphan relationships")
 def cleanup_orphan_relationships(user_id: str = Depends(require_user)) -> OrphanCleanupResult:
-    """Delete all relationships where from_thing_id or to_thing_id doesn't exist."""
+    """Delete all orphan relationships."""
     deleted_count, deleted_ids = clean_orphan_relationships()
     return OrphanCleanupResult(deleted_count=deleted_count, deleted_ids=deleted_ids)
 
 
-# ── Relationships ────────────────────────────────────────────────────────────
+# -- Relationships --
 
-
-def _parse_rel_row(row: sqlite3.Row) -> Relationship:
-    meta = row["metadata"]
+def _parse_rel_row(row: Any) -> Relationship:
+    """Convert a Row or SQLModel record to a Relationship response model."""
+    meta = getattr(row, "metadata_", None) or getattr(row, "metadata", None)
     if isinstance(meta, str) and meta:
         try:
             meta = json.loads(meta)
@@ -771,60 +752,93 @@ def _parse_rel_row(row: sqlite3.Row) -> Relationship:
             meta = None
     if isinstance(meta, str):
         meta = None
+    created_at = getattr(row, "created_at", None)
     return Relationship(
-        id=row["id"],
-        from_thing_id=row["from_thing_id"],
-        to_thing_id=row["to_thing_id"],
-        relationship_type=row["relationship_type"],
+        id=row.id,
+        from_thing_id=row.from_thing_id,
+        to_thing_id=row.to_thing_id,
+        relationship_type=row.relationship_type,
         metadata=meta,
-        created_at=_parse_dt(row["created_at"]) or datetime.min,
+        created_at=_parse_dt(created_at) if isinstance(created_at, str) else (created_at or datetime.min),  # type: ignore[arg-type]
+    )
+
+
+def _record_to_rel(record: ThingRelationshipRecord) -> Relationship:
+    """Convert a ThingRelationshipRecord to a Relationship response model."""
+    return Relationship(
+        id=record.id,
+        from_thing_id=record.from_thing_id,
+        to_thing_id=record.to_thing_id,
+        relationship_type=record.relationship_type,
+        metadata=record.metadata_,
+        created_at=record.created_at or datetime.min,
     )
 
 
 @router.get("/{thing_id}/relationships", response_model=list[Relationship], summary="List relationships for a Thing")
-def list_relationships(thing_id: str, user_id: str = Depends(require_user)) -> list[Relationship]:
+def list_relationships(
+    thing_id: str,
+    user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> list[Relationship]:
     """List all relationships where the given Thing is either the source or target."""
-    uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        row = conn.execute(f"SELECT id FROM things WHERE id = ?{uf_sql}", [thing_id, *uf_params]).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
-        rows = conn.execute(
-            "SELECT * FROM thing_relationships WHERE from_thing_id = ? OR to_thing_id = ?",
-            (thing_id, thing_id),
-        ).fetchall()
-    return [_parse_rel_row(r) for r in rows]
+    # Verify thing exists
+    thing = session.exec(
+        select(ThingRecord).where(
+            ThingRecord.id == thing_id,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+    ).first()
+    if not thing:
+        raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
+
+    records = session.exec(
+        select(ThingRelationshipRecord).where(
+            or_(
+                ThingRelationshipRecord.from_thing_id == thing_id,
+                ThingRelationshipRecord.to_thing_id == thing_id,
+            )
+        )
+    ).all()
+    return [_record_to_rel(r) for r in records]
 
 
 @router.post(
     "/relationships", response_model=Relationship, status_code=status.HTTP_201_CREATED, summary="Create a relationship"
 )
-def create_relationship(body: RelationshipCreate, user_id: str = Depends(require_user)) -> Relationship:
+def create_relationship(
+    body: RelationshipCreate,
+    user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> Relationship:
     """Create a typed relationship between two Things."""
-    rel_id = str(uuid.uuid4())
-    meta_json = json.dumps(body.metadata) if body.metadata is not None else None
-    uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        # Validate both things exist and belong to this user
-        for tid, label in [(body.from_thing_id, "from"), (body.to_thing_id, "to")]:
-            if not conn.execute(f"SELECT id FROM things WHERE id = ?{uf_sql}", [tid, *uf_params]).fetchone():
-                raise HTTPException(status_code=404, detail=f"{label}_thing_id '{tid}' not found")
-        if body.from_thing_id == body.to_thing_id:
-            raise HTTPException(status_code=422, detail="A Thing cannot have a relationship with itself")
-        conn.execute(
-            "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type, metadata)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (rel_id, body.from_thing_id, body.to_thing_id, body.relationship_type, meta_json),
-        )
-        row = conn.execute("SELECT * FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()
-    return _parse_rel_row(row)
+    uf = user_filter_clause(ThingRecord.user_id, user_id)
+    for tid, label in [(body.from_thing_id, "from"), (body.to_thing_id, "to")]:
+        if not session.exec(select(ThingRecord).where(ThingRecord.id == tid, uf)).first():
+            raise HTTPException(status_code=404, detail=f"{label}_thing_id '{tid}' not found")
+    if body.from_thing_id == body.to_thing_id:
+        raise HTTPException(status_code=422, detail="A Thing cannot have a relationship with itself")
+
+    record = ThingRelationshipRecord(
+        from_thing_id=body.from_thing_id,
+        to_thing_id=body.to_thing_id,
+        relationship_type=body.relationship_type,
+        metadata_=body.metadata,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return _record_to_rel(record)
 
 
 @router.delete("/relationships/{rel_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a relationship")
-def delete_relationship(rel_id: str) -> None:
+def delete_relationship(
+    rel_id: str,
+    session: Session = Depends(get_session),
+) -> None:
     """Delete a relationship by ID."""
-    with db() as conn:
-        row = conn.execute("SELECT id FROM thing_relationships WHERE id = ?", (rel_id,)).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
-        conn.execute("DELETE FROM thing_relationships WHERE id = ?", (rel_id,))
+    record = session.get(ThingRelationshipRecord, rel_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
+    session.delete(record)
+    session.commit()

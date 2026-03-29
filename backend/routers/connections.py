@@ -1,3 +1,5 @@
+from sqlmodel import Session
+
 """Connection suggestions API — auto-connect related Things."""
 
 import uuid
@@ -7,7 +9,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import require_user, user_filter
-from ..database import db
+import backend.db_engine as _engine_mod
+from ..db_engine import _exec
 from ..models import ConnectionSuggestion, ConnectionSuggestionAccept, ConnectionSuggestionThing
 
 router = APIRouter(prefix="/connections", tags=["connections"])
@@ -15,7 +18,7 @@ router = APIRouter(prefix="/connections", tags=["connections"])
 
 def _row_to_suggestion(row: Any, from_thing: dict, to_thing: dict) -> ConnectionSuggestion:
     return ConnectionSuggestion(
-        id=row["id"],
+        id=row.id,
         from_thing=ConnectionSuggestionThing(
             id=from_thing["id"],
             title=from_thing["title"],
@@ -26,11 +29,11 @@ def _row_to_suggestion(row: Any, from_thing: dict, to_thing: dict) -> Connection
             title=to_thing["title"],
             type_hint=to_thing.get("type_hint"),
         ),
-        suggested_relationship_type=row["suggested_relationship_type"],
-        reason=row["reason"],
-        confidence=row["confidence"],
-        status=row["status"],
-        created_at=row["created_at"],
+        suggested_relationship_type=row.suggested_relationship_type,
+        reason=row.reason,
+        confidence=row.confidence,
+        status=row.status,
+        created_at=row.created_at,
     )
 
 
@@ -47,8 +50,8 @@ def list_suggestions(
     """List connection suggestions, optionally filtered by status."""
     uf_sql, uf_params = user_filter(user_id, "cs")
 
-    with db() as conn:
-        rows = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        rows = _exec(session, 
             f"""SELECT cs.* FROM connection_suggestions cs
                WHERE cs.status = ?{uf_sql}
                ORDER BY cs.confidence DESC, cs.created_at DESC
@@ -58,22 +61,23 @@ def list_suggestions(
 
         suggestions: list[ConnectionSuggestion] = []
         for row in rows:
-            from_thing = conn.execute(
+            from_thing = _exec(session, 
                 "SELECT id, title, type_hint FROM things WHERE id = ?",
-                (row["from_thing_id"],),
+                (row.from_thing_id,),
             ).fetchone()
-            to_thing = conn.execute(
+            to_thing = _exec(session, 
                 "SELECT id, title, type_hint FROM things WHERE id = ?",
-                (row["to_thing_id"],),
+                (row.to_thing_id,),
             ).fetchone()
 
             if not from_thing or not to_thing:
                 # One of the Things was deleted, clean up
-                conn.execute("DELETE FROM connection_suggestions WHERE id = ?", (row["id"],))
+                _exec(session, "DELETE FROM connection_suggestions WHERE id = ?", (row.id,))
                 continue
 
             suggestions.append(_row_to_suggestion(row, dict(from_thing), dict(to_thing)))
 
+        session.commit()
     return suggestions
 
 
@@ -90,41 +94,41 @@ def accept_suggestion(
     """Accept a connection suggestion — creates the relationship between the Things."""
     uf_sql, uf_params = user_filter(user_id, "cs")
 
-    with db() as conn:
-        row = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        row = _exec(session, 
             f"SELECT cs.* FROM connection_suggestions cs WHERE cs.id = ?{uf_sql}",
             [suggestion_id, *uf_params],
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Suggestion not found")
-        if row["status"] != "pending" and row["status"] != "deferred":
+        if row.status != "pending" and row.status != "deferred":
             raise HTTPException(status_code=400, detail=f"Suggestion is already {row['status']}")
 
-        from_thing = conn.execute(
+        from_thing = _exec(session, 
             "SELECT id, title, type_hint FROM things WHERE id = ?",
-            (row["from_thing_id"],),
+            (row.from_thing_id,),
         ).fetchone()
-        to_thing = conn.execute(
+        to_thing = _exec(session, 
             "SELECT id, title, type_hint FROM things WHERE id = ?",
-            (row["to_thing_id"],),
+            (row.to_thing_id,),
         ).fetchone()
         if not from_thing or not to_thing:
             raise HTTPException(status_code=404, detail="One of the Things no longer exists")
 
         # Determine relationship type
-        rel_type = body.relationship_type if body and body.relationship_type else row["suggested_relationship_type"]
+        rel_type = body.relationship_type if body and body.relationship_type else row.suggested_relationship_type
 
         # Create the actual relationship
         rel_id = f"rel-{uuid.uuid4().hex[:8]}"
         now = datetime.utcnow().isoformat()
-        conn.execute(
+        _exec(session, 
             """INSERT INTO thing_relationships
                (id, from_thing_id, to_thing_id, relationship_type, metadata, created_at)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (
                 rel_id,
-                row["from_thing_id"],
-                row["to_thing_id"],
+                row.from_thing_id,
+                row.to_thing_id,
                 rel_type,
                 None,
                 now,
@@ -132,16 +136,17 @@ def accept_suggestion(
         )
 
         # Mark suggestion as accepted
-        conn.execute(
+        _exec(session, 
             "UPDATE connection_suggestions SET status = 'accepted', resolved_at = ? WHERE id = ?",
             (now, suggestion_id),
         )
 
-        row = conn.execute(
+        row = _exec(session, 
             "SELECT * FROM connection_suggestions WHERE id = ?",
             (suggestion_id,),
         ).fetchone()
 
+        session.commit()
     return _row_to_suggestion(row, dict(from_thing), dict(to_thing))
 
 
@@ -157,8 +162,8 @@ def dismiss_suggestion(
     """Dismiss a connection suggestion — it won't be shown again."""
     uf_sql, uf_params = user_filter(user_id, "cs")
 
-    with db() as conn:
-        row = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        row = _exec(session, 
             f"SELECT cs.* FROM connection_suggestions cs WHERE cs.id = ?{uf_sql}",
             [suggestion_id, *uf_params],
         ).fetchone()
@@ -166,25 +171,26 @@ def dismiss_suggestion(
             raise HTTPException(status_code=404, detail="Suggestion not found")
 
         now = datetime.utcnow().isoformat()
-        conn.execute(
+        _exec(session, 
             "UPDATE connection_suggestions SET status = 'dismissed', resolved_at = ? WHERE id = ?",
             (now, suggestion_id),
         )
 
-        row = conn.execute(
+        row = _exec(session, 
             "SELECT * FROM connection_suggestions WHERE id = ?",
             (suggestion_id,),
         ).fetchone()
 
-        from_thing = conn.execute(
+        from_thing = _exec(session, 
             "SELECT id, title, type_hint FROM things WHERE id = ?",
-            (row["from_thing_id"],),
+            (row.from_thing_id,),
         ).fetchone()
-        to_thing = conn.execute(
+        to_thing = _exec(session, 
             "SELECT id, title, type_hint FROM things WHERE id = ?",
-            (row["to_thing_id"],),
+            (row.to_thing_id,),
         ).fetchone()
 
+        session.commit()
     if not from_thing or not to_thing:
         raise HTTPException(status_code=404, detail="Thing not found")
 
@@ -203,33 +209,34 @@ def defer_suggestion(
     """Defer a connection suggestion — it can be reviewed later."""
     uf_sql, uf_params = user_filter(user_id, "cs")
 
-    with db() as conn:
-        row = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        row = _exec(session, 
             f"SELECT cs.* FROM connection_suggestions cs WHERE cs.id = ?{uf_sql}",
             [suggestion_id, *uf_params],
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Suggestion not found")
 
-        conn.execute(
+        _exec(session, 
             "UPDATE connection_suggestions SET status = 'deferred' WHERE id = ?",
             (suggestion_id,),
         )
 
-        row = conn.execute(
+        row = _exec(session, 
             "SELECT * FROM connection_suggestions WHERE id = ?",
             (suggestion_id,),
         ).fetchone()
 
-        from_thing = conn.execute(
+        from_thing = _exec(session, 
             "SELECT id, title, type_hint FROM things WHERE id = ?",
-            (row["from_thing_id"],),
+            (row.from_thing_id,),
         ).fetchone()
-        to_thing = conn.execute(
+        to_thing = _exec(session, 
             "SELECT id, title, type_hint FROM things WHERE id = ?",
-            (row["to_thing_id"],),
+            (row.to_thing_id,),
         ).fetchone()
 
+        session.commit()
     if not from_thing or not to_thing:
         raise HTTPException(status_code=404, detail="Thing not found")
 

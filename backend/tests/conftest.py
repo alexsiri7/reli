@@ -57,7 +57,10 @@ def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(engine_module, "get_session", _test_get_session)
 
-    return tmp_db_path
+    yield tmp_db_path
+
+    # Dispose the test engine to release all connections
+    test_engine.dispose()
 
 
 # ---------------------------------------------------------------------------

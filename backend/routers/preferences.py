@@ -1,3 +1,5 @@
+from sqlmodel import Session
+
 """Preference feedback endpoint."""
 
 import json
@@ -7,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..auth import require_user, user_filter
-from ..database import db
+import backend.db_engine as _engine_mod
+from ..db_engine import _exec
 
 router = APIRouter(prefix="/preferences", tags=["preferences"])
 
@@ -46,15 +49,15 @@ def preference_feedback(
     uf_sql, uf_params = user_filter(user_id)
     now = datetime.now(timezone.utc).isoformat()
 
-    with db() as conn:
-        row = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        row = _exec(session, 
             f"SELECT * FROM things WHERE id = ? AND type_hint = 'preference' AND active = 1{uf_sql}",
             [thing_id, *uf_params],
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Preference not found")
 
-        raw_data = row["data"]
+        raw_data = row.data
         try:
             data = json.loads(raw_data) if isinstance(raw_data, str) else (raw_data or {})
         except (json.JSONDecodeError, TypeError):
@@ -83,9 +86,10 @@ def preference_feedback(
             # No confidence field — initialize it
             data["confidence"] = 0.6 if body.accurate else 0.3
 
-        conn.execute(
+        _exec(session, 
             "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
             (json.dumps(data), now, thing_id),
         )
 
+        session.commit()
     return {"id": thing_id, "updated": True}

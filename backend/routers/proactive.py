@@ -1,3 +1,5 @@
+from sqlmodel import Session
+
 """Proactive surfaces — surface time-relevant entities in the sidebar."""
 
 import re
@@ -6,7 +8,8 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 
 from ..auth import require_user, user_filter
-from ..database import db
+import backend.db_engine as _engine_mod
+from ..db_engine import _exec
 from ..models import ProactiveSurface
 from .things import _row_to_thing
 
@@ -115,9 +118,9 @@ def get_proactive_surfaces(
     today = date.today()
     uf_sql, uf_params = user_filter(user_id)
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         # Fetch all Things that have a non-null data field (entities live here).
-        rows = conn.execute(
+        rows = _exec(session, 
             f"SELECT * FROM things WHERE data IS NOT NULL AND data != '{{}}'  AND data != 'null'{uf_sql}",
             uf_params,
         ).fetchall()

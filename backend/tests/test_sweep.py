@@ -4,6 +4,8 @@ import json
 from datetime import date, timedelta
 
 from backend.database import db
+import backend.db_engine as _engine_mod
+from sqlmodel import Session
 from backend.sweep import (
     _generate_template_gap_questions as generate_gap_questions,
 )
@@ -81,8 +83,8 @@ class TestApproachingDates:
         tomorrow = (today + timedelta(days=1)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Task A", checkin_date=f"{tomorrow}T09:00:00")
-        with db() as conn:
-            results = find_approaching_dates(conn, today, window_days=7)
+        with Session(_engine_mod.engine) as session:
+            results = find_approaching_dates(session, today, window_days=7)
         assert len(results) == 1
         assert results[0].thing_id == "t1"
         assert results[0].finding_type == "approaching_date"
@@ -93,8 +95,8 @@ class TestApproachingDates:
         far_future = (today + timedelta(days=30)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Far Away", checkin_date=f"{far_future}T09:00:00")
-        with db() as conn:
-            results = find_approaching_dates(conn, today, window_days=7)
+        with Session(_engine_mod.engine) as session:
+            results = find_approaching_dates(session, today, window_days=7)
         assert len(results) == 0
 
     def test_data_json_deadline(self, patched_db):
@@ -102,8 +104,8 @@ class TestApproachingDates:
         in_3_days = (today + timedelta(days=3)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Project X", data={"deadline": in_3_days})
-        with db() as conn:
-            results = find_approaching_dates(conn, today, window_days=7)
+        with Session(_engine_mod.engine) as session:
+            results = find_approaching_dates(session, today, window_days=7)
         assert len(results) == 1
         assert "Deadline in 3d" in results[0].message
 
@@ -114,8 +116,8 @@ class TestApproachingDates:
         bday_str = f"1990-{bday.month:02d}-{bday.day:02d}"
         with db() as conn:
             _insert_thing(conn, "tom", "Tom", type_hint="person", data={"birthday": bday_str})
-        with db() as conn:
-            results = find_approaching_dates(conn, today, window_days=7)
+        with Session(_engine_mod.engine) as session:
+            results = find_approaching_dates(session, today, window_days=7)
         assert len(results) == 1
         assert results[0].extra["days_away"] == 2
 
@@ -124,8 +126,8 @@ class TestApproachingDates:
         past = (today - timedelta(days=5)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Past Event", data={"deadline": past})
-        with db() as conn:
-            results = find_approaching_dates(conn, today, window_days=7)
+        with Session(_engine_mod.engine) as session:
+            results = find_approaching_dates(session, today, window_days=7)
         assert len(results) == 0
 
     def test_inactive_thing_excluded(self, patched_db):
@@ -133,16 +135,16 @@ class TestApproachingDates:
         tomorrow = (today + timedelta(days=1)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Inactive", checkin_date=f"{tomorrow}T09:00:00", active=False)
-        with db() as conn:
-            results = find_approaching_dates(conn, today, window_days=7)
+        with Session(_engine_mod.engine) as session:
+            results = find_approaching_dates(session, today, window_days=7)
         assert len(results) == 0
 
     def test_today_checkin(self, patched_db):
         today = date.today()
         with db() as conn:
             _insert_thing(conn, "t1", "Due Now", checkin_date=f"{today.isoformat()}T09:00:00")
-        with db() as conn:
-            results = find_approaching_dates(conn, today, window_days=7)
+        with Session(_engine_mod.engine) as session:
+            results = find_approaching_dates(session, today, window_days=7)
         assert len(results) == 1
         assert results[0].priority == 1  # high priority for today
 
@@ -158,8 +160,8 @@ class TestStaleThings:
         old_date = (today - timedelta(days=20)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Old Task", updated_at=old_date)
-        with db() as conn:
-            results = find_stale_things(conn, today, stale_days=14)
+        with Session(_engine_mod.engine) as session:
+            results = find_stale_things(session, today, stale_days=14)
         assert len(results) == 1
         assert results[0].finding_type == "stale"
         assert "20d" in results[0].message
@@ -169,8 +171,8 @@ class TestStaleThings:
         recent = (today - timedelta(days=3)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Fresh Task", updated_at=recent)
-        with db() as conn:
-            results = find_stale_things(conn, today, stale_days=14)
+        with Session(_engine_mod.engine) as session:
+            results = find_stale_things(session, today, stale_days=14)
         assert len(results) == 0
 
     def test_inactive_excluded(self, patched_db):
@@ -178,8 +180,8 @@ class TestStaleThings:
         old_date = (today - timedelta(days=20)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Inactive Old", updated_at=old_date, active=False)
-        with db() as conn:
-            results = find_stale_things(conn, today, stale_days=14)
+        with Session(_engine_mod.engine) as session:
+            results = find_stale_things(session, today, stale_days=14)
         assert len(results) == 0
 
     def test_high_importance_flagged_as_neglected(self, patched_db):
@@ -189,8 +191,8 @@ class TestStaleThings:
         with db() as conn:
             _insert_thing(conn, "t1", "Urgent Task", updated_at=old_date)
             conn.execute("UPDATE things SET importance = 0 WHERE id = 't1'")
-        with db() as conn:
-            results = find_stale_things(conn, today, stale_days=14)
+        with Session(_engine_mod.engine) as session:
+            results = find_stale_things(session, today, stale_days=14)
         assert len(results) == 1
         assert results[0].finding_type == "neglected"
         assert results[0].priority == 2  # higher urgency
@@ -204,8 +206,8 @@ class TestStaleThings:
         with db() as conn:
             _insert_thing(conn, "proj", "Old Project", type_hint="project", updated_at=old_date)
             _insert_thing(conn, "c1", "Active Child", parent_id="proj")
-        with db() as conn:
-            results = find_stale_things(conn, today, stale_days=14)
+        with Session(_engine_mod.engine) as session:
+            results = find_stale_things(session, today, stale_days=14)
         neglected = [r for r in results if r.thing_id == "proj"]
         assert len(neglected) == 1
         assert neglected[0].finding_type == "neglected"
@@ -218,8 +220,8 @@ class TestStaleThings:
         with db() as conn:
             _insert_thing(conn, "t1", "Low Importance Note", updated_at=old_date)
             conn.execute("UPDATE things SET importance = 3 WHERE id = 't1'")
-        with db() as conn:
-            results = find_stale_things(conn, today, stale_days=14)
+        with Session(_engine_mod.engine) as session:
+            results = find_stale_things(session, today, stale_days=14)
         assert len(results) == 1
         assert results[0].finding_type == "stale"
         assert results[0].extra["is_neglected"] is False
@@ -236,8 +238,8 @@ class TestOverdueCheckins:
         past = (today - timedelta(days=5)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Overdue Task", checkin_date=f"{past}T09:00:00")
-        with db() as conn:
-            results = find_overdue_checkins(conn, today, grace_days=1)
+        with Session(_engine_mod.engine) as session:
+            results = find_overdue_checkins(session, today, grace_days=1)
         assert len(results) == 1
         assert results[0].finding_type == "overdue_checkin"
         assert results[0].extra["days_overdue"] == 5
@@ -249,8 +251,8 @@ class TestOverdueCheckins:
         yesterday = (today - timedelta(days=0)).isoformat()  # today
         with db() as conn:
             _insert_thing(conn, "t1", "Today Check-in", checkin_date=f"{yesterday}T09:00:00")
-        with db() as conn:
-            results = find_overdue_checkins(conn, today, grace_days=1)
+        with Session(_engine_mod.engine) as session:
+            results = find_overdue_checkins(session, today, grace_days=1)
         assert len(results) == 0
 
     def test_inactive_excluded(self, patched_db):
@@ -258,8 +260,8 @@ class TestOverdueCheckins:
         past = (today - timedelta(days=10)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Done Thing", checkin_date=f"{past}T09:00:00", active=False)
-        with db() as conn:
-            results = find_overdue_checkins(conn, today, grace_days=1)
+        with Session(_engine_mod.engine) as session:
+            results = find_overdue_checkins(session, today, grace_days=1)
         assert len(results) == 0
 
     def test_severely_overdue_gets_high_priority(self, patched_db):
@@ -267,8 +269,8 @@ class TestOverdueCheckins:
         old = (today - timedelta(days=10)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Very Overdue", checkin_date=f"{old}T09:00:00")
-        with db() as conn:
-            results = find_overdue_checkins(conn, today, grace_days=1)
+        with Session(_engine_mod.engine) as session:
+            results = find_overdue_checkins(session, today, grace_days=1)
         assert len(results) == 1
         assert results[0].priority == 1  # high priority for 7+ days overdue
 
@@ -277,8 +279,8 @@ class TestOverdueCheckins:
         future = (today + timedelta(days=5)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Future Check-in", checkin_date=f"{future}T09:00:00")
-        with db() as conn:
-            results = find_overdue_checkins(conn, today, grace_days=1)
+        with Session(_engine_mod.engine) as session:
+            results = find_overdue_checkins(session, today, grace_days=1)
         assert len(results) == 0
 
 
@@ -291,8 +293,8 @@ class TestOrphanThings:
     def test_orphan_detected(self, patched_db):
         with db() as conn:
             _insert_thing(conn, "t1", "Lonely Thing")
-        with db() as conn:
-            results = find_orphan_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_orphan_things(session)
         assert len(results) == 1
         assert results[0].finding_type == "orphan"
 
@@ -300,8 +302,8 @@ class TestOrphanThings:
         with db() as conn:
             _insert_thing(conn, "parent", "Parent")
             _insert_thing(conn, "child", "Child", parent_id="parent")
-        with db() as conn:
-            results = find_orphan_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_orphan_things(session)
         # Parent is orphan (no parent_id, no relationships), child is not
         ids = [r.thing_id for r in results]
         assert "parent" in ids
@@ -312,8 +314,8 @@ class TestOrphanThings:
             _insert_thing(conn, "t1", "Connected A")
             _insert_thing(conn, "t2", "Connected B")
             _insert_relationship(conn, "r1", "t1", "t2")
-        with db() as conn:
-            results = find_orphan_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_orphan_things(session)
         ids = [r.thing_id for r in results]
         assert "t1" not in ids
         assert "t2" not in ids
@@ -321,8 +323,8 @@ class TestOrphanThings:
     def test_inactive_excluded(self, patched_db):
         with db() as conn:
             _insert_thing(conn, "t1", "Inactive Orphan", active=False)
-        with db() as conn:
-            results = find_orphan_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_orphan_things(session)
         assert len(results) == 0
 
 
@@ -337,8 +339,8 @@ class TestCompletedProjects:
             _insert_thing(conn, "proj", "My Project", type_hint="project")
             _insert_thing(conn, "c1", "Task 1", parent_id="proj", active=False)
             _insert_thing(conn, "c2", "Task 2", parent_id="proj", active=False)
-        with db() as conn:
-            results = find_completed_projects(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_completed_projects(session)
         assert len(results) == 1
         assert results[0].thing_id == "proj"
         assert results[0].extra["total_children"] == 2
@@ -348,31 +350,31 @@ class TestCompletedProjects:
             _insert_thing(conn, "proj", "Active Project", type_hint="project")
             _insert_thing(conn, "c1", "Done", parent_id="proj", active=False)
             _insert_thing(conn, "c2", "WIP", parent_id="proj", active=True)
-        with db() as conn:
-            results = find_completed_projects(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_completed_projects(session)
         assert len(results) == 0
 
     def test_project_with_no_children(self, patched_db):
         with db() as conn:
             _insert_thing(conn, "proj", "Empty Project", type_hint="project")
-        with db() as conn:
-            results = find_completed_projects(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_completed_projects(session)
         assert len(results) == 0
 
     def test_inactive_project_excluded(self, patched_db):
         with db() as conn:
             _insert_thing(conn, "proj", "Done Project", type_hint="project", active=False)
             _insert_thing(conn, "c1", "Task", parent_id="proj", active=False)
-        with db() as conn:
-            results = find_completed_projects(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_completed_projects(session)
         assert len(results) == 0
 
     def test_non_project_type_excluded(self, patched_db):
         with db() as conn:
             _insert_thing(conn, "goal", "My Goal", type_hint="goal")
             _insert_thing(conn, "c1", "Step 1", parent_id="goal", active=False)
-        with db() as conn:
-            results = find_completed_projects(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_completed_projects(session)
         assert len(results) == 0
 
 
@@ -385,8 +387,8 @@ class TestOpenQuestions:
     def test_thing_with_questions(self, patched_db):
         with db() as conn:
             _insert_thing(conn, "t1", "Budget", open_questions=["When is the deadline?", "Who approves?"])
-        with db() as conn:
-            results = find_open_questions(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_open_questions(session)
         assert len(results) == 1
         assert results[0].finding_type == "open_question"
         assert "2 unanswered questions" in results[0].message
@@ -395,29 +397,29 @@ class TestOpenQuestions:
     def test_empty_questions_excluded(self, patched_db):
         with db() as conn:
             _insert_thing(conn, "t1", "No Q", open_questions=[])
-        with db() as conn:
-            results = find_open_questions(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_open_questions(session)
         assert len(results) == 0
 
     def test_null_questions_excluded(self, patched_db):
         with db() as conn:
             _insert_thing(conn, "t1", "Null Q")
-        with db() as conn:
-            results = find_open_questions(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_open_questions(session)
         assert len(results) == 0
 
     def test_inactive_excluded(self, patched_db):
         with db() as conn:
             _insert_thing(conn, "t1", "Inactive Q", open_questions=["Why?"], active=False)
-        with db() as conn:
-            results = find_open_questions(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_open_questions(session)
         assert len(results) == 0
 
     def test_single_question_grammar(self, patched_db):
         with db() as conn:
             _insert_thing(conn, "t1", "One Q", open_questions=["What?"])
-        with db() as conn:
-            results = find_open_questions(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_open_questions(session)
         assert "1 unanswered question:" in results[0].message  # no 's'
 
 
@@ -434,8 +436,8 @@ class TestInformationGaps:
             _insert_thing(conn, "p1", "Sarah", type_hint="person", updated_at=old)
             # Force created_at to be old enough
             conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
-        with db() as conn:
-            results = find_information_gaps(conn, today, min_age_days=3)
+        with Session(_engine_mod.engine) as session:
+            results = find_information_gaps(session, today, min_age_days=3)
         gaps = [r for r in results if r.extra.get("gap_type") == "name_only_person"]
         assert len(gaps) == 1
         assert gaps[0].thing_id == "p1"
@@ -454,8 +456,8 @@ class TestInformationGaps:
                 updated_at=old,
             )
             conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
-        with db() as conn:
-            results = find_information_gaps(conn, today, min_age_days=3)
+        with Session(_engine_mod.engine) as session:
+            results = find_information_gaps(session, today, min_age_days=3)
         gaps = [r for r in results if r.extra.get("gap_type") == "name_only_person"]
         assert len(gaps) == 0
 
@@ -472,8 +474,8 @@ class TestInformationGaps:
                 updated_at=old,
             )
             conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
-        with db() as conn:
-            results = find_information_gaps(conn, today, min_age_days=3)
+        with Session(_engine_mod.engine) as session:
+            results = find_information_gaps(session, today, min_age_days=3)
         gaps = [r for r in results if r.extra.get("gap_type") == "name_only_person"]
         assert len(gaps) == 0
 
@@ -482,8 +484,8 @@ class TestInformationGaps:
         with db() as conn:
             _insert_thing(conn, "proj", "Conference Planning", type_hint="project")
             _insert_thing(conn, "t1", "Book venue", parent_id="proj")
-        with db() as conn:
-            results = find_information_gaps(conn, today, min_age_days=0)
+        with Session(_engine_mod.engine) as session:
+            results = find_information_gaps(session, today, min_age_days=0)
         gaps = [r for r in results if r.extra.get("gap_type") == "no_deadline_project"]
         assert len(gaps) == 1
         assert "no deadline" in gaps[0].message.lower()
@@ -499,8 +501,8 @@ class TestInformationGaps:
                 data={"deadline": "2026-06-01"},
             )
             _insert_thing(conn, "t1", "Book venue", parent_id="proj")
-        with db() as conn:
-            results = find_information_gaps(conn, today, min_age_days=0)
+        with Session(_engine_mod.engine) as session:
+            results = find_information_gaps(session, today, min_age_days=0)
         gaps = [r for r in results if r.extra.get("gap_type") == "no_deadline_project"]
         assert len(gaps) == 0
 
@@ -516,8 +518,8 @@ class TestInformationGaps:
                 checkin_date=f"{future}T09:00:00",
             )
             _insert_thing(conn, "t1", "Book venue", parent_id="proj")
-        with db() as conn:
-            results = find_information_gaps(conn, today, min_age_days=0)
+        with Session(_engine_mod.engine) as session:
+            results = find_information_gaps(session, today, min_age_days=0)
         gaps = [r for r in results if r.extra.get("gap_type") == "no_deadline_project"]
         assert len(gaps) == 0
 
@@ -527,8 +529,8 @@ class TestInformationGaps:
         with db() as conn:
             _insert_thing(conn, "e1", "Team Offsite", type_hint="event", updated_at=old)
             conn.execute("UPDATE things SET created_at = ? WHERE id = 'e1'", (old,))
-        with db() as conn:
-            results = find_information_gaps(conn, today, min_age_days=3)
+        with Session(_engine_mod.engine) as session:
+            results = find_information_gaps(session, today, min_age_days=3)
         gaps = [r for r in results if r.extra.get("gap_type") == "no_dates"]
         assert len(gaps) == 1
         assert "no dates" in gaps[0].message.lower()
@@ -546,8 +548,8 @@ class TestInformationGaps:
                 updated_at=old,
             )
             conn.execute("UPDATE things SET created_at = ? WHERE id = 'e1'", (old,))
-        with db() as conn:
-            results = find_information_gaps(conn, today, min_age_days=3)
+        with Session(_engine_mod.engine) as session:
+            results = find_information_gaps(session, today, min_age_days=3)
         gaps = [r for r in results if r.extra.get("gap_type") == "no_dates"]
         assert len(gaps) == 0
 
@@ -557,8 +559,8 @@ class TestInformationGaps:
         with db() as conn:
             _insert_thing(conn, "t1", "Random Idea", updated_at=old)
             conn.execute("UPDATE things SET created_at = ? WHERE id = 't1'", (old,))
-        with db() as conn:
-            results = find_information_gaps(conn, today, min_age_days=3)
+        with Session(_engine_mod.engine) as session:
+            results = find_information_gaps(session, today, min_age_days=3)
         gaps = [r for r in results if r.extra.get("gap_type") == "minimal_data"]
         assert len(gaps) == 1
         assert "Minimal data" in gaps[0].message
@@ -569,8 +571,8 @@ class TestInformationGaps:
         with db() as conn:
             _insert_thing(conn, "t1", "New Idea", updated_at=recent)
             conn.execute("UPDATE things SET created_at = ? WHERE id = 't1'", (recent,))
-        with db() as conn:
-            results = find_information_gaps(conn, today, min_age_days=3)
+        with Session(_engine_mod.engine) as session:
+            results = find_information_gaps(session, today, min_age_days=3)
         gaps = [r for r in results if r.extra.get("gap_type") == "minimal_data"]
         assert len(gaps) == 0  # Too young (< 14 days for minimal_data)
 
@@ -580,8 +582,8 @@ class TestInformationGaps:
         with db() as conn:
             _insert_thing(conn, "p1", "Old Person", type_hint="person", active=False, updated_at=old)
             conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
-        with db() as conn:
-            results = find_information_gaps(conn, today, min_age_days=3)
+        with Session(_engine_mod.engine) as session:
+            results = find_information_gaps(session, today, min_age_days=3)
         assert len(results) == 0
 
 
@@ -592,10 +594,10 @@ class TestGenerateGapQuestions:
         with db() as conn:
             _insert_thing(conn, "p1", "Sarah", type_hint="person", updated_at=old)
             conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
-        with db() as conn:
-            gaps = find_information_gaps(conn, today, min_age_days=3)
-            count = generate_gap_questions(conn, gaps)
-        assert count == 1
+        with Session(_engine_mod.engine) as session:
+            gaps = find_information_gaps(session, today, min_age_days=3)
+            count = generate_gap_questions(session, gaps)
+            session.commit()
         with db() as conn:
             row = conn.execute("SELECT open_questions FROM things WHERE id = 'p1'").fetchone()
             questions = json.loads(row["open_questions"])
@@ -607,10 +609,10 @@ class TestGenerateGapQuestions:
         with db() as conn:
             _insert_thing(conn, "proj", "Trip Planning", type_hint="project")
             _insert_thing(conn, "t1", "Book hotel", parent_id="proj")
-        with db() as conn:
-            gaps = find_information_gaps(conn, today, min_age_days=0)
-            count = generate_gap_questions(conn, gaps)
-        assert count == 1
+        with Session(_engine_mod.engine) as session:
+            gaps = find_information_gaps(session, today, min_age_days=0)
+            count = generate_gap_questions(session, gaps)
+            session.commit()
         with db() as conn:
             row = conn.execute("SELECT open_questions FROM things WHERE id = 'proj'").fetchone()
             questions = json.loads(row["open_questions"])
@@ -645,8 +647,9 @@ class TestGenerateGapQuestions:
             message="Name only",
             extra={"gap_type": "name_only_person", "type_hint": "person"},
         )
-        with db() as conn:
-            count = generate_gap_questions(conn, [fake_gap])
+        with Session(_engine_mod.engine) as session:
+            count = generate_gap_questions(session, [fake_gap])
+            session.commit()
         assert count == 0  # Should not overwrite existing questions
 
     def test_collect_candidates_includes_gaps(self, patched_db):
@@ -676,9 +679,9 @@ class TestGenerateGapQuestions:
             _insert_thing(conn, "proj1", "My Project", type_hint="project")
             _insert_thing(conn, "task1", "Child Task", parent_id="proj1")
             conn.execute("UPDATE things SET user_id = 'u-test' WHERE id IN ('proj1', 'task1')")
-        with db() as conn:
+        with Session(_engine_mod.engine) as session:
             # This must not raise OperationalError: ambiguous column name: user_id
-            results = find_information_gaps(conn, today, min_age_days=0, user_id="u-test")
+            results = find_information_gaps(session, today, min_age_days=0, user_id="u-test")
         proj_gaps = [r for r in results if r.thing_id == "proj1"]
         assert any(r.extra.get("gap_type") == "no_deadline_project" for r in proj_gaps)
 
@@ -778,8 +781,8 @@ class TestCrossProjectSharedBlockers:
             _insert_thing(conn, "blocker", "API Migration")
             _insert_relationship(conn, "r1", "blocker", "t1", "blocks")
             _insert_relationship(conn, "r2", "blocker", "t2", "blocks")
-        with db() as conn:
-            results = find_cross_project_shared_blockers(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_shared_blockers(session)
         assert len(results) == 1
         assert results[0].thing_id == "blocker"
         assert results[0].finding_type == "cross_project_shared_blocker"
@@ -794,8 +797,8 @@ class TestCrossProjectSharedBlockers:
             _insert_thing(conn, "blocker", "Single Project Blocker")
             _insert_relationship(conn, "r1", "blocker", "t1", "blocks")
             _insert_relationship(conn, "r2", "blocker", "t2", "blocks")
-        with db() as conn:
-            results = find_cross_project_shared_blockers(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_shared_blockers(session)
         assert len(results) == 0
 
     def test_inactive_blocker_excluded(self, patched_db):
@@ -807,8 +810,8 @@ class TestCrossProjectSharedBlockers:
             _insert_thing(conn, "blocker", "Done Blocker", active=False)
             _insert_relationship(conn, "r1", "blocker", "t1", "blocks")
             _insert_relationship(conn, "r2", "blocker", "t2", "blocks")
-        with db() as conn:
-            results = find_cross_project_shared_blockers(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_shared_blockers(session)
         assert len(results) == 0
 
     def test_depends_on_relationship_type(self, patched_db):
@@ -821,8 +824,8 @@ class TestCrossProjectSharedBlockers:
             _insert_thing(conn, "dep", "Shared Dependency")
             _insert_relationship(conn, "r1", "t1", "dep", "depends_on")
             _insert_relationship(conn, "r2", "t2", "dep", "depends_on")
-        with db() as conn:
-            results = find_cross_project_shared_blockers(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_shared_blockers(session)
         assert len(results) == 1
         assert results[0].thing_id == "dep"
 
@@ -844,8 +847,8 @@ class TestCrossProjectResourceConflicts:
             _insert_thing(conn, "alice", "Alice", type_hint="person")
             _insert_relationship(conn, "r1", "alice", "t1", "assigned_to")
             _insert_relationship(conn, "r2", "alice", "t2", "assigned_to")
-        with db() as conn:
-            results = find_cross_project_resource_conflicts(conn, today)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_resource_conflicts(session, today)
         assert len(results) == 1
         assert results[0].thing_id == "alice"
         assert results[0].finding_type == "cross_project_resource_conflict"
@@ -859,8 +862,8 @@ class TestCrossProjectResourceConflicts:
             _insert_thing(conn, "t1", "Task A", parent_id="p1", updated_at=old)
             _insert_thing(conn, "alice", "Alice", type_hint="person")
             _insert_relationship(conn, "r1", "alice", "t1", "assigned_to")
-        with db() as conn:
-            results = find_cross_project_resource_conflicts(conn, today)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_resource_conflicts(session, today)
         assert len(results) == 0
 
     def test_no_stale_tasks_excluded(self, patched_db):
@@ -873,8 +876,8 @@ class TestCrossProjectResourceConflicts:
             _insert_thing(conn, "alice", "Alice", type_hint="person")
             _insert_relationship(conn, "r1", "alice", "t1", "assigned_to")
             _insert_relationship(conn, "r2", "alice", "t2", "assigned_to")
-        with db() as conn:
-            results = find_cross_project_resource_conflicts(conn, today)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_resource_conflicts(session, today)
         assert len(results) == 0
 
     def test_non_person_excluded(self, patched_db):
@@ -888,8 +891,8 @@ class TestCrossProjectResourceConflicts:
             _insert_thing(conn, "tool", "Shared Tool", type_hint="tool")
             _insert_relationship(conn, "r1", "tool", "t1", "used_by")
             _insert_relationship(conn, "r2", "tool", "t2", "used_by")
-        with db() as conn:
-            results = find_cross_project_resource_conflicts(conn, today)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_resource_conflicts(session, today)
         assert len(results) == 0
 
 
@@ -905,8 +908,8 @@ class TestCrossProjectThematicConnections:
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
             _insert_thing(conn, "t1", "Design user authentication flow", parent_id="p1")
             _insert_thing(conn, "t2", "Implement user authentication service", parent_id="p2")
-        with db() as conn:
-            results = find_cross_project_thematic_connections(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_thematic_connections(session)
         assert len(results) == 1
         assert results[0].finding_type == "cross_project_thematic_connection"
         assert "user" in results[0].extra["shared_words"]
@@ -917,8 +920,8 @@ class TestCrossProjectThematicConnections:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "t1", "Design user auth", parent_id="p1")
             _insert_thing(conn, "t2", "Implement user auth", parent_id="p1")
-        with db() as conn:
-            results = find_cross_project_thematic_connections(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_thematic_connections(session)
         assert len(results) == 0
 
     def test_unrelated_titles_excluded(self, patched_db):
@@ -927,8 +930,8 @@ class TestCrossProjectThematicConnections:
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
             _insert_thing(conn, "t1", "Design homepage layout", parent_id="p1")
             _insert_thing(conn, "t2", "Fix database migration", parent_id="p2")
-        with db() as conn:
-            results = find_cross_project_thematic_connections(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_thematic_connections(session)
         assert len(results) == 0
 
     def test_short_words_excluded(self, patched_db):
@@ -938,8 +941,8 @@ class TestCrossProjectThematicConnections:
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
             _insert_thing(conn, "t1", "Do it", parent_id="p1")
             _insert_thing(conn, "t2", "Do it", parent_id="p2")
-        with db() as conn:
-            results = find_cross_project_thematic_connections(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_thematic_connections(session)
         # "Do" and "it" are <3 chars, no significant shared words
         assert len(results) == 0
 
@@ -949,8 +952,8 @@ class TestCrossProjectThematicConnections:
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
             _insert_thing(conn, "t1", "Design user authentication", parent_id="p1", active=False)
             _insert_thing(conn, "t2", "Implement user authentication", parent_id="p2")
-        with db() as conn:
-            results = find_cross_project_thematic_connections(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_thematic_connections(session)
         assert len(results) == 0
 
 
@@ -966,8 +969,8 @@ class TestCrossProjectDuplicateEffort:
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
             _insert_thing(conn, "t1", "Setup database", parent_id="p1")
             _insert_thing(conn, "t2", "Setup database", parent_id="p2")
-        with db() as conn:
-            results = find_cross_project_duplicate_effort(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_duplicate_effort(session)
         assert len(results) == 1
         assert results[0].finding_type == "cross_project_duplicate_effort"
         assert results[0].priority == 2
@@ -978,8 +981,8 @@ class TestCrossProjectDuplicateEffort:
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
             _insert_thing(conn, "t1", "Setup Database", parent_id="p1")
             _insert_thing(conn, "t2", "setup database", parent_id="p2")
-        with db() as conn:
-            results = find_cross_project_duplicate_effort(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_duplicate_effort(session)
         assert len(results) == 1
 
     def test_same_project_excluded(self, patched_db):
@@ -987,8 +990,8 @@ class TestCrossProjectDuplicateEffort:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "t1", "Setup database", parent_id="p1")
             _insert_thing(conn, "t2", "Setup database", parent_id="p1")
-        with db() as conn:
-            results = find_cross_project_duplicate_effort(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_duplicate_effort(session)
         assert len(results) == 0
 
     def test_different_titles_excluded(self, patched_db):
@@ -997,8 +1000,8 @@ class TestCrossProjectDuplicateEffort:
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
             _insert_thing(conn, "t1", "Setup database", parent_id="p1")
             _insert_thing(conn, "t2", "Deploy server", parent_id="p2")
-        with db() as conn:
-            results = find_cross_project_duplicate_effort(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_duplicate_effort(session)
         assert len(results) == 0
 
     def test_inactive_task_excluded(self, patched_db):
@@ -1007,8 +1010,8 @@ class TestCrossProjectDuplicateEffort:
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
             _insert_thing(conn, "t1", "Setup database", parent_id="p1", active=False)
             _insert_thing(conn, "t2", "Setup database", parent_id="p2")
-        with db() as conn:
-            results = find_cross_project_duplicate_effort(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_duplicate_effort(session)
         assert len(results) == 0
 
     def test_inactive_project_excluded(self, patched_db):
@@ -1017,8 +1020,8 @@ class TestCrossProjectDuplicateEffort:
             _insert_thing(conn, "p2", "Project Beta", type_hint="project", active=False)
             _insert_thing(conn, "t1", "Setup database", parent_id="p1")
             _insert_thing(conn, "t2", "Setup database", parent_id="p2")
-        with db() as conn:
-            results = find_cross_project_duplicate_effort(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_cross_project_duplicate_effort(session)
         assert len(results) == 0
 
 
@@ -1032,8 +1035,8 @@ class TestIncompleteThings:
         """A Thing with null data is flagged as incomplete."""
         with db() as conn:
             _insert_thing(conn, "t1", "Bare Task")
-        with db() as conn:
-            results = find_incomplete_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_incomplete_things(session)
         ids = [r.thing_id for r in results]
         assert "t1" in ids
         gaps = next(r for r in results if r.thing_id == "t1").extra["gaps"]
@@ -1050,8 +1053,8 @@ class TestIncompleteThings:
                 checkin_date=f"{today.isoformat()}T09:00:00",
                 data={"notes": "some info"},
             )
-        with db() as conn:
-            results = find_incomplete_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_incomplete_things(session)
         t1_results = [r for r in results if r.thing_id == "t1"]
         if t1_results:
             assert "no dates" not in t1_results[0].extra["gaps"]
@@ -1066,8 +1069,8 @@ class TestIncompleteThings:
                 type_hint="person",
                 data={"birthday": "1990-05-15", "role": "engineer", "email": "a@b.com"},
             )
-        with db() as conn:
-            results = find_incomplete_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_incomplete_things(session)
         t1_results = [r for r in results if r.thing_id == "t1"]
         if t1_results:
             assert "no dates" not in t1_results[0].extra["gaps"]
@@ -1076,8 +1079,8 @@ class TestIncompleteThings:
         """A person with only a title and no meaningful data is flagged."""
         with db() as conn:
             _insert_thing(conn, "p1", "Jane Doe", type_hint="person")
-        with db() as conn:
-            results = find_incomplete_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_incomplete_things(session)
         p1_results = [r for r in results if r.thing_id == "p1"]
         assert len(p1_results) == 1
         assert "name-only person" in p1_results[0].extra["gaps"]
@@ -1092,8 +1095,8 @@ class TestIncompleteThings:
                 type_hint="person",
                 data={"email": "jane@example.com", "role": "Manager"},
             )
-        with db() as conn:
-            results = find_incomplete_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_incomplete_things(session)
         p1_results = [r for r in results if r.thing_id == "p1"]
         if p1_results:
             assert "name-only person" not in p1_results[0].extra["gaps"]
@@ -1102,8 +1105,8 @@ class TestIncompleteThings:
         """A task with no deadline/due_date is flagged."""
         with db() as conn:
             _insert_thing(conn, "t1", "Build feature", type_hint="task", data={"notes": "important"})
-        with db() as conn:
-            results = find_incomplete_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_incomplete_things(session)
         t1_results = [r for r in results if r.thing_id == "t1"]
         assert len(t1_results) == 1
         assert "no deadline" in t1_results[0].extra["gaps"]
@@ -1118,8 +1121,8 @@ class TestIncompleteThings:
                 type_hint="task",
                 data={"deadline": "2026-04-01", "notes": "important"},
             )
-        with db() as conn:
-            results = find_incomplete_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_incomplete_things(session)
         t1_results = [r for r in results if r.thing_id == "t1"]
         if t1_results:
             assert "no deadline" not in t1_results[0].extra["gaps"]
@@ -1128,24 +1131,24 @@ class TestIncompleteThings:
         """Inactive Things should not be flagged."""
         with db() as conn:
             _insert_thing(conn, "t1", "Done Task", active=False)
-        with db() as conn:
-            results = find_incomplete_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_incomplete_things(session)
         assert len(results) == 0
 
     def test_thing_with_open_questions_excluded(self, patched_db):
         """Things that already have open_questions should not be flagged."""
         with db() as conn:
             _insert_thing(conn, "t1", "Already Asked", open_questions=["When is this due?"])
-        with db() as conn:
-            results = find_incomplete_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_incomplete_things(session)
         assert len(results) == 0
 
     def test_finding_type_is_incomplete(self, patched_db):
         """The finding_type for gap detection should be 'incomplete'."""
         with db() as conn:
             _insert_thing(conn, "t1", "Bare Thing")
-        with db() as conn:
-            results = find_incomplete_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = find_incomplete_things(session)
         assert results[0].finding_type == "incomplete"
 
     def test_collect_candidates_includes_incomplete(self, patched_db):

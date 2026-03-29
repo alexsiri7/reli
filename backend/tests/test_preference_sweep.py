@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from backend.database import db
+import backend.db_engine as _engine_mod
+from sqlmodel import Session
 from backend.preference_sweep import (
     MIN_INTERACTIONS,
     _fetch_communication_style_things,
@@ -76,8 +78,8 @@ class TestFetchRecentInteractions:
             _insert_chat_message(conn, "assistant", "Recent reply", timestamp=recent)
             _insert_chat_message(conn, "user", "Old message", timestamp=old)
 
-        with db() as conn:
-            results = _fetch_recent_interactions(conn, days=30)
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_recent_interactions(session, days=30)
 
         assert len(results) == 2
         assert results[0]["content"] == "Recent message"
@@ -92,8 +94,8 @@ class TestFetchRecentInteractions:
                 applied_changes=changes,
             )
 
-        with db() as conn:
-            results = _fetch_recent_interactions(conn, days=30)
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_recent_interactions(session, days=30)
 
         assert len(results) == 1
         assert results[0]["applied_changes"]["created"][0]["title"] == "New Task"
@@ -103,14 +105,14 @@ class TestFetchRecentInteractions:
         with db() as conn:
             _insert_chat_message(conn, "user", long_content)
 
-        with db() as conn:
-            results = _fetch_recent_interactions(conn, days=30)
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_recent_interactions(session, days=30)
 
         assert len(results[0]["content"]) == 500
 
     def test_empty_db_returns_empty(self, patched_db):
-        with db() as conn:
-            results = _fetch_recent_interactions(conn, days=30)
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_recent_interactions(session, days=30)
         assert results == []
 
 
@@ -126,8 +128,8 @@ class TestFetchExistingPreferences:
             _insert_thing(conn, "pref-1", "Prefers mornings", type_hint="preference", data=pref_data)
             _insert_thing(conn, "task-1", "Regular task", type_hint="task")
 
-        with db() as conn:
-            results = _fetch_existing_preferences(conn)
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_existing_preferences(session)
 
         assert len(results) == 1
         assert results[0]["id"] == "pref-1"
@@ -137,8 +139,8 @@ class TestFetchExistingPreferences:
         with db() as conn:
             _insert_thing(conn, "pref-1", "Old pref", type_hint="preference", active=False)
 
-        with db() as conn:
-            results = _fetch_existing_preferences(conn)
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_existing_preferences(session)
 
         assert len(results) == 0
 
@@ -422,8 +424,8 @@ class TestFetchCommunicationStyleThings:
             _insert_thing(conn, "pref-comm", "How user wants Reli to communicate", type_hint="preference", data=comm_data)
             _insert_thing(conn, "pref-sched", "Likes mornings", type_hint="preference", data={"category": "scheduling"})
 
-        with db() as conn:
-            results = _fetch_communication_style_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_communication_style_things(session)
 
         assert len(results) == 1
         assert results[0]["id"] == "pref-comm"
@@ -433,8 +435,8 @@ class TestFetchCommunicationStyleThings:
         with db() as conn:
             _insert_thing(conn, "pref-1", "Regular pref", type_hint="preference", data={"category": "scheduling"})
 
-        with db() as conn:
-            results = _fetch_communication_style_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_communication_style_things(session)
 
         assert len(results) == 0
 
@@ -443,8 +445,8 @@ class TestFetchCommunicationStyleThings:
         with db() as conn:
             _insert_thing(conn, "pref-old", "Old comm pref", type_hint="preference", active=False, data=comm_data)
 
-        with db() as conn:
-            results = _fetch_communication_style_things(conn)
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_communication_style_things(session)
 
         assert len(results) == 0
 
@@ -462,8 +464,8 @@ class TestFetchExistingPreferencesExclusion:
             _insert_thing(conn, "pref-comm", "Comm pref", type_hint="preference", data=comm_data)
             _insert_thing(conn, "pref-sched", "Schedule pref", type_hint="preference", data={"category": "scheduling", "confidence": 0.6})
 
-        with db() as conn:
-            results = _fetch_existing_preferences(conn)
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_existing_preferences(session)
 
         ids = [r["id"] for r in results]
         assert "pref-comm" not in ids

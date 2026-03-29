@@ -23,13 +23,15 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from .auth import user_filter
-from .database import db
+from sqlmodel import Session
+
+import backend.db_engine as _engine_mod
+from .db_engine import _exec
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +74,7 @@ class CommStyleAggregationResult:
 
 
 def _fetch_recent_interactions(
-    conn: sqlite3.Connection,
+    session: Session,
     user_id: str = "",
     days: int = INTERACTION_WINDOW_DAYS,
 ) -> list[dict]:
@@ -84,7 +86,7 @@ def _fetch_recent_interactions(
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     uf_sql, uf_params = user_filter(user_id)
 
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT role, content, applied_changes, timestamp
            FROM chat_history
            WHERE timestamp >= ?{uf_sql}
@@ -96,31 +98,31 @@ def _fetch_recent_interactions(
     interactions = []
     for row in rows:
         applied = None
-        if row["applied_changes"]:
+        if row.applied_changes:
             try:
-                raw = row["applied_changes"]
+                raw = row.applied_changes
                 applied = json.loads(raw) if isinstance(raw, str) else raw
             except (json.JSONDecodeError, TypeError):
                 pass
         interactions.append(
             {
-                "role": row["role"],
-                "content": row["content"][:500],  # truncate long messages
+                "role": row.role,
+                "content": row.content[:500],  # truncate long messages
                 "applied_changes": applied,
-                "timestamp": row["timestamp"],
+                "timestamp": row.timestamp,
             }
         )
     return interactions
 
 
-def _fetch_existing_preferences(conn: sqlite3.Connection, user_id: str = "") -> list[dict]:
+def _fetch_existing_preferences(session: Session, user_id: str = "") -> list[dict]:
     """Fetch existing preference Things for this user.
 
     Excludes reli_communication preferences — those use a different schema
     and are handled by aggregate_communication_style_patterns().
     """
     uf_sql, uf_params = user_filter(user_id)
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT id, title, data FROM things
            WHERE type_hint = 'preference'
              AND active = 1{uf_sql}""",
@@ -130,9 +132,9 @@ def _fetch_existing_preferences(conn: sqlite3.Connection, user_id: str = "") -> 
     preferences = []
     for row in rows:
         data = {}
-        if row["data"]:
+        if row.data:
             try:
-                data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+                data = json.loads(row.data) if isinstance(row.data, str) else row.data
             except (json.JSONDecodeError, TypeError):
                 pass
         # Skip reli_communication preferences — they have a different data schema
@@ -140,18 +142,18 @@ def _fetch_existing_preferences(conn: sqlite3.Connection, user_id: str = "") -> 
             continue
         preferences.append(
             {
-                "id": row["id"],
-                "title": row["title"],
+                "id": row.id,
+                "title": row.title,
                 "data": data,
             }
         )
     return preferences
 
 
-def _fetch_communication_style_things(conn: sqlite3.Connection, user_id: str = "") -> list[dict]:
+def _fetch_communication_style_things(session: Session, user_id: str = "") -> list[dict]:
     """Fetch existing reli_communication preference Things for this user."""
     uf_sql, uf_params = user_filter(user_id)
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT id, title, data FROM things
            WHERE type_hint = 'preference'
              AND active = 1{uf_sql}""",
@@ -161,13 +163,13 @@ def _fetch_communication_style_things(conn: sqlite3.Connection, user_id: str = "
     result = []
     for row in rows:
         data = {}
-        if row["data"]:
+        if row.data:
             try:
-                data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+                data = json.loads(row.data) if isinstance(row.data, str) else row.data
             except (json.JSONDecodeError, TypeError):
                 pass
         if data.get("category") == "reli_communication":
-            result.append({"id": row["id"], "title": row["title"], "data": data})
+            result.append({"id": row.id, "title": row.title, "data": data})
     return result
 
 
@@ -270,9 +272,9 @@ async def aggregate_preference_patterns(
     """
     from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
 
-    with db() as conn:
-        interactions = _fetch_recent_interactions(conn, user_id)
-        existing_preferences = _fetch_existing_preferences(conn, user_id)
+    with Session(_engine_mod.engine) as session:
+        interactions = _fetch_recent_interactions(session, user_id)
+        existing_preferences = _fetch_existing_preferences(session, user_id)
 
     if len(interactions) < MIN_INTERACTIONS:
         logger.info(
@@ -314,7 +316,7 @@ async def aggregate_preference_patterns(
 
     now = datetime.now(timezone.utc).isoformat()
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         for pref in raw_prefs:
             if not isinstance(pref, dict):
                 continue
@@ -356,7 +358,7 @@ async def aggregate_preference_patterns(
                     "sweep_count": existing_data.get("sweep_count", 0) + 1,
                 }
 
-                conn.execute(
+                _exec(session, 
                     "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
                     (json.dumps(updated_data), now, existing_id),
                 )
@@ -381,7 +383,7 @@ async def aggregate_preference_patterns(
                     "sweep_count": 1,
                 }
 
-                conn.execute(
+                _exec(session, 
                     """INSERT INTO things
                        (id, title, type_hint, importance, active, surface, data,
                         created_at, updated_at, user_id)
@@ -397,6 +399,7 @@ async def aggregate_preference_patterns(
                         "confidence": confidence,
                     }
                 )
+        session.commit()
 
     return PreferenceAggregationResult(
         preferences_created=created_count,
@@ -517,9 +520,9 @@ async def aggregate_communication_style_patterns(
     """
     from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
 
-    with db() as conn:
-        interactions = _fetch_recent_interactions(conn, user_id)
-        existing_things = _fetch_communication_style_things(conn, user_id)
+    with Session(_engine_mod.engine) as session:
+        interactions = _fetch_recent_interactions(session, user_id)
+        existing_things = _fetch_communication_style_things(session, user_id)
 
     if len(interactions) < MIN_INTERACTIONS:
         logger.info(
@@ -637,7 +640,7 @@ async def aggregate_communication_style_patterns(
             usage=usage_stats.to_dict(),
         )
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         if primary_thing_id:
             if has_changes or needs_consolidation:
                 # Update the primary Thing with merged patterns
@@ -646,14 +649,14 @@ async def aggregate_communication_style_patterns(
                     "patterns": merged_patterns,
                     "last_sweep": now,
                 }
-                conn.execute(
+                _exec(session, 
                     "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
                     (json.dumps(thing_data), now, primary_thing_id),
                 )
 
             # Deactivate any extra reli_communication Things (duplicates)
             for thing in existing_things[1:]:
-                conn.execute(
+                _exec(session, 
                     "UPDATE things SET active = 0, updated_at = ? WHERE id = ?",
                     (now, thing["id"]),
                 )
@@ -666,7 +669,7 @@ async def aggregate_communication_style_patterns(
                     "patterns": merged_patterns,
                     "last_sweep": now,
                 }
-                conn.execute(
+                _exec(session, 
                     """INSERT INTO things
                        (id, title, type_hint, importance, active, surface, data,
                         created_at, updated_at, user_id)
@@ -680,6 +683,7 @@ async def aggregate_communication_style_patterns(
                         user_id or None,
                     ),
                 )
+        session.commit()
 
     return CommStyleAggregationResult(
         patterns_added=patterns_added,

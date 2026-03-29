@@ -30,13 +30,17 @@ def _resolve_api_token_user() -> str:
     Returns the first user_id found in the database, or "" if none exist
     (which falls through to the auth-disabled path).
     """
-    from .database import get_connection
+    from sqlmodel import Session, select
+
+    import backend.db_engine as _engine_mod
+    from .db_models import UserRecord
 
     try:
-        conn = get_connection()
-        row = conn.execute("SELECT id FROM users ORDER BY created_at LIMIT 1").fetchone()
-        conn.close()
-        return row["id"] if row else ""
+        with Session(_engine_mod.engine) as session:
+            record = session.exec(
+                select(UserRecord).order_by(UserRecord.created_at).limit(1)  # type: ignore[arg-type]
+            ).first()
+            return record.id if record else ""
     except Exception:
         return ""
 
