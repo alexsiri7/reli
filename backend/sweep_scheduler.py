@@ -46,13 +46,15 @@ def _seconds_until(hour: int, minute: int) -> float:
 
 def _get_all_user_ids() -> list[str]:
     """Return all user IDs from the database. Returns [''] if no users exist."""
-    from .database import db
+    import backend.db_engine as _engine_mod
+    from sqlmodel import Session, select
+    from .db_models import UserRecord
 
-    with db() as conn:
-        rows = conn.execute("SELECT id FROM users ORDER BY created_at").fetchall()
-    if not rows:
+    with Session(_engine_mod.engine) as session:
+        records = session.exec(select(UserRecord).order_by(UserRecord.created_at)).all()
+    if not records:
         return [""]  # No users — run in legacy single-user mode
-    return [row["id"] for row in rows]
+    return [r.id for r in records]
 
 
 def _log_run(
@@ -70,15 +72,21 @@ def _log_run(
     completed_at: str | None = None,
 ) -> None:
     """Insert or update a sweep run record."""
-    from .database import db
+    import backend.db_engine as _engine_mod
+    from sqlalchemy import text
+    from sqlmodel import Session
 
-    with db() as conn:
-        conn.execute(
-            """INSERT INTO sweep_runs
+    with Session(_engine_mod.engine) as session:
+        # TODO: convert to SQLModel query
+        session.execute(
+            text(
+                """INSERT INTO sweep_runs
                (id, user_id, status, candidates_found, findings_created,
                 model, prompt_tokens, completion_tokens, cost_usd,
                 error, started_at, completed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (:id, :user_id, :status, :candidates_found, :findings_created,
+                       :model, :prompt_tokens, :completion_tokens, :cost_usd,
+                       :error, :started_at, :completed_at)
                ON CONFLICT(id) DO UPDATE SET
                  status=excluded.status,
                  candidates_found=excluded.candidates_found,
@@ -88,22 +96,24 @@ def _log_run(
                  completion_tokens=excluded.completion_tokens,
                  cost_usd=excluded.cost_usd,
                  error=excluded.error,
-                 completed_at=excluded.completed_at""",
-            (
-                run_id,
-                user_id or None,
-                status,
-                candidates_found,
-                findings_created,
-                model,
-                prompt_tokens,
-                completion_tokens,
-                cost_usd,
-                error,
-                started_at,
-                completed_at,
+                 completed_at=excluded.completed_at"""
             ),
+            {
+                "id": run_id,
+                "user_id": user_id or None,
+                "status": status,
+                "candidates_found": candidates_found,
+                "findings_created": findings_created,
+                "model": model,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "cost_usd": cost_usd,
+                "error": error,
+                "started_at": started_at,
+                "completed_at": completed_at,
+            },
         )
+        session.commit()
 
 
 async def _run_sweep_for_user(user_id: str) -> None:

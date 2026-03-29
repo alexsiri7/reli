@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from backend.database import db
+import backend.db_engine as _engine_mod
+from sqlmodel import Session
 from backend.sweep import (
     _SWEEP_PREF_TITLE,
     BehavioralSignal,
@@ -86,8 +88,8 @@ class TestDetectTitleShortening:
         with db() as conn:
             _insert_user(conn)
         cutoff = (date.today() - timedelta(days=30)).isoformat()
-        with db() as conn:
-            signals = _detect_title_shortening(conn, "u1", cutoff)
+        with Session(_engine_mod.engine) as session:
+            signals = _detect_title_shortening(session, "u1", cutoff)
         assert signals == []
 
     def test_detects_shortened_titles(self, patched_db):
@@ -117,8 +119,8 @@ class TestDetectTitleShortening:
             )
 
         cutoff = (date.today() - timedelta(days=30)).isoformat()
-        with db() as conn:
-            signals = _detect_title_shortening(conn, "u1", cutoff)
+        with Session(_engine_mod.engine) as session:
+            signals = _detect_title_shortening(session, "u1", cutoff)
 
         assert len(signals) == 1
         assert signals[0].signal_type == "title_shortening"
@@ -150,8 +152,8 @@ class TestDetectTitleShortening:
             )
 
         cutoff = (date.today() - timedelta(days=30)).isoformat()
-        with db() as conn:
-            signals = _detect_title_shortening(conn, "u1", cutoff)
+        with Session(_engine_mod.engine) as session:
+            signals = _detect_title_shortening(session, "u1", cutoff)
 
         # Should still have a signal (title_updates > 0) but shortening count = 0
         if signals:
@@ -168,8 +170,8 @@ class TestDetectFindingDismissalPatterns:
         with db() as conn:
             _insert_user(conn)
         cutoff = (date.today() - timedelta(days=30)).isoformat()
-        with db() as conn:
-            signals = _detect_finding_dismissal_patterns(conn, "u1", cutoff)
+        with Session(_engine_mod.engine) as session:
+            signals = _detect_finding_dismissal_patterns(session, "u1", cutoff)
         assert signals == []
 
     def test_high_dismissal_rate(self, patched_db):
@@ -180,8 +182,8 @@ class TestDetectFindingDismissalPatterns:
                 _insert_finding(conn, f"sf-{i}", "stale", dismissed=(i < 4))
 
         cutoff = (date.today() - timedelta(days=30)).isoformat()
-        with db() as conn:
-            signals = _detect_finding_dismissal_patterns(conn, "u1", cutoff)
+        with Session(_engine_mod.engine) as session:
+            signals = _detect_finding_dismissal_patterns(session, "u1", cutoff)
 
         assert len(signals) == 1
         assert signals[0].signal_type == "finding_dismissal"
@@ -197,8 +199,8 @@ class TestDetectFindingDismissalPatterns:
                 _insert_finding(conn, f"sf-{i}", "stale", dismissed=(i == 0))
 
         cutoff = (date.today() - timedelta(days=30)).isoformat()
-        with db() as conn:
-            signals = _detect_finding_dismissal_patterns(conn, "u1", cutoff)
+        with Session(_engine_mod.engine) as session:
+            signals = _detect_finding_dismissal_patterns(session, "u1", cutoff)
 
         assert signals == []
 
@@ -213,8 +215,8 @@ class TestDetectFindingDismissalPatterns:
                 _insert_finding(conn, f"sf-date-{i}", "approaching_date", dismissed=False)
 
         cutoff = (date.today() - timedelta(days=30)).isoformat()
-        with db() as conn:
-            signals = _detect_finding_dismissal_patterns(conn, "u1", cutoff)
+        with Session(_engine_mod.engine) as session:
+            signals = _detect_finding_dismissal_patterns(session, "u1", cutoff)
 
         assert len(signals) == 1
         assert signals[0].examples == ["stale"]
@@ -234,8 +236,8 @@ class TestDetectFindingEngagementPatterns:
                 _insert_finding(conn, f"sf-{i}", "approaching_date", dismissed=False)
 
         cutoff = (date.today() - timedelta(days=30)).isoformat()
-        with db() as conn:
-            signals = _detect_finding_engagement_patterns(conn, "u1", cutoff)
+        with Session(_engine_mod.engine) as session:
+            signals = _detect_finding_engagement_patterns(session, "u1", cutoff)
 
         assert len(signals) == 1
         assert signals[0].signal_type == "finding_engagement"
@@ -249,8 +251,8 @@ class TestDetectFindingEngagementPatterns:
                 _insert_finding(conn, f"sf-{i}", "stale", dismissed=(i < 3))
 
         cutoff = (date.today() - timedelta(days=30)).isoformat()
-        with db() as conn:
-            signals = _detect_finding_engagement_patterns(conn, "u1", cutoff)
+        with Session(_engine_mod.engine) as session:
+            signals = _detect_finding_engagement_patterns(session, "u1", cutoff)
 
         assert signals == []
 

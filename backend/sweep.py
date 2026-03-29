@@ -36,13 +36,16 @@ from __future__ import annotations
 import json
 import logging
 import re
-import sqlite3
+
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
+from sqlmodel import Session
+
+import backend.db_engine as _engine_mod
+from .db_engine import _exec
 from .auth import user_filter
-from .database import db
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +135,7 @@ class SweepCandidate:
 
 
 def find_approaching_dates(
-    conn: sqlite3.Connection,
+    session: Session,
     today: date | None = None,
     window_days: int = 7,
     user_id: str = "",
@@ -147,7 +150,7 @@ def find_approaching_dates(
     uf_sql, uf_params = user_filter(user_id)
 
     # 1. checkin_date column (already in ISO format)
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT id, title, checkin_date FROM things
            WHERE active = 1
              AND checkin_date IS NOT NULL
@@ -155,7 +158,7 @@ def find_approaching_dates(
         (today.isoformat(), cutoff.isoformat(), *uf_params),
     ).fetchall()
     for row in rows:
-        parsed = _parse_date_value(row["checkin_date"])
+        parsed = _parse_date_value(row.checkin_date)
         if parsed:
             days = (parsed - today).days
             if days == 0:
@@ -166,17 +169,17 @@ def find_approaching_dates(
                 label = f"Check-in in {days}d"
             candidates.append(
                 SweepCandidate(
-                    thing_id=row["id"],
-                    thing_title=row["title"],
+                    thing_id=row.id,
+                    thing_title=row.title,
                     finding_type="approaching_date",
-                    message=f"{label}: {row['title']}",
+                    message=f"{label}: {row.title}",
                     priority=1 if days <= 1 else 2,
                     extra={"date_key": "checkin_date", "days_away": days},
                 )
             )
 
     # 2. Date fields in the data JSON
-    data_rows = conn.execute(
+    data_rows = _exec(session, 
         f"""SELECT id, title, data FROM things
            WHERE active = 1
              AND data IS NOT NULL AND data != '{{}}' AND data != 'null'{uf_sql}""",
@@ -184,7 +187,7 @@ def find_approaching_dates(
     ).fetchall()
     for row in data_rows:
         try:
-            data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+            data = json.loads(row.data) if isinstance(row.data, str) else row.data
         except (json.JSONDecodeError, TypeError):
             continue
         if not isinstance(data, dict):
@@ -212,10 +215,10 @@ def find_approaching_dates(
                     reason = f"{label} in {days}d"
                 candidates.append(
                     SweepCandidate(
-                        thing_id=row["id"],
-                        thing_title=row["title"],
+                        thing_id=row.id,
+                        thing_title=row.title,
                         finding_type="approaching_date",
-                        message=f"{reason}: {row['title']}",
+                        message=f"{reason}: {row.title}",
                         priority=1 if days <= 1 else 2,
                         extra={"date_key": key, "days_away": days},
                     )
@@ -225,7 +228,7 @@ def find_approaching_dates(
 
 
 def find_stale_things(
-    conn: sqlite3.Connection,
+    session: Session,
     today: date | None = None,
     stale_days: int = 14,
     user_id: str = "",
@@ -238,7 +241,7 @@ def find_stale_things(
     today = today or date.today()
     cutoff = (today - timedelta(days=stale_days)).isoformat()
     uf_sql, uf_params = user_filter(user_id)
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT t.id, t.title, t.type_hint, t.updated_at, t.importance,
                   t.checkin_date,
                   (SELECT COUNT(*) FROM things c WHERE c.parent_id = t.id AND c.active = 1) AS active_children
@@ -251,11 +254,11 @@ def find_stale_things(
 
     candidates: list[SweepCandidate] = []
     for row in rows:
-        parsed_dt = _parse_date_value(row["updated_at"])
+        parsed_dt = _parse_date_value(row.updated_at)
         days_stale = (today - parsed_dt).days if parsed_dt else stale_days
-        type_label = row["type_hint"] or "Thing"
-        importance_val = row["importance"] if row["importance"] is not None else 2
-        active_children = row["active_children"] or 0
+        type_label = row.type_hint or "Thing"
+        importance_val = row.importance if row.importance is not None else 2
+        active_children = row.active_children or 0
 
         # Distinguish neglected (high-importance or has pending work) from plain stale
         is_neglected = importance_val <= 1 or active_children > 0
@@ -268,16 +271,16 @@ def find_stale_things(
             if active_children > 0:
                 parts.append(f"{active_children} pending subtask{'s' if active_children != 1 else ''}")
             context = ", ".join(parts)
-            message = f"Neglected for {days_stale}d ({context}): {row['title']}"
+            message = f"Neglected for {days_stale}d ({context}): {row.title}"
             pri = 2  # higher urgency for neglected items
         else:
-            message = f"Untouched for {days_stale}d: {row['title']}"
+            message = f"Untouched for {days_stale}d: {row.title}"
             pri = 3
 
         candidates.append(
             SweepCandidate(
-                thing_id=row["id"],
-                thing_title=row["title"],
+                thing_id=row.id,
+                thing_title=row.title,
                 finding_type=finding_type,
                 message=message,
                 priority=pri,
@@ -293,7 +296,7 @@ def find_stale_things(
 
 
 def find_overdue_checkins(
-    conn: sqlite3.Connection,
+    session: Session,
     today: date | None = None,
     grace_days: int = 1,
 ) -> list[SweepCandidate]:
@@ -304,7 +307,7 @@ def find_overdue_checkins(
     """
     today = today or date.today()
     cutoff = (today - timedelta(days=grace_days)).isoformat()
-    rows = conn.execute(
+    rows = _exec(session, 
         """SELECT id, title, type_hint, checkin_date, importance FROM things
            WHERE active = 1
              AND checkin_date IS NOT NULL
@@ -315,32 +318,32 @@ def find_overdue_checkins(
 
     candidates: list[SweepCandidate] = []
     for row in rows:
-        parsed = _parse_date_value(row["checkin_date"])
+        parsed = _parse_date_value(row.checkin_date)
         if not parsed:
             continue
         days_overdue = (today - parsed).days
-        importance_val = row["importance"] if row["importance"] is not None else 2
+        importance_val = row.importance if row.importance is not None else 2
         pri = 1 if days_overdue >= 7 or importance_val <= 1 else 2
         candidates.append(
             SweepCandidate(
-                thing_id=row["id"],
-                thing_title=row["title"],
+                thing_id=row.id,
+                thing_title=row.title,
                 finding_type="overdue_checkin",
-                message=f"Check-in overdue by {days_overdue}d: {row['title']}",
+                message=f"Check-in overdue by {days_overdue}d: {row.title}",
                 priority=pri,
                 extra={
                     "days_overdue": days_overdue,
-                    "type_hint": row["type_hint"] or "Thing",
+                    "type_hint": row.type_hint or "Thing",
                 },
             )
         )
     return candidates
 
 
-def find_orphan_things(conn: sqlite3.Connection, user_id: str = "") -> list[SweepCandidate]:
+def find_orphan_things(session: Session, user_id: str = "") -> list[SweepCandidate]:
     """Find active Things with no relationships (no parent, no children, no graph edges)."""
     uf_sql, uf_params = user_filter(user_id, "t")
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT t.id, t.title, t.type_hint FROM things t
            LEFT JOIN thing_relationships r
              ON t.id = r.from_thing_id OR t.id = r.to_thing_id
@@ -355,18 +358,18 @@ def find_orphan_things(conn: sqlite3.Connection, user_id: str = "") -> list[Swee
     for row in rows:
         candidates.append(
             SweepCandidate(
-                thing_id=row["id"],
-                thing_title=row["title"],
+                thing_id=row.id,
+                thing_title=row.title,
                 finding_type="orphan",
-                message=f"No connections: {row['title']}",
+                message=f"No connections: {row.title}",
                 priority=3,
-                extra={"type_hint": row["type_hint"] or "Thing"},
+                extra={"type_hint": row.type_hint or "Thing"},
             )
         )
     return candidates
 
 
-def find_completed_projects(conn: sqlite3.Connection, user_id: str = "") -> list[SweepCandidate]:
+def find_completed_projects(session: Session, user_id: str = "") -> list[SweepCandidate]:
     """Find active projects where all children are inactive (completed).
 
     A project qualifies if:
@@ -375,7 +378,7 @@ def find_completed_projects(conn: sqlite3.Connection, user_id: str = "") -> list
     - ALL of its children are inactive
     """
     uf_sql, uf_params = user_filter(user_id, "p")
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT p.id, p.title,
                   COUNT(c.id) AS total_children,
                   SUM(CASE WHEN c.active = 0 THEN 1 ELSE 0 END) AS inactive_children
@@ -390,13 +393,13 @@ def find_completed_projects(conn: sqlite3.Connection, user_id: str = "") -> list
 
     candidates: list[SweepCandidate] = []
     for row in rows:
-        n = row["total_children"]
+        n = row.total_children
         candidates.append(
             SweepCandidate(
-                thing_id=row["id"],
-                thing_title=row["title"],
+                thing_id=row.id,
+                thing_title=row.title,
                 finding_type="completed_project",
-                message=f"All {n} tasks done — still active: {row['title']}",
+                message=f"All {n} tasks done — still active: {row.title}",
                 priority=2,
                 extra={"total_children": n},
             )
@@ -404,10 +407,10 @@ def find_completed_projects(conn: sqlite3.Connection, user_id: str = "") -> list
     return candidates
 
 
-def find_open_questions(conn: sqlite3.Connection, user_id: str = "") -> list[SweepCandidate]:
+def find_open_questions(session: Session, user_id: str = "") -> list[SweepCandidate]:
     """Find active Things that have unanswered open_questions."""
     uf_sql, uf_params = user_filter(user_id)
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT id, title, open_questions FROM things
            WHERE active = 1
              AND open_questions IS NOT NULL
@@ -419,7 +422,7 @@ def find_open_questions(conn: sqlite3.Connection, user_id: str = "") -> list[Swe
     candidates: list[SweepCandidate] = []
     for row in rows:
         try:
-            raw = row["open_questions"]
+            raw = row.open_questions
             questions = json.loads(raw) if isinstance(raw, str) else raw
         except (json.JSONDecodeError, TypeError):
             continue
@@ -430,10 +433,10 @@ def find_open_questions(conn: sqlite3.Connection, user_id: str = "") -> list[Swe
         preview = first_q[:80] + "…" if len(first_q) > 80 else first_q
         candidates.append(
             SweepCandidate(
-                thing_id=row["id"],
-                thing_title=row["title"],
+                thing_id=row.id,
+                thing_title=row.title,
                 finding_type="open_question",
-                message=f"{n} unanswered question{'s' if n != 1 else ''}: {row['title']}",
+                message=f"{n} unanswered question{'s' if n != 1 else ''}: {row.title}",
                 priority=2,
                 extra={"question_count": n, "first_question": preview},
             )
@@ -447,7 +450,7 @@ def find_open_questions(conn: sqlite3.Connection, user_id: str = "") -> list[Swe
 
 
 def find_incomplete_things(
-    conn: sqlite3.Connection,
+    session: Session,
     user_id: str = "",
 ) -> list[SweepCandidate]:
     """Find active Things with information gaps that need filling.
@@ -461,7 +464,7 @@ def find_incomplete_things(
     uf_sql, uf_params = user_filter(user_id)
 
     # Fetch active things that don't already have open_questions
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT id, title, type_hint, data, checkin_date, parent_id
            FROM things
            WHERE active = 1
@@ -474,13 +477,13 @@ def find_incomplete_things(
     seen_ids: set[str] = set()
 
     for row in rows:
-        thing_id = row["id"]
-        title = row["title"]
-        type_hint = row["type_hint"] or ""
-        checkin_date = row["checkin_date"]
+        thing_id = row.id
+        title = row.title
+        type_hint = row.type_hint or ""
+        checkin_date = row.checkin_date
 
         # Parse data JSON
-        raw_data = row["data"]
+        raw_data = row.data
         try:
             data = json.loads(raw_data) if isinstance(raw_data, str) and raw_data else raw_data
         except (json.JSONDecodeError, TypeError):
@@ -577,7 +580,7 @@ def _questions_for_gap(
 
 
 def find_information_gaps(
-    conn: sqlite3.Connection,
+    session: Session,
     today: date | None = None,
     min_age_days: int = 3,
     user_id: str = "",
@@ -601,7 +604,7 @@ def find_information_gaps(
     candidates: list[SweepCandidate] = []
 
     # --- Name-only persons: person type with null/empty data ---
-    person_rows = conn.execute(
+    person_rows = _exec(session, 
         f"""SELECT id, title, type_hint, data, created_at FROM things
            WHERE active = 1
              AND type_hint = 'person'
@@ -613,17 +616,17 @@ def find_information_gaps(
     for row in person_rows:
         candidates.append(
             SweepCandidate(
-                thing_id=row["id"],
-                thing_title=row["title"],
+                thing_id=row.id,
+                thing_title=row.title,
                 finding_type="information_gap",
-                message=f"Name only — no context: {row['title']}",
+                message=f"Name only — no context: {row.title}",
                 priority=3,
                 extra={"gap_type": "name_only_person", "type_hint": "person"},
             )
         )
 
     # --- Projects with children but no deadline ---
-    proj_rows = conn.execute(
+    proj_rows = _exec(session, 
         f"""SELECT p.id, p.title, p.data,
                   COUNT(c.id) AS child_count
            FROM things p
@@ -639,9 +642,9 @@ def find_information_gaps(
     for row in proj_rows:
         # Check data JSON for deadline/due_date fields
         has_deadline = False
-        if row["data"]:
+        if row.data:
             try:
-                data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+                data = json.loads(row.data) if isinstance(row.data, str) else row.data
                 if isinstance(data, dict):
                     has_deadline = bool(set(data.keys()) & {"deadline", "due_date", "due", "end_date", "ends_at"})
             except (json.JSONDecodeError, TypeError):
@@ -649,21 +652,21 @@ def find_information_gaps(
         if not has_deadline:
             candidates.append(
                 SweepCandidate(
-                    thing_id=row["id"],
-                    thing_title=row["title"],
+                    thing_id=row.id,
+                    thing_title=row.title,
                     finding_type="information_gap",
-                    message=f"Project has {row['child_count']} task(s) but no deadline: {row['title']}",
+                    message=f"Project has {row.child_count} task(s) but no deadline: {row.title}",
                     priority=2,
                     extra={
                         "gap_type": "no_deadline_project",
                         "type_hint": "project",
-                        "child_count": row["child_count"],
+                        "child_count": row.child_count,
                     },
                 )
             )
 
     # --- Things with no dates at all ---
-    no_date_rows = conn.execute(
+    no_date_rows = _exec(session, 
         f"""SELECT id, title, type_hint, data FROM things
            WHERE active = 1
              AND checkin_date IS NULL
@@ -674,28 +677,28 @@ def find_information_gaps(
     ).fetchall()
     for row in no_date_rows:
         has_date = False
-        if row["data"]:
+        if row.data:
             try:
-                data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+                data = json.loads(row.data) if isinstance(row.data, str) else row.data
                 if isinstance(data, dict):
                     has_date = bool(set(k.lower().replace(" ", "_") for k in data.keys()) & _ALL_DATE_KEYS)
             except (json.JSONDecodeError, TypeError):
                 pass
         if not has_date:
-            type_hint = row["type_hint"] or "Thing"
+            type_hint = row.type_hint or "Thing"
             candidates.append(
                 SweepCandidate(
-                    thing_id=row["id"],
-                    thing_title=row["title"],
+                    thing_id=row.id,
+                    thing_title=row.title,
                     finding_type="information_gap",
-                    message=f"{type_hint.title()} has no dates: {row['title']}",
+                    message=f"{type_hint.title()} has no dates: {row.title}",
                     priority=3,
-                    extra={"gap_type": "no_dates", "type_hint": row["type_hint"]},
+                    extra={"gap_type": "no_dates", "type_hint": row.type_hint},
                 )
             )
 
     # --- Minimal data: old Things with null/empty data (exclude persons, already handled) ---
-    minimal_rows = conn.execute(
+    minimal_rows = _exec(session, 
         f"""SELECT id, title, type_hint, created_at FROM things
            WHERE active = 1
              AND (data IS NULL OR data = '{{}}' OR data = 'null')
@@ -707,17 +710,17 @@ def find_information_gaps(
     # Only flag if old enough to suggest fleshing out (use 14 days for minimal_data)
     minimal_cutoff = (today - timedelta(days=14)).isoformat()
     for row in minimal_rows:
-        if row["created_at"] and row["created_at"] > minimal_cutoff:
+        if row.created_at and row.created_at > minimal_cutoff:
             continue
-        type_hint = row["type_hint"] or "Thing"
+        type_hint = row.type_hint or "Thing"
         candidates.append(
             SweepCandidate(
-                thing_id=row["id"],
-                thing_title=row["title"],
+                thing_id=row.id,
+                thing_title=row.title,
                 finding_type="information_gap",
-                message=f"Minimal data — created 14+ days ago: {row['title']}",
+                message=f"Minimal data — created 14+ days ago: {row.title}",
                 priority=3,
-                extra={"gap_type": "minimal_data", "type_hint": row["type_hint"]},
+                extra={"gap_type": "minimal_data", "type_hint": row.type_hint},
             )
         )
 
@@ -725,7 +728,7 @@ def find_information_gaps(
 
 
 def _generate_template_gap_questions(
-    conn: sqlite3.Connection,
+    session: Session,
     gap_candidates: list[SweepCandidate],
 ) -> int:
     """Generate and store open_questions on Things based on detected gaps.
@@ -745,19 +748,19 @@ def _generate_template_gap_questions(
             continue
 
         # Double-check the Thing still has no open_questions (race safety)
-        row = conn.execute(
+        row = _exec(session, 
             "SELECT open_questions FROM things WHERE id = ?",
             (candidate.thing_id,),
         ).fetchone()
         if not row:
             continue
-        existing = row["open_questions"]
+        existing = row.open_questions
         if existing and existing not in ("[]", "null", ""):
             continue
 
         # Don't update updated_at — sweep-generated questions shouldn't make
         # a Thing appear "fresh" (which would hide it from stale detection).
-        conn.execute(
+        _exec(session, 
             "UPDATE things SET open_questions = ? WHERE id = ?",
             (json.dumps(questions), candidate.thing_id),
         )
@@ -770,7 +773,7 @@ def _generate_template_gap_questions(
 # ---------------------------------------------------------------------------
 
 
-def find_cross_project_shared_blockers(conn: sqlite3.Connection) -> list[SweepCandidate]:
+def find_cross_project_shared_blockers(session: Session) -> list[SweepCandidate]:
     """Find Things that block active tasks in multiple projects.
 
     A "shared blocker" is a Thing connected (via relationships) to active tasks
@@ -780,7 +783,7 @@ def find_cross_project_shared_blockers(conn: sqlite3.Connection) -> list[SweepCa
     # Find Things that have "blocks" or similar relationships to tasks in
     # different projects.  We look for Things connected to children of
     # different projects via typed edges.
-    rows = conn.execute(
+    rows = _exec(session, 
         """SELECT blocker.id        AS blocker_id,
                   blocker.title     AS blocker_title,
                   COUNT(DISTINCT p.id) AS project_count,
@@ -806,16 +809,16 @@ def find_cross_project_shared_blockers(conn: sqlite3.Connection) -> list[SweepCa
 
     candidates: list[SweepCandidate] = []
     for row in rows:
-        projects = row["project_titles"]
+        projects = row.project_titles
         candidates.append(
             SweepCandidate(
-                thing_id=row["blocker_id"],
-                thing_title=row["blocker_title"],
+                thing_id=row.blocker_id,
+                thing_title=row.blocker_title,
                 finding_type="cross_project_shared_blocker",
-                message=(f"Blocks tasks in {row['project_count']} projects ({projects}): {row['blocker_title']}"),
+                message=(f"Blocks tasks in {row.project_count} projects ({projects}): {row.blocker_title}"),
                 priority=1,
                 extra={
-                    "project_count": row["project_count"],
+                    "project_count": row.project_count,
                     "project_titles": projects,
                 },
             )
@@ -824,7 +827,7 @@ def find_cross_project_shared_blockers(conn: sqlite3.Connection) -> list[SweepCa
 
 
 def find_cross_project_resource_conflicts(
-    conn: sqlite3.Connection,
+    session: Session,
     today: date | None = None,
     stale_days: int = 14,
 ) -> list[SweepCandidate]:
@@ -837,7 +840,7 @@ def find_cross_project_resource_conflicts(
     today = today or date.today()
     stale_cutoff = (today - timedelta(days=stale_days)).isoformat()
 
-    rows = conn.execute(
+    rows = _exec(session, 
         """SELECT person.id          AS person_id,
                   person.title       AS person_title,
                   COUNT(DISTINCT p.id) AS project_count,
@@ -867,18 +870,18 @@ def find_cross_project_resource_conflicts(
     for row in rows:
         candidates.append(
             SweepCandidate(
-                thing_id=row["person_id"],
-                thing_title=row["person_title"],
+                thing_id=row.person_id,
+                thing_title=row.person_title,
                 finding_type="cross_project_resource_conflict",
                 message=(
-                    f"{row['person_title']} is involved in {row['project_count']} projects "
-                    f"with {row['stale_tasks']} stale task(s): {row['project_titles']}"
+                    f"{row.person_title} is involved in {row.project_count} projects "
+                    f"with {row.stale_tasks} stale task(s): {row.project_titles}"
                 ),
                 priority=2,
                 extra={
-                    "project_count": row["project_count"],
-                    "project_titles": row["project_titles"],
-                    "stale_tasks": row["stale_tasks"],
+                    "project_count": row.project_count,
+                    "project_titles": row.project_titles,
+                    "stale_tasks": row.stale_tasks,
                 },
             )
         )
@@ -886,7 +889,7 @@ def find_cross_project_resource_conflicts(
 
 
 def find_cross_project_thematic_connections(
-    conn: sqlite3.Connection,
+    session: Session,
 ) -> list[SweepCandidate]:
     """Find active Things with similar titles across different projects.
 
@@ -895,7 +898,7 @@ def find_cross_project_thematic_connections(
     thematic connections or potential collaboration opportunities.
     """
     # Get all active tasks that belong to a project (via parent_id)
-    rows = conn.execute(
+    rows = _exec(session, 
         """SELECT t.id, t.title, t.parent_id, p.title AS project_title
            FROM things t
            JOIN things p ON t.parent_id = p.id AND p.type_hint = 'project' AND p.active = 1
@@ -907,7 +910,7 @@ def find_cross_project_thematic_connections(
         return []
 
     # Build a list of (id, title, parent_id, project_title) for comparison
-    items = [(row["id"], row["title"], row["parent_id"], row["project_title"]) for row in rows]
+    items = [(row.id, row.title, row.parent_id, row.project_title) for row in rows]
 
     # Extract significant words (3+ chars, lowercased) from each title
     def _significant_words(title: str) -> set[str]:
@@ -959,7 +962,7 @@ def find_cross_project_thematic_connections(
 
 
 def find_cross_project_duplicate_effort(
-    conn: sqlite3.Connection,
+    session: Session,
 ) -> list[SweepCandidate]:
     """Find tasks with near-identical titles across different projects.
 
@@ -967,7 +970,7 @@ def find_cross_project_duplicate_effort(
     targets cases where the same work appears to be duplicated in multiple
     projects — suggesting consolidation.
     """
-    rows = conn.execute(
+    rows = _exec(session, 
         """SELECT t1.id       AS id_a,
                   t1.title    AS title_a,
                   t1.parent_id AS proj_id_a,
@@ -993,18 +996,18 @@ def find_cross_project_duplicate_effort(
     for row in rows:
         candidates.append(
             SweepCandidate(
-                thing_id=row["id_a"],
-                thing_title=row["title_a"],
+                thing_id=row.id_a,
+                thing_title=row.title_a,
                 finding_type="cross_project_duplicate_effort",
                 message=(
-                    f'Possible duplicate: "{row["title_a"]}" exists in both '
-                    f"{row['proj_title_a']} and {row['proj_title_b']}"
+                    f'Possible duplicate: "{row.title_a}" exists in both '
+                    f"{row.proj_title_a} and {row.proj_title_b}"
                 ),
                 priority=2,
                 extra={
-                    "duplicate_thing_id": row["id_b"],
-                    "project_a": row["proj_title_a"],
-                    "project_b": row["proj_title_b"],
+                    "duplicate_thing_id": row.id_b,
+                    "project_a": row.proj_title_a,
+                    "project_b": row.proj_title_b,
                 },
             )
         )
@@ -1029,26 +1032,27 @@ def collect_candidates(
     """
     today = today or date.today()
 
-    with db() as conn:
-        gap_candidates = find_information_gaps(conn, today, user_id=user_id)
+    with Session(_engine_mod.engine) as session:
+        gap_candidates = find_information_gaps(session, today, user_id=user_id)
         # Generate and store questions on Things with gaps before collecting
         # open_questions — so newly generated questions show up in the same sweep.
         if gap_candidates:
-            _generate_template_gap_questions(conn, gap_candidates)
+            _generate_template_gap_questions(session, gap_candidates)
+            session.commit()
 
         candidates = (
-            find_approaching_dates(conn, today, window_days, user_id=user_id)
-            + find_stale_things(conn, today, stale_days, user_id=user_id)
-            + find_overdue_checkins(conn, today)
-            + find_orphan_things(conn, user_id=user_id)
-            + find_incomplete_things(conn)
-            + find_completed_projects(conn, user_id=user_id)
-            + find_open_questions(conn, user_id=user_id)
+            find_approaching_dates(session, today, window_days, user_id=user_id)
+            + find_stale_things(session, today, stale_days, user_id=user_id)
+            + find_overdue_checkins(session, today)
+            + find_orphan_things(session, user_id=user_id)
+            + find_incomplete_things(session)
+            + find_completed_projects(session, user_id=user_id)
+            + find_open_questions(session, user_id=user_id)
             + gap_candidates
-            + find_cross_project_shared_blockers(conn)
-            + find_cross_project_resource_conflicts(conn, today, stale_days)
-            + find_cross_project_thematic_connections(conn)
-            + find_cross_project_duplicate_effort(conn)
+            + find_cross_project_shared_blockers(session)
+            + find_cross_project_resource_conflicts(session, today, stale_days)
+            + find_cross_project_thematic_connections(session)
+            + find_cross_project_duplicate_effort(session)
         )
 
     # Deduplicate: keep the highest-priority (lowest number) candidate per (thing_id, finding_type)
@@ -1076,9 +1080,9 @@ def dismiss_stale_findings(user_id: str = "") -> int:
     now = datetime.now(timezone.utc).isoformat()
     total = 0
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         # Dismiss findings linked to inactive Things
-        cur = conn.execute(
+        cur = _exec(session, 
             """UPDATE sweep_findings SET dismissed = 1
                WHERE dismissed = 0
                  AND thing_id IS NOT NULL
@@ -1089,7 +1093,7 @@ def dismiss_stale_findings(user_id: str = "") -> int:
         total += cur.rowcount
 
         # Dismiss expired findings
-        cur = conn.execute(
+        cur = _exec(session, 
             """UPDATE sweep_findings SET dismissed = 1
                WHERE dismissed = 0
                  AND expires_at IS NOT NULL
@@ -1098,6 +1102,7 @@ def dismiss_stale_findings(user_id: str = "") -> int:
             (now, user_id or None, user_id),
         )
         total += cur.rowcount
+        session.commit()
 
     return int(total)
 
@@ -1105,8 +1110,8 @@ def dismiss_stale_findings(user_id: str = "") -> int:
 def _fetch_active_findings(user_id: str = "") -> list[dict]:
     """Fetch active (non-dismissed, non-expired) findings for a user."""
     now = datetime.now(timezone.utc).isoformat()
-    with db() as conn:
-        rows = conn.execute(
+    with Session(_engine_mod.engine) as session:
+        rows = _exec(session, 
             """SELECT sf.id, sf.thing_id, sf.finding_type, sf.message,
                       sf.priority, sf.created_at, sf.expires_at,
                       t.title as thing_title
@@ -1118,7 +1123,7 @@ def _fetch_active_findings(user_id: str = "") -> list[dict]:
                ORDER BY sf.priority, sf.created_at DESC""",
             (user_id or None, user_id, now),
         ).fetchall()
-    return [dict(r) for r in rows]
+    return [r._asdict() for r in rows]
 
 
 def _format_active_findings_for_prompt(findings: list[dict]) -> str:
@@ -1267,7 +1272,7 @@ async def reflect_on_candidates(
     # Collect valid thing_ids from candidates for validation
     valid_thing_ids = {c.thing_id for c in candidates}
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         for f in raw_findings:
             if not isinstance(f, dict):
                 continue
@@ -1289,7 +1294,7 @@ async def reflect_on_candidates(
                 expires_at = (now + timedelta(days=int(expires_in))).isoformat()
 
             finding_id = f"sf-{uuid.uuid4().hex[:8]}"
-            conn.execute(
+            _exec(session, 
                 """INSERT INTO sweep_findings
                    (id, thing_id, finding_type, message, priority, dismissed, created_at, expires_at, user_id)
                    VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)""",
@@ -1305,6 +1310,7 @@ async def reflect_on_candidates(
                     "expires_at": expires_at,
                 }
             )
+        session.commit()
 
     return ReflectionResult(
         findings_created=len(created),
@@ -1370,8 +1376,8 @@ async def generate_gap_questions(
     from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
 
     if candidates is None:
-        with db() as conn:
-            candidates = find_incomplete_things(conn, user_id=user_id)
+        with Session(_engine_mod.engine) as session:
+            candidates = find_incomplete_things(session, user_id=user_id)
 
     if not candidates:
         return GapQuestionResult()
@@ -1417,7 +1423,7 @@ async def generate_gap_questions(
     things_updated = 0
     questions_generated = 0
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         for item in raw_things:
             if not isinstance(item, dict):
                 continue
@@ -1432,13 +1438,14 @@ async def generate_gap_questions(
             if not questions:
                 continue
 
-            conn.execute(
+            _exec(session, 
                 """UPDATE things SET open_questions = ?, updated_at = ?
                    WHERE id = ?""",
                 (json.dumps(questions), datetime.now(timezone.utc).isoformat(), thing_id),
             )
             things_updated += 1
             questions_generated += len(questions)
+        session.commit()
 
     logger.info(
         "Gap question generation: %d things updated, %d questions generated",
@@ -1485,16 +1492,16 @@ def collect_behavioral_signals(
     cutoff = (today - timedelta(days=lookback_days)).isoformat()
     signals: list[BehavioralSignal] = []
 
-    with db() as conn:
-        signals.extend(_detect_title_shortening(conn, user_id, cutoff))
-        signals.extend(_detect_finding_dismissal_patterns(conn, user_id, cutoff))
-        signals.extend(_detect_finding_engagement_patterns(conn, user_id, cutoff))
+    with Session(_engine_mod.engine) as session:
+        signals.extend(_detect_title_shortening(session, user_id, cutoff))
+        signals.extend(_detect_finding_dismissal_patterns(session, user_id, cutoff))
+        signals.extend(_detect_finding_engagement_patterns(session, user_id, cutoff))
 
     return [s for s in signals if s.count > 0]
 
 
 def _detect_title_shortening(
-    conn: sqlite3.Connection,
+    session: Session,
     user_id: str,
     cutoff: str,
 ) -> list[BehavioralSignal]:
@@ -1504,7 +1511,7 @@ def _detect_title_shortening(
     titles, comparing old vs new length.
     """
     uf_sql, uf_params = user_filter(user_id)
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT ch.applied_changes FROM chat_history ch
            WHERE ch.role = 'assistant'
              AND ch.applied_changes IS NOT NULL
@@ -1518,7 +1525,7 @@ def _detect_title_shortening(
     examples: list[str] = []
 
     for row in rows:
-        raw = row["applied_changes"] if isinstance(row, sqlite3.Row) else row[0]
+        raw = row.applied_changes
         if not raw:
             continue
         try:
@@ -1550,7 +1557,7 @@ def _detect_title_shortening(
     # Now check: among created Things, how many were later updated with shorter titles?
     # We query for Things that were created in the lookback period and have been
     # updated with a shorter title.
-    created_rows = conn.execute(
+    created_rows = _exec(session, 
         f"""SELECT ch.applied_changes FROM chat_history ch
            WHERE ch.role = 'assistant'
              AND ch.applied_changes IS NOT NULL
@@ -1563,7 +1570,7 @@ def _detect_title_shortening(
     updated_titles: dict[str, str] = {}
 
     for row in created_rows:
-        raw = row["applied_changes"] if isinstance(row, sqlite3.Row) else row[0]
+        raw = row.applied_changes
         if not raw:
             continue
         try:
@@ -1604,7 +1611,7 @@ def _detect_title_shortening(
 
 
 def _detect_finding_dismissal_patterns(
-    conn: sqlite3.Connection,
+    session: Session,
     user_id: str,
     cutoff: str,
 ) -> list[BehavioralSignal]:
@@ -1614,7 +1621,7 @@ def _detect_finding_dismissal_patterns(
     those findings -> lower their priority in personality preferences.
     """
     uf_sql, uf_params = user_filter(user_id)
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT finding_type,
                   COUNT(*) as total,
                   SUM(CASE WHEN dismissed = 1 THEN 1 ELSE 0 END) as dismissed_count
@@ -1626,9 +1633,9 @@ def _detect_finding_dismissal_patterns(
 
     signals: list[BehavioralSignal] = []
     for row in rows:
-        finding_type = row["finding_type"]
-        total = row["total"]
-        dismissed = row["dismissed_count"]
+        finding_type = row.finding_type
+        total = row.total
+        dismissed = row.dismissed_count
 
         if total < 2:
             continue  # need enough data
@@ -1649,7 +1656,7 @@ def _detect_finding_dismissal_patterns(
 
 
 def _detect_finding_engagement_patterns(
-    conn: sqlite3.Connection,
+    session: Session,
     user_id: str,
     cutoff: str,
 ) -> list[BehavioralSignal]:
@@ -1659,7 +1666,7 @@ def _detect_finding_engagement_patterns(
     -> boost those areas in personality preferences.
     """
     uf_sql, uf_params = user_filter(user_id)
-    rows = conn.execute(
+    rows = _exec(session, 
         f"""SELECT finding_type,
                   COUNT(*) as total,
                   SUM(CASE WHEN dismissed = 1 THEN 1 ELSE 0 END) as dismissed_count
@@ -1671,9 +1678,9 @@ def _detect_finding_engagement_patterns(
 
     signals: list[BehavioralSignal] = []
     for row in rows:
-        finding_type = row["finding_type"]
-        total = row["total"]
-        dismissed = row["dismissed_count"]
+        finding_type = row.finding_type
+        total = row.total
+        dismissed = row.dismissed_count
 
         if total < 2:
             continue
@@ -1836,9 +1843,9 @@ def _upsert_sweep_preference(user_id: str, new_patterns: list[dict]) -> None:
     """
     uf_sql, uf_params = user_filter(user_id)
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         # Find existing sweep-learned preference Thing
-        row = conn.execute(
+        row = _exec(session, 
             f"""SELECT id, data FROM things
                WHERE title = ? AND type_hint = 'preference' AND active = 1{uf_sql}""",
             (_SWEEP_PREF_TITLE, *uf_params),
@@ -1847,7 +1854,7 @@ def _upsert_sweep_preference(user_id: str, new_patterns: list[dict]) -> None:
         if row:
             # Merge with existing patterns
             existing_data = {}
-            raw = row["data"]
+            raw = row.data
             if raw:
                 try:
                     existing_data = json.loads(raw) if isinstance(raw, str) else raw
@@ -1857,14 +1864,14 @@ def _upsert_sweep_preference(user_id: str, new_patterns: list[dict]) -> None:
             existing_patterns = existing_data.get("patterns", []) if isinstance(existing_data, dict) else []
             merged = _merge_patterns(existing_patterns, new_patterns)
 
-            conn.execute(
+            _exec(session, 
                 "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
-                (json.dumps({"patterns": merged}), datetime.now(timezone.utc).isoformat(), row["id"]),
+                (json.dumps({"patterns": merged}), datetime.now(timezone.utc).isoformat(), row.id),
             )
         else:
             # Create new preference Thing
             thing_id = f"t-sweep-{uuid.uuid4().hex[:8]}"
-            conn.execute(
+            _exec(session, 
                 """INSERT INTO things (id, title, type_hint, active, data, created_at, updated_at, user_id)
                    VALUES (?, ?, 'preference', 1, ?, ?, ?, ?)""",
                 (
@@ -1876,6 +1883,7 @@ def _upsert_sweep_preference(user_id: str, new_patterns: list[dict]) -> None:
                     user_id or None,
                 ),
             )
+        session.commit()
 
 
 def _merge_patterns(
