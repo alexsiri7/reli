@@ -521,6 +521,30 @@ class TestInformationGaps:
         gaps = [r for r in results if r.extra.get("gap_type") == "no_deadline_project"]
         assert len(gaps) == 0
 
+    def test_project_no_deadline_with_user_id(self, patched_db):
+        """Regression: user_id filter must not be ambiguous in the self-JOIN query."""
+        today = date.today()
+        now = today.isoformat()
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO users (id, email, google_id, name) VALUES ('u-test1', 'test@example.com', 'gid-test1', 'Test User')"
+            )
+            conn.execute(
+                """INSERT INTO things (id, title, type_hint, active, surface, created_at, updated_at, user_id)
+                   VALUES ('proj', 'Roadmap', 'project', 1, 1, ?, ?, 'u-test1')""",
+                (now, now),
+            )
+            conn.execute(
+                """INSERT INTO things (id, title, parent_id, active, surface, created_at, updated_at, user_id)
+                   VALUES ('t1', 'Write spec', 'proj', 1, 1, ?, ?, 'u-test1')""",
+                (now, now),
+            )
+        with db() as conn:
+            # This must not raise OperationalError: ambiguous column name: user_id
+            results = find_information_gaps(conn, today, min_age_days=0, user_id="u-test1")
+        gaps = [r for r in results if r.extra.get("gap_type") == "no_deadline_project"]
+        assert len(gaps) == 1
+
     def test_event_no_dates(self, patched_db):
         today = date.today()
         old = (today - timedelta(days=5)).isoformat()

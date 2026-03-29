@@ -622,6 +622,8 @@ def find_information_gaps(
         )
 
     # --- Projects with children but no deadline ---
+    # Use "p" alias to avoid ambiguous user_id when things is joined to itself.
+    uf_sql_p, uf_params_p = user_filter(user_id, "p")
     proj_rows = conn.execute(
         f"""SELECT p.id, p.title, p.data,
                   COUNT(c.id) AS child_count
@@ -630,10 +632,10 @@ def find_information_gaps(
            WHERE p.active = 1
              AND p.type_hint = 'project'
              AND p.checkin_date IS NULL
-             AND (p.open_questions IS NULL OR p.open_questions = '[]' OR p.open_questions = 'null'){uf_sql}
+             AND (p.open_questions IS NULL OR p.open_questions = '[]' OR p.open_questions = 'null'){uf_sql_p}
            GROUP BY p.id
            HAVING child_count > 0""",
-        uf_params,
+        uf_params_p,
     ).fetchall()
     for row in proj_rows:
         # Check data JSON for deadline/due_date fields
