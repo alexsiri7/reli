@@ -171,6 +171,8 @@ const calendarDefaults = {
   thingTypes: [],
   proactiveSurfaces: [],
   focusRecommendations: [],
+  sidebarOpen: true,
+  setSidebarOpen: vi.fn(),
   ...searchDefaults,
   ...filterDefaults,
   ...mergeDefaults,
@@ -245,7 +247,7 @@ describe('Sidebar', () => {
 
   it('is collapsed by default on mobile', () => {
     setMobileViewport()
-    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn(), ...calendarDefaults }
+    mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn(), ...calendarDefaults, sidebarOpen: false }
     render(<Sidebar />)
     expect(screen.getByLabelText('Open sidebar')).toBeInTheDocument()
   })
