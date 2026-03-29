@@ -6,6 +6,7 @@ import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported } from '../hooks/useTTS'
 import { useNetworkStatus } from '../hooks/useNetworkStatus'
+import { useProgressiveDisclosure } from '../hooks/useProgressiveDisclosure'
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso)
@@ -722,6 +723,7 @@ export function ChatPanel() {
     }))
   )
   const { isOnline } = useNetworkStatus()
+  const disclosure = useProgressiveDisclosure()
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -814,13 +816,53 @@ export function ChatPanel() {
           </div>
         )}
         {messages.length === 0 && !historyLoading && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="text-5xl mb-4">✨</div>
-            <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">What's on your mind?</h3>
-            <p className="text-sm text-gray-400 dark:text-gray-400 mt-1 max-w-xs">
-              Try: "Remind me to check the server logs tomorrow" or "I had an idea about the new API design"
-            </p>
-          </div>
+          disclosure.showOnboarding ? (
+            <div className="flex flex-col items-center justify-center h-full text-center px-6">
+              <div className="text-5xl mb-4">👋</div>
+              <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">Welcome to Reli</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 max-w-xs leading-relaxed">
+                Reli helps you keep track of everything that matters. Start by telling me what's on your mind.
+              </p>
+              <div className="mt-4 space-y-2 text-left w-full max-w-xs">
+                <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Try saying…</p>
+                <button
+                  onClick={() => {
+                    const input = document.querySelector<HTMLTextAreaElement>('textarea')
+                    if (input) { input.value = 'I need to finish my project proposal by Friday'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  "I need to finish my project proposal by Friday"
+                </button>
+                <button
+                  onClick={() => {
+                    const input = document.querySelector<HTMLTextAreaElement>('textarea')
+                    if (input) { input.value = 'Remind me to call the dentist next week'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  "Remind me to call the dentist next week"
+                </button>
+                <button
+                  onClick={() => {
+                    const input = document.querySelector<HTMLTextAreaElement>('textarea')
+                    if (input) { input.value = 'I have an idea for a new side project'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  "I have an idea for a new side project"
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="text-5xl mb-4">✨</div>
+              <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">What's on your mind?</h3>
+              <p className="text-sm text-gray-400 dark:text-gray-400 mt-1 max-w-xs">
+                Try: "Remind me to check the server logs tomorrow" or "I had an idea about the new API design"
+              </p>
+            </div>
+          )
         )}
         {messages.map(msg => (
           <MessageBubble key={msg.id} msg={msg} speakingId={speakingId} speak={speak} />
