@@ -846,8 +846,20 @@ export function Sidebar() {
             {/* Weekly Digest */}
             {weeklyBriefing && <WeeklyBriefingSection briefing={weeklyBriefing} />}
 
-            {/* Daily Briefing — sweep findings + checkin-due things (meaningful at 5+ things) */}
-            {disclosure.showBriefing && (findings.length > 0 || briefing.length > 0) && (
+            {/* Briefing empty state */}
+            {!loading && !morningBriefing && !weeklyBriefing && findings.length === 0 && briefing.length === 0 && (
+              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                <h2 className="pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+                  Daily Briefing
+                </h2>
+                <p className="text-xs text-gray-400 dark:text-gray-500 py-1">
+                  Your morning briefing shows up here once you have Things with check-in dates.
+                </p>
+              </div>
+            )}
+
+            {/* Daily Briefing — sweep findings + checkin-due things */}
+            {(findings.length > 0 || briefing.length > 0) && (
               <section className="py-2 border-b border-gray-100 dark:border-gray-800">
                 <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
                   Daily Briefing
@@ -1084,8 +1096,18 @@ export function Sidebar() {
             <GmailPanel />
 
             {!loading && things.length === 0 && (
-              <div className="px-4 py-6 text-sm text-gray-400 dark:text-gray-400 text-center">
-                Start by typing in the chat…
+              <div className="px-6 py-8 flex flex-col items-center gap-4 text-center">
+                <svg className="w-16 h-16 text-gray-200 dark:text-gray-700" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <circle cx="12" cy="32" r="8" stroke="currentColor" strokeWidth="2" fill="none"/>
+                  <circle cx="52" cy="16" r="7" stroke="currentColor" strokeWidth="2" fill="none"/>
+                  <circle cx="52" cy="48" r="7" stroke="currentColor" strokeWidth="2" fill="none"/>
+                  <line x1="20" y1="30" x2="45" y2="19" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2"/>
+                  <line x1="20" y1="34" x2="45" y2="45" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2"/>
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Things you mention in chat appear here</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Try telling me about a project, goal, or task.</p>
+                </div>
               </div>
             )}
           </>
