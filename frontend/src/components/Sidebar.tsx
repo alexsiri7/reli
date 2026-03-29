@@ -595,6 +595,7 @@ export function Sidebar() {
               )}
             </button>
             {disclosure.showGraphView && (
+            <>
             <button
               onClick={() => setMainView(mainView === 'briefing' ? 'list' : 'briefing')}
               aria-label={mainView === 'briefing' ? 'Switch to All Things' : 'Switch to Briefing'}
@@ -623,6 +624,7 @@ export function Sidebar() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zm9 0a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zm-4.5 9a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zM7.5 7.5h9M12 12.75v3" />
               </svg>
             </button>
+            </>
             )}
             {currentUser && (
               <div className="relative" ref={userMenuRef}>
