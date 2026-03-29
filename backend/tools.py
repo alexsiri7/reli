@@ -1,7 +1,7 @@
-"""Shared tool implementations for Reli — used by both MCP server and reasoning agent.
+"""Shared tool implementations for Reli -- used by both MCP server and reasoning agent.
 
 Each function takes explicit parameters, hits the DB directly, and returns plain dicts.
-No side-effect tracking (applied/fetched_context) — callers handle that themselves.
+No side-effect tracking (applied/fetched_context) -- callers handle that themselves.
 """
 
 from __future__ import annotations
@@ -12,8 +12,15 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from .auth import user_filter
-from .database import db
+from sqlalchemy import text
+from sqlmodel import Session, or_, select
+
+import backend.db_engine as _engine_mod
+from .db_engine import user_filter_clause
+from .db_models import ThingRecord, ThingRelationshipRecord, MergeHistoryRecord as MergeHistoryDBRecord, ChatHistoryRecord
+# Keep db import for test backward compat (tests patch backend.tools.db).
+# TODO: remove once all tests are updated to use patched_db fixture.
+from .database import db  # noqa: F401
 from .vector_store import delete_thing as vs_delete
 from .vector_store import upsert_thing
 
@@ -21,6 +28,26 @@ logger = logging.getLogger(__name__)
 
 # Entity type_hints that default to surface=false
 _ENTITY_TYPES = {"person", "place", "event", "concept", "reference", "preference"}
+
+
+def _thing_to_dict(record: ThingRecord) -> dict[str, Any]:
+    """Convert a ThingRecord to a plain dict matching the legacy sqlite3.Row format."""
+    d = record.model_dump()
+    # Legacy code expects 'priority' key
+    d.setdefault("priority", record.priority)
+    return d
+
+
+def _rel_to_dict(record: ThingRelationshipRecord) -> dict[str, Any]:
+    """Convert a ThingRelationshipRecord to a plain dict."""
+    return {
+        "id": record.id,
+        "from_thing_id": record.from_thing_id,
+        "to_thing_id": record.to_thing_id,
+        "relationship_type": record.relationship_type,
+        "metadata": record.metadata_,
+        "created_at": record.created_at,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +89,10 @@ def fetch_context(
 
     seen_ids: set[str] = set()
     results: list[dict[str, Any]] = []
+
+    # _fetch_relevant_things and _fetch_with_family still use raw sqlite3 connections
+    # (pipeline.py not yet converted). Use the legacy db() for these calls.
+    from .database import db
 
     with db() as conn:
         if search_queries:
@@ -140,41 +171,32 @@ def chat_history(
 
     n = max(1, min(n, 50))
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
+        stmt = select(ChatHistoryRecord)
+
         if cross_session and user_id:
-            # Search across all sessions for this user
+            stmt = stmt.where(ChatHistoryRecord.user_id == user_id)
             if search_query and search_query.strip():
-                rows = conn.execute(
-                    "SELECT role, content, timestamp, session_id FROM chat_history"
-                    " WHERE user_id = ? AND content LIKE ?"
-                    " ORDER BY id DESC LIMIT ?",
-                    (user_id, f"%{search_query.strip()}%", n),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT role, content, timestamp, session_id FROM chat_history"
-                    " WHERE user_id = ?"
-                    " ORDER BY id DESC LIMIT ?",
-                    (user_id, n),
-                ).fetchall()
+                stmt = stmt.where(ChatHistoryRecord.content.contains(search_query.strip()))
         else:
-            # Search within a single session
+            stmt = stmt.where(ChatHistoryRecord.session_id == session_id)
             if search_query and search_query.strip():
-                rows = conn.execute(
-                    "SELECT role, content, timestamp FROM chat_history"
-                    " WHERE session_id = ? AND content LIKE ?"
-                    " ORDER BY id DESC LIMIT ?",
-                    (session_id, f"%{search_query.strip()}%", n),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT role, content, timestamp FROM chat_history"
-                    " WHERE session_id = ? ORDER BY id DESC LIMIT ?",
-                    (session_id, n),
-                ).fetchall()
+                stmt = stmt.where(ChatHistoryRecord.content.contains(search_query.strip()))
+
+        stmt = stmt.order_by(ChatHistoryRecord.id.desc()).limit(n)  # type: ignore[union-attr]
+        rows = session.exec(stmt).all()
 
     # Reverse to chronological order
-    messages = [dict(r) for r in reversed(rows)]
+    messages = []
+    for r in reversed(rows):
+        msg: dict[str, Any] = {
+            "role": r.role,
+            "content": r.content,
+            "timestamp": r.timestamp,
+        }
+        if cross_session and user_id:
+            msg["session_id"] = r.session_id
+        messages.append(msg)
 
     return {"messages": messages, "count": len(messages)}
 
@@ -203,7 +225,7 @@ def create_thing(
     if not title:
         return {"error": "title is required"}
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
 
     try:
         data = json.loads(data_json) if data_json else {}
@@ -219,83 +241,65 @@ def create_thing(
     except json.JSONDecodeError:
         open_questions = []
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         # Deduplicate: if a Thing with the same title exists, convert to update
-        existing = conn.execute(
-            "SELECT * FROM things WHERE LOWER(title) = LOWER(?) AND active = 1 LIMIT 1",
-            (title,),
-        ).fetchone()
+        from sqlalchemy import func
+        stmt = select(ThingRecord).where(
+            func.lower(ThingRecord.title) == func.lower(title),
+            ThingRecord.active == True,
+        ).limit(1)
+        existing = session.exec(stmt).first()
 
         if existing:
             logger.info(
                 "Dedup: converting create for '%s' into update on %s",
                 title,
-                existing["id"],
+                existing.id,
             )
-            merge_fields: dict[str, Any] = {}
             if data:
-                try:
-                    old = (
-                        json.loads(existing["data"])
-                        if isinstance(existing["data"], str) and existing["data"]
-                        else {}
-                    )
-                except (ValueError, TypeError):
-                    old = {}
-                merged = {**old, **data}
-                merge_fields["data"] = json.dumps(merged)
+                old = existing.data if isinstance(existing.data, dict) else {}
+                existing.data = {**old, **data}
             if open_questions:
-                merge_fields["open_questions"] = json.dumps(open_questions)
-            if checkin_date and not existing["checkin_date"]:
-                merge_fields["checkin_date"] = checkin_date
-            if merge_fields:
-                merge_fields["updated_at"] = now
-                set_clause = ", ".join(f"{k} = ?" for k in merge_fields)
-                values = list(merge_fields.values()) + [existing["id"]]
-                conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
-            updated_row = conn.execute("SELECT * FROM things WHERE id = ?", (existing["id"],)).fetchone()
-            if updated_row:
-                row_dict = dict(updated_row)
-                row_dict["deduplicated"] = True
-                upsert_thing(row_dict)
-                return row_dict
-            return {"id": existing["id"], "title": title, "deduplicated": True}
+                existing.open_questions = open_questions
+            if checkin_date and not existing.checkin_date:
+                existing.checkin_date = datetime.fromisoformat(checkin_date) if isinstance(checkin_date, str) else checkin_date
+            existing.updated_at = now
+            session.add(existing)
+            session.commit()
+            session.refresh(existing)
+            row_dict = _thing_to_dict(existing)
+            row_dict["deduplicated"] = True
+            upsert_thing(row_dict)
+            return row_dict
 
         # Create new Thing
         thing_id = str(uuid.uuid4())
-        data_str = json.dumps(data) if isinstance(data, dict) else str(data)
         effective_surface = surface
         if type_hint in _ENTITY_TYPES:
             effective_surface = False
-        oq_json = json.dumps(open_questions) if open_questions else None
+        oq = open_questions if open_questions else None
 
-        conn.execute(
-            """INSERT INTO things
-               (id, title, type_hint, parent_id, checkin_date, importance,
-                active, surface, data, open_questions, created_at,
-                updated_at, user_id)
-               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""",
-            (
-                thing_id,
-                title,
-                type_hint or None,
-                None,
-                checkin_date or None,
-                importance,
-                int(effective_surface),
-                data_str,
-                oq_json,
-                now,
-                now,
-                user_id or None,
-            ),
+        record = ThingRecord(
+            id=thing_id,
+            title=title,
+            type_hint=type_hint or None,
+            parent_id=None,
+            checkin_date=datetime.fromisoformat(checkin_date) if checkin_date else None,
+            importance=importance,
+            active=True,
+            surface=effective_surface,
+            data=data if data else None,
+            open_questions=oq,
+            created_at=now,
+            updated_at=now,
+            user_id=user_id or None,
         )
-        row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
-        if row:
-            row_dict = dict(row)
-            upsert_thing(row_dict)
-            return row_dict
-        return {"id": thing_id, "title": title}
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+        row_dict = _thing_to_dict(record)
+        upsert_thing(row_dict)
+        return row_dict
 
 
 # ---------------------------------------------------------------------------
@@ -323,26 +327,32 @@ def update_thing(
     if not thing_id:
         return {"error": "thing_id is required"}
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
 
-    with db() as conn:
-        row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
-        if not row:
+    with Session(_engine_mod.engine) as session:
+        record = session.get(ThingRecord, thing_id)
+        if not record:
             return {"error": f"Thing {thing_id} not found"}
 
-        fields: dict[str, Any] = {}
+        changed = False
         if title:
-            fields["title"] = title
+            record.title = title
+            changed = True
         if active is not None:
-            fields["active"] = int(bool(active))
+            record.active = bool(active)
+            changed = True
         if checkin_date:
-            fields["checkin_date"] = checkin_date
+            record.checkin_date = datetime.fromisoformat(checkin_date) if isinstance(checkin_date, str) else checkin_date
+            changed = True
         if importance is not None:
-            fields["importance"] = importance
+            record.importance = importance
+            changed = True
         if type_hint:
-            fields["type_hint"] = type_hint
+            record.type_hint = type_hint
+            changed = True
         if surface is not None:
-            fields["surface"] = int(bool(surface))
+            record.surface = bool(surface)
+            changed = True
         if data_json:
             try:
                 new_data = json.loads(data_json)
@@ -354,33 +364,27 @@ def update_thing(
             except (json.JSONDecodeError, TypeError) as exc:
                 return {"error": f"data_json is not valid JSON: {exc}"}
             if new_data:
-                try:
-                    old_data = json.loads(row["data"]) if isinstance(row["data"], str) and row["data"] else {}
-                except (ValueError, TypeError):
-                    old_data = {}
-                merged = {**old_data, **new_data}
-                fields["data"] = json.dumps(merged)
+                old_data = record.data if isinstance(record.data, dict) else {}
+                record.data = {**old_data, **new_data}
+                changed = True
         if open_questions_json:
             try:
                 oq = json.loads(open_questions_json)
-                fields["open_questions"] = json.dumps(oq) if oq else None
+                record.open_questions = oq if oq else None
+                changed = True
             except json.JSONDecodeError:
                 pass
 
-        if not fields:
+        if not changed:
             return {"error": "no fields to update"}
 
-        fields["updated_at"] = now
-        set_clause = ", ".join(f"{k} = ?" for k in fields)
-        values = list(fields.values()) + [thing_id]
-        conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
-
-        updated_row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
-        if updated_row:
-            row_dict = dict(updated_row)
-            upsert_thing(row_dict)
-            return row_dict
-        return {"error": "update failed"}
+        record.updated_at = now
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+        row_dict = _thing_to_dict(record)
+        upsert_thing(row_dict)
+        return row_dict
 
 
 # ---------------------------------------------------------------------------
@@ -397,13 +401,15 @@ def delete_thing(thing_id: str, user_id: str = "") -> dict[str, Any]:
     if not thing_id:
         return {"error": "thing_id is required"}
 
-    with db() as conn:
-        row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
-        if not row:
+    with Session(_engine_mod.engine) as session:
+        record = session.get(ThingRecord, thing_id)
+        if not record:
             return {"error": f"Thing {thing_id} not found"}
-        conn.execute("DELETE FROM things WHERE id = ?", (thing_id,))
+        title = record.title
+        session.delete(record)
+        session.commit()
         vs_delete(thing_id)
-    return {"deleted": thing_id, "title": row["title"]}
+    return {"deleted": thing_id, "title": title}
 
 
 # ---------------------------------------------------------------------------
@@ -427,7 +433,7 @@ def merge_things(
     if not keep_id or not remove_id or keep_id == remove_id:
         return {"error": "need two distinct Thing IDs"}
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     try:
         merged_data = json.loads(merged_data_json) if merged_data_json else {}
         if not isinstance(merged_data, dict):
@@ -438,109 +444,85 @@ def merge_things(
     except (json.JSONDecodeError, TypeError) as exc:
         return {"error": f"merged_data_json is not valid JSON: {exc}"}
 
-    with db() as conn:
-        keep_row = conn.execute("SELECT * FROM things WHERE id = ?", (keep_id,)).fetchone()
-        remove_row = conn.execute("SELECT * FROM things WHERE id = ?", (remove_id,)).fetchone()
-        if not keep_row or not remove_row:
+    with Session(_engine_mod.engine) as session:
+        keep_rec = session.get(ThingRecord, keep_id)
+        remove_rec = session.get(ThingRecord, remove_id)
+        if not keep_rec or not remove_rec:
             return {"error": "one or both Things not found"}
 
+        remove_title = remove_rec.title
+
         # 1. Merge data
-        mf: dict[str, Any] = {}
-        try:
-            old_data = (
-                json.loads(keep_row["data"]) if isinstance(keep_row["data"], str) and keep_row["data"] else {}
-            )
-        except (ValueError, TypeError):
-            old_data = {}
+        old_data = keep_rec.data if isinstance(keep_rec.data, dict) else {}
         if merged_data or old_data:
-            mf["data"] = json.dumps({**old_data, **merged_data})
+            keep_rec.data = {**old_data, **merged_data}
 
         # 2. Transfer open_questions
-        try:
-            keep_oq = (
-                json.loads(keep_row["open_questions"])
-                if isinstance(keep_row["open_questions"], str) and keep_row["open_questions"]
-                else []
-            )
-        except (ValueError, TypeError):
-            keep_oq = []
-        try:
-            remove_oq = (
-                json.loads(remove_row["open_questions"])
-                if isinstance(remove_row["open_questions"], str) and remove_row["open_questions"]
-                else []
-            )
-        except (ValueError, TypeError):
-            remove_oq = []
+        keep_oq = keep_rec.open_questions if isinstance(keep_rec.open_questions, list) else []
+        remove_oq = remove_rec.open_questions if isinstance(remove_rec.open_questions, list) else []
         if remove_oq:
             existing_set = set(keep_oq)
             for q in remove_oq:
                 if q not in existing_set:
                     keep_oq.append(q)
                     existing_set.add(q)
-            mf["open_questions"] = json.dumps(keep_oq)
+            keep_rec.open_questions = keep_oq
 
-        if mf:
-            mf["updated_at"] = now
-            set_clause = ", ".join(f"{k} = ?" for k in mf)
-            values = list(mf.values()) + [keep_id]
-            conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
+        keep_rec.updated_at = now
+        session.add(keep_rec)
 
         # 3. Re-point relationships
-        conn.execute(
-            "UPDATE thing_relationships SET from_thing_id = ? WHERE from_thing_id = ?",
-            (keep_id, remove_id),
-        )
-        conn.execute(
-            "UPDATE thing_relationships SET to_thing_id = ? WHERE to_thing_id = ?",
-            (keep_id, remove_id),
-        )
-        conn.execute(
-            "DELETE FROM thing_relationships WHERE from_thing_id = ? AND to_thing_id = ?",
-            (keep_id, keep_id),
-        )
+        for rel in session.exec(
+            select(ThingRelationshipRecord).where(ThingRelationshipRecord.from_thing_id == remove_id)
+        ).all():
+            rel.from_thing_id = keep_id
+            session.add(rel)
+        for rel in session.exec(
+            select(ThingRelationshipRecord).where(ThingRelationshipRecord.to_thing_id == remove_id)
+        ).all():
+            rel.to_thing_id = keep_id
+            session.add(rel)
+        # Delete self-referential
+        for rel in session.exec(
+            select(ThingRelationshipRecord).where(
+                ThingRelationshipRecord.from_thing_id == keep_id,
+                ThingRelationshipRecord.to_thing_id == keep_id,
+            )
+        ).all():
+            session.delete(rel)
 
         # 4. Delete duplicate
-        conn.execute("DELETE FROM things WHERE id = ?", (remove_id,))
+        session.delete(remove_rec)
         vs_delete(remove_id)
 
         # 5. Record merge history
-        try:
-            _rem_data = (
-                json.loads(remove_row["data"]) if isinstance(remove_row["data"], str) and remove_row["data"] else {}
-            )
-        except (ValueError, TypeError):
-            _rem_data = {}
+        _rem_data = remove_rec.data if isinstance(remove_rec.data, dict) else {}
         _merged_snapshot = {**_rem_data, **merged_data} if (merged_data or _rem_data) else None
-        conn.execute(
-            "INSERT INTO merge_history (id, keep_id, remove_id, keep_title,"
-            " remove_title, merged_data, triggered_by, user_id, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                str(uuid.uuid4()),
-                keep_id,
-                remove_id,
-                keep_row["title"],
-                remove_row["title"],
-                json.dumps(_merged_snapshot) if _merged_snapshot else None,
-                "agent",
-                user_id or None,
-                now,
-            ),
+        merge_record = MergeHistoryDBRecord(
+            id=str(uuid.uuid4()),
+            keep_id=keep_id,
+            remove_id=remove_id,
+            keep_title=keep_rec.title,
+            remove_title=remove_title,
+            merged_data=_merged_snapshot,
+            triggered_by="agent",
+            user_id=user_id or None,
+            created_at=now,
         )
+        session.add(merge_record)
+
+        session.commit()
 
         # 6. Re-embed
-        updated_keep = conn.execute("SELECT * FROM things WHERE id = ?", (keep_id,)).fetchone()
-        if updated_keep:
-            upsert_thing(dict(updated_keep))
-            return {
-                "keep_id": keep_id,
-                "remove_id": remove_id,
-                "keep_title": updated_keep["title"],
-                "remove_title": remove_row["title"],
-            }
-
-    return {"error": "merge failed"}
+        session.refresh(keep_rec)
+        row_dict = _thing_to_dict(keep_rec)
+        upsert_thing(row_dict)
+        return {
+            "keep_id": keep_id,
+            "remove_id": remove_id,
+            "keep_title": keep_rec.title,
+            "remove_title": remove_title,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -566,19 +548,21 @@ def create_relationship(
     if from_id == to_id:
         return {"error": "cannot create self-referential relationship"}
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         # Skip duplicate
-        dup = conn.execute(
-            "SELECT id FROM thing_relationships"
-            " WHERE from_thing_id = ? AND to_thing_id = ? AND relationship_type = ? LIMIT 1",
-            (from_id, to_id, rel_type),
-        ).fetchone()
+        dup = session.exec(
+            select(ThingRelationshipRecord).where(
+                ThingRelationshipRecord.from_thing_id == from_id,
+                ThingRelationshipRecord.to_thing_id == to_id,
+                ThingRelationshipRecord.relationship_type == rel_type,
+            ).limit(1)
+        ).first()
         if dup:
             return {"status": "duplicate", "relationship_type": rel_type}
 
         # Verify both things exist
-        from_row = conn.execute("SELECT id FROM things WHERE id = ?", (from_id,)).fetchone()
-        to_row = conn.execute("SELECT id FROM things WHERE id = ?", (to_id,)).fetchone()
+        from_row = session.get(ThingRecord, from_id)
+        to_row = session.get(ThingRecord, to_id)
         if not from_row or not to_row:
             missing = []
             if not from_row:
@@ -588,12 +572,15 @@ def create_relationship(
             return {"error": f"Thing(s) not found: {', '.join(missing)}"}
 
         rel_id = str(uuid.uuid4())
-        conn.execute(
-            "INSERT INTO thing_relationships"
-            " (id, from_thing_id, to_thing_id, relationship_type, metadata)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (rel_id, from_id, to_id, rel_type, None),
+        record = ThingRelationshipRecord(
+            id=rel_id,
+            from_thing_id=from_id,
+            to_thing_id=to_id,
+            relationship_type=rel_type,
+            metadata_=None,
         )
+        session.add(record)
+        session.commit()
         return {
             "id": rel_id,
             "from_thing_id": from_id,
@@ -615,15 +602,15 @@ def get_thing(
 
     Returns the Thing dict, or an error dict if not found.
     """
-    uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        row = conn.execute(
-            f"SELECT * FROM things WHERE id = ?{uf_sql}",
-            [thing_id, *uf_params],
-        ).fetchone()
-    if not row:
+    with Session(_engine_mod.engine) as session:
+        stmt = select(ThingRecord).where(
+            ThingRecord.id == thing_id,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+        record = session.exec(stmt).first()
+    if not record:
         return {"error": f"Thing {thing_id} not found"}
-    return dict(row)
+    return _thing_to_dict(record)
 
 
 # ---------------------------------------------------------------------------
@@ -645,9 +632,14 @@ def search_things(
     if not query.strip():
         return []
 
+    # This query is complex (UNION, subqueries, GROUP BY, LIKE on JSON columns).
+    # Keep as raw SQL for now.
+    # TODO: convert to SQLModel query
+    from .auth import user_filter
+    from .database import db
+
     pattern = f"%{query}%"
     with db() as conn:
-        # Build a WHERE filter applied to all branches of the UNION
         filters = ""
         filter_params: list[str | int] = []
         uf_sql, uf_params = user_filter(user_id, "t")
@@ -659,15 +651,12 @@ def search_things(
             filters += " AND t.type_hint = ?"
             filter_params.append(type_hint)
 
-        # Direct matches on title, data, or type_hint
         direct_params: list[str | int] = [pattern, pattern, pattern, *filter_params]
         direct_sql = (
             "SELECT t.*, 1 AS _rank FROM things t"
             " WHERE (t.title LIKE ? OR t.data LIKE ? OR t.type_hint LIKE ?)" + filters
         )
 
-        # Things connected via relationships to directly matching Things,
-        # or connected by a relationship whose type matches the query
         rel_sql = (
             "SELECT t.*, 2 AS _rank FROM things t"
             " WHERE t.id IN ("
@@ -688,7 +677,6 @@ def search_things(
         )
         rel_params: list[str | int] = [pattern, pattern, pattern, pattern, pattern, pattern, *filter_params]
 
-        # Combine with deduplication: direct matches first, then related
         sql = (
             "SELECT * FROM ("
             f"  {direct_sql}"
@@ -718,13 +706,15 @@ def list_relationships(
 
     Returns a list of relationship dicts.
     """
-    with db() as conn:
-        rows = conn.execute(
-            "SELECT * FROM thing_relationships"
-            " WHERE from_thing_id = ? OR to_thing_id = ?",
-            (thing_id, thing_id),
-        ).fetchall()
-    return [dict(r) for r in rows]
+    with Session(_engine_mod.engine) as session:
+        stmt = select(ThingRelationshipRecord).where(
+            or_(
+                ThingRelationshipRecord.from_thing_id == thing_id,
+                ThingRelationshipRecord.to_thing_id == thing_id,
+            )
+        )
+        records = session.exec(stmt).all()
+    return [_rel_to_dict(r) for r in records]
 
 
 # ---------------------------------------------------------------------------
@@ -737,14 +727,12 @@ def delete_relationship(relationship_id: str, user_id: str = "") -> dict[str, An
 
     Returns {"ok": True} on success, or an error dict.
     """
-    with db() as conn:
-        row = conn.execute(
-            "SELECT id FROM thing_relationships WHERE id = ?",
-            (relationship_id,),
-        ).fetchone()
-        if not row:
+    with Session(_engine_mod.engine) as session:
+        record = session.get(ThingRelationshipRecord, relationship_id)
+        if not record:
             return {"error": f"Relationship {relationship_id} not found"}
-        conn.execute("DELETE FROM thing_relationships WHERE id = ?", (relationship_id,))
+        session.delete(record)
+        session.commit()
     return {"ok": True}
 
 
@@ -765,64 +753,64 @@ def get_briefing(
     from .urgency import build_blocker_graph, compute_composite_score, compute_urgency
 
     target = date.fromisoformat(as_of) if as_of else date.today()
-    # Use a 14-day horizon for checkin items
-    horizon = datetime.combine(target + timedelta(days=14), datetime.max.time()).isoformat()
-    now = datetime.utcnow().isoformat()
+    horizon = datetime.combine(target + timedelta(days=14), datetime.max.time())
+    now = datetime.now(timezone.utc)
 
-    uf_sql, uf_params = user_filter(user_id)
-    sf_uf_sql, sf_uf_params = user_filter(user_id, "sf")
+    with Session(_engine_mod.engine) as session:
+        # Things with checkin_date within horizon
+        thing_stmt = select(ThingRecord).where(
+            ThingRecord.active == True,
+            ThingRecord.checkin_date.is_not(None),  # type: ignore[union-attr]
+            ThingRecord.checkin_date <= horizon,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        ).order_by(ThingRecord.checkin_date.asc())  # type: ignore[union-attr]
+        thing_rows = session.exec(thing_stmt).all()
 
-    with db() as conn:
-        # Things with checkin_date within horizon (includes overdue)
-        thing_rows = conn.execute(
-            f"""SELECT * FROM things
-               WHERE active = 1
-                 AND checkin_date IS NOT NULL
-                 AND checkin_date <= ?{uf_sql}
-               ORDER BY checkin_date ASC""",
-            [horizon, *uf_params],
-        ).fetchall()
-
-        # All active things for blocker graph context
-        all_active = conn.execute(
-            f"""SELECT id, importance, active FROM things
-               WHERE active = 1{uf_sql}""",
-            [*uf_params],
-        ).fetchall()
+        # All active things for blocker graph
+        all_active_stmt = select(ThingRecord).where(
+            ThingRecord.active == True,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+        all_active = session.exec(all_active_stmt).all()
 
         # Relationships for blocker graph
-        rel_rows = conn.execute(
-            """SELECT from_thing_id, to_thing_id, relationship_type
-               FROM thing_relationships
-               WHERE relationship_type IN ('blocks', 'depends-on')""",
-        ).fetchall()
+        rel_stmt = select(ThingRelationshipRecord).where(
+            ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"])
+        )
+        rel_rows = session.exec(rel_stmt).all()
 
         # Active sweep findings
-        finding_rows = conn.execute(
-            f"""SELECT sf.*
-               FROM sweep_findings sf
-               WHERE sf.dismissed = 0
-                 AND (sf.expires_at IS NULL OR sf.expires_at > ?)
-                 AND (sf.snoozed_until IS NULL OR sf.snoozed_until <= ?){sf_uf_sql}
-               ORDER BY sf.priority ASC, sf.created_at DESC""",
-            [now, now, *sf_uf_params],
-        ).fetchall()
+        from .db_models import SweepFindingRecord
+        finding_stmt = select(SweepFindingRecord).where(
+            SweepFindingRecord.dismissed == False,
+            or_(SweepFindingRecord.expires_at.is_(None), SweepFindingRecord.expires_at > now),  # type: ignore[union-attr]
+            or_(SweepFindingRecord.snoozed_until.is_(None), SweepFindingRecord.snoozed_until <= now),  # type: ignore[union-attr]
+            user_filter_clause(SweepFindingRecord.user_id, user_id),
+        ).order_by(SweepFindingRecord.priority.asc(), SweepFindingRecord.created_at.desc())  # type: ignore[union-attr]
+        finding_rows = session.exec(finding_stmt).all()
 
-        total_active = conn.execute(
-            f"SELECT COUNT(*) FROM things WHERE active = 1{uf_sql}",
-            [*uf_params],
-        ).fetchone()[0]
+        total_active_stmt = select(ThingRecord).where(
+            ThingRecord.active == True,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+        total_active = len(session.exec(total_active_stmt).all())
 
     # Build blocker graph
-    all_things_map = {r["id"]: dict(r) for r in all_active}
-    blocker_graph = build_blocker_graph([dict(r) for r in rel_rows])
+    all_things_map = {r.id: {"id": r.id, "importance": r.importance, "active": r.active} for r in all_active}
+    blocker_graph = build_blocker_graph([
+        {
+            "from_thing_id": r.from_thing_id,
+            "to_thing_id": r.to_thing_id,
+            "relationship_type": r.relationship_type,
+        }
+        for r in rel_rows
+    ])
 
     # Score each checkin-due thing
     scored: list[dict[str, Any]] = []
-    for row in thing_rows:
-        thing = dict(row)
-        raw_imp = thing.get("importance")
-        imp = int(raw_imp) if raw_imp is not None else 2
+    for rec in thing_rows:
+        thing = _thing_to_dict(rec)
+        imp = rec.importance if rec.importance is not None else 2
         urgency, reasons = compute_urgency(thing, target, blocker_graph, all_things_map)
         composite = compute_composite_score(int(imp), urgency)
         scored.append({
@@ -835,7 +823,6 @@ def get_briefing(
 
     scored.sort(key=lambda x: x["score"], reverse=True)
 
-    # Split into tiers
     the_one_thing = scored[0] if scored else None
     secondary = scored[1:6] if len(scored) > 1 else []
     parking_lot = [
@@ -844,7 +831,7 @@ def get_briefing(
         for s in scored[6:]
     ] if len(scored) > 6 else []
 
-    findings = [dict(r) for r in finding_rows]
+    findings = [f.model_dump() for f in finding_rows]
     checkin_due = sum(1 for s in scored if s["urgency"] >= 0.25)
 
     return {
@@ -875,18 +862,23 @@ def get_open_questions(
 
     Returns a list of Thing dicts ordered by priority then recency.
     """
-    uf_sql, uf_params = user_filter(user_id)
-    with db() as conn:
-        rows = conn.execute(
-            f"""SELECT * FROM things
-               WHERE active = 1
-                 AND open_questions IS NOT NULL
-                 AND open_questions != '[]'{uf_sql}
-               ORDER BY importance ASC, updated_at DESC
-               LIMIT ?""",
-            [*uf_params, limit],
-        ).fetchall()
-    return [dict(r) for r in rows]
+    with Session(_engine_mod.engine) as session:
+        stmt = select(ThingRecord).where(
+            ThingRecord.active == True,
+            ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
+            user_filter_clause(ThingRecord.user_id, user_id),
+        ).order_by(
+            ThingRecord.importance.asc(),  # type: ignore[union-attr]
+            ThingRecord.updated_at.desc(),  # type: ignore[union-attr]
+        ).limit(limit)
+        records = session.exec(stmt).all()
+
+    # Filter out empty arrays (can't easily do in SQL with JSON)
+    results = []
+    for r in records:
+        if r.open_questions and len(r.open_questions) > 0:
+            results.append(_thing_to_dict(r))
+    return results
 
 
 # ---------------------------------------------------------------------------

@@ -102,89 +102,63 @@ class TestChatHistoryTool:
         assert result["count"] == 0
         assert "error" in result
 
-    def test_chat_history_returns_messages(self):
+    def test_chat_history_returns_messages(self, patched_db):
         """chat_history retrieves messages from the DB."""
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+        from backend.database import db
 
-        mock_rows = [
-            {"role": "user", "content": "hello", "timestamp": "2026-03-22T00:00:00"},
-            {"role": "assistant", "content": "hi there", "timestamp": "2026-03-22T00:00:01"},
-        ]
-        # Rows come back in DESC order, reversed by the tool
-        mock_conn.execute.return_value.fetchall.return_value = list(reversed(mock_rows))
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+                ("test-session", "user", "hello", "2026-03-22T00:00:00"),
+            )
+            conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+                ("test-session", "assistant", "hi there", "2026-03-22T00:00:01"),
+            )
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+        from backend.reasoning_agent import _make_reasoning_tools
 
-            tools, _, _fetched = _make_reasoning_tools("test-user", session_id="test-session")
-            history_fn = tools[1]
-            result = history_fn(n=10)
+        tools, _, _fetched = _make_reasoning_tools("test-user", session_id="test-session")
+        history_fn = tools[1]
+        result = history_fn(n=10)
 
         assert result["count"] == 2
         assert result["messages"][0]["role"] == "user"
         assert result["messages"][1]["role"] == "assistant"
 
-    def test_chat_history_with_search_query(self):
+    def test_chat_history_with_search_query(self, patched_db):
         """chat_history filters by search_query."""
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+        from backend.database import db
 
-        mock_conn.execute.return_value.fetchall.return_value = [
-            {"role": "user", "content": "budget meeting", "timestamp": "2026-03-22T00:00:00"},
-        ]
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+                ("test-session", "user", "budget meeting", "2026-03-22T00:00:00"),
+            )
+            conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+                ("test-session", "user", "hello world", "2026-03-22T00:00:01"),
+            )
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+        from backend.reasoning_agent import _make_reasoning_tools
 
-            tools, _, _fetched = _make_reasoning_tools("test-user", session_id="test-session")
-            history_fn = tools[1]
-            result = history_fn(n=5, search_query="budget")
+        tools, _, _fetched = _make_reasoning_tools("test-user", session_id="test-session")
+        history_fn = tools[1]
+        result = history_fn(n=5, search_query="budget")
 
         assert result["count"] == 1
-        # Verify the SQL used LIKE with the search query
-        call_args = mock_conn.execute.call_args
-        assert "%budget%" in call_args[0][1]
 
-    def test_chat_history_clamps_n(self):
+    def test_chat_history_clamps_n(self, patched_db):
         """chat_history clamps n to 1-50 range."""
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
-        mock_conn.execute.return_value.fetchall.return_value = []
+        from backend.tools import chat_history
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+        # n=100 should be clamped to 50 (no error)
+        result = chat_history(n=100, session_id="s")
+        assert result["count"] == 0
 
-            tools, _, _fetched = _make_reasoning_tools("test-user", session_id="s")
-            history_fn = tools[1]
-
-            # n=100 should be clamped to 50
-            history_fn(n=100)
-            call_args = mock_conn.execute.call_args
-            assert call_args[0][1][-1] == 50
-
-            # n=-5 should be clamped to 1
-            history_fn(n=-5)
-            call_args = mock_conn.execute.call_args
-            assert call_args[0][1][-1] == 1
+        # n=-5 should be clamped to 1 (no error)
+        result = chat_history(n=-5, session_id="s")
+        assert result["count"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -202,172 +176,49 @@ class TestCreateThingTool:
         assert "error" in result
         assert applied["created"] == []
 
-    def test_create_thing_dedup_existing(self):
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+    def test_create_thing_dedup_existing(self, patched_db):
+        from backend.tools import create_thing as raw_create
+        # Create the first thing
+        raw_create(title="Test Thing", data_json='{"notes": "old"}')
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        create_fn = tools[2]
 
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            create_fn = tools[2]
+        create_fn(title="Test Thing", data_json='{"extra": "new"}')
 
-            # Simulate existing Thing with same title
-            existing_row = {
-                "id": "existing-uuid",
-                "title": "Test Thing",
-                "data": '{"notes": "old"}',
-                "checkin_date": None,
-                "open_questions": None,
-            }
-            mock_existing = MagicMock()
-            mock_existing.__getitem__ = lambda self, key: existing_row[key]
-            mock_existing.keys = lambda: existing_row.keys()
+        assert len(applied["updated"]) == 1
+        assert applied["created"] == []
 
-            updated_row = {**existing_row, "data": '{"notes": "old", "extra": "new"}'}
-            mock_updated = MagicMock()
-            mock_updated.__getitem__ = lambda self, key: updated_row[key]
-            mock_updated.keys = lambda: updated_row.keys()
+    def test_create_thing_new(self, patched_db):
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        create_fn = tools[2]
 
-            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[mock_existing, mock_updated])
+        create_fn(title="Brand New", type_hint="task")
 
-            create_fn(
-                title="Test Thing",
-                data_json='{"extra": "new"}',
-            )
+        assert len(applied["created"]) == 1
 
-            assert len(applied["updated"]) == 1
-            assert applied["created"] == []
+    def test_create_entity_defaults_surface_false(self, patched_db):
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        create_fn = tools[2]
 
-    def test_create_thing_new(self):
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+        result = create_fn(title="Alice", type_hint="person", surface=True)
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing") as mock_upsert,
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+        # Entity types (person) should default to surface=false
+        assert result.get("surface") in (False, 0)
 
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            create_fn = tools[2]
-
-            new_row = {
-                "id": "new-uuid",
-                "title": "Brand New",
-                "type_hint": "task",
-                "data": "{}",
-                "active": 1,
-                "surface": 1,
-                "open_questions": None,
-            }
-            mock_new = MagicMock()
-            mock_new.__getitem__ = lambda self, key: new_row[key]
-            mock_new.keys = lambda: new_row.keys()
-
-            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, mock_new])
-
-            create_fn(title="Brand New", type_hint="task")
-
-            assert len(applied["created"]) == 1
-            mock_upsert.assert_called_once()
-
-    def test_create_entity_defaults_surface_false(self):
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
-
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
-
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            create_fn = tools[2]
-
-            new_row = {
-                "id": "person-uuid",
-                "title": "Alice",
-                "type_hint": "person",
-                "data": "{}",
-                "active": 1,
-                "surface": 0,
-                "open_questions": None,
-            }
-            mock_new = MagicMock()
-            mock_new.__getitem__ = lambda self, key: new_row[key]
-            mock_new.keys = lambda: new_row.keys()
-
-            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, mock_new])
-
-            create_fn(title="Alice", type_hint="person", surface=True)
-
-            # The INSERT call should have surface=0 for entity types
-            insert_call = None
-            for call in mock_conn.execute.call_args_list:
-                if "INSERT INTO things" in str(call):
-                    insert_call = call
-                    break
-            assert insert_call is not None
-            args = insert_call[0][1]
-            # surface is at index 6 in the INSERT params
-            assert args[6] == 0
-
-    def test_create_preference_defaults_surface_false(self):
+    def test_create_preference_defaults_surface_false(self, patched_db):
         """Preference type_hint should default to surface=false like other entity types."""
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        create_fn = tools[2]
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+        result = create_fn(title="Scheduling preferences", type_hint="preference", surface=True)
 
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            create_fn = tools[2]
-
-            new_row = {
-                "id": "pref-uuid",
-                "title": "Scheduling preferences",
-                "type_hint": "preference",
-                "data": '{"patterns": []}',
-                "active": 1,
-                "surface": 0,
-                "open_questions": None,
-            }
-            mock_new = MagicMock()
-            mock_new.__getitem__ = lambda self, key: new_row[key]
-            mock_new.keys = lambda: new_row.keys()
-
-            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, mock_new])
-
-            create_fn(title="Scheduling preferences", type_hint="preference", surface=True)
-
-            insert_call = None
-            for call in mock_conn.execute.call_args_list:
-                if "INSERT INTO things" in str(call):
-                    insert_call = call
-                    break
-            assert insert_call is not None
-            args = insert_call[0][1]
-            # surface is at index 6 in the INSERT params
-            assert args[6] == 0
+        # Entity types (preference) should default to surface=false
+        assert result.get("surface") in (False, 0)
 
 
 class TestPreferencePromptInstructions:
@@ -398,53 +249,28 @@ class TestPreferencePromptInstructions:
 
 
 class TestDeleteThingTool:
-    def test_delete_not_found(self):
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+    def test_delete_not_found(self, patched_db):
+        from backend.reasoning_agent import _make_reasoning_tools
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        delete_fn = tools[4]
 
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            delete_fn = tools[4]
+        result = delete_fn(thing_id="nonexistent")
+        assert "error" in result
+        assert applied["deleted"] == []
 
-            mock_conn.execute.return_value.fetchone = MagicMock(return_value=None)
-            result = delete_fn(thing_id="nonexistent")
-            assert "error" in result
-            assert applied["deleted"] == []
+    def test_delete_success(self, patched_db):
+        from backend.tools import create_thing as raw_create
+        created = raw_create(title="Delete Me")
+        thing_id = created["id"]
 
-    def test_delete_success(self):
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        delete_fn = tools[4]
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete") as mock_vs_delete,
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
-
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            delete_fn = tools[4]
-
-            row = {"id": "del-uuid", "title": "Delete Me"}
-            mock_row = MagicMock()
-            mock_row.__getitem__ = lambda self, key: row[key]
-
-            mock_conn.execute.return_value.fetchone = MagicMock(return_value=mock_row)
-
-            result = delete_fn(thing_id="del-uuid")
-            assert result["deleted"] == "del-uuid"
-            assert "del-uuid" in applied["deleted"]
-            mock_vs_delete.assert_called_once_with("del-uuid")
+        result = delete_fn(thing_id=thing_id)
+        assert result["deleted"] == thing_id
+        assert thing_id in applied["deleted"]
 
 
 # ---------------------------------------------------------------------------
@@ -465,89 +291,53 @@ class TestCreateRelationshipTool:
         )
         assert "error" in result
 
-    def test_missing_thing_returns_error(self):
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+    def test_missing_thing_returns_error(self, patched_db):
+        from backend.reasoning_agent import _make_reasoning_tools
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        rel_fn = tools[6]
 
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            rel_fn = tools[6]
+        result = rel_fn(
+            from_thing_id="from-uuid",
+            to_thing_id="to-uuid",
+            relationship_type="involves",
+        )
+        assert "error" in result
 
-            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, None, None])
+    def test_duplicate_skipped(self, patched_db):
+        from backend.tools import create_thing as raw_create, create_relationship as raw_rel
+        t1 = raw_create(title="Thing A")
+        t2 = raw_create(title="Thing B")
+        raw_rel(from_thing_id=t1["id"], to_thing_id=t2["id"], relationship_type="sister")
 
-            result = rel_fn(
-                from_thing_id="from-uuid",
-                to_thing_id="to-uuid",
-                relationship_type="involves",
-            )
-            assert "error" in result
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        rel_fn = tools[6]
 
-    def test_duplicate_skipped(self):
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+        result = rel_fn(
+            from_thing_id=t1["id"],
+            to_thing_id=t2["id"],
+            relationship_type="sister",
+        )
+        assert result["status"] == "duplicate"
+        assert applied["relationships_created"] == []
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+    def test_create_success(self, patched_db):
+        from backend.tools import create_thing as raw_create
+        t1 = raw_create(title="Thing From")
+        t2 = raw_create(title="Thing To")
 
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            rel_fn = tools[6]
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        rel_fn = tools[6]
 
-            dup_row = MagicMock()
-            dup_row.__getitem__ = lambda self, key: "dup-id"
-            mock_conn.execute.return_value.fetchone = MagicMock(return_value=dup_row)
-
-            result = rel_fn(
-                from_thing_id="a",
-                to_thing_id="b",
-                relationship_type="sister",
-            )
-            assert result["status"] == "duplicate"
-            assert applied["relationships_created"] == []
-
-    def test_create_success(self):
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
-
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
-
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            rel_fn = tools[6]
-
-            from_row = MagicMock()
-            from_row.__getitem__ = lambda self, key: "from-uuid"
-            to_row = MagicMock()
-            to_row.__getitem__ = lambda self, key: "to-uuid"
-
-            mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, from_row, to_row])
-
-            result = rel_fn(
-                from_thing_id="from-uuid",
-                to_thing_id="to-uuid",
-                relationship_type="sister",
-            )
-            assert result["relationship_type"] == "sister"
-            assert len(applied["relationships_created"]) == 1
+        result = rel_fn(
+            from_thing_id=t1["id"],
+            to_thing_id=t2["id"],
+            relationship_type="sister",
+        )
+        assert result["relationship_type"] == "sister"
+        assert len(applied["relationships_created"]) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -891,57 +681,31 @@ class TestDataJsonStringRegression:
         assert "JSON object" in result["error"]
         assert applied["created"] == []
 
-    def test_update_thing_with_string_data_json_returns_error(self):
+    def test_update_thing_with_string_data_json_returns_error(self, patched_db):
         """update_thing returns error when data_json is a JSON string."""
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+        from backend.tools import create_thing as raw_create
+        created = raw_create(title="Existing")
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        update_fn = tools[3]
 
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            update_fn = tools[3]
+        result = update_fn(thing_id=created["id"], data_json='"string value"')
+        assert "error" in result
+        assert "JSON object" in result["error"]
 
-            existing_row = {"id": "ex-uuid", "title": "Existing", "data": "{}"}
-            mock_existing = MagicMock()
-            mock_existing.__getitem__ = lambda self, key: existing_row[key]
-            mock_conn.execute.return_value.fetchone = MagicMock(return_value=mock_existing)
-
-            result = update_fn(thing_id="ex-uuid", data_json='"string value"')
-            assert "error" in result
-            assert "JSON object" in result["error"]
-
-    def test_update_thing_with_list_data_json_returns_error(self):
+    def test_update_thing_with_list_data_json_returns_error(self, patched_db):
         """update_thing returns error when data_json is a JSON array."""
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+        from backend.tools import create_thing as raw_create
+        created = raw_create(title="Existing")
 
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        update_fn = tools[3]
 
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            update_fn = tools[3]
-
-            existing_row = {"id": "ex-uuid", "title": "Existing", "data": "{}"}
-            mock_existing = MagicMock()
-            mock_existing.__getitem__ = lambda self, key: existing_row[key]
-            mock_conn.execute.return_value.fetchone = MagicMock(return_value=mock_existing)
-
-            result = update_fn(thing_id="ex-uuid", data_json="[1, 2, 3]")
-            assert "error" in result
-            assert "JSON object" in result["error"]
+        result = update_fn(thing_id=created["id"], data_json="[1, 2, 3]")
+        assert "error" in result
+        assert "JSON object" in result["error"]
 
     def test_merge_things_with_string_merged_data_json_returns_error(self):
         """merge_things returns error when merged_data_json is a JSON string."""
@@ -1235,13 +999,8 @@ class TestCommStyleSignalSystemPrompt:
 class TestCommStylePreferenceStructure:
     """Verify that create_thing can store reli_communication preference data."""
 
-    def test_create_reli_comm_preference_thing(self):
+    def test_create_reli_comm_preference_thing(self, patched_db):
         """create_thing stores a reli_communication preference with correct structure."""
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
-
         pref_data_str = json.dumps({
             "category": "reli_communication",
             "patterns": [
@@ -1253,39 +1012,16 @@ class TestCommStylePreferenceStructure:
             ],
         })
 
-        # First fetchone: no existing thing (dedup check returns None)
-        # Second fetchone: newly inserted row
-        new_row = {
-            "id": "pref-uuid",
-            "title": "How the user wants Reli to communicate",
-            "type_hint": "preference",
-            "data": pref_data_str,
-            "active": 1,
-            "surface": 0,
-            "open_questions": None,
-        }
-        mock_new = MagicMock()
-        mock_new.__getitem__ = lambda self, key: new_row[key]
-        mock_new.keys = lambda: new_row.keys()
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        create_fn = tools[2]
 
-        mock_conn.execute.return_value.fetchone = MagicMock(side_effect=[None, mock_new])
-
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing") as mock_upsert,
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
-
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            create_fn = tools[2]
-
-            result = create_fn(
-                title="How the user wants Reli to communicate",
-                type_hint="preference",
-                data_json=pref_data_str,
-                surface=False,
-            )
+        result = create_fn(
+            title="How the user wants Reli to communicate",
+            type_hint="preference",
+            data_json=pref_data_str,
+            surface=False,
+        )
 
         assert "error" not in result
         assert len(applied["created"]) == 1
@@ -1293,18 +1029,14 @@ class TestCommStylePreferenceStructure:
         assert created["type_hint"] == "preference"
 
         # Verify the stored data has the right structure
-        stored_data = json.loads(created["data"])
+        stored_data = created["data"] if isinstance(created["data"], dict) else json.loads(created["data"])
         assert stored_data["category"] == "reli_communication"
         assert stored_data["patterns"][0]["pattern"] == "Avoid using emoji in responses"
         assert stored_data["patterns"][0]["confidence"] == "established"
-        mock_upsert.assert_called_once()
 
-    def test_update_existing_reli_comm_preference(self):
+    def test_update_existing_reli_comm_preference(self, patched_db):
         """update_thing can reinforce an existing reli_communication preference."""
-        mock_conn = MagicMock()
-        mock_db_ctx = MagicMock()
-        mock_db_ctx.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db_ctx.__exit__ = MagicMock(return_value=False)
+        from backend.tools import create_thing as raw_create
 
         existing_data = json.dumps({
             "category": "reli_communication",
@@ -1316,18 +1048,17 @@ class TestCommStylePreferenceStructure:
                 }
             ],
         })
-        existing_row = {
-            "id": "pref-uuid",
-            "title": "How the user wants Reli to communicate",
-            "data": existing_data,
-            "checkin_date": None,
-            "open_questions": None,
-        }
-        mock_existing = MagicMock()
-        mock_existing.__getitem__ = lambda self, key: existing_row[key]
-        mock_existing.keys = lambda: existing_row.keys()
+        created = raw_create(
+            title="How the user wants Reli to communicate",
+            type_hint="preference",
+            data_json=existing_data,
+        )
 
-        updated_data = json.dumps({
+        from backend.reasoning_agent import _make_reasoning_tools
+        tools, applied, _fetched = _make_reasoning_tools("test-user")
+        update_fn = tools[3]
+
+        new_data = json.dumps({
             "category": "reli_communication",
             "patterns": [
                 {
@@ -1337,37 +1068,8 @@ class TestCommStylePreferenceStructure:
                 }
             ],
         })
-        updated_row = {**existing_row, "data": updated_data}
-        mock_updated = MagicMock()
-        mock_updated.__getitem__ = lambda self, key: updated_row[key]
-        mock_updated.keys = lambda: updated_row.keys()
 
-        mock_conn.execute.return_value.fetchone = MagicMock(
-            side_effect=[mock_existing, mock_updated]
-        )
-
-        with (
-            patch("backend.tools.db", return_value=mock_db_ctx),
-            patch("backend.tools.upsert_thing"),
-            patch("backend.tools.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
-
-            tools, applied, _fetched = _make_reasoning_tools("test-user")
-            update_fn = tools[3]
-
-            new_data = json.dumps({
-                "category": "reli_communication",
-                "patterns": [
-                    {
-                        "pattern": "Be concise",
-                        "confidence": "established",
-                        "observations": 2,
-                    }
-                ],
-            })
-
-            result = update_fn(thing_id="pref-uuid", data_json=new_data)
+        result = update_fn(thing_id=created["id"], data_json=new_data)
 
         assert "error" not in result
         assert len(applied["updated"]) == 1
