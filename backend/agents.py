@@ -804,6 +804,11 @@ def _build_personality_overlay(patterns: list[dict[str, Any]]) -> str:
     for p in patterns:
         confidence = p.get("confidence", "emerging")
         lines.append(f"- [{confidence}] {p['pattern']}")
+    lines.append(
+        "\nWhen your choice or recommendation is shaped by one of these preferences, "
+        "briefly mention it in a natural way. Example: 'I picked afternoon since you tend "
+        "to prefer those.' Keep it short — one casual clause is enough."
+    )
     return "\n".join(lines)
 
 

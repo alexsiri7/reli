@@ -50,7 +50,7 @@ export const ReferencedThingSchema = z.object({
 })
 
 export const AppliedChangesSchema = z.object({
-  created: z.array(z.object({ id: z.string(), title: z.string(), type_hint: z.string().optional() })).optional(),
+  created: z.array(z.object({ id: z.string(), title: z.string(), type_hint: z.string().optional() }).catchall(z.unknown())).optional(),
   updated: z.array(z.object({ id: z.string(), title: z.string() }).catchall(z.unknown())).optional(),
   deleted: z.array(z.string()).optional(),
   context_things: z.array(ContextThingSchema).optional(),

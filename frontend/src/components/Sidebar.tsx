@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { Thing, SweepFinding, FocusRecommendation, MorningBriefing } from '../store'
@@ -229,19 +229,28 @@ function confidenceLabel(confidence: number): { label: string; className: string
 
 function PreferenceCard({ thing }: { thing: Thing }) {
   const openThingDetail = useStore(s => s.openThingDetail)
+  const submitPreferenceFeedback = useStore(s => s.submitPreferenceFeedback)
+  const [feedbackSent, setFeedbackSent] = useState<'accurate' | 'inaccurate' | null>(null)
   const confidence: number = typeof thing.data?.confidence === 'number' ? thing.data.confidence : 0
   const evidence: unknown[] = Array.isArray(thing.data?.evidence) ? (thing.data.evidence as unknown[]) : []
   const category: string = typeof thing.data?.category === 'string' ? thing.data.category : ''
   const { label, className } = confidenceLabel(confidence)
 
+  const handleFeedback = useCallback((accurate: boolean, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (feedbackSent) return
+    setFeedbackSent(accurate ? 'accurate' : 'inaccurate')
+    submitPreferenceFeedback(thing.id, accurate)
+  }, [feedbackSent, submitPreferenceFeedback, thing.id])
+
   return (
-    <div className="px-3 py-1">
+    <div className="px-3 py-1 group">
       <div
         className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors px-2 cursor-pointer border border-transparent hover:border-purple-100 dark:hover:border-purple-900"
         onClick={() => openThingDetail(thing.id)}
         role="button"
       >
-        <span className="text-base leading-none mt-0.5 select-none shrink-0">⚙️</span>
+        <span className="text-base leading-none mt-0.5 select-none shrink-0">🧠</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
             {thing.title}
@@ -258,6 +267,31 @@ function PreferenceCard({ thing }: { thing: Thing }) {
             {category && (
               <span className="text-[10px] text-gray-400 dark:text-gray-500 capitalize">
                 {category}
+              </span>
+            )}
+          </div>
+          {/* Feedback buttons */}
+          <div className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {feedbackSent === null ? (
+              <>
+                <button
+                  onClick={e => handleFeedback(true, e)}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/60 font-medium transition-colors"
+                  title="Confirm this preference"
+                >
+                  That&apos;s right
+                </button>
+                <button
+                  onClick={e => handleFeedback(false, e)}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 font-medium transition-colors"
+                  title="Correct this preference"
+                >
+                  Not really
+                </button>
+              </>
+            ) : (
+              <span className="text-[10px] text-gray-400 dark:text-gray-500 italic">
+                {feedbackSent === 'accurate' ? 'Thanks for confirming!' : 'Got it, noted.'}
               </span>
             )}
           </div>
