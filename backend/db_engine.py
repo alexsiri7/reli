@@ -13,7 +13,8 @@ from __future__ import annotations
 from collections.abc import Generator
 
 from sqlalchemy import event
-from sqlmodel import Session, SQLModel, create_engine
+from sqlalchemy.orm.attributes import InstrumentedAttribute
+from sqlmodel import Session, SQLModel, create_engine, or_
 
 from .config import settings
 
@@ -39,6 +40,24 @@ def get_session() -> Generator[Session, None, None]:
     """Yield a SQLModel session. Use as a FastAPI ``Depends()`` or context manager."""
     with Session(engine) as session:
         yield session
+
+
+def user_filter_clause(user_id_column: InstrumentedAttribute, user_id: str):
+    """Return a SQLAlchemy filter clause equivalent to the legacy ``user_filter()`` helper.
+
+    When *user_id* is empty (auth disabled), returns ``True`` (no filtering).
+    Otherwise returns ``(column == user_id) | (column IS NULL)``.
+
+    Usage::
+
+        stmt = select(ThingRecord).where(
+            ThingRecord.active == True,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+    """
+    if not user_id:
+        return True  # no filter
+    return or_(user_id_column == user_id, user_id_column.is_(None))  # type: ignore[union-attr]
 
 
 def init_sqlmodel_tables() -> None:
