@@ -42,16 +42,21 @@ export function formatDate(iso: string | null | undefined): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-const PRIORITY_LABELS: Record<number, string> = {
-  1: '🔴 Critical',
-  2: '🟠 High',
-  3: '🟡 Medium',
-  4: '🔵 Low',
-  5: '⚪ None',
+const IMPORTANCE_LABELS: Record<number, string> = {
+  0: '🔴 Critical',
+  1: '🟠 High',
+  2: '🟡 Medium',
+  3: '🔵 Low',
+  4: '⚪ Backlog',
 }
 
+export function importanceLabel(p: number): string {
+  return IMPORTANCE_LABELS[p] ?? `Importance ${p}`
+}
+
+/** @deprecated Use importanceLabel instead */
 export function priorityLabel(p: number): string {
-  return PRIORITY_LABELS[p] ?? `Priority ${p}`
+  return importanceLabel(p)
 }
 
 export function formatTimestamp(iso: string | null | undefined): string {

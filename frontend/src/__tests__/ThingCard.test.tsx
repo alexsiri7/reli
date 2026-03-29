@@ -20,6 +20,7 @@ const baseThing = {
   parent_id: null,
   checkin_date: null,
   priority: 1,
+  importance: 2,
   active: true,
   surface: true,
   data: null,

@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { Relationship, ThingType } from '../store'
-import { typeIcon, formatTimestamp, formatDate, isOverdue, priorityLabel } from '../utils'
+import { typeIcon, formatTimestamp, formatDate, isOverdue, importanceLabel } from '../utils'
 import { PreferencePatterns } from './PreferencePatterns'
 
 export function DetailPanel() {
@@ -146,7 +146,7 @@ export function DetailPanel() {
                     {typeIcon(thing.type_hint, thingTypes)} {thing.type_hint}
                   </span>
                 )}
-                <span className="text-gray-500 dark:text-gray-400">{priorityLabel(thing.priority)}</span>
+                <span className="text-gray-500 dark:text-gray-400">{importanceLabel(thing.importance)}</span>
               </div>
 
               {/* Check-in date */}

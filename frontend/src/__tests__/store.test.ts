@@ -8,6 +8,7 @@ const mockThing = {
   parent_id: null,
   checkin_date: null,
   priority: 2,
+  importance: 2,
   active: true,
   surface: true,
   data: null,
