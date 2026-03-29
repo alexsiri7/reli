@@ -4,7 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 /**
  * ContextDropdown is a private component inside ChatPanel.tsx.
  * We test it indirectly by re-creating the same logic in a minimal test component.
- * This verifies the click-to-open-detail behavior works correctly.
+ * This verifies the pill-based summary and click-to-expand behavior.
  */
 
 const openThingDetail = vi.fn()
@@ -46,20 +46,33 @@ function TestContextDropdown({ changes }: { changes: AppliedChanges }) {
   const updated = changes.updated ?? []
   const deleted = changes.deleted ?? []
   const hasEffects = created.length > 0 || updated.length > 0 || deleted.length > 0
-  const hasContext = contextThings.length > 0
+  const hasInferredConnections = contextThings.length > 0
 
-  if (!hasContext && !hasEffects) return null
-
-  const totalCount = contextThings.length + created.length + updated.length + deleted.length
+  if (!hasInferredConnections && !hasEffects) return null
 
   return (
     <div>
-      <button onClick={() => setExpanded(!expanded)}>
-        Context &amp; changes ({totalCount})
-      </button>
+      {/* Pill summary */}
+      <div>
+        {created.length > 0 && (
+          <span data-testid="pill-created">+{created.length} created</span>
+        )}
+        {updated.length > 0 && (
+          <span data-testid="pill-updated">✓ {updated.length} updated</span>
+        )}
+        {deleted.length > 0 && (
+          <span data-testid="pill-deleted">{deleted.length} deleted</span>
+        )}
+        {hasInferredConnections && (
+          <span data-testid="pill-inferred">💡 inferred connection</span>
+        )}
+        <button onClick={() => setExpanded(!expanded)}>
+          {expanded ? '▴ hide' : '▾ details'}
+        </button>
+      </div>
       {expanded && (
         <div>
-          {hasContext && (
+          {hasInferredConnections && (
             <div>
               {contextThings.map((t: ContextThing) => (
                 <button
@@ -107,61 +120,133 @@ describe('ContextDropdown', () => {
     expect(container.innerHTML).toBe('')
   })
 
-  it('shows toggle button with count', () => {
-    render(
-      <TestContextDropdown
-        changes={{ context_things: [{ id: 'uuid-1', title: 'Test Thing', type_hint: 'task' }] }}
-      />,
-    )
-    expect(screen.getByText(/Context & changes \(1\)/)).toBeInTheDocument()
-  })
-
-  it('expands on toggle click to show context things', () => {
-    render(
-      <TestContextDropdown
-        changes={{ context_things: [{ id: 'uuid-1', title: 'Test Thing', type_hint: 'task' }] }}
-      />,
-    )
-    expect(screen.queryByText('Test Thing')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText(/Context & changes/))
-    expect(screen.getByText('Test Thing')).toBeInTheDocument()
-  })
-
-  it('calls openThingDetail when context thing is clicked', () => {
-    render(
-      <TestContextDropdown
-        changes={{ context_things: [{ id: 'uuid-abc', title: 'My Note', type_hint: 'note' }] }}
-      />,
-    )
-    fireEvent.click(screen.getByText(/Context & changes/))
-    fireEvent.click(screen.getByTestId('context-thing-uuid-abc'))
-    expect(openThingDetail).toHaveBeenCalledTimes(1)
-    expect(openThingDetail).toHaveBeenCalledWith('uuid-abc')
-  })
-
-  it('calls openThingDetail for created things', () => {
+  it('shows created pill when things are created', () => {
     render(
       <TestContextDropdown
         changes={{ created: [{ id: 'new-1', title: 'New Item', type_hint: 'task' }] }}
       />,
     )
-    fireEvent.click(screen.getByText(/Context & changes/))
-    fireEvent.click(screen.getByTestId('created-thing-new-1'))
-    expect(openThingDetail).toHaveBeenCalledWith('new-1')
+    expect(screen.getByTestId('pill-created')).toHaveTextContent('+1 created')
   })
 
-  it('calls openThingDetail for updated things', () => {
+  it('shows updated pill when things are updated', () => {
     render(
       <TestContextDropdown
         changes={{ updated: [{ id: 'upd-1', title: 'Updated Item' }] }}
       />,
     )
-    fireEvent.click(screen.getByText(/Context & changes/))
+    expect(screen.getByTestId('pill-updated')).toHaveTextContent('✓ 1 updated')
+  })
+
+  it('shows inferred connection pill when context things exist', () => {
+    render(
+      <TestContextDropdown
+        changes={{ context_things: [{ id: 'ctx-1', title: 'Related Thing', type_hint: 'task' }] }}
+      />,
+    )
+    expect(screen.getByTestId('pill-inferred')).toBeInTheDocument()
+  })
+
+  it('does not show inferred pill when no context things', () => {
+    render(
+      <TestContextDropdown
+        changes={{ created: [{ id: 'new-1', title: 'New Item' }] }}
+      />,
+    )
+    expect(screen.queryByTestId('pill-inferred')).not.toBeInTheDocument()
+  })
+
+  it('shows details toggle button', () => {
+    render(
+      <TestContextDropdown
+        changes={{ context_things: [{ id: 'ctx-1', title: 'Test Thing', type_hint: 'task' }] }}
+      />,
+    )
+    expect(screen.getByText('▾ details')).toBeInTheDocument()
+  })
+
+  it('details are hidden by default', () => {
+    render(
+      <TestContextDropdown
+        changes={{ context_things: [{ id: 'ctx-1', title: 'Test Thing', type_hint: 'task' }] }}
+      />,
+    )
+    expect(screen.queryByText('Test Thing')).not.toBeInTheDocument()
+  })
+
+  it('expands on details toggle click', () => {
+    render(
+      <TestContextDropdown
+        changes={{ context_things: [{ id: 'uuid-1', title: 'Test Thing', type_hint: 'task' }] }}
+      />,
+    )
+    fireEvent.click(screen.getByText('▾ details'))
+    expect(screen.getByText('Test Thing')).toBeInTheDocument()
+    expect(screen.getByText('▴ hide')).toBeInTheDocument()
+  })
+
+  it('collapses when hide is clicked', () => {
+    render(
+      <TestContextDropdown
+        changes={{ context_things: [{ id: 'ctx-1', title: 'Test Thing' }] }}
+      />,
+    )
+    fireEvent.click(screen.getByText('▾ details'))
+    expect(screen.getByText('Test Thing')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('▴ hide'))
+    expect(screen.queryByText('Test Thing')).not.toBeInTheDocument()
+  })
+
+  it('calls openThingDetail when context thing is clicked in expanded view', () => {
+    render(
+      <TestContextDropdown
+        changes={{ context_things: [{ id: 'uuid-abc', title: 'My Note', type_hint: 'note' }] }}
+      />,
+    )
+    fireEvent.click(screen.getByText('▾ details'))
+    fireEvent.click(screen.getByTestId('context-thing-uuid-abc'))
+    expect(openThingDetail).toHaveBeenCalledTimes(1)
+    expect(openThingDetail).toHaveBeenCalledWith('uuid-abc')
+  })
+
+  it('calls openThingDetail for created things in expanded view', () => {
+    render(
+      <TestContextDropdown
+        changes={{ created: [{ id: 'new-1', title: 'New Item', type_hint: 'task' }] }}
+      />,
+    )
+    fireEvent.click(screen.getByText('▾ details'))
+    fireEvent.click(screen.getByTestId('created-thing-new-1'))
+    expect(openThingDetail).toHaveBeenCalledWith('new-1')
+  })
+
+  it('calls openThingDetail for updated things in expanded view', () => {
+    render(
+      <TestContextDropdown
+        changes={{ updated: [{ id: 'upd-1', title: 'Updated Item' }] }}
+      />,
+    )
+    fireEvent.click(screen.getByText('▾ details'))
     fireEvent.click(screen.getByTestId('updated-thing-upd-1'))
     expect(openThingDetail).toHaveBeenCalledWith('upd-1')
   })
 
-  it('handles multiple context things', () => {
+  it('shows multiple pills when effects and inferred connections both exist', () => {
+    render(
+      <TestContextDropdown
+        changes={{
+          created: [{ id: 'new-1', title: 'New Item' }],
+          updated: [{ id: 'upd-1', title: 'Updated Item' }],
+          context_things: [{ id: 'ctx-1', title: 'Related Thing' }],
+        }}
+      />,
+    )
+    expect(screen.getByTestId('pill-created')).toBeInTheDocument()
+    expect(screen.getByTestId('pill-updated')).toBeInTheDocument()
+    expect(screen.getByTestId('pill-inferred')).toBeInTheDocument()
+  })
+
+  it('handles multiple context things in expanded view', () => {
     render(
       <TestContextDropdown
         changes={{
@@ -173,7 +258,8 @@ describe('ContextDropdown', () => {
         }}
       />,
     )
-    fireEvent.click(screen.getByText(/Context & changes \(3\)/))
+    expect(screen.getByTestId('pill-inferred')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('▾ details'))
     expect(screen.getByText('Thing A')).toBeInTheDocument()
     expect(screen.getByText('Thing B')).toBeInTheDocument()
     expect(screen.getByText('Thing C')).toBeInTheDocument()

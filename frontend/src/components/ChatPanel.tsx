@@ -156,36 +156,48 @@ function ContextDropdown({ changes }: { changes: AppliedChanges }) {
   const updated = changes.updated ?? []
   const deleted = changes.deleted ?? []
   const hasEffects = created.length > 0 || updated.length > 0 || deleted.length > 0
-  const hasContext = contextThings.length > 0
+  const hasInferredConnections = contextThings.length > 0
 
-  if (!hasContext && !hasEffects) return null
-
-  const totalCount = contextThings.length + created.length + updated.length + deleted.length
+  if (!hasInferredConnections && !hasEffects) return null
 
   return (
     <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors cursor-pointer"
-      >
-        <svg
-          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
+      {/* Collapsed pill summary — always visible */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {created.length > 0 && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400">
+            +{created.length} created
+          </span>
+        )}
+        {updated.length > 0 && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400">
+            ✓ {updated.length} updated
+          </span>
+        )}
+        {deleted.length > 0 && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-red-50 text-red-500 dark:bg-red-900/30 dark:text-red-400">
+            {deleted.length} deleted
+          </span>
+        )}
+        {hasInferredConnections && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-blue-50 text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
+            💡 inferred connection
+          </span>
+        )}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-        Context &amp; changes
-        <span className="text-gray-400 dark:text-gray-400 font-normal">({totalCount})</span>
-      </button>
+          {expanded ? '▴ hide' : '▾ details'}
+        </button>
+      </div>
+
       {expanded && (
         <div className="mt-1.5 space-y-2">
-          {/* Context section — Things that informed the response */}
-          {hasContext ? (
+          {/* Inferred connections — Things the system proactively connected */}
+          {hasInferredConnections && (
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-400 font-semibold mb-1">Context</p>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-400 font-semibold mb-1">Inferred connections</p>
               <div className="space-y-0.5">
                 {contextThings.map((t: ContextThing) => (
                   <button
@@ -202,11 +214,9 @@ function ContextDropdown({ changes }: { changes: AppliedChanges }) {
                 ))}
               </div>
             </div>
-          ) : (
-            <p className="text-[10px] text-gray-400 dark:text-gray-400 italic">No database context used</p>
           )}
 
-          {/* Effects section — Things that were created/updated/deleted */}
+          {/* Effects — Things that were created/updated/deleted */}
           {hasEffects && (
             <div>
               <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-400 font-semibold mb-1">Effects</p>
