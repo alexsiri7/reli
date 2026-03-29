@@ -73,46 +73,38 @@ def _log_run(
 ) -> None:
     """Insert or update a sweep run record."""
     import backend.db_engine as _engine_mod
-    from sqlalchemy import text
     from sqlmodel import Session
 
+    from .db_models import SweepRunRecord
+
     with Session(_engine_mod.engine) as session:
-        # TODO: convert to SQLModel query
-        session.execute(
-            text(
-                """INSERT INTO sweep_runs
-               (id, user_id, status, candidates_found, findings_created,
-                model, prompt_tokens, completion_tokens, cost_usd,
-                error, started_at, completed_at)
-               VALUES (:id, :user_id, :status, :candidates_found, :findings_created,
-                       :model, :prompt_tokens, :completion_tokens, :cost_usd,
-                       :error, :started_at, :completed_at)
-               ON CONFLICT(id) DO UPDATE SET
-                 status=excluded.status,
-                 candidates_found=excluded.candidates_found,
-                 findings_created=excluded.findings_created,
-                 model=excluded.model,
-                 prompt_tokens=excluded.prompt_tokens,
-                 completion_tokens=excluded.completion_tokens,
-                 cost_usd=excluded.cost_usd,
-                 error=excluded.error,
-                 completed_at=excluded.completed_at"""
-            ),
-            {
-                "id": run_id,
-                "user_id": user_id or None,
-                "status": status,
-                "candidates_found": candidates_found,
-                "findings_created": findings_created,
-                "model": model,
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "cost_usd": cost_usd,
-                "error": error,
-                "started_at": started_at,
-                "completed_at": completed_at,
-            },
-        )
+        existing = session.get(SweepRunRecord, run_id)
+        if existing:
+            existing.status = status
+            existing.candidates_found = candidates_found
+            existing.findings_created = findings_created
+            existing.model = model
+            existing.prompt_tokens = prompt_tokens
+            existing.completion_tokens = completion_tokens
+            existing.cost_usd = cost_usd
+            existing.error = error
+            if completed_at:
+                existing.completed_at = datetime.fromisoformat(completed_at)
+        else:
+            session.add(SweepRunRecord(
+                id=run_id,
+                user_id=user_id or None,
+                status=status,
+                candidates_found=candidates_found,
+                findings_created=findings_created,
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cost_usd=cost_usd,
+                error=error,
+                started_at=datetime.fromisoformat(started_at) if started_at else datetime.now(timezone.utc),
+                completed_at=datetime.fromisoformat(completed_at) if completed_at else None,
+            ))
         session.commit()
 
 
