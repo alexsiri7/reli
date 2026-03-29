@@ -492,8 +492,7 @@ interface ReliState {
   setSidebarOpen: (open: boolean) => void
   toggleSidebar: () => void
 
-  // Right panel view: chat or briefing
-  rightView: 'chat' | 'briefing'
+  // toggleRightView alias
   toggleRightView: () => void
 }
 
@@ -1474,6 +1473,24 @@ export const useStore = create<ReliState>((set, get) => ({
       get().fetchThings()
     } catch { /* best-effort */ }
   },
+
+  // Command palette
+  commandPaletteOpen: false,
+  openCommandPalette: () => set({ commandPaletteOpen: true }),
+  closeCommandPalette: () => set({ commandPaletteOpen: false }),
+
+  // Quick-add dialog
+  quickAddOpen: false,
+  openQuickAdd: () => set({ quickAddOpen: true }),
+  closeQuickAdd: () => set({ quickAddOpen: false }),
+
+  // Sidebar visibility (desktop)
+  sidebarOpen: typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
+
+  // toggleRightView alias
+  toggleRightView: () => set(s => ({ rightView: s.rightView === 'chat' ? 'briefing' : 'chat' })),
 
   // Feedback
   feedbackOpen: false,
