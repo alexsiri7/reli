@@ -416,10 +416,16 @@ class TestIntegration:
         result = merge_things(keep_id=keep["id"], remove_id=remove["id"])
         assert result["keep_id"] == keep["id"]
         assert result["remove_id"] == remove["id"]
+        assert result["keep_title"] == "Alice Johnson MCP"
+        assert result["remove_title"] == "A. Johnson MCP"
 
         # Kept thing still exists
         kept = get_thing(thing_id=keep["id"])
         assert kept["id"] == keep["id"]
+
+        # Removed thing is gone
+        gone = get_thing(thing_id=remove["id"])
+        assert "error" in gone
 
     def test_relationship_lifecycle(self, api_server: None) -> None:
         """Create two Things, link them, list, then delete the relationship."""
