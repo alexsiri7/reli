@@ -1025,3 +1025,38 @@ class TestTokenAuthMiddleware:
         resp = client.get("/", headers={"Authorization": "Bearer bad"})
         assert resp.status_code == 401
         assert "Bearer" in resp.headers.get("www-authenticate", "")
+
+
+class TestSessionManagerRestart:
+    """Regression test: session manager must restart after a previous run completes.
+
+    Re: GH#312, #313 — "Task group is not initialized. Make sure to use run()."
+    The bug: _has_started stays True after run() exits, so the lifespan skips
+    run() on the next startup, leaving _task_group = None.
+    """
+
+    def test_session_manager_restarts_after_previous_run(self, patched_db) -> None:
+        """Verify that a second TestClient (= second lifespan) still serves MCP."""
+        from backend.main import app
+        from backend.mcp_server import mcp
+
+        # First app lifecycle: start and stop
+        with TestClient(app):
+            pass  # lifespan runs and exits; _has_started = True, _task_group = None
+
+        sm = mcp._session_manager
+        assert sm is not None
+        assert sm._has_started, "session manager should have been started"
+        assert sm._task_group is None, "task group should be None after shutdown"
+
+        # Second app lifecycle: the lifespan must reset and restart the session manager
+        with TestClient(app) as client:
+            # If the fix is absent, any MCP request would raise
+            # "Task group is not initialized" and the app would return 500.
+            resp = client.get("/mcp/", headers={"Authorization": "Bearer "})
+            # The session manager is running — it handles the request (400/422/200 are all ok;
+            # 500 means the task group was not restarted).
+            assert resp.status_code != 500, (
+                f"MCP returned 500 — session manager task group was not restarted. "
+                f"Response: {resp.text}"
+            )
