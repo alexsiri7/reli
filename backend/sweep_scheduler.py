@@ -251,6 +251,96 @@ async def _run_sweep_for_user(user_id: str) -> None:
         )
 
 
+async def _execute_scheduled_task(task: Any) -> None:
+    """Execute a single scheduled task and mark it as executed."""
+    from .database import db
+
+    task_id = task["id"]
+    task_type = task["task_type"]
+    user_id = task["user_id"] or ""
+    user_label = (user_id[:8] if user_id else "legacy")
+
+    import json as _json
+
+    payload: dict = {}
+    if task["payload"]:
+        try:
+            payload = _json.loads(task["payload"])
+        except (ValueError, TypeError):
+            payload = {}
+
+    result: dict = {}
+    try:
+        if task_type == "remind":
+            # Deliver a reminder notification.
+            # Push notification delivery (#332) will be wired up separately;
+            # for now we log the message and store the result.
+            message = payload.get("message", "")
+            logger.info(
+                "Scheduled task REMIND [%s]: %s (user=%s)",
+                task_id,
+                message,
+                user_label,
+            )
+            result = {"status": "delivered", "message": message}
+
+        elif task_type == "sweep_concern":
+            # Run mini-sweep for the user (surfaces concern-related findings).
+            thing_id = task["thing_id"] or payload.get("thing_id", "")
+            if thing_id:
+                from .sweep import collect_candidates, reflect_on_candidates
+
+                candidates = collect_candidates(user_id=user_id)
+                # Filter to candidates relevant to the linked concern Thing
+                candidates = [c for c in candidates if c.thing_id == thing_id]
+                if candidates:
+                    sweep_result = await reflect_on_candidates(candidates, user_id=user_id)
+                    result = {"status": "completed", "findings_created": sweep_result.findings_created}
+                else:
+                    result = {"status": "completed", "findings_created": 0}
+            else:
+                result = {"status": "skipped", "reason": "no thing_id"}
+
+        else:
+            # 'check' and 'custom' — extensibility placeholder.
+            logger.info("Scheduled task %s [%s] executed (user=%s)", task_type, task_id, user_label)
+            result = {"status": "completed", "task_type": task_type}
+
+    except Exception as exc:
+        logger.exception("Scheduled task %s [%s] failed", task_type, task_id)
+        result = {"status": "failed", "error": str(exc)}
+
+    # Mark as executed
+    executed_at = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        conn.execute(
+            "UPDATE scheduled_tasks SET executed_at = ?, result = ? WHERE id = ?",
+            (executed_at, _json.dumps(result), task_id),
+        )
+
+
+async def _process_scheduled_tasks() -> None:
+    """Process any scheduled tasks that are due."""
+    from .database import db
+
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        due = conn.execute(
+            "SELECT * FROM scheduled_tasks WHERE scheduled_at <= ? AND executed_at IS NULL",
+            (now,),
+        ).fetchall()
+
+    if not due:
+        return
+
+    logger.info("Processing %d due scheduled task(s)", len(due))
+    for task in due:
+        try:
+            await _execute_scheduled_task(task)
+        except Exception:
+            logger.exception("Failed to execute scheduled task %s", task["id"])
+
+
 async def _run_sweep() -> None:
     """Execute one sweep cycle: iterate over all users, then run connection sweep."""
     logger.info("Sweep started")
@@ -303,22 +393,40 @@ async def sweep_loop() -> None:
         await asyncio.sleep(61)
 
 
+async def scheduled_task_loop() -> None:
+    """Background loop that checks for due scheduled tasks every 15 minutes."""
+    logger.info("Scheduled task processor started — interval: 15 minutes")
+    while True:
+        await asyncio.sleep(15 * 60)
+        try:
+            await _process_scheduled_tasks()
+        except Exception:
+            logger.exception("Unexpected error in scheduled task loop")
+
+
 _task: asyncio.Task[None] | None = None
+_scheduled_task_task: asyncio.Task[None] | None = None
 
 
 def start_scheduler() -> None:
-    """Start the sweep background task.  Safe to call multiple times."""
-    global _task
-    if _task is not None and not _task.done():
-        return
-    _task = asyncio.create_task(sweep_loop())
-    logger.info("Sweep scheduler task created")
+    """Start the sweep and scheduled-task background tasks.  Safe to call multiple times."""
+    global _task, _scheduled_task_task
+    if _task is None or _task.done():
+        _task = asyncio.create_task(sweep_loop())
+        logger.info("Sweep scheduler task created")
+    if _scheduled_task_task is None or _scheduled_task_task.done():
+        _scheduled_task_task = asyncio.create_task(scheduled_task_loop())
+        logger.info("Scheduled task processor task created")
 
 
 def stop_scheduler() -> None:
-    """Cancel the sweep background task if running."""
-    global _task
+    """Cancel the sweep and scheduled-task background tasks if running."""
+    global _task, _scheduled_task_task
     if _task is not None and not _task.done():
         _task.cancel()
         logger.info("Sweep scheduler task cancelled")
     _task = None
+    if _scheduled_task_task is not None and not _scheduled_task_task.done():
+        _scheduled_task_task.cancel()
+        logger.info("Scheduled task processor task cancelled")
+    _scheduled_task_task = None

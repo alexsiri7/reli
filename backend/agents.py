@@ -311,7 +311,7 @@ def apply_storage_changes(
     from .vector_store import delete_thing as vs_delete
     from .vector_store import upsert_thing
 
-    applied: dict[str, list] = {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": []}
+    applied: dict[str, list] = {"created": [], "updated": [], "deleted": [], "merged": [], "relationships_created": [], "scheduled_tasks_created": []}
 
     now = datetime.now(timezone.utc).isoformat()
 
@@ -708,6 +708,28 @@ def apply_storage_changes(
                 "relationship_type": rel_type,
             }
         )
+
+    # ── Scheduled Tasks ───────────────────────────────────────────────────
+    from .tools import create_scheduled_task
+
+    for task_spec in storage_changes.get("scheduled_tasks", []):
+        task_type = str(task_spec.get("task_type", "")).strip()
+        scheduled_at = str(task_spec.get("scheduled_at", "")).strip()
+        if not task_type or not scheduled_at:
+            continue
+        payload = task_spec.get("payload") or {}
+        thing_id = task_spec.get("thing_id") or None
+        try:
+            created = create_scheduled_task(
+                task_type=task_type,
+                scheduled_at=scheduled_at,
+                payload=payload,
+                thing_id=thing_id,
+                user_id=user_id,
+            )
+            applied["scheduled_tasks_created"].append(created)
+        except Exception:
+            logger.exception("Failed to create scheduled task: %s at %s", task_type, scheduled_at)
 
     # ── Update last_referenced on all retrieved things ────────────────────
     # This is called after reasoning runs; mark all referenced things

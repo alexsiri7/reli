@@ -307,6 +307,27 @@ def _migrate_conversation_summaries(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_summaries_user ON conversation_summaries(user_id)")
 
 
+def _migrate_scheduled_tasks(conn: sqlite3.Connection) -> None:
+    """Create scheduled_tasks table for Reli self-scheduling."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scheduled_tasks (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            thing_id TEXT,
+            task_type TEXT NOT NULL,
+            payload TEXT,
+            scheduled_at TEXT NOT NULL,
+            executed_at TEXT,
+            result TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (thing_id) REFERENCES things(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_user ON scheduled_tasks(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_scheduled ON scheduled_tasks(scheduled_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_executed ON scheduled_tasks(executed_at)")
+
+
 def get_latest_summary(user_id: str) -> dict[str, Any] | None:
     """Get the most recent conversation summary for a user.
 
@@ -574,4 +595,5 @@ def init_db() -> None:
         _migrate_connection_suggestions(conn)
         _migrate_morning_briefings(conn)
         _migrate_conversation_summaries(conn)
+        _migrate_scheduled_tasks(conn)
         _seed_thing_types(conn)

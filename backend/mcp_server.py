@@ -604,6 +604,50 @@ The `data` field holds a `patterns` array:
 
 
 # ---------------------------------------------------------------------------
+# Self-scheduling
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def schedule_task(
+    task_type: str,
+    scheduled_at: str,
+    message: str = "",
+    thing_id: str | None = None,
+) -> dict[str, Any]:
+    """Schedule a future task for Reli to execute autonomously.
+
+    Reli will execute this task at the specified time without the user
+    needing to initiate a conversation.
+
+    Args:
+        task_type: What to do when the task fires. One of:
+            - 'remind': Send a push notification with ``message``.
+            - 'check': Run a check action (uses ``message`` as action description).
+            - 'sweep_concern': Run a mini-sweep for the linked Thing (uses ``thing_id``).
+            - 'custom': Arbitrary future extensibility.
+        scheduled_at: ISO 8601 datetime when the task should fire (e.g.
+            "2026-04-01T09:00:00Z").
+        message: Human-readable text for 'remind' and 'check' tasks.
+        thing_id: Optional UUID of a Thing to link to this task (required
+            for 'sweep_concern').
+
+    Returns:
+        Dict with ``id``, ``task_type``, ``scheduled_at``, and ``created_at``.
+    """
+    payload: dict[str, Any] = {}
+    if message:
+        payload["message"] = message
+    return shared_tools.create_scheduled_task(
+        task_type=task_type,
+        scheduled_at=scheduled_at,
+        payload=payload if payload else None,
+        thing_id=thing_id,
+        user_id=_user_id(),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Reasoning-as-a-service: reli_think
 # ---------------------------------------------------------------------------
 

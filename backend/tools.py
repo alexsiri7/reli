@@ -835,6 +835,46 @@ def get_open_questions(
 # ---------------------------------------------------------------------------
 
 
+def create_scheduled_task(
+    task_type: str,
+    scheduled_at: str,
+    payload: dict[str, Any] | None = None,
+    thing_id: str | None = None,
+    user_id: str = "",
+) -> dict[str, Any]:
+    """Create a scheduled task for Reli to execute autonomously in the future.
+
+    Args:
+        task_type: One of 'remind', 'check', 'sweep_concern', 'custom'.
+        scheduled_at: ISO 8601 datetime when the task should fire.
+        payload: JSON-serializable dict with task-specific data
+            (e.g. {"message": "..."} for remind tasks).
+        thing_id: Optional UUID of a linked Thing.
+        user_id: Authenticated user ID.
+
+    Returns:
+        Dict with the created task's id, task_type, scheduled_at, and created_at.
+    """
+    task_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    payload_json = json.dumps(payload) if payload is not None else None
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO scheduled_tasks"
+            " (id, user_id, thing_id, task_type, payload, scheduled_at, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (task_id, user_id or None, thing_id or None, task_type, payload_json, scheduled_at, now),
+        )
+    logger.info(
+        "Scheduled task created: id=%s type=%s scheduled_at=%s user=%s",
+        task_id,
+        task_type,
+        scheduled_at,
+        user_id or "legacy",
+    )
+    return {"id": task_id, "task_type": task_type, "scheduled_at": scheduled_at, "created_at": now}
+
+
 def get_conflicts(
     window: int = 14,
     user_id: str = "",

@@ -32,6 +32,14 @@ Output schema:
       "relationship_type": "..."
     }]
   },
+  "scheduled_tasks": [
+    {
+      "task_type": "remind",
+      "thing_id": null,
+      "payload": {"message": "Check flight prices for Spain trip"},
+      "scheduled_at": "2026-04-01T09:00:00Z"
+    }
+  ],
   "questions_for_user": [],
   "priority_question": "The single most important question to ask this turn (or empty string).",
   "reasoning_summary": "Brief internal note explaining intent.",
@@ -39,6 +47,12 @@ Output schema:
 }
 
 Rules:
+- "scheduled_tasks" items: task_type required; scheduled_at ISO-8601 required; thing_id optional
+  - Use task_type "remind" when the user says "remind me about X on <date/time>"
+  - Use task_type "check" when the user wants Reli to autonomously check something in the future
+  - Use task_type "sweep_concern" when a recurring concern needs a future check-in (requires thing_id)
+  - Only create scheduled_tasks when the user expresses a future autonomous action (not just a checkin_date)
+  - scheduled_at must be an absolute ISO-8601 datetime (e.g. "2026-04-01T09:00:00Z"), not relative
 - "create" items: title required; type_hint optional; checkin_date ISO-8601 or null
 - "update" items: id required; changes = only the fields to change
 - "delete" items: list of UUIDs to hard-delete
