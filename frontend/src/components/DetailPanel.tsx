@@ -63,7 +63,22 @@ export function DetailPanel() {
     return groups
   }, [detailRelationships, detailThingId, things])
 
-  if (!detailThingId) return null
+  if (!detailThingId) {
+    return (
+      <div className="hidden md:flex w-80 shrink-0 flex-col items-center justify-center gap-3 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-center px-6">
+        <svg className="w-12 h-12 text-gray-200 dark:text-gray-700" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="6" y="10" width="36" height="28" rx="3" stroke="currentColor" strokeWidth="2" fill="none"/>
+          <line x1="6" y1="18" x2="42" y2="18" stroke="currentColor" strokeWidth="2"/>
+          <rect x="12" y="23" width="10" height="3" rx="1" fill="currentColor" opacity="0.3"/>
+          <rect x="12" y="29" width="24" height="2" rx="1" fill="currentColor" opacity="0.2"/>
+          <rect x="12" y="33" width="18" height="2" rx="1" fill="currentColor" opacity="0.2"/>
+        </svg>
+        <p className="text-sm text-gray-400 dark:text-gray-500">
+          Click any Thing in the sidebar to see its details and relationships.
+        </p>
+      </div>
+    )
+  }
 
   const thing = detailThing
   const canGoBack = detailHistory.length > 0
