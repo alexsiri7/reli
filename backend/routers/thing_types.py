@@ -1,35 +1,26 @@
-from sqlmodel import Session
-
 """CRUD endpoints for Thing Types."""
 
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlmodel import Session, select
 
-import backend.db_engine as _engine_mod
-from ..db_engine import _exec
+from ..db_engine import get_session
+from ..db_models import ThingTypeRecord
 from ..models import ThingType, ThingTypeCreate, ThingTypeUpdate
 
 router = APIRouter(prefix="/thing-types", tags=["thing-types"])
 
 
-def _parse_dt(val: str | None) -> datetime | None:
-    if val is None:
-        return None
-    if isinstance(val, datetime):
-        return val
-    return datetime.fromisoformat(val)
-
-
-def _row_to_thing_type(row: Any) -> ThingType:
+def _record_to_thing_type(record: ThingTypeRecord) -> ThingType:
     return ThingType(
-        id=row.id,
-        name=row.name,
-        icon=row.icon,
-        color=row.color,
-        created_at=_parse_dt(row.created_at) or datetime.min,
+        id=record.id,
+        name=record.name,
+        icon=record.icon,
+        color=record.color,
+        created_at=record.created_at or datetime.min,
     )
 
 
@@ -37,91 +28,101 @@ def _row_to_thing_type(row: Any) -> ThingType:
 def list_thing_types(
     limit: int = Query(100, ge=1, le=500, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
+    session: Session = Depends(get_session),
 ) -> list[ThingType]:
     """List all Thing Types, sorted alphabetically by name."""
-    with Session(_engine_mod.engine) as session:
-        rows = _exec(session, 
-            "SELECT * FROM thing_types ORDER BY name ASC LIMIT ? OFFSET ?",
-            (limit, offset),
-        ).fetchall()
-    return [_row_to_thing_type(r) for r in rows]
+    records = session.exec(
+        select(ThingTypeRecord)
+        .order_by(ThingTypeRecord.name.asc())  # type: ignore[attr-defined]
+        .limit(limit)
+        .offset(offset)
+    ).all()
+    return [_record_to_thing_type(r) for r in records]
 
 
 @router.get("/{type_id}", response_model=ThingType, summary="Get a Thing Type")
-def get_thing_type(type_id: str) -> ThingType:
+def get_thing_type(
+    type_id: str,
+    session: Session = Depends(get_session),
+) -> ThingType:
     """Retrieve a single Thing Type by ID."""
-    with Session(_engine_mod.engine) as session:
-        row = _exec(session, "SELECT * FROM thing_types WHERE id = ?", (type_id,)).fetchone()
-    if not row:
+    record = session.get(ThingTypeRecord, type_id)
+    if not record:
         raise HTTPException(status_code=404, detail=f"Thing type '{type_id}' not found")
-    return _row_to_thing_type(row)
+    return _record_to_thing_type(record)
 
 
 @router.post("", response_model=ThingType, status_code=status.HTTP_201_CREATED, summary="Create a Thing Type")
-def create_thing_type(body: ThingTypeCreate) -> ThingType:
+def create_thing_type(
+    body: ThingTypeCreate,
+    session: Session = Depends(get_session),
+) -> ThingType:
     """Create a new Thing Type. Names must be unique."""
-    type_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-    with Session(_engine_mod.engine) as session:
-        # Check for duplicate name
-        existing = _exec(session, "SELECT id FROM thing_types WHERE name = ?", (body.name,)).fetchone()
+    existing = session.exec(
+        select(ThingTypeRecord).where(ThingTypeRecord.name == body.name)
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Thing type with name '{body.name}' already exists",
+        )
+
+    record = ThingTypeRecord(
+        id=str(uuid.uuid4()),
+        name=body.name,
+        icon=body.icon,
+        color=body.color,
+        created_at=datetime.now(timezone.utc),
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return _record_to_thing_type(record)
+
+
+@router.patch("/{type_id}", response_model=ThingType, summary="Update a Thing Type")
+def update_thing_type(
+    type_id: str,
+    body: ThingTypeUpdate,
+    session: Session = Depends(get_session),
+) -> ThingType:
+    """Partially update a Thing Type. Names must remain unique."""
+    record = session.get(ThingTypeRecord, type_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Thing type '{type_id}' not found")
+
+    if body.name is not None:
+        existing = session.exec(
+            select(ThingTypeRecord).where(
+                ThingTypeRecord.name == body.name,
+                ThingTypeRecord.id != type_id,
+            )
+        ).first()
         if existing:
             raise HTTPException(
                 status_code=409,
                 detail=f"Thing type with name '{body.name}' already exists",
             )
-        _exec(session, 
-            "INSERT INTO thing_types (id, name, icon, color, created_at) VALUES (?, ?, ?, ?, ?)",
-            (type_id, body.name, body.icon, body.color, now),
-        )
-        row = _exec(session, "SELECT * FROM thing_types WHERE id = ?", (type_id,)).fetchone()
-        session.commit()
-    return _row_to_thing_type(row)
+        record.name = body.name
+    if body.icon is not None:
+        record.icon = body.icon
+    if body.color is not None:
+        record.color = body.color
 
-
-@router.patch("/{type_id}", response_model=ThingType, summary="Update a Thing Type")
-def update_thing_type(type_id: str, body: ThingTypeUpdate) -> ThingType:
-    """Partially update a Thing Type. Names must remain unique."""
-    with Session(_engine_mod.engine) as session:
-        row = _exec(session, "SELECT * FROM thing_types WHERE id = ?", (type_id,)).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Thing type '{type_id}' not found")
-
-        fields: dict[str, str | None] = {}
-        if body.name is not None:
-            # Check for duplicate name (excluding self)
-            existing = _exec(session, 
-                "SELECT id FROM thing_types WHERE name = ? AND id != ?",
-                (body.name, type_id),
-            ).fetchone()
-            if existing:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Thing type with name '{body.name}' already exists",
-                )
-            fields["name"] = body.name
-        if body.icon is not None:
-            fields["icon"] = body.icon
-        if body.color is not None:
-            fields["color"] = body.color
-
-        if not fields:
-            return _row_to_thing_type(row)
-
-        set_clause = ", ".join(f"{k} = ?" for k in fields)
-        values = list(fields.values()) + [type_id]
-        _exec(session, f"UPDATE thing_types SET {set_clause} WHERE id = ?", values)
-        row = _exec(session, "SELECT * FROM thing_types WHERE id = ?", (type_id,)).fetchone()
-        session.commit()
-    return _row_to_thing_type(row)
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return _record_to_thing_type(record)
 
 
 @router.delete("/{type_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a Thing Type")
-def delete_thing_type(type_id: str) -> None:
+def delete_thing_type(
+    type_id: str,
+    session: Session = Depends(get_session),
+) -> None:
     """Delete a Thing Type by ID."""
-    with Session(_engine_mod.engine) as session:
-        row = _exec(session, "SELECT id FROM thing_types WHERE id = ?", (type_id,)).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Thing type '{type_id}' not found")
-        _exec(session, "DELETE FROM thing_types WHERE id = ?", (type_id,))
-        session.commit()
+    record = session.get(ThingTypeRecord, type_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Thing type '{type_id}' not found")
+    session.delete(record)
+    session.commit()
