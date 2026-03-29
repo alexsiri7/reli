@@ -27,11 +27,11 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from .auth import user_filter
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
-from .db_engine import _exec
+from .db_engine import user_filter_clause
+from .db_models import ChatHistoryRecord, ThingRecord
 
 logger = logging.getLogger(__name__)
 
@@ -83,17 +83,18 @@ def _fetch_recent_interactions(
     Returns a list of dicts with keys: role, content, applied_changes, timestamp.
     Limited to the most recent interactions within the window.
     """
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-    uf_sql, uf_params = user_filter(user_id)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
-    rows = _exec(session, 
-        f"""SELECT role, content, applied_changes, timestamp
-           FROM chat_history
-           WHERE timestamp >= ?{uf_sql}
-           ORDER BY timestamp ASC
-           LIMIT 500""",
-        (cutoff, *uf_params),
-    ).fetchall()
+    stmt = (
+        select(ChatHistoryRecord)
+        .where(
+            ChatHistoryRecord.timestamp >= cutoff,
+            user_filter_clause(ChatHistoryRecord.user_id, user_id),
+        )
+        .order_by(ChatHistoryRecord.timestamp.asc())  # type: ignore[union-attr]
+        .limit(500)
+    )
+    rows = session.exec(stmt).all()
 
     interactions = []
     for row in rows:
@@ -121,22 +122,18 @@ def _fetch_existing_preferences(session: Session, user_id: str = "") -> list[dic
     Excludes reli_communication preferences — those use a different schema
     and are handled by aggregate_communication_style_patterns().
     """
-    uf_sql, uf_params = user_filter(user_id)
-    rows = _exec(session, 
-        f"""SELECT id, title, data FROM things
-           WHERE type_hint = 'preference'
-             AND active = 1{uf_sql}""",
-        uf_params,
-    ).fetchall()
+    stmt = select(ThingRecord).where(
+        ThingRecord.type_hint == "preference",
+        ThingRecord.active == True,
+        user_filter_clause(ThingRecord.user_id, user_id),
+    )
+    rows = session.exec(stmt).all()
 
     preferences = []
     for row in rows:
         data = {}
         if row.data:
-            try:
-                data = json.loads(row.data) if isinstance(row.data, str) else row.data
-            except (json.JSONDecodeError, TypeError):
-                pass
+            data = row.data if isinstance(row.data, dict) else {}
         # Skip reli_communication preferences — they have a different data schema
         if data.get("category") == "reli_communication":
             continue
@@ -152,22 +149,16 @@ def _fetch_existing_preferences(session: Session, user_id: str = "") -> list[dic
 
 def _fetch_communication_style_things(session: Session, user_id: str = "") -> list[dict]:
     """Fetch existing reli_communication preference Things for this user."""
-    uf_sql, uf_params = user_filter(user_id)
-    rows = _exec(session, 
-        f"""SELECT id, title, data FROM things
-           WHERE type_hint = 'preference'
-             AND active = 1{uf_sql}""",
-        uf_params,
-    ).fetchall()
+    stmt = select(ThingRecord).where(
+        ThingRecord.type_hint == "preference",
+        ThingRecord.active == True,
+        user_filter_clause(ThingRecord.user_id, user_id),
+    )
+    rows = session.exec(stmt).all()
 
     result = []
     for row in rows:
-        data = {}
-        if row.data:
-            try:
-                data = json.loads(row.data) if isinstance(row.data, str) else row.data
-            except (json.JSONDecodeError, TypeError):
-                pass
+        data = row.data if isinstance(row.data, dict) else {}
         if data.get("category") == "reli_communication":
             result.append({"id": row.id, "title": row.title, "data": data})
     return result
@@ -358,10 +349,11 @@ async def aggregate_preference_patterns(
                     "sweep_count": existing_data.get("sweep_count", 0) + 1,
                 }
 
-                _exec(session, 
-                    "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
-                    (json.dumps(updated_data), now, existing_id),
-                )
+                thing_rec = session.get(ThingRecord, existing_id)
+                if thing_rec:
+                    thing_rec.data = updated_data
+                    thing_rec.updated_at = datetime.fromisoformat(now)
+                    session.add(thing_rec)
                 updated_count += 1
                 result_prefs.append(
                     {
@@ -383,13 +375,20 @@ async def aggregate_preference_patterns(
                     "sweep_count": 1,
                 }
 
-                _exec(session, 
-                    """INSERT INTO things
-                       (id, title, type_hint, importance, active, surface, data,
-                        created_at, updated_at, user_id)
-                       VALUES (?, ?, 'preference', 2, 1, 0, ?, ?, ?, ?)""",
-                    (thing_id, title, json.dumps(pref_data), now, now, user_id or None),
+                now_dt = datetime.fromisoformat(now)
+                new_thing = ThingRecord(
+                    id=thing_id,
+                    title=title,
+                    type_hint="preference",
+                    importance=2,
+                    active=True,
+                    surface=False,
+                    data=pref_data,
+                    created_at=now_dt,
+                    updated_at=now_dt,
+                    user_id=user_id or None,
                 )
+                session.add(new_thing)
                 created_count += 1
                 result_prefs.append(
                     {
@@ -649,17 +648,19 @@ async def aggregate_communication_style_patterns(
                     "patterns": merged_patterns,
                     "last_sweep": now,
                 }
-                _exec(session, 
-                    "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
-                    (json.dumps(thing_data), now, primary_thing_id),
-                )
+                thing_rec = session.get(ThingRecord, primary_thing_id)
+                if thing_rec:
+                    thing_rec.data = thing_data
+                    thing_rec.updated_at = datetime.fromisoformat(now)
+                    session.add(thing_rec)
 
             # Deactivate any extra reli_communication Things (duplicates)
             for thing in existing_things[1:]:
-                _exec(session, 
-                    "UPDATE things SET active = 0, updated_at = ? WHERE id = ?",
-                    (now, thing["id"]),
-                )
+                dup_rec = session.get(ThingRecord, thing["id"])
+                if dup_rec:
+                    dup_rec.active = False
+                    dup_rec.updated_at = datetime.fromisoformat(now)
+                    session.add(dup_rec)
         else:
             # No existing Thing — create one if we have patterns
             if merged_patterns:
@@ -669,20 +670,20 @@ async def aggregate_communication_style_patterns(
                     "patterns": merged_patterns,
                     "last_sweep": now,
                 }
-                _exec(session, 
-                    """INSERT INTO things
-                       (id, title, type_hint, importance, active, surface, data,
-                        created_at, updated_at, user_id)
-                       VALUES (?, ?, 'preference', 2, 1, 0, ?, ?, ?, ?)""",
-                    (
-                        primary_thing_id,
-                        "How the user wants Reli to communicate",
-                        json.dumps(thing_data),
-                        now,
-                        now,
-                        user_id or None,
-                    ),
+                now_dt = datetime.fromisoformat(now)
+                new_thing = ThingRecord(
+                    id=primary_thing_id,
+                    title="How the user wants Reli to communicate",
+                    type_hint="preference",
+                    importance=2,
+                    active=True,
+                    surface=False,
+                    data=thing_data,
+                    created_at=now_dt,
+                    updated_at=now_dt,
+                    user_id=user_id or None,
                 )
+                session.add(new_thing)
         session.commit()
 
     return CommStyleAggregationResult(
