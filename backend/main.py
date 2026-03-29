@@ -47,7 +47,6 @@ from .routers import (  # noqa: E402
     focus,
     gmail,
     mcp_oauth,
-    nudges,
     preferences,
     proactive,
     settings,
@@ -67,14 +66,19 @@ _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_tracing()
-    init_db()
-    clean_orphan_relationships()
 
-    # Initialize SQLModel tables (no-op if they already exist from sqlite3 init).
+    # Initialize SQLModel tables (no-op if they already exist).
     from .db_engine import init_sqlmodel_tables
     from . import db_models as _db_models  # noqa: F811 — register table metadata
 
     init_sqlmodel_tables()
+
+    # Legacy SQLite init — only when not using an external database
+    from .config import settings as _settings
+
+    if not _settings.DATABASE_URL:
+        init_db()
+        clean_orphan_relationships()
     start_scheduler()
 
     # Start MCP session manager (required for streamable HTTP transport).
@@ -266,7 +270,6 @@ app.include_router(focus.router, prefix="/api", dependencies=_api_deps)
 app.include_router(staleness.router, prefix="/api", dependencies=_api_deps)
 app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
 app.include_router(connections.router, prefix="/api", dependencies=_api_deps)
-app.include_router(nudges.router, prefix="/api", dependencies=_api_deps)
 app.include_router(preferences.router, prefix="/api", dependencies=_api_deps)
 app.include_router(think.router, prefix="/api", dependencies=_api_deps)
 
