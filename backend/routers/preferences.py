@@ -1,5 +1,3 @@
-from sqlmodel import Session
-
 """Preference feedback endpoint."""
 
 import json
@@ -7,10 +5,12 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlmodel import Session, select
 
-from ..auth import require_user, user_filter
+from ..auth import require_user
 import backend.db_engine as _engine_mod
-from ..db_engine import _exec
+from ..db_engine import user_filter_clause
+from ..db_models import ThingRecord
 
 router = APIRouter(prefix="/preferences", tags=["preferences"])
 
@@ -46,18 +46,21 @@ def preference_feedback(
     'accurate: true' (That's right) boosts confidence.
     'accurate: false' (Not really) reduces confidence.
     """
-    uf_sql, uf_params = user_filter(user_id)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
 
     with Session(_engine_mod.engine) as session:
-        row = _exec(session, 
-            f"SELECT * FROM things WHERE id = ? AND type_hint = 'preference' AND active = 1{uf_sql}",
-            [thing_id, *uf_params],
-        ).fetchone()
-        if not row:
+        record = session.exec(
+            select(ThingRecord).where(
+                ThingRecord.id == thing_id,
+                ThingRecord.type_hint == "preference",
+                ThingRecord.active == True,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+        ).first()
+        if not record:
             raise HTTPException(status_code=404, detail="Preference not found")
 
-        raw_data = row.data
+        raw_data = record.data
         try:
             data = json.loads(raw_data) if isinstance(raw_data, str) else (raw_data or {})
         except (json.JSONDecodeError, TypeError):
@@ -86,10 +89,8 @@ def preference_feedback(
             # No confidence field — initialize it
             data["confidence"] = 0.6 if body.accurate else 0.3
 
-        _exec(session, 
-            "UPDATE things SET data = ?, updated_at = ? WHERE id = ?",
-            (json.dumps(data), now, thing_id),
-        )
-
+        record.data = data
+        record.updated_at = now
+        session.add(record)
         session.commit()
     return {"id": thing_id, "updated": True}
