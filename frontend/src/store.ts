@@ -459,6 +459,13 @@ interface ReliState {
   dismissConnectionSuggestion: (id: string) => Promise<void>
   deferConnectionSuggestion: (id: string) => Promise<void>
 
+  // Preference toasts
+  preferenceToasts: { id: string; title: string; confidenceLabel: string; action: 'created' | 'updated' }[]
+  dismissPreferenceToast: (id: string) => void
+
+  // Preference feedback
+  submitPreferenceFeedback: (thingId: string, accurate: boolean) => Promise<void>
+
   // Feedback
   feedbackOpen: boolean
   openFeedback: () => void
@@ -501,6 +508,44 @@ async function fetchThingDetailWithFallback(
     }
     throw new Error('Network error')
   }
+}
+
+function _preferenceConfidenceLabel(data: unknown): string {
+  if (!data || typeof data !== 'object') return ''
+  const d = data as Record<string, unknown>
+  if (typeof d.confidence === 'number') {
+    const c = d.confidence as number
+    return c >= 0.7 ? 'strong' : c >= 0.5 ? 'moderate' : 'emerging'
+  }
+  if (Array.isArray(d.patterns) && d.patterns.length > 0) {
+    const first = d.patterns[0] as Record<string, unknown>
+    return String(first.confidence ?? 'emerging')
+  }
+  return ''
+}
+
+function _parsePreferenceToasts(
+  changes: AppliedChanges | null | undefined
+): { id: string; title: string; confidenceLabel: string; action: 'created' | 'updated' }[] {
+  if (!changes) return []
+  const toasts: { id: string; title: string; confidenceLabel: string; action: 'created' | 'updated' }[] = []
+  const ts = Date.now()
+  const checkItem = (item: Record<string, unknown>, action: 'created' | 'updated') => {
+    if ((item.type_hint as string | undefined) !== 'preference') return
+    let data = item.data
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data) } catch { data = null }
+    }
+    toasts.push({
+      id: `pref-toast-${ts}-${item.id}`,
+      title: String(item.title ?? ''),
+      confidenceLabel: _preferenceConfidenceLabel(data),
+      action,
+    })
+  }
+  for (const c of changes.created ?? []) checkItem(c as Record<string, unknown>, 'created')
+  for (const u of changes.updated ?? []) checkItem(u as Record<string, unknown>, 'updated')
+  return toasts
 }
 
 export const useStore = create<ReliState>((set, get) => ({
@@ -1010,11 +1055,15 @@ export const useStore = create<ReliState>((set, get) => ({
                 per_call_usage: chatData.usage?.per_call_usage ?? [],
                 timestamp: new Date().toISOString(),
               }
+              const newToasts = _parsePreferenceToasts(chatData.applied_changes)
               const updates: Partial<ReliState> = {
                 messages: get().messages.map(m => m.streaming ? assistantMsg : m),
               }
               if (chatData.session_usage) {
                 updates.sessionStats = chatData.session_usage
+              }
+              if (newToasts.length > 0) {
+                updates.preferenceToasts = [...get().preferenceToasts, ...newToasts]
               }
               set(updates as ReliState)
             } else if (eventType === 'error') {
@@ -1387,6 +1436,24 @@ export const useStore = create<ReliState>((set, get) => ({
     } catch {
       // ignore
     }
+  },
+
+  // Preference toasts
+  preferenceToasts: [],
+  dismissPreferenceToast: (id: string) =>
+    set(state => ({ preferenceToasts: state.preferenceToasts.filter(t => t.id !== id) })),
+
+  // Preference feedback
+  submitPreferenceFeedback: async (thingId: string, accurate: boolean) => {
+    try {
+      const res = await apiFetch(`${BASE}/preferences/${thingId}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accurate }),
+      })
+      if (!res.ok) return
+      get().fetchThings()
+    } catch { /* best-effort */ }
   },
 
   // Feedback
