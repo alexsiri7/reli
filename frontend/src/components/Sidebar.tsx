@@ -541,7 +541,7 @@ export function Sidebar() {
           <div className="flex items-center gap-1.5">
             {disclosure.showGraphView && (
             <button
-              onClick={() => setMainView(mainView === 'list' ? 'graph' : 'list')}
+              onClick={() => setMainView(mainView === 'graph' ? 'list' : 'graph')}
               aria-label={mainView === 'graph' ? 'Switch to list view' : 'Switch to graph view'}
               title={mainView === 'graph' ? 'List view' : 'Graph view'}
               className={`p-1.5 rounded-lg transition-colors ${
@@ -613,6 +613,30 @@ export function Sidebar() {
               </svg>
             </button>
           </div>
+        </div>
+
+        {/* Briefing / All Things view toggle (desktop only) */}
+        <div className="hidden md:flex px-3 pt-2 pb-1 gap-1 border-b border-gray-200 dark:border-gray-800">
+          <button
+            onClick={() => setMainView('briefing')}
+            className={`flex-1 py-1 text-xs font-medium rounded-md transition-colors ${
+              mainView === 'briefing'
+                ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+            }`}
+          >
+            Briefing
+          </button>
+          <button
+            onClick={() => setMainView(mainView === 'graph' ? 'graph' : 'list')}
+            className={`flex-1 py-1 text-xs font-medium rounded-md transition-colors ${
+              mainView === 'list' || mainView === 'graph'
+                ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+            }`}
+          >
+            All Things
+          </button>
         </div>
 
         {/* Search bar */}

@@ -402,8 +402,8 @@ interface ReliState {
   clearThingFilters: () => void
 
   // View mode
-  mainView: 'list' | 'graph'
-  setMainView: (view: 'list' | 'graph') => void
+  mainView: 'list' | 'graph' | 'briefing'
+  setMainView: (view: 'list' | 'graph' | 'briefing') => void
 
   // Chat mode (Hats)
   chatMode: ChatMode
@@ -414,8 +414,13 @@ interface ReliState {
   setInteractionStyle: (style: InteractionStyle) => void
 
   // Mobile navigation
-  mobileView: 'things' | 'chat'
-  setMobileView: (view: 'things' | 'chat') => void
+  mobileView: 'things' | 'chat' | 'briefing'
+  setMobileView: (view: 'things' | 'chat' | 'briefing') => void
+
+  // Chat pre-fill (for "Chat about it" from briefing)
+  pendingChatInput: string
+  setPendingChatInput: (text: string) => void
+  clearPendingChatInput: () => void
 
   // Settings
   settingsOpen: boolean
@@ -1106,7 +1111,7 @@ export const useStore = create<ReliState>((set, get) => ({
   clearThingFilters: () => set({ thingFilterQuery: '', thingFilterTypes: [] }),
 
   // View mode
-  mainView: 'list',
+  mainView: 'briefing',
   setMainView: (view) => set({ mainView: view }),
 
   // Chat mode (Hats)
@@ -1133,8 +1138,13 @@ export const useStore = create<ReliState>((set, get) => ({
   },
 
   // Mobile navigation
-  mobileView: 'things',
+  mobileView: 'briefing',
   setMobileView: (view) => set({ mobileView: view }),
+
+  // Chat pre-fill
+  pendingChatInput: '',
+  setPendingChatInput: (text) => set({ pendingChatInput: text }),
+  clearPendingChatInput: () => set({ pendingChatInput: '' }),
 
   // Settings
   settingsOpen: false,
