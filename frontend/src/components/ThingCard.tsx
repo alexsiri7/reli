@@ -16,30 +16,60 @@ function snoozeDate(days: number): string {
 
 export function ThingCard({ thing }: Props) {
   const snoozeThing = useStore(s => s.snoozeThing)
+  const updateThing = useStore(s => s.updateThing)
   const thingTypes = useStore(s => s.thingTypes)
   const openThingDetail = useStore(s => s.openThingDetail)
   const [showSnooze, setShowSnooze] = useState(false)
+  const [completing, setCompleting] = useState(false)
 
   const overdue = isOverdue(thing.checkin_date)
   const dateLabel = formatDate(thing.checkin_date)
+  const isTask = thing.type_hint === 'task'
 
   const handleSnooze = async (days: number) => {
     setShowSnooze(false)
     await snoozeThing(thing.id, snoozeDate(days))
   }
 
+  const handleCheckbox = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (completing) return
+    setCompleting(true)
+    // Give animation time to play before the item disappears from the list
+    await new Promise(r => setTimeout(r, 600))
+    await updateThing(thing.id, { active: false })
+  }
+
   return (
-    <div className="px-3 py-1">
+    <div
+      className="px-3 py-1 transition-all duration-500"
+      style={completing ? { opacity: 0.3, transform: 'translateY(4px)' } : undefined}
+    >
       <div
         className="relative flex items-start gap-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 group transition-colors cursor-pointer px-1"
         onClick={() => openThingDetail(thing.id)}
         role="button"
       >
-        <span className="text-lg leading-none mt-0.5 select-none" title={thing.type_hint ?? 'thing'}>
-          {typeIcon(thing.type_hint, thingTypes)}
-        </span>
+        {isTask ? (
+          <button
+            onClick={handleCheckbox}
+            className="shrink-0 mt-0.5 w-4 h-4 rounded border border-gray-300 dark:border-gray-600 hover:border-emerald-500 dark:hover:border-emerald-400 flex items-center justify-center transition-colors"
+            title="Mark done"
+            aria-label="Mark task done"
+          >
+            {completing && (
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            )}
+          </button>
+        ) : (
+          <span className="text-lg leading-none mt-0.5 select-none" title={thing.type_hint ?? 'thing'}>
+            {typeIcon(thing.type_hint, thingTypes)}
+          </span>
+        )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
+          <p className={`text-sm font-medium truncate leading-snug transition-all duration-300 ${completing ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
             {thing.title}
           </p>
           {dateLabel && (

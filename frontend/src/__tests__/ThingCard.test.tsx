@@ -3,13 +3,14 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { ThingCard } from '../components/ThingCard'
 
 const snoozeThing = vi.fn()
+const updateThing = vi.fn()
 const openThingDetail = vi.fn()
 
 const thingTypes: { name: string; icon: string }[] = []
 
 vi.mock('../store', () => ({
-  useStore: (selector: (s: { snoozeThing: typeof snoozeThing; thingTypes: typeof thingTypes; openThingDetail: typeof openThingDetail }) => unknown) =>
-    selector({ snoozeThing, thingTypes, openThingDetail }),
+  useStore: (selector: (s: { snoozeThing: typeof snoozeThing; updateThing: typeof updateThing; thingTypes: typeof thingTypes; openThingDetail: typeof openThingDetail }) => unknown) =>
+    selector({ snoozeThing, updateThing, thingTypes, openThingDetail }),
 }))
 
 const baseThing = {
@@ -33,6 +34,8 @@ const baseThing = {
 beforeEach(() => {
   snoozeThing.mockReset()
   snoozeThing.mockResolvedValue(undefined)
+  updateThing.mockReset()
+  updateThing.mockResolvedValue(undefined)
   openThingDetail.mockReset()
 })
 
@@ -42,9 +45,15 @@ describe('ThingCard', () => {
     expect(screen.getByText('Finish report')).toBeInTheDocument()
   })
 
-  it('renders type_hint icon', () => {
+  it('renders checkbox for task type instead of icon', () => {
     render(<ThingCard thing={baseThing} />)
-    expect(screen.getByTitle('task')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mark task done' })).toBeInTheDocument()
+  })
+
+  it('renders type_hint icon for non-task types', () => {
+    const note = { ...baseThing, type_hint: 'note' as const }
+    render(<ThingCard thing={note} />)
+    expect(screen.getByTitle('note')).toBeInTheDocument()
   })
 
   it('renders checkin_date label when set', () => {
@@ -116,5 +125,28 @@ describe('ThingCard', () => {
     pastDate.setDate(pastDate.getDate() - 3)
     render(<ThingCard thing={{ ...baseThing, checkin_date: pastDate.toISOString() }} />)
     expect(screen.getByText(/overdue/)).toBeInTheDocument()
+  })
+
+  it('does not render checkbox for non-task types', () => {
+    const note = { ...baseThing, type_hint: 'note' as const }
+    render(<ThingCard thing={note} />)
+    expect(screen.queryByRole('button', { name: 'Mark task done' })).not.toBeInTheDocument()
+  })
+
+  it('calls updateThing with active=false when checkbox clicked', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    render(<ThingCard thing={baseThing} />)
+    const checkbox = screen.getByRole('button', { name: 'Mark task done' })
+    fireEvent.click(checkbox)
+    await vi.advanceTimersByTimeAsync(700)
+    expect(updateThing).toHaveBeenCalledWith('t1', { active: false })
+    vi.useRealTimers()
+  })
+
+  it('does not call openThingDetail when checkbox is clicked', () => {
+    render(<ThingCard thing={baseThing} />)
+    const checkbox = screen.getByRole('button', { name: 'Mark task done' })
+    fireEvent.click(checkbox)
+    expect(openThingDetail).not.toHaveBeenCalled()
   })
 })
