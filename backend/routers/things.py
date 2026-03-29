@@ -442,10 +442,10 @@ def get_thing(
         stmt = stmt.where(
             or_(ThingRecord.user_id == user_id, ThingRecord.user_id.is_(None))  # type: ignore[union-attr]
         )
-    thing = session.exec(stmt).first()
-    if not thing:
+    record = session.exec(stmt).first()
+    if not record:
         raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
-    return thing
+    return Thing.model_validate(record, from_attributes=True)
 
 
 @router.patch("/{thing_id}", response_model=Thing, summary="Update a Thing")
