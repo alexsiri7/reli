@@ -1063,6 +1063,83 @@ def collect_candidates(
 
 
 # ---------------------------------------------------------------------------
+# Phase 1.5: Dismiss stale findings before reflection
+# ---------------------------------------------------------------------------
+
+
+def dismiss_stale_findings(user_id: str = "") -> int:
+    """Dismiss findings whose linked Thing is inactive or that have expired.
+
+    Returns count of findings dismissed.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    total = 0
+
+    with db() as conn:
+        # Dismiss findings linked to inactive Things
+        cur = conn.execute(
+            """UPDATE sweep_findings SET dismissed = 1
+               WHERE dismissed = 0
+                 AND thing_id IS NOT NULL
+                 AND thing_id IN (SELECT id FROM things WHERE active = 0)
+                 AND (user_id = ? OR (? = '' AND user_id IS NULL))""",
+            (user_id or None, user_id),
+        )
+        total += cur.rowcount
+
+        # Dismiss expired findings
+        cur = conn.execute(
+            """UPDATE sweep_findings SET dismissed = 1
+               WHERE dismissed = 0
+                 AND expires_at IS NOT NULL
+                 AND expires_at < ?
+                 AND (user_id = ? OR (? = '' AND user_id IS NULL))""",
+            (now, user_id or None, user_id),
+        )
+        total += cur.rowcount
+
+    return int(total)
+
+
+def _fetch_active_findings(user_id: str = "") -> list[dict]:
+    """Fetch active (non-dismissed, non-expired) findings for a user."""
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        rows = conn.execute(
+            """SELECT sf.id, sf.thing_id, sf.finding_type, sf.message,
+                      sf.priority, sf.created_at, sf.expires_at,
+                      t.title as thing_title
+               FROM sweep_findings sf
+               LEFT JOIN things t ON sf.thing_id = t.id
+               WHERE sf.dismissed = 0
+                 AND (sf.user_id = ? OR (? = '' AND sf.user_id IS NULL))
+                 AND (sf.expires_at IS NULL OR sf.expires_at > ?)
+               ORDER BY sf.priority, sf.created_at DESC""",
+            (user_id or None, user_id, now),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _format_active_findings_for_prompt(findings: list[dict]) -> str:
+    """Format active findings into a prompt section for deduplication."""
+    if not findings:
+        return ""
+
+    lines = [
+        "",
+        "## Currently active findings (do NOT repeat these):",
+    ]
+    for i, f in enumerate(findings, 1):
+        thing_info = f" (thing: {f['thing_title']})" if f.get("thing_title") else ""
+        lines.append(
+            f"{i}. [priority {f['priority']}] \"{f['message']}\"{thing_info}"
+        )
+    lines.append("")
+    lines.append("Generate NEW insights only. Skip anything already covered above.")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Phase 2: LLM reflection
 # ---------------------------------------------------------------------------
 
@@ -1111,6 +1188,8 @@ GUARD RAILS — you MUST follow these:
 - NEVER suggest deleting any Thing. You may only propose creating, updating, or reviewing.
 - Your output is advisory — you create findings (observations), never modify data directly.
 - When in doubt, surface information rather than recommend destructive action.
+- You will be shown currently active findings. Do NOT generate findings that repeat or \
+rephrase existing ones. Only add genuinely new insights.
 """
 
 
@@ -1154,6 +1233,12 @@ async def reflect_on_candidates(
 
     usage_stats = UsageStats()
     prompt = _format_candidates_for_llm(candidates)
+
+    # Include active findings so the LLM avoids duplicating them
+    active_findings = _fetch_active_findings(user_id)
+    active_findings_section = _format_active_findings_for_prompt(active_findings)
+    if active_findings_section:
+        prompt += "\n" + active_findings_section
 
     raw = await _chat(
         messages=[

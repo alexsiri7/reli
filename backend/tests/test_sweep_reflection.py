@@ -1,7 +1,7 @@
 """Tests for the nightly sweep Phase 2: LLM reflection."""
 
 import json
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -10,6 +10,7 @@ from backend.database import db
 from backend.sweep import (
     SweepCandidate,
     _format_candidates_for_llm,
+    dismiss_stale_findings,
     reflect_on_candidates,
 )
 
@@ -316,3 +317,96 @@ class TestSweepRouter:
         resp = await async_client.get("/api/sweep/runs")
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
+
+
+# ---------------------------------------------------------------------------
+# dismiss_stale_findings
+# ---------------------------------------------------------------------------
+
+
+def _insert_finding(conn, finding_id: str, thing_id=None, dismissed=0, expires_at=None, user_id=None):
+    """Helper to insert a sweep finding."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """INSERT INTO sweep_findings
+           (id, thing_id, finding_type, message, priority, dismissed, created_at, expires_at, user_id)
+           VALUES (?, ?, 'llm_insight', 'test message', 2, ?, ?, ?, ?)""",
+        (finding_id, thing_id, dismissed, now, expires_at, user_id),
+    )
+
+
+class TestDismissStaleFindings:
+    def test_dismisses_findings_for_inactive_things(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "t-active", "Active Thing", active=True)
+            _insert_thing(conn, "t-inactive", "Inactive Thing", active=False)
+            _insert_finding(conn, "f1", thing_id="t-inactive")
+            _insert_finding(conn, "f2", thing_id="t-active")
+
+        count = dismiss_stale_findings()
+
+        with db() as conn:
+            f1 = conn.execute("SELECT dismissed FROM sweep_findings WHERE id = 'f1'").fetchone()
+            f2 = conn.execute("SELECT dismissed FROM sweep_findings WHERE id = 'f2'").fetchone()
+        assert count == 1
+        assert f1["dismissed"] == 1
+        assert f2["dismissed"] == 0
+
+    def test_dismisses_expired_findings(self, patched_db):
+        past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        future = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+
+        with db() as conn:
+            _insert_finding(conn, "f-expired", expires_at=past)
+            _insert_finding(conn, "f-future", expires_at=future)
+            _insert_finding(conn, "f-none", expires_at=None)
+
+        count = dismiss_stale_findings()
+
+        with db() as conn:
+            rows = {
+                r["id"]: r["dismissed"]
+                for r in conn.execute("SELECT id, dismissed FROM sweep_findings").fetchall()
+            }
+        assert count == 1
+        assert rows["f-expired"] == 1
+        assert rows["f-future"] == 0
+        assert rows["f-none"] == 0
+
+    def test_does_not_dismiss_valid_findings(self, patched_db):
+        future = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+
+        with db() as conn:
+            _insert_thing(conn, "t-ok", "Valid Thing", active=True)
+            _insert_finding(conn, "f-valid-linked", thing_id="t-ok", expires_at=future)
+            _insert_finding(conn, "f-valid-no-thing", thing_id=None, expires_at=None)
+
+        count = dismiss_stale_findings()
+        assert count == 0
+
+        with db() as conn:
+            rows = conn.execute(
+                "SELECT id, dismissed FROM sweep_findings ORDER BY id"
+            ).fetchall()
+        assert all(r["dismissed"] == 0 for r in rows)
+
+    def test_returns_correct_count(self, patched_db):
+        past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        with db() as conn:
+            _insert_thing(conn, "t-dead", "Dead Thing", active=False)
+            _insert_finding(conn, "f1", thing_id="t-dead")
+            _insert_finding(conn, "f2", thing_id="t-dead")
+            _insert_finding(conn, "f3", expires_at=past)
+
+        count = dismiss_stale_findings()
+        assert count == 3
+
+    def test_skips_already_dismissed(self, patched_db):
+        """Already-dismissed findings should not be counted again."""
+        with db() as conn:
+            _insert_thing(conn, "t-dead2", "Dead Thing 2", active=False)
+            _insert_finding(conn, "f-already", thing_id="t-dead2", dismissed=1)
+
+        count = dismiss_stale_findings()
+        assert count == 0
