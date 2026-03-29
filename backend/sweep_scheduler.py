@@ -108,7 +108,7 @@ def _log_run(
 
 async def _run_sweep_for_user(user_id: str) -> None:
     """Execute one sweep cycle for a single user."""
-    from .sweep import collect_candidates, reflect_on_candidates
+    from .sweep import collect_candidates, dismiss_stale_findings, reflect_on_candidates
 
     run_id = f"sr-{uuid.uuid4().hex[:8]}"
     now = datetime.now(timezone.utc).isoformat()
@@ -116,8 +116,13 @@ async def _run_sweep_for_user(user_id: str) -> None:
     _log_run(run_id, user_id, status="running", started_at=now)
 
     try:
-        candidates = collect_candidates(user_id=user_id)
+        # Phase 0: clean up stale findings
         user_label = user_id[:8] if user_id else "legacy"
+        dismissed = dismiss_stale_findings(user_id)
+        if dismissed:
+            logger.info("Sweep [%s] dismissed %d stale findings", user_label, dismissed)
+
+        candidates = collect_candidates(user_id=user_id)
         logger.info("Sweep [%s] SQL phase: %d candidates found", user_label, len(candidates))
 
         if not candidates:
