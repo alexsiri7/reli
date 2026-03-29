@@ -766,19 +766,34 @@ def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
     if not user_id:
         return []
 
-    from .auth import user_filter
-    from .database import db
+    from sqlmodel import Session, select
+
+    import backend.db_engine as _engine_mod
+    from .db_engine import user_filter_clause
+    from .db_models import ThingRecord
 
     patterns: list[dict[str, Any]] = []
-    with db() as conn:
-        filter_sql, filter_params = user_filter(user_id)
-        query = "SELECT data FROM things WHERE type_hint = 'preference' AND active = 1"
-        if filter_sql:
-            query += f" {filter_sql}"
-        rows = conn.execute(query, filter_params).fetchall()
+
+    # Use raw SQL to avoid SQLAlchemy's JSON processor failing on malformed data.
+    # The data column may contain invalid JSON in older records.
+    from sqlalchemy import text as sa_text
+
+    with Session(_engine_mod.engine) as session:
+        uf_clause = ""
+        bind_params: dict[str, Any] = {}
+        if user_id:
+            uf_clause = " AND (user_id = :uid OR user_id IS NULL)"
+            bind_params["uid"] = user_id
+        result = session.execute(
+            sa_text(
+                f"SELECT data FROM things WHERE type_hint = 'preference' AND active = 1{uf_clause}"
+            ),
+            bind_params,
+        )
+        rows = result.fetchall()
 
     for row in rows:
-        raw = row["data"] if isinstance(row, sqlite3.Row) else row[0]
+        raw = row[0]
         if not raw:
             continue
         try:
