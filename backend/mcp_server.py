@@ -130,7 +130,7 @@ def create_thing(
     title: str,
     type_hint: str | None = None,
     data: dict[str, Any] | None = None,
-    priority: int = 3,
+    importance: int = 2,
     parent_id: str | None = None,
     checkin_date: str | None = None,
     active: bool = True,
@@ -143,7 +143,7 @@ def create_thing(
         title: Short descriptive title (required).
         type_hint: Category like 'task', 'note', 'project', 'person', 'idea', 'goal', 'event', 'place', 'concept'.
         data: Arbitrary JSON data (e.g. {"email": "...", "birthday": "..."}).
-        priority: 1 (highest) to 5 (lowest), default 3.
+        importance: How bad if undone: 0 (critical) to 4 (backlog), default 2.
         parent_id: ID of a parent Thing for hierarchical nesting.
         checkin_date: ISO 8601 date when this Thing should surface in the briefing.
         active: Whether the Thing is active (true) or completed/archived (false).
@@ -155,7 +155,7 @@ def create_thing(
     return shared_tools.create_thing(
         title=title,
         type_hint=type_hint or "",
-        priority=priority,
+        importance=importance,
         checkin_date=checkin_date or "",
         surface=surface,
         data_json=data_json,
@@ -170,7 +170,7 @@ def update_thing(
     title: str | None = None,
     type_hint: str | None = None,
     data: dict[str, Any] | None = None,
-    priority: int | None = None,
+    importance: int | None = None,
     parent_id: str | None = None,
     checkin_date: str | None = None,
     active: bool | None = None,
@@ -184,7 +184,7 @@ def update_thing(
         title: New title.
         type_hint: New category.
         data: New arbitrary JSON data (replaces existing data dict).
-        priority: New priority (1-5).
+        importance: How bad if undone: 0 (critical) to 4 (backlog).
         parent_id: New parent Thing ID.
         checkin_date: New checkin date (ISO 8601).
         active: Set active/archived status.
@@ -195,7 +195,7 @@ def update_thing(
     oq_json = json.dumps(open_questions) if open_questions is not None else ""
 
     # Check if any field was actually provided
-    has_fields = any(v is not None for v in [title, type_hint, data, priority, parent_id, checkin_date, active, surface, open_questions])
+    has_fields = any(v is not None for v in [title, type_hint, data, importance, parent_id, checkin_date, active, surface, open_questions])
     if not has_fields:
         return {"error": "No fields provided to update"}
 
@@ -204,7 +204,7 @@ def update_thing(
         title=title or "",
         active=active,
         checkin_date=checkin_date or "",
-        priority=priority,
+        importance=importance,
         type_hint=type_hint or "",
         surface=surface,
         data_json=data_json,
@@ -305,7 +305,7 @@ def get_briefing(as_of: str | None = None) -> dict[str, Any]:
       - findings: Active sweep findings. Each has a ``finding_type`` field:
           - ``approaching_date``: Something time-sensitive within 7 days.
           - ``stale``: Active Thing not updated in 14+ days.
-          - ``neglected``: High-priority or active-children Thing that's stale.
+          - ``neglected``: High-importance or active-children Thing that's stale.
           - ``overdue_checkin``: Thing whose checkin_date is in the past.
           - ``cross_project_resource_conflict``: Person involved in multiple stale projects.
         Each finding also has ``message`` (human-readable summary), ``priority``
@@ -323,7 +323,7 @@ def get_briefing(as_of: str | None = None) -> dict[str, Any]:
 
 @mcp.tool()
 def get_open_questions(limit: int = 50) -> list[dict[str, Any]]:
-    """Get Things that have unresolved open questions, ordered by priority then recency.
+    """Get Things that have unresolved open questions, ordered by importance then recency.
 
     Returns active Things with non-empty ``open_questions`` arrays. Each Thing
     includes its full field set including the ``open_questions`` list of strings —
@@ -449,7 +449,7 @@ def thing_schema_reference() -> str:
 | type_hint      | string or null  | null    | Category for filtering and display             |
 | parent_id      | string or null  | null    | Parent Thing UUID for hierarchical nesting     |
 | checkin_date   | ISO 8601 or null| null    | When to surface this Thing in the daily briefing |
-| priority       | int (1–5)       | 3       | 1 = highest urgency, 5 = lowest                |
+| importance     | int (0–4)       | 2       | How bad if undone: 0 = critical, 4 = backlog   |
 | active         | bool            | true    | false = completed/archived (never hard-delete) |
 | surface        | bool            | true    | false = graph entity, hide from default views  |
 | data           | object or null  | null    | Arbitrary JSON for custom fields and notes     |
@@ -541,7 +541,7 @@ The `data` field holds a `patterns` array:
 {
   "title": "Draft Q1 budget spreadsheet",
   "type_hint": "task",
-  "priority": 2,
+  "importance": 2,
   "checkin_date": "2025-03-31",
   "data": {"notes": "Due before board meeting"},
   "open_questions": ["Who needs to review it before submission?"]
@@ -564,7 +564,7 @@ The `data` field holds a `patterns` array:
 {
   "title": "Website Redesign",
   "type_hint": "project",
-  "priority": 1,
+  "importance": 1,
   "data": {"deadline": "2025-09-01", "stakeholder": "Marketing team"}
 }
 ```

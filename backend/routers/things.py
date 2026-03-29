@@ -86,7 +86,7 @@ def _row_to_thing(row: sqlite3.Row) -> Thing:
         type_hint=row["type_hint"],
         parent_id=row["parent_id"],
         checkin_date=_parse_dt(row["checkin_date"]),
-        priority=row["priority"],
+        importance=row["importance"],
         active=bool(row["active"]),
         surface=surface,
         data=data,
@@ -170,7 +170,7 @@ def get_open_questions(
     limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
     user_id: str = Depends(require_user),
 ) -> list[Thing]:
-    """Return active Things that have non-empty open_questions arrays, ordered by priority then recency."""
+    """Return active Things that have non-empty open_questions arrays, ordered by importance then recency."""
     uf_sql, uf_params = user_filter(user_id)
     with db() as conn:
         rows = conn.execute(
@@ -178,7 +178,7 @@ def get_open_questions(
                WHERE active = 1
                  AND open_questions IS NOT NULL
                  AND open_questions != '[]'{uf_sql}
-               ORDER BY priority ASC, updated_at DESC
+               ORDER BY importance ASC, updated_at DESC
                LIMIT ?""",
             [*uf_params, limit],
         ).fetchall()
@@ -275,7 +275,7 @@ def list_things(
             where += " AND active = 1"
         params.extend([limit, offset])
         rows = conn.execute(
-            f"SELECT * FROM things {where} ORDER BY checkin_date ASC, priority ASC LIMIT ? OFFSET ?",
+            f"SELECT * FROM things {where} ORDER BY checkin_date ASC, importance ASC LIMIT ? OFFSET ?",
             params,
         ).fetchall()
         things = [_row_to_thing(r) for r in rows]
@@ -352,7 +352,7 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks, user_id: 
     with db() as conn:
         conn.execute(
             "INSERT INTO things"
-            " (id, title, type_hint, parent_id, checkin_date, priority, active, surface, data,"
+            " (id, title, type_hint, parent_id, checkin_date, importance, active, surface, data,"
             " open_questions, created_at, updated_at, user_id)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
@@ -361,7 +361,7 @@ def create_thing(body: ThingCreate, background_tasks: BackgroundTasks, user_id: 
                 body.type_hint,
                 body.parent_id,
                 checkin,
-                body.priority,
+                body.importance,
                 int(body.active),
                 int(body.surface),
                 data_json,
@@ -464,8 +464,8 @@ def update_thing(
             fields["parent_id"] = body.parent_id
         if body.checkin_date is not None:
             fields["checkin_date"] = body.checkin_date.isoformat()
-        if body.priority is not None:
-            fields["priority"] = body.priority
+        if body.importance is not None:
+            fields["importance"] = body.importance
         if body.active is not None:
             fields["active"] = int(body.active)
         if body.surface is not None:

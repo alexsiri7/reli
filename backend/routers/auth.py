@@ -102,9 +102,9 @@ def _create_user_thing(conn: sqlite3.Connection, user_id: str, name: str, email:
     data_json = json.dumps({"email": email, "google_id": google_id})
     conn.execute(
         """INSERT INTO things
-           (id, title, type_hint, parent_id, checkin_date, priority, active, surface,
+           (id, title, type_hint, parent_id, checkin_date, importance, active, surface,
             data, open_questions, created_at, updated_at, user_id)
-           VALUES (?, ?, 'person', NULL, NULL, 3, 1, 0, ?, NULL, ?, ?, ?)""",
+           VALUES (?, ?, 'person', NULL, NULL, 2, 1, 0, ?, NULL, ?, ?, ?)""",
         (thing_id, name, data_json, now, now, user_id),
     )
     row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()

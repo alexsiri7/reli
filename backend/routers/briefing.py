@@ -63,7 +63,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                WHERE active = 1
                  AND checkin_date IS NOT NULL
                  AND checkin_date <= ?{uf_sql}
-               ORDER BY checkin_date ASC, priority ASC""",
+               ORDER BY checkin_date ASC, importance ASC""",
             [cutoff, *uf_params],
         ).fetchall()
 
@@ -71,7 +71,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
         finding_rows = conn.execute(
             f"""SELECT sf.*, t.id AS t_id, t.title AS t_title, t.type_hint AS t_type_hint,
                       t.parent_id AS t_parent_id, t.checkin_date AS t_checkin_date,
-                      t.priority AS t_priority, t.active AS t_active, t.surface AS t_surface,
+                      t.importance AS t_importance, t.active AS t_active, t.surface AS t_surface,
                       t.data AS t_data, t.created_at AS t_created_at,
                       t.updated_at AS t_updated_at, t.last_referenced AS t_last_referenced
                FROM sweep_findings sf
@@ -95,7 +95,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                 type_hint=r["t_type_hint"],
                 parent_id=r["t_parent_id"],
                 checkin_date=r["t_checkin_date"],
-                priority=r["t_priority"],
+                importance=r["t_importance"],
                 active=bool(r["t_active"]),
                 surface=bool(r["t_surface"]),
                 data=json.loads(r["t_data"]) if isinstance(r["t_data"], str) and r["t_data"] else r["t_data"],
@@ -105,11 +105,55 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
             )
         findings.append(_row_to_finding(r, linked_thing))
 
+    from ..urgency import build_blocker_graph, compute_composite_score, compute_urgency
+
+    # Build blocker graph for urgency computation
+    with db() as conn:
+        rel_rows = conn.execute(
+            """SELECT from_thing_id, to_thing_id, relationship_type
+               FROM thing_relationships
+               WHERE relationship_type IN ('blocks', 'depends-on')""",
+        ).fetchall()
+        all_active = conn.execute(
+            f"SELECT id, importance, active FROM things WHERE active = 1{uf_sql}",
+            [*uf_params],
+        ).fetchall()
+
+    all_things_map = {r["id"]: dict(r) for r in all_active}
+    blocker_graph = build_blocker_graph([dict(r) for r in rel_rows])
+
+    # Score each thing
+    scored = []
+    for thing in things:
+        thing_dict = thing.model_dump()
+        imp = thing.importance if thing.importance is not None else 2
+        urgency, reasons = compute_urgency(thing_dict, target, blocker_graph, all_things_map)
+        composite = compute_composite_score(imp, urgency)
+        scored.append({
+            "thing": thing_dict,
+            "importance": imp,
+            "urgency": round(urgency, 2),
+            "score": round(composite, 2),
+            "reasons": reasons,
+        })
+
+    scored.sort(key=lambda x: x["score"], reverse=True)
+
+    the_one_thing = scored[0] if scored else None
+    secondary = scored[1:6] if len(scored) > 1 else []
+    parking_lot = [
+        {"thing_id": s["thing"]["id"], "title": s["thing"]["title"],
+         "importance": s["importance"], "urgency": s["urgency"]}
+        for s in scored[6:]
+    ] if len(scored) > 6 else []
+
     return BriefingResponse(
         date=target.isoformat(),
-        things=things,
+        the_one_thing=the_one_thing,
+        secondary=secondary,
+        parking_lot=parking_lot,
         findings=findings,
-        total=len(things) + len(findings),
+        total=len(scored) + len(findings),
     )
 
 

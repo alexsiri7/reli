@@ -8,7 +8,7 @@ Examples of patterns detected:
   - Rescheduling morning meetings to afternoon → "avoids mornings"
   - Always picking cheap options for travel → "cost-conscious traveler"
   - Mentioning a person in 60% of social planning → "core social group member"
-  - Consistently creating tasks as high priority then downgrading → "overestimates urgency"
+  - Consistently creating tasks as high importance then downgrading → "overestimates urgency"
 
 Preferences are stored as Things with type_hint='preference' and structured
 data including confidence (0.0-1.0), supporting evidence, and category.
@@ -383,9 +383,9 @@ async def aggregate_preference_patterns(
 
                 conn.execute(
                     """INSERT INTO things
-                       (id, title, type_hint, priority, active, surface, data,
+                       (id, title, type_hint, importance, active, surface, data,
                         created_at, updated_at, user_id)
-                       VALUES (?, ?, 'preference', 3, 1, 0, ?, ?, ?, ?)""",
+                       VALUES (?, ?, 'preference', 2, 1, 0, ?, ?, ?, ?)""",
                     (thing_id, title, json.dumps(pref_data), now, now, user_id or None),
                 )
                 created_count += 1
@@ -668,9 +668,9 @@ async def aggregate_communication_style_patterns(
                 }
                 conn.execute(
                     """INSERT INTO things
-                       (id, title, type_hint, priority, active, surface, data,
+                       (id, title, type_hint, importance, active, surface, data,
                         created_at, updated_at, user_id)
-                       VALUES (?, ?, 'preference', 3, 1, 0, ?, ?, ?, ?)""",
+                       VALUES (?, ?, 'preference', 2, 1, 0, ?, ?, ?, ?)""",
                     (
                         primary_thing_id,
                         "How the user wants Reli to communicate",

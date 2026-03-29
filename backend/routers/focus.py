@@ -84,7 +84,7 @@ def _compute_recommendations(
         thing_rows = conn.execute(
             f"""SELECT * FROM things
                WHERE active = 1{uf_sql}
-               ORDER BY priority ASC, updated_at DESC""",
+               ORDER BY importance ASC, updated_at DESC""",
             uf_params,
         ).fetchall()
 
@@ -146,11 +146,11 @@ def _compute_recommendations(
         reasons: list[str] = []
         is_blocked = thing.id in blocked_by
 
-        # 1. Priority (1=highest, 5=lowest) — strong signal
-        priority_boost = (6 - thing.priority) * 20  # P1=100, P2=80, P3=60, P4=40, P5=20
-        score += priority_boost
-        if thing.priority <= 2:
-            reasons.append(f"High priority (P{thing.priority})")
+        # 1. Importance (0=highest, 4=lowest) — strong signal
+        importance_boost = (4 - thing.importance) * 25  # 0=100, 1=75, 2=50, 3=25, 4=0
+        score += importance_boost
+        if thing.importance <= 1:
+            reasons.append(f"High importance ({thing.importance})")
 
         # 2. Deadline urgency
         deadline = _earliest_deadline(thing.data)

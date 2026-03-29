@@ -44,7 +44,7 @@ class ThingCreate(BaseModel):
     checkin_date: datetime | None = Field(
         default=None, description="Date when this Thing should surface in the briefing"
     )
-    priority: int = Field(default=3, ge=1, le=5, description="1 (highest) to 5 (lowest)")
+    importance: int = Field(default=2, ge=0, le=4, description="How bad if undone: 0 (critical) to 4 (backlog)")
     active: bool = Field(default=True, description="Inactive = completed/archived")
     surface: bool = Field(default=True, description="Whether to show in default views")
     data: dict[str, Any] | None = Field(default=None, description="Arbitrary JSON data (e.g. birthday, email, notes)")
@@ -60,7 +60,7 @@ class ThingUpdate(BaseModel):
     checkin_date: datetime | None = Field(
         default=None, description="Date when this Thing should surface in the briefing"
     )
-    priority: int | None = Field(default=None, ge=1, le=5, description="1 (highest) to 5 (lowest)")
+    importance: int | None = Field(default=None, ge=0, le=4, description="How bad if undone: 0 (critical) to 4 (backlog)")
     active: bool | None = Field(default=None, description="Inactive = completed/archived")
     surface: bool | None = Field(default=None, description="Whether to show in default views")
     data: dict[str, Any] | None = Field(default=None, description="Arbitrary JSON data")
@@ -73,7 +73,7 @@ class Thing(BaseModel):
     type_hint: str | None
     parent_id: str | None
     checkin_date: datetime | None
-    priority: int
+    importance: int
     active: bool
     surface: bool
     data: dict[str, Any] | None
@@ -282,11 +282,24 @@ class SweepFindingSnooze(BaseModel):
     until: datetime = Field(..., description="Hide the finding from the briefing until this time")
 
 
+class BriefingItem(BaseModel):
+    """A Thing scored by importance x urgency for the briefing."""
+
+    thing: dict[str, Any]
+    importance: int
+    urgency: float
+    score: float
+    reasons: list[str]
+
+
 class BriefingResponse(BaseModel):
     date: str
-    things: list[Thing]
-    findings: list[SweepFinding]
+    the_one_thing: BriefingItem | None = None
+    secondary: list[BriefingItem] = []
+    parking_lot: list[dict[str, Any]] = []
+    findings: list[SweepFinding] = []
     total: int
+    stats: dict[str, int] = {}
 
 
 # ── Staleness & Neglect ─────────────────────────────────────────────────────
@@ -331,7 +344,7 @@ class StalenessReport(BaseModel):
 
 
 class MorningBriefingItem(BaseModel):
-    """A single item in the morning briefing (priority, overdue, or blocker)."""
+    """A single item in the morning briefing (importance, overdue, or blocker)."""
 
     thing_id: str
     title: str

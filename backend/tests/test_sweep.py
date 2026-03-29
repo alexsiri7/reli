@@ -182,19 +182,19 @@ class TestStaleThings:
             results = find_stale_things(conn, today, stale_days=14)
         assert len(results) == 0
 
-    def test_high_priority_flagged_as_neglected(self, patched_db):
-        """High-priority stale Things should be flagged as 'neglected'."""
+    def test_high_importance_flagged_as_neglected(self, patched_db):
+        """High-importance stale Things should be flagged as 'neglected'."""
         today = date.today()
         old_date = (today - timedelta(days=20)).isoformat()
         with db() as conn:
             _insert_thing(conn, "t1", "Urgent Task", updated_at=old_date)
-            conn.execute("UPDATE things SET priority = 1 WHERE id = 't1'")
+            conn.execute("UPDATE things SET importance = 0 WHERE id = 't1'")
         with db() as conn:
             results = find_stale_things(conn, today, stale_days=14)
         assert len(results) == 1
         assert results[0].finding_type == "neglected"
         assert results[0].priority == 2  # higher urgency
-        assert "high-priority" in results[0].message
+        assert "high-importance" in results[0].message
         assert results[0].extra["is_neglected"] is True
 
     def test_thing_with_active_children_flagged_as_neglected(self, patched_db):
@@ -211,13 +211,13 @@ class TestStaleThings:
         assert neglected[0].finding_type == "neglected"
         assert "1 pending subtask" in neglected[0].message
 
-    def test_low_priority_no_children_is_plain_stale(self, patched_db):
-        """Low-priority stale Things without children are plain 'stale'."""
+    def test_low_importance_no_children_is_plain_stale(self, patched_db):
+        """Low-importance stale Things without children are plain 'stale'."""
         today = date.today()
         old_date = (today - timedelta(days=20)).isoformat()
         with db() as conn:
-            _insert_thing(conn, "t1", "Low Priority Note", updated_at=old_date)
-            conn.execute("UPDATE things SET priority = 4 WHERE id = 't1'")
+            _insert_thing(conn, "t1", "Low Importance Note", updated_at=old_date)
+            conn.execute("UPDATE things SET importance = 3 WHERE id = 't1'")
         with db() as conn:
             results = find_stale_things(conn, today, stale_days=14)
         assert len(results) == 1

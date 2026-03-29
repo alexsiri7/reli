@@ -138,12 +138,12 @@ class TestTracedToolDecorator:
         """Wrapped tool should return the same result as the original."""
         from backend.reasoning_agent import _traced_tool
 
-        def my_tool(title: str, priority: int = 3) -> dict:
-            return {"id": "abc", "title": title, "priority": priority}
+        def my_tool(title: str, importance: int = 2) -> dict:
+            return {"id": "abc", "title": title, "importance": importance}
 
         wrapped = _traced_tool(my_tool)
-        result = wrapped(title="Test", priority=1)
-        assert result == {"id": "abc", "title": "Test", "priority": 1}
+        result = wrapped(title="Test", importance=0)
+        assert result == {"id": "abc", "title": "Test", "importance": 0}
 
     def test_traced_tool_catches_exceptions(self):
         """Wrapped tool should catch exceptions and return error dict."""
@@ -168,11 +168,11 @@ class TestTracedToolDecorator:
 
         with patch("backend.reasoning_agent._tracer", mock_tracer):
 
-            def create_thing(title: str, priority: int = 3) -> dict:
+            def create_thing(title: str, importance: int = 2) -> dict:
                 return {"id": "new-uuid", "title": title}
 
             wrapped = _traced_tool(create_thing)
-            result = wrapped(title="Buy groceries", priority=1)
+            result = wrapped(title="Buy groceries", importance=0)
 
         assert result == {"id": "new-uuid", "title": "Buy groceries"}
 
@@ -184,7 +184,7 @@ class TestTracedToolDecorator:
         # Verify input attributes were set
         set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
         assert set_attr_calls["tool.input.title"] == "Buy groceries"
-        assert set_attr_calls["tool.input.priority"] == "1"
+        assert set_attr_calls["tool.input.importance"] == "0"
         assert "new-uuid" in set_attr_calls["tool.output"]
         assert set_attr_calls["tool.result.id"] == "new-uuid"
 

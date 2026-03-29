@@ -4,9 +4,9 @@ from datetime import date, timedelta
 
 
 def _create_thing(
-    client, title: str, priority: int = 3, checkin_date: str | None = None, data: dict | None = None
+    client, title: str, importance: int = 2, checkin_date: str | None = None, data: dict | None = None
 ) -> dict:
-    payload = {"title": title, "priority": priority, "active": True}
+    payload = {"title": title, "importance": importance, "active": True}
     if checkin_date:
         payload["checkin_date"] = checkin_date
     if data:
@@ -37,8 +37,8 @@ class TestMorningBriefingEndpoint:
 
     def test_morning_briefing_includes_priorities(self, client):
         """Briefing includes high-priority items."""
-        _create_thing(client, "Urgent Task", priority=1)
-        _create_thing(client, "Low Priority", priority=5)
+        _create_thing(client, "Urgent Task", importance=0)
+        _create_thing(client, "Low Priority", importance=4)
         resp = client.get("/api/briefing/morning")
         data = resp.json()
         titles = [p["title"] for p in data["content"]["priorities"]]
@@ -63,7 +63,7 @@ class TestMorningBriefingEndpoint:
 
     def test_morning_briefing_has_stats(self, client):
         """Briefing includes stats summary."""
-        _create_thing(client, "Task A", priority=1)
+        _create_thing(client, "Task A", importance=0)
         resp = client.get("/api/briefing/morning")
         data = resp.json()
         assert "stats" in data["content"]

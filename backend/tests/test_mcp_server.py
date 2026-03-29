@@ -66,7 +66,7 @@ class TestGetThing:
             "id": "abc-123",
             "title": "My Task",
             "type_hint": "task",
-            "priority": 2,
+            "importance": 1,
         }
         mock_get.return_value = thing
         result = get_thing(thing_id="abc-123")
@@ -94,7 +94,7 @@ class TestCreateThing:
         mock_create.assert_called_once_with(
             title="Hello",
             type_hint="",
-            priority=3,
+            importance=2,
             checkin_date="",
             surface=True,
             data_json="{}",
@@ -110,7 +110,7 @@ class TestCreateThing:
             title="Meeting with Tom",
             type_hint="event",
             data={"location": "Coffee shop"},
-            priority=1,
+            importance=0,
             checkin_date="2026-03-25T09:00:00Z",
             open_questions=["What time?"],
         )
@@ -118,7 +118,7 @@ class TestCreateThing:
         assert call_kwargs["title"] == "Meeting with Tom"
         assert call_kwargs["type_hint"] == "event"
         assert json.loads(call_kwargs["data_json"]) == {"location": "Coffee shop"}
-        assert call_kwargs["priority"] == 1
+        assert call_kwargs["importance"] == 0
         assert call_kwargs["checkin_date"] == "2026-03-25T09:00:00Z"
         assert json.loads(call_kwargs["open_questions_json"]) == ["What time?"]
 
@@ -157,10 +157,10 @@ class TestUpdateThing:
         mock_update.return_value = {
             "id": "t1",
             "title": "Task",
-            "priority": 1,
+            "importance": 0,
             "active": False,
         }
-        update_thing(thing_id="t1", priority=1, active=False)
+        update_thing(thing_id="t1", importance=0, active=False)
         mock_update.assert_called_once()
 
     @patch("backend.mcp_server.shared_tools.update_thing")
@@ -171,7 +171,7 @@ class TestUpdateThing:
             title="Updated",
             type_hint="task",
             data={"note": "extra"},
-            priority=2,
+            importance=1,
             parent_id="p-1",
             checkin_date="2026-04-01",
             active=True,
@@ -382,7 +382,7 @@ class TestIntegration:
     def test_crud_lifecycle(self, api_server: None) -> None:
         """Create, read, update, search, and soft-delete a Thing end-to-end."""
         # Create
-        created = create_thing(title="MCP Test Thing", type_hint="task", priority=2)
+        created = create_thing(title="MCP Test Thing", type_hint="task", importance=1)
         assert created["title"] == "MCP Test Thing"
         thing_id = created["id"]
 
@@ -391,9 +391,9 @@ class TestIntegration:
         assert fetched["id"] == thing_id
 
         # Update
-        updated = update_thing(thing_id=thing_id, title="Updated MCP Thing", priority=1)
+        updated = update_thing(thing_id=thing_id, title="Updated MCP Thing", importance=0)
         assert updated["title"] == "Updated MCP Thing"
-        assert updated["priority"] == 1
+        assert updated["importance"] == 0
 
         # Fetch context
         ctx = fetch_context(search_queries=["Updated MCP"])
@@ -699,7 +699,7 @@ class TestPromptResources:
             "type_hint",
             "parent_id",
             "checkin_date",
-            "priority",
+            "importance",
             "active",
             "surface",
             "data",
@@ -878,14 +878,14 @@ class TestMCPTools:
         # Create
         resp = token_client_with_user.post(
             "/api/things",
-            json={"title": "Buy groceries", "type_hint": "task", "priority": 2},
+            json={"title": "Buy groceries", "type_hint": "task", "importance": 1},
             headers=headers,
         )
         assert resp.status_code == 201
         thing = resp.json()
         thing_id = thing["id"]
         assert thing["title"] == "Buy groceries"
-        assert thing["priority"] == 2
+        assert thing["importance"] == 1
 
         # Get
         resp = token_client_with_user.get(f"/api/things/{thing_id}", headers=headers)

@@ -87,7 +87,7 @@ class TestChatPipeline:
     async def test_chat_with_storage_changes_create(self, async_client):
         reasoning_with_create = {
             "applied_changes": {
-                "created": [{"id": "new-uuid", "title": "New Pipeline Task", "type_hint": "task", "priority": 2}],
+                "created": [{"id": "new-uuid", "title": "New Pipeline Task", "type_hint": "task", "importance": 1}],
                 "updated": [],
                 "deleted": [],
                 "merged": [],
@@ -256,17 +256,17 @@ class TestFetchUserRelationships:
         with db() as conn:
             # Create user Thing
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
-                ("user-1", "Alice", "person", 3, 1, 1),
+                "INSERT INTO things (id, title, type_hint, importance, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
+                ("user-1", "Alice", "person", 2, 1, 1),
             )
             # Create related Things
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
-                ("sister-1", "Bob (sister)", "person", 3, 1, 1),
+                "INSERT INTO things (id, title, type_hint, importance, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
+                ("sister-1", "Bob (sister)", "person", 2, 1, 1),
             )
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
-                ("project-1", "Acme Project", "project", 3, 1, 1),
+                "INSERT INTO things (id, title, type_hint, importance, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
+                ("project-1", "Acme Project", "project", 2, 1, 1),
             )
             # Create relationships from user to both
             conn.execute(
@@ -306,8 +306,8 @@ class TestFetchUserRelationships:
 
         with db() as conn:
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
-                ("user-1", "Alice", "person", 3, 1, 1),
+                "INSERT INTO things (id, title, type_hint, importance, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
+                ("user-1", "Alice", "person", 2, 1, 1),
             )
             results = _fetch_user_relationships(conn, "user-1", ["anything"])
             assert results == []
@@ -319,19 +319,19 @@ class TestFetchUserRelationships:
 
         with db() as conn:
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
-                ("user-1", "Alice", "person", 3, 1, 1),
+                "INSERT INTO things (id, title, type_hint, importance, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
+                ("user-1", "Alice", "person", 2, 1, 1),
             )
             # Two related Things both matching "Task"
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface, last_referenced) "
+                "INSERT INTO things (id, title, type_hint, importance, active, surface, last_referenced) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                ("task-old", "Old Task", "task", 3, 1, 1, "2025-01-01T00:00:00"),
+                ("task-old", "Old Task", "task", 2, 1, 1, "2025-01-01T00:00:00"),
             )
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface, last_referenced) "
+                "INSERT INTO things (id, title, type_hint, importance, active, surface, last_referenced) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                ("task-new", "New Task", "task", 3, 1, 1, "2026-03-16T00:00:00"),
+                ("task-new", "New Task", "task", 2, 1, 1, "2026-03-16T00:00:00"),
             )
             conn.execute(
                 "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) "
@@ -361,8 +361,8 @@ class TestPreferenceBoost:
 
     def _insert_thing(self, conn, thing_id: str, title: str, type_hint: str) -> None:
         conn.execute(
-            "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
-            (thing_id, title, type_hint, 3, 1, 1),
+            "INSERT INTO things (id, title, type_hint, importance, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
+            (thing_id, title, type_hint, 2, 1, 1),
         )
 
     def test_preference_things_sorted_first(self, patched_db):
@@ -373,18 +373,18 @@ class TestPreferenceBoost:
         with db() as conn:
             # Create a regular task Thing
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
-                ("task-1", "Morning standup meeting", "task", 3, 1, 1),
+                "INSERT INTO things (id, title, type_hint, importance, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
+                ("task-1", "Morning standup meeting", "task", 2, 1, 1),
             )
             # Create a preference Thing about meetings
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface, data) "
+                "INSERT INTO things (id, title, type_hint, importance, active, surface, data) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     "pref-1",
                     "Meeting scheduling preferences",
                     "preference",
-                    3,
+                    2,
                     1,
                     1,
                     '{"patterns": [{"pattern": "Avoids morning meetings", "confidence": "strong"}]}',
@@ -411,8 +411,8 @@ class TestPreferenceBoost:
 
         with db() as conn:
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
-                ("task-1", "Buy groceries", "task", 3, 1, 1),
+                "INSERT INTO things (id, title, type_hint, importance, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
+                ("task-1", "Buy groceries", "task", 2, 1, 1),
             )
 
             results = _fetch_relevant_things(
@@ -431,13 +431,13 @@ class TestPreferenceBoost:
 
         with db() as conn:
             conn.execute(
-                "INSERT INTO things (id, title, type_hint, priority, active, surface, data) "
+                "INSERT INTO things (id, title, type_hint, importance, active, surface, data) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     "pref-1",
                     "Travel cost preferences",
                     "preference",
-                    3,
+                    2,
                     1,
                     1,
                     '{"patterns": [{"pattern": "Optimizes for cost on travel", "confidence": "moderate"}]}',

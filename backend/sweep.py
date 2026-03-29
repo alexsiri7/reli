@@ -239,7 +239,7 @@ def find_stale_things(
     cutoff = (today - timedelta(days=stale_days)).isoformat()
     uf_sql, uf_params = user_filter(user_id)
     rows = conn.execute(
-        f"""SELECT t.id, t.title, t.type_hint, t.updated_at, t.priority,
+        f"""SELECT t.id, t.title, t.type_hint, t.updated_at, t.importance,
                   t.checkin_date,
                   (SELECT COUNT(*) FROM things c WHERE c.parent_id = t.id AND c.active = 1) AS active_children
            FROM things t
@@ -254,17 +254,17 @@ def find_stale_things(
         parsed_dt = _parse_date_value(row["updated_at"])
         days_stale = (today - parsed_dt).days if parsed_dt else stale_days
         type_label = row["type_hint"] or "Thing"
-        priority_val = row["priority"] or 3
+        importance_val = row["importance"] if row["importance"] is not None else 2
         active_children = row["active_children"] or 0
 
-        # Distinguish neglected (high-priority or has pending work) from plain stale
-        is_neglected = priority_val <= 2 or active_children > 0
+        # Distinguish neglected (high-importance or has pending work) from plain stale
+        is_neglected = importance_val <= 1 or active_children > 0
         finding_type = "neglected" if is_neglected else "stale"
 
         if is_neglected:
             parts = []
-            if priority_val <= 2:
-                parts.append("high-priority")
+            if importance_val <= 1:
+                parts.append("high-importance")
             if active_children > 0:
                 parts.append(f"{active_children} pending subtask{'s' if active_children != 1 else ''}")
             context = ", ".join(parts)
@@ -305,7 +305,7 @@ def find_overdue_checkins(
     today = today or date.today()
     cutoff = (today - timedelta(days=grace_days)).isoformat()
     rows = conn.execute(
-        """SELECT id, title, type_hint, checkin_date, priority FROM things
+        """SELECT id, title, type_hint, checkin_date, importance FROM things
            WHERE active = 1
              AND checkin_date IS NOT NULL
              AND DATE(checkin_date) < ?
@@ -319,8 +319,8 @@ def find_overdue_checkins(
         if not parsed:
             continue
         days_overdue = (today - parsed).days
-        priority_val = row["priority"] or 3
-        pri = 1 if days_overdue >= 7 or priority_val <= 2 else 2
+        importance_val = row["importance"] if row["importance"] is not None else 2
+        pri = 1 if days_overdue >= 7 or importance_val <= 1 else 2
         candidates.append(
             SweepCandidate(
                 thing_id=row["id"],

@@ -27,13 +27,13 @@ class TestCreateThing:
         assert data["title"] == "My Task"
         assert data["id"]
         assert data["active"] is True
-        assert data["priority"] == 3
+        assert data["importance"] == 2
 
     def test_create_full(self, client):
         payload = {
             "title": "Full Thing",
             "type_hint": "task",
-            "priority": 1,
+            "importance": 0,
             "active": True,
             "checkin_date": "2026-03-15T00:00:00",
             "data": {"notes": "some notes"},
@@ -42,7 +42,7 @@ class TestCreateThing:
         assert resp.status_code == 201
         data = resp.json()
         assert data["type_hint"] == "task"
-        assert data["priority"] == 1
+        assert data["importance"] == 0
         assert data["data"] == {"notes": "some notes"}
 
     def test_create_with_valid_parent(self, client):
@@ -62,8 +62,8 @@ class TestCreateThing:
         resp = client.post("/api/things", json={"title": "x" * 501})
         assert resp.status_code == 422
 
-    def test_create_invalid_priority_returns_422(self, client):
-        resp = client.post("/api/things", json={"title": "Bad Priority", "priority": 10})
+    def test_create_invalid_importance_returns_422(self, client):
+        resp = client.post("/api/things", json={"title": "Bad Importance", "importance": 10})
         assert resp.status_code == 422
 
     def test_create_upserts_vector_store(self, client, mock_vector_store):
@@ -143,11 +143,11 @@ class TestUpdateThing:
         assert resp.status_code == 200
         assert resp.json()["title"] == "New Title"
 
-    def test_update_priority(self, client):
-        thing = create_thing(client, title="Low Priority")
-        resp = client.patch(f"/api/things/{thing['id']}", json={"priority": 1})
+    def test_update_importance(self, client):
+        thing = create_thing(client, title="Low Importance")
+        resp = client.patch(f"/api/things/{thing['id']}", json={"importance": 0})
         assert resp.status_code == 200
-        assert resp.json()["priority"] == 1
+        assert resp.json()["importance"] == 0
 
     def test_update_active_false(self, client):
         thing = create_thing(client, title="To Archive")

@@ -71,10 +71,10 @@ class TestStalenessEndpoint:
     def test_neglected_vs_stale_distinction(self, client, patched_db):
         from backend.database import db
 
-        # High-priority thing — should be neglected
-        high_pri = _create_thing(client, "Urgent Thing", priority=1)
-        # Low-priority thing — should be plain stale
-        low_pri = _create_thing(client, "Low Priority Note", priority=5)
+        # High-importance thing — should be neglected
+        high_pri = _create_thing(client, "Urgent Thing", importance=0)
+        # Low-importance thing — should be plain stale
+        low_pri = _create_thing(client, "Low Importance Note", importance=4)
 
         old_date = (date.today() - timedelta(days=20)).isoformat()
         with db() as conn:

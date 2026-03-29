@@ -97,6 +97,16 @@ def _seed_thing_types(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_priority_to_importance(conn: sqlite3.Connection) -> None:
+    """Rename priority column to importance (0-4 scale, 0=critical)."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(things)").fetchall()}
+    if "importance" not in cols and "priority" in cols:
+        conn.execute("ALTER TABLE things ADD COLUMN importance INTEGER DEFAULT 2")
+        conn.execute("UPDATE things SET importance = MAX(0, priority - 1)")
+    elif "importance" not in cols:
+        conn.execute("ALTER TABLE things ADD COLUMN importance INTEGER DEFAULT 2")
+
+
 def _migrate_things_graph(conn: sqlite3.Connection) -> None:
     """Add surface, last_referenced, and open_questions columns to things if missing."""
     cols = {row[1] for row in conn.execute("PRAGMA table_info(things)").fetchall()}
@@ -563,6 +573,7 @@ def init_db() -> None:
             );
         """)
         _migrate_chat_history_usage(conn)
+        _migrate_priority_to_importance(conn)
         _migrate_things_graph(conn)
         _migrate_sweep_findings_snooze(conn)
         _migrate_add_users(conn)
