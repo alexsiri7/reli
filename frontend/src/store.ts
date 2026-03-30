@@ -135,6 +135,14 @@ export interface SweepFinding {
   thing: Thing | null
 }
 
+export interface BriefingItem {
+  thing: Thing
+  importance: number
+  urgency: number
+  score: number
+  reasons: string[]
+}
+
 export interface MorningBriefingItem {
   thing_id: string
   title: string
@@ -378,6 +386,7 @@ interface ReliState {
   thingTypes: ThingType[]
   things: Thing[]
   briefing: Thing[]
+  theOneThing: BriefingItem | null
   findings: SweepFinding[]
   messages: ChatMessage[]
   sessionId: string
@@ -673,6 +682,7 @@ export const useStore = create<ReliState>((set, get) => ({
   thingTypes: [],
   things: [],
   briefing: [],
+  theOneThing: null,
   findings: [],
   messages: [],
   sessionId: '',
@@ -906,10 +916,17 @@ export const useStore = create<ReliState>((set, get) => ({
       const data = validateResponse(BriefingResponseSchema, await res.json(), '/briefing')
       // Extract Things from the importance × urgency scored response
       const things: Thing[] = []
+      const theOneThing: BriefingItem | null = data.the_one_thing ? {
+        thing: data.the_one_thing.thing,
+        importance: data.the_one_thing.importance,
+        urgency: data.the_one_thing.urgency,
+        score: data.the_one_thing.score,
+        reasons: data.the_one_thing.reasons,
+      } : null
       if (data.the_one_thing) things.push(data.the_one_thing.thing)
       for (const item of data.secondary ?? []) things.push(item.thing)
       const findings = data.findings ?? []
-      set({ briefing: things, findings })
+      set({ briefing: things, theOneThing, findings })
       cacheBriefing(things, findings).catch(() => {})
     } catch {
       if (!navigator.onLine) {
