@@ -2,6 +2,7 @@
 
 import json
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -28,6 +29,7 @@ GOOGLE_REDIRECT_URI = settings.GOOGLE_REDIRECT_URI
 
 # PKCE state storage: state -> code_verifier (single-process, in-memory)
 _pending_flows: dict[str, str] = {}
+_pending_flows_lock = threading.Lock()
 
 
 def _client_config() -> dict:
@@ -58,7 +60,8 @@ def get_auth_url() -> str:
         prompt="consent",
     )
     # Store PKCE code_verifier for the callback
-    _pending_flows[state] = flow.code_verifier or ""
+    with _pending_flows_lock:
+        _pending_flows[state] = flow.code_verifier or ""
     return str(auth_url)
 
 
@@ -68,7 +71,11 @@ def exchange_code(code: str, state: str = "", user_id: str = "") -> Credentials:
     flow.redirect_uri = GOOGLE_REDIRECT_URI
 
     # Restore PKCE code_verifier from the auth request
-    code_verifier = _pending_flows.pop(state, None) if state else None
+    if state:
+        with _pending_flows_lock:
+            code_verifier = _pending_flows.pop(state, None)
+    else:
+        code_verifier = None
     if code_verifier:
         flow.code_verifier = code_verifier
 

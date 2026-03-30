@@ -11,12 +11,17 @@ store/retrieve, and each dict is hard-capped at MAX_ENTRIES_PER_DICT.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
 MAX_ENTRIES_PER_DICT = 10_000
+
+# Lock protecting all mutable state dicts below against concurrent access
+# from threadpool-dispatched sync endpoints.
+_state_lock = threading.Lock()
 
 # server_state -> {
 #   client_state, redirect_uri, code_challenge, code_challenge_method,
@@ -81,21 +86,24 @@ def cleanup_and_store(store: dict[str, dict], key: str, value: dict) -> None:
     Raises :class:`StoreFullError` if the store is still at capacity after
     purging expired entries.
     """
-    _cleanup_expired(store)
-    if len(store) >= MAX_ENTRIES_PER_DICT:
-        raise StoreFullError(
-            f"OAuth state store is full ({MAX_ENTRIES_PER_DICT} entries)"
-        )
-    store[key] = value
+    with _state_lock:
+        _cleanup_expired(store)
+        if len(store) >= MAX_ENTRIES_PER_DICT:
+            raise StoreFullError(
+                f"OAuth state store is full ({MAX_ENTRIES_PER_DICT} entries)"
+            )
+        store[key] = value
 
 
 def cleanup_and_get(store: dict[str, dict], key: str) -> dict | None:
     """Purge expired entries, then return the entry for *key* (or ``None``)."""
-    _cleanup_expired(store)
-    return store.get(key)
+    with _state_lock:
+        _cleanup_expired(store)
+        return store.get(key)
 
 
 def cleanup_and_pop(store: dict[str, dict], key: str) -> dict | None:
     """Purge expired entries, then pop and return the entry for *key* (or ``None``)."""
-    _cleanup_expired(store)
-    return store.pop(key, None)
+    with _state_lock:
+        _cleanup_expired(store)
+        return store.pop(key, None)
