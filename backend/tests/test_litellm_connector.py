@@ -173,7 +173,7 @@ async def test_per_user_model_override():
         )
 
     call_kwargs = mock_call.call_args.kwargs
-    assert call_kwargs["model"] == "openai/custom/user-model"
+    assert call_kwargs["model"] == "openai/user-model"
     assert call_kwargs["api_key"] == "user-personal-key"
     assert result.choices[0].message.content == "custom model reply"
 
