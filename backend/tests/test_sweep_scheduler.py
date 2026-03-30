@@ -240,11 +240,11 @@ class TestStartStop:
         import backend.sweep_scheduler as mod
 
         mod._task = None
-        start_scheduler()
+        await start_scheduler()
         assert mod._task is not None
         # Let the task start and exit (disabled -> returns immediately)
         await asyncio.sleep(0.1)
-        stop_scheduler()
+        await stop_scheduler()
         assert mod._task is None
 
     @pytest.mark.asyncio
@@ -252,5 +252,5 @@ class TestStartStop:
         import backend.sweep_scheduler as mod
 
         mod._task = None
-        stop_scheduler()  # should not raise
+        await stop_scheduler()  # should not raise
         assert mod._task is None
