@@ -298,15 +298,15 @@ def health() -> dict[str, str]:
 @app.get("/api/health", tags=["health"])
 def health_detailed() -> dict:
     """Detailed health check with DB, ChromaDB, and performance metrics."""
-    from .database import get_connection
+    from sqlalchemy import text
+    from .db_engine import engine as _db_engine
     from .vector_store import vector_count
 
     # DB status
     db_ok = False
     try:
-        conn = get_connection()
-        conn.execute("SELECT 1")
-        conn.close()
+        with _db_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
         db_ok = True
     except Exception:
         logger.warning("Health check: DB connection failed", exc_info=True)

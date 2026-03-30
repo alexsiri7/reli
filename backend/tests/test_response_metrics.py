@@ -74,7 +74,8 @@ class TestHealthDetailed:
         assert body["status"] == "ok"
 
     def test_health_db_failure_shows_degraded(self, client):
-        with patch("backend.database.get_connection", side_effect=Exception("db down")):
+        import backend.db_engine as _engine_mod
+        with patch.object(_engine_mod.engine, "connect", side_effect=Exception("db down")):
             resp = client.get("/api/health")
         body = resp.json()
         assert body["db_connected"] is False
