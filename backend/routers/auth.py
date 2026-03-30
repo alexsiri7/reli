@@ -3,6 +3,7 @@
 import json
 import logging
 import secrets
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -44,6 +45,7 @@ COOKIE_NAME = "reli_session"
 
 # PKCE state storage: state -> code_verifier (single-process, in-memory)
 _pending_flows: dict[str, str] = {}
+_pending_flows_lock = threading.Lock()
 
 MCP_AUTH_CODE_TTL_SECONDS = 60 * 10  # 10 minutes
 
@@ -156,7 +158,8 @@ def google_login() -> dict:
         prompt="consent",
     )
     # Store PKCE code_verifier for the callback
-    _pending_flows[state] = flow.code_verifier or ""
+    with _pending_flows_lock:
+        _pending_flows[state] = flow.code_verifier or ""
     return {"auth_url": str(auth_url)}
 
 
@@ -173,7 +176,8 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
 
     # Restore PKCE code_verifier from the auth request.
     # For MCP OAuth flows the verifier is stored in mcp_oauth_sessions instead.
-    code_verifier = _pending_flows.pop(state, None)
+    with _pending_flows_lock:
+        code_verifier = _pending_flows.pop(state, None)
     if not code_verifier:
         mcp_session = cleanup_and_get(mcp_oauth_sessions, state)
         if mcp_session:
