@@ -9,18 +9,88 @@ import logging
 from typing import Any
 
 from .agents import UsageStats, estimate_cost
-from .database import (
-    create_summary,
-    get_latest_summary,
-    get_message_count_since_summary,
-    get_messages_since_summary,
-)
+from sqlmodel import Session, select
+
+import backend.db_engine as _engine_mod
+from .db_models import ChatHistoryRecord, ConversationSummaryRecord
 from .llm import acomplete
 
 logger = logging.getLogger(__name__)
 
 # Use the context (cheap) model from config for summarization
 from .agents import REQUESTY_MODEL as SUMMARIZATION_MODEL  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# DB helpers (migrated from legacy database.py)
+# ---------------------------------------------------------------------------
+
+
+def _get_latest_summary(user_id: str) -> dict[str, Any] | None:
+    with Session(_engine_mod.engine) as session:
+        record = session.exec(
+            select(ConversationSummaryRecord)
+            .where(ConversationSummaryRecord.user_id == user_id)
+            .order_by(ConversationSummaryRecord.messages_summarized_up_to.desc())  # type: ignore[union-attr]
+        ).first()
+    if not record:
+        return None
+    return {
+        "id": record.id,
+        "summary_text": record.summary_text,
+        "messages_summarized_up_to": record.messages_summarized_up_to,
+        "token_count": record.token_count,
+        "created_at": record.created_at,
+    }
+
+
+def _create_summary(
+    user_id: str,
+    summary_text: str,
+    messages_summarized_up_to: int,
+    token_count: int = 0,
+) -> int:
+    with Session(_engine_mod.engine) as session:
+        record = ConversationSummaryRecord(
+            user_id=user_id,
+            summary_text=summary_text,
+            messages_summarized_up_to=messages_summarized_up_to,
+            token_count=token_count,
+        )
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+        if record.id is None:
+            raise RuntimeError("INSERT into conversation_summaries failed to return id")
+        return record.id
+
+
+def _get_messages_since_summary(user_id: str) -> list[dict[str, Any]]:
+    latest = _get_latest_summary(user_id)
+    with Session(_engine_mod.engine) as session:
+        stmt = select(ChatHistoryRecord).where(
+            ChatHistoryRecord.user_id == user_id
+        ).order_by(ChatHistoryRecord.id.asc())  # type: ignore[union-attr]
+        if latest:
+            stmt = stmt.where(ChatHistoryRecord.id > latest["messages_summarized_up_to"])
+        records = session.exec(stmt).all()
+    return [
+        {"id": r.id, "session_id": r.session_id, "role": r.role, "content": r.content, "timestamp": r.timestamp}
+        for r in records
+    ]
+
+
+def _get_message_count_since_summary(user_id: str) -> int:
+    latest = _get_latest_summary(user_id)
+    with Session(_engine_mod.engine) as session:
+        from sqlalchemy import func
+        stmt = select(func.count()).select_from(ChatHistoryRecord).where(
+            ChatHistoryRecord.user_id == user_id
+        )
+        if latest:
+            stmt = stmt.where(ChatHistoryRecord.id > latest["messages_summarized_up_to"])
+        result = session.exec(stmt).one()
+    return result or 0
 
 # Default number of messages before triggering summarization
 DEFAULT_SUMMARY_TRIGGER_N = 20
@@ -71,14 +141,14 @@ async def summarize_conversation(
     or None if there are no messages to summarize.
     """
     model = model or SUMMARIZATION_MODEL
-    messages_since = get_messages_since_summary(user_id)
+    messages_since = _get_messages_since_summary(user_id)
 
     if not messages_since:
         logger.debug("No messages to summarize for user %s", user_id)
         return None
 
     # Build the user prompt
-    previous_summary = get_latest_summary(user_id)
+    previous_summary = _get_latest_summary(user_id)
     prompt_parts: list[str] = []
 
     if previous_summary:
@@ -128,7 +198,7 @@ async def summarize_conversation(
 
     # Persist the summary
     last_msg_id = messages_since[-1]["id"]
-    row_id = create_summary(
+    row_id = _create_summary(
         user_id=user_id,
         summary_text=summary_text,
         messages_summarized_up_to=last_msg_id,
@@ -156,5 +226,5 @@ async def summarize_conversation(
 
 def should_summarize(user_id: str, trigger_n: int = DEFAULT_SUMMARY_TRIGGER_N) -> bool:
     """Check if the message count since last summary has reached the trigger threshold."""
-    count = get_message_count_since_summary(user_id)
+    count = _get_message_count_since_summary(user_id)
     return count >= trigger_n

@@ -332,3 +332,20 @@ class ConversationSummaryRecord(SQLModel, table=True):
     messages_summarized_up_to: int
     token_count: int = 0
     created_at: datetime = Field(default_factory=_utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Weekly Briefings
+# ---------------------------------------------------------------------------
+
+
+class WeeklyBriefingRecord(SQLModel, table=True):
+    """Pre-generated weekly digest briefing."""
+
+    __tablename__ = "weekly_briefings"
+
+    id: str = Field(primary_key=True)
+    user_id: str | None = Field(default=None, foreign_key="users.id")
+    week_start: str
+    content: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
+    generated_at: datetime = Field(default_factory=_utcnow)

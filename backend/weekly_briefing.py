@@ -16,8 +16,12 @@ import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from .auth import user_filter
-from .database import db
+from sqlalchemy import text
+from sqlmodel import Session
+
+import backend.db_engine as _engine_mod
+from .db_engine import user_filter_clause, user_filter_text
+from .db_models import ThingRecord, ThingRelationshipRecord, WeeklyBriefingRecord
 from .models import (
     WeeklyBriefing,
     WeeklyBriefingConnection,
@@ -79,7 +83,7 @@ def generate_weekly_briefing(
     # Forward window: upcoming dates in the next 7 days
     upcoming_cutoff = today + timedelta(days=7)
 
-    uf_sql, uf_params = user_filter(user_id)
+    uf_frag, uf_p = user_filter_text(user_id)
 
     completed: list[WeeklyBriefingItem] = []
     upcoming: list[WeeklyBriefingItem] = []
@@ -87,68 +91,76 @@ def generate_weekly_briefing(
     preferences_learned: list[str] = []
     open_questions: list[WeeklyBriefingItem] = []
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         # Completed items: active=0, updated in lookback window
-        completed_rows = conn.execute(
-            f"""SELECT id, title, type_hint, updated_at
-               FROM things
-               WHERE active = 0
-                 AND updated_at >= ?
-                 AND updated_at < ?{uf_sql}
-               ORDER BY updated_at DESC
-               LIMIT 20""",
-            [lookback_start, lookback_end, *uf_params],
+        completed_rows = session.execute(
+            text(
+                f"""SELECT id, title, type_hint, updated_at
+                   FROM things
+                   WHERE active = false
+                     AND updated_at >= :lb_start
+                     AND updated_at < :lb_end{uf_frag}
+                   ORDER BY updated_at DESC
+                   LIMIT 20"""
+            ),
+            {"lb_start": lookback_start, "lb_end": lookback_end, **uf_p},
         ).fetchall()
 
         # All active things (for upcoming deadlines and open questions)
-        active_rows = conn.execute(
-            f"""SELECT id, title, type_hint, data, open_questions, checkin_date
-               FROM things
-               WHERE active = 1{uf_sql}""",
-            uf_params,
+        active_rows = session.execute(
+            text(
+                f"""SELECT id, title, type_hint, data, open_questions, checkin_date
+                   FROM things
+                   WHERE active = true{uf_frag}"""
+            ),
+            uf_p,
         ).fetchall()
 
         # New connections created in lookback window
-        conn_rows = conn.execute(
-            f"""SELECT tr.from_thing_id, tr.to_thing_id, tr.relationship_type,
-                      tf.title AS from_title, tt.title AS to_title
-               FROM thing_relationships tr
-               JOIN things tf ON tr.from_thing_id = tf.id
-               JOIN things tt ON tr.to_thing_id = tt.id
-               WHERE tr.created_at >= ?
-                 AND tr.created_at < ?
-               LIMIT 10""",
-            [lookback_start, lookback_end],
+        conn_rows = session.execute(
+            text(
+                """SELECT tr.from_thing_id, tr.to_thing_id, tr.relationship_type,
+                          tf.title AS from_title, tt.title AS to_title
+                   FROM thing_relationships tr
+                   JOIN things tf ON tr.from_thing_id = tf.id
+                   JOIN things tt ON tr.to_thing_id = tt.id
+                   WHERE tr.created_at >= :lb_start
+                     AND tr.created_at < :lb_end
+                   LIMIT 10"""
+            ),
+            {"lb_start": lookback_start, "lb_end": lookback_end},
         ).fetchall()
 
         # Preferences learned: preference Things updated/created in lookback window
-        pref_rows = conn.execute(
-            f"""SELECT id, title, data
-               FROM things
-               WHERE type_hint = 'preference'
-                 AND (updated_at >= ? OR created_at >= ?){uf_sql}
-               ORDER BY updated_at DESC
-               LIMIT 10""",
-            [lookback_start, lookback_start, *uf_params],
+        pref_rows = session.execute(
+            text(
+                f"""SELECT id, title, data
+                   FROM things
+                   WHERE type_hint = 'preference'
+                     AND (updated_at >= :lb_start OR created_at >= :lb_start){uf_frag}
+                   ORDER BY updated_at DESC
+                   LIMIT 10"""
+            ),
+            {"lb_start": lookback_start, **uf_p},
         ).fetchall()
 
     # Build completed list
     for row in completed_rows:
-        updated = row["updated_at"] or ""
+        updated = row.updated_at or ""
         detail = None
         d = _parse_date(str(updated))
         if d:
             detail = f"Completed {d.strftime('%a')}"
         completed.append(WeeklyBriefingItem(
-            thing_id=row["id"],
-            title=row["title"],
-            type_hint=row["type_hint"],
+            thing_id=row.id,
+            title=row.title,
+            type_hint=row.type_hint,
             detail=detail,
         ))
 
     # Build upcoming deadlines
     for row in active_rows:
-        data_raw = row["data"]
+        data_raw = row.data
         data: dict | None = None
         if data_raw:
             try:
@@ -180,20 +192,20 @@ def generate_weekly_briefing(
                 else:
                     detail = f"{label} in {days}d"
                 upcoming.append(WeeklyBriefingItem(
-                    thing_id=row["id"],
-                    title=row["title"],
-                    type_hint=row["type_hint"],
+                    thing_id=row.id,
+                    title=row.title,
+                    type_hint=row.type_hint,
                     detail=detail,
                 ))
                 break  # one deadline per thing
 
         # Also check checkin_date as upcoming
-        checkin_str = row["checkin_date"]
+        checkin_str = row.checkin_date
         if checkin_str:
             checkin = _parse_date(str(checkin_str))
             if checkin and 0 <= (checkin - today).days <= 7:
                 # Avoid duplicates
-                if not any(u.thing_id == row["id"] for u in upcoming):
+                if not any(u.thing_id == row.id for u in upcoming):
                     days = (checkin - today).days
                     if days == 0:
                         detail = "Check-in due today"
@@ -202,22 +214,22 @@ def generate_weekly_briefing(
                     else:
                         detail = f"Check-in in {days}d"
                     upcoming.append(WeeklyBriefingItem(
-                        thing_id=row["id"],
-                        title=row["title"],
-                        type_hint=row["type_hint"],
+                        thing_id=row.id,
+                        title=row.title,
+                        type_hint=row.type_hint,
                         detail=detail,
                     ))
 
         # Open questions
-        oq_raw = row["open_questions"]
+        oq_raw = row.open_questions
         if oq_raw:
             try:
                 oq = json.loads(oq_raw) if isinstance(oq_raw, str) else oq_raw
                 if isinstance(oq, list) and len(oq) > 0:
                     open_questions.append(WeeklyBriefingItem(
-                        thing_id=row["id"],
-                        title=row["title"],
-                        type_hint=row["type_hint"],
+                        thing_id=row.id,
+                        title=row.title,
+                        type_hint=row.type_hint,
                         detail=oq[0] if oq else None,
                     ))
             except (json.JSONDecodeError, TypeError):
@@ -226,19 +238,19 @@ def generate_weekly_briefing(
     # Build new connections list (de-duplicate by pair)
     seen_pairs: set[frozenset[str]] = set()
     for row in conn_rows:
-        pair = frozenset([row["from_thing_id"], row["to_thing_id"]])
+        pair = frozenset([row.from_thing_id, row.to_thing_id])
         if pair in seen_pairs:
             continue
         seen_pairs.add(pair)
         new_connections.append(WeeklyBriefingConnection(
-            from_title=row["from_title"],
-            to_title=row["to_title"],
-            relationship_type=row["relationship_type"],
+            from_title=row.from_title,
+            to_title=row.to_title,
+            relationship_type=row.relationship_type,
         ))
 
     # Build preferences learned
     for row in pref_rows:
-        preferences_learned.append(row["title"])
+        preferences_learned.append(row.title)
 
     # Sort upcoming by urgency
     upcoming.sort(key=lambda x: int(x.detail.split("in ")[1].rstrip("d")) if x.detail and "in " in x.detail else (0 if x.detail and "today" in x.detail else 1))
@@ -288,16 +300,49 @@ def store_weekly_briefing(user_id: str, content: WeeklyBriefingContent) -> str:
     briefing_id = f"wb-{uuid.uuid4().hex[:8]}"
     now = datetime.now(timezone.utc).isoformat()
 
-    with db() as conn:
-        conn.execute(
-            """INSERT INTO weekly_briefings (id, user_id, week_start, content, generated_at)
-               VALUES (?, ?, ?, ?, ?)
-               ON CONFLICT(user_id, week_start) DO UPDATE SET
-                 id = excluded.id,
-                 content = excluded.content,
-                 generated_at = excluded.generated_at""",
-            (briefing_id, user_id or None, content.week_start, content.model_dump_json(), now),
-        )
+    with Session(_engine_mod.engine) as session:
+        # Check for existing briefing for this user/week
+        existing = session.execute(
+            text(
+                "SELECT id FROM weekly_briefings WHERE user_id = :uid AND week_start = :ws"
+                if user_id
+                else "SELECT id FROM weekly_briefings WHERE user_id IS NULL AND week_start = :ws"
+            ),
+            {"uid": user_id, "ws": content.week_start} if user_id else {"ws": content.week_start},
+        ).fetchone()
+
+        if existing:
+            session.execute(
+                text(
+                    "UPDATE weekly_briefings SET id = :id, content = :content, generated_at = :gen"
+                    " WHERE user_id = :uid AND week_start = :ws"
+                    if user_id
+                    else "UPDATE weekly_briefings SET id = :id, content = :content, generated_at = :gen"
+                    " WHERE user_id IS NULL AND week_start = :ws"
+                ),
+                {
+                    "id": briefing_id,
+                    "content": content.model_dump_json(),
+                    "gen": now,
+                    "uid": user_id,
+                    "ws": content.week_start,
+                } if user_id else {
+                    "id": briefing_id,
+                    "content": content.model_dump_json(),
+                    "gen": now,
+                    "ws": content.week_start,
+                },
+            )
+        else:
+            record = WeeklyBriefingRecord(
+                id=briefing_id,
+                user_id=user_id or None,
+                week_start=content.week_start,
+                content=json.loads(content.model_dump_json()),
+                generated_at=datetime.fromisoformat(now),
+            )
+            session.add(record)
+        session.commit()
 
     logger.info("Weekly briefing stored: %s for user %s week %s", briefing_id, user_id[:8] if user_id else "legacy", content.week_start)
     return briefing_id
@@ -305,35 +350,40 @@ def store_weekly_briefing(user_id: str, content: WeeklyBriefingContent) -> str:
 
 def get_latest_weekly_briefing(user_id: str, week_start: date | None = None) -> dict | None:
     """Retrieve the most recent weekly briefing for a user."""
-    uf_sql, uf_params = user_filter(user_id)
+    uf_frag, uf_p = user_filter_text(user_id)
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         if week_start:
-            row = conn.execute(
-                f"""SELECT * FROM weekly_briefings
-                   WHERE week_start = ?{uf_sql}""",
-                [week_start.isoformat(), *uf_params],
+            row = session.execute(
+                text(
+                    f"""SELECT * FROM weekly_briefings
+                       WHERE week_start = :ws{uf_frag}"""
+                ),
+                {"ws": week_start.isoformat(), **uf_p},
             ).fetchone()
         else:
-            row = conn.execute(
-                f"""SELECT * FROM weekly_briefings
-                   WHERE 1=1{uf_sql}
-                   ORDER BY week_start DESC
-                   LIMIT 1""",
-                uf_params,
+            row = session.execute(
+                text(
+                    f"""SELECT * FROM weekly_briefings
+                       WHERE 1=1{uf_frag}
+                       ORDER BY week_start DESC
+                       LIMIT 1"""
+                ),
+                uf_p,
             ).fetchone()
 
     if not row:
         return None
 
+    raw_content = row.content
     try:
-        content = json.loads(row["content"])
+        content = json.loads(raw_content) if isinstance(raw_content, str) else raw_content
     except (json.JSONDecodeError, TypeError):
         content = {}
 
     return {
-        "id": row["id"],
-        "week_start": row["week_start"],
+        "id": row.id,
+        "week_start": row.week_start,
         "content": content,
-        "generated_at": row["generated_at"],
+        "generated_at": row.generated_at,
     }
