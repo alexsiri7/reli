@@ -30,7 +30,7 @@ from .db_models import (
 logger = logging.getLogger(__name__)
 
 # Minimum similarity score (cosine distance) to consider a pair
-# ChromaDB returns distances where lower = more similar (cosine)
+# pgvector returns distances where lower = more similar (cosine)
 # We filter by distance < threshold
 MAX_DISTANCE = 0.35
 
