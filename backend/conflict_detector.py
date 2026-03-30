@@ -14,6 +14,8 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
+from sqlalchemy import String, cast
+
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, or_, select
 
@@ -236,7 +238,7 @@ def detect_schedule_overlaps(
     stmt = select(ThingRecord).where(
         ThingRecord.active == True,
         ThingRecord.data.is_not(None),  # type: ignore[union-attr]
-        ThingRecord.data != {},  # type: ignore[arg-type]
+        cast(ThingRecord.data, String) != '{}',
     )
     rows = session.exec(stmt).all()
 
