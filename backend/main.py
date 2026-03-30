@@ -68,11 +68,18 @@ _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_tracing()
 
-    # Initialize SQLModel tables (no-op if they already exist).
-    from .db_engine import init_sqlmodel_tables
-    from . import db_models as _db_models  # noqa: F811 — register table metadata
+    # Run Alembic migrations to ensure schema is up-to-date.
+    from alembic.config import Config as AlembicConfig
+    from alembic import command as alembic_command
+    import pathlib as _pathlib
 
-    init_sqlmodel_tables()
+    _alembic_ini = _pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
+    if _alembic_ini.exists():
+        _alembic_cfg = AlembicConfig(str(_alembic_ini))
+        alembic_command.upgrade(_alembic_cfg, "head")
+        logger.info("Alembic migrations applied successfully.")
+    else:
+        logger.warning("alembic.ini not found at %s — skipping migrations.", _alembic_ini)
 
     # Legacy SQLite init — only when not using an external database
     from .config import settings as _settings
