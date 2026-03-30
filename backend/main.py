@@ -32,7 +32,7 @@ from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
 from starlette.responses import Response as StarletteResponse  # noqa: E402
 
 from .auth import COOKIE_NAME, JWT_ALGORITHM, SECRET_KEY, require_user  # noqa: E402
-from .database import clean_orphan_relationships, init_db  # noqa: E402
+from .db_engine import engine as _db_engine  # noqa: E402
 from .mcp_server import create_mcp_asgi_app  # noqa: E402
 from .metrics import MetricsMiddleware, metrics_response  # noqa: E402
 from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
@@ -88,8 +88,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from .config import settings as _settings
 
     if not _settings.DATABASE_URL:
-        init_db()
-        clean_orphan_relationships()
+        from sqlmodel import SQLModel as _SQLModel
+        _SQLModel.metadata.create_all(_db_engine)
     await start_scheduler()
 
     # Start MCP session manager (required for streamable HTTP transport).
