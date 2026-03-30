@@ -29,14 +29,19 @@ COPY prompts/ ./prompts/
 # Copy frontend build from stage 1
 COPY --from=frontend-build /app/frontend/dist/ ./frontend/dist/
 
-# Create data directory with correct ownership
-RUN mkdir -p /app/data && chown reli:reli /app/data
+# Create data & chroma_db directories with correct ownership
+# chroma_db: defensive — chromadb was removed in the pgvector migration but
+# cached Docker layers or transitive deps could still try to initialise it.
+RUN mkdir -p /app/data /app/backend/chroma_db && \
+    chown reli:reli /app/data /app/backend/chroma_db
 
 # Entrypoint fixes bind-mount permissions then drops to non-root
 COPY --chmod=755 <<'ENTRY' /app/entrypoint.sh
 #!/bin/sh
 # Fix ownership of bind-mounted data dir (runs as root initially)
 chown -R reli:reli /app/data 2>/dev/null || true
+# Ensure chroma_db dir is writable (defensive — chromadb removed in pgvector migration)
+mkdir -p /app/backend/chroma_db && chown reli:reli /app/backend/chroma_db 2>/dev/null || true
 exec gosu reli "$@"
 ENTRY
 
