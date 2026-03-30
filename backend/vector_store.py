@@ -200,7 +200,7 @@ def reindex_all() -> int:
     try:
         with Session(_engine_mod.engine) as session:
             # Clear existing embeddings
-            session.execute(sa_text("TRUNCATE thing_embeddings"))
+            session.execute(sa_text("DELETE FROM thing_embeddings"))
             session.commit()
 
         # Fetch all things from the database
