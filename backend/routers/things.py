@@ -16,7 +16,6 @@ from ..db_models import ThingRecord, ThingRelationshipRecord, ThingTypeRecord
 from ..db_models import MergeHistoryRecord as MergeHistoryDBRecord
 
 from ..auth import require_user
-from ..database import clean_orphan_relationships
 from ..models import (
     GraphEdge,
     GraphNode,
@@ -724,10 +723,30 @@ def get_orphan_relationships(
 
 
 @router.post("/relationships/cleanup", response_model=OrphanCleanupResult, summary="Delete orphan relationships")
-def cleanup_orphan_relationships(user_id: str = Depends(require_user)) -> OrphanCleanupResult:
-    """Delete all orphan relationships."""
-    deleted_count, deleted_ids = clean_orphan_relationships()
-    return OrphanCleanupResult(deleted_count=deleted_count, deleted_ids=deleted_ids)
+def cleanup_orphan_relationships(
+    session: Session = Depends(get_session),
+    user_id: str = Depends(require_user),
+) -> OrphanCleanupResult:
+    """Delete all orphan relationships where from/to thing no longer exists."""
+    import logging as _logging
+
+    _logger = _logging.getLogger(__name__)
+    thing_ids_subq = select(ThingRecord.id)
+    orphans = session.exec(
+        select(ThingRelationshipRecord).where(
+            or_(
+                ThingRelationshipRecord.from_thing_id.notin_(thing_ids_subq),  # type: ignore[union-attr]
+                ThingRelationshipRecord.to_thing_id.notin_(thing_ids_subq),  # type: ignore[union-attr]
+            )
+        )
+    ).all()
+    orphan_ids = [r.id for r in orphans]
+    for r in orphans:
+        session.delete(r)
+    if orphan_ids:
+        session.commit()
+        _logger.info("Cleaned %d orphan relationship(s): %s", len(orphan_ids), orphan_ids)
+    return OrphanCleanupResult(deleted_count=len(orphan_ids), deleted_ids=orphan_ids)
 
 
 # -- Relationships --

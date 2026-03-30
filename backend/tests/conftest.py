@@ -35,7 +35,12 @@ def tmp_db_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Patch the database module to use a temp SQLite file."""
+    """Patch the database module to use a temp SQLite file.
+
+    Uses legacy ``init_db()`` to create tables and seed data (many test files
+    still import ``db()`` from ``database.py``), then patches the ORM
+    ``db_engine`` module so SQLModel code-paths hit the same temp DB.
+    """
     import backend.database as db_module
     import backend.db_engine as engine_module
     from sqlmodel import Session, create_engine

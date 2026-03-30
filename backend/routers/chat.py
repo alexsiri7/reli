@@ -15,8 +15,7 @@ from sqlmodel import Session, select
 from ..auth import require_user
 import backend.db_engine as _engine_mod
 from ..db_engine import user_filter_clause, user_filter_text
-from ..db_models import ChatHistoryRecord, ChatMessageUsageRecord, UsageLogRecord
-from ..database import get_latest_summary
+from ..db_models import ChatHistoryRecord, ChatMessageUsageRecord, ConversationSummaryRecord, UsageLogRecord
 from ..models import (
     CallUsage,
     ChatMessage,
@@ -308,7 +307,23 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
 
     # Try summary-based history if we have a user_id
     if user_id:
-        latest_summary = get_latest_summary(user_id)
+        with Session(_engine_mod.engine) as _sum_sess:
+            _sum_record = _sum_sess.exec(
+                select(ConversationSummaryRecord)
+                .where(ConversationSummaryRecord.user_id == user_id)
+                .order_by(ConversationSummaryRecord.messages_summarized_up_to.desc())  # type: ignore[union-attr]
+            ).first()
+        latest_summary: dict[str, Any] | None = (
+            {
+                "id": _sum_record.id,
+                "summary_text": _sum_record.summary_text,
+                "messages_summarized_up_to": _sum_record.messages_summarized_up_to,
+                "token_count": _sum_record.token_count,
+                "created_at": _sum_record.created_at,
+            }
+            if _sum_record
+            else None
+        )
         if latest_summary:
             with Session(_engine_mod.engine) as session:
                 records = session.exec(
