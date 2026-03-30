@@ -22,16 +22,23 @@ function formatTimestamp(iso: string): string {
   return `${monthDay}, ${time}`
 }
 
+/** Format timestamp as "RELI / 10:42 AM" label */
+function formatReliTimestamp(iso: string, isUser: boolean): string {
+  const ts = formatTimestamp(iso)
+  if (!ts) return ''
+  return isUser ? ts : `RELI / ${ts}`
+}
+
 function WebSources({ results }: { results: WebSearchResult[] }) {
   const [expanded, setExpanded] = useState(false)
 
   if (results.length === 0) return null
 
   return (
-    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+    <div className="mt-2 pt-2 border-t border-on-surface-variant/10">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
+        className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
       >
         <svg
           className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -52,10 +59,10 @@ function WebSources({ results }: { results: WebSearchResult[] }) {
               href={r.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="block text-xs text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              className="block text-xs text-on-surface-variant hover:text-primary transition-colors"
             >
               <span className="font-medium">{r.title}</span>
-              <span className="block text-gray-400 dark:text-gray-400 truncate">{r.snippet}</span>
+              <span className="block text-on-surface-variant/60 truncate">{r.snippet}</span>
             </a>
           ))}
         </div>
@@ -70,10 +77,10 @@ function GmailSources({ messages }: { messages: GmailMessage[] }) {
   if (messages.length === 0) return null
 
   return (
-    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+    <div className="mt-2 pt-2 border-t border-on-surface-variant/10">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+        className="flex items-center gap-1 text-xs font-medium text-ideas hover:text-ideas/80 transition-colors"
       >
         <svg
           className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -91,11 +98,11 @@ function GmailSources({ messages }: { messages: GmailMessage[] }) {
           {messages.map((m, i) => (
             <div
               key={i}
-              className="text-xs text-gray-600 dark:text-gray-300"
+              className="text-xs text-on-surface-variant"
             >
               <span className="font-medium">{m.subject}</span>
-              <span className="text-gray-400 dark:text-gray-400"> — {m.from}</span>
-              <span className="block text-gray-400 dark:text-gray-400 truncate">{m.snippet}</span>
+              <span className="text-on-surface-variant/60"> — {m.from}</span>
+              <span className="block text-on-surface-variant/60 truncate">{m.snippet}</span>
             </div>
           ))}
         </div>
@@ -110,10 +117,10 @@ function CalendarSources({ events }: { events: CalendarEvent[] }) {
   if (events.length === 0) return null
 
   return (
-    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+    <div className="mt-2 pt-2 border-t border-on-surface-variant/10">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 transition-colors"
+        className="flex items-center gap-1 text-xs font-medium text-events hover:text-events/80 transition-colors"
       >
         <svg
           className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -131,12 +138,12 @@ function CalendarSources({ events }: { events: CalendarEvent[] }) {
           {events.map((ev, i) => (
             <div
               key={i}
-              className="text-xs text-gray-600 dark:text-gray-300"
+              className="text-xs text-on-surface-variant"
             >
               <span className="font-medium">{ev.summary}</span>
-              <span className="text-gray-400 dark:text-gray-400"> — {new Date(ev.start).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+              <span className="text-on-surface-variant/60"> — {new Date(ev.start).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
               {ev.location && (
-                <span className="block text-gray-400 dark:text-gray-400 truncate">{ev.location}</span>
+                <span className="block text-on-surface-variant/60 truncate">{ev.location}</span>
               )}
             </div>
           ))}
@@ -146,8 +153,8 @@ function CalendarSources({ events }: { events: CalendarEvent[] }) {
   )
 }
 
-function ContextDropdown({ changes }: { changes: AppliedChanges }) {
-  const [expanded, setExpanded] = useState(false)
+/** Action Applied card — green SUCCESS badge with created/updated Things */
+function ActionAppliedCard({ changes }: { changes: AppliedChanges }) {
   const thingTypes = useStore(s => s.thingTypes)
   const openThingDetail = useStore(s => s.openThingDetail)
 
@@ -161,102 +168,112 @@ function ContextDropdown({ changes }: { changes: AppliedChanges }) {
   if (!hasInferredConnections && !hasEffects) return null
 
   return (
-    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-      {/* Collapsed pill summary — always visible */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {created.length > 0 && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400">
-            +{created.length} created
+    <div className="mt-3 rounded-xl border border-projects/20 bg-projects/5 p-3 space-y-2">
+      {/* SUCCESS badge */}
+      {hasEffects && (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-projects/20 text-projects">
+            SUCCESS
           </span>
-        )}
-        {updated.length > 0 && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400">
-            ✓ {updated.length} updated
-          </span>
-        )}
-        {deleted.length > 0 && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-red-50 text-red-500 dark:bg-red-900/30 dark:text-red-400">
-            {deleted.length} deleted
-          </span>
-        )}
-        {hasInferredConnections && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-blue-50 text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
-            💡 inferred connection
-          </span>
-        )}
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
-        >
-          {expanded ? '▴ hide' : '▾ details'}
-        </button>
-      </div>
-
-      {expanded && (
-        <div className="mt-1.5 space-y-2">
-          {/* Inferred connections — Things the system proactively connected */}
-          {hasInferredConnections && (
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-400 font-semibold mb-1">Inferred connections</p>
-              <div className="space-y-0.5">
-                {contextThings.map((t: ContextThing) => (
-                  <button
-                    key={t.id}
-                    onClick={() => openThingDetail(t.id)}
-                    className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors w-full text-left cursor-pointer"
-                  >
-                    <span>{typeIcon(t.type_hint, thingTypes)}</span>
-                    <span className="truncate">{t.title}</span>
-                    {t.type_hint && (
-                      <span className="text-[10px] text-gray-400 dark:text-gray-400 capitalize ml-auto shrink-0">{t.type_hint}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Effects — Things that were created/updated/deleted */}
-          {hasEffects && (
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-400 font-semibold mb-1">Effects</p>
-              <div className="space-y-0.5">
-                {created.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => openThingDetail(c.id)}
-                    className="flex items-center gap-1.5 text-xs w-full text-left hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
-                  >
-                    <span className="font-medium text-green-600 dark:text-green-400 shrink-0">Created</span>
-                    <span>{typeIcon(c.type_hint, thingTypes)}</span>
-                    <span className="truncate text-gray-600 dark:text-gray-300">{c.title}</span>
-                  </button>
-                ))}
-                {updated.map(u => (
-                  <button
-                    key={u.id}
-                    onClick={() => openThingDetail(u.id)}
-                    className="flex items-center gap-1.5 text-xs w-full text-left hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
-                  >
-                    <span className="font-medium text-amber-600 dark:text-amber-400 shrink-0">Updated</span>
-                    <span>{typeIcon((u as { type_hint?: string }).type_hint, thingTypes)}</span>
-                    <span className="truncate text-gray-600 dark:text-gray-300">{u.title}</span>
-                  </button>
-                ))}
-                {deleted.map(id => (
-                  <div
-                    key={id}
-                    className="flex items-center gap-1.5 text-xs"
-                  >
-                    <span className="font-medium text-red-500 dark:text-red-400 shrink-0">Deleted</span>
-                    <span className="truncate text-gray-600 dark:text-gray-300">{id}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
+
+      {/* Created/Updated/Deleted items */}
+      {hasEffects && (
+        <div className="space-y-1">
+          {created.map(c => (
+            <button
+              key={c.id}
+              onClick={() => openThingDetail(c.id)}
+              className="flex items-center gap-2 text-xs w-full text-left hover:text-primary transition-colors cursor-pointer group"
+            >
+              <span className="text-projects font-medium shrink-0">Created</span>
+              <span>{typeIcon(c.type_hint, thingTypes)}</span>
+              <span className="truncate text-on-surface group-hover:text-primary">{c.title}</span>
+              <svg className="w-3 h-3 text-on-surface-variant/40 group-hover:text-primary ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            </button>
+          ))}
+          {updated.map(u => (
+            <button
+              key={u.id}
+              onClick={() => openThingDetail(u.id)}
+              className="flex items-center gap-2 text-xs w-full text-left hover:text-primary transition-colors cursor-pointer group"
+            >
+              <span className="text-events font-medium shrink-0">Updated</span>
+              <span>{typeIcon((u as { type_hint?: string }).type_hint, thingTypes)}</span>
+              <span className="truncate text-on-surface group-hover:text-primary">{u.title}</span>
+              <svg className="w-3 h-3 text-on-surface-variant/40 group-hover:text-primary ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            </button>
+          ))}
+          {deleted.map(id => (
+            <div
+              key={id}
+              className="flex items-center gap-2 text-xs"
+            >
+              <span className="font-medium text-ideas shrink-0">Deleted</span>
+              <span className="truncate text-on-surface-variant">{id}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Inferred connections */}
+      {hasInferredConnections && (
+        <div>
+          <p className="text-label text-on-surface-variant mb-1">Inferred connections</p>
+          <div className="space-y-0.5">
+            {contextThings.map((t: ContextThing) => (
+              <button
+                key={t.id}
+                onClick={() => openThingDetail(t.id)}
+                className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-primary transition-colors w-full text-left cursor-pointer"
+              >
+                <span>{typeIcon(t.type_hint, thingTypes)}</span>
+                <span className="truncate">{t.title}</span>
+                {t.type_hint && (
+                  <span className="text-[10px] text-on-surface-variant/60 capitalize ml-auto shrink-0">{t.type_hint}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Context chips — bottom bar showing context Things as pills */
+function ContextChips({ changes }: { changes: AppliedChanges }) {
+  const thingTypes = useStore(s => s.thingTypes)
+  const openThingDetail = useStore(s => s.openThingDetail)
+  const contextThings = changes.context_things ?? []
+  const created = changes.created ?? []
+  const updated = changes.updated ?? []
+
+  const allThings = [
+    ...created.map(c => ({ ...c, kind: 'created' as const })),
+    ...updated.map(u => ({ ...u, kind: 'updated' as const })),
+    ...contextThings.map(t => ({ ...t, kind: 'context' as const })),
+  ]
+
+  if (allThings.length === 0) return null
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mt-2">
+      {allThings.map(t => (
+        <button
+          key={t.id}
+          onClick={() => openThingDetail(t.id)}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-surface-container-high text-on-surface-variant hover:bg-surface-container-high/80 hover:text-on-surface transition-colors cursor-pointer"
+        >
+          <span className="text-xs">{typeIcon('type_hint' in t ? t.type_hint : undefined, thingTypes)}</span>
+          <span className="truncate max-w-[120px]">{t.title}</span>
+        </button>
+      ))}
     </div>
   )
 }
@@ -282,19 +299,19 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="text-[10px] text-gray-400 dark:text-gray-400 font-mono hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
+        className="text-[10px] text-on-surface-variant/60 font-mono hover:text-on-surface-variant transition-colors cursor-pointer"
       >
         {formatTokens(totalTokens)} tokens{msg.cost_usd != null && msg.cost_usd > 0 ? ` · ${formatCost(msg.cost_usd)}` : ''}
       </button>
       {open && (
-        <div className="absolute left-0 bottom-full mb-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2.5 min-w-[200px] font-mono text-[11px] text-gray-500 dark:text-gray-400">
+        <div className="absolute left-0 bottom-full mb-1 z-50 glass rounded-lg shadow-lg p-2.5 min-w-[200px] font-mono text-[11px] text-on-surface-variant">
           {calls.length > 1 ? (
             <>
-              <p className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-400 mb-1">Per-call breakdown</p>
+              <p className="text-label text-on-surface-variant/60 mb-1">Per-call breakdown</p>
               <div className="space-y-2">
                 {calls.map((call, i) => (
                   <div key={i}>
-                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
+                    <p className="text-xs font-semibold text-on-surface truncate">
                       {call.model.split('/').pop()}
                     </p>
                     <div className="space-y-0.5 mt-0.5">
@@ -307,7 +324,7 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
                         <span className="tabular-nums">{formatTokens(call.completion_tokens)}</span>
                       </div>
                       {call.cost_usd > 0 && (
-                        <div className="flex justify-between gap-3 text-gray-600 dark:text-gray-300">
+                        <div className="flex justify-between gap-3 text-on-surface">
                           <span>Cost</span>
                           <span className="tabular-nums">{formatCost(call.cost_usd)}</span>
                         </div>
@@ -316,7 +333,7 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
                   </div>
                 ))}
               </div>
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-1.5 mt-1.5 font-medium text-gray-700 dark:text-gray-300">
+              <div className="border-t border-on-surface-variant/10 pt-1.5 mt-1.5 font-medium text-on-surface">
                 <div className="flex justify-between">
                   <span>Total</span>
                   <span className="tabular-nums">{formatTokens(totalTokens)}</span>
@@ -332,7 +349,7 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
           ) : (
             <>
               {msg.model && (
-                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 truncate">
+                <p className="text-xs font-semibold text-on-surface mb-1.5 truncate">
                   {msg.model.split('/').pop()}
                 </p>
               )}
@@ -345,13 +362,13 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
                   <span>Completion</span>
                   <span className="tabular-nums">{formatTokens(msg.completion_tokens ?? 0)}</span>
                 </div>
-                <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-0.5 mt-0.5 font-medium text-gray-700 dark:text-gray-300">
+                <div className="flex justify-between border-t border-on-surface-variant/10 pt-0.5 mt-0.5 font-medium text-on-surface">
                   <span>Total</span>
                   <span className="tabular-nums">{formatTokens(totalTokens)}</span>
                 </div>
               </div>
               {msg.cost_usd != null && msg.cost_usd > 0 && (
-                <p className="mt-1.5 text-right text-gray-600 dark:text-gray-300 font-medium">
+                <p className="mt-1.5 text-right text-on-surface font-medium">
                   {formatCost(msg.cost_usd)}
                 </p>
               )}
@@ -371,8 +388,8 @@ function SpeakButton({ msg, speakingId, speak }: { msg: ChatMessage; speakingId:
   return (
     <button
       onClick={() => speak(msg.content, String(msg.id))}
-      className={`p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${
-        isSpeaking ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-400'
+      className={`p-0.5 rounded hover:bg-surface-container-high transition-colors ${
+        isSpeaking ? 'text-primary' : 'text-on-surface-variant/60'
       }`}
       title={isSpeaking ? 'Stop speaking' : 'Read aloud'}
       aria-label={isSpeaking ? 'Stop speaking' : 'Read aloud'}
@@ -401,17 +418,17 @@ function StreamingIndicator({ stage }: { stage: StreamingStage }) {
   const label = STAGE_LABELS[stage] ?? stage
 
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-400 py-1">
+    <div className="flex items-center gap-2 text-xs text-on-surface-variant py-1">
       <span className="flex gap-0.5">
         {['context', 'reasoning', 'response'].map(s => (
           <span
             key={s}
             className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
               s === stage
-                ? 'bg-indigo-500 animate-pulse'
+                ? 'bg-primary animate-pulse'
                 : ['context', 'reasoning', 'response'].indexOf(s) < ['context', 'reasoning', 'response'].indexOf(stage)
-                  ? 'bg-indigo-400'
-                  : 'bg-gray-300 dark:bg-gray-600'
+                  ? 'bg-primary/60'
+                  : 'bg-on-surface-variant/30'
             }`}
           />
         ))}
@@ -444,7 +461,7 @@ function injectThingLinks(content: string, refs: ReferencedThing[]): string {
 
 function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingId: string | null; speak: (text: string, id: string) => void }) {
   const isUser = msg.role === 'user'
-  const ts = formatTimestamp(msg.timestamp)
+  const ts = formatReliTimestamp(msg.timestamp, isUser)
   const openThingDetail = useStore(s => s.openThingDetail)
 
   const referencedThings = msg.applied_changes?.referenced_things ?? []
@@ -453,18 +470,25 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
     : msg.content
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       {!isUser && (
-        <div className="w-7 h-7 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center shrink-0 mr-2 mt-1 font-bold">
+        <div className="w-7 h-7 rounded-full gradient-cta text-white text-xs flex items-center justify-center shrink-0 mr-2.5 mt-1 font-bold">
           R
         </div>
       )}
-      <div className="flex flex-col max-w-[75%]">
+      <div className={`flex flex-col ${isUser ? 'max-w-[75%] items-end' : 'max-w-[80%]'}`}>
+        {/* Timestamp label */}
+        {ts && (
+          <span className={`text-label text-on-surface-variant/60 tracking-widest mb-1 ${isUser ? 'text-right' : ''}`}>
+            {ts}
+          </span>
+        )}
+
         <div
-          className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+          className={`text-sm leading-relaxed ${
             isUser
-              ? 'bg-indigo-600 text-white rounded-br-sm'
-              : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-sm'
+              ? 'bg-surface-container-high text-on-surface rounded-xl rounded-br-sm px-4 py-2.5'
+              : 'border-l-4 border-primary pl-4 py-1'
           }`}
         >
           {msg.streaming && !msg.content && msg.streamingStage ? (
@@ -478,7 +502,7 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
             </>
           ) : (
             <>
-              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-blockquote:my-1">
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-blockquote:my-1 prose-pre:bg-surface-container-low prose-pre:border prose-pre:border-on-surface-variant/10 prose-code:text-primary">
                 <ReactMarkdown
                   urlTransform={(url) => url}
                   components={{
@@ -488,7 +512,7 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
                         return (
                           <button
                             onClick={() => openThingDetail(thingId)}
-                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 underline decoration-indigo-300 dark:decoration-indigo-500 underline-offset-2 cursor-pointer font-medium"
+                            className="text-primary hover:text-primary/80 underline decoration-primary/30 underline-offset-2 cursor-pointer font-medium"
                           >
                             {children}
                           </button>
@@ -515,25 +539,42 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
           {!isUser && msg.applied_changes?.calendar_events && msg.applied_changes.calendar_events.length > 0 && (
             <CalendarSources events={msg.applied_changes.calendar_events} />
           )}
-          {!isUser && msg.applied_changes && (
-            <ContextDropdown changes={msg.applied_changes} />
-          )}
           {!isUser && msg.questions_for_user && msg.questions_for_user.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+            <div className="mt-2 pt-2 border-t border-on-surface-variant/10">
               {msg.questions_for_user.map((q, i) => (
-                <p key={i} className="text-sm font-medium text-indigo-600 dark:text-indigo-300">
+                <p key={i} className="text-sm font-medium text-primary">
                   {q}
                 </p>
               ))}
             </div>
           )}
         </div>
+
+        {/* Action Applied card */}
+        {!isUser && msg.applied_changes && (
+          <ActionAppliedCard changes={msg.applied_changes} />
+        )}
+
+        {/* Context chips */}
+        {!isUser && msg.applied_changes && (
+          <ContextChips changes={msg.applied_changes} />
+        )}
+
+        {/* Reli Suggestion card — for proactive suggestions */}
+        {!isUser && msg.questions_for_user && msg.questions_for_user.length > 0 && (
+          <div className="mt-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
+            <p className="text-label text-primary tracking-widest mb-1.5">SUGGESTION</p>
+            {msg.questions_for_user.map((q, i) => (
+              <p key={i} className="text-body text-on-surface mb-2">{q}</p>
+            ))}
+            <button className="gradient-cta px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wider uppercase">
+              Prepare Now
+            </button>
+          </div>
+        )}
+
+        {/* Usage + speak row */}
         <div className={`flex items-center gap-2 mt-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
-          {ts && (
-            <span className="text-[10px] text-gray-400 dark:text-gray-400">
-              {ts}
-            </span>
-          )}
           {!isUser && <UsagePill msg={msg} />}
           {!isUser && <SpeakButton msg={msg} speakingId={speakingId} speak={speak} />}
         </div>
@@ -556,8 +597,8 @@ function formatCost(usd: number): string {
 
 function ModelRow({ m }: { m: ModelUsage }) {
   return (
-    <tr className="border-t border-gray-200 dark:border-gray-700">
-      <td className="py-1.5 pr-3 text-gray-700 dark:text-gray-300 font-medium whitespace-nowrap">
+    <tr className="border-t border-on-surface-variant/10">
+      <td className="py-1.5 pr-3 text-on-surface font-medium whitespace-nowrap">
         {m.model.split('/').pop()}
       </td>
       <td className="py-1.5 px-3 text-right tabular-nums">{formatTokens(m.prompt_tokens)}</td>
@@ -586,7 +627,7 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
+        className="p-1 rounded hover:bg-surface-container-high text-on-surface-variant transition-colors"
         title="Today's usage stats"
         aria-label="Today's usage stats"
       >
@@ -595,15 +636,15 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[280px] font-mono text-[11px] text-gray-500 dark:text-gray-400">
+        <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg shadow-lg p-3 min-w-[280px] font-mono text-[11px] text-on-surface-variant">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-xs text-gray-700 dark:text-gray-300">Today's Usage</span>
-            <span className="text-gray-400">{formatTokens(stats.total_tokens)} tokens · {stats.api_calls} call{stats.api_calls !== 1 ? 's' : ''} · {formatCost(stats.cost_usd)}</span>
+            <span className="font-semibold text-xs text-on-surface">Today's Usage</span>
+            <span className="text-on-surface-variant/60">{formatTokens(stats.total_tokens)} tokens · {stats.api_calls} call{stats.api_calls !== 1 ? 's' : ''} · {formatCost(stats.cost_usd)}</span>
           </div>
           {stats.per_model.length > 0 ? (
             <table className="w-full text-[11px]">
               <thead>
-                <tr className="text-gray-400 dark:text-gray-400">
+                <tr className="text-on-surface-variant/60">
                   <th className="text-left font-normal pr-3 pb-1">Model</th>
                   <th className="text-right font-normal px-3 pb-1">Prompt</th>
                   <th className="text-right font-normal px-3 pb-1">Compl.</th>
@@ -618,7 +659,7 @@ function NerdStatsIcon({ stats }: { stats: SessionStats }) {
               </tbody>
             </table>
           ) : (
-            <p className="text-center text-gray-400 dark:text-gray-400 py-2">No usage yet</p>
+            <p className="text-center text-on-surface-variant/60 py-2">No usage yet</p>
           )}
         </div>
       )}
@@ -634,8 +675,8 @@ function ModeToggle({ mode, onChange }: { mode: ChatMode; onChange: (mode: ChatM
       onClick={() => onChange(isPlanning ? 'normal' : 'planning')}
       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
         isPlanning
-          ? 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 ring-1 ring-violet-300 dark:ring-violet-600'
-          : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+          ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
+          : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-high/80 hover:text-on-surface'
       }`}
       title={isPlanning ? 'Switch to Normal mode' : 'Switch to Planning mode'}
       aria-label={`Current mode: ${mode}. Click to switch.`}
@@ -689,7 +730,7 @@ function InteractionStyleSelector({ style, onChange }: { style: InteractionStyle
   ]
 
   return (
-    <div className="flex items-center rounded-lg bg-gray-100 dark:bg-gray-800 p-0.5" role="radiogroup" aria-label="Interaction style">
+    <div className="flex items-center rounded-lg bg-surface-container-high p-0.5" role="radiogroup" aria-label="Interaction style">
       {styles.map(s => (
         <button
           key={s.value}
@@ -697,11 +738,11 @@ function InteractionStyleSelector({ style, onChange }: { style: InteractionStyle
           className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${
             style === s.value
               ? s.value === 'coach'
-                ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 shadow-sm'
+                ? 'bg-events/15 text-events shadow-sm'
                 : s.value === 'consultant'
-                ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 shadow-sm'
-                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 shadow-sm'
-              : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                ? 'bg-people/15 text-people shadow-sm'
+                : 'bg-surface-container-low text-on-surface shadow-sm'
+              : 'text-on-surface-variant hover:text-on-surface'
           }`}
           title={s.title}
           aria-label={`${s.label} style: ${s.title}`}
@@ -735,6 +776,7 @@ export function ChatPanel() {
   const { isOnline } = useNetworkStatus()
   const disclosure = useProgressiveDisclosure()
   const [input, setInput] = useState('')
+  const [collapsed, setCollapsed] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -804,148 +846,175 @@ export function ChatPanel() {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 min-w-0 min-h-0 mobile-chat-pb md:pb-0">
-      {/* Title bar */}
-      <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0 flex items-start justify-between">
-        <div className="flex items-center gap-2">
+    <div className="flex-1 flex flex-col bg-surface min-w-0 min-h-0 mobile-chat-pb md:pb-0">
+      {/* Header — "Reli Assistant" with expand/collapse */}
+      <div className="px-5 py-3 border-b border-on-surface-variant/10 bg-surface-container-low shrink-0 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full gradient-cta flex items-center justify-center">
+            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+            </svg>
+          </div>
           <div>
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Chat</h2>
-            <p className="text-xs text-gray-400 dark:text-gray-400">Talk to Reli — create, update, and query your Things</p>
+            <h2 className="text-title text-on-surface">Reli Assistant</h2>
+            <p className="text-label text-on-surface-variant">Your personal knowledge companion</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <InteractionStyleSelector style={interactionStyle} onChange={setInteractionStyle} />
           <ModeToggle mode={chatMode} onChange={setChatMode} />
           <NerdStatsIcon stats={sessionStats} />
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-5 py-4"
-        onScroll={handleScroll}
-      >
-        {historyLoading && hasMoreHistory && (
-          <div className="flex justify-center py-2">
-            <span className="w-4 h-4 border-2 border-gray-300 border-t-indigo-600 rounded-full animate-spin" />
-          </div>
-        )}
-        {messages.length === 0 && !historyLoading && (
-          disclosure.showOnboarding ? (
-            <div className="flex flex-col items-center justify-center h-full text-center px-6">
-              <div className="text-5xl mb-4">👋</div>
-              <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">Welcome to Reli</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 max-w-xs leading-relaxed">
-                Reli helps you keep track of everything that matters. Start by telling me what's on your mind.
-              </p>
-              <div className="mt-4 space-y-2 text-left w-full max-w-xs">
-                <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Try saying…</p>
-                <button
-                  onClick={() => {
-                    const input = document.querySelector<HTMLTextAreaElement>('textarea')
-                    if (input) { input.value = 'I need to finish my project proposal by Friday'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  "I need to finish my project proposal by Friday"
-                </button>
-                <button
-                  onClick={() => {
-                    const input = document.querySelector<HTMLTextAreaElement>('textarea')
-                    if (input) { input.value = 'Remind me to call the dentist next week'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  "Remind me to call the dentist next week"
-                </button>
-                <button
-                  onClick={() => {
-                    const input = document.querySelector<HTMLTextAreaElement>('textarea')
-                    if (input) { input.value = 'I have an idea for a new side project'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  "I have an idea for a new side project"
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="text-5xl mb-4">✨</div>
-              <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">What's on your mind?</h3>
-              <p className="text-sm text-gray-400 dark:text-gray-400 mt-1 max-w-xs">
-                Try: "Remind me to check the server logs tomorrow" or "I had an idea about the new API design"
-              </p>
-            </div>
-          )
-        )}
-        {messages.map(msg => (
-          <MessageBubble key={msg.id} msg={msg} speakingId={speakingId} speak={speak} />
-        ))}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input */}
-      <div className="px-4 pb-4 pt-2 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 shrink-0">
-        {!isOnline && (
-          <div className="mb-2 px-3 py-2 text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-xl text-center">
-            Chat requires an internet connection
-          </div>
-        )}
-        <div className="flex items-end gap-2 bg-gray-100 dark:bg-gray-800 rounded-2xl px-3 py-2">
-          <textarea
-            ref={inputRef}
-            rows={1}
-            maxLength={10000}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={isOnline ? "Message Reli\u2026" : "Chat unavailable offline"}
-            disabled={!isOnline}
-            className="flex-1 bg-transparent resize-none outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 max-h-32 py-1 leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ height: 'auto' }}
-            onInput={e => {
-              const t = e.currentTarget
-              t.style.height = 'auto'
-              t.style.height = `${t.scrollHeight}px`
-            }}
-          />
-          {speechRecognitionSupported && (
-            <button
-              onClick={toggleListening}
-              className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
-                listening
-                  ? 'bg-red-500 text-white animate-pulse'
-                  : 'text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-              title={listening ? 'Stop recording' : 'Voice input'}
-              aria-label={listening ? 'Stop recording' : 'Voice input'}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-              </svg>
-            </button>
-          )}
           <button
-            onClick={submit}
-            disabled={!input.trim() || chatLoading || !isOnline}
-            className="shrink-0 w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
-            title="Send (Enter)"
+            onClick={() => setCollapsed(c => !c)}
+            className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+            title={collapsed ? 'Expand chat' : 'Collapse chat'}
+            aria-label={collapsed ? 'Expand chat' : 'Collapse chat'}
           >
-            {chatLoading ? (
-              <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-            ) : (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
-              </svg>
-            )}
+            <svg className={`w-4 h-4 transition-transform ${collapsed ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+            </svg>
           </button>
         </div>
-        <p className="text-xs text-gray-400 dark:text-gray-400 text-center mt-1.5">
-          Enter to send · Shift+Enter for new line{speechRecognitionSupported ? ' · 🎤 for voice' : ''}
-        </p>
       </div>
+
+      {!collapsed && (
+        <>
+          {/* Messages */}
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-y-auto px-5 py-4"
+            onScroll={handleScroll}
+          >
+            {historyLoading && hasMoreHistory && (
+              <div className="flex justify-center py-2">
+                <span className="w-4 h-4 border-2 border-on-surface-variant/30 border-t-primary rounded-full animate-spin" />
+              </div>
+            )}
+            {messages.length === 0 && !historyLoading && (
+              disclosure.showOnboarding ? (
+                <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                  <div className="w-16 h-16 rounded-2xl gradient-cta flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-title text-on-surface">Welcome to Reli</h3>
+                  <p className="text-body text-on-surface-variant mt-2 max-w-xs">
+                    Reli helps you keep track of everything that matters. Start by telling me what's on your mind.
+                  </p>
+                  <div className="mt-4 space-y-2 text-left w-full max-w-xs">
+                    <p className="text-label text-on-surface-variant tracking-widest">Try saying...</p>
+                    <button
+                      onClick={() => {
+                        const input = document.querySelector<HTMLTextAreaElement>('textarea')
+                        if (input) { input.value = 'I need to finish my project proposal by Friday'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
+                      }}
+                      className="w-full text-left px-3 py-2 text-body text-on-surface bg-surface-container-high rounded-xl hover:bg-surface-container-high/80 transition-colors"
+                    >
+                      "I need to finish my project proposal by Friday"
+                    </button>
+                    <button
+                      onClick={() => {
+                        const input = document.querySelector<HTMLTextAreaElement>('textarea')
+                        if (input) { input.value = 'Remind me to call the dentist next week'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
+                      }}
+                      className="w-full text-left px-3 py-2 text-body text-on-surface bg-surface-container-high rounded-xl hover:bg-surface-container-high/80 transition-colors"
+                    >
+                      "Remind me to call the dentist next week"
+                    </button>
+                    <button
+                      onClick={() => {
+                        const input = document.querySelector<HTMLTextAreaElement>('textarea')
+                        if (input) { input.value = 'I have an idea for a new side project'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
+                      }}
+                      className="w-full text-left px-3 py-2 text-body text-on-surface bg-surface-container-high rounded-xl hover:bg-surface-container-high/80 transition-colors"
+                    >
+                      "I have an idea for a new side project"
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <div className="w-16 h-16 rounded-2xl gradient-cta flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-title text-on-surface">What's on your mind?</h3>
+                  <p className="text-body text-on-surface-variant mt-1 max-w-xs">
+                    Try: "Remind me to check the server logs tomorrow" or "I had an idea about the new API design"
+                  </p>
+                </div>
+              )
+            )}
+            {messages.map(msg => (
+              <MessageBubble key={msg.id} msg={msg} speakingId={speakingId} speak={speak} />
+            ))}
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Input area */}
+          <div className="px-4 pb-4 pt-2 bg-surface-container-low border-t border-on-surface-variant/10 shrink-0">
+            {!isOnline && (
+              <div className="mb-2 px-3 py-2 text-sm text-events bg-events/10 border border-events/20 rounded-xl text-center">
+                Chat requires an internet connection
+              </div>
+            )}
+            <div className="flex items-end gap-2 bg-surface-container-high rounded-2xl px-3 py-2">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                maxLength={10000}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={isOnline ? "Message Reli\u2026" : "Chat unavailable offline"}
+                disabled={!isOnline}
+                className="flex-1 bg-transparent resize-none outline-none text-body text-on-surface placeholder-on-surface-variant/40 max-h-32 py-1 leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ height: 'auto' }}
+                onInput={e => {
+                  const t = e.currentTarget
+                  t.style.height = 'auto'
+                  t.style.height = `${t.scrollHeight}px`
+                }}
+              />
+              {speechRecognitionSupported && (
+                <button
+                  onClick={toggleListening}
+                  className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                    listening
+                      ? 'bg-ideas text-white animate-pulse'
+                      : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/80'
+                  }`}
+                  title={listening ? 'Stop recording' : 'Voice input'}
+                  aria-label={listening ? 'Stop recording' : 'Voice input'}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                  </svg>
+                </button>
+              )}
+              <button
+                onClick={submit}
+                disabled={!input.trim() || chatLoading || !isOnline}
+                className="shrink-0 w-8 h-8 rounded-full gradient-cta flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                title="Send (Enter)"
+              >
+                {chatLoading ? (
+                  <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            <p className="text-[10px] text-on-surface-variant/40 text-center mt-1.5 tracking-wide">
+              Enter to send · Shift+Enter for new line{speechRecognitionSupported ? ' · mic for voice' : ''}
+            </p>
+          </div>
+        </>
+      )}
     </div>
   )
 }
