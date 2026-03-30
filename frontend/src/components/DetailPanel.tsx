@@ -5,6 +5,22 @@ import type { Relationship, ThingType } from '../store'
 import { typeIcon, formatTimestamp, formatDate, isOverdue, importanceLabel } from '../utils'
 import { PreferencePatterns } from './PreferencePatterns'
 
+/** Map type_hint to design-system accent color classes */
+function typeColorClasses(typeHint: string | null): { bg: string; text: string } {
+  switch (typeHint?.toLowerCase()) {
+    case 'project':
+      return { bg: 'bg-projects/15', text: 'text-projects' }
+    case 'event':
+      return { bg: 'bg-events/15', text: 'text-events' }
+    case 'person':
+      return { bg: 'bg-people/15', text: 'text-people' }
+    case 'idea':
+      return { bg: 'bg-ideas/15', text: 'text-ideas' }
+    default:
+      return { bg: 'bg-primary/15', text: 'text-primary' }
+  }
+}
+
 export function DetailPanel() {
   const {
     detailThingId, detailThing, detailRelationships, detailHistory,
@@ -65,15 +81,15 @@ export function DetailPanel() {
 
   if (!detailThingId) {
     return (
-      <div className="hidden md:flex w-80 shrink-0 flex-col items-center justify-center gap-3 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-center px-6">
-        <svg className="w-12 h-12 text-gray-200 dark:text-gray-700" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <div className="hidden md:flex w-80 shrink-0 flex-col items-center justify-center gap-3 bg-surface dark:bg-surface text-center px-6">
+        <svg className="w-12 h-12 text-on-surface-variant/30" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <rect x="6" y="10" width="36" height="28" rx="3" stroke="currentColor" strokeWidth="2" fill="none"/>
           <line x1="6" y1="18" x2="42" y2="18" stroke="currentColor" strokeWidth="2"/>
           <rect x="12" y="23" width="10" height="3" rx="1" fill="currentColor" opacity="0.3"/>
           <rect x="12" y="29" width="24" height="2" rx="1" fill="currentColor" opacity="0.2"/>
           <rect x="12" y="33" width="18" height="2" rx="1" fill="currentColor" opacity="0.2"/>
         </svg>
-        <p className="text-sm text-gray-400 dark:text-gray-500">
+        <p className="text-sm text-on-surface-variant/50">
           Click any Thing in the sidebar to see its details and relationships.
         </p>
       </div>
@@ -90,11 +106,17 @@ export function DetailPanel() {
   const children = thing ? things.filter(t => t.parent_id === thing.id) : []
   const parent = thing?.parent_id ? things.find(t => t.id === thing.parent_id) : null
 
-  const dataEntries = thing?.data ? Object.entries(thing.data) : []
+  // Separate notes from other data entries
+  const notes = thing?.data?.notes != null ? String(thing.data.notes) : null
+  const dataEntries = thing?.data
+    ? Object.entries(thing.data).filter(([key]) => key !== 'notes')
+    : []
 
   // Format relationship type for display: "related_to" -> "Related to"
   const formatRelType = (type: string) =>
     type.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
+
+  const colors = typeColorClasses(thing?.type_hint ?? null)
 
   return (
     <>
@@ -105,13 +127,13 @@ export function DetailPanel() {
       />
 
       {/* Panel — desktop: inline flex child on left; mobile: fixed overlay from left */}
-      <div className="fixed left-0 top-0 bottom-0 z-50 w-full max-w-md bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-xl flex flex-col overflow-hidden animate-slide-in-left md:relative md:z-auto md:w-80 md:max-w-none md:shrink-0 md:shadow-none md:animate-none md:border-r">
-        {/* Header */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
+      <div className="fixed left-0 top-0 bottom-0 z-50 w-full max-w-md bg-surface dark:bg-surface shadow-xl flex flex-col overflow-hidden animate-slide-in-left md:relative md:z-auto md:w-80 md:max-w-none md:shrink-0 md:shadow-none md:animate-none">
+        {/* Header — minimal toolbar */}
+        <div className="flex items-center gap-2 px-4 py-3 shrink-0">
           {canGoBack && (
             <button
               onClick={goBackThingDetail}
-              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
               aria-label="Go back"
               title="Go back"
             >
@@ -121,20 +143,13 @@ export function DetailPanel() {
             </button>
           )}
           <div className="flex-1 min-w-0">
-            {thing ? (
-              <div className="flex items-center gap-2">
-                <span className="text-lg shrink-0">{typeIcon(thing.type_hint, thingTypes)}</span>
-                <h2 className="text-sm font-semibold text-gray-900 dark:text-white truncate">{thing.title}</h2>
-              </div>
-            ) : detailLoading ? (
-              <div className="h-5 w-40 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-            ) : (
-              <span className="text-sm text-gray-400">Not found</span>
+            {!thing && !detailLoading && (
+              <span className="text-body text-on-surface-variant">Not found</span>
             )}
           </div>
           <button
             onClick={closeThingDetail}
-            className="p-1.5 rounded-lg text-gray-400 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
             aria-label="Close detail panel"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -146,76 +161,94 @@ export function DetailPanel() {
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
           {detailLoading ? (
-            <div className="p-4 space-y-3 animate-pulse">
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6" />
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
+            <div className="p-6 space-y-4 animate-pulse">
+              <div className="h-3 bg-surface-container-high rounded w-24" />
+              <div className="h-7 bg-surface-container-high rounded w-3/4" />
+              <div className="h-4 bg-surface-container-high rounded w-1/2" />
+              <div className="h-4 bg-surface-container-high rounded w-5/6" />
             </div>
           ) : thing ? (
-            <div className="p-4 space-y-4">
-              {/* Type & Priority */}
-              <div className="flex items-center gap-3 text-xs">
+            <div className="px-6 pb-6 space-y-6">
+              {/* Type badge + created date */}
+              <div className="flex items-center gap-3">
                 {thing.type_hint && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 capitalize">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-label font-semibold capitalize ${colors.bg} ${colors.text}`}>
                     {typeIcon(thing.type_hint, thingTypes)} {thing.type_hint}
                   </span>
                 )}
-                <span className="text-gray-500 dark:text-gray-400">{importanceLabel(thing.importance)}</span>
+                <span className="text-label text-on-surface-variant">
+                  {formatTimestamp(thing.created_at)}
+                </span>
               </div>
 
-              {/* Check-in date */}
-              {thing.checkin_date && (() => {
-                const overdue = isOverdue(thing.checkin_date)
-                const dateLabel = formatDate(thing.checkin_date)
-                return (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="shrink-0">📅</span>
-                    <span className={overdue ? 'text-red-500 font-semibold' : 'text-gray-600 dark:text-gray-300'}>
-                      {overdue ? '⚠ ' : ''}{dateLabel}
-                    </span>
-                  </div>
-                )
-              })()}
+              {/* Title — editorial headline */}
+              <h2 className="text-headline font-bold text-on-surface leading-tight">
+                {thing.title}
+              </h2>
 
-              {/* Preference patterns (dedicated view) or generic data fields */}
+              {/* Importance + check-in date */}
+              <div className="flex items-center gap-3 text-body text-on-surface-variant">
+                <span>{importanceLabel(thing.importance)}</span>
+                {thing.checkin_date && (() => {
+                  const overdue = isOverdue(thing.checkin_date)
+                  const dateLabel = formatDate(thing.checkin_date)
+                  return (
+                    <span className={`inline-flex items-center gap-1 ${overdue ? 'text-ideas font-semibold' : ''}`}>
+                      <span className="shrink-0">{overdue ? '\u26a0' : '\ud83d\udcc5'}</span>
+                      <span>{dateLabel}</span>
+                    </span>
+                  )
+                })()}
+              </div>
+
+              {/* ── NOTES ── */}
               {thing.type_hint === 'preference' ? (
                 <PreferencePatterns thingId={thing.id} data={thing.data} />
-              ) : dataEntries.length > 0 ? (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">Details</h3>
-                  <div className="space-y-1.5">
+              ) : notes ? (
+                <section className="space-y-3">
+                  <h3 className="text-label font-semibold text-on-surface-variant tracking-widest">Notes</h3>
+                  <div className="rounded-xl bg-surface-container-high p-4">
+                    <p className="text-body text-on-surface whitespace-pre-wrap">{notes}</p>
+                  </div>
+                </section>
+              ) : null}
+
+              {/* Other data fields (non-notes) */}
+              {dataEntries.length > 0 && thing.type_hint !== 'preference' && (
+                <section className="space-y-3">
+                  <h3 className="text-label font-semibold text-on-surface-variant tracking-widest">Details</h3>
+                  <div className="rounded-xl bg-surface-container-high p-4 space-y-2">
                     {dataEntries.map(([key, value]) => (
-                      <div key={key} className="text-sm">
-                        <span className="font-medium text-gray-500 dark:text-gray-400">{key}:</span>{' '}
-                        <span className="text-gray-700 dark:text-gray-300">
+                      <div key={key} className="text-body">
+                        <span className="font-medium text-on-surface-variant">{key}:</span>{' '}
+                        <span className="text-on-surface">
                           {typeof value === 'string' ? value : JSON.stringify(value)}
                         </span>
                       </div>
                     ))}
                   </div>
-                </div>
-              ) : null}
-
-              {/* Open questions */}
-              {thing.open_questions && thing.open_questions.length > 0 && (
-                <div className="space-y-1.5">
-                  <h3 className="text-xs font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-wider">Open Questions</h3>
-                  <ul className="space-y-1">
-                    {thing.open_questions.map((q, i) => (
-                      <li key={i} className="text-sm text-amber-700 dark:text-amber-300 flex items-start gap-1.5">
-                        <span className="shrink-0 mt-0.5">?</span>
-                        <span>{q}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                </section>
               )}
 
-              {/* Parent */}
+              {/* ── OPEN QUESTIONS ── (rose/ideas accent) */}
+              {thing.open_questions && thing.open_questions.length > 0 && (
+                <section className="space-y-3">
+                  <h3 className="text-label font-semibold text-ideas tracking-widest">Open Questions</h3>
+                  <div className="rounded-xl bg-ideas/10 p-4 space-y-2">
+                    {thing.open_questions.map((q, i) => (
+                      <div key={i} className="flex items-start gap-2 text-body">
+                        <span className="shrink-0 text-ideas font-bold mt-0.5">?</span>
+                        <span className="text-on-surface">{q}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* ── PARENT ── */}
               {parent && (
-                <div className="space-y-1.5">
-                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">Parent</h3>
+                <section className="space-y-3">
+                  <h3 className="text-label font-semibold text-on-surface-variant tracking-widest">Parent</h3>
                   <ThingLink
                     id={parent.id}
                     title={parent.title}
@@ -223,16 +256,16 @@ export function DetailPanel() {
                     thingTypes={thingTypes}
                     onClick={navigateThingDetail}
                   />
-                </div>
+                </section>
               )}
 
-              {/* Children */}
+              {/* ── CHILDREN ── */}
               {children.length > 0 && (
-                <div className="space-y-1.5">
-                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">
+                <section className="space-y-3">
+                  <h3 className="text-label font-semibold text-on-surface-variant tracking-widest">
                     Children ({children.length})
                   </h3>
-                  <div className="space-y-0.5">
+                  <div className="space-y-1">
                     {children.map(c => (
                       <ThingLink
                         key={c.id}
@@ -244,66 +277,68 @@ export function DetailPanel() {
                       />
                     ))}
                   </div>
-                </div>
+                </section>
               )}
 
-              {/* Relationships grouped by type */}
+              {/* ── RELATIONSHIPS ── */}
               {groupedRels.size > 0 && (
-                <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider">Relationships</h3>
-                  {Array.from(groupedRels.entries()).map(([type, items]) => (
-                    <div key={type} className="space-y-0.5">
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 italic">
-                        {formatRelType(type)}
-                      </p>
-                      {items.map(({ rel, otherId, direction }) => {
-                        const other = resolveThing(otherId)
-                        return (
-                          <div key={rel.id} className="flex items-center gap-1.5 text-sm">
-                            <span className="text-gray-400 dark:text-gray-400 text-xs shrink-0">{direction}</span>
-                            {other ? (
-                              <ThingLink
-                                id={other.id}
-                                title={other.title}
-                                typeHint={other.type_hint}
-                                thingTypes={thingTypes}
-                                onClick={navigateThingDetail}
-                              />
-                            ) : (
-                              <button
-                                onClick={() => navigateThingDetail(otherId)}
-                                className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline truncate"
-                              >
-                                {otherId}
-                              </button>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ))}
-                </div>
+                <section className="space-y-3">
+                  <h3 className="text-label font-semibold text-on-surface-variant tracking-widest">Relationships</h3>
+                  <div className="space-y-4">
+                    {Array.from(groupedRels.entries()).map(([type, items]) => (
+                      <div key={type} className="space-y-1">
+                        <p className="text-label text-on-surface-variant italic">
+                          {formatRelType(type)}
+                        </p>
+                        {items.map(({ rel, otherId, direction }) => {
+                          const other = resolveThing(otherId)
+                          return (
+                            <div key={rel.id} className="flex items-center gap-1.5">
+                              <span className="text-on-surface-variant text-xs shrink-0">{direction}</span>
+                              {other ? (
+                                <ThingLink
+                                  id={other.id}
+                                  title={other.title}
+                                  typeHint={other.type_hint}
+                                  thingTypes={thingTypes}
+                                  onClick={navigateThingDetail}
+                                />
+                              ) : (
+                                <button
+                                  onClick={() => navigateThingDetail(otherId)}
+                                  className="text-body text-primary hover:underline truncate"
+                                >
+                                  {otherId}
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </section>
               )}
 
-              {/* Timestamps */}
-              <div className="space-y-1 pt-2 border-t border-gray-100 dark:border-gray-800">
-                <p className="text-xs text-gray-400 dark:text-gray-400">
+              {/* Timestamps footer */}
+              <div className="space-y-1 pt-4">
+                <p className="text-label text-on-surface-variant">
                   Created {formatTimestamp(thing.created_at)}
                 </p>
                 {thing.updated_at !== thing.created_at && (
-                  <p className="text-xs text-gray-400 dark:text-gray-400">
+                  <p className="text-label text-on-surface-variant">
                     Updated {formatTimestamp(thing.updated_at)}
                   </p>
                 )}
                 {thing.last_referenced && (
-                  <p className="text-xs text-gray-400 dark:text-gray-400">
+                  <p className="text-label text-on-surface-variant">
                     Last discussed {formatTimestamp(thing.last_referenced)}
                   </p>
                 )}
               </div>
             </div>
           ) : (
-            <div className="p-4 text-sm text-gray-400 dark:text-gray-400 text-center">
+            <div className="p-6 text-body text-on-surface-variant text-center">
               Thing not found
             </div>
           )}
@@ -325,14 +360,14 @@ function ThingLink({
   return (
     <button
       onClick={() => onClick(id)}
-      className="flex items-center gap-1.5 w-full text-left px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group"
+      className="flex items-center gap-2 w-full text-left px-3 py-1.5 rounded-lg hover:bg-surface-container-high transition-colors group"
     >
       <span className="text-sm shrink-0">{typeIcon(typeHint, thingTypes)}</span>
-      <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate transition-colors">
+      <span className="text-body text-on-surface group-hover:text-primary truncate transition-colors">
         {title}
       </span>
       {typeHint && (
-        <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-400 capitalize shrink-0">
+        <span className="ml-auto text-label text-on-surface-variant capitalize shrink-0">
           {typeHint}
         </span>
       )}
