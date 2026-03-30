@@ -247,6 +247,37 @@ _default_origins = ["http://localhost:5173", "http://localhost:3000"]
 _extra_origins = [o.strip() for o in _app_settings.CORS_ORIGINS.split(",") if o.strip()] if _app_settings.CORS_ORIGINS else []
 _all_origins = _default_origins + _extra_origins
 
+# MCP OAuth endpoints must accept cross-origin requests from any MCP client.
+# Use a separate permissive CORS middleware for those paths, and the
+# restrictive one for everything else.
+_MCP_CORS_PREFIXES = ("/oauth/", "/.well-known/")
+
+
+class _MCPCorsMiddleware(BaseHTTPMiddleware):
+    """Allow any origin on MCP OAuth / well-known endpoints."""
+
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[StarletteResponse]]) -> StarletteResponse:  # type: ignore[override]
+        path = request.url.path
+        is_mcp = any(path.startswith(p) for p in _MCP_CORS_PREFIXES)
+        if not is_mcp:
+            return await call_next(request)
+
+        origin = request.headers.get("origin", "")
+
+        # Handle preflight
+        if request.method == "OPTIONS":
+            resp = StarletteResponse(status_code=204)
+            resp.headers["Access-Control-Allow-Origin"] = origin or "*"
+            resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            resp.headers["Access-Control-Allow-Headers"] = "content-type, authorization"
+            resp.headers["Access-Control-Max-Age"] = "600"
+            return resp
+
+        response = await call_next(request)
+        response.headers["Access-Control-Allow-Origin"] = origin or "*"
+        return response
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_all_origins,
@@ -254,6 +285,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Added after CORSMiddleware so it runs FIRST (LIFO order).
+# Intercepts MCP OAuth paths before the restrictive CORSMiddleware.
+app.add_middleware(_MCPCorsMiddleware)
 
 app.add_middleware(SecurityHeadersMiddleware)
 _rl_config = get_rate_limit_config()
