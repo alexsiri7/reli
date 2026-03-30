@@ -50,6 +50,68 @@ class TestOAuthMetadataScheme:
         assert data["resource"].startswith("https://")
 
 
+class TestMcpOAuthCors:
+    """MCP OAuth endpoints must allow cross-origin requests from any MCP client."""
+
+    def test_oauth_token_cors_preflight(self, mcp_client):
+        resp = mcp_client.options(
+            "/oauth/token",
+            headers={
+                "Origin": "https://claude.ai",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert resp.status_code == 204
+        assert resp.headers.get("access-control-allow-origin") == "https://claude.ai"
+
+    def test_oauth_register_cors_preflight(self, mcp_client):
+        resp = mcp_client.options(
+            "/oauth/register",
+            headers={
+                "Origin": "https://example.com",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert resp.status_code == 204
+        assert resp.headers.get("access-control-allow-origin") == "https://example.com"
+
+    def test_well_known_cors_preflight(self, mcp_client):
+        resp = mcp_client.options(
+            "/.well-known/oauth-authorization-server",
+            headers={
+                "Origin": "https://claude.ai",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert resp.status_code == 204
+        assert resp.headers.get("access-control-allow-origin") == "https://claude.ai"
+
+    def test_oauth_token_post_has_cors_header(self, mcp_client):
+        resp = mcp_client.post(
+            "/oauth/token",
+            data={"grant_type": "authorization_code", "code": "fake"},
+            headers={"Origin": "https://claude.ai"},
+        )
+        # Should fail with 400 (bad code) but still have CORS headers
+        assert resp.status_code == 400
+        assert resp.headers.get("access-control-allow-origin") == "https://claude.ai"
+
+    def test_api_route_does_not_get_permissive_cors(self, mcp_client):
+        """Non-OAuth routes should NOT allow arbitrary origins."""
+        resp = mcp_client.options(
+            "/api/health",
+            headers={
+                "Origin": "https://evil.example.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        # Should NOT have access-control-allow-origin for an unknown origin
+        acao = resp.headers.get("access-control-allow-origin", "")
+        assert "evil.example.com" not in acao
+
+
 class TestMcpRedirectScheme:
     """The /mcp redirect must use the config-derived base URL, not request.url.
 

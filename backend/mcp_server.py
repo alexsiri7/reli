@@ -653,6 +653,16 @@ async def reli_think(
 # ---------------------------------------------------------------------------
 
 
+def _resource_metadata_url(cfg: Any) -> str:
+    """Build the OAuth protected resource metadata URL."""
+    base = cfg.RELI_BASE_URL
+    if not base:
+        uri = cfg.GOOGLE_AUTH_REDIRECT_URI or ""
+        parts = uri.split("/")
+        base = "/".join(parts[:3])
+    return base.rstrip("/") + "/.well-known/oauth-protected-resource"
+
+
 class _TokenAuthMiddleware:
     """ASGI middleware that enforces Bearer token authentication on /mcp.
 
@@ -712,7 +722,14 @@ class _TokenAuthMiddleware:
                 content='{"detail":"Unauthorized"}',
                 status_code=401,
                 media_type="application/json",
-                headers={"WWW-Authenticate": 'Bearer realm="reli"'},
+                headers={
+                    "WWW-Authenticate": (
+                        'Bearer realm="reli"'
+                        ', resource_metadata="'
+                        + _resource_metadata_url(_settings)
+                        + '"'
+                    ),
+                },
             )
             await response(scope, receive, send)
             return
