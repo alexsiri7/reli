@@ -99,7 +99,9 @@ async def test_acomplete_all_model_configs(model: str):
             model,
         )
 
-    assert mock_call.call_args.kwargs["model"] == f"openai/{model}"
+    # Provider prefix is stripped: "google/model" -> "openai/model"
+    base_model = model.split("/", 1)[-1] if "/" in model else model
+    assert mock_call.call_args.kwargs["model"] == f"openai/{base_model}"
     assert result.choices[0].message.content == "ok"
 
 
