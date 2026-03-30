@@ -1,5 +1,6 @@
 """Google Calendar read-only integration endpoints."""
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,6 +15,8 @@ from ..google_calendar import (
     is_configured,
     is_connected,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -47,13 +50,14 @@ def calendar_callback(
 ) -> RedirectResponse:
     """Handle the OAuth2 callback from Google."""
     if error:
-        # Redirect to frontend with error
-        return RedirectResponse(url=f"/?calendar_error={error}")
+        logger.error("Calendar OAuth returned error: %s", error)
+        return RedirectResponse(url="/?calendar_error=oauth_denied")
 
     try:
         exchange_code(code, state=state, user_id=user_id)
-    except Exception as exc:
-        return RedirectResponse(url=f"/?calendar_error={exc}")
+    except Exception:
+        logger.exception("Calendar OAuth callback failed")
+        return RedirectResponse(url="/?calendar_error=connection_failed")
 
     # Redirect back to the app with success indicator
     return RedirectResponse(url="/?calendar_connected=true")

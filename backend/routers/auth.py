@@ -188,9 +188,9 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
 
     try:
         flow.fetch_token(code=code)
-    except Exception as exc:
-        logger.error("OAuth token exchange failed: %s", exc)
-        raise HTTPException(status_code=502, detail=f"Google login failed: {exc}")
+    except Exception:
+        logger.exception("Google OAuth callback failed")
+        raise HTTPException(status_code=502, detail="Authentication failed. Please try again.")
 
     # Verify and extract user info from the id_token
     credentials = flow.credentials
