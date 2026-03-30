@@ -140,6 +140,9 @@ class Settings(BaseSettings):
                 raise ValueError(f"STORAGE_BACKEND=supabase requires: {', '.join(missing)}")
         return self
 
+    # --- CORS ---
+    CORS_ORIGINS: str = ""  # Comma-separated extra origins (e.g. https://reli.interstellarai.net)
+
     # --- Sentry ---
     SENTRY_DSN: str = ""
     SENTRY_ENVIRONMENT: str = "production"

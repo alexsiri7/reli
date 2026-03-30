@@ -233,9 +233,13 @@ app = FastAPI(
     openapi_tags=_TAG_METADATA,
 )
 
+_default_origins = ["http://localhost:5173", "http://localhost:3000"]
+_extra_origins = [o.strip() for o in _app_settings.CORS_ORIGINS.split(",") if o.strip()] if _app_settings.CORS_ORIGINS else []
+_all_origins = _default_origins + _extra_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=_all_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
