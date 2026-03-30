@@ -416,7 +416,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, theOneThing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView, sidebarOpen, setSidebarOpen } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, theOneThing: s.theOneThing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView, sidebarOpen: s.sidebarOpen, setSidebarOpen: s.setSidebarOpen })))
+  const { currentUser, logout, things, thingTypes, briefing, theOneThing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView, sidebarOpen, setSidebarOpen, createThing } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, theOneThing: s.theOneThing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView, sidebarOpen: s.sidebarOpen, setSidebarOpen: s.setSidebarOpen, createThing: s.createThing })))
   const disclosure = useProgressiveDisclosure()
   const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -489,6 +489,45 @@ export function Sidebar() {
 
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false)
   const filterDropdownRef = useRef<HTMLDivElement>(null)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  const [quickAddSection, setQuickAddSection] = useState<string | null>(null)
+  const [quickAddValue, setQuickAddValue] = useState('')
+  const [quickAddSaving, setQuickAddSaving] = useState(false)
+  const quickAddInputRef = useRef<HTMLInputElement>(null)
+  const [fabOpen, setFabOpen] = useState(false)
+
+  const toggleSection = useCallback((type: string) => {
+    setCollapsedSections(prev => {
+      const next = new Set(prev)
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
+      return next
+    })
+  }, [])
+
+  const openQuickAdd = useCallback((type: string) => {
+    setQuickAddSection(type)
+    setQuickAddValue('')
+    setCollapsedSections(prev => {
+      const next = new Set(prev)
+      next.delete(type)
+      return next
+    })
+    setTimeout(() => quickAddInputRef.current?.focus(), 50)
+  }, [])
+
+  const handleQuickAddSubmit = useCallback(async (type: string) => {
+    const trimmed = quickAddValue.trim()
+    if (!trimmed) { setQuickAddSection(null); return }
+    setQuickAddSaving(true)
+    try {
+      await createThing(trimmed, type)
+      setQuickAddSection(null)
+      setQuickAddValue('')
+    } finally {
+      setQuickAddSaving(false)
+    }
+  }, [quickAddValue, createThing])
 
   // Close filter dropdown on outside click
   useEffect(() => {
@@ -549,13 +588,14 @@ export function Sidebar() {
 
   // Group active things by type, excluding children of projects (shown under parent)
   const activeGroups = useMemo(() => {
-    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal', 'preference'] as const
+    const TYPE_ORDER = ['task', 'project', 'person', 'idea', 'note', 'goal', 'journal', 'preference'] as const
     const FALLBACK_LABELS: Record<string, string> = {
-      project: 'Projects',
-      goal: 'Goals',
       task: 'Tasks',
-      note: 'Notes',
+      project: 'Projects',
+      person: 'People',
       idea: 'Ideas',
+      note: 'Notes',
+      goal: 'Goals',
       journal: 'Journal',
       preference: 'Preferences',
     }
@@ -610,11 +650,11 @@ export function Sidebar() {
 
   // Available types for the filter dropdown (derived from active things)
   const availableTypes = useMemo(() => {
-    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal', 'preference']
+    const TYPE_ORDER = ['task', 'project', 'person', 'idea', 'note', 'goal', 'journal', 'preference']
     const FALLBACK_LABELS: Record<string, string> = {
-      project: 'Projects', goal: 'Goals', task: 'Tasks',
-      note: 'Notes', idea: 'Ideas', journal: 'Journal',
-      preference: 'Preferences',
+      task: 'Tasks', project: 'Projects', person: 'People',
+      idea: 'Ideas', note: 'Notes', goal: 'Goals',
+      journal: 'Journal', preference: 'Preferences',
     }
     const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
     for (const tt of thingTypes) {
@@ -1102,16 +1142,61 @@ export function Sidebar() {
         )}
 
         {/* Active Things grouped by type */}
-        {activeGroups.map(group => (
-          <section key={group.type} className="py-2">
-            <h2 className="px-4 pb-1 text-label font-semibold text-on-surface-variant flex items-center gap-1.5">
-              <span>{group.icon}</span>
-              <span>{group.label}</span>
-              <span className="ml-auto text-[10px] font-normal tabular-nums">{group.items.length}</span>
-            </h2>
-            {group.items.map(t => <ThingCard key={t.id} thing={t} />)}
-          </section>
-        ))}
+        {activeGroups.map(group => {
+          const isCollapsed = collapsedSections.has(group.type)
+          const isQuickAdding = quickAddSection === group.type
+          const addLabel = `Add ${group.label.toLowerCase().replace(/s$/, '')}`
+          return (
+            <section key={group.type} className="py-2" data-type-section={group.type}>
+              <button
+                className="w-full px-4 pb-1 text-label font-semibold text-on-surface-variant flex items-center gap-1.5 hover:text-on-surface transition-colors"
+                onClick={() => toggleSection(group.type)}
+                aria-expanded={!isCollapsed}
+              >
+                <span>{group.icon}</span>
+                <span>{group.label}</span>
+                <span className="ml-auto flex items-center gap-1.5">
+                  <span className="text-[10px] font-normal tabular-nums">{group.items.length}</span>
+                  <span className="text-[10px] opacity-50">{isCollapsed ? '▼' : '▲'}</span>
+                </span>
+              </button>
+              {!isCollapsed && (
+                <>
+                  {group.items.map(t => <ThingCard key={t.id} thing={t} />)}
+                  {/* Inline quick-add */}
+                  {isQuickAdding ? (
+                    <div className="px-3 py-1">
+                      <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-primary/40 bg-surface-container-high">
+                        <input
+                          ref={quickAddInputRef}
+                          type="text"
+                          value={quickAddValue}
+                          onChange={e => setQuickAddValue(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); void handleQuickAddSubmit(group.type) }
+                            if (e.key === 'Escape') { setQuickAddSection(null) }
+                          }}
+                          placeholder={`${group.label.replace(/s$/, '')} title…`}
+                          disabled={quickAddSaving}
+                          className="flex-1 text-sm bg-transparent text-on-surface placeholder-on-surface-variant/50 outline-none min-w-0"
+                        />
+                        {quickAddSaving && <span className="text-xs text-on-surface-variant">Saving…</span>}
+                      </div>
+                      <p className="text-[10px] text-on-surface-variant mt-0.5 px-2">Enter to save · Esc to cancel</p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => openQuickAdd(group.type)}
+                      className="w-full text-left px-5 py-1 text-xs text-on-surface-variant/60 hover:text-primary transition-colors"
+                    >
+                      + {addLabel}
+                    </button>
+                  )}
+                </>
+              )}
+            </section>
+          )
+        })}
 
         {/* Preferences — learned behavioral patterns */}
         {preferenceThings.length > 0 && (
@@ -1169,6 +1254,52 @@ export function Sidebar() {
             <div className="w-1 h-1 rounded-full bg-on-surface-variant/30 group-hover/handle:bg-primary/60 transition-colors" />
           </div>
         </div>
+      </div>
+
+      {/* Mobile FAB — floating action button for quick-add on Things tab */}
+      <div className="md:hidden">
+        {fabOpen && (
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setFabOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+        {fabOpen && (
+          <div className="fixed bottom-20 right-4 z-50 flex flex-col-reverse gap-2">
+            {([
+              { type: 'task', label: 'Add task', icon: '✅' },
+              { type: 'note', label: 'Quick note', icon: '📝' },
+              { type: 'idea', label: 'Capture idea', icon: '💡' },
+              { type: 'person', label: 'Remember person', icon: '👤' },
+            ] as const).map(({ type, label, icon }) => (
+              <button
+                key={type}
+                onClick={() => {
+                  setFabOpen(false)
+                  openQuickAdd(type)
+                  // Scroll to section
+                  setTimeout(() => {
+                    const el = document.querySelector(`[data-type-section="${type}"]`)
+                    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  }, 100)
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-surface-container-high shadow-lg text-sm font-medium text-on-surface border border-on-surface-variant/10 hover:bg-primary-container hover:text-on-surface transition-colors"
+              >
+                <span>{icon}</span>
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => setFabOpen(v => !v)}
+          aria-label="Quick add"
+          className="fixed bottom-16 right-4 z-50 w-14 h-14 rounded-full bg-primary text-on-primary shadow-lg flex items-center justify-center text-2xl hover:bg-primary/90 transition-all active:scale-95"
+          style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        >
+          <span className={`transition-transform duration-200 ${fabOpen ? 'rotate-45' : ''}`}>+</span>
+        </button>
       </div>
     </>
   )
