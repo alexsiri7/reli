@@ -1,9 +1,11 @@
 """Tests for config.yaml loading and per-stage model routing."""
 
 import textwrap
+import warnings
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 import yaml
 
 
@@ -153,3 +155,62 @@ def test_estimate_cost_unknown_model():
 
     cost = estimate_cost("unknown/nonexistent-model-xyz", 1000, 1000)
     assert cost == 0.0
+
+
+# --- Settings production secret validation tests (#437) ---
+
+
+def test_settings_production_missing_secrets_raises():
+    """Settings must raise ValueError when required secrets are missing in production."""
+    from backend.config import Settings
+
+    with patch.dict("os.environ", {"RAILWAY_ENVIRONMENT_NAME": "production"}, clear=False):
+        with pytest.raises(ValueError, match="Missing required production env vars"):
+            Settings(SECRET_KEY="", REQUESTY_API_KEY="")
+
+
+def test_settings_production_with_secrets_passes():
+    """Settings should not raise when required secrets are provided in production."""
+    from backend.config import Settings
+
+    with patch.dict(
+        "os.environ", {"RAILWAY_ENVIRONMENT_NAME": "production"}, clear=False
+    ):
+        s = Settings(SECRET_KEY="supersecret", REQUESTY_API_KEY="key123")
+        assert s.SECRET_KEY == "supersecret"
+        assert s.REQUESTY_API_KEY == "key123"
+
+
+def test_settings_dev_mode_allows_empty_secrets():
+    """In dev mode (no RAILWAY_ENVIRONMENT_NAME/PRODUCTION), empty secrets are allowed."""
+    from backend.config import Settings
+
+    env_overrides = {
+        "RAILWAY_ENVIRONMENT_NAME": "",
+        "PRODUCTION": "",
+    }
+    with patch.dict("os.environ", env_overrides, clear=False):
+        # Should not raise, just warn
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            s = Settings(SECRET_KEY="", REQUESTY_API_KEY="")
+            assert s.SECRET_KEY == ""
+            # Check that a warning was emitted about SECRET_KEY
+            secret_warnings = [x for x in w if "SECRET_KEY" in str(x.message)]
+            assert len(secret_warnings) >= 1
+
+
+def test_settings_empty_secret_key_warns():
+    """An empty SECRET_KEY should emit a warning even in dev mode."""
+    from backend.config import Settings
+
+    env_overrides = {
+        "RAILWAY_ENVIRONMENT_NAME": "",
+        "PRODUCTION": "",
+    }
+    with patch.dict("os.environ", env_overrides, clear=False):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            Settings(SECRET_KEY="", REQUESTY_API_KEY="somekey")
+            secret_warnings = [x for x in w if "authentication is DISABLED" in str(x.message)]
+            assert len(secret_warnings) >= 1
