@@ -10,6 +10,7 @@ from google.adk.models.lite_llm import LiteLlm
 
 from backend.agents import (
     REQUESTY_API_KEY,
+    REQUESTY_BASE_URL,
     REQUESTY_MODEL,
     REQUESTY_REASONING_MODEL,
     REQUESTY_RESPONSE_MODEL,
@@ -42,9 +43,12 @@ def make_eval_model(stage: str = "reasoning") -> LiteLlm:
             api_key=google_api_key,
         )
     else:
-        # Fall back to Requesty
+        # Fall back to Requesty — openai/ prefix tells LiteLLM to use the
+        # OpenAI-compatible provider, and api_base routes to Requesty which
+        # handles the google/ provider routing in the model name.
         effective = model_name if model_name.startswith("openai/") else f"openai/{model_name}"
         return LiteLlm(
             model=effective,
             api_key=REQUESTY_API_KEY,
+            api_base=REQUESTY_BASE_URL,
         )
