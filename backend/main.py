@@ -79,7 +79,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if not _settings.DATABASE_URL:
         init_db()
         clean_orphan_relationships()
-    start_scheduler()
+    await start_scheduler()
 
     # Start MCP session manager (required for streamable HTTP transport).
     # When mounted as a sub-app, Starlette's lifespan doesn't trigger,
@@ -104,7 +104,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 yield
         else:
             yield
-    stop_scheduler()
+    await stop_scheduler()
     shutdown_tracing()
 
 
