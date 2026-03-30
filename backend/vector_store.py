@@ -1,42 +1,26 @@
-"""ChromaDB vector store for semantic search over Things."""
+"""pgvector-backed vector store for semantic search over Things.
+
+Stores embeddings in a ``thing_embeddings`` Postgres table using the pgvector
+extension. Uses cosine distance (``<=>``) for similarity search.
+"""
 
 import json
 import logging
-import sys
-import types
-from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Suppress ChromaDB PostHog telemetry (re-s5ne)
-#
-# ChromaDB <1.0 bundles a Posthog telemetry client that calls
-# ``posthog.capture(distinct_id, event, props)`` with 3 positional args.
-# Newer versions of the posthog SDK changed ``capture()`` to accept only 1
-# positional arg, causing a TypeError that spams logs.  Injecting a stub
-# module into sys.modules prevents the real SDK from loading and silences
-# the error regardless of which posthog version (or none) is installed.
-# ---------------------------------------------------------------------------
-if "posthog" not in sys.modules:
-    _posthog_stub = types.ModuleType("posthog")
-    _posthog_stub.capture = lambda *_args, **_kwargs: None  # type: ignore[attr-defined]
-    _posthog_stub.disabled = True  # type: ignore[attr-defined]
-    _posthog_stub.project_api_key = ""  # type: ignore[attr-defined]
-    sys.modules["posthog"] = _posthog_stub
+from sqlalchemy import func, text as sa_text
+from sqlmodel import Session, select
 
-import chromadb
-from chromadb import EmbeddingFunction
-
+import backend.db_engine as _engine_mod
 from .config import settings
+from .db_models import ThingEmbeddingRecord, ThingRecord
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-
-CHROMA_PATH = Path(settings.DATA_DIR) / "chroma_db"
-COLLECTION_NAME = "things"
 
 REQUESTY_BASE_URL = settings.REQUESTY_BASE_URL
 REQUESTY_API_KEY = settings.REQUESTY_API_KEY
@@ -54,10 +38,10 @@ VECTOR_SEARCH_THRESHOLD = 0
 # ---------------------------------------------------------------------------
 
 
-class _ThingEmbedder(EmbeddingFunction):
+class _ThingEmbedder:
     """Embed text via Requesty (OpenAI-compatible) with Ollama fallback."""
 
-    def __call__(self, input: list[str]) -> list[list[float]]:  # type: ignore[override]  # noqa: A002
+    def __call__(self, input: list[str]) -> list[list[float]]:  # noqa: A002
         # Try Requesty first (if API key configured)
         if REQUESTY_API_KEY:
             try:
@@ -87,23 +71,6 @@ class _ThingEmbedder(EmbeddingFunction):
 
 
 _embedder = _ThingEmbedder()
-
-
-# ---------------------------------------------------------------------------
-# ChromaDB client / collection helpers
-# ---------------------------------------------------------------------------
-
-
-def _get_collection() -> chromadb.Collection:
-    client = chromadb.PersistentClient(
-        path=str(CHROMA_PATH),
-        settings=chromadb.Settings(anonymized_telemetry=False),
-    )
-    return client.get_or_create_collection(
-        name=COLLECTION_NAME,
-        embedding_function=_embedder,
-        metadata={"hnsw:space": "cosine"},
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -147,11 +114,6 @@ def _thing_to_text(thing: dict[str, Any]) -> str:
     thing_id = thing.get("id")
     if thing_id:
         try:
-            from sqlalchemy import text as sa_text
-            from sqlmodel import Session
-
-            import backend.db_engine as _engine_mod
-
             with Session(_engine_mod.engine) as session:
                 rows = session.execute(
                     sa_text(
@@ -174,40 +136,59 @@ def _thing_to_text(thing: dict[str, Any]) -> str:
 
 
 def upsert_thing(thing: dict[str, Any]) -> None:
-    """Embed and upsert a Thing into ChromaDB. Silently no-ops on error."""
+    """Embed and upsert a Thing into pgvector. Silently no-ops on error."""
     try:
-        collection = _get_collection()
         text = _thing_to_text(thing)
-        collection.upsert(
-            ids=[thing["id"]],
-            documents=[text],
-            metadatas=[
+        embeddings = _embedder([text])
+        embedding = embeddings[0]
+
+        with Session(_engine_mod.engine) as session:
+            # Use raw SQL for INSERT ON CONFLICT (upsert)
+            session.execute(
+                sa_text(
+                    "INSERT INTO thing_embeddings (thing_id, embedding, content, updated_at) "
+                    "VALUES (:thing_id, :embedding, :content, :updated_at) "
+                    "ON CONFLICT (thing_id) DO UPDATE SET "
+                    "embedding = EXCLUDED.embedding, "
+                    "content = EXCLUDED.content, "
+                    "updated_at = EXCLUDED.updated_at"
+                ),
                 {
-                    "type_hint": thing.get("type_hint") or "",
-                    "active": 1 if thing.get("active", True) else 0,
-                    "user_id": thing.get("user_id") or "",
-                }
-            ],
-        )
+                    "thing_id": thing["id"],
+                    "embedding": str(embedding),
+                    "content": text,
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            )
+            session.commit()
     except Exception as exc:
-        logger.error("ChromaDB upsert failed for thing %s: %s", thing.get("id"), exc)
+        logger.error("pgvector upsert failed for thing %s: %s", thing.get("id"), exc)
 
 
 def delete_thing(thing_id: str) -> None:
-    """Remove a Thing from ChromaDB. Silently no-ops on error."""
+    """Remove a Thing's embedding from pgvector. Silently no-ops on error."""
     try:
-        collection = _get_collection()
-        collection.delete(ids=[thing_id])
+        with Session(_engine_mod.engine) as session:
+            record = session.get(ThingEmbeddingRecord, thing_id)
+            if record:
+                session.delete(record)
+                session.commit()
     except Exception as exc:
-        logger.error("ChromaDB delete failed for thing %s: %s", thing_id, exc)
+        logger.error("pgvector delete failed for thing %s: %s", thing_id, exc)
 
 
 def vector_count() -> int:
-    """Return the number of Things indexed in ChromaDB."""
+    """Return the number of Things indexed in pgvector."""
     try:
-        return _get_collection().count()
+        with Session(_engine_mod.engine) as session:
+            from sqlalchemy import func
+
+            count = session.exec(
+                select(func.count()).select_from(ThingEmbeddingRecord)
+            ).one()
+            return count
     except Exception as exc:
-        logger.error("ChromaDB count failed: %s", exc)
+        logger.error("pgvector count failed: %s", exc)
         return 0
 
 
@@ -216,17 +197,11 @@ def reindex_all() -> int:
 
     Returns the number of Things re-indexed.
     """
-    from sqlmodel import Session, select
-
-    import backend.db_engine as _engine_mod
-    from .db_models import ThingRecord
-
     try:
-        collection = _get_collection()
-        # Clear existing embeddings
-        existing = collection.get()
-        if existing["ids"]:
-            collection.delete(ids=existing["ids"])
+        with Session(_engine_mod.engine) as session:
+            # Clear existing embeddings
+            session.execute(sa_text("TRUNCATE thing_embeddings"))
+            session.commit()
 
         # Fetch all things from the database
         with Session(_engine_mod.engine) as session:
@@ -235,26 +210,40 @@ def reindex_all() -> int:
         if not records:
             return 0
 
-        # Batch upsert
-        ids: list[str] = []
-        documents: list[str] = []
-        metadatas: list[dict[str, str | int]] = []
+        # Batch embed
+        texts: list[str] = []
+        thing_ids: list[str] = []
         for record in records:
             thing = record.model_dump()
-            ids.append(thing["id"])
-            documents.append(_thing_to_text(thing))
-            metadatas.append(
-                {
-                    "type_hint": thing.get("type_hint") or "",
-                    "active": 1 if thing.get("active", True) else 0,
-                    "user_id": thing.get("user_id") or "",
-                }
-            )
+            thing_ids.append(thing["id"])
+            texts.append(_thing_to_text(thing))
 
-        collection.upsert(ids=ids, documents=documents, metadatas=metadatas)  # type: ignore[arg-type]
-        return len(ids)
+        embeddings = _embedder(texts)
+
+        # Batch insert
+        now = datetime.now(timezone.utc)
+        with Session(_engine_mod.engine) as session:
+            for tid, embedding, text in zip(thing_ids, embeddings, texts):
+                session.execute(
+                    sa_text(
+                        "INSERT INTO thing_embeddings (thing_id, embedding, content, updated_at) "
+                        "VALUES (:thing_id, :embedding, :content, :updated_at) "
+                        "ON CONFLICT (thing_id) DO UPDATE SET "
+                        "embedding = EXCLUDED.embedding, "
+                        "content = EXCLUDED.content, "
+                        "updated_at = EXCLUDED.updated_at"
+                    ),
+                    {
+                        "thing_id": tid,
+                        "embedding": str(embedding),
+                        "content": text,
+                        "updated_at": now,
+                    },
+                )
+            session.commit()
+        return len(thing_ids)
     except Exception as exc:
-        logger.error("ChromaDB reindex_all failed: %s", exc)
+        logger.error("pgvector reindex_all failed: %s", exc)
         raise
 
 
@@ -272,42 +261,105 @@ def vector_search(
     Returns an empty list on any error so callers can fall back to SQL.
     """
     try:
-        collection = _get_collection()
-        total = collection.count()
-        if total == 0:
-            return []
+        with Session(_engine_mod.engine) as session:
+            total = session.exec(
+                select(func.count()).select_from(ThingEmbeddingRecord)
+            ).one()
+            if total == 0:
+                return []
 
-        # Build ChromaDB `where` filter
-        filters: list[dict] = []
-        if active_only:
-            filters.append({"active": {"$eq": 1}})
-        if type_hint:
-            filters.append({"type_hint": {"$eq": type_hint}})
-        if user_id:
-            filters.append({"$or": [{"user_id": {"$eq": user_id}}, {"user_id": {"$eq": ""}}]})
+        # Embed all queries (limit to 3)
+        query_texts = queries[:3]
+        query_embeddings = _embedder(query_texts)
 
-        where: dict | None = None
-        if len(filters) == 1:
-            where = filters[0]
-        elif len(filters) > 1:
-            where = {"$and": filters}
-
-        per_query = min(n_results, total)
         seen_ids: list[str] = []
         seen_set: set[str] = set()
 
-        for query in queries[:3]:
-            results = collection.query(
-                query_texts=[query],
-                n_results=per_query,
-                where=where,
+        for query_embedding in query_embeddings:
+            # Build dynamic SQL with filters
+            where_clauses = []
+            params: dict[str, Any] = {
+                "embedding": str(query_embedding),
+                "limit": n_results,
+            }
+
+            if active_only:
+                where_clauses.append("t.active = true")
+            if type_hint:
+                where_clauses.append("t.type_hint = :type_hint")
+                params["type_hint"] = type_hint
+            if user_id:
+                where_clauses.append("(t.user_id = :user_id OR t.user_id IS NULL)")
+                params["user_id"] = user_id
+
+            where_sql = ""
+            if where_clauses:
+                where_sql = "WHERE " + " AND ".join(where_clauses)
+
+            sql = sa_text(
+                f"SELECT e.thing_id "
+                f"FROM thing_embeddings e "
+                f"JOIN things t ON t.id = e.thing_id "
+                f"{where_sql} "
+                f"ORDER BY e.embedding <=> :embedding "
+                f"LIMIT :limit"
             )
-            for id_ in results["ids"][0]:
-                if id_ not in seen_set:
-                    seen_set.add(id_)
-                    seen_ids.append(id_)
+
+            with Session(_engine_mod.engine) as session:
+                rows = session.execute(sql, params).fetchall()
+                for row in rows:
+                    tid = row[0]
+                    if tid not in seen_set:
+                        seen_set.add(tid)
+                        seen_ids.append(tid)
 
         return seen_ids
     except Exception as exc:
-        logger.error("ChromaDB vector_search failed: %s", exc)
+        logger.error("pgvector vector_search failed: %s", exc)
+        return []
+
+
+def vector_search_with_distances(
+    query: str,
+    n_results: int = 20,
+    active_only: bool = True,
+    user_id: str = "",
+) -> list[tuple[str, float]]:
+    """Return (thing_id, cosine_distance) pairs ordered by similarity.
+
+    Used by connection_sweep for distance-threshold filtering.
+    """
+    try:
+        query_embedding = _embedder([query])[0]
+
+        where_clauses = []
+        params: dict[str, Any] = {
+            "embedding": str(query_embedding),
+            "limit": n_results,
+        }
+
+        if active_only:
+            where_clauses.append("t.active = true")
+        if user_id:
+            where_clauses.append("(t.user_id = :user_id OR t.user_id IS NULL)")
+            params["user_id"] = user_id
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        sql = sa_text(
+            f"SELECT e.thing_id, e.embedding <=> :embedding AS distance "
+            f"FROM thing_embeddings e "
+            f"JOIN things t ON t.id = e.thing_id "
+            f"{where_sql} "
+            f"ORDER BY distance "
+            f"LIMIT :limit"
+        )
+
+        with Session(_engine_mod.engine) as session:
+            rows = session.execute(sql, params).fetchall()
+            return [(row[0], float(row[1])) for row in rows]
+    except Exception as exc:
+        logger.error("pgvector vector_search_with_distances failed: %s", exc)
         return []
