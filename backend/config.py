@@ -10,6 +10,8 @@ Usage:
     settings.DATA_DIR
 """
 
+import os
+import warnings
 from pathlib import Path
 from typing import Literal
 
@@ -106,6 +108,25 @@ class Settings(BaseSettings):
         if self.DATABASE_URL:
             return self.DATABASE_URL
         return f"sqlite:///{Path(self.DATA_DIR) / 'reli.db'}"
+
+    @model_validator(mode="after")
+    def _validate_production_secrets(self) -> "Settings":
+        """Fail fast if required secrets are missing in production."""
+        if os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("PRODUCTION"):
+            required = {
+                "SECRET_KEY": self.SECRET_KEY,
+                "REQUESTY_API_KEY": self.REQUESTY_API_KEY,
+            }
+            missing = [k for k, v in required.items() if not v]
+            if missing:
+                raise ValueError(
+                    f"Missing required production env vars: {', '.join(missing)}"
+                )
+        if not self.SECRET_KEY:
+            warnings.warn(
+                "SECRET_KEY is empty — authentication is DISABLED", stacklevel=2
+            )
+        return self
 
     @model_validator(mode="after")
     def _validate_supabase_config(self) -> "Settings":
