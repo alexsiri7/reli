@@ -23,6 +23,7 @@ type Thing = {
 let mockState: Record<string, unknown> = {
   things: [] as Thing[],
   briefing: [] as Thing[],
+  theOneThing: null,
   findings: [],
   loading: false,
   snoozeThing: vi.fn(),

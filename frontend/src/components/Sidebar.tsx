@@ -31,14 +31,14 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
   const icon = FINDING_TYPE_ICONS[finding.finding_type] ?? '\u{1F4CB}'
   return (
     <div
-      className="group px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
+      className="group px-4 py-2 hover:bg-surface-container-high transition-colors"
     >
       <div className="flex items-start gap-2">
         <span className="text-sm mt-0.5 shrink-0">{icon}</span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{finding.message}</p>
+          <p className="text-sm text-on-surface leading-snug">{finding.message}</p>
           {finding.thing && (
-            <p className="text-xs text-gray-400 dark:text-gray-400 mt-0.5 truncate">
+            <p className="text-xs text-on-surface-variant mt-0.5 truncate">
               {typeIcon(finding.thing.type_hint)} {finding.thing.title}
             </p>
           )}
@@ -47,7 +47,7 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
             {finding.thing_id && (
               <button
                 onClick={() => onAct(finding)}
-                className="text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium"
+                className="text-xs text-primary hover:text-primary/80 font-medium"
                 title="Open in detail panel"
               >
                 Open
@@ -55,14 +55,14 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
             )}
             <button
               onClick={() => onSnooze(finding.id)}
-              className="text-xs text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              className="text-xs text-on-surface-variant hover:text-on-surface"
               title="Snooze for 1 day"
             >
               Snooze
             </button>
             <button
               onClick={() => onDismiss(finding.id)}
-              className="text-xs text-gray-400 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400"
+              className="text-xs text-on-surface-variant hover:text-ideas"
               title="Dismiss"
             >
               Dismiss
@@ -80,7 +80,7 @@ function FocusCard({ rec }: { rec: FocusRecommendation }) {
       className={`group px-3 py-1 ${rec.is_blocked ? 'opacity-50' : ''}`}
     >
       <div
-        className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors px-1 cursor-pointer"
+        className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-surface-container-high transition-colors px-2 cursor-pointer"
         onClick={() => useStore.getState().openThingDetail(rec.thing.id)}
         role="button"
       >
@@ -88,15 +88,15 @@ function FocusCard({ rec }: { rec: FocusRecommendation }) {
           {typeIcon(rec.thing.type_hint)}
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
+          <p className="text-sm font-medium text-on-surface truncate leading-snug">
             {rec.thing.title}
           </p>
-          <p className="text-xs text-gray-400 dark:text-gray-400 mt-0.5 leading-snug">
+          <p className="text-xs text-on-surface-variant mt-0.5 leading-snug">
             {rec.reasons.join(' \u00B7 ')}
           </p>
         </div>
         {rec.is_blocked && (
-          <span className="text-[10px] text-red-400 dark:text-red-500 font-medium mt-1 shrink-0">BLOCKED</span>
+          <span className="text-[10px] text-ideas font-medium mt-1 shrink-0">BLOCKED</span>
         )}
       </div>
     </div>
@@ -116,38 +116,38 @@ function MorningBriefingSection({ briefing }: { briefing: MorningBriefing }) {
   if (!hasContent) return null
 
   return (
-    <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+    <section className="py-2">
       <button
         className="w-full flex items-center justify-between px-4 pb-1"
         onClick={() => setExpanded(!expanded)}
       >
-        <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+        <h2 className="text-label font-semibold text-on-surface-variant">
           Morning Briefing
         </h2>
-        <span className="text-xs text-gray-300 dark:text-gray-500">{expanded ? '\u25B2' : '\u25BC'}</span>
+        <span className="text-xs text-on-surface-variant">{expanded ? '\u25B2' : '\u25BC'}</span>
       </button>
 
       {expanded && (
         <div className="space-y-1">
           {/* Summary */}
-          <p className="px-4 text-sm text-gray-600 dark:text-gray-300 leading-snug">
+          <p className="px-4 text-sm text-on-surface leading-snug">
             {c.summary}
           </p>
 
           {/* Overdue items */}
           {hasOverdue && (
             <div className="px-4 mt-1">
-              <p className="text-xs font-medium text-red-500 dark:text-red-400 uppercase tracking-wider mb-0.5">Overdue</p>
+              <p className="text-label font-medium text-ideas mb-0.5">Overdue</p>
               {c.overdue.map(item => (
                 <div
                   key={item.thing_id}
-                  className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  className="flex items-center gap-2 py-1 cursor-pointer hover:bg-surface-container-high rounded px-1 -mx-1"
                   onClick={() => useStore.getState().openThingDetail(item.thing_id)}
                   role="button"
                 >
-                  <span className="text-red-400 text-xs shrink-0">{'\u26A0'}</span>
-                  <span className="text-sm text-gray-700 dark:text-gray-200 truncate flex-1">{item.title}</span>
-                  <span className="text-xs text-red-400 shrink-0">{item.days_overdue}d</span>
+                  <span className="text-ideas text-xs shrink-0">{'\u26A0'}</span>
+                  <span className="text-sm text-on-surface truncate flex-1">{item.title}</span>
+                  <span className="text-xs text-ideas shrink-0">{item.days_overdue}d</span>
                 </div>
               ))}
             </div>
@@ -156,18 +156,18 @@ function MorningBriefingSection({ briefing }: { briefing: MorningBriefing }) {
           {/* Top priorities */}
           {hasPriorities && (
             <div className="px-4 mt-1">
-              <p className="text-xs font-medium text-amber-500 dark:text-amber-400 uppercase tracking-wider mb-0.5">Priorities</p>
+              <p className="text-label font-medium text-events mb-0.5">Priorities</p>
               {c.priorities.map(item => (
                 <div
                   key={item.thing_id}
-                  className="flex items-start gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  className="flex items-start gap-2 py-1 cursor-pointer hover:bg-surface-container-high rounded px-1 -mx-1"
                   onClick={() => useStore.getState().openThingDetail(item.thing_id)}
                   role="button"
                 >
-                  <span className="text-amber-400 text-xs mt-0.5 shrink-0">{'\u2B50'}</span>
+                  <span className="text-events text-xs mt-0.5 shrink-0">{'\u2B50'}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-700 dark:text-gray-200 truncate leading-snug">{item.title}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 leading-snug">{item.reasons.join(' \u00B7 ')}</p>
+                    <p className="text-sm text-on-surface truncate leading-snug">{item.title}</p>
+                    <p className="text-xs text-on-surface-variant leading-snug">{item.reasons.join(' \u00B7 ')}</p>
                   </div>
                 </div>
               ))}
@@ -177,19 +177,19 @@ function MorningBriefingSection({ briefing }: { briefing: MorningBriefing }) {
           {/* Blockers */}
           {hasBlockers && (
             <div className="px-4 mt-1">
-              <p className="text-xs font-medium text-orange-500 dark:text-orange-400 uppercase tracking-wider mb-0.5">Blocked</p>
+              <p className="text-label font-medium text-events mb-0.5">Blocked</p>
               {c.blockers.map(item => (
                 <div
                   key={item.thing_id}
-                  className="flex items-start gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  className="flex items-start gap-2 py-1 cursor-pointer hover:bg-surface-container-high rounded px-1 -mx-1"
                   onClick={() => useStore.getState().openThingDetail(item.thing_id)}
                   role="button"
                 >
-                  <span className="text-orange-400 text-xs mt-0.5 shrink-0">{'\u{1F6AB}'}</span>
+                  <span className="text-events text-xs mt-0.5 shrink-0">{'\u{1F6AB}'}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-700 dark:text-gray-200 truncate leading-snug">{item.title}</p>
+                    <p className="text-sm text-on-surface truncate leading-snug">{item.title}</p>
                     {item.blocked_by.length > 0 && (
-                      <p className="text-xs text-gray-400 dark:text-gray-500 leading-snug truncate">
+                      <p className="text-xs text-on-surface-variant leading-snug truncate">
                         Blocked by: {item.blocked_by.join(', ')}
                       </p>
                     )}
@@ -202,16 +202,16 @@ function MorningBriefingSection({ briefing }: { briefing: MorningBriefing }) {
           {/* Sweep findings summary */}
           {hasFindings && (
             <div className="px-4 mt-1">
-              <p className="text-xs font-medium text-blue-500 dark:text-blue-400 uppercase tracking-wider mb-0.5">Insights</p>
+              <p className="text-label font-medium text-primary mb-0.5">Insights</p>
               {c.findings.slice(0, 5).map(f => (
                 <div
                   key={f.id}
-                  className={`flex items-start gap-2 py-1 ${f.thing_id ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800' : ''} rounded px-1 -mx-1`}
+                  className={`flex items-start gap-2 py-1 ${f.thing_id ? 'cursor-pointer hover:bg-surface-container-high' : ''} rounded px-1 -mx-1`}
                   onClick={() => f.thing_id && useStore.getState().openThingDetail(f.thing_id)}
                   role={f.thing_id ? 'button' : undefined}
                 >
-                  <span className="text-blue-400 text-xs mt-0.5 shrink-0">{'\u{1F4A1}'}</span>
-                  <p className="text-sm text-gray-700 dark:text-gray-200 leading-snug">{f.message}</p>
+                  <span className="text-primary text-xs mt-0.5 shrink-0">{'\u{1F4A1}'}</span>
+                  <p className="text-sm text-on-surface leading-snug">{f.message}</p>
                 </div>
               ))}
             </div>
@@ -230,34 +230,34 @@ function WeeklyBriefingSection({ briefing }: { briefing: WeeklyBriefing }) {
   if (!hasContent && !c.summary) return null
 
   return (
-    <section className="py-2 border-b border-gray-100 dark:border-gray-800">
+    <section className="py-2">
       <button
         className="w-full flex items-center justify-between px-4 pb-1"
         onClick={() => setExpanded(!expanded)}
       >
-        <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+        <h2 className="text-label font-semibold text-on-surface-variant">
           Weekly Digest
         </h2>
-        <span className="text-xs text-gray-300 dark:text-gray-500">{expanded ? '\u25B2' : '\u25BC'}</span>
+        <span className="text-xs text-on-surface-variant">{expanded ? '\u25B2' : '\u25BC'}</span>
       </button>
 
-      <p className="px-4 text-sm text-gray-600 dark:text-gray-300 leading-snug">{c.summary}</p>
+      <p className="px-4 text-sm text-on-surface leading-snug">{c.summary}</p>
 
       {expanded && (
         <div className="space-y-1 mt-1">
           {c.upcoming.length > 0 && (
             <div className="px-4">
-              <p className="text-xs font-medium text-amber-500 dark:text-amber-400 uppercase tracking-wider mb-0.5">Upcoming</p>
+              <p className="text-label font-medium text-events mb-0.5">Upcoming</p>
               {c.upcoming.map(item => (
                 <div
                   key={item.thing_id}
-                  className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  className="flex items-center gap-2 py-1 cursor-pointer hover:bg-surface-container-high rounded px-1 -mx-1"
                   onClick={() => useStore.getState().openThingDetail(item.thing_id)}
                   role="button"
                 >
                   <span className="text-sm shrink-0">{typeIcon(item.type_hint)}</span>
-                  <span className="text-sm text-gray-700 dark:text-gray-200 truncate flex-1">{item.title}</span>
-                  {item.detail && <span className="text-xs text-amber-500 dark:text-amber-400 shrink-0">{item.detail}</span>}
+                  <span className="text-sm text-on-surface truncate flex-1">{item.title}</span>
+                  {item.detail && <span className="text-xs text-events shrink-0">{item.detail}</span>}
                 </div>
               ))}
             </div>
@@ -265,16 +265,16 @@ function WeeklyBriefingSection({ briefing }: { briefing: WeeklyBriefing }) {
 
           {c.completed.length > 0 && (
             <div className="px-4">
-              <p className="text-xs font-medium text-emerald-500 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Completed</p>
+              <p className="text-label font-medium text-projects mb-0.5">Completed</p>
               {c.completed.map(item => (
                 <div
                   key={item.thing_id}
-                  className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  className="flex items-center gap-2 py-1 cursor-pointer hover:bg-surface-container-high rounded px-1 -mx-1"
                   onClick={() => useStore.getState().openThingDetail(item.thing_id)}
                   role="button"
                 >
-                  <span className="text-emerald-400 text-xs shrink-0">{'\u2713'}</span>
-                  <span className="text-sm text-gray-700 dark:text-gray-200 truncate flex-1">{item.title}</span>
+                  <span className="text-projects text-xs shrink-0">{'\u2713'}</span>
+                  <span className="text-sm text-on-surface truncate flex-1">{item.title}</span>
                 </div>
               ))}
             </div>
@@ -282,13 +282,13 @@ function WeeklyBriefingSection({ briefing }: { briefing: WeeklyBriefing }) {
 
           {c.new_connections.length > 0 && (
             <div className="px-4">
-              <p className="text-xs font-medium text-blue-500 dark:text-blue-400 uppercase tracking-wider mb-0.5">New Connections</p>
+              <p className="text-label font-medium text-primary mb-0.5">New Connections</p>
               {c.new_connections.map((conn, i) => (
-                <p key={i} className="text-sm text-gray-600 dark:text-gray-300 py-0.5 leading-snug">
+                <p key={i} className="text-sm text-on-surface py-0.5 leading-snug">
                   <span className="font-medium">{conn.from_title}</span>
-                  <span className="text-gray-400 dark:text-gray-500 mx-1">{'\u2192'}</span>
+                  <span className="text-on-surface-variant mx-1">{'\u2192'}</span>
                   <span className="font-medium">{conn.to_title}</span>
-                  {conn.relationship_type && <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">({conn.relationship_type})</span>}
+                  {conn.relationship_type && <span className="text-on-surface-variant ml-1 text-xs">({conn.relationship_type})</span>}
                 </p>
               ))}
             </div>
@@ -296,18 +296,18 @@ function WeeklyBriefingSection({ briefing }: { briefing: WeeklyBriefing }) {
 
           {c.open_questions.length > 0 && (
             <div className="px-4">
-              <p className="text-xs font-medium text-purple-500 dark:text-purple-400 uppercase tracking-wider mb-0.5">Open Questions</p>
+              <p className="text-label font-medium text-primary mb-0.5">Open Questions</p>
               {c.open_questions.map(item => (
                 <div
                   key={item.thing_id}
-                  className="flex items-start gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+                  className="flex items-start gap-2 py-1 cursor-pointer hover:bg-surface-container-high rounded px-1 -mx-1"
                   onClick={() => useStore.getState().openThingDetail(item.thing_id)}
                   role="button"
                 >
-                  <span className="text-purple-400 text-xs mt-0.5 shrink-0">{'\u2753'}</span>
+                  <span className="text-primary text-xs mt-0.5 shrink-0">{'\u2753'}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-700 dark:text-gray-200 truncate leading-snug">{item.title}</p>
-                    {item.detail && <p className="text-xs text-gray-400 dark:text-gray-500 leading-snug truncate">{item.detail}</p>}
+                    <p className="text-sm text-on-surface truncate leading-snug">{item.title}</p>
+                    {item.detail && <p className="text-xs text-on-surface-variant leading-snug truncate">{item.detail}</p>}
                   </div>
                 </div>
               ))}
@@ -320,9 +320,9 @@ function WeeklyBriefingSection({ briefing }: { briefing: WeeklyBriefing }) {
 }
 
 function confidenceLabel(confidence: number): { label: string; className: string } {
-  if (confidence >= 0.7) return { label: 'Strong', className: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950' }
-  if (confidence >= 0.5) return { label: 'Moderate', className: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950' }
-  return { label: 'Emerging', className: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950' }
+  if (confidence >= 0.7) return { label: 'Strong', className: 'text-projects bg-projects/10' }
+  if (confidence >= 0.5) return { label: 'Moderate', className: 'text-primary bg-primary/10' }
+  return { label: 'Emerging', className: 'text-events bg-events/10' }
 }
 
 function PreferenceCard({ thing }: { thing: Thing }) {
@@ -344,13 +344,13 @@ function PreferenceCard({ thing }: { thing: Thing }) {
   return (
     <div className="px-3 py-1 group">
       <div
-        className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors px-2 cursor-pointer border border-transparent hover:border-purple-100 dark:hover:border-purple-900"
+        className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-surface-container-high transition-colors px-2 cursor-pointer"
         onClick={() => openThingDetail(thing.id)}
         role="button"
       >
         <span className="text-base leading-none mt-0.5 select-none shrink-0">🧠</span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
+          <p className="text-sm font-medium text-on-surface truncate leading-snug">
             {thing.title}
           </p>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -358,12 +358,12 @@ function PreferenceCard({ thing }: { thing: Thing }) {
               {label}
             </span>
             {evidence.length > 0 && (
-              <span className="text-[10px] text-gray-400 dark:text-gray-500">
+              <span className="text-[10px] text-on-surface-variant">
                 {evidence.length} obs.
               </span>
             )}
             {category && (
-              <span className="text-[10px] text-gray-400 dark:text-gray-500 capitalize">
+              <span className="text-[10px] text-on-surface-variant capitalize">
                 {category}
               </span>
             )}
@@ -374,21 +374,21 @@ function PreferenceCard({ thing }: { thing: Thing }) {
               <>
                 <button
                   onClick={e => handleFeedback(true, e)}
-                  className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/60 font-medium transition-colors"
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-projects/20 text-projects hover:bg-projects/30 font-medium transition-colors"
                   title="Confirm this preference"
                 >
                   That&apos;s right
                 </button>
                 <button
                   onClick={e => handleFeedback(false, e)}
-                  className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 font-medium transition-colors"
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant hover:bg-surface-container-high/80 font-medium transition-colors"
                   title="Correct this preference"
                 >
                   Not really
                 </button>
               </>
             ) : (
-              <span className="text-[10px] text-gray-400 dark:text-gray-500 italic">
+              <span className="text-[10px] text-on-surface-variant italic">
                 {feedbackSent === 'accurate' ? 'Thanks for confirming!' : 'Got it, noted.'}
               </span>
             )}
@@ -401,7 +401,7 @@ function PreferenceCard({ thing }: { thing: Thing }) {
 
 const SIDEBAR_MIN_WIDTH = 200
 const SIDEBAR_MAX_WIDTH = 500
-const SIDEBAR_DEFAULT_WIDTH = 288 // w-72
+const SIDEBAR_DEFAULT_WIDTH = 240
 const SIDEBAR_WIDTH_KEY = 'reli-sidebar-width'
 
 function loadSidebarWidth(): number {
@@ -416,7 +416,7 @@ function loadSidebarWidth(): number {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView, sidebarOpen, setSidebarOpen } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView, sidebarOpen: s.sidebarOpen, setSidebarOpen: s.setSidebarOpen })))
+  const { currentUser, logout, things, thingTypes, briefing, theOneThing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView, sidebarOpen, setSidebarOpen } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, theOneThing: s.theOneThing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView, sidebarOpen: s.sidebarOpen, setSidebarOpen: s.setSidebarOpen })))
   const disclosure = useProgressiveDisclosure()
   const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -646,7 +646,7 @@ export function Sidebar() {
         <button
           onClick={() => setIsOpen(true)}
           aria-label="Open sidebar"
-          className="hidden md:block md:static md:m-0 md:border-0 md:shadow-none md:rounded-none md:bg-gray-50 md:dark:bg-gray-950 md:border-r md:border-gray-200 md:dark:border-gray-800 md:px-2 md:py-3 p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          className="hidden md:block md:static md:m-0 md:border-0 md:shadow-none md:rounded-none md:bg-surface-container-low md:px-2 md:py-3 p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -664,19 +664,21 @@ export function Sidebar() {
       >
       <aside
         className={`
-          flex flex-col border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 overflow-y-auto
+          flex flex-col bg-surface-container-low overflow-y-auto
           w-full h-full pb-14
           md:pb-0
         `}
       >
         {/* Header */}
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+        <div className="px-4 py-4 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <img src="/logo.svg" alt="Reli" className="h-7 w-7 rounded-md" />
-              <h1 className="text-lg font-bold text-gray-900 dark:text-white tracking-tight">Reli</h1>
+              <div className="w-7 h-7 rounded bg-primary-container flex items-center justify-center">
+                <img src="/logo.svg" alt="Reli" className="h-4 w-4" />
+              </div>
+              <h1 className="text-lg font-bold text-on-surface tracking-tight">The Radar</h1>
             </div>
-            <p className="text-xs text-gray-400 dark:text-gray-400 mt-0.5">
+            <p className="text-label text-on-surface-variant mt-0.5">
               {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
             </p>
           </div>
@@ -688,8 +690,8 @@ export function Sidebar() {
               title={rightView === 'briefing' ? 'Chat' : 'Briefing'}
               className={`p-1.5 rounded-lg transition-colors ${
                 rightView === 'briefing'
-                  ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
-                  : 'text-gray-400 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'
+                  ? 'text-primary bg-primary/10'
+                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
               }`}
             >
               {rightView === 'briefing' ? (
@@ -710,8 +712,8 @@ export function Sidebar() {
               title={mainView === 'graph' ? 'List view' : 'Graph view'}
               className={`p-1.5 rounded-lg transition-colors ${
                 mainView === 'graph'
-                  ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
-                  : 'text-gray-400 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'
+                  ? 'text-primary bg-primary/10'
+                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
               }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -724,8 +726,8 @@ export function Sidebar() {
               title={mainView === 'calendar' ? 'List view' : 'Calendar view'}
               className={`p-1.5 rounded-lg transition-colors ${
                 mainView === 'calendar'
-                  ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
-                  : 'text-gray-400 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'
+                  ? 'text-primary bg-primary/10'
+                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
               }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -746,32 +748,32 @@ export function Sidebar() {
                   />
                 ) : (
                   <div
-                    className="h-7 w-7 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-medium cursor-pointer"
+                    className="h-7 w-7 rounded-full bg-primary flex items-center justify-center text-white text-xs font-medium cursor-pointer"
                     onClick={() => setUserMenuOpen(v => !v)}
                   >
                     {currentUser.name.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <div className={`absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg transition-all z-50 ${userMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
-                  <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{currentUser.name}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-400 truncate">{currentUser.email}</p>
+                <div className={`absolute right-0 top-full mt-1 w-48 bg-surface-container-high border border-on-surface-variant/10 rounded-lg shadow-lg transition-all z-50 ${userMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+                  <div className="px-3 py-2 border-b border-on-surface-variant/10">
+                    <p className="text-sm font-medium text-on-surface truncate">{currentUser.name}</p>
+                    <p className="text-xs text-on-surface-variant truncate">{currentUser.email}</p>
                   </div>
                   <button
                     onClick={() => { setUserMenuOpen(false); useStore.getState().openSettings() }}
-                    className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="w-full text-left px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors"
                   >
                     Settings
                   </button>
                   <button
                     onClick={() => { setUserMenuOpen(false); useStore.getState().openFeedback() }}
-                    className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="w-full text-left px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors"
                   >
                     Send Feedback
                   </button>
                   <button
                     onClick={() => { setUserMenuOpen(false); logout() }}
-                    className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg transition-colors"
+                    className="w-full text-left px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface rounded-b-lg transition-colors"
                   >
                     Sign out
                   </button>
@@ -781,7 +783,7 @@ export function Sidebar() {
             <button
               onClick={() => setIsOpen(false)}
               aria-label="Close sidebar"
-              className="hidden md:block p-1.5 rounded-lg text-gray-400 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              className="hidden md:block p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -791,9 +793,9 @@ export function Sidebar() {
         </div>
 
         {/* Search bar */}
-        <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-800">
+        <div className="px-3 py-2">
           <div className="relative">
-            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-on-surface-variant" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
@@ -801,12 +803,12 @@ export function Sidebar() {
               placeholder="Search everything…"
               value={searchQuery}
               onChange={e => handleSearchChange(e.target.value)}
-              className="w-full pl-8 pr-16 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
+              className="w-full pl-8 pr-16 py-1.5 text-sm rounded-lg border border-on-surface-variant/10 bg-surface text-on-surface placeholder-on-surface-variant focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
             />
             {searchQuery ? (
               <button
                 onClick={() => handleSearchChange('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
                 aria-label="Clear search"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -814,7 +816,7 @@ export function Sidebar() {
                 </svg>
               </button>
             ) : disclosure.showCommandPaletteHint && (
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-300 dark:text-gray-600 font-mono select-none pointer-events-none">
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-on-surface-variant/50 font-mono select-none pointer-events-none">
                 ⌘K
               </span>
             )}
@@ -824,16 +826,16 @@ export function Sidebar() {
         {/* Search results */}
         {isSearching ? (
           <section className="py-2 flex-1">
-            <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+            <h2 className="px-4 pb-1 text-label font-semibold text-on-surface-variant">
               Search Results {!searchLoading && `(${searchResults.length})`}
             </h2>
             {searchLoading ? (
               <div className="px-4 py-3 space-y-2 animate-pulse">
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+                <div className="h-4 bg-surface-container-high rounded w-3/4"></div>
+                <div className="h-4 bg-surface-container-high rounded w-1/2"></div>
               </div>
             ) : searchResults.length === 0 ? (
-              <div className="px-4 py-4 text-sm text-gray-400 dark:text-gray-400 text-center">
+              <div className="px-4 py-4 text-sm text-on-surface-variant text-center">
                 No results found
               </div>
             ) : (
@@ -844,9 +846,28 @@ export function Sidebar() {
           <>
             {loading && things.length === 0 && (
               <div className="px-4 py-3 space-y-2 animate-pulse">
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+                <div className="h-4 bg-surface-container-high rounded w-3/4"></div>
+                <div className="h-4 bg-surface-container-high rounded w-1/2"></div>
+                <div className="h-4 bg-surface-container-high rounded w-5/6"></div>
+              </div>
+            )}
+
+            {/* The One Thing — hero card */}
+            {theOneThing && (
+              <div className="px-4 pt-3 pb-1">
+                <div
+                  className="bg-primary-container p-4 rounded-xl shadow-lg shadow-primary-container/20 cursor-pointer hover:shadow-xl transition-shadow"
+                  onClick={() => useStore.getState().openThingDetail(theOneThing.thing.id)}
+                  role="button"
+                >
+                  <p className="text-label font-bold text-on-surface/70 mb-1">The One Thing</p>
+                  <h3 className="text-on-surface font-bold text-sm leading-tight">{theOneThing.thing.title}</h3>
+                  {theOneThing.reasons.length > 0 && (
+                    <p className="text-xs text-on-surface/60 mt-1.5 leading-snug">
+                      {theOneThing.reasons[0]}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -855,7 +876,7 @@ export function Sidebar() {
 
             {/* Nudges — time-sensitive proactive reminders */}
             {nudges.length > 0 && (
-              <section className="px-3 pt-2 pb-1 border-b border-gray-100 dark:border-gray-800">
+              <section className="px-3 pt-2 pb-1">
                 {nudges.map(nudge => (
                   <NudgeBanner key={nudge.id} nudge={nudge} />
                 ))}
@@ -870,11 +891,11 @@ export function Sidebar() {
 
             {/* Briefing empty state */}
             {!loading && !morningBriefing && !weeklyBriefing && findings.length === 0 && briefing.length === 0 && (
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                <h2 className="pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+              <div className="px-4 py-3">
+                <h2 className="pb-1 text-label font-semibold text-on-surface-variant">
                   Daily Briefing
                 </h2>
-                <p className="text-xs text-gray-400 dark:text-gray-500 py-1">
+                <p className="text-xs text-on-surface-variant py-1">
                   Your morning briefing shows up here once you have Things with check-in dates.
                 </p>
               </div>
@@ -882,8 +903,8 @@ export function Sidebar() {
 
             {/* Daily Briefing — sweep findings + checkin-due things */}
             {(findings.length > 0 || briefing.length > 0) && (
-              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+              <section className="py-2">
+                <h2 className="px-4 pb-1 text-label font-semibold text-on-surface-variant">
                   Daily Briefing
                 </h2>
 
@@ -899,8 +920,8 @@ export function Sidebar() {
 
             {/* Focus Recommendations (priority board useful at 20+ things) */}
             {disclosure.showFocusBoard && focusRecommendations.length > 0 && (
-              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+              <section className="py-2">
+                <h2 className="px-4 pb-1 text-label font-semibold text-on-surface-variant">
                   Focus
                 </h2>
                 {focusRecommendations.slice(0, 5).map(rec => (
@@ -917,20 +938,20 @@ export function Sidebar() {
 
             {/* Conflict Alerts */}
             {conflictAlerts && conflictAlerts.length > 0 && (
-              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+              <section className="py-2">
+                <h2 className="px-4 pb-1 text-label font-semibold text-on-surface-variant">
                   {'\u26A0\uFE0F'} Alerts
                 </h2>
                 {conflictAlerts.map((alert, i) => {
                   const severityColor = alert.severity === 'critical'
-                    ? 'text-red-600 dark:text-red-400'
+                    ? 'text-ideas'
                     : alert.severity === 'warning'
-                    ? 'text-amber-600 dark:text-amber-400'
-                    : 'text-blue-500 dark:text-blue-400'
+                    ? 'text-events'
+                    : 'text-primary'
                   const severityIcon = alert.severity === 'critical' ? '\u{1F6A8}' : alert.severity === 'warning' ? '\u26A0\uFE0F' : '\u2139\uFE0F'
                   const typeIcon = alert.alert_type === 'blocking_chain' ? '\u{1F6D1}' : alert.alert_type === 'schedule_overlap' ? '\u{1F4C5}' : '\u23F0'
                   return (
-                    <div key={`conflict-${i}`} className="px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors">
+                    <div key={`conflict-${i}`} className="px-4 py-1.5 hover:bg-surface-container-high transition-colors">
                       <div className="flex items-start gap-2">
                         <span className="text-sm mt-0.5 shrink-0">{typeIcon}</span>
                         <div className="flex-1 min-w-0">
@@ -939,7 +960,7 @@ export function Sidebar() {
                           </p>
                           <div className="flex items-center gap-1 mt-0.5">
                             <span className="text-xs">{severityIcon}</span>
-                            <span className="text-xs text-gray-400 dark:text-gray-500 capitalize">{alert.severity}</span>
+                            <span className="text-xs text-on-surface-variant capitalize">{alert.severity}</span>
                           </div>
                         </div>
                       </div>
@@ -951,14 +972,14 @@ export function Sidebar() {
 
             {/* Proactive Surfaces */}
             {proactiveSurfaces && proactiveSurfaces.length > 0 && (
-              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
-                  ✨ Coming Up
+              <section className="py-2">
+                <h2 className="px-4 pb-1 text-label font-semibold text-on-surface-variant">
+                  Coming Up
                 </h2>
                 {proactiveSurfaces.map(s => (
                   <div key={`${s.thing.id}-${s.date_key}`} className="px-3 py-1">
                     <div
-                      className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors px-1 cursor-pointer"
+                      className="flex items-start gap-2 py-1.5 rounded-lg hover:bg-surface-container-high transition-colors px-2 cursor-pointer"
                       onClick={() => useStore.getState().openThingDetail(s.thing.id)}
                       role="button"
                     >
@@ -966,10 +987,10 @@ export function Sidebar() {
                         {typeIcon(s.thing.type_hint, thingTypes)}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-snug">
+                        <p className="text-sm font-medium text-on-surface truncate leading-snug">
                           {s.thing.title}
                         </p>
-                        <p className={`text-xs mt-0.5 ${s.days_away === 0 ? 'text-amber-500 font-semibold' : 'text-gray-400 dark:text-gray-400'}`}>
+                        <p className={`text-xs mt-0.5 ${s.days_away === 0 ? 'text-events font-semibold' : 'text-on-surface-variant'}`}>
                           {s.reason}
                         </p>
                       </div>
@@ -981,8 +1002,8 @@ export function Sidebar() {
 
             {/* Recently Discussed */}
             {recentlyDiscussed.length > 0 && (
-              <section className="py-2 border-b border-gray-100 dark:border-gray-800">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+              <section className="py-2">
+                <h2 className="px-4 pb-1 text-label font-semibold text-on-surface-variant">
                   Recently Discussed
                 </h2>
                 {recentlyDiscussed.map(t => {
@@ -999,10 +1020,10 @@ export function Sidebar() {
 
         {/* Things filter bar */}
         {active.length > 0 && (
-          <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800">
+          <div className="px-3 py-2 mt-2">
             <div className="flex items-center gap-1.5">
               <div className="relative flex-1">
-                <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-on-surface-variant" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <input
@@ -1010,7 +1031,7 @@ export function Sidebar() {
                   placeholder="Filter things…"
                   value={thingFilterQuery}
                   onChange={e => setThingFilterQuery(e.target.value)}
-                  className="w-full pl-7 pr-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500"
+                  className="w-full pl-7 pr-2 py-1 text-xs rounded border border-on-surface-variant/10 bg-surface text-on-surface placeholder-on-surface-variant focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
               <div className="relative" ref={filterDropdownRef}>
@@ -1018,8 +1039,8 @@ export function Sidebar() {
                   onClick={() => setFilterDropdownOpen(o => !o)}
                   className={`p-1 rounded transition-colors relative ${
                     thingFilterTypes.length > 0
-                      ? 'text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950'
-                      : 'text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      ? 'text-primary bg-primary/10'
+                      : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'
                   }`}
                   aria-label="Filter by type"
                   title="Filter by type"
@@ -1028,21 +1049,21 @@ export function Sidebar() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                   </svg>
                   {thingFilterTypes.length > 0 && (
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center h-3.5 w-3.5 rounded-full bg-indigo-500 text-white text-[9px] font-bold leading-none">
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center h-3.5 w-3.5 rounded-full bg-primary text-white text-[9px] font-bold leading-none">
                       {thingFilterTypes.length}
                     </span>
                   )}
                 </button>
                 {filterDropdownOpen && (
-                  <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 py-1">
+                  <div className="absolute right-0 top-full mt-1 w-44 bg-surface-container-high border border-on-surface-variant/10 rounded-lg shadow-lg z-50 py-1">
                     {availableTypes.map(t => (
                       <button
                         key={t.type}
                         onClick={() => toggleThingFilterType(t.type)}
                         className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors ${
                           thingFilterTypes.includes(t.type)
-                            ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
-                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'
                         }`}
                       >
                         <span>{t.icon}</span>
@@ -1055,7 +1076,7 @@ export function Sidebar() {
                       </button>
                     ))}
                     {availableTypes.length === 0 && (
-                      <p className="px-3 py-2 text-xs text-gray-400 dark:text-gray-400">No types available</p>
+                      <p className="px-3 py-2 text-xs text-on-surface-variant">No types available</p>
                     )}
                   </div>
                 )}
@@ -1063,7 +1084,7 @@ export function Sidebar() {
               {isThingFilterActive && (
                 <button
                   onClick={clearThingFilters}
-                  className="text-[10px] text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 whitespace-nowrap"
+                  className="text-[10px] text-on-surface-variant hover:text-on-surface whitespace-nowrap"
                   title="Clear all filters"
                 >
                   Clear
@@ -1075,15 +1096,15 @@ export function Sidebar() {
 
         {/* No results state for filtered things */}
         {isThingFilterActive && activeGroups.length === 0 && (
-          <div className="px-4 py-4 text-sm text-gray-400 dark:text-gray-400 text-center">
+          <div className="px-4 py-4 text-sm text-on-surface-variant text-center">
             No things match your filters
           </div>
         )}
 
         {/* Active Things grouped by type */}
         {activeGroups.map(group => (
-          <section key={group.type} className="py-2 border-t border-gray-100 dark:border-gray-800">
-            <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+          <section key={group.type} className="py-2">
+            <h2 className="px-4 pb-1 text-label font-semibold text-on-surface-variant flex items-center gap-1.5">
               <span>{group.icon}</span>
               <span>{group.label}</span>
               <span className="ml-auto text-[10px] font-normal tabular-nums">{group.items.length}</span>
@@ -1094,11 +1115,11 @@ export function Sidebar() {
 
         {/* Preferences — learned behavioral patterns */}
         {preferenceThings.length > 0 && (
-          <section className="py-2 border-t border-gray-100 dark:border-gray-800">
-            <h2 className="px-4 pb-1 text-xs font-semibold text-purple-400 dark:text-purple-400 uppercase tracking-widest flex items-center gap-1.5">
+          <section className="py-2">
+            <h2 className="px-4 pb-1 text-label font-semibold text-on-surface-variant flex items-center gap-1.5">
               <span>⚙️</span>
               <span>Preferences</span>
-              <span className="ml-auto text-[10px] font-normal tabular-nums text-gray-400">{preferenceThings.length}</span>
+              <span className="ml-auto text-[10px] font-normal tabular-nums text-on-surface-variant">{preferenceThings.length}</span>
             </h2>
             {preferenceThings.map(t => <PreferenceCard key={t.id} thing={t} />)}
           </section>
@@ -1107,7 +1128,7 @@ export function Sidebar() {
             {/* Upcoming Check-ins */}
             {upcoming.length > 0 && (
               <section className="py-2">
-                <h2 className="px-4 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
+                <h2 className="px-4 pb-1 text-label font-semibold text-on-surface-variant">
                   Upcoming Check-ins
                 </h2>
                 {upcoming.map(t => <ThingCard key={t.id} thing={t} />)}
@@ -1119,7 +1140,7 @@ export function Sidebar() {
 
             {!loading && things.length === 0 && (
               <div className="px-6 py-8 flex flex-col items-center gap-4 text-center">
-                <svg className="w-16 h-16 text-gray-200 dark:text-gray-700" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <svg className="w-16 h-16 text-surface-container-high" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                   <circle cx="12" cy="32" r="8" stroke="currentColor" strokeWidth="2" fill="none"/>
                   <circle cx="52" cy="16" r="7" stroke="currentColor" strokeWidth="2" fill="none"/>
                   <circle cx="52" cy="48" r="7" stroke="currentColor" strokeWidth="2" fill="none"/>
@@ -1127,8 +1148,8 @@ export function Sidebar() {
                   <line x1="20" y1="34" x2="45" y2="45" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2"/>
                 </svg>
                 <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Start by typing in the chat…</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Things you mention appear here — try telling me about a project, goal, or task.</p>
+                  <p className="text-sm font-medium text-on-surface-variant">Start by typing in the chat…</p>
+                  <p className="text-xs text-on-surface-variant/70 mt-1">Things you mention appear here — try telling me about a project, goal, or task.</p>
                 </div>
               </div>
             )}
@@ -1140,12 +1161,12 @@ export function Sidebar() {
           onPointerDown={handleDragStart}
           className="hidden md:flex absolute top-0 right-0 w-2 h-full cursor-col-resize group/handle z-10 items-center justify-center"
         >
-          <div className="w-1 h-full bg-gray-300 dark:bg-gray-600 group-hover/handle:bg-indigo-400 dark:group-hover/handle:bg-indigo-500 transition-colors" />
+          <div className="w-1 h-full bg-on-surface-variant/20 group-hover/handle:bg-primary transition-colors" />
           {/* Grip indicator — three dots centered vertically */}
           <div className="absolute flex flex-col gap-1 pointer-events-none">
-            <div className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 group-hover/handle:bg-indigo-300 dark:group-hover/handle:bg-indigo-400 transition-colors" />
-            <div className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 group-hover/handle:bg-indigo-300 dark:group-hover/handle:bg-indigo-400 transition-colors" />
-            <div className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 group-hover/handle:bg-indigo-300 dark:group-hover/handle:bg-indigo-400 transition-colors" />
+            <div className="w-1 h-1 rounded-full bg-on-surface-variant/30 group-hover/handle:bg-primary/60 transition-colors" />
+            <div className="w-1 h-1 rounded-full bg-on-surface-variant/30 group-hover/handle:bg-primary/60 transition-colors" />
+            <div className="w-1 h-1 rounded-full bg-on-surface-variant/30 group-hover/handle:bg-primary/60 transition-colors" />
           </div>
         </div>
       </div>
