@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     REQUESTY_RESPONSE_MODEL: str = ""
 
     # --- Embedding ---
-    EMBEDDING_MODEL: str = "text-embedding-3-large"
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
 
     # --- Ollama (optional local LLM) ---
     OLLAMA_BASE_URL: str = "http://localhost:11434"
