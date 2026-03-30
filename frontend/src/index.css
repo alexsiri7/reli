@@ -3,8 +3,47 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ─── Cognitive Atelier Design System Tokens ──────────────────────────
+   Issue #386 — Foundation tokens for the obsidian dark-mode-first UI.
+   Component restyling happens in #387-#393; this file only defines
+   colors, typography, glassmorphism, and gradient utilities.
+   ──────────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* ── Surface / Background palette ─────────────────────────────── */
+  --color-canvas: #0b1326;
+  --color-surface: #0b1326;
+  --color-surface-container-low: #131b2e;
+  --color-surface-container-high: #222a3d;
+
+  /* ── Semantic accent colors ───────────────────────────────────── */
+  --color-primary: #4F46E5;
+  --color-primary-container: #3730A3;
+  --color-projects: #10B981;
+  --color-events: #F59E0B;
+  --color-people: #14B8A6;
+  --color-ideas: #F43F5E;
+
+  /* ── On-surface text (no pure white) ──────────────────────────── */
+  --color-on-surface: #E2E8F0;
+  --color-on-surface-variant: #94A3B8;
+
+  /* ── Typography scale ─────────────────────────────────────────── */
+  --font-size-display: 3.5rem;
+  --font-size-headline: 1.75rem;
+  --font-size-title: 1.125rem;
+  --font-size-body: 0.875rem;
+  --font-size-label: 0.75rem;
+}
+
 :root {
   color-scheme: light dark;
+
+  /* ── Typography tokens as CSS custom properties ─────────────── */
+  --tracking-display: -0.02em;
+  --tracking-label: 0.05em;
+  --leading-body: 1.6;
+  --font-weight-title: 600;
 }
 
 body {
@@ -12,6 +51,59 @@ body {
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Dark mode base styles ───────────────────────────────────────── */
+.dark body,
+:where(.dark) body {
+  background-color: var(--color-canvas);
+  color: var(--color-on-surface);
+}
+
+/* ─── Typography utility classes ─────────────────────────────────── */
+
+.text-display {
+  font-size: var(--font-size-display);
+  letter-spacing: var(--tracking-display);
+  line-height: 1.1;
+}
+
+.text-headline {
+  font-size: var(--font-size-headline);
+  line-height: 1.3;
+}
+
+.text-title {
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-title);
+  line-height: 1.4;
+}
+
+.text-body {
+  font-size: var(--font-size-body);
+  line-height: var(--leading-body);
+}
+
+.text-label {
+  font-size: var(--font-size-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+
+/* ─── Glassmorphism utility ──────────────────────────────────────── */
+
+.glass {
+  background: color-mix(in srgb, var(--color-surface-container-high) 60%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ─── Gradient CTA utility ───────────────────────────────────────── */
+
+.gradient-cta {
+  background: linear-gradient(135deg, var(--color-primary-container), var(--color-primary));
+  color: #fff;
 }
 
 #root {
