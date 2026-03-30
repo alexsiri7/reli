@@ -21,7 +21,7 @@ def _fresh_key(tmp_path, monkeypatch):
     """Use a fresh encryption key for each test."""
     reset_for_testing()
     key_file = tmp_path / ".token_key"
-    monkeypatch.setattr("backend.token_encryption._KEY_FILE", key_file)
+    monkeypatch.setattr("backend.token_encryption._PRIMARY_KEY_FILE", key_file)
     monkeypatch.delenv("TOKEN_ENCRYPTION_KEY", raising=False)
     yield
     reset_for_testing()
@@ -79,7 +79,7 @@ class TestDecryptOrPlaintext:
 class TestKeyPersistence:
     def test_auto_generates_key_file(self, tmp_path, monkeypatch):
         key_file = tmp_path / "subdir" / ".token_key"
-        monkeypatch.setattr("backend.token_encryption._KEY_FILE", key_file)
+        monkeypatch.setattr("backend.token_encryption._PRIMARY_KEY_FILE", key_file)
         reset_for_testing()
 
         encrypt("test")
@@ -90,7 +90,7 @@ class TestKeyPersistence:
 
     def test_reuses_existing_key(self, tmp_path, monkeypatch):
         key_file = tmp_path / ".token_key"
-        monkeypatch.setattr("backend.token_encryption._KEY_FILE", key_file)
+        monkeypatch.setattr("backend.token_encryption._PRIMARY_KEY_FILE", key_file)
         reset_for_testing()
 
         encrypted = encrypt("test-value")

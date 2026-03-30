@@ -23,9 +23,25 @@ from .config import settings
 
 logger = logging.getLogger(__name__)
 
-_KEY_FILE = Path(settings.DATA_DIR) / ".token_key"
+_PRIMARY_KEY_FILE = Path(settings.DATA_DIR) / ".token_key"
+_FALLBACK_KEY_DIR = Path("/tmp/.reli")
+_FALLBACK_KEY_FILE = _FALLBACK_KEY_DIR / ".token_key"
 
 _fernet: Fernet | None = None
+
+
+def _key_file_path() -> Path:
+    """Return a writable key-file path, preferring DATA_DIR, falling back to /tmp."""
+    if _PRIMARY_KEY_FILE.exists():
+        return _PRIMARY_KEY_FILE
+    # Check if primary directory is writable
+    try:
+        _PRIMARY_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if os.access(_PRIMARY_KEY_FILE.parent, os.W_OK):
+            return _PRIMARY_KEY_FILE
+    except OSError:
+        pass
+    return _FALLBACK_KEY_FILE
 
 
 def _get_fernet() -> Fernet:
@@ -43,15 +59,25 @@ def _get_fernet() -> Fernet:
         return _fernet
 
     # Auto-generate and persist a key file
-    if _KEY_FILE.exists():
-        key = _KEY_FILE.read_text().strip()
+    key_file = _key_file_path()
+    if key_file.exists():
+        key = key_file.read_text().strip()
     else:
         key = Fernet.generate_key().decode()
-        _KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _KEY_FILE.write_text(key)
-        # Restrict permissions to owner-only
-        _KEY_FILE.chmod(0o600)
-        logger.info("Generated new token encryption key at %s", _KEY_FILE)
+        try:
+            key_file.parent.mkdir(parents=True, exist_ok=True)
+            key_file.write_text(key)
+            key_file.chmod(0o600)
+            logger.info("Generated new token encryption key at %s", key_file)
+        except OSError:
+            # Last resort: use /tmp fallback if even the chosen path fails
+            _FALLBACK_KEY_DIR.mkdir(parents=True, exist_ok=True)
+            _FALLBACK_KEY_FILE.write_text(key)
+            _FALLBACK_KEY_FILE.chmod(0o600)
+            logger.warning(
+                "Could not write key to %s, using fallback %s",
+                key_file, _FALLBACK_KEY_FILE,
+            )
 
     _fernet = Fernet(key.encode())
     return _fernet
