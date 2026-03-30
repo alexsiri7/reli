@@ -28,12 +28,16 @@ REQUESTY_BASE_URL: str = settings.REQUESTY_BASE_URL or "https://router.requesty.
 REQUESTY_API_KEY: str = settings.REQUESTY_API_KEY
 
 # ---------------------------------------------------------------------------
-# Retry config for transient 404s (Gemini/Vertex AI via LiteLLM)
+# Retry config for transient errors (404, 429, 503)
 # ---------------------------------------------------------------------------
 
 _RETRY_MAX_ATTEMPTS: int = 4
 _RETRY_BASE_DELAY: float = 0.5  # seconds
 _RETRY_MAX_DELAY: float = 8.0  # seconds
+
+# Errors worth retrying: transient 404s (Gemini/Vertex AI), 429 rate limits,
+# and 503 service unavailable.
+_RETRYABLE_ERRORS = (litellm.NotFoundError, litellm.RateLimitError, litellm.ServiceUnavailableError)
 
 
 def _litellm_model(model: str) -> str:
@@ -66,8 +70,8 @@ async def acomplete(
     LiteLLM's dynamic return types).  Callers can access ``.choices``, ``.usage``,
     and ``.model`` as usual.
 
-    Retries with exponential backoff on transient 404 errors (common with
-    Gemini/Vertex AI models via LiteLLM).
+    Retries with exponential backoff on transient errors: 404 (Gemini/Vertex AI),
+    429 (rate limit), and 503 (service unavailable).
     """
     last_exc: Exception | None = None
     for attempt in range(_RETRY_MAX_ATTEMPTS):
@@ -79,12 +83,13 @@ async def acomplete(
                 api_base=REQUESTY_BASE_URL,
                 **kwargs,
             )
-        except litellm.NotFoundError as exc:
+        except _RETRYABLE_ERRORS as exc:
             last_exc = exc
             if attempt < _RETRY_MAX_ATTEMPTS - 1:
                 delay = min(_RETRY_BASE_DELAY * (2**attempt), _RETRY_MAX_DELAY)
                 logger.warning(
-                    "LiteLLM 404 on attempt %d/%d for model %s, retrying in %.1fs",
+                    "LiteLLM %s on attempt %d/%d for model %s, retrying in %.1fs",
+                    type(exc).__name__,
                     attempt + 1,
                     _RETRY_MAX_ATTEMPTS,
                     model,
@@ -105,8 +110,8 @@ async def acomplete_stream(
 
     Yields ``litellm`` chunk objects (same shape as OpenAI streaming chunks).
 
-    Retries with exponential backoff on transient 404 errors (common with
-    Gemini/Vertex AI models via LiteLLM).
+    Retries with exponential backoff on transient errors: 404 (Gemini/Vertex AI),
+    429 (rate limit), and 503 (service unavailable).
     """
     last_exc: Exception | None = None
     for attempt in range(_RETRY_MAX_ATTEMPTS):
@@ -123,12 +128,13 @@ async def acomplete_stream(
             async for chunk in response:
                 yield chunk
             return
-        except litellm.NotFoundError as exc:
+        except _RETRYABLE_ERRORS as exc:
             last_exc = exc
             if attempt < _RETRY_MAX_ATTEMPTS - 1:
                 delay = min(_RETRY_BASE_DELAY * (2**attempt), _RETRY_MAX_DELAY)
                 logger.warning(
-                    "LiteLLM 404 on attempt %d/%d for model %s (stream), retrying in %.1fs",
+                    "LiteLLM %s on attempt %d/%d for model %s (stream), retrying in %.1fs",
+                    type(exc).__name__,
                     attempt + 1,
                     _RETRY_MAX_ATTEMPTS,
                     model,
