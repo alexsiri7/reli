@@ -75,7 +75,7 @@ async def test_acomplete_routes_through_requesty():
 
     mock_call.assert_called_once()
     call_kwargs = mock_call.call_args
-    assert call_kwargs.kwargs["model"] == "openai/gemini-2.5-flash-lite"
+    assert call_kwargs.kwargs["model"] == "openai/google/gemini-2.5-flash-lite"
     assert call_kwargs.kwargs["api_base"] == REQUESTY_BASE_URL
     assert call_kwargs.kwargs["api_key"] == "test-key"
     assert result.choices[0].message.content == "test reply"
@@ -99,9 +99,7 @@ async def test_acomplete_all_model_configs(model: str):
             model,
         )
 
-    # Provider prefix is stripped: "google/model" -> "openai/model"
-    base_model = model.split("/", 1)[-1] if "/" in model else model
-    assert mock_call.call_args.kwargs["model"] == f"openai/{base_model}"
+    assert mock_call.call_args.kwargs["model"] == f"openai/{model}"
     assert result.choices[0].message.content == "ok"
 
 
@@ -173,7 +171,7 @@ async def test_per_user_model_override():
         )
 
     call_kwargs = mock_call.call_args.kwargs
-    assert call_kwargs["model"] == "openai/user-model"
+    assert call_kwargs["model"] == "openai/custom/user-model"
     assert call_kwargs["api_key"] == "user-personal-key"
     assert result.choices[0].message.content == "custom model reply"
 
