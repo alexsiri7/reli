@@ -75,9 +75,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     _alembic_ini = _pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
     if _alembic_ini.exists():
-        _alembic_cfg = AlembicConfig(str(_alembic_ini))
-        alembic_command.upgrade(_alembic_cfg, "head")
-        logger.info("Alembic migrations applied successfully.")
+        try:
+            _alembic_cfg = AlembicConfig(str(_alembic_ini))
+            alembic_command.upgrade(_alembic_cfg, "head")
+            logger.info("Alembic migrations applied successfully.")
+        except Exception:
+            logger.exception("Alembic migration failed — starting with existing schema.")
     else:
         logger.warning("alembic.ini not found at %s — skipping migrations.", _alembic_ini)
 

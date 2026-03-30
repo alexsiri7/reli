@@ -24,7 +24,12 @@ _url = settings.database_url
 # SQLite needs check_same_thread=False for FastAPI's threaded request handling.
 _connect_args: dict = {"check_same_thread": False} if _url.startswith("sqlite") else {}
 
-engine = create_engine(_url, connect_args=_connect_args, echo=False)
+_pool_args: dict = {}
+if not _url.startswith("sqlite"):
+    # Limit pool size to stay within Supabase free-tier connection limits.
+    _pool_args = {"pool_size": 3, "max_overflow": 2, "pool_pre_ping": True}
+
+engine = create_engine(_url, connect_args=_connect_args, echo=False, **_pool_args)
 
 # SQLite-specific PRAGMAs (WAL mode, foreign keys).
 if _url.startswith("sqlite"):
