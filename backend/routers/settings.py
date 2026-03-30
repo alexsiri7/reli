@@ -14,6 +14,7 @@ from ..auth import require_user
 import backend.db_engine as _engine_mod
 from ..db_models import UserSettingRecord
 from ..http_client import get_http_client
+from ..token_encryption import encrypt, decrypt_or_plaintext
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,9 @@ _VALID_KEYS = {
     "interaction_style",
     "briefing_preferences",
 }
+
+# Keys whose values are encrypted at rest
+_ENCRYPTED_KEYS = {"requesty_api_key", "openai_api_key"}
 
 # Valid interaction styles for coach/consultant calibration
 VALID_INTERACTION_STYLES = {"auto", "coach", "consultant"}
@@ -214,13 +218,34 @@ def get_user_proactivity_level(user_id: str) -> str:
 
 
 def get_user_api_key(user_id: str) -> str:
-    """Return user's Requesty API key, falling back to env/global."""
+    """Return user's Requesty API key (decrypted), falling back to env/global."""
     import os
 
-    key = get_user_setting(user_id, "requesty_api_key")
-    if key:
-        return key
+    raw = get_user_setting(user_id, "requesty_api_key")
+    if raw:
+        plaintext, was_encrypted = decrypt_or_plaintext(raw)
+        if not was_encrypted:
+            # Migrate: re-encrypt the plaintext value
+            _migrate_encrypt(user_id, "requesty_api_key", plaintext)
+        return plaintext
     return os.environ.get("REQUESTY_API_KEY", "")
+
+
+def _migrate_encrypt(user_id: str, key: str, plaintext: str) -> None:
+    """Re-encrypt a plaintext setting value in-place (migration helper)."""
+    try:
+        with Session(_engine_mod.engine) as session:
+            _set_user_setting(session, user_id, key, encrypt(plaintext))
+    except Exception:
+        logger.warning("Failed to migrate-encrypt %s for user %s", key, user_id)
+
+
+def _decrypt_setting(raw: str) -> str:
+    """Decrypt an encrypted setting value, handling plaintext gracefully."""
+    if not raw:
+        return raw
+    plaintext, _ = decrypt_or_plaintext(raw)
+    return plaintext
 
 
 def get_user_interaction_style(user_id: str) -> str:
@@ -389,8 +414,8 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
     stale_threshold = int(stale_val) if stale_val else 14
 
     return UserSettings(
-        requesty_api_key=_mask(user_settings.get("requesty_api_key", "")),
-        openai_api_key=_mask(user_settings.get("openai_api_key", "")),
+        requesty_api_key=_mask(_decrypt_setting(user_settings.get("requesty_api_key", ""))),
+        openai_api_key=_mask(_decrypt_setting(user_settings.get("openai_api_key", ""))),
         embedding_model=user_settings.get("embedding_model", ""),
         context_model=user_settings.get("context_model", ""),
         reasoning_model=user_settings.get("reasoning_model", ""),
@@ -433,6 +458,9 @@ def update_user_settings(
                 elif field_name == "interaction_style":
                     if val not in VALID_INTERACTION_STYLES:
                         continue
-                _set_user_setting(session, user_id, field_name, str(val))
+                store_val = str(val)
+                if field_name in _ENCRYPTED_KEYS and store_val:
+                    store_val = encrypt(store_val)
+                _set_user_setting(session, user_id, field_name, store_val)
 
     return get_user_settings_endpoint(user_id)
