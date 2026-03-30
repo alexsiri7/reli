@@ -2,6 +2,7 @@
 
 import base64
 import json
+import logging
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -16,6 +17,8 @@ from ..auth import require_user
 from ..config import settings
 import backend.db_engine as _engine_mod
 from ..db_models import GoogleTokenRecord
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
 
@@ -285,7 +288,8 @@ def gmail_callback(
 ) -> RedirectResponse:
     """Exchange authorization code for tokens and store them."""
     if error:
-        raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
+        logger.error("Gmail OAuth returned error: %s", error)
+        raise HTTPException(status_code=400, detail="Gmail authorization was denied or failed.")
 
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=501, detail="Gmail integration not configured")
@@ -378,8 +382,9 @@ def get_message(message_id: str, user_id: str = Depends(require_user)) -> GmailM
     service = _get_service(user_id=user_id)
     try:
         msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Message not found: {e}")
+    except Exception:
+        logger.exception("Failed to fetch Gmail message %s", message_id)
+        raise HTTPException(status_code=404, detail="Message not found")
     return _parse_message(msg)
 
 
@@ -389,8 +394,9 @@ def get_thread(thread_id: str, user_id: str = Depends(require_user)) -> GmailThr
     service = _get_service(user_id=user_id)
     try:
         thread = service.users().threads().get(userId="me", id=thread_id, format="full").execute()
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Thread not found: {e}")
+    except Exception:
+        logger.exception("Failed to fetch Gmail thread %s", thread_id)
+        raise HTTPException(status_code=404, detail="Thread not found")
 
     thread_messages = [_parse_message(m) for m in thread.get("messages", [])]
     subject = thread_messages[0].subject if thread_messages else "(no subject)"
