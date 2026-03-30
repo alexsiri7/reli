@@ -65,7 +65,7 @@ export default defineConfig({
         short_name: 'Reli',
         description: 'Reli — your personal relationship manager',
         theme_color: '#4F46E5',
-        background_color: '#ffffff',
+        background_color: '#0b1326',
         display: 'standalone',
         icons: [
           {
