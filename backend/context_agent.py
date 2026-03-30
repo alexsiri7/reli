@@ -92,13 +92,12 @@ def _make_litellm_model(
             "like google/gemini-2.5-flash. See GH #176.",
             effective_model,
         )
-    # LiteLlm expects the openai/ prefix for OpenAI-compatible providers.
-    # Models from config.yaml may already have a provider prefix like
-    # "google/model-name" — strip it before adding "openai/" so we don't
-    # end up with "openai/google/model-name".
+    # LiteLlm needs the "openai/" prefix to use the OpenAI-compatible client.
+    # Requesty expects "provider/model" (e.g. "google/gemini-3-flash-preview")
+    # as the model name, so the full LiteLLM model string becomes
+    # "openai/google/gemini-3-flash-preview" — openai/ for the client,
+    # google/gemini-3-flash-preview for Requesty's router.
     if not effective_model.startswith("openai/"):
-        if "/" in effective_model:
-            effective_model = effective_model.split("/", 1)[1]
         effective_model = f"openai/{effective_model}"
     return LiteLlm(
         model=effective_model,
