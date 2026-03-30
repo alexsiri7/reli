@@ -168,7 +168,7 @@ export function BriefingPanel() {
   const handleSnooze = (id: string) => {
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
-    snoozeFinding(id, tomorrow.toISOString().split('T')[0])
+    snoozeFinding(id, tomorrow.toISOString().slice(0, 10))
   }
 
   const hasContent = theOneThing || secondaryItems.length > 0 || findings.length > 0
