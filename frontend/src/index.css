@@ -3,8 +3,44 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Dark-navy theme — colors extracted from design mockups.
+ *
+ * We override Tailwind's default gray scale inside the .dark selector
+ * so every existing `dark:bg-gray-*` / `dark:text-gray-*` class picks
+ * up the navy palette automatically, without touching component files.
+ */
+@theme inline {
+  --color-navy-50:  #dae2fd;
+  --color-navy-100: #c7c4d8;
+  --color-navy-200: #918fa1;
+  --color-navy-300: #6b6a7d;
+  --color-navy-400: #464555;
+  --color-navy-500: #31394d;
+  --color-navy-600: #2d3449;
+  --color-navy-700: #222a3d;
+  --color-navy-800: #171f33;
+  --color-navy-900: #0b1326;
+  --color-navy-950: #060e20;
+}
+
 :root {
   color-scheme: light dark;
+}
+
+/* Override gray palette in dark mode to navy */
+.dark {
+  --color-gray-50:  var(--color-navy-50);
+  --color-gray-100: var(--color-navy-100);
+  --color-gray-200: var(--color-navy-200);
+  --color-gray-300: var(--color-navy-300);
+  --color-gray-400: var(--color-navy-400);
+  --color-gray-500: var(--color-navy-500);
+  --color-gray-600: var(--color-navy-600);
+  --color-gray-700: var(--color-navy-700);
+  --color-gray-800: var(--color-navy-800);
+  --color-gray-900: var(--color-navy-900);
+  --color-gray-950: var(--color-navy-950);
 }
 
 body {

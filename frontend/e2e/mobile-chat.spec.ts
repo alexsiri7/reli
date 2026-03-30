@@ -16,19 +16,19 @@ const MOCK_HISTORY = [
   {
     id: 'msg-2',
     role: 'assistant' as const,
-    content: 'You have 3 active items: Review the pull request for the auth module, prepare the quarterly report, and schedule the team retrospective.',
+    content: 'You have 5 active items this week:\n\n1. **Review Q3 Reports** — due tomorrow, high priority\n2. **Portfolio Redesign** — 63% complete, on track\n3. **AI Agent Beta** — setup phase, check-in April 1\n4. **Book work holidays** — no deadline set\n5. **Client meeting prep** — due today\n\nWould you like me to help prioritize?',
     timestamp: '2026-03-14T09:00:05Z',
   },
   {
     id: 'msg-3',
     role: 'user' as const,
-    content: 'Can you mark the PR review as done?',
+    content: 'Mark the client meeting prep as done and add a follow-up task for Sarah.',
     timestamp: '2026-03-14T09:01:00Z',
   },
   {
     id: 'msg-4',
     role: 'assistant' as const,
-    content: 'Done! I\'ve marked "Review pull request for auth module" as complete.',
+    content: 'Done! Two actions applied:\n\n**Action Applied** — Completed:\n- *Client meeting prep checklist* marked as done\n\n**Action Applied** — Created:\n- *Follow up with Sarah re: campaign budget*\n- Tagged under Zenith Campaign project',
     timestamp: '2026-03-14T09:01:05Z',
   },
 ]
