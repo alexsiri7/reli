@@ -10,6 +10,7 @@ import httpx
 from .config import settings as _app_settings  # noqa: E402 — must load before other backend imports
 
 # Configure logging — LOG_LEVEL env var controls verbosity (default: INFO)
+logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=getattr(logging, _app_settings.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
@@ -146,7 +147,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
                 payload = pyjwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
                 set_sentry_user(payload.get("sub", ""), payload.get("email"))
             except Exception:
-                pass  # Don't block requests if JWT decode fails
+                logger.debug("Failed to decode JWT for Sentry context", exc_info=True)
         return await call_next(request)
 
 
@@ -294,7 +295,7 @@ def health_detailed() -> dict:
         conn.close()
         db_ok = True
     except Exception:
-        pass
+        logger.warning("Health check: DB connection failed", exc_info=True)
 
     # ChromaDB status
     chroma_ok = False
@@ -303,7 +304,7 @@ def health_detailed() -> dict:
         vec_count = vector_count()
         chroma_ok = True
     except Exception:
-        pass
+        logger.warning("Health check: ChromaDB connection failed", exc_info=True)
 
     avg_ms = metrics_store.avg_response_time_ms()
 
