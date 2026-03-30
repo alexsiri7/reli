@@ -356,21 +356,28 @@ async def sweep_loop() -> None:
 
 
 _task: asyncio.Task[None] | None = None
+_scheduler_lock = asyncio.Lock()
 
 
-def start_scheduler() -> None:
+async def start_scheduler() -> None:
     """Start the sweep background task.  Safe to call multiple times."""
     global _task
-    if _task is not None and not _task.done():
-        return
-    _task = asyncio.create_task(sweep_loop())
-    logger.info("Sweep scheduler task created")
+    async with _scheduler_lock:
+        if _task is not None and not _task.done():
+            return
+        _task = asyncio.create_task(sweep_loop())
+        logger.info("Sweep scheduler task created")
 
 
-def stop_scheduler() -> None:
-    """Cancel the sweep background task if running."""
+async def stop_scheduler() -> None:
+    """Cancel the sweep background task if running and await cleanup."""
     global _task
-    if _task is not None and not _task.done():
-        _task.cancel()
-        logger.info("Sweep scheduler task cancelled")
-    _task = None
+    async with _scheduler_lock:
+        if _task is not None and not _task.done():
+            _task.cancel()
+            try:
+                await _task
+            except asyncio.CancelledError:
+                pass
+            logger.info("Sweep scheduler task cancelled")
+        _task = None
