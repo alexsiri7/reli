@@ -1,8 +1,14 @@
 """In-memory rate limiting middleware for FastAPI.
 
-Uses a simple token-bucket algorithm per client IP. Two tiers:
+Uses a simple token-bucket algorithm per user (via JWT) with IP fallback.
+Two tiers:
 - **LLM endpoints** (chat, sweep): strict limits to prevent cost amplification
 - **General API**: more lenient limits for normal usage
+
+When a valid JWT session cookie is present the ``sub`` claim is used as the
+rate-limit key so that users behind the same reverse proxy (Railway /
+Cloudflare) each get their own bucket.  Unauthenticated requests (login,
+health, etc.) fall back to client IP.
 
 Configurable via environment variables:
 - ``RATE_LIMIT_ENABLED``: "true" (default) or "false"
@@ -12,6 +18,7 @@ Configurable via environment variables:
 
 from __future__ import annotations
 
+import logging
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -19,6 +26,8 @@ from dataclasses import dataclass, field
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse
+
+log = logging.getLogger(__name__)
 
 # LLM-calling paths that need strict rate limiting
 _LLM_PATHS = {"/api/chat", "/api/sweep/run"}
@@ -58,14 +67,14 @@ class _Bucket:
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Per-IP token-bucket rate limiter."""
+    """Per-user (JWT) / per-IP token-bucket rate limiter."""
 
     def __init__(self, app, *, llm_rpm: int = 10, api_rpm: int = 60, enabled: bool = True) -> None:  # type: ignore[no-untyped-def]
         super().__init__(app)
         self.enabled = enabled
         self.llm_rpm = llm_rpm
         self.api_rpm = api_rpm
-        # Separate buckets for LLM and general API per client IP
+        # Separate buckets for LLM and general API, keyed by user id or IP
         self._llm_buckets: dict[str, _Bucket] = defaultdict(
             lambda: _Bucket(tokens=float(llm_rpm), max_tokens=float(llm_rpm), refill_rate=llm_rpm / 60.0)
         )
@@ -79,6 +88,29 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return forwarded.split(",")[0].strip()
         return request.client.host if request.client else "unknown"
 
+    def _get_rate_limit_key(self, request: Request) -> str:
+        """Derive the rate-limit key from the JWT session cookie.
+
+        If a valid JWT cookie is present, the ``sub`` claim (user id) is
+        returned so each authenticated user gets their own bucket.
+        Otherwise falls back to client IP (for unauthenticated endpoints
+        like login or when behind a reverse proxy without a cookie).
+        """
+        from backend.auth import COOKIE_NAME, JWT_ALGORITHM, SECRET_KEY
+
+        token = request.cookies.get(COOKIE_NAME)
+        if token and SECRET_KEY:
+            try:
+                import jwt as pyjwt
+
+                payload = pyjwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+                sub = payload.get("sub")
+                if sub:
+                    return f"user:{sub}"
+            except Exception:
+                log.debug("JWT decode failed for rate-limit key; falling back to IP")
+        return f"ip:{self._get_client_ip(request)}"
+
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if not self.enabled:
             return await call_next(request)
@@ -89,9 +121,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if path in ("/healthz", "/metrics") or path.startswith("/assets") or not path.startswith("/api"):
             return await call_next(request)
 
-        client_ip = self._get_client_ip(request)
+        key = self._get_rate_limit_key(request)
         is_llm = _is_llm_path(path)
-        bucket = self._llm_buckets[client_ip] if is_llm else self._api_buckets[client_ip]
+        bucket = self._llm_buckets[key] if is_llm else self._api_buckets[key]
 
         if not bucket.consume():
             retry_after = int(bucket.retry_after) + 1
