@@ -427,7 +427,7 @@ def find_completed_projects(session: Session, user_id: str = "") -> list[SweepCa
             _p.c.id,
             _p.c.title,
             func.count(_ch.c.id).label("total_children"),
-            func.sum(case((~_ch.c.active, 1), else_=0)).label("inactive_children"),
+            func.sum(case((_ch.c.active == False, 1), else_=0)).label("inactive_children"),  # noqa: E712
         )
         .select_from(_p.join(_ch, _ch.c.parent_id == _p.c.id))
         .where(
@@ -438,7 +438,7 @@ def find_completed_projects(session: Session, user_id: str = "") -> list[SweepCa
         .group_by(_p.c.id, _p.c.title)
         .having(
             func.count(_ch.c.id) > 0,
-            func.count(_ch.c.id) == func.sum(case((~_ch.c.active, 1), else_=0)),
+            func.count(_ch.c.id) == func.sum(case((_ch.c.active == False, 1), else_=0)),  # noqa: E712
         )
     )
     rows = session.execute(stmt).all()
@@ -466,7 +466,7 @@ def find_open_questions(session: Session, user_id: str = "") -> list[SweepCandid
         .where(
             ThingRecord.active == True,  # noqa: E712
             ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
-            ThingRecord.open_questions != [],
+            cast(ThingRecord.open_questions, String).notin_(["[]", "null"]),
             user_filter_clause(ThingRecord.user_id, user_id),
         )
     )
@@ -727,7 +727,7 @@ def find_information_gaps(
             _no_oq_p,
             user_filter_clause(_p.c.user_id, user_id),
         )
-        .group_by(_p.c.id, _p.c.title, _p.c.data)
+        .group_by(_p.c.id, _p.c.title, cast(_p.c.data, String))
         .having(func.count(_ch2.c.id) > 0)
     )
     proj_rows = session.execute(proj_stmt).all()

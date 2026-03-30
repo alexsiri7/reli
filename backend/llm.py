@@ -49,6 +49,10 @@ def _litellm_model(model: str) -> str:
     """
     if model.startswith("openai/"):
         return model
+    # Strip any existing provider prefix (e.g. "google/model-name") before
+    # adding "openai/" so we don't produce "openai/google/model-name".
+    if "/" in model:
+        model = model.split("/", 1)[1]
     return f"openai/{model}"
 
 
