@@ -279,11 +279,40 @@ async function waitForApp(page: Page) {
   await page.waitForTimeout(500)
 }
 
+/**
+ * Ensure light mode is active.
+ * index.html ships with class="dark" on <html>, so light-mode tests must
+ * explicitly strip it. Dark-mode tests (the "dark-chromium" project) keep it.
+ * Pass isDark=true to skip removal (used when the test runs under dark-chromium).
+ */
+async function ensureLightMode(page: Page, isDark: boolean) {
+  if (isDark) return
+  await page.evaluate(() => document.documentElement.classList.remove('dark'))
+  // Let Tailwind repaint
+  await page.waitForTimeout(200)
+}
+
+/**
+ * Switch the desktop right panel from Briefing (the default) to Chat,
+ * so chat-panel screenshots capture actual messages rather than the briefing.
+ */
+async function switchToChat(page: Page) {
+  // Click the toggle button in the sidebar (aria-label="Switch to Chat").
+  // The app renders sidebar in both desktop and mobile layout divs, so use .first().
+  const toggle = page.locator('button[aria-label="Switch to Chat"]').first()
+  if (await toggle.isVisible()) {
+    await toggle.click()
+    await page.waitForTimeout(300)
+  }
+}
+
 test.describe('Visual regression – reli frontend', () => {
-  test('full layout – empty state', async ({ page }) => {
+  test('full layout – empty state', async ({ page }, testInfo) => {
+    const isDark = testInfo.project.name.includes('dark')
     await interceptApi(page)
     await page.goto('/')
     await waitForApp(page)
+    await ensureLightMode(page, isDark)
 
     await expect(page).toHaveScreenshot('full-layout-empty.png', {
       ...SNAPSHOT_OPTS,
@@ -292,10 +321,12 @@ test.describe('Visual regression – reli frontend', () => {
     })
   })
 
-  test('sidebar – empty (no Things)', async ({ page }) => {
+  test('sidebar – empty (no Things)', async ({ page }, testInfo) => {
+    const isDark = testInfo.project.name.includes('dark')
     await interceptApi(page)
     await page.goto('/')
     await waitForApp(page)
+    await ensureLightMode(page, isDark)
 
     // Use .first() because the app renders aside in both desktop and mobile layout divs
     await expect(page.locator('aside').first()).toHaveScreenshot('sidebar-empty.png', {
@@ -305,10 +336,12 @@ test.describe('Visual regression – reli frontend', () => {
     })
   })
 
-  test('sidebar – with Things listed', async ({ page }) => {
+  test('sidebar – with Things listed', async ({ page }, testInfo) => {
+    const isDark = testInfo.project.name.includes('dark')
     await interceptApi(page, { things: true })
     await page.goto('/')
     await waitForApp(page)
+    await ensureLightMode(page, isDark)
     // Wait for Things to render
     await page.waitForSelector('aside h2', { timeout: 5_000 })
 
@@ -323,10 +356,13 @@ test.describe('Visual regression – reli frontend', () => {
     )
   })
 
-  test('chat panel – empty messages state', async ({ page }) => {
+  test('chat panel – empty messages state', async ({ page }, testInfo) => {
+    const isDark = testInfo.project.name.includes('dark')
     await interceptApi(page)
     await page.goto('/')
     await waitForApp(page)
+    await ensureLightMode(page, isDark)
+    await switchToChat(page)
 
     // Chat panel is the main flex column next to sidebar
     const chatPanel = page.locator('div.flex-1.flex.flex-col').first()
@@ -336,10 +372,13 @@ test.describe('Visual regression – reli frontend', () => {
     })
   })
 
-  test('chat panel – with messages', async ({ page }) => {
+  test('chat panel – with messages', async ({ page }, testInfo) => {
+    const isDark = testInfo.project.name.includes('dark')
     await interceptApi(page, { history: true })
     await page.goto('/')
     await waitForApp(page)
+    await ensureLightMode(page, isDark)
+    await switchToChat(page)
     // Wait for history to render
     await page
       .waitForSelector('[class*="rounded-2xl"]', { timeout: 5_000 })
@@ -352,10 +391,12 @@ test.describe('Visual regression – reli frontend', () => {
     })
   })
 
-  test('full layout – with Things and messages', async ({ page }) => {
+  test('full layout – with Things and messages', async ({ page }, testInfo) => {
+    const isDark = testInfo.project.name.includes('dark')
     await interceptApi(page, { things: true, history: true })
     await page.goto('/')
     await waitForApp(page)
+    await ensureLightMode(page, isDark)
     await page.waitForSelector('aside h2', { timeout: 5_000 })
 
     await expect(page).toHaveScreenshot('full-layout-populated.png', {

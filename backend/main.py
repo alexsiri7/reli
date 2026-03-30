@@ -297,28 +297,28 @@ def health() -> dict[str, str]:
 
 @app.get("/api/health", tags=["health"])
 def health_detailed() -> dict:
-    """Detailed health check with DB, ChromaDB, and performance metrics."""
-    from .database import get_connection
+    """Detailed health check with DB, pgvector, and performance metrics."""
+    from sqlalchemy import text
+    from .db_engine import engine as _db_engine
     from .vector_store import vector_count
 
     # DB status
     db_ok = False
     try:
-        conn = get_connection()
-        conn.execute("SELECT 1")
-        conn.close()
+        with _db_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
         db_ok = True
     except Exception:
         logger.warning("Health check: DB connection failed", exc_info=True)
 
-    # ChromaDB status
-    chroma_ok = False
+    # pgvector status (uses the same DB connection)
+    vector_ok = False
     vec_count = 0
     try:
         vec_count = vector_count()
-        chroma_ok = True
+        vector_ok = True
     except Exception:
-        logger.warning("Health check: ChromaDB connection failed", exc_info=True)
+        logger.warning("Health check: pgvector query failed", exc_info=True)
 
     avg_ms = metrics_store.avg_response_time_ms()
 
@@ -327,7 +327,7 @@ def health_detailed() -> dict:
         "service": "reli",
         "uptime_seconds": round(metrics_store.uptime_seconds(), 1),
         "db_connected": db_ok,
-        "chromadb_connected": chroma_ok,
+        "chromadb_connected": vector_ok,  # kept for API backward compat
         "vector_count": vec_count,
         "avg_response_time_ms": round(avg_ms, 2) if avg_ms is not None else None,
         "recent_request_count": metrics_store.request_count(),
