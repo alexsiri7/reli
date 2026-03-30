@@ -70,7 +70,7 @@ def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture(autouse=True)
 def mock_vector_store():
-    """Mock ChromaDB / vector store to avoid requiring a real Chroma instance.
+    """Mock vector store to avoid requiring a real pgvector/Postgres instance.
 
     Patches both the source module and the imported symbols in each router,
     since background tasks hold references to the imported names.

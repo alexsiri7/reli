@@ -38,11 +38,14 @@ REQUEST_DURATION = Histogram(
     registry=REGISTRY,
 )
 
-CHROMA_VECTOR_COUNT = Gauge(
-    "chroma_vector_count",
-    "Number of vectors indexed in ChromaDB.",
+VECTOR_COUNT = Gauge(
+    "vector_count",
+    "Number of vectors indexed in pgvector.",
     registry=REGISTRY,
 )
+
+# Backward-compatible alias so existing dashboards/alerts don't break.
+CHROMA_VECTOR_COUNT = VECTOR_COUNT
 
 DB_THINGS_COUNT = Gauge(
     "db_things_total",
@@ -114,11 +117,11 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
 def _refresh_gauges() -> None:
     """Update gauge values from live data sources."""
-    # ChromaDB vector count
+    # pgvector embedding count
     try:
         from .vector_store import vector_count
 
-        CHROMA_VECTOR_COUNT.set(vector_count())
+        VECTOR_COUNT.set(vector_count())
     except Exception:
         pass
 

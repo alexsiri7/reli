@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import JSON, Column, Text
+from pgvector.sqlalchemy import Vector
 from sqlmodel import Field, SQLModel
 
 
@@ -349,3 +350,19 @@ class WeeklyBriefingRecord(SQLModel, table=True):
     week_start: str
     content: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
     generated_at: datetime = Field(default_factory=_utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Thing Embeddings (pgvector)
+# ---------------------------------------------------------------------------
+
+
+class ThingEmbeddingRecord(SQLModel, table=True):
+    """Vector embedding for a Thing, stored via pgvector."""
+
+    __tablename__ = "thing_embeddings"
+
+    thing_id: str = Field(primary_key=True, foreign_key="things.id")
+    embedding: Any = Field(sa_column=Column(Vector(3072), nullable=False))
+    content: str = ""  # The text that was embedded (for debugging/reindex)
+    updated_at: datetime = Field(default_factory=_utcnow)

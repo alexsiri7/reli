@@ -25,9 +25,9 @@ class TestMetricsEndpoint:
         resp = client.get("/metrics")
         assert "http_request_duration_seconds" in resp.text
 
-    def test_contains_chroma_vector_count(self, client: TestClient):
+    def test_contains_vector_count(self, client: TestClient):
         resp = client.get("/metrics")
-        assert "chroma_vector_count" in resp.text
+        assert "vector_count" in resp.text
 
     def test_contains_db_things_total(self, client: TestClient):
         resp = client.get("/metrics")
@@ -85,7 +85,7 @@ class TestGaugeRefresh:
     def test_vector_count_uses_vector_store(self, client: TestClient):
         with patch("backend.vector_store.vector_count", return_value=42):
             resp = client.get("/metrics")
-        assert "chroma_vector_count 42.0" in resp.text
+        assert "vector_count 42.0" in resp.text
 
     def test_db_counts_reflect_data(self, client: TestClient):
         # The patched_db is empty, so counts should be 0

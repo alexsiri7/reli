@@ -1,6 +1,6 @@
 """Auto-connect sweep — find semantically similar but unconnected Things.
 
-Phase 1 (Vector): Query ChromaDB for each active Thing, identify pairs that
+Phase 1 (Vector): Query pgvector for each active Thing, identify pairs that
 are semantically similar but have no existing relationship.
 
 Phase 2 (LLM): Validate candidate pairs and suggest relationship types.
@@ -67,18 +67,17 @@ def find_connection_candidates(
 ) -> list[ConnectionCandidate]:
     """Find semantically similar but unconnected Things using vector search.
 
-    For each active Thing, queries ChromaDB for similar Things and filters out
+    For each active Thing, queries pgvector for similar Things and filters out
     pairs that already have a relationship or an existing suggestion.
     """
-    from .vector_store import _get_collection
+    from .vector_store import vector_count, vector_search_with_distances
 
     try:
-        collection = _get_collection()
-        total = collection.count()
+        total = vector_count()
         if total < 2:
             return []
     except Exception as exc:
-        logger.error("ChromaDB unavailable for connection sweep: %s", exc)
+        logger.error("pgvector unavailable for connection sweep: %s", exc)
         return []
 
     # Get all active Things
@@ -121,35 +120,22 @@ def find_connection_candidates(
     seen_pairs: set[tuple[str, str]] = set()
     candidates: list[ConnectionCandidate] = []
 
-    # Build ChromaDB where filter
-    filters: list[dict] = [{"active": {"$eq": 1}}]
-    if user_id:
-        filters.append({"$or": [{"user_id": {"$eq": user_id}}, {"user_id": {"$eq": ""}}]})
-
-    where: dict | None = None
-    if len(filters) == 1:
-        where = filters[0]
-    elif len(filters) > 1:
-        where = {"$and": filters}
-
     for thing in things:
         thing_id = thing.id
         thing_title = thing.title
 
         try:
-            results = collection.query(
-                query_texts=[thing_title],
-                n_results=min(max_per_thing + 1, total),
-                where=where,
+            results = vector_search_with_distances(
+                query=thing_title,
+                n_results=max_per_thing + 1,
+                active_only=True,
+                user_id=user_id,
             )
         except Exception as exc:
-            logger.debug("ChromaDB query failed for thing %s: %s", thing_id, exc)
+            logger.debug("pgvector query failed for thing %s: %s", thing_id, exc)
             continue
 
-        if not results["ids"] or not results["ids"][0]:
-            continue
-
-        for i, match_id in enumerate(results["ids"][0]):
+        for match_id, distance in results:
             if match_id == thing_id:
                 continue
 
@@ -168,8 +154,6 @@ def find_connection_candidates(
                 continue
 
             # Check distance threshold
-            distances = results.get("distances")
-            distance = distances[0][i] if distances else 1.0
             if distance > MAX_DISTANCE:
                 continue
 
