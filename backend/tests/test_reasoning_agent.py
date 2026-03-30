@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, MagicMock, patch  # noqa: I001
 
+import litellm
 import pytest
 
 # ---------------------------------------------------------------------------
@@ -1081,6 +1082,124 @@ class TestRunAdkWithThoughtSignatureFallback:
                 "full prompt",
                 "fallback prompt",
             )
+
+
+class TestIsModelNotFoundError:
+    """Test _is_model_not_found_error detects 404 / NotFoundError conditions."""
+
+    def test_detects_litellm_not_found_error(self):
+        from backend.reasoning_agent import _is_model_not_found_error
+
+        exc = litellm.NotFoundError(
+            message="404 page not found",
+            model="google/gemini-3-flash-preview",
+            llm_provider="google",
+        )
+        assert _is_model_not_found_error(exc) is True
+
+    def test_detects_404_message(self):
+        from backend.reasoning_agent import _is_model_not_found_error
+
+        exc = Exception("GeminiException - 404 page not found")
+        assert _is_model_not_found_error(exc) is True
+
+    def test_ignores_other_errors(self):
+        from backend.reasoning_agent import _is_model_not_found_error
+
+        assert _is_model_not_found_error(ValueError("connection refused")) is False
+
+    def test_ignores_unrelated_error_with_404(self):
+        from backend.reasoning_agent import _is_model_not_found_error
+
+        # 404 without "not found" shouldn't match
+        assert _is_model_not_found_error(Exception("error code 4040")) is False
+
+
+class TestRunAdkWithModelNotFoundFallback:
+    """Test _run_adk_with_thought_signature_fallback retries with default model on 404."""
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_default_model_on_404(self):
+        from backend.reasoning_agent import _run_adk_with_thought_signature_fallback
+
+        agent = MagicMock()
+        call_count = 0
+
+        async def mock_run(ag, prompt, stats=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise litellm.NotFoundError(
+                    message="404 page not found",
+                    model="google/gemini-3-flash-preview",
+                    llm_provider="google",
+                )
+            return "fallback ok"
+
+        with (
+            patch("backend.reasoning_agent._run_agent_for_text", side_effect=mock_run),
+            patch("backend.reasoning_agent._make_litellm_model") as mock_factory,
+        ):
+            mock_model = MagicMock()
+            mock_factory.return_value = mock_model
+
+            result = await _run_adk_with_thought_signature_fallback(
+                agent, "full prompt", "fallback prompt", api_key="test-key"
+            )
+
+        assert result == "fallback ok"
+        assert call_count == 2
+        mock_factory.assert_called_once()
+        assert mock_factory.call_args.kwargs["api_key"] == "test-key"
+
+    @pytest.mark.asyncio
+    async def test_restores_original_model_after_404_fallback(self):
+        from backend.reasoning_agent import _run_adk_with_thought_signature_fallback
+
+        agent = MagicMock()
+        original_model = MagicMock()
+        agent.model = original_model
+        call_count = 0
+
+        async def mock_run(ag, prompt, stats=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise litellm.NotFoundError(
+                    message="404 page not found",
+                    model="bad-model",
+                    llm_provider="google",
+                )
+            return "ok"
+
+        with (
+            patch("backend.reasoning_agent._run_agent_for_text", side_effect=mock_run),
+            patch("backend.reasoning_agent._make_litellm_model", return_value=MagicMock()),
+        ):
+            await _run_adk_with_thought_signature_fallback(agent, "prompt", "fallback")
+
+        # model is restored even after successful fallback
+        assert agent.model is original_model
+
+    @pytest.mark.asyncio
+    async def test_raises_if_fallback_also_fails(self):
+        from backend.reasoning_agent import _run_adk_with_thought_signature_fallback
+
+        agent = MagicMock()
+
+        async def mock_run(ag, prompt, stats=None):
+            raise litellm.NotFoundError(
+                message="404 page not found",
+                model="bad-model",
+                llm_provider="google",
+            )
+
+        with (
+            patch("backend.reasoning_agent._run_agent_for_text", side_effect=mock_run),
+            patch("backend.reasoning_agent._make_litellm_model", return_value=MagicMock()),
+            pytest.raises(litellm.NotFoundError),
+        ):
+            await _run_adk_with_thought_signature_fallback(agent, "prompt", "fallback")
 
 
 class TestHistoryEnrichmentInReasoningAgent:

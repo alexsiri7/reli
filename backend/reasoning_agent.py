@@ -1192,6 +1192,15 @@ def _is_thought_signature_error(exc: Exception) -> bool:
     return "thought_signature" in msg and ("missing" in msg or "functioncall" in msg)
 
 
+def _is_model_not_found_error(exc: Exception) -> bool:
+    """Return True if the exception is a model-not-found / 404 error."""
+    # litellm raises litellm.NotFoundError for HTTP 404 responses
+    if type(exc).__name__ == "NotFoundError":
+        return True
+    msg = str(exc).lower()
+    return "404" in msg and "not found" in msg
+
+
 async def _run_adk_with_thought_signature_fallback(
     agent: "LlmAgent",
     full_prompt: str,
@@ -1206,6 +1215,10 @@ async def _run_adk_with_thought_signature_fallback(
     (see GH #176).  The default config now uses a non-thinking model, so this
     fallback should rarely trigger.  If it does, we retry once with a fresh
     session (no accumulated history) which avoids the missing-signature issue.
+
+    Also handles model-not-found (404) errors by falling back to the default
+    REQUESTY_REASONING_MODEL.  This guards against misconfigured model names
+    (e.g. a non-existent preview model in config.yaml).
     """
     try:
         return await _run_agent_for_text(agent, full_prompt, usage_stats)
@@ -1243,6 +1256,21 @@ async def _run_adk_with_thought_signature_fallback(
                     finally:
                         agent.model = original_model
                 raise
+        elif _is_model_not_found_error(exc):
+            logger.warning(
+                "Model not found (404) — falling back to default reasoning model %s: %s",
+                REQUESTY_REASONING_MODEL,
+                exc,
+            )
+            original_model = agent.model
+            try:
+                agent.model = _make_litellm_model(
+                    model=REQUESTY_REASONING_MODEL,
+                    api_key=api_key,
+                )
+                return await _run_agent_for_text(agent, full_prompt, usage_stats)
+            finally:
+                agent.model = original_model
         raise
 
 
