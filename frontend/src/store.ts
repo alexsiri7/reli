@@ -1613,20 +1613,6 @@ export const useStore = create<ReliState>((set, get) => ({
   openFeedback: () => set({ feedbackOpen: true }),
   closeFeedback: () => set({ feedbackOpen: false }),
 
-  // Command palette
-  commandPaletteOpen: false,
-  openCommandPalette: () => set({ commandPaletteOpen: true }),
-  closeCommandPalette: () => set({ commandPaletteOpen: false }),
-
-  // Quick add
-  quickAddOpen: false,
-  openQuickAdd: () => set({ quickAddOpen: true }),
-  closeQuickAdd: () => set({ quickAddOpen: false }),
-
-  // Sidebar open/closed
-  sidebarOpen: true,
-  setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
-
   // Create a Thing
   createThing: async (title: string, typeHint?: string) => {
     const res = await apiFetch(`${BASE}/things`, {
