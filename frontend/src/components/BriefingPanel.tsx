@@ -1,28 +1,186 @@
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
+import type { SweepFinding, BriefingItem } from '../store'
+
+const FINDING_TYPE_ICONS: Record<string, string> = {
+  approaching_date: '\u23F0',
+  stale: '\u{1F4A4}',
+  neglected: '\u{1F6A8}',
+  overdue_checkin: '\u{1F4C5}',
+  orphan: '\u{1F50D}',
+  inconsistency: '\u26A0\uFE0F',
+  open_question: '\u2753',
+  connection: '\u{1F517}',
+}
+
+const FINDING_TYPE_COLORS: Record<string, string> = {
+  approaching_date: 'bg-events',
+  stale: 'bg-on-surface-variant',
+  neglected: 'bg-ideas',
+  overdue_checkin: 'bg-ideas',
+  orphan: 'bg-primary',
+  inconsistency: 'bg-events',
+  open_question: 'bg-people',
+  connection: 'bg-projects',
+}
+
+function formatGreetingDate(): string {
+  return new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
+function getGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good Morning'
+  if (hour < 17) return 'Good Afternoon'
+  return 'Good Evening'
+}
+
+function urgencyLabel(urgency: number): { text: string; className: string } {
+  if (urgency >= 0.8) return { text: 'Urgent', className: 'text-ideas' }
+  if (urgency >= 0.5) return { text: 'Soon', className: 'text-events' }
+  return { text: 'Upcoming', className: 'text-on-surface-variant' }
+}
+
+function OneThingCard({ item, onClick }: { item: BriefingItem; onClick: () => void }) {
+  const urg = urgencyLabel(item.urgency)
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left glass rounded-2xl p-6 hover:bg-surface-container-high/80 transition-colors cursor-pointer"
+    >
+      <p className="text-label text-on-surface-variant mb-2">The One Thing</p>
+      <h3 className="text-headline text-on-surface font-semibold mb-3 leading-tight">
+        {item.thing.title}
+      </h3>
+      {item.reasons.length > 0 && (
+        <p className="text-body text-on-surface-variant mb-3">
+          {item.reasons[0]}
+        </p>
+      )}
+      <div className="flex items-center gap-3">
+        <span className={`text-label font-medium ${urg.className}`}>{urg.text}</span>
+        <span className="text-label text-on-surface-variant">
+          Score {item.score.toFixed(1)}
+        </span>
+      </div>
+    </button>
+  )
+}
+
+function PriorityFocusCard({ item, onClick }: { item: BriefingItem; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left rounded-xl p-4 bg-surface-container-low hover:bg-surface-container-high transition-colors cursor-pointer flex items-center gap-4"
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-on-surface font-medium truncate">{item.thing.title}</p>
+        {item.reasons.length > 0 && (
+          <p className="text-xs text-on-surface-variant mt-0.5 truncate">{item.reasons[0]}</p>
+        )}
+      </div>
+      <span className="gradient-cta text-xs font-medium px-3 py-1.5 rounded-lg shrink-0">
+        Focus
+      </span>
+    </button>
+  )
+}
+
+function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
+  finding: SweepFinding
+  onDismiss: (id: string) => void
+  onSnooze: (id: string) => void
+  onAct: (finding: SweepFinding) => void
+}) {
+  const icon = FINDING_TYPE_ICONS[finding.finding_type] ?? '\u{1F4CB}'
+  const dotColor = FINDING_TYPE_COLORS[finding.finding_type] ?? 'bg-primary'
+  return (
+    <div className="group flex items-start gap-3 py-3 px-4 rounded-xl hover:bg-surface-container-high/60 transition-colors">
+      <div className="flex items-center gap-2 mt-0.5 shrink-0">
+        <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+        <span className="text-sm">{icon}</span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-on-surface leading-snug">{finding.message}</p>
+        {finding.thing && (
+          <p className="text-xs text-on-surface-variant mt-0.5 truncate">
+            {finding.thing.title}
+          </p>
+        )}
+        <div className="flex items-center gap-2 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {finding.thing_id && (
+            <button
+              onClick={() => onAct(finding)}
+              className="text-xs text-primary hover:text-primary/80 font-medium"
+            >
+              Open
+            </button>
+          )}
+          <button
+            onClick={() => onSnooze(finding.id)}
+            className="text-xs text-on-surface-variant hover:text-on-surface"
+          >
+            Snooze
+          </button>
+          <button
+            onClick={() => onDismiss(finding.id)}
+            className="text-xs text-on-surface-variant hover:text-ideas"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
+  return (
+    <div className="glass rounded-xl p-3 flex-1 min-w-0">
+      <p className={`text-headline font-semibold ${accent ?? 'text-on-surface'}`}>{value}</p>
+      <p className="text-label text-on-surface-variant mt-0.5">{label}</p>
+    </div>
+  )
+}
 
 export function BriefingPanel() {
-  const { morningBriefing, briefing, findings, setRightView, openThingDetail } = useStore(
+  const {
+    theOneThing, secondaryItems, briefingStats, findings,
+    setRightView, openThingDetail, dismissFinding, snoozeFinding, actOnFinding,
+  } = useStore(
     useShallow(s => ({
-      morningBriefing: s.morningBriefing,
-      briefing: s.briefing,
+      theOneThing: s.theOneThing,
+      secondaryItems: s.secondaryItems,
+      briefingStats: s.briefingStats,
       findings: s.findings,
       setRightView: s.setRightView,
       openThingDetail: s.openThingDetail,
+      dismissFinding: s.dismissFinding,
+      snoozeFinding: s.snoozeFinding,
+      actOnFinding: s.actOnFinding,
     }))
   )
 
+  const handleSnooze = (id: string) => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    snoozeFinding(id, tomorrow.toISOString().slice(0, 10))
+  }
+
+  const hasContent = theOneThing || secondaryItems.length > 0 || findings.length > 0
+
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 min-w-0 min-h-0">
-      {/* Header */}
-      <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0 flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Briefing</h2>
-          <p className="text-xs text-gray-400 dark:text-gray-400">Your daily overview</p>
-        </div>
+    <div className="flex-1 flex flex-col bg-canvas min-w-0 min-h-0">
+      {/* Header bar */}
+      <div className="px-5 py-3 border-b border-surface-container-high bg-surface shrink-0 flex items-center justify-between">
+        <p className="text-label text-on-surface-variant">Daily Briefing</p>
         <button
           onClick={() => setRightView('chat')}
-          className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-on-surface transition-colors"
           title="Switch to Chat"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -33,123 +191,81 @@ export function BriefingPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Morning briefing */}
-        {morningBriefing?.content && (() => {
-          const c = morningBriefing.content
-          const hasPriorities = c.priorities.length > 0
-          const hasOverdue = c.overdue.length > 0
-          const hasBlockers = c.blockers.length > 0
-          const hasFindings = c.findings.length > 0
-          const hasContent = hasPriorities || hasOverdue || hasBlockers || hasFindings || c.summary
+        {/* Greeting */}
+        <section className="px-6 pt-8 pb-4">
+          <h1 className="text-display text-on-surface font-bold">{getGreeting()}</h1>
+          <p className="text-body text-on-surface-variant mt-1">{formatGreetingDate()}</p>
+        </section>
 
-          if (!hasContent) return null
-          return (
-            <section className="p-5 border-b border-gray-200 dark:border-gray-800">
-              <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest mb-3">Morning Briefing</h3>
-              {c.summary && (
-                <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-3">{c.summary}</p>
-              )}
-              {hasOverdue && (
-                <div className="mb-3">
-                  <p className="text-xs font-medium text-red-500 dark:text-red-400 uppercase tracking-wider mb-1.5">Overdue</p>
-                  <div className="space-y-1">
-                    {c.overdue.map(item => (
-                      <div
-                        key={item.thing_id}
-                        className="flex items-center gap-2 py-1.5 px-2 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                        onClick={() => openThingDetail(item.thing_id)}
-                        role="button"
-                      >
-                        <span className="text-red-400 text-xs shrink-0">⚠</span>
-                        <span className="text-sm text-gray-700 dark:text-gray-200 flex-1 truncate">{item.title}</span>
-                        <span className="text-xs text-red-400 shrink-0">{item.days_overdue}d</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {hasPriorities && (
-                <div className="mb-3">
-                  <p className="text-xs font-medium text-amber-500 dark:text-amber-400 uppercase tracking-wider mb-1.5">Priorities</p>
-                  <div className="space-y-1">
-                    {c.priorities.map(item => (
-                      <div
-                        key={item.thing_id}
-                        className="flex items-start gap-2 py-1.5 px-2 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                        onClick={() => openThingDetail(item.thing_id)}
-                        role="button"
-                      >
-                        <span className="text-amber-400 text-xs mt-0.5 shrink-0">⭐</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-700 dark:text-gray-200 truncate">{item.title}</p>
-                          <p className="text-xs text-gray-400 dark:text-gray-500">{item.reasons.join(' · ')}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {hasBlockers && (
-                <div className="mb-3">
-                  <p className="text-xs font-medium text-orange-500 dark:text-orange-400 uppercase tracking-wider mb-1.5">Blocked</p>
-                  <div className="space-y-1">
-                    {c.blockers.map(item => (
-                      <div
-                        key={item.thing_id}
-                        className="flex items-start gap-2 py-1.5 px-2 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                        onClick={() => openThingDetail(item.thing_id)}
-                        role="button"
-                      >
-                        <span className="text-orange-400 text-xs mt-0.5 shrink-0">🚧</span>
-                        <p className="text-sm text-gray-700 dark:text-gray-200 flex-1 truncate">{item.title}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
-          )
-        })()}
-
-        {/* Daily briefing / sweep findings */}
-        {briefing.length > 0 && (
-          <section className="p-5 border-b border-gray-200 dark:border-gray-800">
-            <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest mb-3">Check-ins Due</h3>
-            <div className="space-y-1">
-              {briefing.slice(0, 10).map(thing => (
-                <div
-                  key={thing.id}
-                  className="flex items-center gap-2 py-1.5 px-2 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                  onClick={() => openThingDetail(thing.id)}
-                  role="button"
-                >
-                  <span className="text-xs text-gray-400 shrink-0">📅</span>
-                  <span className="text-sm text-gray-700 dark:text-gray-200 flex-1 truncate">{thing.title}</span>
-                </div>
-              ))}
-            </div>
+        {/* The One Thing hero card */}
+        {theOneThing && (
+          <section className="px-6 pb-6">
+            <OneThingCard
+              item={theOneThing}
+              onClick={() => openThingDetail(theOneThing.thing.id)}
+            />
           </section>
         )}
 
-        {/* Sweep findings */}
-        {findings.length > 0 && (
-          <section className="p-5">
-            <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-widest mb-3">Insights</h3>
+        {/* Priority Focus — first secondary item */}
+        {secondaryItems.length > 0 && (
+          <section className="px-6 pb-6">
+            <p className="text-label text-on-surface-variant mb-2">Priority Focus</p>
             <div className="space-y-2">
-              {findings.slice(0, 5).map(f => (
-                <div key={f.id} className="text-sm text-gray-600 dark:text-gray-300 leading-snug">
-                  {f.message}
-                </div>
+              {secondaryItems.slice(0, 3).map(item => (
+                <PriorityFocusCard
+                  key={item.thing.id}
+                  item={item}
+                  onClick={() => openThingDetail(item.thing.id)}
+                />
               ))}
             </div>
           </section>
         )}
 
-        {!morningBriefing && briefing.length === 0 && findings.length === 0 && (
+        {/* Findings from Sweep */}
+        {findings.length > 0 && (
+          <section className="px-6 pb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <p className="text-label text-on-surface-variant">Findings from Sweep</p>
+              <span className="text-[10px] text-on-surface-variant bg-surface-container-high px-1.5 py-0.5 rounded-full">
+                AI-Generated Insights
+              </span>
+            </div>
+            <div className="space-y-1">
+              {findings.slice(0, 6).map(f => (
+                <FindingCard
+                  key={f.id}
+                  finding={f}
+                  onDismiss={dismissFinding}
+                  onSnooze={handleSnooze}
+                  onAct={actOnFinding}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Stats footer */}
+        {briefingStats && (
+          <section className="px-6 pb-8">
+            <p className="text-label text-on-surface-variant mb-2">Overview</p>
+            <div className="flex gap-3">
+              <StatCard label="Active" value={briefingStats.active_things} />
+              <StatCard label="Check-in Due" value={briefingStats.checkin_due} accent="text-events" />
+              <StatCard label="Overdue" value={briefingStats.overdue} accent="text-ideas" />
+            </div>
+          </section>
+        )}
+
+        {/* Empty state */}
+        {!hasContent && (
           <div className="flex flex-col items-center justify-center h-64 text-center px-6">
-            <p className="text-4xl mb-3">☀️</p>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">No briefing yet</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Add some Things with check-in dates and your briefing will appear here.</p>
+            <p className="text-4xl mb-3">{'\u2600\uFE0F'}</p>
+            <p className="text-sm font-medium text-on-surface">No briefing yet</p>
+            <p className="text-xs text-on-surface-variant mt-1">
+              Add some Things with check-in dates and your briefing will appear here.
+            </p>
           </div>
         )}
       </div>
