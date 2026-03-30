@@ -16,8 +16,13 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import JSON, Column, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from pgvector.sqlalchemy import Vector
 from sqlmodel import Field, SQLModel
+
+# Use JSONB on PostgreSQL (supports comparison operators, indexing, etc.)
+# and plain JSON on SQLite (which stores JSON as text anyway).
+_JSON = JSON().with_variant(JSONB(), "postgresql")
 
 
 def _utcnow() -> datetime:
@@ -51,8 +56,8 @@ class ThingRecord(SQLModel, table=True):
     active: bool = True
     surface: bool = True
 
-    data: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
-    open_questions: list[str] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    data: dict[str, Any] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
+    open_questions: list[str] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
 
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
@@ -77,7 +82,7 @@ class ThingRelationshipRecord(SQLModel, table=True):
     relationship_type: str
     metadata_: dict[str, Any] | None = Field(
         default=None,
-        sa_column=Column("metadata", JSON, nullable=True),
+        sa_column=Column("metadata", _JSON, nullable=True),
     )
     created_at: datetime = Field(default_factory=_utcnow)
 
@@ -97,7 +102,7 @@ class ChatHistoryRecord(SQLModel, table=True):
     role: str
     content: str
     applied_changes: dict[str, Any] | None = Field(
-        default=None, sa_column=Column(JSON, nullable=True)
+        default=None, sa_column=Column(_JSON, nullable=True)
     )
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -271,7 +276,7 @@ class MergeHistoryRecord(SQLModel, table=True):
     keep_title: str
     remove_title: str
     merged_data: dict[str, Any] | None = Field(
-        default=None, sa_column=Column(JSON, nullable=True)
+        default=None, sa_column=Column(_JSON, nullable=True)
     )
     triggered_by: str = "api"
     user_id: str | None = Field(default=None, foreign_key="users.id")
@@ -291,7 +296,7 @@ class MorningBriefingRecord(SQLModel, table=True):
     id: str = Field(primary_key=True)
     user_id: str | None = Field(default=None, foreign_key="users.id")
     briefing_date: str
-    content: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
+    content: dict[str, Any] = Field(sa_column=Column(_JSON, nullable=False))
     generated_at: datetime = Field(default_factory=_utcnow)
 
 
@@ -348,7 +353,7 @@ class WeeklyBriefingRecord(SQLModel, table=True):
     id: str = Field(primary_key=True)
     user_id: str | None = Field(default=None, foreign_key="users.id")
     week_start: str
-    content: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
+    content: dict[str, Any] = Field(sa_column=Column(_JSON, nullable=False))
     generated_at: datetime = Field(default_factory=_utcnow)
 
 
