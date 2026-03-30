@@ -1,6 +1,7 @@
 """Google Calendar read-only integration using OAuth2."""
 
 import json
+import logging
 import os
 import threading
 from datetime import datetime, timedelta, timezone
@@ -12,6 +13,8 @@ from google_auth_oauthlib.flow import Flow
 import httplib2
 from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
+
+logger = logging.getLogger(__name__)
 
 from sqlmodel import Session, select
 
@@ -193,7 +196,7 @@ def get_credentials(user_id: str = "") -> Credentials | None:
             creds.refresh(Request())
             _save_credentials(creds, user_id=user_id)
         except Exception:
-            # Token refresh failed — user needs to re-authorize
+            logger.warning("Google Calendar token refresh failed", exc_info=True)
             return None
 
     if not creds.valid:
