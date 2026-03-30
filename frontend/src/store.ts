@@ -531,12 +531,12 @@ interface ReliState {
     url: string
   }) => Promise<{ success: boolean; issueUrl?: string; error?: string }>
 
-  // Command palette
+  // Keyboard shortcuts — command palette
   commandPaletteOpen: boolean
   openCommandPalette: () => void
   closeCommandPalette: () => void
 
-  // Quick-add dialog
+  // Keyboard shortcuts — quick add
   quickAddOpen: boolean
   openQuickAdd: () => void
   closeQuickAdd: () => void
@@ -548,6 +548,14 @@ interface ReliState {
 
   // toggleRightView alias
   toggleRightView: () => void
+
+  // Create a Thing directly (quick add)
+  createThing: (title: string, typeHint?: string) => Promise<Thing>
+
+  // Chat input focus (registered by ChatPanel)
+  _chatInputFocusFn: (() => void) | null
+  registerChatInputFocus: (fn: () => void) => void
+  focusChatInput: () => void
 }
 
 const HISTORY_PAGE_SIZE = 20
@@ -1604,6 +1612,28 @@ export const useStore = create<ReliState>((set, get) => ({
   feedbackOpen: false,
   openFeedback: () => set({ feedbackOpen: true }),
   closeFeedback: () => set({ feedbackOpen: false }),
+
+  // Create a Thing
+  createThing: async (title: string, typeHint?: string) => {
+    const res = await apiFetch(`${BASE}/things`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, type_hint: typeHint ?? null }),
+    })
+    if (!res.ok) throw new Error(`Failed to create thing: ${res.status}`)
+    const data = validateResponse(ThingSchema, await res.json(), '/things POST')
+    // Refresh things list
+    get().fetchThings()
+    return data
+  },
+
+  // Chat input focus
+  _chatInputFocusFn: null,
+  registerChatInputFocus: (fn: () => void) => set({ _chatInputFocusFn: fn }),
+  focusChatInput: () => {
+    const fn = get()._chatInputFocusFn
+    if (fn) fn()
+  },
   submitFeedback: async (data) => {
     try {
       const res = await apiFetch(`${BASE}/feedback`, {
