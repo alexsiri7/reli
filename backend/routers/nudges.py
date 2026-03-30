@@ -5,16 +5,20 @@ POST /nudges/{id}/dismiss → mark nudge as dismissed for today
 POST /nudges/{id}/stop    → suppress this nudge type permanently (preference signal)
 """
 
+import json
 import re
-import sqlite3
 from datetime import date
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import String, cast
+from sqlmodel import Session, select
 
-from ..auth import require_user, user_filter
-from ..database import db
+from ..auth import require_user
+import backend.db_engine as _engine_mod
+from ..db_engine import user_filter_clause
+from ..db_models import NudgeDismissalRecord, NudgeSuppressionRecord, ThingRecord
 from ..models import Nudge
-from .things import _row_to_thing
+from .things import _record_to_thing
 
 router = APIRouter(prefix="/nudges", tags=["nudges"])
 
@@ -66,8 +70,8 @@ def _days_until_recurring(target: date, today: date) -> int:
     return (today.replace(year=today.year + 1, month=target.month, day=target.day) - today).days
 
 
-def _build_nudge_from_surface(thing_row: sqlite3.Row, date_key: str, reason: str, days: int) -> Nudge:
-    thing = _row_to_thing(thing_row)
+def _build_nudge_from_surface(record: ThingRecord, date_key: str, reason: str, days: int) -> Nudge:
+    thing = _record_to_thing(record)
     nudge_id = f"proactive_{thing.id}_{date_key}"
     action = None
     if thing.type_hint in ("person", "contact"):
@@ -91,38 +95,48 @@ def get_nudges(user_id: str = Depends(require_user)) -> list[Nudge]:
     """Return today's proactive nudges (max 3), respecting dismissals and suppressions."""
     today = date.today()
     today_str = today.isoformat()
-    uf_sql, uf_params = user_filter(user_id)
 
-    with db() as conn:
+    with Session(_engine_mod.engine) as session:
         # Dismissed nudge IDs for today
-        dismissed_rows = conn.execute(
-            "SELECT nudge_id FROM nudge_dismissals WHERE user_id = ? AND dismissed_date = ?",
-            (user_id, today_str),
-        ).fetchall()
-        dismissed_ids = {r["nudge_id"] for r in dismissed_rows}
+        dismissed_records = session.exec(
+            select(NudgeDismissalRecord).where(
+                NudgeDismissalRecord.user_id == user_id,
+                NudgeDismissalRecord.dismissed_date == today_str,
+            )
+        ).all()
+        dismissed_ids = {r.nudge_id for r in dismissed_records}
 
         # Suppressed nudge types
-        suppressed_rows = conn.execute(
-            "SELECT nudge_type FROM nudge_suppressions WHERE user_id = ?",
-            (user_id,),
-        ).fetchall()
-        suppressed_types = {r["nudge_type"] for r in suppressed_rows}
+        suppressed_records = session.exec(
+            select(NudgeSuppressionRecord).where(
+                NudgeSuppressionRecord.user_id == user_id,
+            )
+        ).all()
+        suppressed_types = {r.nudge_type for r in suppressed_records}
 
-        # Fetch things with upcoming dates (window: 7 days)
-        rows = conn.execute(
-            f"SELECT * FROM things WHERE data IS NOT NULL AND CAST(data AS TEXT) != '{{}}' AND CAST(data AS TEXT) != 'null' AND active = true{uf_sql}",
-            uf_params,
-        ).fetchall()
+        # Fetch things with non-empty data
+        thing_stmt = (
+            select(ThingRecord)
+            .where(
+                ThingRecord.data.is_not(None),  # type: ignore[union-attr]
+                cast(ThingRecord.data, String) != '{}',
+                cast(ThingRecord.data, String) != 'null',
+                ThingRecord.active == True,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+        )
+        thing_records = session.exec(thing_stmt).all()
 
     nudges: list[Nudge] = []
-    for row in rows:
+    for record in thing_records:
         if "approaching_date" in suppressed_types:
             break
-        import json
-        try:
-            data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
-        except (ValueError, TypeError):
-            continue
+        data = record.data
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except (ValueError, TypeError):
+                continue
         if not isinstance(data, dict):
             continue
         for key, value in data.items():
@@ -147,7 +161,7 @@ def get_nudges(user_id: str = Depends(require_user)) -> list[Nudge]:
                 reason = f"{label} tomorrow"
             else:
                 reason = f"{label} in {days}d"
-            nudge = _build_nudge_from_surface(row, key_lower, reason, days)
+            nudge = _build_nudge_from_surface(record, key_lower, reason, days)
             if nudge.id not in dismissed_ids:
                 nudges.append(nudge)
 
@@ -161,12 +175,22 @@ def get_nudges(user_id: str = Depends(require_user)) -> list[Nudge]:
 def dismiss_nudge(nudge_id: str, user_id: str = Depends(require_user)) -> dict:
     """Dismiss a nudge — it won't reappear today."""
     today_str = date.today().isoformat()
-    with db() as conn:
-        conn.execute(
-            "INSERT OR IGNORE INTO nudge_dismissals (user_id, nudge_id, dismissed_date) VALUES (?, ?, ?)",
-            (user_id, nudge_id, today_str),
-        )
-        conn.commit()
+    with Session(_engine_mod.engine) as session:
+        # Check if already dismissed (equivalent to INSERT OR IGNORE)
+        existing = session.exec(
+            select(NudgeDismissalRecord).where(
+                NudgeDismissalRecord.user_id == user_id,
+                NudgeDismissalRecord.nudge_id == nudge_id,
+                NudgeDismissalRecord.dismissed_date == today_str,
+            )
+        ).first()
+        if not existing:
+            session.add(NudgeDismissalRecord(
+                user_id=user_id,
+                nudge_id=nudge_id,
+                dismissed_date=today_str,
+            ))
+            session.commit()
     return {"ok": True}
 
 
@@ -176,17 +200,35 @@ def stop_nudge_type(nudge_id: str, user_id: str = Depends(require_user)) -> dict
     # Extract nudge_type from nudge_id (format: "{type}_{thing_id}_{key}")
     nudge_type = nudge_id.split("_")[0] if "_" in nudge_id else nudge_id
 
-    with db() as conn:
-        # Record suppression
-        conn.execute(
-            "INSERT OR IGNORE INTO nudge_suppressions (user_id, nudge_type) VALUES (?, ?)",
-            (user_id, nudge_type),
-        )
+    today_str = date.today().isoformat()
+    with Session(_engine_mod.engine) as session:
+        # Record suppression (equivalent to INSERT OR IGNORE)
+        existing_suppression = session.exec(
+            select(NudgeSuppressionRecord).where(
+                NudgeSuppressionRecord.user_id == user_id,
+                NudgeSuppressionRecord.nudge_type == nudge_type,
+            )
+        ).first()
+        if not existing_suppression:
+            session.add(NudgeSuppressionRecord(
+                user_id=user_id,
+                nudge_type=nudge_type,
+            ))
+
         # Also dismiss for today
-        today_str = date.today().isoformat()
-        conn.execute(
-            "INSERT OR IGNORE INTO nudge_dismissals (user_id, nudge_id, dismissed_date) VALUES (?, ?, ?)",
-            (user_id, nudge_id, today_str),
-        )
-        conn.commit()
+        existing_dismissal = session.exec(
+            select(NudgeDismissalRecord).where(
+                NudgeDismissalRecord.user_id == user_id,
+                NudgeDismissalRecord.nudge_id == nudge_id,
+                NudgeDismissalRecord.dismissed_date == today_str,
+            )
+        ).first()
+        if not existing_dismissal:
+            session.add(NudgeDismissalRecord(
+                user_id=user_id,
+                nudge_id=nudge_id,
+                dismissed_date=today_str,
+            ))
+
+        session.commit()
     return {"ok": True, "suppressed_type": nudge_type}
