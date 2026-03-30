@@ -352,6 +352,31 @@ class WeeklyBriefingRecord(SQLModel, table=True):
     generated_at: datetime = Field(default_factory=_utcnow)
 
 
+# Nudge Dismissals & Suppressions
+# ---------------------------------------------------------------------------
+
+
+class NudgeDismissalRecord(SQLModel, table=True):
+    """A nudge dismissed by a user for a specific date."""
+
+    __tablename__ = "nudge_dismissals"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: str
+    nudge_id: str
+    dismissed_date: str
+
+
+class NudgeSuppressionRecord(SQLModel, table=True):
+    """A permanently suppressed nudge type for a user."""
+
+    __tablename__ = "nudge_suppressions"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: str
+    nudge_type: str
+
+
 # ---------------------------------------------------------------------------
 # Thing Embeddings (pgvector)
 # ---------------------------------------------------------------------------

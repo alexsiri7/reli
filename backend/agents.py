@@ -766,6 +766,7 @@ def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
     if not user_id:
         return []
 
+    from sqlalchemy import String, cast
     from sqlmodel import Session, select
 
     import backend.db_engine as _engine_mod
@@ -774,26 +775,20 @@ def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
 
     patterns: list[dict[str, Any]] = []
 
-    # Use raw SQL to avoid SQLAlchemy's JSON processor failing on malformed data.
-    # The data column may contain invalid JSON in older records.
-    from sqlalchemy import text as sa_text
-
+    # Select data as raw text to avoid SQLAlchemy's JSON processor failing
+    # on malformed data that may exist in older records.
     with Session(_engine_mod.engine) as session:
-        uf_clause = ""
-        bind_params: dict[str, Any] = {}
-        if user_id:
-            uf_clause = " AND (user_id = :uid OR user_id IS NULL)"
-            bind_params["uid"] = user_id
-        result = session.execute(
-            sa_text(
-                f"SELECT data FROM things WHERE type_hint = 'preference' AND active = true{uf_clause}"
-            ),
-            bind_params,
+        stmt = (
+            select(cast(ThingRecord.data, String))
+            .where(
+                ThingRecord.type_hint == "preference",
+                ThingRecord.active == True,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
         )
-        rows = result.fetchall()
+        rows = session.exec(stmt).all()
 
-    for row in rows:
-        raw = row[0]
+    for raw in rows:
         if not raw:
             continue
         try:

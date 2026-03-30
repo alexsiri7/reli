@@ -3,10 +3,10 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import text
+from sqlalchemy import func, select as sa_select
 from sqlmodel import Session, select
 
-from ..db_engine import get_session, user_filter_clause, user_filter_text
+from ..db_engine import get_session, user_filter_clause
 from ..db_models import ThingRecord
 
 from ..auth import require_user
@@ -19,7 +19,7 @@ from ..models import (
 )
 from ..sweep import _parse_date_value
 from .settings import get_user_stale_threshold
-from .things import _record_to_thing, _row_to_thing
+from .things import _record_to_thing
 
 router = APIRouter(prefix="/staleness", tags=["staleness"])
 
@@ -40,46 +40,57 @@ def get_staleness_report(
     cutoff = today.isoformat()
     stale_cutoff = (today - timedelta(days=threshold)).isoformat()
 
-    uf_frag, uf_params = user_filter_text(user_id, "t")
-
     with Session(_engine_mod.engine) as session:
-        stale_rows = session.execute(
-            text(
-                f"""SELECT t.*,
-                           (SELECT COUNT(*) FROM things c
-                            WHERE c.parent_id = t.id AND c.active = true) AS active_children
-                    FROM things t
-                    WHERE t.active = true
-                      AND t.updated_at < :stale_cutoff{uf_frag}
-                    ORDER BY t.updated_at ASC"""
-            ),
-            {"stale_cutoff": stale_cutoff, **uf_params},
-        ).fetchall()
+        # Subquery: count active children per thing
+        child_count_sq = (
+            sa_select(
+                ThingRecord.parent_id,
+                func.count().label("active_children"),
+            )
+            .where(ThingRecord.active == True)
+            .group_by(ThingRecord.parent_id)
+            .subquery()
+        )
 
-        uf_frag2, uf_params2 = user_filter_text(user_id)
-        overdue_rows = session.execute(
-            text(
-                f"""SELECT * FROM things
-                    WHERE active = true
-                      AND checkin_date IS NOT NULL
-                      AND DATE(checkin_date) < :cutoff_date{uf_frag2}
-                    ORDER BY checkin_date ASC"""
-            ),
-            {"cutoff_date": cutoff, **uf_params2},
-        ).fetchall()
+        # Stale things with active_children count
+        stale_stmt = (
+            select(ThingRecord, child_count_sq.c.active_children)
+            .outerjoin(child_count_sq, ThingRecord.id == child_count_sq.c.parent_id)
+            .where(
+                ThingRecord.active == True,
+                ThingRecord.updated_at < stale_cutoff,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+            .order_by(ThingRecord.updated_at.asc())  # type: ignore[union-attr]
+        )
+        stale_results = session.exec(stale_stmt).all()
+
+        # Overdue checkins
+        overdue_stmt = (
+            select(ThingRecord)
+            .where(
+                ThingRecord.active == True,
+                ThingRecord.checkin_date.is_not(None),  # type: ignore[union-attr]
+                ThingRecord.checkin_date < cutoff,  # type: ignore[operator]
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+            .order_by(ThingRecord.checkin_date.asc())  # type: ignore[union-attr]
+        )
+        overdue_records = session.exec(overdue_stmt).all()
 
     stale_items: list[StaleItem] = []
     neglected_count = 0
     plain_stale_count = 0
 
-    for row in stale_rows:
-        thing = _row_to_thing(row)
-        updated = row.updated_at or ""
-        parsed = _parse_date_value(updated)
+    for record, active_children_val in stale_results:
+        active_children = active_children_val or 0
+
+        thing = _record_to_thing(record)
+        updated = record.updated_at or ""
+        parsed = _parse_date_value(str(updated) if updated else "")
         days_stale = (today - parsed).days if parsed else threshold
 
-        active_children = row.active_children or 0
-        importance = row.importance if row.importance is not None else 2
+        importance = record.importance if record.importance is not None else 2
         is_neglected = importance <= 1 or active_children > 0
 
         if is_neglected:
@@ -97,9 +108,9 @@ def get_staleness_report(
         )
 
     overdue_list: list[OverdueCheckin] = []
-    for row in overdue_rows:
-        thing = _row_to_thing(row)
-        parsed = _parse_date_value(row.checkin_date)
+    for record in overdue_records:
+        thing = _record_to_thing(record)
+        parsed = _parse_date_value(str(record.checkin_date) if record.checkin_date else "")
         days_overdue = (today - parsed).days if parsed else 1
         overdue_list.append(OverdueCheckin(thing=thing, days_overdue=days_overdue))
 
