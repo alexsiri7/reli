@@ -110,7 +110,7 @@ def get_nudges(user_id: str = Depends(require_user)) -> list[Nudge]:
 
         # Fetch things with upcoming dates (window: 7 days)
         rows = conn.execute(
-            f"SELECT * FROM things WHERE data IS NOT NULL AND data != '{{}}' AND data != 'null' AND active = 1{uf_sql}",
+            f"SELECT * FROM things WHERE data IS NOT NULL AND CAST(data AS TEXT) != '{{}}' AND CAST(data AS TEXT) != 'null' AND active = true{uf_sql}",
             uf_params,
         ).fetchall()
 

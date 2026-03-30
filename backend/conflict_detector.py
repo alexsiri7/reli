@@ -123,8 +123,8 @@ def detect_blocking_chains(
            JOIN things bf ON bf.id = r.from_thing_id
            JOIN things bt ON bt.id = r.to_thing_id
            WHERE r.relationship_type IN ('blocks', 'depends-on')
-             AND bf.active = 1
-             AND bt.active = 1"""
+             AND bf.active = true
+             AND bt.active = true"""
         )
     ).fetchall()
 
@@ -213,8 +213,8 @@ def detect_schedule_overlaps(
     rows = session.execute(
         text(
             """SELECT id, title, data, checkin_date FROM things
-           WHERE active = 1
-             AND (data IS NOT NULL AND data != '{}' AND data != 'null')"""
+           WHERE active = true
+             AND (data IS NOT NULL AND CAST(data AS TEXT) != '{}' AND CAST(data AS TEXT) != 'null')"""
         )
     ).fetchall()
 
@@ -308,8 +308,8 @@ def detect_deadline_conflicts(
            JOIN things df ON df.id = r.from_thing_id
            JOIN things dt ON dt.id = r.to_thing_id
            WHERE r.relationship_type IN ('depends-on', 'blocks')
-             AND df.active = 1
-             AND dt.active = 1"""
+             AND df.active = true
+             AND dt.active = true"""
         )
     ).fetchall()
 

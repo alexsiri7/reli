@@ -41,7 +41,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import func, text
+from sqlalchemy import String, cast, func, text
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
@@ -195,7 +195,7 @@ def find_approaching_dates(
         .where(
             ThingRecord.active == True,  # noqa: E712
             ThingRecord.data.is_not(None),  # type: ignore[union-attr]
-            ThingRecord.data != {},
+            cast(ThingRecord.data, String) != '{}',
             user_filter_clause(ThingRecord.user_id, user_id),
         )
     )
@@ -672,7 +672,7 @@ def find_information_gaps(
              AND p.type_hint = 'project'
              AND p.checkin_date IS NULL
              AND {_NO_OQ.replace('open_questions', 'p.open_questions')}{uf_sql_p}
-           GROUP BY p.id, p.title, p.data
+           GROUP BY p.id, p.title, CAST(p.data AS TEXT)
            HAVING COUNT(c.id) > 0"""
         ),
         uf_params_p,

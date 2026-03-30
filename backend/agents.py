@@ -342,7 +342,7 @@ def apply_storage_changes(
         # Deduplicate: if an active Thing with the same title already exists (case-insensitive),
         # convert the create into an update on the existing Thing instead of silently skipping.
         existing = conn.execute(
-            "SELECT * FROM things WHERE LOWER(title) = LOWER(?) AND active = 1 LIMIT 1", (title,)
+            "SELECT * FROM things WHERE LOWER(title) = LOWER(?) AND active = true LIMIT 1", (title,)
         ).fetchone()
 
         # Possessive dedup: if no exact title match, check whether the user already
@@ -375,7 +375,7 @@ def apply_storage_changes(
                         "SELECT t.* FROM things t"
                         " JOIN thing_relationships r ON r.to_thing_id = t.id"
                         " WHERE r.from_thing_id = ? AND r.relationship_type = ?"
-                        " AND t.active = 1 LIMIT 1",
+                        " AND t.active = true LIMIT 1",
                         (from_id, rel_type),
                     ).fetchone()
                     if match:
@@ -786,7 +786,7 @@ def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
             bind_params["uid"] = user_id
         result = session.execute(
             sa_text(
-                f"SELECT data FROM things WHERE type_hint = 'preference' AND active = 1{uf_clause}"
+                f"SELECT data FROM things WHERE type_hint = 'preference' AND active = true{uf_clause}"
             ),
             bind_params,
         )
