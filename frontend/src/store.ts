@@ -143,6 +143,12 @@ export interface BriefingItem {
   reasons: string[]
 }
 
+export interface BriefingStats {
+  active_things: number
+  checkin_due: number
+  overdue: number
+}
+
 export interface MorningBriefingItem {
   thing_id: string
   title: string
@@ -387,6 +393,8 @@ interface ReliState {
   things: Thing[]
   briefing: Thing[]
   theOneThing: BriefingItem | null
+  secondaryItems: BriefingItem[]
+  briefingStats: BriefingStats | null
   findings: SweepFinding[]
   messages: ChatMessage[]
   sessionId: string
@@ -683,6 +691,8 @@ export const useStore = create<ReliState>((set, get) => ({
   things: [],
   briefing: [],
   theOneThing: null,
+  secondaryItems: [],
+  briefingStats: null,
   findings: [],
   messages: [],
   sessionId: '',
@@ -924,9 +934,21 @@ export const useStore = create<ReliState>((set, get) => ({
         reasons: data.the_one_thing.reasons,
       } : null
       if (data.the_one_thing) things.push(data.the_one_thing.thing)
-      for (const item of data.secondary ?? []) things.push(item.thing)
+      const secondaryItems: BriefingItem[] = (data.secondary ?? []).map((item: { thing: Thing; importance: number; urgency: number; score: number; reasons: string[] }) => ({
+        thing: item.thing,
+        importance: item.importance,
+        urgency: item.urgency,
+        score: item.score,
+        reasons: item.reasons,
+      }))
+      for (const item of secondaryItems) things.push(item.thing)
       const findings = data.findings ?? []
-      set({ briefing: things, theOneThing, findings })
+      const briefingStats: BriefingStats | null = data.stats ? {
+        active_things: data.stats.active_things ?? 0,
+        checkin_due: data.stats.checkin_due ?? 0,
+        overdue: data.stats.overdue ?? 0,
+      } : null
+      set({ briefing: things, theOneThing, secondaryItems, briefingStats, findings })
       cacheBriefing(things, findings).catch(() => {})
     } catch {
       if (!navigator.onLine) {
