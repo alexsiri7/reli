@@ -21,7 +21,14 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..config import settings
-from ..oauth_state import mcp_auth_codes, mcp_oauth_sessions, mcp_refresh_tokens, mcp_registered_clients
+from ..oauth_state import (
+    cleanup_and_pop,
+    cleanup_and_store,
+    mcp_auth_codes,
+    mcp_oauth_sessions,
+    mcp_refresh_tokens,
+    mcp_registered_clients,
+)
 from .auth import AUTH_SCOPES, GOOGLE_REDIRECT_URI, JWT_EXPIRY_SECONDS, _client_config, _create_jwt, _upsert_user
 
 logger = logging.getLogger(__name__)
@@ -103,7 +110,7 @@ async def oauth_register(request: Request) -> JSONResponse:
         "token_endpoint_auth_method": body.get("token_endpoint_auth_method", "client_secret_post"),
         "scope": body.get("scope", "mcp"),
     }
-    mcp_registered_clients[client_id] = client
+    cleanup_and_store(mcp_registered_clients, client_id, client)
 
     logger.info("MCP OAuth: registered client %s (%s)", client_id, client.get("client_name"))
 
@@ -163,7 +170,7 @@ def oauth_authorize(
         state=server_state,
     )
 
-    mcp_oauth_sessions[server_state] = {
+    cleanup_and_store(mcp_oauth_sessions, server_state, {
         "client_state": state,
         "redirect_uri": redirect_uri,
         "code_challenge": code_challenge,
@@ -171,7 +178,8 @@ def oauth_authorize(
         "client_id": client_id,
         "scope": scope,
         "google_code_verifier": flow.code_verifier or "",
-    }
+        "expires_at": datetime.now(timezone.utc) + timedelta(seconds=AUTH_CODE_TTL_SECONDS),
+    })
 
     return RedirectResponse(url=str(auth_url), status_code=302)
 
@@ -189,13 +197,13 @@ def _issue_token_response(user_id: str, email: str, client_id: str, scope: str) 
     access_token = _create_jwt(user_id, email)
 
     refresh_token = secrets.token_urlsafe(32)
-    mcp_refresh_tokens[refresh_token] = {
+    cleanup_and_store(mcp_refresh_tokens, refresh_token, {
         "user_id": user_id,
         "email": email,
         "client_id": client_id,
         "scope": scope,
         "expires_at": datetime.now(timezone.utc) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
-    }
+    })
 
     return JSONResponse({
         "access_token": access_token,
@@ -219,7 +227,7 @@ async def oauth_token(
     if grant_type == "refresh_token":
         if not refresh_token:
             raise HTTPException(status_code=400, detail="refresh_token is required")
-        session = mcp_refresh_tokens.pop(refresh_token, None)
+        session = cleanup_and_pop(mcp_refresh_tokens, refresh_token)
         if not session:
             raise HTTPException(status_code=400, detail="Invalid or expired refresh_token")
         if datetime.now(timezone.utc) > session["expires_at"]:
@@ -229,7 +237,7 @@ async def oauth_token(
     if grant_type != "authorization_code":
         raise HTTPException(status_code=400, detail="Unsupported grant_type")
 
-    session = mcp_auth_codes.pop(code, None)
+    session = cleanup_and_pop(mcp_auth_codes, code)
     if not session:
         raise HTTPException(status_code=400, detail="Invalid or expired authorization code")
 
