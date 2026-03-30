@@ -48,7 +48,7 @@ create table if not exists things (
     last_referenced timestamptz,
     open_questions jsonb,
     user_id text not null references users(id),
-    embedding vector(3072)
+    embedding vector(1536)
 );
 
 create index if not exists idx_things_checkin on things(checkin_date);
