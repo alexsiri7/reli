@@ -14,10 +14,11 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import text
-from sqlmodel import Session
+from sqlalchemy.orm import aliased
+from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
+from .db_models import ThingRecord, ThingRelationshipRecord
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,16 @@ class ConflictAlert:
     thing_titles: list[str]
 
 
+def _thing_dict(rec: ThingRecord) -> dict:
+    """Convert a ThingRecord to a dict with the keys used by date extraction."""
+    return {
+        "id": rec.id,
+        "title": rec.title,
+        "data": rec.data,
+        "checkin_date": rec.checkin_date,
+    }
+
+
 def detect_blocking_chains(
     session: Session,
     user_id: str = "",
@@ -110,23 +121,36 @@ def detect_blocking_chains(
     today = date.today()
     alerts: list[ConflictAlert] = []
 
-    # Find all blocks/depends-on relationships between active Things
-    # TODO: convert to SQLModel query
-    rows = session.execute(
-        text(
-            """SELECT r.from_thing_id, r.to_thing_id, r.relationship_type,
-                  bf.id as blocker_id, bf.title as blocker_title, bf.active as blocker_active,
-                  bf.data as blocker_data, bf.checkin_date as blocker_checkin,
-                  bt.id as blocked_id, bt.title as blocked_title, bt.active as blocked_active,
-                  bt.data as blocked_data, bt.checkin_date as blocked_checkin
-           FROM thing_relationships r
-           JOIN things bf ON bf.id = r.from_thing_id
-           JOIN things bt ON bt.id = r.to_thing_id
-           WHERE r.relationship_type IN ('blocks', 'depends-on')
-             AND bf.active = true
-             AND bt.active = true"""
+    # Aliased tables for the two sides of the relationship
+    FromThing = aliased(ThingRecord)
+    ToThing = aliased(ThingRecord)
+
+    stmt = (
+        select(
+            ThingRelationshipRecord.from_thing_id,
+            ThingRelationshipRecord.to_thing_id,
+            ThingRelationshipRecord.relationship_type,
+            FromThing.id.label("blocker_id"),  # type: ignore[union-attr]
+            FromThing.title.label("blocker_title"),  # type: ignore[union-attr]
+            FromThing.active.label("blocker_active"),  # type: ignore[union-attr]
+            FromThing.data.label("blocker_data"),  # type: ignore[union-attr]
+            FromThing.checkin_date.label("blocker_checkin"),  # type: ignore[union-attr]
+            ToThing.id.label("blocked_id"),  # type: ignore[union-attr]
+            ToThing.title.label("blocked_title"),  # type: ignore[union-attr]
+            ToThing.active.label("blocked_active"),  # type: ignore[union-attr]
+            ToThing.data.label("blocked_data"),  # type: ignore[union-attr]
+            ToThing.checkin_date.label("blocked_checkin"),  # type: ignore[union-attr]
         )
-    ).fetchall()
+        .join(FromThing, FromThing.id == ThingRelationshipRecord.from_thing_id)  # type: ignore[union-attr]
+        .join(ToThing, ToThing.id == ThingRelationshipRecord.to_thing_id)  # type: ignore[union-attr]
+        .where(
+            ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"]),  # type: ignore[union-attr]
+            FromThing.active == True,  # type: ignore[union-attr]
+            ToThing.active == True,  # type: ignore[union-attr]
+        )
+    )
+
+    rows = session.execute(stmt).all()
 
     for row in rows:
         rel_type = row.relationship_type
@@ -209,19 +233,17 @@ def detect_schedule_overlaps(
     alerts: list[ConflictAlert] = []
 
     # Get all active Things with date data
-    # TODO: convert to SQLModel query
-    rows = session.execute(
-        text(
-            """SELECT id, title, data, checkin_date FROM things
-           WHERE active = true
-             AND (data IS NOT NULL AND CAST(data AS TEXT) != '{}' AND CAST(data AS TEXT) != 'null')"""
-        )
-    ).fetchall()
+    stmt = select(ThingRecord).where(
+        ThingRecord.active == True,
+        ThingRecord.data.is_not(None),  # type: ignore[union-attr]
+        ThingRecord.data != {},  # type: ignore[arg-type]
+    )
+    rows = session.exec(stmt).all()
 
     # Build map of things with date ranges
     things_with_ranges: list[tuple[dict, date, date]] = []
-    for row in rows:
-        thing = row._asdict()
+    for rec in rows:
+        thing = _thing_dict(rec)
         dates = _extract_dates(thing)
         start, end = _get_date_range(dates)
         if start and end and start <= end:
@@ -238,15 +260,16 @@ def detect_schedule_overlaps(
     if not thing_ids:
         return alerts
 
-    ph = ",".join(f":id{i}" for i in range(len(thing_ids)))
-    params = {f"id{i}": tid for i, tid in enumerate(thing_ids)}
-    rels = session.execute(
-        text(
-            f"""SELECT from_thing_id, to_thing_id FROM thing_relationships
-            WHERE from_thing_id IN ({ph}) OR to_thing_id IN ({ph})"""
-        ),
-        params,
-    ).fetchall()
+    rel_stmt = select(
+        ThingRelationshipRecord.from_thing_id,
+        ThingRelationshipRecord.to_thing_id,
+    ).where(
+        or_(
+            ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[union-attr]
+            ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[union-attr]
+        )
+    )
+    rels = session.execute(rel_stmt).all()
 
     related_pairs: set[tuple[str, str]] = set()
     for rel in rels:
@@ -295,23 +318,34 @@ def detect_deadline_conflicts(
     its dependent's deadline (the thing you depend on is due after you)."""
     alerts: list[ConflictAlert] = []
 
-    # Get depends-on relationships between active Things
-    # TODO: convert to SQLModel query
-    rows = session.execute(
-        text(
-            """SELECT r.from_thing_id, r.to_thing_id, r.relationship_type,
-                  df.id as dep_id, df.title as dep_title,
-                  df.data as dep_data, df.checkin_date as dep_checkin,
-                  dt.id as depn_id, dt.title as depn_title,
-                  dt.data as depn_data, dt.checkin_date as depn_checkin
-           FROM thing_relationships r
-           JOIN things df ON df.id = r.from_thing_id
-           JOIN things dt ON dt.id = r.to_thing_id
-           WHERE r.relationship_type IN ('depends-on', 'blocks')
-             AND df.active = true
-             AND dt.active = true"""
+    # Aliased tables for the two sides of the relationship
+    FromThing = aliased(ThingRecord)
+    ToThing = aliased(ThingRecord)
+
+    stmt = (
+        select(
+            ThingRelationshipRecord.from_thing_id,
+            ThingRelationshipRecord.to_thing_id,
+            ThingRelationshipRecord.relationship_type,
+            FromThing.id.label("dep_id"),  # type: ignore[union-attr]
+            FromThing.title.label("dep_title"),  # type: ignore[union-attr]
+            FromThing.data.label("dep_data"),  # type: ignore[union-attr]
+            FromThing.checkin_date.label("dep_checkin"),  # type: ignore[union-attr]
+            ToThing.id.label("depn_id"),  # type: ignore[union-attr]
+            ToThing.title.label("depn_title"),  # type: ignore[union-attr]
+            ToThing.data.label("depn_data"),  # type: ignore[union-attr]
+            ToThing.checkin_date.label("depn_checkin"),  # type: ignore[union-attr]
         )
-    ).fetchall()
+        .join(FromThing, FromThing.id == ThingRelationshipRecord.from_thing_id)  # type: ignore[union-attr]
+        .join(ToThing, ToThing.id == ThingRelationshipRecord.to_thing_id)  # type: ignore[union-attr]
+        .where(
+            ThingRelationshipRecord.relationship_type.in_(["depends-on", "blocks"]),  # type: ignore[union-attr]
+            FromThing.active == True,  # type: ignore[union-attr]
+            ToThing.active == True,  # type: ignore[union-attr]
+        )
+    )
+
+    rows = session.execute(stmt).all()
 
     for row in rows:
         rel_type = row.relationship_type
