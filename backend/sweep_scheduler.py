@@ -141,7 +141,8 @@ async def _run_sweep_for_user(user_id: str) -> None:
             try:
                 from .preference_sweep import aggregate_preference_patterns
 
-                pref_result = await aggregate_preference_patterns(user_id=user_id)
+                async with asyncio.timeout(300):
+                    pref_result = await aggregate_preference_patterns(user_id=user_id)
                 if pref_result.preferences_created or pref_result.preferences_updated:
                     logger.info(
                         "Preference sweep [%s]: %d created, %d updated",
@@ -149,6 +150,8 @@ async def _run_sweep_for_user(user_id: str) -> None:
                         pref_result.preferences_created,
                         pref_result.preferences_updated,
                     )
+            except TimeoutError:
+                logger.error("Preference sweep timed out for user %s (300s limit)", user_label)
             except Exception:
                 logger.exception("Preference sweep failed for user %s", user_label)
 
@@ -156,7 +159,8 @@ async def _run_sweep_for_user(user_id: str) -> None:
             try:
                 from .preference_sweep import aggregate_communication_style_patterns
 
-                comm_result = await aggregate_communication_style_patterns(user_id=user_id)
+                async with asyncio.timeout(300):
+                    comm_result = await aggregate_communication_style_patterns(user_id=user_id)
                 if comm_result.patterns_added or comm_result.patterns_reinforced or comm_result.patterns_removed:
                     logger.info(
                         "Comm style sweep [%s]: %d added, %d reinforced, %d removed",
@@ -165,6 +169,8 @@ async def _run_sweep_for_user(user_id: str) -> None:
                         comm_result.patterns_reinforced,
                         comm_result.patterns_removed,
                     )
+            except TimeoutError:
+                logger.error("Comm style sweep timed out for user %s (300s limit)", user_label)
             except Exception:
                 logger.exception("Comm style sweep failed for user %s", user_label)
 
@@ -172,9 +178,12 @@ async def _run_sweep_for_user(user_id: str) -> None:
             try:
                 from .morning_briefing import generate_morning_briefing, store_morning_briefing
 
-                content = generate_morning_briefing(user_id)
-                store_morning_briefing(user_id, content)
+                async with asyncio.timeout(300):
+                    content = await asyncio.to_thread(generate_morning_briefing, user_id)
+                    await asyncio.to_thread(store_morning_briefing, user_id, content)
                 logger.info("Morning briefing generated for user %s (no sweep candidates)", user_label)
+            except TimeoutError:
+                logger.error("Morning briefing timed out for user %s (300s limit)", user_label)
             except Exception:
                 logger.exception("Failed to generate morning briefing for user %s", user_label)
 
@@ -183,20 +192,25 @@ async def _run_sweep_for_user(user_id: str) -> None:
                 if datetime.now().weekday() == 0:  # 0 = Monday
                     from .weekly_briefing import generate_weekly_briefing, store_weekly_briefing
 
-                    weekly_content = generate_weekly_briefing(user_id)
-                    store_weekly_briefing(user_id, weekly_content)
+                    async with asyncio.timeout(300):
+                        weekly_content = await asyncio.to_thread(generate_weekly_briefing, user_id)
+                        await asyncio.to_thread(store_weekly_briefing, user_id, weekly_content)
                     logger.info("Weekly briefing generated for user %s (no sweep candidates)", user_label)
+            except TimeoutError:
+                logger.error("Weekly briefing timed out for user %s (300s limit)", user_label)
             except Exception:
                 logger.exception("Failed to generate weekly briefing for user %s", user_label)
             return
 
-        result = await reflect_on_candidates(candidates, user_id=user_id)
+        async with asyncio.timeout(300):
+            result = await reflect_on_candidates(candidates, user_id=user_id)
 
         # Preference aggregation: detect behavioral patterns from interactions
         try:
             from .preference_sweep import aggregate_preference_patterns
 
-            pref_result = await aggregate_preference_patterns(user_id=user_id)
+            async with asyncio.timeout(300):
+                pref_result = await aggregate_preference_patterns(user_id=user_id)
             if pref_result.preferences_created or pref_result.preferences_updated:
                 logger.info(
                     "Preference sweep [%s]: %d created, %d updated",
@@ -204,6 +218,8 @@ async def _run_sweep_for_user(user_id: str) -> None:
                     pref_result.preferences_created,
                     pref_result.preferences_updated,
                 )
+        except TimeoutError:
+            logger.error("Preference sweep timed out for user %s (300s limit)", user_label)
         except Exception:
             logger.exception("Preference sweep failed for user %s", user_label)
 
@@ -211,7 +227,8 @@ async def _run_sweep_for_user(user_id: str) -> None:
         try:
             from .preference_sweep import aggregate_communication_style_patterns
 
-            comm_result = await aggregate_communication_style_patterns(user_id=user_id)
+            async with asyncio.timeout(300):
+                comm_result = await aggregate_communication_style_patterns(user_id=user_id)
             if comm_result.patterns_added or comm_result.patterns_reinforced or comm_result.patterns_removed:
                 logger.info(
                     "Comm style sweep [%s]: %d added, %d reinforced, %d removed",
@@ -220,6 +237,8 @@ async def _run_sweep_for_user(user_id: str) -> None:
                     comm_result.patterns_reinforced,
                     comm_result.patterns_removed,
                 )
+        except TimeoutError:
+            logger.error("Comm style sweep timed out for user %s (300s limit)", user_label)
         except Exception:
             logger.exception("Comm style sweep failed for user %s", user_label)
 
@@ -247,9 +266,12 @@ async def _run_sweep_for_user(user_id: str) -> None:
         try:
             from .morning_briefing import generate_morning_briefing, store_morning_briefing
 
-            content = generate_morning_briefing(user_id)
-            store_morning_briefing(user_id, content)
+            async with asyncio.timeout(300):
+                content = await asyncio.to_thread(generate_morning_briefing, user_id)
+                await asyncio.to_thread(store_morning_briefing, user_id, content)
             logger.info("Morning briefing generated for user %s", user_label)
+        except TimeoutError:
+            logger.error("Morning briefing timed out for user %s (300s limit)", user_label)
         except Exception:
             logger.exception("Failed to generate morning briefing for user %s", user_label)
 
@@ -258,9 +280,12 @@ async def _run_sweep_for_user(user_id: str) -> None:
             if datetime.now().weekday() == 0:  # 0 = Monday
                 from .weekly_briefing import generate_weekly_briefing, store_weekly_briefing
 
-                weekly_content = generate_weekly_briefing(user_id)
-                store_weekly_briefing(user_id, weekly_content)
+                async with asyncio.timeout(300):
+                    weekly_content = await asyncio.to_thread(generate_weekly_briefing, user_id)
+                    await asyncio.to_thread(store_weekly_briefing, user_id, weekly_content)
                 logger.info("Weekly briefing generated for user %s", user_label)
+        except TimeoutError:
+            logger.error("Weekly briefing timed out for user %s (300s limit)", user_label)
         except Exception:
             logger.exception("Failed to generate weekly briefing for user %s", user_label)
     except Exception as exc:
@@ -291,12 +316,15 @@ async def _run_sweep() -> None:
     try:
         from .connection_sweep import run_connection_sweep
 
-        conn_result = await run_connection_sweep()
+        async with asyncio.timeout(300):
+            conn_result = await run_connection_sweep()
         logger.info(
             "Connection sweep: %d candidates, %d suggestions created",
             conn_result.candidates_found,
             conn_result.suggestions_created,
         )
+    except TimeoutError:
+        logger.error("Connection sweep timed out (300s limit)")
     except Exception:
         logger.exception("Connection sweep failed")
 

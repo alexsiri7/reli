@@ -172,9 +172,12 @@ def _get_service(user_id: str = "") -> Any:
     creds = _load_creds(user_id=user_id)
     if creds is None:
         raise HTTPException(status_code=401, detail="Gmail not connected. Please authorize first.")
+    import httplib2
+    from google_auth_httplib2 import AuthorizedHttp
     from googleapiclient.discovery import build
 
-    return build("gmail", "v1", credentials=creds)
+    authorized_http = AuthorizedHttp(creds, http=httplib2.Http(timeout=30))
+    return build("gmail", "v1", http=authorized_http)
 
 
 def _parse_message(msg: dict[str, Any]) -> GmailMessage:
@@ -230,9 +233,12 @@ def gmail_status(user_id: str = Depends(require_user)) -> GmailStatus:
         return GmailStatus(connected=False)
 
     try:
+        import httplib2
+        from google_auth_httplib2 import AuthorizedHttp
         from googleapiclient.discovery import build
 
-        service = build("gmail", "v1", credentials=creds)
+        authorized_http = AuthorizedHttp(creds, http=httplib2.Http(timeout=30))
+        service = build("gmail", "v1", http=authorized_http)
         profile = service.users().getProfile(userId="me").execute()
         return GmailStatus(connected=True, email=profile.get("emailAddress"))
     except Exception:
