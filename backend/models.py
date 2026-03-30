@@ -1,9 +1,13 @@
 """Pydantic models for request/response validation."""
 
+import json
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Maximum serialized size for arbitrary JSON dict fields (100 KB).
+_MAX_DATA_JSON_BYTES = 100_000
 
 # ── Thing Types ───────────────────────────────────────────────────────────────
 
@@ -39,8 +43,8 @@ class ThingCreate(BaseModel):
     """Create a new Thing (task, note, project, idea, goal, person, etc.)."""
 
     title: str = Field(..., min_length=1, max_length=500, examples=["Buy groceries"])
-    type_hint: str | None = Field(default=None, examples=["task"])
-    parent_id: str | None = Field(default=None, description="Parent Thing ID for hierarchical nesting")
+    type_hint: str | None = Field(default=None, max_length=100, examples=["task"])
+    parent_id: str | None = Field(default=None, max_length=100, description="Parent Thing ID for hierarchical nesting")
     checkin_date: datetime | None = Field(
         default=None, description="Date when this Thing should surface in the briefing"
     )
@@ -50,13 +54,31 @@ class ThingCreate(BaseModel):
     data: dict[str, Any] | None = Field(default=None, description="Arbitrary JSON data (e.g. birthday, email, notes)")
     open_questions: list[str] | None = Field(default=None, description="Unresolved questions about this Thing")
 
+    @field_validator("data")
+    @classmethod
+    def data_max_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is not None and len(json.dumps(v)) > _MAX_DATA_JSON_BYTES:
+            raise ValueError(f"data payload must be under {_MAX_DATA_JSON_BYTES} bytes when JSON-serialized")
+        return v
+
+    @field_validator("open_questions")
+    @classmethod
+    def open_questions_limits(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None:
+            if len(v) > 100:
+                raise ValueError("open_questions may contain at most 100 items")
+            for q in v:
+                if len(q) > 2000:
+                    raise ValueError("each open_question must be at most 2000 characters")
+        return v
+
 
 class ThingUpdate(BaseModel):
     """Partial update for a Thing. Only provided fields are changed."""
 
     title: str | None = Field(default=None, min_length=1, max_length=500)
-    type_hint: str | None = None
-    parent_id: str | None = Field(default=None, description="Parent Thing ID for hierarchical nesting")
+    type_hint: str | None = Field(default=None, max_length=100)
+    parent_id: str | None = Field(default=None, max_length=100, description="Parent Thing ID for hierarchical nesting")
     checkin_date: datetime | None = Field(
         default=None, description="Date when this Thing should surface in the briefing"
     )
@@ -65,6 +87,24 @@ class ThingUpdate(BaseModel):
     surface: bool | None = Field(default=None, description="Whether to show in default views")
     data: dict[str, Any] | None = Field(default=None, description="Arbitrary JSON data")
     open_questions: list[str] | None = Field(default=None, description="Unresolved questions about this Thing")
+
+    @field_validator("data")
+    @classmethod
+    def data_max_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is not None and len(json.dumps(v)) > _MAX_DATA_JSON_BYTES:
+            raise ValueError(f"data payload must be under {_MAX_DATA_JSON_BYTES} bytes when JSON-serialized")
+        return v
+
+    @field_validator("open_questions")
+    @classmethod
+    def open_questions_limits(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None:
+            if len(v) > 100:
+                raise ValueError("open_questions may contain at most 100 items")
+            for q in v:
+                if len(q) > 2000:
+                    raise ValueError("each open_question must be at most 2000 characters")
+        return v
 
 
 class Thing(BaseModel):
@@ -122,12 +162,19 @@ class OrphanCleanupResult(BaseModel):
 class RelationshipCreate(BaseModel):
     """Create a typed relationship between two Things."""
 
-    from_thing_id: str = Field(..., description="Source Thing ID")
-    to_thing_id: str = Field(..., description="Target Thing ID")
+    from_thing_id: str = Field(..., max_length=100, description="Source Thing ID")
+    to_thing_id: str = Field(..., max_length=100, description="Target Thing ID")
     relationship_type: str = Field(
         ..., min_length=1, max_length=100, examples=["works_with"], description="Relationship label"
     )
     metadata: dict[str, Any] | None = Field(default=None, description="Optional metadata for this relationship")
+
+    @field_validator("metadata")
+    @classmethod
+    def metadata_max_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is not None and len(json.dumps(v)) > _MAX_DATA_JSON_BYTES:
+            raise ValueError(f"metadata must be under {_MAX_DATA_JSON_BYTES} bytes when JSON-serialized")
+        return v
 
 
 class Relationship(BaseModel):
@@ -145,10 +192,17 @@ class Relationship(BaseModel):
 
 
 class ChatMessageCreate(BaseModel):
-    session_id: str = Field(..., min_length=1)
+    session_id: str = Field(..., min_length=1, max_length=200)
     role: str = Field(..., pattern="^(user|assistant)$")
-    content: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1, max_length=100_000)
     applied_changes: dict[str, Any] | None = None
+
+    @field_validator("applied_changes")
+    @classmethod
+    def applied_changes_max_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is not None and len(json.dumps(v)) > _MAX_DATA_JSON_BYTES:
+            raise ValueError(f"applied_changes must be under {_MAX_DATA_JSON_BYTES} bytes when JSON-serialized")
+        return v
 
 
 class CallUsage(BaseModel):
@@ -182,7 +236,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """Send a message through the multi-agent chat pipeline."""
 
-    session_id: str = Field(..., min_length=1, description="Chat session identifier", examples=["session-abc123"])
+    session_id: str = Field(..., min_length=1, max_length=200, description="Chat session identifier", examples=["session-abc123"])
     message: str = Field(
         ...,
         min_length=1,
@@ -192,6 +246,7 @@ class ChatRequest(BaseModel):
     )
     mode: str = Field(
         default="normal",
+        max_length=50,
         description="Chat mode ('normal' or 'planning') that changes reasoning behavior",
         examples=["normal", "planning"],
     )
@@ -200,8 +255,8 @@ class ChatRequest(BaseModel):
 class MigrateSessionRequest(BaseModel):
     """Migrate chat history from an old session ID to a new one."""
 
-    old_session_id: str = Field(..., min_length=1, description="The old session ID to migrate from")
-    new_session_id: str = Field(..., min_length=1, description="The new session ID to migrate to")
+    old_session_id: str = Field(..., min_length=1, max_length=200, description="The old session ID to migrate from")
+    new_session_id: str = Field(..., min_length=1, max_length=200, description="The new session ID to migrate to")
 
 
 class UsageInfo(BaseModel):
@@ -267,11 +322,11 @@ class SweepFinding(BaseModel):
 class SweepFindingCreate(BaseModel):
     """Create a sweep finding (insight from the nightly sweep)."""
 
-    thing_id: str | None = Field(default=None, description="Related Thing ID, if applicable")
+    thing_id: str | None = Field(default=None, max_length=100, description="Related Thing ID, if applicable")
     finding_type: str = Field(
         ..., min_length=1, max_length=100, examples=["stale_task"], description="Category of finding"
     )
-    message: str = Field(..., min_length=1, description="Human-readable finding message")
+    message: str = Field(..., min_length=1, max_length=5000, description="Human-readable finding message")
     priority: int = Field(default=2, ge=0, le=4, description="0 (critical) to 4 (backlog)")
     expires_at: datetime | None = Field(default=None, description="Auto-dismiss after this time")
 
@@ -464,8 +519,8 @@ class WeeklyBriefing(BaseModel):
 class PersonalityPattern(BaseModel):
     """A single learned personality/behavior pattern."""
 
-    pattern: str = Field(..., min_length=1, description="The learned preference pattern text")
-    confidence: str = Field(default="emerging", description="Confidence level: emerging, established, or strong")
+    pattern: str = Field(..., min_length=1, max_length=2000, description="The learned preference pattern text")
+    confidence: str = Field(default="emerging", max_length=50, description="Confidence level: emerging, established, or strong")
     observations: int = Field(default=1, ge=1, description="Number of times this pattern has been observed")
 
 
@@ -534,8 +589,8 @@ class MergeSuggestion(BaseModel):
 class MergeRequest(BaseModel):
     """Request to merge two Things."""
 
-    keep_id: str = Field(..., description="ID of the Thing to keep")
-    remove_id: str = Field(..., description="ID of the Thing to merge into keep_id and delete")
+    keep_id: str = Field(..., max_length=100, description="ID of the Thing to keep")
+    remove_id: str = Field(..., max_length=100, description="ID of the Thing to merge into keep_id and delete")
 
 
 class MergeResult(BaseModel):
@@ -590,4 +645,4 @@ class ConnectionSuggestion(BaseModel):
 class ConnectionSuggestionAccept(BaseModel):
     """Accept a connection suggestion, optionally overriding the relationship type."""
 
-    relationship_type: str | None = Field(default=None, description="Override the suggested relationship type")
+    relationship_type: str | None = Field(default=None, max_length=100, description="Override the suggested relationship type")
