@@ -8,6 +8,8 @@ from typing import Any
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
+import httplib2
+from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
 
 from sqlmodel import Session, select
@@ -224,7 +226,8 @@ def fetch_upcoming_events(
     if not creds:
         return []
 
-    service = build("calendar", "v3", credentials=creds)
+    authorized_http = AuthorizedHttp(creds, http=httplib2.Http(timeout=30))
+    service = build("calendar", "v3", http=authorized_http)
 
     now = datetime.now(timezone.utc)
     time_max = now + timedelta(days=days_ahead)
