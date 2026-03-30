@@ -11,6 +11,7 @@ interface GraphNode {
   icon: string | null
   x?: number
   y?: number
+  [key: string]: unknown
 }
 
 interface GraphEdge {
