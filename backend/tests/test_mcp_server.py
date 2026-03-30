@@ -1030,7 +1030,16 @@ class TestTokenAuthMiddleware:
         client = self._make_client("secret-token")
         resp = client.get("/", headers={"Authorization": "Bearer bad"})
         assert resp.status_code == 401
-        assert "Bearer" in resp.headers.get("www-authenticate", "")
+        www_auth = resp.headers.get("www-authenticate", "")
+        assert "Bearer" in www_auth
+
+    def test_www_authenticate_includes_resource_metadata(self) -> None:
+        client = self._make_client("secret-token")
+        resp = client.get("/", headers={"Authorization": "Bearer bad"})
+        assert resp.status_code == 401
+        www_auth = resp.headers.get("www-authenticate", "")
+        assert "resource_metadata=" in www_auth
+        assert "/.well-known/oauth-protected-resource" in www_auth
 
 
 class TestSessionManagerRestart:
