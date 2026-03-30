@@ -16,11 +16,11 @@ import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import text
-from sqlmodel import Session
+from sqlalchemy.orm import aliased
+from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
-from .db_engine import user_filter_clause, user_filter_text
+from .db_engine import user_filter_clause
 from .db_models import ThingRecord, ThingRelationshipRecord, WeeklyBriefingRecord
 from .models import (
     WeeklyBriefing,
@@ -83,8 +83,6 @@ def generate_weekly_briefing(
     # Forward window: upcoming dates in the next 7 days
     upcoming_cutoff = today + timedelta(days=7)
 
-    uf_frag, uf_p = user_filter_text(user_id)
-
     completed: list[WeeklyBriefingItem] = []
     upcoming: list[WeeklyBriefingItem] = []
     new_connections: list[WeeklyBriefingConnection] = []
@@ -92,79 +90,84 @@ def generate_weekly_briefing(
     open_questions: list[WeeklyBriefingItem] = []
 
     with Session(_engine_mod.engine) as session:
-        # Completed items: active=0, updated in lookback window
-        completed_rows = session.execute(
-            text(
-                f"""SELECT id, title, type_hint, updated_at
-                   FROM things
-                   WHERE active = false
-                     AND updated_at >= :lb_start
-                     AND updated_at < :lb_end{uf_frag}
-                   ORDER BY updated_at DESC
-                   LIMIT 20"""
-            ),
-            {"lb_start": lookback_start, "lb_end": lookback_end, **uf_p},
-        ).fetchall()
+        # Completed items: active=false, updated in lookback window
+        completed_stmt = (
+            select(ThingRecord)
+            .where(
+                ThingRecord.active == False,
+                ThingRecord.updated_at >= lookback_start,
+                ThingRecord.updated_at < lookback_end,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+            .order_by(ThingRecord.updated_at.desc())  # type: ignore[union-attr]
+            .limit(20)
+        )
+        completed_rows = session.exec(completed_stmt).all()
 
         # All active things (for upcoming deadlines and open questions)
-        active_rows = session.execute(
-            text(
-                f"""SELECT id, title, type_hint, data, open_questions, checkin_date
-                   FROM things
-                   WHERE active = true{uf_frag}"""
-            ),
-            uf_p,
-        ).fetchall()
+        active_stmt = select(ThingRecord).where(
+            ThingRecord.active == True,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+        active_rows = session.exec(active_stmt).all()
 
         # New connections created in lookback window
-        conn_rows = session.execute(
-            text(
-                """SELECT tr.from_thing_id, tr.to_thing_id, tr.relationship_type,
-                          tf.title AS from_title, tt.title AS to_title
-                   FROM thing_relationships tr
-                   JOIN things tf ON tr.from_thing_id = tf.id
-                   JOIN things tt ON tr.to_thing_id = tt.id
-                   WHERE tr.created_at >= :lb_start
-                     AND tr.created_at < :lb_end
-                   LIMIT 10"""
-            ),
-            {"lb_start": lookback_start, "lb_end": lookback_end},
-        ).fetchall()
+        FromThing = aliased(ThingRecord)
+        ToThing = aliased(ThingRecord)
+        conn_stmt = (
+            select(
+                ThingRelationshipRecord.from_thing_id,
+                ThingRelationshipRecord.to_thing_id,
+                ThingRelationshipRecord.relationship_type,
+                FromThing.title.label("from_title"),  # type: ignore[union-attr]
+                ToThing.title.label("to_title"),  # type: ignore[union-attr]
+            )
+            .join(FromThing, ThingRelationshipRecord.from_thing_id == FromThing.id)  # type: ignore[union-attr]
+            .join(ToThing, ThingRelationshipRecord.to_thing_id == ToThing.id)  # type: ignore[union-attr]
+            .where(
+                ThingRelationshipRecord.created_at >= lookback_start,
+                ThingRelationshipRecord.created_at < lookback_end,
+            )
+            .limit(10)
+        )
+        conn_rows = session.execute(conn_stmt).all()
 
         # Preferences learned: preference Things updated/created in lookback window
-        pref_rows = session.execute(
-            text(
-                f"""SELECT id, title, data
-                   FROM things
-                   WHERE type_hint = 'preference'
-                     AND (updated_at >= :lb_start OR created_at >= :lb_start){uf_frag}
-                   ORDER BY updated_at DESC
-                   LIMIT 10"""
-            ),
-            {"lb_start": lookback_start, **uf_p},
-        ).fetchall()
+        pref_stmt = (
+            select(ThingRecord)
+            .where(
+                ThingRecord.type_hint == "preference",
+                or_(
+                    ThingRecord.updated_at >= lookback_start,
+                    ThingRecord.created_at >= lookback_start,
+                ),
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+            .order_by(ThingRecord.updated_at.desc())  # type: ignore[union-attr]
+            .limit(10)
+        )
+        pref_rows = session.exec(pref_stmt).all()
 
     # Build completed list
-    for row in completed_rows:
-        updated = row.updated_at or ""
+    for rec in completed_rows:
+        updated = rec.updated_at or ""
         detail = None
         d = _parse_date(str(updated))
         if d:
             detail = f"Completed {d.strftime('%a')}"
         completed.append(WeeklyBriefingItem(
-            thing_id=row.id,
-            title=row.title,
-            type_hint=row.type_hint,
+            thing_id=rec.id,
+            title=rec.title,
+            type_hint=rec.type_hint,
             detail=detail,
         ))
 
     # Build upcoming deadlines
-    for row in active_rows:
-        data_raw = row.data
+    for rec in active_rows:
         data: dict | None = None
-        if data_raw:
+        if rec.data:
             try:
-                data = json.loads(data_raw) if isinstance(data_raw, str) else data_raw
+                data = json.loads(rec.data) if isinstance(rec.data, str) else rec.data
             except (json.JSONDecodeError, TypeError):
                 pass
 
@@ -192,20 +195,20 @@ def generate_weekly_briefing(
                 else:
                     detail = f"{label} in {days}d"
                 upcoming.append(WeeklyBriefingItem(
-                    thing_id=row.id,
-                    title=row.title,
-                    type_hint=row.type_hint,
+                    thing_id=rec.id,
+                    title=rec.title,
+                    type_hint=rec.type_hint,
                     detail=detail,
                 ))
                 break  # one deadline per thing
 
         # Also check checkin_date as upcoming
-        checkin_str = row.checkin_date
+        checkin_str = rec.checkin_date
         if checkin_str:
             checkin = _parse_date(str(checkin_str))
             if checkin and 0 <= (checkin - today).days <= 7:
                 # Avoid duplicates
-                if not any(u.thing_id == row.id for u in upcoming):
+                if not any(u.thing_id == rec.id for u in upcoming):
                     days = (checkin - today).days
                     if days == 0:
                         detail = "Check-in due today"
@@ -214,22 +217,22 @@ def generate_weekly_briefing(
                     else:
                         detail = f"Check-in in {days}d"
                     upcoming.append(WeeklyBriefingItem(
-                        thing_id=row.id,
-                        title=row.title,
-                        type_hint=row.type_hint,
+                        thing_id=rec.id,
+                        title=rec.title,
+                        type_hint=rec.type_hint,
                         detail=detail,
                     ))
 
         # Open questions
-        oq_raw = row.open_questions
+        oq_raw = rec.open_questions
         if oq_raw:
             try:
                 oq = json.loads(oq_raw) if isinstance(oq_raw, str) else oq_raw
                 if isinstance(oq, list) and len(oq) > 0:
                     open_questions.append(WeeklyBriefingItem(
-                        thing_id=row.id,
-                        title=row.title,
-                        type_hint=row.type_hint,
+                        thing_id=rec.id,
+                        title=rec.title,
+                        type_hint=rec.type_hint,
                         detail=oq[0] if oq else None,
                     ))
             except (json.JSONDecodeError, TypeError):
@@ -249,8 +252,8 @@ def generate_weekly_briefing(
         ))
 
     # Build preferences learned
-    for row in pref_rows:
-        preferences_learned.append(row.title)
+    for rec in pref_rows:
+        preferences_learned.append(rec.title)
 
     # Sort upcoming by urgency
     upcoming.sort(key=lambda x: int(x.detail.split("in ")[1].rstrip("d")) if x.detail and "in " in x.detail else (0 if x.detail and "today" in x.detail else 1))
@@ -302,37 +305,25 @@ def store_weekly_briefing(user_id: str, content: WeeklyBriefingContent) -> str:
 
     with Session(_engine_mod.engine) as session:
         # Check for existing briefing for this user/week
-        existing = session.execute(
-            text(
-                "SELECT id FROM weekly_briefings WHERE user_id = :uid AND week_start = :ws"
-                if user_id
-                else "SELECT id FROM weekly_briefings WHERE user_id IS NULL AND week_start = :ws"
-            ),
-            {"uid": user_id, "ws": content.week_start} if user_id else {"ws": content.week_start},
-        ).fetchone()
+        existing_stmt = select(WeeklyBriefingRecord).where(
+            WeeklyBriefingRecord.week_start == content.week_start,
+        )
+        if user_id:
+            existing_stmt = existing_stmt.where(
+                WeeklyBriefingRecord.user_id == user_id,
+            )
+        else:
+            existing_stmt = existing_stmt.where(
+                WeeklyBriefingRecord.user_id.is_(None),  # type: ignore[union-attr]
+            )
+
+        existing = session.exec(existing_stmt).first()
 
         if existing:
-            session.execute(
-                text(
-                    "UPDATE weekly_briefings SET id = :id, content = :content, generated_at = :gen"
-                    " WHERE user_id = :uid AND week_start = :ws"
-                    if user_id
-                    else "UPDATE weekly_briefings SET id = :id, content = :content, generated_at = :gen"
-                    " WHERE user_id IS NULL AND week_start = :ws"
-                ),
-                {
-                    "id": briefing_id,
-                    "content": content.model_dump_json(),
-                    "gen": now,
-                    "uid": user_id,
-                    "ws": content.week_start,
-                } if user_id else {
-                    "id": briefing_id,
-                    "content": content.model_dump_json(),
-                    "gen": now,
-                    "ws": content.week_start,
-                },
-            )
+            existing.id = briefing_id
+            existing.content = json.loads(content.model_dump_json())
+            existing.generated_at = datetime.fromisoformat(now)
+            session.add(existing)
         else:
             record = WeeklyBriefingRecord(
                 id=briefing_id,
@@ -350,40 +341,39 @@ def store_weekly_briefing(user_id: str, content: WeeklyBriefingContent) -> str:
 
 def get_latest_weekly_briefing(user_id: str, week_start: date | None = None) -> dict | None:
     """Retrieve the most recent weekly briefing for a user."""
-    uf_frag, uf_p = user_filter_text(user_id)
-
     with Session(_engine_mod.engine) as session:
         if week_start:
-            row = session.execute(
-                text(
-                    f"""SELECT * FROM weekly_briefings
-                       WHERE week_start = :ws{uf_frag}"""
-                ),
-                {"ws": week_start.isoformat(), **uf_p},
-            ).fetchone()
+            stmt = (
+                select(WeeklyBriefingRecord)
+                .where(
+                    WeeklyBriefingRecord.week_start == week_start.isoformat(),
+                    user_filter_clause(WeeklyBriefingRecord.user_id, user_id),
+                )
+            )
         else:
-            row = session.execute(
-                text(
-                    f"""SELECT * FROM weekly_briefings
-                       WHERE 1=1{uf_frag}
-                       ORDER BY week_start DESC
-                       LIMIT 1"""
-                ),
-                uf_p,
-            ).fetchone()
+            stmt = (
+                select(WeeklyBriefingRecord)
+                .where(
+                    user_filter_clause(WeeklyBriefingRecord.user_id, user_id),
+                )
+                .order_by(WeeklyBriefingRecord.week_start.desc())  # type: ignore[union-attr]
+                .limit(1)
+            )
 
-    if not row:
+        record = session.exec(stmt).first()
+
+    if not record:
         return None
 
-    raw_content = row.content
+    raw_content = record.content
     try:
         content = json.loads(raw_content) if isinstance(raw_content, str) else raw_content
     except (json.JSONDecodeError, TypeError):
         content = {}
 
     return {
-        "id": row.id,
-        "week_start": row.week_start,
+        "id": record.id,
+        "week_start": record.week_start,
         "content": content,
-        "generated_at": row.generated_at,
+        "generated_at": record.generated_at,
     }
