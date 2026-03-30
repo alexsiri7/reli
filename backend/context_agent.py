@@ -92,8 +92,13 @@ def _make_litellm_model(
             "like google/gemini-2.5-flash. See GH #176.",
             effective_model,
         )
-    # LiteLlm expects the openai/ prefix for OpenAI-compatible providers
+    # LiteLlm expects the openai/ prefix for OpenAI-compatible providers.
+    # Models from config.yaml may already have a provider prefix like
+    # "google/model-name" — strip it before adding "openai/" so we don't
+    # end up with "openai/google/model-name".
     if not effective_model.startswith("openai/"):
+        if "/" in effective_model:
+            effective_model = effective_model.split("/", 1)[1]
         effective_model = f"openai/{effective_model}"
     return LiteLlm(
         model=effective_model,

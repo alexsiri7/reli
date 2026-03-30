@@ -388,6 +388,6 @@ class ThingEmbeddingRecord(SQLModel, table=True):
     __tablename__ = "thing_embeddings"
 
     thing_id: str = Field(primary_key=True, foreign_key="things.id")
-    embedding: Any = Field(sa_column=Column(Vector(3072), nullable=False))
+    embedding: Any = Field(sa_column=Column(Vector(1536), nullable=False))
     content: str = ""  # The text that was embedded (for debugging/reindex)
     updated_at: datetime = Field(default_factory=_utcnow)
