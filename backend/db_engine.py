@@ -102,8 +102,17 @@ def user_filter_text(user_id: str, table_alias: str = "", param_name: str = "uf_
 
 
 def init_sqlmodel_tables() -> None:
-    """Create all tables registered in SQLModel metadata.
+    """Deprecated: schema is now managed by Alembic migrations.
 
-    No-op for tables that already exist (uses CREATE TABLE IF NOT EXISTS).
+    Run ``alembic upgrade head`` instead.  This function is kept as a
+    no-op so existing call sites don't break during the transition.
     """
-    SQLModel.metadata.create_all(engine)
+    import logging
+    import warnings
+
+    msg = (
+        "init_sqlmodel_tables() is deprecated — schema is managed by Alembic. "
+        "Run 'alembic upgrade head' instead."
+    )
+    warnings.warn(msg, DeprecationWarning, stacklevel=2)
+    logging.getLogger(__name__).warning(msg)

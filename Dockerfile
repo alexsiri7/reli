@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 # Copy config
 COPY config.yaml ./config.yaml
+COPY alembic.ini ./alembic.ini
 
 # Copy backend and prompts
 COPY backend/ ./backend/
