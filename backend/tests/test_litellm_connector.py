@@ -301,3 +301,166 @@ async def test_acomplete_retry_uses_exponential_backoff():
     # First retry: 0.5s, second retry: 1.0s
     assert mock_sleep.call_args_list[0].args[0] == pytest.approx(0.5)
     assert mock_sleep.call_args_list[1].args[0] == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Retry on 429 (rate limit) and 503 (service unavailable)
+# ---------------------------------------------------------------------------
+
+
+def _make_rate_limit_error() -> litellm.RateLimitError:
+    """Create a litellm.RateLimitError for testing."""
+    return litellm.RateLimitError(
+        message="Rate limit exceeded",
+        model="google/gemini-2.5-flash-lite",
+        llm_provider="openai",
+    )
+
+
+def _make_service_unavailable_error() -> litellm.ServiceUnavailableError:
+    """Create a litellm.ServiceUnavailableError for testing."""
+    return litellm.ServiceUnavailableError(
+        message="Service unavailable",
+        model="google/gemini-2.5-flash-lite",
+        llm_provider="openai",
+    )
+
+
+@pytest.mark.asyncio
+async def test_acomplete_retries_on_429_then_succeeds():
+    """acomplete retries on 429 rate limit errors and returns on success."""
+    mock_resp = _fake_response("recovered")
+    mock_call = AsyncMock(side_effect=[_make_rate_limit_error(), mock_resp])
+
+    with (
+        patch("backend.llm.litellm.acompletion", mock_call),
+        patch("backend.llm.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        result = await acomplete(
+            [{"role": "user", "content": "hi"}],
+            "google/gemini-2.5-flash-lite",
+        )
+
+    assert result.choices[0].message.content == "recovered"
+    assert mock_call.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_acomplete_retries_on_503_then_succeeds():
+    """acomplete retries on 503 service unavailable errors and returns on success."""
+    mock_resp = _fake_response("recovered")
+    mock_call = AsyncMock(side_effect=[_make_service_unavailable_error(), mock_resp])
+
+    with (
+        patch("backend.llm.litellm.acompletion", mock_call),
+        patch("backend.llm.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        result = await acomplete(
+            [{"role": "user", "content": "hi"}],
+            "google/gemini-2.5-flash-lite",
+        )
+
+    assert result.choices[0].message.content == "recovered"
+    assert mock_call.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_acomplete_raises_429_after_max_retries():
+    """acomplete raises RateLimitError after exhausting all retries."""
+    mock_call = AsyncMock(side_effect=[_make_rate_limit_error()] * _RETRY_MAX_ATTEMPTS)
+
+    with (
+        patch("backend.llm.litellm.acompletion", mock_call),
+        patch("backend.llm.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        with pytest.raises(litellm.RateLimitError):
+            await acomplete(
+                [{"role": "user", "content": "hi"}],
+                "google/gemini-2.5-flash-lite",
+            )
+
+    assert mock_call.call_count == _RETRY_MAX_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_acomplete_raises_503_after_max_retries():
+    """acomplete raises ServiceUnavailableError after exhausting all retries."""
+    mock_call = AsyncMock(side_effect=[_make_service_unavailable_error()] * _RETRY_MAX_ATTEMPTS)
+
+    with (
+        patch("backend.llm.litellm.acompletion", mock_call),
+        patch("backend.llm.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        with pytest.raises(litellm.ServiceUnavailableError):
+            await acomplete(
+                [{"role": "user", "content": "hi"}],
+                "google/gemini-2.5-flash-lite",
+            )
+
+    assert mock_call.call_count == _RETRY_MAX_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_acomplete_stream_retries_on_429_then_succeeds():
+    """acomplete_stream retries on 429 rate limit errors and yields chunks on success."""
+    chunks = [_fake_chunk("Hello"), _fake_chunk(" world")]
+
+    async def _fake_stream(*args, **kwargs):
+        for c in chunks:
+            yield c
+
+    call_count = 0
+
+    async def _mock_acompletion(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count <= 1:
+            raise _make_rate_limit_error()
+        return _fake_stream()
+
+    with (
+        patch("backend.llm.litellm.acompletion", side_effect=_mock_acompletion),
+        patch("backend.llm.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        collected = []
+        async for chunk in acomplete_stream(
+            [{"role": "user", "content": "hi"}],
+            "google/gemini-2.5-flash-lite",
+        ):
+            collected.append(chunk)
+
+    assert len(collected) == 2
+    assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_acomplete_stream_retries_on_503_then_succeeds():
+    """acomplete_stream retries on 503 service unavailable and yields chunks on success."""
+    chunks = [_fake_chunk("Hello"), _fake_chunk(" world")]
+
+    async def _fake_stream(*args, **kwargs):
+        for c in chunks:
+            yield c
+
+    call_count = 0
+
+    async def _mock_acompletion(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count <= 1:
+            raise _make_service_unavailable_error()
+        return _fake_stream()
+
+    with (
+        patch("backend.llm.litellm.acompletion", side_effect=_mock_acompletion),
+        patch("backend.llm.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        collected = []
+        async for chunk in acomplete_stream(
+            [{"role": "user", "content": "hi"}],
+            "google/gemini-2.5-flash-lite",
+        ):
+            collected.append(chunk)
+
+    assert len(collected) == 2
+    assert call_count == 2
