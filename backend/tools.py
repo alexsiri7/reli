@@ -334,6 +334,9 @@ def update_thing(
         if not record:
             return {"error": f"Thing {thing_id} not found"}
 
+        if record.user_id and user_id and record.user_id != user_id:
+            return {"error": "Unauthorized"}
+
         changed = False
         if title:
             record.title = title
@@ -405,6 +408,10 @@ def delete_thing(thing_id: str, user_id: str = "") -> dict[str, Any]:
         record = session.get(ThingRecord, thing_id)
         if not record:
             return {"error": f"Thing {thing_id} not found"}
+
+        if record.user_id and user_id and record.user_id != user_id:
+            return {"error": "Unauthorized"}
+
         title = record.title
         session.delete(record)
         session.commit()
@@ -449,6 +456,11 @@ def merge_things(
         remove_rec = session.get(ThingRecord, remove_id)
         if not keep_rec or not remove_rec:
             return {"error": "one or both Things not found"}
+
+        if keep_rec.user_id and user_id and keep_rec.user_id != user_id:
+            return {"error": "Unauthorized"}
+        if remove_rec.user_id and user_id and remove_rec.user_id != user_id:
+            return {"error": "Unauthorized"}
 
         remove_title = remove_rec.title
 
@@ -570,6 +582,12 @@ def create_relationship(
             if not to_row:
                 missing.append(f"to={to_id}")
             return {"error": f"Thing(s) not found: {', '.join(missing)}"}
+
+        # Verify ownership
+        if from_row.user_id and user_id and from_row.user_id != user_id:
+            return {"error": "Unauthorized"}
+        if to_row.user_id and user_id and to_row.user_id != user_id:
+            return {"error": "Unauthorized"}
 
         rel_id = str(uuid.uuid4())
         record = ThingRelationshipRecord(
@@ -718,6 +736,16 @@ def delete_relationship(relationship_id: str, user_id: str = "") -> dict[str, An
         record = session.get(ThingRelationshipRecord, relationship_id)
         if not record:
             return {"error": f"Relationship {relationship_id} not found"}
+
+        # Verify both Things in the relationship belong to the user
+        if user_id:
+            from_thing = session.get(ThingRecord, record.from_thing_id)
+            to_thing = session.get(ThingRecord, record.to_thing_id)
+            if from_thing and from_thing.user_id and from_thing.user_id != user_id:
+                return {"error": "Unauthorized"}
+            if to_thing and to_thing.user_id and to_thing.user_id != user_id:
+                return {"error": "Unauthorized"}
+
         session.delete(record)
         session.commit()
     return {"ok": True}
