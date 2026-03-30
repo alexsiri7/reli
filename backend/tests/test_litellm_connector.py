@@ -75,7 +75,7 @@ async def test_acomplete_routes_through_requesty():
 
     mock_call.assert_called_once()
     call_kwargs = mock_call.call_args
-    assert call_kwargs.kwargs["model"] == "openai/google/gemini-2.5-flash-lite"
+    assert call_kwargs.kwargs["model"] == "openai/gemini-2.5-flash-lite"
     assert call_kwargs.kwargs["api_base"] == REQUESTY_BASE_URL
     assert call_kwargs.kwargs["api_key"] == "test-key"
     assert result.choices[0].message.content == "test reply"
