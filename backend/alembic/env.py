@@ -6,9 +6,12 @@ are never hardcoded in alembic.ini.
 
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 
 from alembic import context
+from alembic.script import ScriptDirectory
+
+from backend.alembic.safety import check_pending_migrations
 
 # -- Alembic Config object ---------------------------------------------------
 config = context.config
@@ -33,6 +36,11 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode (emit SQL without a live connection)."""
     url = config.get_main_option("sqlalchemy.url")
+
+    # Safety check: scan pending migrations for destructive DDL
+    script_dir = ScriptDirectory.from_config(config)
+    check_pending_migrations(script_dir, current_heads=set())
+
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -54,6 +62,20 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # Safety check: scan pending migrations for destructive DDL
+        script_dir = ScriptDirectory.from_config(config)
+        try:
+            result = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            )
+            current_heads = {row[0] for row in result}
+        except Exception:
+            # Table doesn't exist yet (fresh database) — all migrations pending
+            current_heads = set()
+            connection.rollback()
+
+        check_pending_migrations(script_dir, current_heads=current_heads)
+
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
