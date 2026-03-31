@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:screenshots": "npx playwright test --config playwright.config.ts",
-    "test:screenshots:update": "npx playwright test --config playwright.config.ts --update-snapshots"
+    "test:screenshots:update": "npx playwright test --config playwright.config.ts --update-snapshots",
+    "test:smoke": "npx playwright test --config playwright.config.ts --project=smoke"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
