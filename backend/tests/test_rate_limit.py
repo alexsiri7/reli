@@ -48,7 +48,7 @@ class TestGetConfig:
         monkeypatch.delenv("RATE_LIMIT_API_RPM", raising=False)
         config = get_rate_limit_config()
         assert config["enabled"] is True
-        assert config["llm_rpm"] == 10
+        assert config["llm_rpm"] == 30
         assert config["api_rpm"] == 60
 
     def test_disabled(self, monkeypatch: pytest.MonkeyPatch):
@@ -81,9 +81,21 @@ def _make_app(llm_rpm: int = 3, api_rpm: int = 5) -> FastAPI:
     def chat():
         return JSONResponse({"reply": "hello"})
 
+    @app.post("/api/chat/stream")
+    def chat_stream():
+        return JSONResponse({"reply": "hello"})
+
     @app.post("/api/sweep/run")
     def sweep():
         return JSONResponse({"findings": []})
+
+    @app.post("/api/sweep/gaps")
+    def sweep_gaps():
+        return JSONResponse({"gaps": []})
+
+    @app.post("/api/sweep/connections")
+    def sweep_connections():
+        return JSONResponse({"connections": []})
 
     @app.get("/healthz")
     def health():
@@ -120,12 +132,48 @@ class TestRateLimitMiddleware:
         res = client.post("/api/chat")
         assert res.status_code == 429
 
+    def test_chat_and_stream_share_llm_bucket(self):
+        app = _make_app(llm_rpm=2, api_rpm=100)
+        client = TestClient(app)
+        res = client.post("/api/chat")
+        assert res.status_code == 200
+        res = client.post("/api/chat/stream")
+        assert res.status_code == 200
+        # Third request to either chat path should be blocked
+        res = client.post("/api/chat/stream")
+        assert res.status_code == 429
+
+    def test_chat_stream_endpoint_rate_limited(self):
+        app = _make_app(llm_rpm=2, api_rpm=100)
+        client = TestClient(app)
+        for _ in range(2):
+            res = client.post("/api/chat/stream")
+            assert res.status_code == 200
+        res = client.post("/api/chat/stream")
+        assert res.status_code == 429
+
     def test_sweep_endpoint_rate_limited(self):
         app = _make_app(llm_rpm=1, api_rpm=100)
         client = TestClient(app)
         res = client.post("/api/sweep/run")
         assert res.status_code == 200
         res = client.post("/api/sweep/run")
+        assert res.status_code == 429
+
+    def test_sweep_gaps_endpoint_rate_limited(self):
+        app = _make_app(llm_rpm=1, api_rpm=100)
+        client = TestClient(app)
+        res = client.post("/api/sweep/gaps")
+        assert res.status_code == 200
+        res = client.post("/api/sweep/gaps")
+        assert res.status_code == 429
+
+    def test_sweep_connections_endpoint_rate_limited(self):
+        app = _make_app(llm_rpm=1, api_rpm=100)
+        client = TestClient(app)
+        res = client.post("/api/sweep/connections")
+        assert res.status_code == 200
+        res = client.post("/api/sweep/connections")
         assert res.status_code == 429
 
     def test_healthz_not_limited(self):

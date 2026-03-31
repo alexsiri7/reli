@@ -12,7 +12,7 @@ health, etc.) fall back to client IP.
 
 Configurable via environment variables:
 - ``RATE_LIMIT_ENABLED``: "true" (default) or "false"
-- ``RATE_LIMIT_LLM_RPM``: requests per minute for LLM endpoints (default: 10)
+- ``RATE_LIMIT_LLM_RPM``: requests per minute for LLM endpoints (default: 30)
 - ``RATE_LIMIT_API_RPM``: requests per minute for general API (default: 60)
 """
 
@@ -30,7 +30,7 @@ from starlette.responses import JSONResponse
 log = logging.getLogger(__name__)
 
 # LLM-calling paths that need strict rate limiting
-_LLM_PATHS = {"/api/chat", "/api/sweep/run"}
+_LLM_PATHS = {"/api/chat", "/api/chat/stream", "/api/sweep/run", "/api/sweep/gaps", "/api/sweep/connections"}
 
 
 def _is_llm_path(path: str) -> bool:
@@ -69,7 +69,7 @@ class _Bucket:
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Per-user (JWT) / per-IP token-bucket rate limiter."""
 
-    def __init__(self, app, *, llm_rpm: int = 10, api_rpm: int = 60, enabled: bool = True) -> None:  # type: ignore[no-untyped-def]
+    def __init__(self, app, *, llm_rpm: int = 30, api_rpm: int = 60, enabled: bool = True) -> None:  # type: ignore[no-untyped-def]
         super().__init__(app)
         self.enabled = enabled
         self.llm_rpm = llm_rpm
