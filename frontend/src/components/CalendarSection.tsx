@@ -18,10 +18,12 @@ function formatEventDate(event: CalendarEvent): string {
     date.getFullYear() === now.getFullYear() &&
     date.getMonth() === now.getMonth() &&
     date.getDate() === now.getDate()
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
   const isTomorrow =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate() + 1
+    date.getFullYear() === tomorrow.getFullYear() &&
+    date.getMonth() === tomorrow.getMonth() &&
+    date.getDate() === tomorrow.getDate()
   if (isToday) return 'Today'
   if (isTomorrow) return 'Tomorrow'
   return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
