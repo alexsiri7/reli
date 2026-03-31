@@ -29,6 +29,11 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], colorScheme: 'dark' },
       testMatch: /visual\.spec\.ts/,
     },
+    {
+      name: 'smoke',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /smoke\.spec\.ts/,
+    },
   ],
   // Start a local preview server when not using a live BASE_URL
   ...(process.env.BASE_URL
