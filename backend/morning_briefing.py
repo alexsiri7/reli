@@ -168,6 +168,7 @@ def generate_morning_briefing(
                 or_(SweepFindingRecord.expires_at.is_(None), SweepFindingRecord.expires_at > now_dt),  # type: ignore[union-attr]
                 or_(SweepFindingRecord.snoozed_until.is_(None), SweepFindingRecord.snoozed_until <= now_dt),  # type: ignore[union-attr]
                 user_filter_clause(SweepFindingRecord.user_id, user_id),
+                or_(SweepFindingRecord.thing_id.is_(None), ThingRecord.active == True),  # type: ignore[union-attr]
             )
             .order_by(SweepFindingRecord.priority.asc(), SweepFindingRecord.created_at.desc())  # type: ignore[union-attr]
         )

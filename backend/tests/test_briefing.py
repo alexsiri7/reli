@@ -142,3 +142,38 @@ class TestSnoozeFinding:
         resp = client.get("/api/briefing")
         finding_ids = [f["id"] for f in resp.json()["findings"]]
         assert finding["id"] in finding_ids
+
+
+class TestFindingsForInactiveThings:
+    def test_finding_for_inactive_thing_excluded(self, client):
+        """Findings linked to inactive (completed) Things should not appear."""
+        thing = _create_thing(client, "Will Complete")
+        finding = _create_finding(client, "stale finding", thing_id=thing["id"])
+
+        # Finding visible while Thing is active
+        resp = client.get("/api/briefing")
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding["id"] in finding_ids
+
+        # Deactivate the Thing
+        client.patch(f"/api/things/{thing['id']}", json={"active": False})
+
+        # Finding should now be excluded
+        resp = client.get("/api/briefing")
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding["id"] not in finding_ids
+
+    def test_finding_without_thing_still_shown(self, client):
+        """Findings not linked to any Thing should still appear."""
+        finding = _create_finding(client, "orphan finding")
+        resp = client.get("/api/briefing")
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding["id"] in finding_ids
+
+    def test_finding_for_active_thing_still_shown(self, client):
+        """Findings linked to active Things should still appear."""
+        thing = _create_thing(client, "Active Thing")
+        finding = _create_finding(client, "active finding", thing_id=thing["id"])
+        resp = client.get("/api/briefing")
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding["id"] in finding_ids

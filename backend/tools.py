@@ -794,14 +794,20 @@ def get_briefing(
         )
         rel_rows = session.exec(rel_stmt).all()
 
-        # Active sweep findings
+        # Active sweep findings (exclude findings linked to inactive Things)
         from .db_models import SweepFindingRecord
-        finding_stmt = select(SweepFindingRecord).where(
-            SweepFindingRecord.dismissed == False,
-            or_(SweepFindingRecord.expires_at.is_(None), SweepFindingRecord.expires_at > now),  # type: ignore[union-attr, operator]
-            or_(SweepFindingRecord.snoozed_until.is_(None), SweepFindingRecord.snoozed_until <= now),  # type: ignore[union-attr, operator]
-            user_filter_clause(SweepFindingRecord.user_id, user_id),
-        ).order_by(SweepFindingRecord.priority.asc(), SweepFindingRecord.created_at.desc())  # type: ignore[union-attr, attr-defined]
+        finding_stmt = (
+            select(SweepFindingRecord)
+            .outerjoin(ThingRecord, SweepFindingRecord.thing_id == ThingRecord.id)
+            .where(
+                SweepFindingRecord.dismissed == False,
+                or_(SweepFindingRecord.expires_at.is_(None), SweepFindingRecord.expires_at > now),  # type: ignore[union-attr, operator]
+                or_(SweepFindingRecord.snoozed_until.is_(None), SweepFindingRecord.snoozed_until <= now),  # type: ignore[union-attr, operator]
+                user_filter_clause(SweepFindingRecord.user_id, user_id),
+                or_(SweepFindingRecord.thing_id.is_(None), ThingRecord.active == True),  # type: ignore[union-attr]
+            )
+            .order_by(SweepFindingRecord.priority.asc(), SweepFindingRecord.created_at.desc())  # type: ignore[union-attr, attr-defined]
+        )
         finding_rows = session.exec(finding_stmt).all()
 
         total_active_stmt = select(ThingRecord).where(
