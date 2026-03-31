@@ -13,6 +13,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+
+logger = logging.getLogger(__name__)
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -96,6 +98,7 @@ async def oauth_register(request: Request) -> JSONResponse:
     in memory. No approval flow needed.
     """
     body = await request.json()
+    logger.info("MCP /oauth/register: client_name=%s redirect_uris=%s", body.get("client_name"), body.get("redirect_uris"))
 
     client_id = str(uuid.uuid4())
     client_secret = secrets.token_urlsafe(32)
@@ -145,6 +148,7 @@ def oauth_authorize(
     response_type: str = "code",
 ) -> RedirectResponse:
     """Receive MCP client OAuth params, start Google login, redirect back with auth code."""
+    logger.info("MCP /oauth/authorize: client_id=%s redirect_uri=%s", client_id, redirect_uri)
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=501, detail="Google OAuth not configured")
     if not settings.SECRET_KEY:
@@ -224,14 +228,18 @@ async def oauth_token(
     refresh_token: str = Form(default=""),
 ) -> JSONResponse:
     """Exchange authorization code or refresh token for a JWT bearer token."""
+    logger.info("MCP /oauth/token: grant_type=%s client_id=%s", grant_type, client_id)
     if grant_type == "refresh_token":
         if not refresh_token:
             raise HTTPException(status_code=400, detail="refresh_token is required")
         session = cleanup_and_pop(mcp_refresh_tokens, refresh_token)
         if not session:
+            logger.warning("MCP /oauth/token: invalid or expired refresh_token")
             raise HTTPException(status_code=400, detail="Invalid or expired refresh_token")
         if datetime.now(timezone.utc) > session["expires_at"]:
+            logger.warning("MCP /oauth/token: refresh token expired")
             raise HTTPException(status_code=400, detail="Refresh token expired")
+        logger.info("MCP /oauth/token: refresh token exchange successful for user=%s", session["user_id"])
         return _issue_token_response(session["user_id"], session["email"], session["client_id"], session["scope"])
 
     if grant_type != "authorization_code":
@@ -239,6 +247,7 @@ async def oauth_token(
 
     session = cleanup_and_pop(mcp_auth_codes, code)
     if not session:
+        logger.warning("MCP /oauth/token: invalid or expired authorization code (have %d codes)", len(mcp_auth_codes))
         raise HTTPException(status_code=400, detail="Invalid or expired authorization code")
 
     if datetime.now(timezone.utc) > session["expires_at"]:
@@ -253,8 +262,10 @@ async def oauth_token(
         digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
         computed = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
         if computed != session["code_challenge"]:
+            logger.warning("MCP /oauth/token: PKCE verification failed")
             raise HTTPException(status_code=400, detail="PKCE verification failed")
 
+    logger.info("MCP /oauth/token: auth code exchange successful for user=%s", session["user_id"])
     return _issue_token_response(
         session["user_id"],
         session["email"],
