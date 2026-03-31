@@ -439,7 +439,15 @@ def get_latest_morning_briefing(user_id: str, as_of: date | None = None) -> dict
     if not row:
         return None
 
-    content = row.content if isinstance(row.content, dict) else {}
+    if isinstance(row.content, dict):
+        content = row.content
+    elif isinstance(row.content, str):
+        try:
+            content = json.loads(row.content)
+        except (json.JSONDecodeError, TypeError):
+            content = {}
+    else:
+        content = {}
 
     return {
         "id": row.id,

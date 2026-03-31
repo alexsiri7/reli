@@ -1,6 +1,6 @@
 """Tests for morning briefing generation and API endpoints."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 
 def _create_thing(
@@ -87,6 +87,32 @@ class TestMorningBriefingEndpoint:
         resp = client.get("/api/briefing/morning")
         summary = resp.json()["content"]["summary"]
         assert "Good morning" in summary
+
+    def test_malformed_stored_content_regenerates(self, client, patched_db):
+        """Stored briefing with empty/malformed content triggers regeneration."""
+        from sqlmodel import Session, create_engine
+
+        import backend.db_engine as engine_mod
+        from backend.db_models import MorningBriefingRecord
+
+        # Insert a briefing with empty content (the exact scenario from the bug)
+        today = date.today().isoformat()
+        with Session(engine_mod.engine) as session:
+            record = MorningBriefingRecord(
+                id="mb-malformed",
+                user_id=None,
+                briefing_date=today,
+                content={},  # Missing required 'summary' field
+                generated_at=datetime.now(timezone.utc),
+            )
+            session.add(record)
+            session.commit()
+
+        resp = client.get("/api/briefing/morning")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "summary" in data["content"]
+        assert "Good morning" in data["content"]["summary"]
 
 
 class TestBriefingPreferences:

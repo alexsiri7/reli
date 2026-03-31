@@ -1,11 +1,13 @@
 """Daily briefing endpoint — combines checkin-due Things with sweep findings."""
 
 import json
+import logging
 import uuid
 from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError
 from sqlmodel import Session, select
 
 from ..auth import require_user
@@ -38,6 +40,8 @@ from ..weekly_briefing import (
     store_weekly_briefing,
 )
 from .things import _record_to_thing
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/briefing", tags=["briefing"])
 
@@ -266,10 +270,22 @@ def get_morning_briefing(as_of: date | None = None, user_id: str = Depends(requi
     if not result:
         raise HTTPException(status_code=500, detail="Failed to generate morning briefing")
 
+    try:
+        content = MorningBriefingContent(**result["content"])
+    except (ValidationError, TypeError):
+        logger.warning("Stored morning briefing %s has malformed content, regenerating", result["id"])
+        target = as_of or date.today()
+        content = generate_morning_briefing(user_id, target_date=target)
+        store_morning_briefing(user_id, content, briefing_date=target)
+        result = get_latest_morning_briefing(user_id, as_of=target)
+        if not result:
+            raise HTTPException(status_code=500, detail="Failed to regenerate morning briefing")
+        content = MorningBriefingContent(**result["content"])
+
     return MorningBriefing(
         id=result["id"],
         briefing_date=result["briefing_date"],
-        content=MorningBriefingContent(**result["content"]),
+        content=content,
         generated_at=result["generated_at"],
     )
 
