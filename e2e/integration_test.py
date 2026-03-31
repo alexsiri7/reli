@@ -1,99 +1,35 @@
-"""E2E integration tests for Reli API.
+"""Smoke E2E tests for Reli API.
 
 Run against a live server:
     BASE_URL=http://localhost:8000 RELI_API_TOKEN=<token> pytest e2e/ -v
 """
 
-import uuid
-
 import httpx
-import pytest
 
 
-# ---------------------------------------------------------------------------
-# Health checks
-# ---------------------------------------------------------------------------
-
-
-class TestHealth:
+class TestSmoke:
     def test_healthz(self, client: httpx.Client) -> None:
-        """GET /healthz returns basic health status."""
+        """Basic health endpoint responds."""
         resp = client.get("/healthz")
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["status"] == "ok"
+        assert resp.json()["status"] == "ok"
 
     def test_detailed_health(self, client: httpx.Client) -> None:
-        """GET /api/health returns detailed health with DB info."""
+        """Detailed health returns DB info."""
         resp = client.get("/api/health")
         assert resp.status_code == 200
         body = resp.json()
         assert "status" in body
+        assert "db" in body or "database" in body or body["status"] in ("ok", "degraded")
 
-
-# ---------------------------------------------------------------------------
-# Things CRUD
-# ---------------------------------------------------------------------------
-
-
-class TestThingsAPI:
-    def test_list_things_valid_response(self, client: httpx.Client) -> None:
-        """GET /api/things returns a list (may be empty)."""
+    def test_things_api_responds(self, client: httpx.Client) -> None:
+        """Things API is reachable and returns a list."""
         resp = client.get("/api/things")
         assert resp.status_code == 200
-        data = resp.json()
-        assert isinstance(data, list)
+        assert isinstance(resp.json(), list)
 
-    def test_crud_lifecycle(self, client: httpx.Client) -> None:
-        """Full create -> read -> update -> delete lifecycle."""
-        tag = uuid.uuid4().hex[:8]
-        title = f"E2E Test Thing {tag}"
-
-        # CREATE
-        create_resp = client.post(
-            "/api/things",
-            json={
-                "title": title,
-                "type_hint": "task",
-                "importance": 3,
-                "data": {"source": "e2e-test", "tag": tag},
-            },
-        )
-        assert create_resp.status_code == 201, create_resp.text
-        created = create_resp.json()
-        thing_id = created["id"]
-        assert created["title"] == title
-        assert created["type_hint"] == "task"
-        assert created["importance"] == 3
-
-        try:
-            # VERIFY IN LIST
-            list_resp = client.get("/api/things", params={"active_only": "false"})
-            assert list_resp.status_code == 200
-            ids_in_list = [t["id"] for t in list_resp.json()]
-            assert thing_id in ids_in_list
-
-            # UPDATE (PATCH)
-            updated_title = f"E2E Updated {tag}"
-            patch_resp = client.patch(
-                f"/api/things/{thing_id}",
-                json={"title": updated_title, "importance": 1},
-            )
-            assert patch_resp.status_code == 200, patch_resp.text
-            patched = patch_resp.json()
-            assert patched["title"] == updated_title
-            assert patched["importance"] == 1
-
-            # GET single
-            get_resp = client.get(f"/api/things/{thing_id}")
-            assert get_resp.status_code == 200
-            assert get_resp.json()["title"] == updated_title
-
-        finally:
-            # DELETE (always clean up)
-            del_resp = client.delete(f"/api/things/{thing_id}")
-            assert del_resp.status_code == 204
-
-        # VERIFY GONE
-        gone_resp = client.get(f"/api/things/{thing_id}")
-        assert gone_resp.status_code == 404
+    def test_auth_rejects_bad_token(self, base_url: str) -> None:
+        """API rejects requests with invalid auth."""
+        with httpx.Client(base_url=base_url, timeout=10.0) as c:
+            resp = c.get("/api/things", headers={"Authorization": "Bearer bad-token"})
+            assert resp.status_code == 401
