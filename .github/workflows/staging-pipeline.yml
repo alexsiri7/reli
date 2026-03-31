@@ -72,10 +72,46 @@ jobs:
     outputs:
       deploy_sha: ${{ steps.sha.outputs.sha }}
 
+  staging-e2e:
+    name: Staging E2E smoke tests
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: frontend/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm --prefix frontend ci
+
+      - name: Install Playwright browsers
+        run: npx --prefix frontend playwright install --with-deps chromium
+
+      - name: Run smoke tests against staging
+        env:
+          BASE_URL: http://100.120.193.82:8001
+        run: npm --prefix frontend run test:smoke
+
   deploy-production:
     name: Deploy to production
     runs-on: ubuntu-latest
-    needs: deploy-staging
+    needs: [deploy-staging, staging-e2e]
     permissions:
       packages: read
     steps:
