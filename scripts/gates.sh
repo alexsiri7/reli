@@ -38,11 +38,21 @@ run_typecheck() {
 }
 
 run_test() {
+    local failed=0
+
     echo "=== Test (frontend) ==="
-    cd frontend && npx vitest run && cd ..
+    if ! (cd frontend && npx vitest run); then
+        echo "FAILED: frontend tests"
+        failed=1
+    fi
 
     echo "=== Test (backend) ==="
-    python3 -m pytest backend/tests/ -x --tb=short --cov=backend --cov-fail-under=70
+    if ! python3 -m pytest backend/tests/ -x --tb=short --cov=backend --cov-fail-under=70; then
+        echo "FAILED: backend tests"
+        failed=1
+    fi
+
+    return $failed
 }
 
 run_build() {
