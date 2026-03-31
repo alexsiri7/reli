@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session, or_, select
 
 from ..auth import require_user
 import backend.db_engine as _engine_mod
@@ -90,6 +90,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                 (SweepFindingRecord.expires_at.is_(None)) | (SweepFindingRecord.expires_at > now),  # type: ignore[union-attr]
                 (SweepFindingRecord.snoozed_until.is_(None)) | (SweepFindingRecord.snoozed_until <= now),  # type: ignore[union-attr]
                 user_filter_clause(SweepFindingRecord.user_id, user_id),
+                or_(SweepFindingRecord.thing_id.is_(None), ThingRecord.active == True),  # type: ignore[union-attr]
             )
             .order_by(
                 SweepFindingRecord.priority.asc(),  # type: ignore[union-attr]
