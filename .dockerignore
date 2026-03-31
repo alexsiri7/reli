@@ -12,6 +12,8 @@ __pycache__
 data/
 .beads/
 *.md
+!prompts/**/*.md
+!backend/prompts/**/*.md
 LICENSE
 .dockerignore
 docker-compose*.yml
