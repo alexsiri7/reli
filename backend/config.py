@@ -86,7 +86,7 @@ class Settings(BaseSettings):
 
     # --- Rate limiting ---
     RATE_LIMIT_ENABLED: str = "true"
-    RATE_LIMIT_LLM_RPM: int = 10
+    RATE_LIMIT_LLM_RPM: int = 30
     RATE_LIMIT_API_RPM: int = 60
 
     # --- GitHub Feedback ---
