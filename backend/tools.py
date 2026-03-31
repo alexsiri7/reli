@@ -645,6 +645,9 @@ def search_things(
 ) -> list[dict[str, Any]]:
     """Search Things by text query across titles, data, types, and relationships.
 
+    Uses a two-phase approach to avoid timeout: first searches direct matches,
+    then searches relationship-connected Things only if more results are needed.
+
     Returns a list of Thing dicts.
     """
     if not query.strip():
@@ -654,7 +657,6 @@ def search_things(
 
     pattern = f"%{query}%"
     with Session(_engine_mod.engine) as session:
-        # Build user filter for Postgres named params
         uf_frag, uf_params = user_filter_text(user_id, "t")
 
         filters = uf_frag
@@ -665,37 +667,50 @@ def search_things(
             filters += " AND t.type_hint = :type_hint"
             params["type_hint"] = type_hint
 
-        # Postgres requires all columns in GROUP BY or use DISTINCT ON.
-        # Use DISTINCT ON(id) with a subquery rank approach instead.
-        sql = text(
-            "SELECT DISTINCT ON (sub.id) sub.* FROM ("
-            "  SELECT t.*, 1 AS _rank FROM things t"
-            "  WHERE (t.title LIKE :pattern OR CAST(t.data AS TEXT) LIKE :pattern"
-            "         OR t.type_hint LIKE :pattern)" + filters +
-            "  UNION ALL"
-            "  SELECT t.*, 2 AS _rank FROM things t"
-            "  WHERE t.id IN ("
-            "    SELECT r.to_thing_id FROM thing_relationships r"
-            "    JOIN things m ON r.from_thing_id = m.id"
-            "    WHERE m.title LIKE :pattern OR CAST(m.data AS TEXT) LIKE :pattern"
-            "    UNION"
-            "    SELECT r.from_thing_id FROM thing_relationships r"
-            "    JOIN things m ON r.to_thing_id = m.id"
-            "    WHERE m.title LIKE :pattern OR CAST(m.data AS TEXT) LIKE :pattern"
-            "    UNION"
-            "    SELECT r.from_thing_id FROM thing_relationships r"
-            "    WHERE r.relationship_type LIKE :pattern"
-            "    UNION"
-            "    SELECT r.to_thing_id FROM thing_relationships r"
-            "    WHERE r.relationship_type LIKE :pattern"
-            "  )" + filters +
-            ") sub"
-            " ORDER BY sub.id, sub._rank, sub.updated_at DESC"
+        # Phase 1: Direct matches on title, type_hint, and data
+        direct_sql = text(
+            "SELECT t.* FROM things t"
+            " WHERE (t.title LIKE :pattern OR t.type_hint LIKE :pattern"
+            "        OR CAST(t.data AS TEXT) LIKE :pattern)"
+            + filters +
+            " ORDER BY t.updated_at DESC"
             " LIMIT :lim"
         )
-        rows = session.execute(sql, params).fetchall()
+        direct_rows = session.execute(direct_sql, params).fetchall()
+        seen_ids = {r.id for r in direct_rows}
+        results = list(direct_rows)
 
-    return [dict(r._mapping) for r in rows]
+        # Phase 2: Relationship-connected matches (only if we need more results)
+        remaining = limit - len(results)
+        if remaining > 0:
+            rel_params = {**params, "lim": remaining}
+            rel_sql = text(
+                "SELECT t.* FROM things t"
+                " WHERE EXISTS ("
+                "   SELECT 1 FROM thing_relationships r"
+                "   WHERE (r.from_thing_id = t.id OR r.to_thing_id = t.id)"
+                "     AND ("
+                "       r.relationship_type LIKE :pattern"
+                "       OR EXISTS ("
+                "         SELECT 1 FROM things m"
+                "         WHERE m.id = CASE WHEN r.from_thing_id = t.id"
+                "                            THEN r.to_thing_id"
+                "                            ELSE r.from_thing_id END"
+                "           AND (m.title LIKE :pattern OR CAST(m.data AS TEXT) LIKE :pattern)"
+                "       )"
+                "     )"
+                " )"
+                + filters +
+                " ORDER BY t.updated_at DESC"
+                " LIMIT :lim"
+            )
+            rel_rows = session.execute(rel_sql, rel_params).fetchall()
+            for r in rel_rows:
+                if r.id not in seen_ids:
+                    seen_ids.add(r.id)
+                    results.append(r)
+
+    return [dict(r._mapping) for r in results[:limit]]
 
 
 # ---------------------------------------------------------------------------
