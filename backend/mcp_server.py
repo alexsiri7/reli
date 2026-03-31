@@ -184,7 +184,7 @@ def update_thing(
         thing_id: The UUID of the Thing to update.
         title: New title.
         type_hint: New category.
-        data: New arbitrary JSON data (replaces existing data dict).
+        data: New arbitrary JSON data (shallow-merged into existing data dict).
         importance: How bad if undone: 0 (critical) to 4 (backlog).
         parent_id: New parent Thing ID.
         checkin_date: New checkin date (ISO 8601).
