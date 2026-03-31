@@ -1,0 +1,31 @@
+# Staging environment — runs alongside production on the same host.
+# Port 8001 to avoid conflicts with production (port 8000).
+# Isolated data directory to keep staging and production databases separate.
+
+services:
+  reli-staging:
+    image: ghcr.io/alexsiri7/reli:${RELI_IMAGE_TAG:-latest}
+    container_name: reli-staging
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - ./data-staging:/app/data
+    environment:
+      - REQUESTY_API_KEY=${REQUESTY_API_KEY}
+      - MODEL_NAME=${MODEL_NAME:-google/gemini-2.0-flash-exp}
+      - EMBED_MODEL=${EMBED_MODEL:-text-embedding-3-small}
+      - GOOGLE_SEARCH_API_KEY=${GOOGLE_SEARCH_API_KEY:-}
+      - GOOGLE_SEARCH_CX=${GOOGLE_SEARCH_CX:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - DATA_DIR=/app/data
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
+      - GOOGLE_AUTH_REDIRECT_URI=${GOOGLE_AUTH_REDIRECT_URI:-}
+      - RELI_BASE_URL=${RELI_BASE_URL:-}
+      - SECRET_KEY=${SECRET_KEY:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=staging
+      - DATABASE_URL=${DATABASE_URL:-}
+    restart: unless-stopped
