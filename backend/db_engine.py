@@ -19,6 +19,47 @@ from sqlmodel import Session, SQLModel, create_engine, or_
 
 from .config import settings
 
+
+# ---------------------------------------------------------------------------
+# Pure helpers (no engine dependency) — defined early so they're available even
+# if engine creation fails and leaves the module partially initialised in
+# sys.modules.  This prevents the ImportError reported in GH #505 / #506.
+# ---------------------------------------------------------------------------
+
+def user_filter_clause(user_id_column: Any, user_id: str) -> Any:
+    """Return a SQLAlchemy filter clause equivalent to the legacy ``user_filter()`` helper.
+
+    When *user_id* is empty (auth disabled), returns ``True`` (no filtering).
+    Otherwise returns ``(column == user_id) | (column IS NULL)``.
+
+    Usage::
+
+        stmt = select(ThingRecord).where(
+            ThingRecord.active == True,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+    """
+    if not user_id:
+        return True  # no filter
+    return or_(user_id_column == user_id, user_id_column.is_(None))  # type: ignore[union-attr]
+
+
+def user_filter_text(user_id: str, table_alias: str = "", param_name: str = "uf_uid") -> tuple[str, dict]:
+    """Return a text()-compatible SQL WHERE fragment and params dict for user filtering.
+
+    Like ``auth.user_filter()`` but uses ``:param`` style placeholders for
+    use with ``session.execute(text(...))``.
+    """
+    if not user_id:
+        return "", {}
+    prefix = f"{table_alias}." if table_alias else ""
+    return f" AND ({prefix}user_id = :{param_name} OR {prefix}user_id IS NULL)", {param_name: user_id}
+
+
+# ---------------------------------------------------------------------------
+# Engine and session — these touch the database and can fail at import time.
+# ---------------------------------------------------------------------------
+
 _url = settings.database_url
 
 # SQLite needs check_same_thread=False for FastAPI's threaded request handling.
@@ -48,24 +89,6 @@ def get_session() -> Generator[Session, None, None]:
         yield session
 
 
-def user_filter_clause(user_id_column: Any, user_id: str) -> Any:
-    """Return a SQLAlchemy filter clause equivalent to the legacy ``user_filter()`` helper.
-
-    When *user_id* is empty (auth disabled), returns ``True`` (no filtering).
-    Otherwise returns ``(column == user_id) | (column IS NULL)``.
-
-    Usage::
-
-        stmt = select(ThingRecord).where(
-            ThingRecord.active == True,
-            user_filter_clause(ThingRecord.user_id, user_id),
-        )
-    """
-    if not user_id:
-        return True  # no filter
-    return or_(user_id_column == user_id, user_id_column.is_(None))  # type: ignore[union-attr]
-
-
 def _exec(session: "Session", sql: Any, params: Any = ()) -> Any:
     """Execute raw SQL via a SQLModel session, converting positional ``?`` params
     to SQLAlchemy ``:param`` style.
@@ -92,18 +115,6 @@ def _exec(session: "Session", sql: Any, params: Any = ()) -> Any:
             param_dict[key] = params[i]
         return session.execute(_text(named_sql), param_dict)
     return session.execute(_text(sql))
-
-
-def user_filter_text(user_id: str, table_alias: str = "", param_name: str = "uf_uid") -> tuple[str, dict]:
-    """Return a text()-compatible SQL WHERE fragment and params dict for user filtering.
-
-    Like ``auth.user_filter()`` but uses ``:param`` style placeholders for
-    use with ``session.execute(text(...))``.
-    """
-    if not user_id:
-        return "", {}
-    prefix = f"{table_alias}." if table_alias else ""
-    return f" AND ({prefix}user_id = :{param_name} OR {prefix}user_id IS NULL)", {param_name: user_id}
 
 
 def init_sqlmodel_tables() -> None:
