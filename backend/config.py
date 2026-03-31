@@ -28,6 +28,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # --- Environment ---
+    RELI_ENVIRONMENT: Literal["development", "staging", "production"] = "development"
+
+    @property
+    def is_staging(self) -> bool:
+        return self.RELI_ENVIRONMENT == "staging"
+
+    @property
+    def is_production(self) -> bool:
+        return self.RELI_ENVIRONMENT == "production"
+
     # --- Requesty LLM gateway ---
     REQUESTY_BASE_URL: str = "https://router.requesty.ai/v1"
     REQUESTY_API_KEY: str = ""
@@ -111,8 +122,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_production_secrets(self) -> "Settings":
-        """Fail fast if required secrets are missing in production."""
-        if os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("PRODUCTION"):
+        """Fail fast if required secrets are missing in production or staging."""
+        if self.RELI_ENVIRONMENT in ("production", "staging") or os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("PRODUCTION"):
             required = {
                 "SECRET_KEY": self.SECRET_KEY,
                 "REQUESTY_API_KEY": self.REQUESTY_API_KEY,
@@ -120,7 +131,7 @@ class Settings(BaseSettings):
             missing = [k for k, v in required.items() if not v]
             if missing:
                 raise ValueError(
-                    f"Missing required production env vars: {', '.join(missing)}"
+                    f"Missing required {self.RELI_ENVIRONMENT} env vars: {', '.join(missing)}"
                 )
         if not self.SECRET_KEY:
             warnings.warn(
@@ -145,8 +156,13 @@ class Settings(BaseSettings):
 
     # --- Sentry ---
     SENTRY_DSN: str = ""
-    SENTRY_ENVIRONMENT: str = "production"
+    SENTRY_ENVIRONMENT: str = ""  # Defaults to RELI_ENVIRONMENT if empty
     SENTRY_TRACES_SAMPLE_RATE: float = 0.2
+
+    @property
+    def sentry_environment(self) -> str:
+        """Resolve Sentry environment: explicit SENTRY_ENVIRONMENT or RELI_ENVIRONMENT."""
+        return self.SENTRY_ENVIRONMENT or self.RELI_ENVIRONMENT
 
     # --- Phoenix / OpenTelemetry ---
     PHOENIX_ENABLED: str = "false"

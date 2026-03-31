@@ -23,7 +23,7 @@ def init_sentry() -> None:
 
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
-        environment=settings.SENTRY_ENVIRONMENT,
+        environment=settings.sentry_environment,
         traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
         integrations=[
             StarletteIntegration(),
@@ -31,7 +31,7 @@ def init_sentry() -> None:
         ],
         send_default_pii=False,
     )
-    logger.info("Sentry initialized (env=%s)", settings.SENTRY_ENVIRONMENT)
+    logger.info("Sentry initialized (env=%s)", settings.sentry_environment)
 
 
 def set_sentry_user(user_id: str, email: str | None = None) -> None:

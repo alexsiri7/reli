@@ -1,0 +1,16 @@
+# Staging LLM configuration — uses cheaper/faster models for pre-production testing.
+# Automatically loaded when RELI_ENVIRONMENT=staging (falls back to config.yaml otherwise).
+
+llm:
+  base_url: https://router.requesty.ai/v1
+  models:
+    context: google/gemini-2.0-flash-exp
+    reasoning: google/gemini-2.0-flash-exp
+    response: google/gemini-2.0-flash-exp
+
+ollama:
+  base_url: http://localhost:11434
+  model: ""
+
+embedding:
+  model: text-embedding-3-small

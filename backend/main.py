@@ -327,7 +327,7 @@ app.include_router(think.router, prefix="/api", dependencies=_api_deps)
 @app.get("/healthz", tags=["health"], summary="Health check", description="Returns service health status.")
 def health() -> dict[str, str]:
     """Returns service health status."""
-    return {"status": "ok", "service": "reli"}
+    return {"status": "ok", "service": "reli", "environment": _app_settings.RELI_ENVIRONMENT}
 
 
 @app.get("/api/health", tags=["health"])
@@ -360,6 +360,7 @@ def health_detailed() -> dict:
     return {
         "status": "ok" if db_ok else "degraded",
         "service": "reli",
+        "environment": _app_settings.RELI_ENVIRONMENT,
         "uptime_seconds": round(metrics_store.uptime_seconds(), 1),
         "db_connected": db_ok,
         "chromadb_connected": vector_ok,  # kept for API backward compat

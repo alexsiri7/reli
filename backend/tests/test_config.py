@@ -40,7 +40,8 @@ def test_load_config_errors_when_missing(tmp_path):
     from backend.agents import _load_config
 
     missing_path = tmp_path / "nonexistent.yaml"
-    with patch("backend.agents._CONFIG_PATH", missing_path):
+    with patch("backend.agents._CONFIG_PATH", missing_path), \
+         patch("backend.agents._resolve_config_path", return_value=missing_path):
         with pytest.raises(FileNotFoundError, match="config.yaml not found"):
             _load_config()
 
@@ -60,12 +61,62 @@ def test_load_config_custom(tmp_path):
     )
     from backend.agents import _load_config
 
-    with patch("backend.agents._CONFIG_PATH", custom):
+    with patch("backend.agents._CONFIG_PATH", custom), \
+         patch("backend.agents._resolve_config_path", return_value=custom):
         cfg = _load_config()
 
     assert cfg["llm"]["models"]["reasoning"] == "custom/reasoning-model"
     assert cfg["llm"]["models"]["response"] == "custom/response-model"
     assert cfg["llm"]["base_url"] == "https://custom.example.com/v1"
+
+
+def test_config_staging_yaml_exists():
+    """config.staging.yaml must exist at the project root."""
+    config_path = Path(__file__).resolve().parent.parent.parent / "config.staging.yaml"
+    assert config_path.exists(), f"config.staging.yaml not found at {config_path}"
+
+
+def test_config_staging_yaml_structure():
+    """config.staging.yaml must have the expected structure."""
+    config_path = Path(__file__).resolve().parent.parent.parent / "config.staging.yaml"
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+
+    assert "llm" in cfg
+    assert "base_url" in cfg["llm"]
+    assert "models" in cfg["llm"]
+    models = cfg["llm"]["models"]
+    assert "context" in models
+    assert "reasoning" in models
+    assert "response" in models
+
+
+def test_resolve_config_path_staging(tmp_path):
+    """_resolve_config_path should prefer config.staging.yaml when RELI_ENVIRONMENT=staging."""
+    from backend.agents import _resolve_config_path
+
+    staging_config = tmp_path / "config.staging.yaml"
+    staging_config.write_text("llm: {}")
+
+    with patch("backend.agents.settings") as mock_settings, \
+         patch("backend.agents._PROJECT_ROOT", tmp_path):
+        mock_settings.RELI_ENVIRONMENT = "staging"
+        result = _resolve_config_path()
+
+    assert result == staging_config
+
+
+def test_resolve_config_path_falls_back_to_default(tmp_path):
+    """_resolve_config_path should fall back to config.yaml when no env-specific file exists."""
+    from backend.agents import _resolve_config_path
+
+    with patch("backend.agents.settings") as mock_settings, \
+         patch("backend.agents._PROJECT_ROOT", tmp_path), \
+         patch("backend.agents._CONFIG_PATH", tmp_path / "config.yaml"):
+        mock_settings.RELI_ENVIRONMENT = "staging"
+        result = _resolve_config_path()
+
+    assert result == tmp_path / "config.yaml"
 
 
 def test_per_stage_model_vars():
@@ -165,7 +216,7 @@ def test_settings_production_missing_secrets_raises():
     from backend.config import Settings
 
     with patch.dict("os.environ", {"RAILWAY_ENVIRONMENT_NAME": "production"}, clear=False):
-        with pytest.raises(ValueError, match="Missing required production env vars"):
+        with pytest.raises(ValueError, match="Missing required"):
             Settings(SECRET_KEY="", REQUESTY_API_KEY="")
 
 
@@ -214,3 +265,55 @@ def test_settings_empty_secret_key_warns():
             Settings(SECRET_KEY="", REQUESTY_API_KEY="somekey")
             secret_warnings = [x for x in w if "authentication is DISABLED" in str(x.message)]
             assert len(secret_warnings) >= 1
+
+
+# --- RELI_ENVIRONMENT tests ---
+
+
+def test_settings_reli_environment_defaults_to_development():
+    """RELI_ENVIRONMENT should default to 'development'."""
+    from backend.config import Settings
+
+    env_overrides = {"RAILWAY_ENVIRONMENT_NAME": "", "PRODUCTION": ""}
+    with patch.dict("os.environ", env_overrides, clear=False):
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            s = Settings(SECRET_KEY="", REQUESTY_API_KEY="key")
+            assert s.RELI_ENVIRONMENT == "development"
+            assert not s.is_staging
+            assert not s.is_production
+
+
+def test_settings_staging_requires_secrets():
+    """Staging environment must have required secrets set."""
+    from backend.config import Settings
+
+    with pytest.raises(ValueError, match="Missing required staging"):
+        Settings(RELI_ENVIRONMENT="staging", SECRET_KEY="", REQUESTY_API_KEY="")
+
+
+def test_settings_staging_with_secrets_passes():
+    """Staging environment should pass validation with required secrets."""
+    from backend.config import Settings
+
+    s = Settings(RELI_ENVIRONMENT="staging", SECRET_KEY="secret", REQUESTY_API_KEY="key")
+    assert s.is_staging
+    assert not s.is_production
+
+
+def test_settings_sentry_environment_falls_back_to_reli_environment():
+    """sentry_environment property should fall back to RELI_ENVIRONMENT when SENTRY_ENVIRONMENT is empty."""
+    from backend.config import Settings
+
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        s = Settings(RELI_ENVIRONMENT="staging", SECRET_KEY="secret", REQUESTY_API_KEY="key", SENTRY_ENVIRONMENT="")
+        assert s.sentry_environment == "staging"
+
+
+def test_settings_sentry_environment_explicit_override():
+    """Explicit SENTRY_ENVIRONMENT should take precedence over RELI_ENVIRONMENT."""
+    from backend.config import Settings
+
+    s = Settings(RELI_ENVIRONMENT="staging", SECRET_KEY="secret", REQUESTY_API_KEY="key", SENTRY_ENVIRONMENT="custom-env")
+    assert s.sentry_environment == "custom-env"

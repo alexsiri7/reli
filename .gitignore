@@ -1,7 +1,9 @@
 
 # Local env (never commit secrets)
 .env
+.env.staging
 data/
+data-staging/
 api_key.txt
 
 # Dolt database files (added by bd init)

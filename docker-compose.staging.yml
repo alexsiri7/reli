@@ -1,0 +1,16 @@
+# Staging environment override — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
+#
+# Runs on port 8001 to avoid conflicts with production on the same host.
+# Uses an isolated data directory for staging database.
+
+services:
+  reli:
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - ./data-staging:/app/data
+    environment:
+      - RELI_ENVIRONMENT=staging
+      - SENTRY_ENVIRONMENT=staging
+      - LOG_LEVEL=DEBUG

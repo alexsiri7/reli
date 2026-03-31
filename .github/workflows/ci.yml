@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, staging]
   pull_request:
     branches: [master]
 
@@ -102,7 +102,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -118,7 +118,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push image
+      - name: Build and push image (production)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v6
         with:
@@ -129,6 +129,81 @@ jobs:
             ghcr.io/alexsiri7/reli:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Build and push image (staging)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/alexsiri7/reli:staging-${{ github.sha }}
+            ghcr.io/alexsiri7/reli:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy to staging
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    permissions:
+      packages: read
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Deploy staging via SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        with:
+          host: 100.120.193.82
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_DEPLOY_KEY }}
+          envs: GITHUB_SHA,GHCR_TOKEN,GHCR_USER
+          script: |
+            IMAGE="ghcr.io/alexsiri7/reli"
+            NEW_TAG="staging-${GITHUB_SHA}"
+
+            # Authenticate with GHCR
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            # Pull the staging image
+            docker pull "$IMAGE:$NEW_TAG"
+
+            # Deploy with staging compose override
+            cd /mnt/ext-fast/gc/rigs/reli
+            git pull --rebase
+            RELI_IMAGE_TAG="$NEW_TAG" RELI_ENVIRONMENT=staging \
+              docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
+
+            # Verify health
+            echo "Waiting for staging health check..."
+            HEALTHY=false
+            for i in 1 2 3 4 5; do
+              sleep 3
+              RESPONSE=$(curl -sf --max-time 5 http://localhost:8001/healthz 2>/dev/null || true)
+              if echo "$RESPONSE" | grep -q '"status":"ok"'; then
+                if echo "$RESPONSE" | grep -q '"environment":"staging"'; then
+                  HEALTHY=true
+                  break
+                fi
+              fi
+              echo "Health check attempt $i failed, retrying..."
+            done
+
+            if [ "$HEALTHY" = true ]; then
+              echo "Staging deploy successful: $NEW_TAG"
+            else
+              echo "Staging deploy FAILED — health check did not pass"
+              RELI_IMAGE_TAG="$NEW_TAG" RELI_ENVIRONMENT=staging \
+                docker compose -f docker-compose.yml -f docker-compose.staging.yml down
+              exit 1
+            fi
 
   deploy:
     name: Deploy to server

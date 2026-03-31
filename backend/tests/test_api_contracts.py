@@ -410,6 +410,7 @@ class TestHealthContract:
         body = resp.json()
         assert body["status"] == "ok"
         assert isinstance(body["service"], str)
+        assert body["environment"] in ("development", "staging", "production")
 
 
 # ===========================================================================

@@ -60,6 +60,7 @@ class TestHealthDetailed:
         body = resp.json()
         assert body["status"] in ("ok", "degraded")
         assert body["service"] == "reli"
+        assert body["environment"] in ("development", "staging", "production")
         assert isinstance(body["uptime_seconds"], (int, float))
         assert isinstance(body["db_connected"], bool)
         assert isinstance(body["chromadb_connected"], bool)

@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 # Config — load from config.yaml
 # ---------------------------------------------------------------------------
 
-_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_CONFIG_PATH = _PROJECT_ROOT / "config.yaml"
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
@@ -29,10 +30,25 @@ def _load_prompt(name: str) -> str:
     return (_PROMPTS_DIR / f"{name}.md").read_text()
 
 
+def _resolve_config_path() -> Path:
+    """Return the config file path, preferring environment-specific overrides.
+
+    Resolution order:
+      1. config.{RELI_ENVIRONMENT}.yaml  (e.g. config.staging.yaml)
+      2. config.yaml                     (fallback)
+    """
+    env = settings.RELI_ENVIRONMENT
+    env_config = _PROJECT_ROOT / f"config.{env}.yaml"
+    if env_config.exists():
+        return env_config
+    return _CONFIG_PATH
+
+
 def _load_config() -> dict[str, Any]:
-    """Load config from config.yaml. Errors if the file is missing."""
+    """Load config from config.yaml (or environment override). Errors if missing."""
+    resolved = _resolve_config_path()
     try:
-        with open(_CONFIG_PATH) as f:
+        with open(resolved) as f:
             cfg = yaml.safe_load(f) or {}
     except FileNotFoundError:
         raise FileNotFoundError(
