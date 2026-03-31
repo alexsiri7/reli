@@ -61,25 +61,26 @@ def _record_to_finding(record: SweepFindingRecord, thing: Thing | None = None) -
 def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)) -> BriefingResponse:
     """Return checkin-due Things and active sweep findings for the daily briefing."""
     target = as_of or date.today()
-    cutoff = datetime.combine(target, datetime.max.time()).isoformat()
+    cutoff = datetime.combine(target, datetime.max.time())
     now = datetime.now(timezone.utc)
 
+    from ..urgency import build_blocker_graph, compute_composite_score, compute_urgency
+
     with Session(_engine_mod.engine) as session:
-        # Things with checkin_date due today or earlier
-        thing_stmt = (
-            select(ThingRecord)
-            .where(
+        # All active things (for blocker graph + checkin-due filtering)
+        all_active = session.exec(
+            select(ThingRecord).where(
                 ThingRecord.active == True,
-                ThingRecord.checkin_date.is_not(None),  # type: ignore[union-attr]
-                ThingRecord.checkin_date <= cutoff,  # type: ignore[operator]
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
-            .order_by(
-                ThingRecord.checkin_date.asc(),  # type: ignore[union-attr]
-                ThingRecord.importance.asc(),  # type: ignore[union-attr]
+        ).all()
+
+        # Relationships for blocker graph
+        rel_rows = session.exec(
+            select(ThingRelationshipRecord).where(
+                ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"])  # type: ignore[union-attr]
             )
-        )
-        thing_records = session.exec(thing_stmt).all()
+        ).all()
 
         # Active (not dismissed, not expired, not snoozed) sweep findings with linked Things
         finding_stmt = (
@@ -99,29 +100,18 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
         )
         finding_results = session.exec(finding_stmt).all()
 
+    # Filter checkin-due things from all_active (avoids a separate query)
+    thing_records = sorted(
+        [r for r in all_active if r.checkin_date is not None and r.checkin_date <= cutoff],
+        key=lambda r: (r.checkin_date, r.importance if r.importance is not None else 2),
+    )
+
     things: list[Thing] = [_record_to_thing(r) for r in thing_records]
 
     findings: list[SweepFinding] = []
     for finding_rec, thing_rec in finding_results:
         linked_thing = _record_to_thing(thing_rec) if thing_rec else None
         findings.append(_record_to_finding(finding_rec, linked_thing))
-
-    from ..urgency import build_blocker_graph, compute_composite_score, compute_urgency
-
-    # Build blocker graph for urgency computation
-    with Session(_engine_mod.engine) as session:
-        rel_rows = session.exec(
-            select(ThingRelationshipRecord).where(
-                ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"])  # type: ignore[union-attr]
-            )
-        ).all()
-        uf_things = user_filter_clause(ThingRecord.user_id, user_id)
-        all_active = session.exec(
-            select(ThingRecord).where(
-                ThingRecord.active == True,
-                uf_things,
-            )
-        ).all()
 
     all_things_map = {
         r.id: {"id": r.id, "importance": r.importance, "active": r.active}
