@@ -772,16 +772,7 @@ def get_briefing(
     now = datetime.now(timezone.utc)
 
     with Session(_engine_mod.engine) as session:
-        # Things with checkin_date within horizon
-        thing_stmt = select(ThingRecord).where(
-            ThingRecord.active == True,
-            ThingRecord.checkin_date.is_not(None),  # type: ignore[union-attr]
-            ThingRecord.checkin_date <= horizon,  # type: ignore[operator]
-            user_filter_clause(ThingRecord.user_id, user_id),
-        ).order_by(ThingRecord.checkin_date.asc())  # type: ignore[union-attr]
-        thing_rows = session.exec(thing_stmt).all()
-
-        # All active things for blocker graph
+        # All active things (used for blocker graph AND to derive checkin-due subset)
         all_active_stmt = select(ThingRecord).where(
             ThingRecord.active == True,
             user_filter_clause(ThingRecord.user_id, user_id),
@@ -810,11 +801,13 @@ def get_briefing(
         )
         finding_rows = session.exec(finding_stmt).all()
 
-        total_active_stmt = select(ThingRecord).where(
-            ThingRecord.active == True,
-            user_filter_clause(ThingRecord.user_id, user_id),
-        )
-        total_active = len(session.exec(total_active_stmt).all())
+    total_active = len(all_active)
+
+    # Filter checkin-due things from all_active (avoids a separate query)
+    thing_rows = sorted(
+        [r for r in all_active if r.checkin_date is not None and r.checkin_date <= horizon],
+        key=lambda r: r.checkin_date,  # type: ignore[arg-type]
+    )
 
     # Build blocker graph
     all_things_map = {r.id: {"id": r.id, "importance": r.importance, "active": r.active} for r in all_active}
