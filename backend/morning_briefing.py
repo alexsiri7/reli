@@ -441,6 +441,11 @@ def get_latest_morning_briefing(user_id: str, as_of: date | None = None) -> dict
 
     content = row.content if isinstance(row.content, dict) else {}
 
+    # If stored content is missing required fields, discard it so the caller
+    # regenerates a fresh briefing instead of raising a ValidationError.
+    if "summary" not in content:
+        return None
+
     return {
         "id": row.id,
         "briefing_date": row.briefing_date,
