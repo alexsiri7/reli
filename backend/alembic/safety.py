@@ -86,32 +86,15 @@ def _find_destructive_ops_in_source(source: str) -> list[str]:
     return findings
 
 
-def _find_destructive_sql_in_source(source: str) -> list[str]:
-    """Scan raw source text for destructive SQL in string literals."""
-    findings: list[str] = []
-    # Find string literals that contain destructive SQL
-    # This catches multi-line f-strings and other patterns the AST misses
-    for pattern in _DESTRUCTIVE_SQL_PATTERNS:
-        for match in pattern.finditer(source):
-            # Get surrounding context
-            start = max(0, match.start() - 20)
-            end = min(len(source), match.end() + 40)
-            context = source[start:end].replace("\n", " ").strip()
-            findings.append(f"SQL pattern: ...{context}...")
-    return findings
-
-
 def check_pending_migrations(
     script_dir: ScriptDirectory,
     current_heads: set[str],
-    target: str = "head",
 ) -> None:
     """Check pending migrations for destructive DDL.
 
     Args:
         script_dir: Alembic ScriptDirectory instance.
         current_heads: Set of current revision IDs in the database.
-        target: Target revision (default "head").
 
     Raises:
         DestructiveDDLFound: If destructive DDL is found and
@@ -119,12 +102,6 @@ def check_pending_migrations(
     """
     if os.environ.get("ALLOW_DESTRUCTIVE_DDL", "").lower() in ("1", "true", "yes"):
         return
-
-    # Resolve head revisions
-    if target == "head":
-        target_revs = script_dir.get_heads()
-    else:
-        target_revs = (target,)
 
     # Walk pending revisions
     all_findings: dict[str, list[str]] = {}
@@ -134,13 +111,6 @@ def check_pending_migrations(
         # Skip if already applied
         if rev_id in current_heads:
             continue
-        # Skip if it's an ancestor of all current heads (already applied)
-        if current_heads and all(
-            script_dir.iterate_revisions(head, rev_id) is not None
-            for head in current_heads
-        ):
-            # More robust: check if revision is in the path from any head
-            pass
 
         source_path = Path(rev_script.path) if rev_script.path else None
         if source_path is None or not source_path.exists():
