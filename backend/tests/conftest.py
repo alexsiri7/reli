@@ -35,24 +35,48 @@ def tmp_db_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Patch the database module to use a temp SQLite file.
+    """Patch both legacy and ORM database modules to use a temp SQLite file.
 
-    Uses legacy ``init_db()`` to create tables and seed data (many test files
-    still import ``db()`` from ``database.py``), then patches the ORM
-    ``db_engine`` module so SQLModel code-paths hit the same temp DB.
+    Creates tables via ``SQLModel.metadata.create_all()`` (Alembic is not
+    used in tests).  The legacy ``database.db()`` context manager is patched
+    so test files that still use raw ``sqlite3`` connections hit the same DB.
     """
     import backend.database as db_module
     import backend.db_engine as engine_module
-    from sqlmodel import Session, create_engine
+    from sqlmodel import SQLModel, Session, create_engine
 
+    # Point the legacy raw-sqlite helpers at the temp DB
     monkeypatch.setattr(db_module, "DB_PATH", tmp_db_path)
-    db_module.init_db()
 
-    # Patch SQLModel engine to use the same temp DB
+    # Create a SQLModel engine for the temp DB
     test_engine = create_engine(
         f"sqlite:///{tmp_db_path}",
         connect_args={"check_same_thread": False},
     )
+    SQLModel.metadata.create_all(test_engine)
+
+    # Seed default thing types (replaces legacy _seed_thing_types from init_db)
+    from backend.db_models import ThingTypeRecord
+
+    _DEFAULT_THING_TYPES = [
+        ("task", "\U0001f4cb"),
+        ("note", "\U0001f4dd"),
+        ("project", "\U0001f4c1"),
+        ("idea", "\U0001f4a1"),
+        ("goal", "\U0001f3af"),
+        ("journal", "\U0001f4d3"),
+        ("person", "\U0001f464"),
+        ("place", "\U0001f4cd"),
+        ("event", "\U0001f4c5"),
+        ("concept", "\U0001f9e0"),
+        ("reference", "\U0001f517"),
+        ("preference", "\u2699\ufe0f"),
+    ]
+    with Session(test_engine) as session:
+        for name, icon in _DEFAULT_THING_TYPES:
+            session.add(ThingTypeRecord(id=name, name=name, icon=icon))
+        session.commit()
+
     monkeypatch.setattr(engine_module, "engine", test_engine)
 
     # Override get_session to use the test engine

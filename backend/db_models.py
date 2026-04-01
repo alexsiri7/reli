@@ -15,10 +15,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Column, Text
+from sqlalchemy import JSON, Column, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from pgvector.sqlalchemy import Vector
 from sqlmodel import Field, SQLModel
+
+# SQL-level server defaults so raw INSERT statements (used in tests and
+# legacy code) get sensible values without specifying every column.
+_TS_DEFAULT = text("CURRENT_TIMESTAMP")
 
 # Use JSONB on PostgreSQL (supports comparison operators, indexing, etc.)
 # and plain JSON on SQLite (which stores JSON as text anyway).
@@ -50,17 +54,17 @@ class ThingRecord(SQLModel, table=True):
     checkin_date: datetime | None = None
 
     # Legacy column -- kept for backward compat, use ``importance`` instead.
-    priority: int | None = Field(default=3, exclude=True)
+    priority: int | None = Field(default=3, exclude=True, sa_column_kwargs={"server_default": "3"})
 
-    importance: int = Field(default=2, ge=0, le=4)
-    active: bool = True
-    surface: bool = True
+    importance: int = Field(default=2, ge=0, le=4, sa_column_kwargs={"server_default": "2"})
+    active: bool = Field(default=True, sa_column_kwargs={"server_default": "1"})
+    surface: bool = Field(default=True, sa_column_kwargs={"server_default": "1"})
 
     data: dict[str, Any] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
     open_questions: list[str] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
 
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+    updated_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
     last_referenced: datetime | None = None
 
     user_id: str | None = None
@@ -84,7 +88,7 @@ class ThingRelationshipRecord(SQLModel, table=True):
         default=None,
         sa_column=Column("metadata", _JSON, nullable=True),
     )
-    created_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
 
 
 # ---------------------------------------------------------------------------
@@ -104,12 +108,12 @@ class ChatHistoryRecord(SQLModel, table=True):
     applied_changes: dict[str, Any] | None = Field(
         default=None, sa_column=Column(_JSON, nullable=True)
     )
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    cost_usd: float = 0.0
-    api_calls: int = 0
+    prompt_tokens: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    completion_tokens: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    cost_usd: float = Field(default=0.0, sa_column_kwargs={"server_default": "0.0"})
+    api_calls: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     model: str | None = None
-    timestamp: datetime = Field(default_factory=_utcnow)
+    timestamp: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
     user_id: str | None = None
 
 
@@ -122,9 +126,9 @@ class ChatMessageUsageRecord(SQLModel, table=True):
     chat_message_id: int = Field(foreign_key="chat_history.id")
     stage: str | None = None
     model: str
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    cost_usd: float = 0.0
+    prompt_tokens: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    completion_tokens: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    cost_usd: float = Field(default=0.0, sa_column_kwargs={"server_default": "0.0"})
 
 
 # ---------------------------------------------------------------------------
@@ -142,8 +146,8 @@ class UserRecord(SQLModel, table=True):
     google_id: str = Field(unique=True)
     name: str
     picture: str | None = None
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+    updated_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
 
 
 class UserSettingRecord(SQLModel, table=True):
@@ -155,7 +159,7 @@ class UserSettingRecord(SQLModel, table=True):
     user_id: str = Field(foreign_key="users.id")
     key: str
     value: str | None = None
-    updated_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
 
 
 # ---------------------------------------------------------------------------
@@ -172,9 +176,9 @@ class SweepFindingRecord(SQLModel, table=True):
     thing_id: str | None = Field(default=None, foreign_key="things.id")
     finding_type: str
     message: str
-    priority: int = 2
-    dismissed: bool = False
-    created_at: datetime = Field(default_factory=_utcnow)
+    priority: int = Field(default=2, sa_column_kwargs={"server_default": "2"})
+    dismissed: bool = Field(default=False, sa_column_kwargs={"server_default": "0"})
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
     expires_at: datetime | None = None
     snoozed_until: datetime | None = None
     user_id: str | None = None
@@ -187,15 +191,15 @@ class SweepRunRecord(SQLModel, table=True):
 
     id: str = Field(primary_key=True)
     user_id: str | None = Field(default=None, foreign_key="users.id")
-    status: str = "running"
-    candidates_found: int = 0
-    findings_created: int = 0
+    status: str = Field(default="running", sa_column_kwargs={"server_default": "'running'"})
+    candidates_found: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    findings_created: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     model: str | None = None
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    cost_usd: float = 0.0
+    prompt_tokens: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    completion_tokens: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    cost_usd: float = Field(default=0.0, sa_column_kwargs={"server_default": "0.0"})
     error: str | None = None
-    started_at: datetime = Field(default_factory=_utcnow)
+    started_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
     completed_at: datetime | None = None
 
 
@@ -212,10 +216,10 @@ class UsageLogRecord(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     session_id: str
     model: str
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    cost_usd: float = 0.0
-    timestamp: datetime = Field(default_factory=_utcnow)
+    prompt_tokens: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    completion_tokens: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    cost_usd: float = Field(default=0.0, sa_column_kwargs={"server_default": "0.0"})
+    timestamp: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
     user_id: str | None = None
 
 
@@ -231,9 +235,9 @@ class ThingTypeRecord(SQLModel, table=True):
 
     id: str = Field(primary_key=True)
     name: str = Field(unique=True)
-    icon: str = Field(default="\U0001f4cc")
+    icon: str = Field(default="\U0001f4cc", sa_column_kwargs={"server_default": "'\U0001f4cc'"})
     color: str | None = None
-    created_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +252,7 @@ class GoogleTokenRecord(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: str | None = Field(default=None, foreign_key="users.id")
-    service: str = "calendar"
+    service: str = Field(default="calendar", sa_column_kwargs={"server_default": "'calendar'"})
     access_token: str
     refresh_token: str | None = None
     token_uri: str
@@ -256,8 +260,8 @@ class GoogleTokenRecord(SQLModel, table=True):
     client_secret: str
     expiry: str | None = None
     scopes: str | None = None
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+    updated_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
 
 
 # ---------------------------------------------------------------------------
@@ -278,9 +282,9 @@ class MergeHistoryRecord(SQLModel, table=True):
     merged_data: dict[str, Any] | None = Field(
         default=None, sa_column=Column(_JSON, nullable=True)
     )
-    triggered_by: str = "api"
+    triggered_by: str = Field(default="api", sa_column_kwargs={"server_default": "'api'"})
     user_id: str | None = Field(default=None, foreign_key="users.id")
-    created_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +301,7 @@ class MorningBriefingRecord(SQLModel, table=True):
     user_id: str | None = Field(default=None, foreign_key="users.id")
     briefing_date: str
     content: dict[str, Any] = Field(sa_column=Column(_JSON, nullable=False))
-    generated_at: datetime = Field(default_factory=_utcnow)
+    generated_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
 
 
 # ---------------------------------------------------------------------------
@@ -315,9 +319,9 @@ class ConnectionSuggestionRecord(SQLModel, table=True):
     to_thing_id: str = Field(foreign_key="things.id")
     suggested_relationship_type: str
     reason: str
-    confidence: float = 0.5
-    status: str = "pending"
-    created_at: datetime = Field(default_factory=_utcnow)
+    confidence: float = Field(default=0.5, sa_column_kwargs={"server_default": "0.5"})
+    status: str = Field(default="pending", sa_column_kwargs={"server_default": "'pending'"})
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
     resolved_at: datetime | None = None
     user_id: str | None = Field(default=None, foreign_key="users.id")
 
@@ -336,8 +340,8 @@ class ConversationSummaryRecord(SQLModel, table=True):
     user_id: str = Field(foreign_key="users.id")
     summary_text: str
     messages_summarized_up_to: int
-    token_count: int = 0
-    created_at: datetime = Field(default_factory=_utcnow)
+    token_count: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
 
 
 # ---------------------------------------------------------------------------
@@ -354,7 +358,7 @@ class WeeklyBriefingRecord(SQLModel, table=True):
     user_id: str | None = Field(default=None, foreign_key="users.id")
     week_start: str
     content: dict[str, Any] = Field(sa_column=Column(_JSON, nullable=False))
-    generated_at: datetime = Field(default_factory=_utcnow)
+    generated_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
 
 
 # Nudge Dismissals & Suppressions
@@ -394,5 +398,5 @@ class ThingEmbeddingRecord(SQLModel, table=True):
 
     thing_id: str = Field(primary_key=True, foreign_key="things.id")
     embedding: Any = Field(sa_column=Column(Vector(1536), nullable=False))
-    content: str = ""  # The text that was embedded (for debugging/reindex)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    content: str = Field(default="", sa_column_kwargs={"server_default": "''"})
+    updated_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})

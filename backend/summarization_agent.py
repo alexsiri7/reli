@@ -26,7 +26,7 @@ from .agents import REQUESTY_MODEL as SUMMARIZATION_MODEL  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
-def _get_latest_summary(user_id: str) -> dict[str, Any] | None:
+def get_latest_summary(user_id: str) -> dict[str, Any] | None:
     with Session(_engine_mod.engine) as session:
         record = session.exec(
             select(ConversationSummaryRecord)
@@ -44,7 +44,7 @@ def _get_latest_summary(user_id: str) -> dict[str, Any] | None:
     }
 
 
-def _create_summary(
+def create_summary(
     user_id: str,
     summary_text: str,
     messages_summarized_up_to: int,
@@ -65,8 +65,8 @@ def _create_summary(
         return record.id
 
 
-def _get_messages_since_summary(user_id: str) -> list[dict[str, Any]]:
-    latest = _get_latest_summary(user_id)
+def get_messages_since_summary(user_id: str) -> list[dict[str, Any]]:
+    latest = get_latest_summary(user_id)
     with Session(_engine_mod.engine) as session:
         stmt = select(ChatHistoryRecord).where(
             ChatHistoryRecord.user_id == user_id
@@ -80,8 +80,8 @@ def _get_messages_since_summary(user_id: str) -> list[dict[str, Any]]:
     ]
 
 
-def _get_message_count_since_summary(user_id: str) -> int:
-    latest = _get_latest_summary(user_id)
+def get_message_count_since_summary(user_id: str) -> int:
+    latest = get_latest_summary(user_id)
     with Session(_engine_mod.engine) as session:
         from sqlalchemy import func
         stmt = select(func.count()).select_from(ChatHistoryRecord).where(
@@ -141,14 +141,14 @@ async def summarize_conversation(
     or None if there are no messages to summarize.
     """
     model = model or SUMMARIZATION_MODEL
-    messages_since = _get_messages_since_summary(user_id)
+    messages_since = get_messages_since_summary(user_id)
 
     if not messages_since:
         logger.debug("No messages to summarize for user %s", user_id)
         return None
 
     # Build the user prompt
-    previous_summary = _get_latest_summary(user_id)
+    previous_summary = get_latest_summary(user_id)
     prompt_parts: list[str] = []
 
     if previous_summary:
@@ -198,7 +198,7 @@ async def summarize_conversation(
 
     # Persist the summary
     last_msg_id = messages_since[-1]["id"]
-    row_id = _create_summary(
+    row_id = create_summary(
         user_id=user_id,
         summary_text=summary_text,
         messages_summarized_up_to=last_msg_id,
@@ -226,5 +226,5 @@ async def summarize_conversation(
 
 def should_summarize(user_id: str, trigger_n: int = DEFAULT_SUMMARY_TRIGGER_N) -> bool:
     """Check if the message count since last summary has reached the trigger threshold."""
-    count = _get_message_count_since_summary(user_id)
+    count = get_message_count_since_summary(user_id)
     return count >= trigger_n

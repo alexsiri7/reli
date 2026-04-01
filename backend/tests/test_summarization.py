@@ -5,16 +5,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.database import (
-    create_summary,
-    db,
-    get_latest_summary,
-    get_message_count_since_summary,
-    get_messages_since_summary,
-)
+from backend.database import db
 from backend.routers.chat import _fetch_history, _maybe_trigger_summarization
 from backend.summarization_agent import (
     DEFAULT_SUMMARY_TRIGGER_N,
+    create_summary,
+    get_latest_summary,
+    get_message_count_since_summary,
+    get_messages_since_summary,
     should_summarize,
     summarize_conversation,
 )
