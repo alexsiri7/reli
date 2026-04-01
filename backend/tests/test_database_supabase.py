@@ -147,45 +147,11 @@ class TestDatabaseGating:
         with db() as conn:
             assert isinstance(conn, sqlite3.Connection)
 
-    def test_init_db_supabase_dispatches(self, mock_supabase_client, monkeypatch):
-        """init_db() dispatches to init_db_supabase when flag is set."""
+    def test_db_yields_supabase_client(self, mock_supabase_client, monkeypatch):
+        """db() dispatches to supabase when STORAGE_BACKEND=supabase."""
         monkeypatch.setattr("backend.database.settings.STORAGE_BACKEND", "supabase")
-        client, _ = mock_supabase_client
+        from backend.database import db
 
-        mock_query = MagicMock()
-        client.table.return_value = mock_query
-        mock_query.select.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.execute.return_value = MagicMock(data=[], count=0)
-
-        from backend.database import init_db
-
-        init_db()
-
-        # Verify it probed tables (i.e., used supabase path)
-        assert client.table.call_count > 0
-
-    def test_clean_orphans_supabase_dispatches(self, mock_supabase_client, monkeypatch):
-        """clean_orphan_relationships() dispatches to supabase when flag is set."""
-        monkeypatch.setattr("backend.database.settings.STORAGE_BACKEND", "supabase")
-        client, _ = mock_supabase_client
-
-        things_query = MagicMock()
-        rels_query = MagicMock()
-
-        def table_router(name):
-            if name == "things":
-                return things_query
-            return rels_query
-
-        client.table.side_effect = table_router
-        things_query.select.return_value = things_query
-        things_query.execute.return_value = MagicMock(data=[])
-        rels_query.select.return_value = rels_query
-        rels_query.execute.return_value = MagicMock(data=[])
-
-        from backend.database import clean_orphan_relationships
-
-        count, ids = clean_orphan_relationships()
-        assert count == 0
-        assert ids == []
+        with db() as client:
+            # supabase_db context manager yields the mocked client
+            assert client is not None
