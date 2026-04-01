@@ -2,13 +2,13 @@ name: Dependency Vulnerability Scan
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - "backend/requirements.txt"
       - "frontend/package.json"
       - "frontend/package-lock.json"
   pull_request:
-    branches: [master]
+    branches: [main]
     paths:
       - "backend/requirements.txt"
       - "frontend/package.json"

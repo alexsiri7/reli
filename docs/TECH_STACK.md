@@ -82,7 +82,7 @@ OpenAI-compatible gateway that handles model routing and cost tracking.
 - **Backend tests**: pytest on Python 3.11
 - **Frontend tests**: Vitest + build on Node 20
 - **Deploy**: Tailscale VPN → SSH → git pull + rebuild
-- **Branch protection**: master requires Backend + Frontend checks
+- **Branch protection**: main requires Backend + Frontend checks
 
 ### Networking
 - **Cloudflare Tunnel** — Public access via `CLOUDFLARE_TUNNEL_TOKEN`

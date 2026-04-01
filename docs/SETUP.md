@@ -193,4 +193,4 @@ GitHub Actions runs on every push:
 3. **Type checking** — mypy (backend) + tsc (frontend)
 4. **Deploy** — SSH to server via Tailscale VPN, `git pull + rebuild`
 
-Branch protection on `master` requires all checks to pass.
+Branch protection on `main` requires all checks to pass.
