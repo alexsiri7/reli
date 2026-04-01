@@ -594,9 +594,10 @@ def _make_reasoning_tools(
             user_id=user_id,
         )
         # Track fetched context for pipeline result
-        seen_fetched = {t["id"] for t in fetched_context["things"]}
+        seen_fetched = {t["id"] for t in fetched_context["things"] if "id" in t}
         for t in result.get("things", []):
-            if t["id"] not in seen_fetched:
+            tid = t.get("id")
+            if tid and tid not in seen_fetched:
                 fetched_context["things"].append(t)
         fetched_context["relationships"] = result.get("relationships", [])
         return result
@@ -980,10 +981,11 @@ async def run_reasoning_agent(
     # Seed fetched_context with warm context so Things from recent turns
     # appear in the pipeline result even if fetch_context is not called
     if warm_context:
-        seen_ids = {t["id"] for t in fetched_context["things"]}
+        seen_ids = {t["id"] for t in fetched_context["things"] if "id" in t}
         for t in warm_context:
-            if t["id"] not in seen_ids:
-                seen_ids.add(t["id"])
+            tid = t.get("id")
+            if tid and tid not in seen_ids:
+                seen_ids.add(tid)
                 fetched_context["things"].append(t)
 
     # Enable thinking for reasoning models. We use 'thinking_budget' which
@@ -1200,9 +1202,10 @@ def _make_think_tools(
             user_id=user_id,
         )
         # Track fetched context
-        seen_fetched = {t["id"] for t in fetched_context["things"]}
+        seen_fetched = {t["id"] for t in fetched_context["things"] if "id" in t}
         for t in result.get("things", []):
-            if t["id"] not in seen_fetched:
+            tid = t.get("id")
+            if tid and tid not in seen_fetched:
                 fetched_context["things"].append(t)
         fetched_context["relationships"] = result.get("relationships", [])
         return result
@@ -1276,9 +1279,10 @@ async def run_think_agent(
     result.setdefault("reasoning_summary", "")
 
     # Attach context for the caller's reference
-    if fetched_context["things"]:
+    valid_things = [t for t in fetched_context["things"] if t.get("id")]
+    if valid_things:
         result["context"] = {
-            "things_found": len(fetched_context["things"]),
+            "things_found": len(valid_things),
             "things": [
                 {
                     "id": t["id"],
@@ -1286,7 +1290,7 @@ async def run_think_agent(
                     "type_hint": t.get("type_hint", ""),
                     "active": t.get("active", 1),
                 }
-                for t in fetched_context["things"]
+                for t in valid_things
             ],
         }
 

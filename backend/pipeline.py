@@ -525,7 +525,7 @@ class ChatPipeline:
             if oq:
                 parsed = json.loads(oq) if isinstance(oq, str) else oq
                 if parsed:
-                    open_questions_by_thing[thing.get("title", thing["id"])] = parsed
+                    open_questions_by_thing[thing.get("title") or thing.get("id", "")] = parsed
         for thing in applied_changes.get("created", []) + applied_changes.get("updated", []):
             oq = thing.get("open_questions")
             if oq:

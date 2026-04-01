@@ -196,9 +196,12 @@ def _parse_message(msg: dict[str, Any]) -> GmailMessage:
     body = _extract_body(msg.get("payload", {}))
     labels = msg.get("labelIds", [])
 
+    msg_id = msg.get("id")
+    if not msg_id:
+        raise ValueError("Gmail message missing 'id' field")
     return GmailMessage(
-        id=msg["id"],
-        thread_id=msg["threadId"],
+        id=msg_id,
+        thread_id=msg.get("threadId", ""),
         subject=headers.get("subject", "(no subject)"),
         sender=headers.get("from", ""),
         to=headers.get("to", ""),
@@ -370,7 +373,10 @@ def list_messages(
 
     messages = []
     for msg_ref in message_ids:
-        msg = service.users().messages().get(userId="me", id=msg_ref["id"], format="full").execute()
+        ref_id = msg_ref.get("id") if isinstance(msg_ref, dict) else None
+        if not ref_id:
+            continue
+        msg = service.users().messages().get(userId="me", id=ref_id, format="full").execute()
         messages.append(_parse_message(msg))
 
     return messages

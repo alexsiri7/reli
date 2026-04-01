@@ -379,7 +379,9 @@ def _persist_exchange(
 
     # Build context_things list
     context_things = [
-        {"id": t["id"], "title": t.get("title", ""), "type_hint": t.get("type_hint")} for t in result.relevant_things
+        {"id": t.get("id", ""), "title": t.get("title", ""), "type_hint": t.get("type_hint")}
+        for t in result.relevant_things
+        if t.get("id")
     ]
 
     applied_with_sources = applied_changes.copy()
