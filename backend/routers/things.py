@@ -272,23 +272,28 @@ def search_things(
         if remaining > 0:
             rel_params = {**params, "qlimit": remaining}
             # Find Things connected via relationships where the *other* Thing or
-            # the relationship_type matches the query. Uses EXISTS to avoid
-            # building large intermediate sets from 4 separate UNIONs.
+            # the relationship_type matches the query.  Split into two directed
+            # EXISTS clauses so SQLite can use idx_rel_from / idx_rel_to instead
+            # of scanning with an OR + CASE expression (fixes #319 timeout).
             rel_sql = text(
                 "SELECT t.* FROM things t"
-                " WHERE EXISTS ("
-                "   SELECT 1 FROM thing_relationships r"
-                "   WHERE (r.from_thing_id = t.id OR r.to_thing_id = t.id)"
-                "     AND ("
-                "       r.relationship_type LIKE :pattern"
-                "       OR EXISTS ("
-                "         SELECT 1 FROM things m"
-                "         WHERE m.id = CASE WHEN r.from_thing_id = t.id"
-                "                            THEN r.to_thing_id"
-                "                            ELSE r.from_thing_id END"
-                "           AND (m.title LIKE :pattern OR CAST(m.data AS TEXT) LIKE :pattern)"
-                "       )"
-                "     )"
+                " WHERE ("
+                "   EXISTS ("
+                "     SELECT 1 FROM thing_relationships r"
+                "     JOIN things m ON m.id = r.to_thing_id"
+                "     WHERE r.from_thing_id = t.id"
+                "       AND (r.relationship_type LIKE :pattern"
+                "            OR m.title LIKE :pattern"
+                "            OR CAST(m.data AS TEXT) LIKE :pattern)"
+                "   )"
+                "   OR EXISTS ("
+                "     SELECT 1 FROM thing_relationships r"
+                "     JOIN things m ON m.id = r.from_thing_id"
+                "     WHERE r.to_thing_id = t.id"
+                "       AND (r.relationship_type LIKE :pattern"
+                "            OR m.title LIKE :pattern"
+                "            OR CAST(m.data AS TEXT) LIKE :pattern)"
+                "   )"
                 " )"
                 + filters +
                 " ORDER BY t.updated_at DESC"
