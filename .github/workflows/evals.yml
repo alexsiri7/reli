@@ -4,7 +4,7 @@ name: Eval CI
 # Only fires on PRs — these tests cost ~$0.05-0.20 per run (live LLM calls).
 on:
   pull_request:
-    branches: [master]
+    branches: [main]
     paths:
       - 'backend/agents.py'
       - 'backend/reasoning_agent.py'
