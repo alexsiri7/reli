@@ -35,34 +35,64 @@ import {
 } from './schemas'
 import { z } from 'zod'
 
+// ── Generated types (from Pydantic models via OpenAPI) ────────────────────────
+// Re-exported so existing imports from './store' continue to work.
+export type {
+  ThingType,
+  Thing,
+  Relationship,
+  CallUsage,
+  ModelUsage,
+  ProactiveSurface,
+  FocusRecommendation,
+  ConflictAlert,
+  SweepFinding,
+  MorningBriefingItem,
+  MorningBriefingFinding,
+  MorningBriefingContent,
+  MorningBriefing,
+  BriefingPreferences,
+  Nudge,
+  WeeklyBriefingItem,
+  WeeklyBriefingConnection,
+  WeeklyBriefingContent,
+  WeeklyBriefing,
+  ModelSettings,
+  RequestyModel,
+  UserSettings,
+  UserProfileRelationship,
+  UserProfile,
+  MergeSuggestionThing,
+  MergeSuggestion,
+  ConnectionSuggestionThing,
+  ConnectionSuggestion,
+} from './generated/api-types'
+
+import type {
+  Thing,
+  ThingType,
+  CallUsage,
+  ModelUsage,
+  Relationship,
+  RequestyModel,
+  ProactiveSurface,
+  FocusRecommendation,
+  ConflictAlert,
+  SweepFinding,
+  MorningBriefing,
+  BriefingPreferences,
+  Nudge,
+  WeeklyBriefing,
+  ModelSettings,
+  UserSettings,
+  UserProfile,
+  MergeSuggestion,
+  ConnectionSuggestion,
+} from './generated/api-types'
+
+// ── Frontend-only types (not derived from Pydantic models) ────────────────────
+
 export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | 'preference' | string
-
-export interface ThingType {
-  id: string
-  name: string
-  icon: string
-  color: string | null
-  created_at: string
-}
-
-export interface Thing {
-  id: string
-  title: string
-  type_hint: TypeHint | null
-  parent_id: string | null
-  checkin_date: string | null
-  priority?: number
-  importance: number
-  active: boolean
-  surface: boolean
-  data: Record<string, unknown> | null
-  created_at: string
-  updated_at: string
-  last_referenced: string | null
-  open_questions: string[] | null
-  children_count: number | null
-  completed_count: number | null
-}
 
 export interface WebSearchResult {
   title: string
@@ -100,41 +130,7 @@ export interface AppliedChanges {
   calendar_events?: CalendarEvent[]
 }
 
-export interface ProactiveSurface {
-  thing: Thing
-  reason: string
-  date_key: string
-  days_away: number
-}
-
-export interface FocusRecommendation {
-  thing: Thing
-  score: number
-  reasons: string[]
-  is_blocked: boolean
-}
-
-export interface ConflictAlert {
-  alert_type: string
-  severity: string
-  message: string
-  thing_ids: string[]
-  thing_titles: string[]
-}
-
-export interface SweepFinding {
-  id: string
-  thing_id: string | null
-  finding_type: string
-  message: string
-  priority: number
-  dismissed: boolean
-  created_at: string
-  expires_at: string | null
-  snoozed_until: string | null
-  thing: Thing | null
-}
-
+// BriefingItem.thing is dict[str, Any] in backend but always a Thing in practice
 export interface BriefingItem {
   thing: Thing
   importance: number
@@ -147,91 +143,6 @@ export interface BriefingStats {
   active_things: number
   checkin_due: number
   overdue: number
-}
-
-export interface MorningBriefingItem {
-  thing_id: string
-  title: string
-  score: number | null
-  reasons: string[]
-  days_overdue: number | null
-  blocked_by: string[]
-}
-
-export interface MorningBriefingFinding {
-  id: string
-  message: string
-  priority: number
-  thing_id: string | null
-  thing_title: string | null
-}
-
-export interface MorningBriefingContent {
-  summary: string
-  priorities: MorningBriefingItem[]
-  overdue: MorningBriefingItem[]
-  blockers: MorningBriefingItem[]
-  findings: MorningBriefingFinding[]
-  stats: Record<string, number>
-}
-
-export interface MorningBriefing {
-  id: string
-  briefing_date: string
-  content: MorningBriefingContent
-  generated_at: string
-}
-
-export interface BriefingPreferences {
-  include_priorities: boolean
-  include_overdue: boolean
-  include_blockers: boolean
-  include_findings: boolean
-  max_priorities: number
-  max_findings: number
-}
-
-export interface Nudge {
-  id: string
-  nudge_type: string
-  message: string
-  thing_id: string | null
-  thing_title: string | null
-  thing_type_hint: string | null
-  days_away: number | null
-  primary_action_label: string | null
-}
-
-export interface WeeklyBriefingItem {
-  thing_id: string
-  title: string
-  type_hint: string | null
-  detail: string | null
-}
-
-export interface WeeklyBriefingConnection {
-  from_title: string
-  to_title: string
-  relationship_type: string
-}
-
-export interface WeeklyBriefingContent {
-  summary: string
-  week_start: string
-  week_end: string
-  completed: WeeklyBriefingItem[]
-  upcoming: WeeklyBriefingItem[]
-  new_connections: WeeklyBriefingConnection[]
-  preferences_learned: string[]
-  open_questions: WeeklyBriefingItem[]
-  stats: Record<string, number>
-}
-
-export interface WeeklyBriefing {
-  id: string
-  week_start: string
-  content: WeeklyBriefingContent
-  generated_at: string
 }
 
 export interface CalendarEvent {
@@ -249,87 +160,11 @@ export interface CalendarStatus {
   connected: boolean
 }
 
-export interface ModelSettings {
-  context: string
-  reasoning: string
-  response: string
-  chat_context_window: number
-}
-
-export interface RequestyModel {
-  id: string
-  name: string | null
-  input_cost_per_million?: number | null
-  output_cost_per_million?: number | null
-}
-
 export type InteractionStyle = 'auto' | 'coach' | 'consultant'
 
-export interface UserSettings {
-  requesty_api_key: string
-  openai_api_key: string
-  embedding_model: string
-  context_model: string
-  reasoning_model: string
-  response_model: string
-  chat_context_window: number | null
-  theme: string
-  chat_mode: string
-  stale_threshold_days: number
-  proactivity_level: string
-  interaction_style: string
-}
+export type ChatMode = 'normal' | 'planning'
 
-export interface UserProfileRelationship {
-  id: string
-  relationship_type: string
-  direction: 'outgoing' | 'incoming'
-  related_thing_id: string
-  related_thing_title: string
-}
-
-export interface UserProfile {
-  thing: Thing
-  relationships: UserProfileRelationship[]
-}
-
-export interface MergeSuggestionThing {
-  id: string
-  title: string
-  type_hint: string | null
-}
-
-export interface MergeSuggestion {
-  thing_a: MergeSuggestionThing
-  thing_b: MergeSuggestionThing
-  reason: string
-}
-
-export interface ConnectionSuggestionThing {
-  id: string
-  title: string
-  type_hint: string | null
-}
-
-export interface ConnectionSuggestion {
-  id: string
-  from_thing: ConnectionSuggestionThing
-  to_thing: ConnectionSuggestionThing
-  suggested_relationship_type: string
-  reason: string
-  confidence: number
-  status: string
-  created_at: string
-}
-
-export interface ModelUsage {
-  model: string
-  prompt_tokens: number
-  completion_tokens: number
-  total_tokens: number
-  api_calls: number
-  cost_usd: number
-}
+export type StreamingStage = 'context' | 'reasoning' | 'response' | null
 
 export interface SessionStats {
   prompt_tokens: number
@@ -339,17 +174,6 @@ export interface SessionStats {
   cost_usd: number
   per_model: ModelUsage[]
 }
-
-export interface CallUsage {
-  model: string
-  prompt_tokens: number
-  completion_tokens: number
-  cost_usd: number
-}
-
-export type ChatMode = 'normal' | 'planning'
-
-export type StreamingStage = 'context' | 'reasoning' | 'response' | null
 
 export interface ChatMessage {
   id: number | string
@@ -366,15 +190,6 @@ export interface ChatMessage {
   timestamp: string
   streaming?: boolean
   streamingStage?: StreamingStage
-}
-
-export interface Relationship {
-  id: string
-  from_thing_id: string
-  to_thing_id: string
-  relationship_type: string
-  metadata: Record<string, unknown> | null
-  created_at: string
 }
 
 export interface AuthUser {

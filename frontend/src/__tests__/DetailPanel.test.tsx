@@ -23,7 +23,6 @@ const baseThing: Thing = {
   type_hint: 'task',
   parent_id: null,
   checkin_date: null,
-  priority: 2,
   importance: 2,
   active: true,
   surface: true,

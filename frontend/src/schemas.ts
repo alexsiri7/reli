@@ -1,37 +1,38 @@
 import { z } from 'zod'
 
-// --- Thing Types ---
+// ── Re-exported from generated (auto-generated from Pydantic models) ──────────
+export {
+  ThingTypeSchema,
+  ThingSchema,
+  RelationshipSchema,
+  SweepFindingSchema,
+  MorningBriefingItemSchema,
+  MorningBriefingFindingSchema,
+  MorningBriefingContentSchema,
+  MorningBriefingSchema,
+  BriefingPreferencesSchema,
+  ProactiveSurfaceSchema,
+  ConflictAlertSchema,
+  ModelSettingsSchema,
+  UserSettingsSchema,
+  RequestyModelSchema,
+  FocusRecommendationSchema,
+  FocusResponseSchema,
+  MergeSuggestionThingSchema,
+  MergeSuggestionSchema,
+  MergeResultSchema,
+  ConnectionSuggestionThingSchema,
+  ConnectionSuggestionSchema,
+  ModelUsageSchema,
+} from './generated/api-types'
 
-export const ThingTypeSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  icon: z.string(),
-  color: z.string().nullable(),
-  created_at: z.string(),
-})
+import {
+  ThingSchema,
+  SweepFindingSchema as GeneratedSweepFindingSchema,
+  ModelUsageSchema,
+} from './generated/api-types'
 
-// --- Things ---
-
-export const ThingSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  type_hint: z.string().nullable(),
-  parent_id: z.string().nullable(),
-  checkin_date: z.string().nullable(),
-  priority: z.number().optional(),
-  importance: z.number(),
-  active: z.boolean(),
-  surface: z.boolean(),
-  data: z.record(z.string(), z.unknown()).nullable(),
-  created_at: z.string(),
-  updated_at: z.string(),
-  last_referenced: z.string().nullable(),
-  open_questions: z.array(z.string()).nullable(),
-  children_count: z.number().nullable(),
-  completed_count: z.number().nullable(),
-})
-
-// --- Chat ---
+// ── Frontend-only schemas (not derived from Pydantic models) ──────────────────
 
 export const WebSearchResultSchema = z.object({
   title: z.string(),
@@ -59,6 +60,7 @@ export const AppliedChangesSchema = z.object({
   web_results: z.array(WebSearchResultSchema).optional(),
 })
 
+// ChatMessage uses frontend-specific fields (streaming, id union) not in backend
 const CallUsageSchema = z.object({
   model: z.string(),
   prompt_tokens: z.number(),
@@ -110,21 +112,7 @@ export const ChatResponseSchema = z.object({
   }).optional(),
 })
 
-// --- Briefing ---
-
-export const SweepFindingSchema = z.object({
-  id: z.string(),
-  thing_id: z.string().nullable(),
-  finding_type: z.string(),
-  message: z.string(),
-  priority: z.number(),
-  dismissed: z.boolean(),
-  created_at: z.string(),
-  expires_at: z.string().nullable(),
-  snoozed_until: z.string().nullable(),
-  thing: ThingSchema.nullable(),
-})
-
+// BriefingItem.thing uses ThingSchema for stricter validation than backend's dict[str, Any]
 export const BriefingItemSchema = z.object({
   thing: ThingSchema,
   importance: z.number(),
@@ -137,75 +125,10 @@ export const BriefingResponseSchema = z.object({
   the_one_thing: BriefingItemSchema.nullable().optional(),
   secondary: z.array(BriefingItemSchema).optional(),
   parking_lot: z.array(z.record(z.string(), z.unknown())).optional(),
-  findings: z.array(SweepFindingSchema).optional(),
+  findings: z.array(GeneratedSweepFindingSchema).optional(),
   total: z.number().optional(),
   stats: z.record(z.string(), z.number()).optional(),
 })
-
-// --- Morning Briefing ---
-
-export const MorningBriefingItemSchema = z.object({
-  thing_id: z.string(),
-  title: z.string(),
-  score: z.number().nullable().default(null),
-  reasons: z.array(z.string()).default([]),
-  days_overdue: z.number().nullable().default(null),
-  blocked_by: z.array(z.string()).default([]),
-})
-
-export const MorningBriefingFindingSchema = z.object({
-  id: z.string(),
-  message: z.string(),
-  priority: z.number(),
-  thing_id: z.string().nullable().default(null),
-  thing_title: z.string().nullable().default(null),
-})
-
-export const MorningBriefingContentSchema = z.object({
-  summary: z.string(),
-  priorities: z.array(MorningBriefingItemSchema).default([]),
-  overdue: z.array(MorningBriefingItemSchema).default([]),
-  blockers: z.array(MorningBriefingItemSchema).default([]),
-  findings: z.array(MorningBriefingFindingSchema).default([]),
-  stats: z.record(z.string(), z.number()).default({}),
-})
-
-export const MorningBriefingSchema = z.object({
-  id: z.string(),
-  briefing_date: z.string(),
-  content: MorningBriefingContentSchema,
-  generated_at: z.string(),
-})
-
-export const BriefingPreferencesSchema = z.object({
-  include_priorities: z.boolean(),
-  include_overdue: z.boolean(),
-  include_blockers: z.boolean(),
-  include_findings: z.boolean(),
-  max_priorities: z.number(),
-  max_findings: z.number(),
-})
-
-// --- Proactive Surfaces ---
-
-export const ProactiveSurfaceSchema = z.object({
-  thing: ThingSchema,
-  reason: z.string(),
-  date_key: z.string(),
-  days_away: z.number(),
-})
-
-// --- Conflict Alerts ---
-
-export const ConflictAlertSchema = z.object({
-  alert_type: z.string(),
-  severity: z.string(),
-  message: z.string(),
-  thing_ids: z.array(z.string()),
-  thing_titles: z.array(z.string()),
-})
-
-// --- Calendar ---
 
 export const CalendarEventSchema = z.object({
   id: z.string(),
@@ -222,17 +145,6 @@ export const CalendarStatusSchema = z.object({
   connected: z.boolean(),
 })
 
-// --- Session Stats ---
-
-export const ModelUsageSchema = z.object({
-  model: z.string(),
-  prompt_tokens: z.number(),
-  completion_tokens: z.number(),
-  total_tokens: z.number(),
-  api_calls: z.number(),
-  cost_usd: z.number(),
-})
-
 export const SessionStatsSchema = z.object({
   prompt_tokens: z.number(),
   completion_tokens: z.number(),
@@ -242,24 +154,9 @@ export const SessionStatsSchema = z.object({
   per_model: z.array(ModelUsageSchema),
 })
 
-// --- Health ---
-
 export const HealthResponseSchema = z.object({
   status: z.string(),
 })
-
-// --- Relationships ---
-
-export const RelationshipSchema = z.object({
-  id: z.string(),
-  from_thing_id: z.string(),
-  to_thing_id: z.string(),
-  relationship_type: z.string(),
-  metadata: z.record(z.string(), z.unknown()).nullable(),
-  created_at: z.string(),
-})
-
-// --- Auth ---
 
 export const AuthUserSchema = z.object({
   id: z.string(),
@@ -268,39 +165,7 @@ export const AuthUserSchema = z.object({
   picture: z.string().nullable(),
 })
 
-// --- Settings ---
-
-export const ModelSettingsSchema = z.object({
-  context: z.string(),
-  reasoning: z.string(),
-  response: z.string(),
-  chat_context_window: z.number(),
-})
-
-export const UserSettingsSchema = z.object({
-  requesty_api_key: z.string(),
-  openai_api_key: z.string(),
-  embedding_model: z.string(),
-  context_model: z.string(),
-  reasoning_model: z.string(),
-  response_model: z.string(),
-  chat_context_window: z.number().nullable(),
-  theme: z.string(),
-  chat_mode: z.string().optional().default('normal'),
-  stale_threshold_days: z.number().default(14),
-  proactivity_level: z.string().default('medium'),
-  interaction_style: z.string().optional().default('auto'),
-})
-
-export const RequestyModelSchema = z.object({
-  id: z.string(),
-  name: z.string().nullable(),
-  input_cost_per_million: z.number().nullable().optional(),
-  output_cost_per_million: z.number().nullable().optional(),
-})
-
-// --- User Profile ---
-
+// UserProfileRelationship uses z.enum for stricter direction validation
 export const UserProfileRelationshipSchema = z.object({
   id: z.string(),
   relationship_type: z.string(),
@@ -312,61 +177,6 @@ export const UserProfileRelationshipSchema = z.object({
 export const UserProfileSchema = z.object({
   thing: ThingSchema,
   relationships: z.array(UserProfileRelationshipSchema),
-})
-
-// --- Focus Recommendations ---
-
-export const FocusRecommendationSchema = z.object({
-  thing: ThingSchema,
-  score: z.number(),
-  reasons: z.array(z.string()),
-  is_blocked: z.boolean(),
-})
-
-export const FocusResponseSchema = z.object({
-  recommendations: z.array(FocusRecommendationSchema),
-  total: z.number(),
-  calendar_active: z.boolean(),
-})
-
-// --- Merge Suggestions ---
-
-export const MergeSuggestionThingSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  type_hint: z.string().nullable(),
-})
-
-export const MergeSuggestionSchema = z.object({
-  thing_a: MergeSuggestionThingSchema,
-  thing_b: MergeSuggestionThingSchema,
-  reason: z.string(),
-})
-
-export const MergeResultSchema = z.object({
-  keep_id: z.string(),
-  remove_id: z.string(),
-  keep_title: z.string(),
-  remove_title: z.string(),
-})
-
-// --- Connection Suggestions ---
-
-export const ConnectionSuggestionThingSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  type_hint: z.string().nullable(),
-})
-
-export const ConnectionSuggestionSchema = z.object({
-  id: z.string(),
-  from_thing: ConnectionSuggestionThingSchema,
-  to_thing: ConnectionSuggestionThingSchema,
-  suggested_relationship_type: z.string(),
-  reason: z.string(),
-  confidence: z.number(),
-  status: z.string(),
-  created_at: z.string(),
 })
 
 // --- Validation helper ---
