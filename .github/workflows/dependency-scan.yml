@@ -1,0 +1,57 @@
+name: Dependency Vulnerability Scan
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "backend/requirements.txt"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+  pull_request:
+    branches: [master]
+    paths:
+      - "backend/requirements.txt"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+  schedule:
+    - cron: "0 6 * * 1" # Weekly on Monday at 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  python-audit:
+    name: Python dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        run: pip-audit -r backend/requirements.txt
+
+  node-audit:
+    name: Node.js dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Run npm audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
