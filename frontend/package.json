@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:screenshots": "npx playwright test --config playwright.config.ts",
     "test:screenshots:update": "npx playwright test --config playwright.config.ts --update-snapshots",
-    "test:smoke": "npx playwright test --config playwright.config.ts --project=smoke"
+    "test:smoke": "npx playwright test --config playwright.config.ts --project=smoke",
+    "generate:types": "cd .. && python3 scripts/generate_types.py",
+    "check:types-fresh": "cd .. && python3 scripts/generate_types.py --check"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
