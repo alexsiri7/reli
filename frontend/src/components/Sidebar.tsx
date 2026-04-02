@@ -856,14 +856,14 @@ export function Sidebar() {
             {theOneThing && (
               <div className="px-4 pt-3 pb-1">
                 <div
-                  className="bg-primary-container p-4 rounded-xl shadow-lg shadow-primary-container/20 cursor-pointer hover:shadow-xl transition-shadow"
+                  className="glass p-5 rounded-2xl cursor-pointer hover:bg-surface-container-high/80 transition-colors"
                   onClick={() => useStore.getState().openThingDetail(theOneThing.thing.id)}
                   role="button"
                 >
-                  <p className="text-label font-bold text-on-surface/70 mb-1">The One Thing</p>
-                  <h3 className="text-on-surface font-bold text-sm leading-tight">{theOneThing.thing.title}</h3>
+                  <p className="text-label font-bold text-on-surface-variant mb-2">The One Thing</p>
+                  <h3 className="text-on-surface font-bold text-lg leading-tight">{theOneThing.thing.title}</h3>
                   {theOneThing.reasons.length > 0 && (
-                    <p className="text-xs text-on-surface/60 mt-1.5 leading-snug">
+                    <p className="text-xs text-on-surface-variant mt-2 leading-snug">
                       {theOneThing.reasons[0]}
                     </p>
                   )}

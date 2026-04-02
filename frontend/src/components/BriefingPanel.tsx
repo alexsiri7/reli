@@ -99,50 +99,55 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
   const icon = FINDING_TYPE_ICONS[finding.finding_type] ?? '\u{1F4CB}'
   const dotColor = FINDING_TYPE_COLORS[finding.finding_type] ?? 'bg-primary'
   return (
-    <div className="group flex items-start gap-3 py-3 px-4 rounded-xl hover:bg-surface-container-high/60 transition-colors">
-      <div className="flex items-center gap-2 mt-0.5 shrink-0">
-        <span className={`w-2 h-2 rounded-full ${dotColor}`} />
-        <span className="text-sm">{icon}</span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-on-surface leading-snug">{finding.message}</p>
-        {finding.thing && (
-          <p className="text-xs text-on-surface-variant mt-0.5 truncate">
-            {finding.thing.title}
-          </p>
-        )}
-        <div className="flex items-center gap-2 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          {finding.thing_id && (
-            <button
-              onClick={() => onAct(finding)}
-              className="text-xs text-primary hover:text-primary/80 font-medium"
-            >
-              Open
-            </button>
+    <div className="group rounded-xl bg-surface-container-low hover:bg-surface-container-high/60 transition-colors overflow-hidden">
+      <div className="flex items-start gap-3 py-3 px-4">
+        <div className={`w-1 self-stretch rounded-full shrink-0 ${dotColor}`} />
+        <div className="flex items-center gap-2 mt-0.5 shrink-0">
+          <span className="text-sm">{icon}</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-on-surface leading-snug">{finding.message}</p>
+          {finding.thing && (
+            <p className="text-xs text-on-surface-variant mt-0.5 truncate">
+              {finding.thing.title}
+            </p>
           )}
-          <button
-            onClick={() => onSnooze(finding.id)}
-            className="text-xs text-on-surface-variant hover:text-on-surface"
-          >
-            Snooze
-          </button>
-          <button
-            onClick={() => onDismiss(finding.id)}
-            className="text-xs text-on-surface-variant hover:text-ideas"
-          >
-            Dismiss
-          </button>
+          <div className="flex items-center gap-2 mt-1.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+            {finding.thing_id && (
+              <button
+                onClick={() => onAct(finding)}
+                className="text-xs text-primary hover:text-primary/80 font-medium"
+              >
+                Open
+              </button>
+            )}
+            <button
+              onClick={() => onSnooze(finding.id)}
+              className="text-xs text-on-surface-variant hover:text-on-surface"
+            >
+              Snooze
+            </button>
+            <button
+              onClick={() => onDismiss(finding.id)}
+              className="text-xs text-on-surface-variant hover:text-ideas"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
+function StatCard({ label, value, suffix, accent }: { label: string; value: number | string; suffix?: string; accent?: string }) {
   return (
-    <div className="glass rounded-xl p-3 flex-1 min-w-0">
-      <p className={`text-headline font-semibold ${accent ?? 'text-on-surface'}`}>{value}</p>
-      <p className="text-label text-on-surface-variant mt-0.5">{label}</p>
+    <div className="glass rounded-xl p-4 flex-1 min-w-0 text-center">
+      <div className="flex items-baseline justify-center gap-0.5">
+        <p className={`text-3xl font-bold tabular-nums ${accent ?? 'text-on-surface'}`}>{value}</p>
+        {suffix && <span className={`text-sm font-medium ${accent ?? 'text-on-surface-variant'}`}>{suffix}</span>}
+      </div>
+      <p className="text-label text-on-surface-variant mt-1">{label}</p>
     </div>
   )
 }
@@ -175,8 +180,8 @@ export function BriefingPanel() {
 
   return (
     <div className="flex-1 flex flex-col bg-canvas min-w-0 min-h-0">
-      {/* Header bar */}
-      <div className="px-5 py-3 border-b border-surface-container-high bg-surface shrink-0 flex items-center justify-between">
+      {/* Header bar — hidden on mobile (bottom tab bar handles navigation) */}
+      <div className="hidden md:flex px-5 py-3 border-b border-surface-container-high bg-surface shrink-0 items-center justify-between">
         <p className="text-label text-on-surface-variant">Daily Briefing</p>
         <button
           onClick={() => setRightView('chat')}
@@ -188,6 +193,14 @@ export function BriefingPanel() {
           </svg>
           Chat
         </button>
+      </div>
+
+      {/* Mobile header — logo and Reli branding */}
+      <div className="md:hidden px-5 pt-4 pb-2 bg-canvas shrink-0 flex items-center gap-2">
+        <div className="w-7 h-7 rounded bg-primary-container flex items-center justify-center">
+          <img src="/logo.svg" alt="Reli" className="h-4 w-4" />
+        </div>
+        <span className="text-lg font-bold text-on-surface tracking-tight">Reli</span>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -232,7 +245,7 @@ export function BriefingPanel() {
                 AI-Generated Insights
               </span>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-2">
               {findings.slice(0, 6).map(f => (
                 <FindingCard
                   key={f.id}
@@ -248,10 +261,9 @@ export function BriefingPanel() {
 
         {/* Stats footer */}
         {briefingStats && (
-          <section className="px-6 pb-8">
-            <p className="text-label text-on-surface-variant mb-2">Overview</p>
+          <section className="px-6 pb-20 md:pb-8">
             <div className="flex gap-3">
-              <StatCard label="Active" value={briefingStats.active_things} />
+              <StatCard label="Active Things" value={briefingStats.active_things} />
               <StatCard label="Check-in Due" value={briefingStats.checkin_due} accent="text-events" />
               <StatCard label="Overdue" value={briefingStats.overdue} accent="text-ideas" />
             </div>
