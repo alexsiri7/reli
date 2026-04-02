@@ -27,7 +27,7 @@ from .config import settings
 # ---------------------------------------------------------------------------
 
 def user_filter_clause(user_id_column: Any, user_id: str) -> Any:
-    """Return a SQLAlchemy filter clause equivalent to the legacy ``user_filter()`` helper.
+    """Return a SQLAlchemy filter clause for user-scoped queries.
 
     When *user_id* is empty (auth disabled), returns ``True`` (no filtering).
     Otherwise returns ``(column == user_id) | (column IS NULL)``.
@@ -47,8 +47,7 @@ def user_filter_clause(user_id_column: Any, user_id: str) -> Any:
 def user_filter_text(user_id: str, table_alias: str = "", param_name: str = "uf_uid") -> tuple[str, dict]:
     """Return a text()-compatible SQL WHERE fragment and params dict for user filtering.
 
-    Like ``auth.user_filter()`` but uses ``:param`` style placeholders for
-    use with ``session.execute(text(...))``.
+    Uses ``:param`` style placeholders for use with ``session.execute(text(...))``.
     """
     if not user_id:
         return "", {}
@@ -88,33 +87,6 @@ def get_session() -> Generator[Session, None, None]:
     with Session(engine) as session:
         yield session
 
-
-def _exec(session: "Session", sql: Any, params: Any = ()) -> Any:
-    """Execute raw SQL via a SQLModel session, converting positional ``?`` params
-    to SQLAlchemy ``:param`` style.
-
-    This is a migration helper so legacy code using ``conn.execute(sql, params)``
-    can be mechanically converted to ``_exec(session, sql, params)`` with
-    minimal diff churn.  New code should use ``session.execute(text(...), {...})``
-    directly.
-    """
-    from sqlalchemy import text as _text
-
-    if params:
-        # Convert ? placeholders to :p0, :p1, ... and build dict
-        parts = sql.split("?")
-        if len(parts) - 1 != len(params):
-            raise ValueError(
-                f"Parameter count mismatch: {len(parts) - 1} placeholders vs {len(params)} params"
-            )
-        named_sql = parts[0]
-        param_dict: dict[str, Any] = {}
-        for i, part in enumerate(parts[1:]):
-            key = f"_p{i}"
-            named_sql += f":{key}{part}"
-            param_dict[key] = params[i]
-        return session.execute(_text(named_sql), param_dict)
-    return session.execute(_text(sql))
 
 
 def init_sqlmodel_tables() -> None:

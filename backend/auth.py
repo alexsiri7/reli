@@ -100,13 +100,3 @@ async def require_user(request: Request) -> str:
     return user_id
 
 
-def user_filter(user_id: str, table_alias: str = "") -> tuple[str, list[str]]:
-    """Return a SQL WHERE fragment and params to filter by user_id.
-
-    When user_id is empty (auth disabled), returns empty filter.
-    Usage: sql += user_filter_sql; params.extend(user_filter_params)
-    """
-    if not user_id:
-        return "", []
-    prefix = f"{table_alias}." if table_alias else ""
-    return f" AND ({prefix}user_id = ? OR {prefix}user_id IS NULL)", [user_id]
