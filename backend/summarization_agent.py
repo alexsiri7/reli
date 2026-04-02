@@ -22,7 +22,7 @@ from .agents import REQUESTY_MODEL as SUMMARIZATION_MODEL  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
-# DB helpers (migrated from legacy database.py)
+# DB helpers
 # ---------------------------------------------------------------------------
 
 

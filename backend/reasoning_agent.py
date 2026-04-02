@@ -32,7 +32,6 @@ from . import tools as shared_tools
 from sqlmodel import Session
 
 import backend.db_engine as _engine_mod
-from .db_engine import _exec
 from .tracing import get_tracer
 from .vector_store import delete_thing as vs_delete
 from .vector_store import upsert_thing
