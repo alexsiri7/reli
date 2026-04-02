@@ -27,3 +27,6 @@ api_key.txt
 
 # Legacy ChromaDB data dir (removed — now using pgvector)
 backend/chroma_db/
+
+# Beads / Dolt files (added by bd init)
+.beads-credential-key
