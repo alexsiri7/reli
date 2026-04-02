@@ -66,6 +66,8 @@ export function DetailPanel() {
     const thingIds = new Set(things.map(t => t.id))
     const groups = new Map<string, { rel: Relationship; otherId: string; direction: string }[]>()
     for (const rel of detailRelationships) {
+      // parent-of/child-of shown in dedicated Parent/Children sections
+      if (rel.relationship_type === 'parent-of' || rel.relationship_type === 'child-of') continue
       const isFrom = rel.from_thing_id === detailThingId
       const otherId = isFrom ? rel.to_thing_id : rel.from_thing_id
       // Filter out relationships pointing to non-existent Things (orphans)
