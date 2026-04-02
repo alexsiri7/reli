@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ChatMode, type ContextThing, type GmailMessage, type InteractionStyle, type ModelUsage, type ReferencedThing, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
@@ -787,6 +787,27 @@ export function ChatPanel() {
     inputRef.current?.focus()
   }, [])
   const { listening, toggleListening } = useVoiceInput(handleTranscript)
+  const openThingDetailStore = useStore(s => s.openThingDetail)
+  const thingTypes = useStore(s => s.thingTypes)
+
+  // Collect unique context things from recent messages for mobile pills
+  const activeContextThings = useMemo(() => {
+    const seen = new Map<string, { id: string; title: string; type_hint?: string | null }>()
+    for (let i = messages.length - 1; i >= 0 && seen.size < 8; i--) {
+      const msg = messages[i]
+      if (!msg) continue
+      const changes = msg.applied_changes
+      if (!changes) continue
+      for (const t of changes.context_things ?? []) {
+        if (!seen.has(t.id)) seen.set(t.id, { id: t.id, title: t.title, type_hint: t.type_hint })
+      }
+      for (const t of changes.referenced_things ?? []) {
+        if (t.thing_id && !seen.has(t.thing_id)) seen.set(t.thing_id, { id: t.thing_id, title: t.mention, type_hint: undefined })
+      }
+    }
+    return Array.from(seen.values())
+  }, [messages])
+
   const prevScrollHeightRef = useRef<number>(0)
   const isLoadingOlderRef = useRef(false)
 
@@ -847,8 +868,16 @@ export function ChatPanel() {
 
   return (
     <div className="flex-1 flex flex-col bg-surface min-w-0 min-h-0 mobile-chat-pb md:pb-0">
-      {/* Header — "Reli Assistant" with expand/collapse */}
-      <div className="px-5 py-3 border-b border-on-surface-variant/10 bg-surface-container-low shrink-0 flex items-center justify-between">
+      {/* Mobile header — compact with Reli branding */}
+      <div className="md:hidden px-5 pt-4 pb-2 bg-surface shrink-0 flex items-center gap-2">
+        <div className="w-7 h-7 rounded bg-primary-container flex items-center justify-center">
+          <img src="/logo.svg" alt="Reli" className="h-4 w-4" />
+        </div>
+        <span className="text-lg font-bold text-on-surface tracking-tight">Reli</span>
+      </div>
+
+      {/* Desktop header — "Reli Assistant" with expand/collapse */}
+      <div className="hidden md:flex px-5 py-3 border-b border-on-surface-variant/10 bg-surface-container-low shrink-0 items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full gradient-cta flex items-center justify-center">
             <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -876,6 +905,26 @@ export function ChatPanel() {
           </button>
         </div>
       </div>
+
+      {/* Mobile context pills — horizontal scrollable bar */}
+      {!collapsed && activeContextThings.length > 0 && (
+        <div className="md:hidden shrink-0 px-4 py-2 border-b border-on-surface-variant/10 bg-surface-container-low">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-primary shrink-0">Context Active</span>
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {activeContextThings.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => openThingDetailStore(t.id)}
+                  className="shrink-0 px-2.5 py-1 rounded-full text-xs font-medium bg-surface-container-high text-on-surface hover:bg-primary/20 hover:text-primary transition-colors whitespace-nowrap"
+                >
+                  {typeIcon(t.type_hint, thingTypes)} {t.title}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {!collapsed && (
         <>

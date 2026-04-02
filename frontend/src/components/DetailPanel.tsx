@@ -120,14 +120,14 @@ export function DetailPanel() {
 
   return (
     <>
-      {/* Backdrop for mobile */}
+      {/* Backdrop for mobile — glassmorphism */}
       <div
         onClick={closeThingDetail}
-        className="fixed inset-0 z-50 bg-black/20 md:hidden"
+        className="fixed inset-0 z-50 bg-canvas/60 backdrop-blur-sm md:hidden"
       />
 
       {/* Panel — desktop: inline flex child on left; mobile: fixed overlay from left */}
-      <div className="fixed left-0 top-0 bottom-0 z-50 w-full max-w-md bg-surface dark:bg-surface shadow-xl flex flex-col overflow-hidden animate-slide-in-left md:relative md:z-auto md:w-80 md:max-w-none md:shrink-0 md:shadow-none md:animate-none">
+      <div className="fixed left-0 top-0 bottom-0 z-50 w-full max-w-md bg-surface shadow-xl flex flex-col overflow-hidden animate-slide-in-left md:relative md:z-auto md:w-80 md:max-w-none md:shrink-0 md:shadow-none md:animate-none">
         {/* Header — minimal toolbar */}
         <div className="flex items-center gap-2 px-4 py-3 shrink-0">
           {canGoBack && (
