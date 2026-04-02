@@ -210,6 +210,7 @@ const makeProfile = (overrides: Record<string, unknown> = {}) => ({
     open_questions: null,
     children_count: null,
     completed_count: null,
+    parent_ids: null,
     ...overrides,
   },
   relationships: [],

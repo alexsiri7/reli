@@ -5,7 +5,6 @@ const mockThing = {
   id: 't1',
   title: 'Test Thing',
   type_hint: 'task' as const,
-  parent_ids: null,
   checkin_date: null,
   priority: 2,
   importance: 2,
@@ -18,6 +17,7 @@ const mockThing = {
   open_questions: null,
   children_count: null,
   completed_count: null,
+  parent_ids: null,
 }
 
 beforeEach(() => {

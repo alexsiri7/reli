@@ -29,6 +29,7 @@ const baseThing = {
   open_questions: null,
   children_count: null,
   completed_count: null,
+  parent_ids: null,
 }
 
 beforeEach(() => {
