@@ -81,8 +81,8 @@ class ThingRelationshipRecord(SQLModel, table=True):
     __tablename__ = "thing_relationships"
 
     id: str = Field(default_factory=_new_id, primary_key=True)
-    from_thing_id: str = Field(foreign_key="things.id")
-    to_thing_id: str = Field(foreign_key="things.id")
+    from_thing_id: str = Field(foreign_key="things.id", index=True)
+    to_thing_id: str = Field(foreign_key="things.id", index=True)
     relationship_type: str
     metadata_: dict[str, Any] | None = Field(
         default=None,
