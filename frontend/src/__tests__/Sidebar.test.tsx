@@ -6,7 +6,6 @@ type Thing = {
   id: string
   title: string
   type_hint: string | null
-  parent_id: string | null
   checkin_date: string | null
   priority: number
   active: boolean
@@ -18,6 +17,7 @@ type Thing = {
   open_questions: string[] | null
   children_count: number | null
   completed_count: number | null
+  parent_ids: string[] | null
 }
 
 let mockState: Record<string, unknown> = {
@@ -68,7 +68,6 @@ const makeThing = (overrides: Partial<Thing> = {}): Thing => ({
   id: 't1',
   title: 'Test Thing',
   type_hint: 'task',
-  parent_id: null,
   checkin_date: null,
   priority: 2,
   active: true,
@@ -80,6 +79,7 @@ const makeThing = (overrides: Partial<Thing> = {}): Thing => ({
   open_questions: null,
   children_count: null,
   completed_count: null,
+  parent_ids: null,
   ...overrides,
 })
 

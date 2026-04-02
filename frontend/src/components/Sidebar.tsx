@@ -568,7 +568,11 @@ export function Sidebar() {
     }
     const projectIds = new Set(active.filter(t => t.type_hint === 'project').map(t => t.id))
     // Don't show children of projects or preference Things as standalone items (preferences get their own section)
-    let standalone = active.filter(t => (!t.parent_id || !projectIds.has(t.parent_id)) && t.type_hint !== 'preference')
+    let standalone = active.filter(t => {
+      const parentIds = t.parent_ids ?? []
+      const isChildOfProject = parentIds.some(pid => projectIds.has(pid))
+      return !isChildOfProject && t.type_hint !== 'preference'
+    })
 
     // Apply client-side filters
     const filterQ = thingFilterQuery.trim().toLowerCase()

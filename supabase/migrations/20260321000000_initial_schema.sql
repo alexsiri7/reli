@@ -37,7 +37,6 @@ create table if not exists things (
     id text primary key,
     title text not null,
     type_hint text,
-    parent_id text references things(id),
     checkin_date timestamptz,
     priority integer default 3,
     active boolean default true,
@@ -54,7 +53,6 @@ create table if not exists things (
 create index if not exists idx_things_checkin on things(checkin_date);
 create index if not exists idx_things_active on things(active);
 create index if not exists idx_things_user_id on things(user_id);
-create index if not exists idx_things_parent on things(parent_id);
 create index if not exists idx_things_embedding on things using ivfflat (embedding vector_cosine_ops) with (lists = 100);
 
 -- thing_relationships (graph edges)

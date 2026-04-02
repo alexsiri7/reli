@@ -107,14 +107,16 @@ def find_connection_candidates(
             existing_suggestions.add((row.from_thing_id, row.to_thing_id))
             existing_suggestions.add((row.to_thing_id, row.from_thing_id))
 
-        # Also exclude parent-child relationships
+        # Also exclude parent-child relationships (via parent-of relationships)
         parent_pairs: set[tuple[str, str]] = set()
-        parent_rows = session.exec(
-            select(ThingRecord).where(ThingRecord.parent_id.is_not(None))  # type: ignore[union-attr]
+        parent_rels = session.exec(
+            select(ThingRelationshipRecord).where(
+                ThingRelationshipRecord.relationship_type == "parent-of"
+            )
         ).all()
-        for row in parent_rows:
-            parent_pairs.add((row.id, row.parent_id))  # type: ignore[arg-type]
-            parent_pairs.add((row.parent_id, row.id))  # type: ignore[arg-type]
+        for rel in parent_rels:
+            parent_pairs.add((rel.from_thing_id, rel.to_thing_id))
+            parent_pairs.add((rel.to_thing_id, rel.from_thing_id))
 
     thing_map = {t.id: {"id": t.id, "title": t.title, "type_hint": t.type_hint} for t in things}
     seen_pairs: set[tuple[str, str]] = set()

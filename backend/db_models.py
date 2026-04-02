@@ -50,7 +50,6 @@ class ThingRecord(SQLModel, table=True):
     id: str = Field(default_factory=_new_id, primary_key=True)
     title: str
     type_hint: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    parent_id: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     checkin_date: datetime | None = None
 
     # Legacy column -- kept for backward compat, use ``importance`` instead.

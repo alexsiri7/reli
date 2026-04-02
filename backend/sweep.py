@@ -255,11 +255,17 @@ def find_stale_things(
     """
     today = today or date.today()
     cutoff = (today - timedelta(days=stale_days)).isoformat()
-    # Build a correlated subquery for active_children
+    # Build a correlated subquery for active_children via parent-of relationships
+    _r = ThingRelationshipRecord.__table__.alias("r")
     _c = ThingRecord.__table__.alias("c")
     active_children_sq = (
         select(func.count(_c.c.id))
-        .where(_c.c.parent_id == ThingRecord.id, _c.c.active == True)  # noqa: E712
+        .select_from(_r.join(_c, _c.c.id == _r.c.to_thing_id))
+        .where(
+            _r.c.from_thing_id == ThingRecord.id,
+            _r.c.relationship_type == "parent-of",
+            _c.c.active == True,  # noqa: E712
+        )
         .correlate(ThingRecord.__table__)
         .scalar_subquery()
         .label("active_children")
@@ -389,7 +395,6 @@ def find_orphan_things(session: Session, user_id: str = "") -> list[SweepCandida
         )
         .where(
             ThingRecord.active == True,  # noqa: E712
-            ThingRecord.parent_id.is_(None),  # type: ignore[union-attr]
             ThingRelationshipRecord.id.is_(None),  # type: ignore[union-attr]
             user_filter_clause(ThingRecord.user_id, user_id),
         )
@@ -417,10 +422,11 @@ def find_completed_projects(session: Session, user_id: str = "") -> list[SweepCa
 
     A project qualifies if:
     - It's active with type_hint='project'
-    - It has at least one child (via parent_id)
+    - It has at least one child (via parent-of relationship)
     - ALL of its children are inactive
     """
     _p = ThingRecord.__table__.alias("p")
+    _r = ThingRelationshipRecord.__table__.alias("r")
     _ch = ThingRecord.__table__.alias("c")
     stmt = (
         select(
@@ -429,7 +435,10 @@ def find_completed_projects(session: Session, user_id: str = "") -> list[SweepCa
             func.count(_ch.c.id).label("total_children"),
             func.sum(case((_ch.c.active == False, 1), else_=0)).label("inactive_children"),  # noqa: E712
         )
-        .select_from(_p.join(_ch, _ch.c.parent_id == _p.c.id))
+        .select_from(
+            _p.join(_r, (_r.c.from_thing_id == _p.c.id) & (_r.c.relationship_type == "parent-of"))
+            .join(_ch, _ch.c.id == _r.c.to_thing_id)
+        )
         .where(
             _p.c.active == True,  # noqa: E712
             _p.c.type_hint == "project",
@@ -524,7 +533,6 @@ def find_incomplete_things(
             ThingRecord.type_hint,
             ThingRecord.data,
             ThingRecord.checkin_date,
-            ThingRecord.parent_id,
         )
         .where(
             ThingRecord.active == True,  # noqa: E712
@@ -706,6 +714,7 @@ def find_information_gaps(
 
     # --- Projects with children but no deadline ---
     _p = ThingRecord.__table__.alias("p")
+    _r2 = ThingRelationshipRecord.__table__.alias("r2")
     _ch2 = ThingRecord.__table__.alias("c")
     _no_oq_p = or_(
         _p.c.open_questions.is_(None),
@@ -719,7 +728,10 @@ def find_information_gaps(
             _p.c.data,
             func.count(_ch2.c.id).label("child_count"),
         )
-        .select_from(_p.join(_ch2, (_ch2.c.parent_id == _p.c.id) & (_ch2.c.active == True)))  # noqa: E712
+        .select_from(
+            _p.join(_r2, (_r2.c.from_thing_id == _p.c.id) & (_r2.c.relationship_type == "parent-of"))
+            .join(_ch2, (_ch2.c.id == _r2.c.to_thing_id) & (_ch2.c.active == True))  # noqa: E712
+        )
         .where(
             _p.c.active == True,  # noqa: E712
             _p.c.type_hint == "project",
@@ -884,6 +896,7 @@ def find_cross_project_shared_blockers(session: Session) -> list[SweepCandidate]
     _blocker = ThingRecord.__table__.alias("blocker")
     _r = ThingRelationshipRecord.__table__.alias("r")
     _task = ThingRecord.__table__.alias("task")
+    _rp = ThingRelationshipRecord.__table__.alias("rp")
     _proj = ThingRecord.__table__.alias("p")
 
     # The "task" is the other side of the relationship from blocker
@@ -905,7 +918,8 @@ def find_cross_project_shared_blockers(session: Session) -> list[SweepCandidate]
             _blocker
             .join(_r, or_(_blocker.c.id == _r.c.from_thing_id, _blocker.c.id == _r.c.to_thing_id))
             .join(_task, _task.c.id == _task_id_expr)
-            .join(_proj, (_task.c.parent_id == _proj.c.id) & (_proj.c.type_hint == "project") & (_proj.c.active == True))  # noqa: E712
+            .join(_rp, (_rp.c.to_thing_id == _task.c.id) & (_rp.c.relationship_type == "parent-of"))
+            .join(_proj, (_proj.c.id == _rp.c.from_thing_id) & (_proj.c.type_hint == "project") & (_proj.c.active == True))  # noqa: E712
         )
         .where(
             _blocker.c.active == True,  # noqa: E712
@@ -963,6 +977,7 @@ def find_cross_project_resource_conflicts(
     _person = ThingRecord.__table__.alias("person")
     _r = ThingRelationshipRecord.__table__.alias("r")
     _task = ThingRecord.__table__.alias("task")
+    _rp = ThingRelationshipRecord.__table__.alias("rp")
     _proj = ThingRecord.__table__.alias("p")
 
     _task_id_expr = case(
@@ -983,7 +998,8 @@ def find_cross_project_resource_conflicts(
             _person
             .join(_r, or_(_person.c.id == _r.c.from_thing_id, _person.c.id == _r.c.to_thing_id))
             .join(_task, _task.c.id == _task_id_expr)
-            .join(_proj, (_task.c.parent_id == _proj.c.id) & (_proj.c.type_hint == "project") & (_proj.c.active == True))  # noqa: E712
+            .join(_rp, (_rp.c.to_thing_id == _task.c.id) & (_rp.c.relationship_type == "parent-of"))
+            .join(_proj, (_proj.c.id == _rp.c.from_thing_id) & (_proj.c.type_hint == "project") & (_proj.c.active == True))  # noqa: E712
         )
         .where(
             _person.c.active == True,  # noqa: E712
@@ -1043,13 +1059,15 @@ def find_cross_project_thematic_connections(
     (3+ chars) across different project hierarchies. This helps identify
     thematic connections or potential collaboration opportunities.
     """
-    # Get all active tasks that belong to a project (via parent_id)
+    # Get all active tasks that belong to a project (via parent-of relationship)
     _t = ThingRecord.__table__.alias("t")
+    _rp = ThingRelationshipRecord.__table__.alias("rp")
     _p = ThingRecord.__table__.alias("p")
     stmt = (
-        select(_t.c.id, _t.c.title, _t.c.parent_id, _p.c.title.label("project_title"))
+        select(_t.c.id, _t.c.title, _rp.c.from_thing_id.label("parent_id"), _p.c.title.label("project_title"))
         .select_from(
-            _t.join(_p, (_t.c.parent_id == _p.c.id) & (_p.c.type_hint == "project") & (_p.c.active == True))  # noqa: E712
+            _t.join(_rp, (_rp.c.to_thing_id == _t.c.id) & (_rp.c.relationship_type == "parent-of"))
+            .join(_p, (_p.c.id == _rp.c.from_thing_id) & (_p.c.type_hint == "project") & (_p.c.active == True))  # noqa: E712
         )
         .where(_t.c.active == True)  # noqa: E712
         .order_by(_t.c.title)
@@ -1059,7 +1077,7 @@ def find_cross_project_thematic_connections(
     if len(rows) < 2:
         return []
 
-    # Build a list of (id, title, parent_id, project_title) for comparison
+    # Build a list of (id, title, project_id, project_title) for comparison
     items = [(row.id, row.title, row.parent_id, row.project_title) for row in rows]
 
     # Extract significant words (3+ chars, lowercased) from each title
@@ -1122,29 +1140,33 @@ def find_cross_project_duplicate_effort(
     """
     _t1 = ThingRecord.__table__.alias("t1")
     _t2 = ThingRecord.__table__.alias("t2")
+    _rp1 = ThingRelationshipRecord.__table__.alias("rp1")
+    _rp2 = ThingRelationshipRecord.__table__.alias("rp2")
     _p1 = ThingRecord.__table__.alias("p1")
     _p2 = ThingRecord.__table__.alias("p2")
     stmt = (
         select(
             _t1.c.id.label("id_a"),
             _t1.c.title.label("title_a"),
-            _t1.c.parent_id.label("proj_id_a"),
+            _rp1.c.from_thing_id.label("proj_id_a"),
             _p1.c.title.label("proj_title_a"),
             _t2.c.id.label("id_b"),
             _t2.c.title.label("title_b"),
-            _t2.c.parent_id.label("proj_id_b"),
+            _rp2.c.from_thing_id.label("proj_id_b"),
             _p2.c.title.label("proj_title_b"),
         )
         .select_from(
             _t1
             .join(_t2, (_t1.c.id < _t2.c.id) & (func.lower(func.trim(_t1.c.title)) == func.lower(func.trim(_t2.c.title))))
-            .join(_p1, (_t1.c.parent_id == _p1.c.id) & (_p1.c.type_hint == "project") & (_p1.c.active == True))  # noqa: E712
-            .join(_p2, (_t2.c.parent_id == _p2.c.id) & (_p2.c.type_hint == "project") & (_p2.c.active == True))  # noqa: E712
+            .join(_rp1, (_rp1.c.to_thing_id == _t1.c.id) & (_rp1.c.relationship_type == "parent-of"))
+            .join(_p1, (_p1.c.id == _rp1.c.from_thing_id) & (_p1.c.type_hint == "project") & (_p1.c.active == True))  # noqa: E712
+            .join(_rp2, (_rp2.c.to_thing_id == _t2.c.id) & (_rp2.c.relationship_type == "parent-of"))
+            .join(_p2, (_p2.c.id == _rp2.c.from_thing_id) & (_p2.c.type_hint == "project") & (_p2.c.active == True))  # noqa: E712
         )
         .where(
             _t1.c.active == True,  # noqa: E712
             _t2.c.active == True,  # noqa: E712
-            _t1.c.parent_id != _t2.c.parent_id,
+            _rp1.c.from_thing_id != _rp2.c.from_thing_id,
         )
     )
     rows = session.execute(stmt).all()

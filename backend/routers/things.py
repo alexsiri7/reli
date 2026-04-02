@@ -68,7 +68,6 @@ def _record_to_thing(record: ThingRecord) -> Thing:
         id=record.id,
         title=record.title,
         type_hint=record.type_hint,
-        parent_id=record.parent_id,
         checkin_date=record.checkin_date,
         importance=record.importance,
         active=bool(record.active),
@@ -124,7 +123,6 @@ def _row_to_thing(row: Any) -> Thing:
         id=row.id,
         title=row.title,
         type_hint=row.type_hint,
-        parent_id=row.parent_id,
         checkin_date=_parse_dt(row.checkin_date),
         importance=row.importance,
         active=bool(row.active),
@@ -334,26 +332,58 @@ def list_things(
     records = session.exec(stmt).all()
     things = [_record_to_thing(r) for r in records]
 
-    # Compute child stats for project-type things
-    project_ids = [t.id for t in things if t.type_hint == "project"]
-    if project_ids:
+    # Compute child stats and parent_ids from parent-of relationships
+    thing_ids = [t.id for t in things]
+    if thing_ids:
         from sqlalchemy import case as sa_case
-        child_stmt = (
+        from collections import defaultdict
+
+        # Fetch all parent-of relationships involving these Things
+        parent_of_rels = session.exec(
             select(
-                ThingRecord.parent_id,
-                func.count().label("children_count"),
-                func.sum(sa_case((ThingRecord.active == False, 1), else_=0)).label("completed_count"),
+                ThingRelationshipRecord.from_thing_id,
+                ThingRelationshipRecord.to_thing_id,
+            ).where(
+                ThingRelationshipRecord.relationship_type == "parent-of",
+                or_(
+                    ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[union-attr]
+                    ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[union-attr]
+                ),
             )
-            .where(ThingRecord.parent_id.in_(project_ids))  # type: ignore[union-attr]
-            .group_by(ThingRecord.parent_id)
-        )
-        child_rows = session.execute(child_stmt).fetchall()
-        stats = {r.parent_id: (r.children_count, r.completed_count or 0) for r in child_rows}
+        ).all()
+
+        # Build parent_ids map (child_id -> list of parent_ids)
+        parent_map: dict[str, list[str]] = defaultdict(list)
+        for from_id, to_id in parent_of_rels:
+            parent_map[to_id].append(from_id)
+
         for t in things:
-            if t.type_hint == "project":
-                counts = stats.get(t.id, (0, 0))
-                t.children_count = counts[0]
-                t.completed_count = counts[1]
+            if t.id in parent_map:
+                t.parent_ids = parent_map[t.id]
+
+        # Compute child stats for project-type things
+        project_ids = [t.id for t in things if t.type_hint == "project"]
+        if project_ids:
+            child_stmt = (
+                select(
+                    ThingRelationshipRecord.from_thing_id.label("project_id"),
+                    func.count().label("children_count"),
+                    func.sum(sa_case((ThingRecord.active == False, 1), else_=0)).label("completed_count"),
+                )
+                .join(ThingRecord, ThingRecord.id == ThingRelationshipRecord.to_thing_id)
+                .where(
+                    ThingRelationshipRecord.from_thing_id.in_(project_ids),  # type: ignore[union-attr]
+                    ThingRelationshipRecord.relationship_type == "parent-of",
+                )
+                .group_by(ThingRelationshipRecord.from_thing_id)
+            )
+            child_rows = session.execute(child_stmt).fetchall()
+            stats = {r.project_id: (r.children_count, r.completed_count or 0) for r in child_rows}
+            for t in things:
+                if t.type_hint == "project":
+                    counts = stats.get(t.id, (0, 0))
+                    t.children_count = counts[0]
+                    t.completed_count = counts[1]
 
     return things
 
@@ -408,15 +438,9 @@ def create_thing(
     """Create a new Thing and index it for vector search."""
     now = datetime.now(timezone.utc)
 
-    if body.parent_id:
-        parent = session.get(ThingRecord, body.parent_id)
-        if not parent:
-            raise HTTPException(status_code=404, detail=f"Parent thing '{body.parent_id}' not found")
-
     record = ThingRecord(
         title=body.title,
         type_hint=body.type_hint,
-        parent_id=body.parent_id,
         checkin_date=body.checkin_date,
         importance=body.importance,
         active=body.active,
@@ -505,19 +529,10 @@ def update_thing(
     if not record:
         raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
 
-    if body.parent_id is not None:
-        if body.parent_id == thing_id:
-            raise HTTPException(status_code=422, detail="A Thing cannot be its own parent")
-        parent = session.get(ThingRecord, body.parent_id)
-        if not parent:
-            raise HTTPException(status_code=404, detail=f"Parent thing '{body.parent_id}' not found")
-
     if body.title is not None:
         record.title = body.title
     if body.type_hint is not None:
         record.type_hint = body.type_hint
-    if body.parent_id is not None:
-        record.parent_id = body.parent_id
     if body.checkin_date is not None:
         record.checkin_date = body.checkin_date
     if body.importance is not None:
@@ -697,14 +712,10 @@ def merge_things(
     )).all():
         session.delete(rel)
 
-    # 4. Re-parent children
-    for child in session.exec(select(ThingRecord).where(ThingRecord.parent_id == body.remove_id)).all():
-        child.parent_id = body.keep_id
-
-    # 5. Delete the duplicate
+    # 4. Delete the duplicate
     session.delete(remove_rec)
 
-    # 6. Record merge history
+    # 5. Record merge history
     merged_snapshot = {**remove_data, **(keep_rec.data if isinstance(keep_rec.data, dict) else {})}
     merge_record = MergeHistoryDBRecord(
         id=str(uuid.uuid4()),

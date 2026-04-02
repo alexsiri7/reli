@@ -132,7 +132,6 @@ def create_thing(
     type_hint: str | None = None,
     data: dict[str, Any] | None = None,
     importance: int = 2,
-    parent_id: str | None = None,
     checkin_date: str | None = None,
     active: bool = True,
     surface: bool = True,
@@ -140,12 +139,13 @@ def create_thing(
 ) -> dict[str, Any]:
     """Create a new Thing in the knowledge graph.
 
+    Use create_relationship with type 'parent-of' or 'child-of' to establish hierarchy.
+
     Args:
         title: Short descriptive title (required).
         type_hint: Category like 'task', 'note', 'project', 'person', 'idea', 'goal', 'event', 'place', 'concept'.
         data: Arbitrary JSON data (e.g. {"email": "...", "birthday": "..."}).
         importance: How bad if undone: 0 (critical) to 4 (backlog), default 2.
-        parent_id: ID of a parent Thing for hierarchical nesting.
         checkin_date: ISO 8601 date when this Thing should surface in the briefing.
         active: Whether the Thing is active (true) or completed/archived (false).
         surface: Whether to show in default views.
@@ -172,7 +172,6 @@ def update_thing(
     type_hint: str | None = None,
     data: dict[str, Any] | None = None,
     importance: int | None = None,
-    parent_id: str | None = None,
     checkin_date: str | None = None,
     active: bool | None = None,
     surface: bool | None = None,
@@ -180,13 +179,14 @@ def update_thing(
 ) -> dict[str, Any]:
     """Update an existing Thing. Only provided fields are changed.
 
+    Use create_relationship / delete_relationship to change hierarchy.
+
     Args:
         thing_id: The UUID of the Thing to update.
         title: New title.
         type_hint: New category.
         data: New arbitrary JSON data (shallow-merged into existing data dict).
         importance: How bad if undone: 0 (critical) to 4 (backlog).
-        parent_id: New parent Thing ID.
         checkin_date: New checkin date (ISO 8601).
         active: Set active/archived status.
         surface: Set visibility in default views.
@@ -196,7 +196,7 @@ def update_thing(
     oq_json = json.dumps(open_questions) if open_questions is not None else ""
 
     # Check if any field was actually provided
-    has_fields = any(v is not None for v in [title, type_hint, data, importance, parent_id, checkin_date, active, surface, open_questions])
+    has_fields = any(v is not None for v in [title, type_hint, data, importance, checkin_date, active, surface, open_questions])
     if not has_fields:
         return {"error": "No fields provided to update"}
 
@@ -446,7 +446,6 @@ def thing_schema_reference() -> str:
 | id             | string (UUID)   | auto    | Unique identifier                              |
 | title          | string          | —       | Short descriptive name (1–500 chars, required) |
 | type_hint      | string or null  | null    | Category for filtering and display             |
-| parent_id      | string or null  | null    | Parent Thing UUID for hierarchical nesting     |
 | checkin_date   | ISO 8601 or null| null    | When to surface this Thing in the daily briefing |
 | importance     | int (0–4)       | 2       | How bad if undone: 0 = critical, 4 = backlog   |
 | active         | bool            | true    | false = completed/archived (never hard-delete) |

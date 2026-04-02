@@ -348,7 +348,6 @@ async def test_context_refinement_includes_open_questions():
                     "title": "Conference Trip",
                     "type_hint": "task",
                     "data": None,
-                    "parent_id": None,
                     "active": True,
                     "open_questions": ["When is the conference?", "What's the budget?"],
                 },

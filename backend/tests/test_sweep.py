@@ -46,14 +46,13 @@ def _insert_thing(
     now = updated_at or date.today().isoformat()
     conn.execute(
         """INSERT INTO things
-           (id, title, type_hint, parent_id, checkin_date, active, surface,
+           (id, title, type_hint, checkin_date, active, surface,
             data, open_questions, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
         (
             thing_id,
             title,
             type_hint,
-            parent_id,
             checkin_date,
             int(active),
             json.dumps(data) if data else None,
@@ -62,6 +61,10 @@ def _insert_thing(
             now,
         ),
     )
+    # Create parent-of relationship if parent_id provided
+    if parent_id:
+        import uuid
+        _insert_relationship(conn, str(uuid.uuid4()), parent_id, thing_id, "parent-of")
 
 
 def _insert_relationship(conn, rel_id: str, from_id: str, to_id: str, rel_type: str = "related-to") -> None:
@@ -304,9 +307,9 @@ class TestOrphanThings:
             _insert_thing(conn, "child", "Child", parent_id="parent")
         with Session(_engine_mod.engine) as session:
             results = find_orphan_things(session)
-        # Parent is orphan (no parent_id, no relationships), child is not
+        # Both have relationships (parent-of), neither is orphan
         ids = [r.thing_id for r in results]
-        assert "parent" in ids
+        assert "parent" not in ids
         assert "child" not in ids
 
     def test_thing_with_relationship_not_orphan(self, patched_db):
