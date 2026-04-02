@@ -17,7 +17,6 @@ const baseThing = {
   id: 't1',
   title: 'Finish report',
   type_hint: 'task' as const,
-  parent_id: null,
   checkin_date: null,
   priority: 1,
   importance: 2,

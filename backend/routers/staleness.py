@@ -7,7 +7,7 @@ from sqlalchemy import func, select as sa_select
 from sqlmodel import Session, select
 
 from ..db_engine import get_session, user_filter_clause
-from ..db_models import ThingRecord
+from ..db_models import ThingRecord, ThingRelationshipRecord
 
 from ..auth import require_user
 import backend.db_engine as _engine_mod
@@ -41,14 +41,19 @@ def get_staleness_report(
     stale_cutoff = (today - timedelta(days=threshold)).isoformat()
 
     with Session(_engine_mod.engine) as session:
-        # Subquery: count active children per thing
+        # Subquery: count active children per thing via parent-of relationships
+        _child = ThingRecord.__table__.alias("child")
         child_count_sq = (
             sa_select(
-                ThingRecord.parent_id,
+                ThingRelationshipRecord.from_thing_id.label("parent_id"),
                 func.count().label("active_children"),
             )
-            .where(ThingRecord.active == True)
-            .group_by(ThingRecord.parent_id)
+            .join(_child, _child.c.id == ThingRelationshipRecord.to_thing_id)
+            .where(
+                ThingRelationshipRecord.relationship_type == "parent-of",
+                _child.c.active == True,
+            )
+            .group_by(ThingRelationshipRecord.from_thing_id)
             .subquery()
         )
 

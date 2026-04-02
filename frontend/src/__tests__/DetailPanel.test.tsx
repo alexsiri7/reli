@@ -21,7 +21,6 @@ const baseThing: Thing = {
   id: 't1',
   title: 'Test Thing',
   type_hint: 'task',
-  parent_id: null,
   checkin_date: null,
   importance: 2,
   active: true,
@@ -33,6 +32,7 @@ const baseThing: Thing = {
   open_questions: null,
   children_count: null,
   completed_count: null,
+  parent_ids: null,
 }
 
 beforeEach(() => {
@@ -159,8 +159,11 @@ describe('DetailPanel', () => {
   })
 
   it('renders children section', () => {
-    const child: Thing = { ...baseThing, id: 't2', title: 'Child Thing', parent_id: 't1' }
+    const child: Thing = { ...baseThing, id: 't2', title: 'Child Thing' }
     storeState.things = [baseThing, child]
+    storeState.detailRelationships = [
+      { id: 'r1', from_thing_id: 't1', to_thing_id: 't2', relationship_type: 'parent-of', metadata: null, created_at: '2026-01-01T00:00:00Z' },
+    ]
     render(<DetailPanel />)
     expect(screen.getByText('Children (1)')).toBeInTheDocument()
     expect(screen.getByText('Child Thing')).toBeInTheDocument()
@@ -168,16 +171,22 @@ describe('DetailPanel', () => {
 
   it('renders parent section', () => {
     const parent: Thing = { ...baseThing, id: 'tp', title: 'Parent Thing' }
-    storeState.detailThing = { ...baseThing, parent_id: 'tp' }
-    storeState.things = [parent, { ...baseThing, parent_id: 'tp' }]
+    storeState.detailThing = baseThing
+    storeState.things = [parent, baseThing]
+    storeState.detailRelationships = [
+      { id: 'r1', from_thing_id: 'tp', to_thing_id: 't1', relationship_type: 'parent-of', metadata: null, created_at: '2026-01-01T00:00:00Z' },
+    ]
     render(<DetailPanel />)
     expect(screen.getByText('Parent')).toBeInTheDocument()
     expect(screen.getByText('Parent Thing')).toBeInTheDocument()
   })
 
   it('navigates on child click', () => {
-    const child: Thing = { ...baseThing, id: 't2', title: 'Child Thing', parent_id: 't1' }
+    const child: Thing = { ...baseThing, id: 't2', title: 'Child Thing' }
     storeState.things = [baseThing, child]
+    storeState.detailRelationships = [
+      { id: 'r1', from_thing_id: 't1', to_thing_id: 't2', relationship_type: 'parent-of', metadata: null, created_at: '2026-01-01T00:00:00Z' },
+    ]
     render(<DetailPanel />)
     fireEvent.click(screen.getByText('Child Thing'))
     expect(navigateThingDetail).toHaveBeenCalledWith('t2')

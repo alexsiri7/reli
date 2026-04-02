@@ -44,7 +44,6 @@ class ThingCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=500, examples=["Buy groceries"])
     type_hint: str | None = Field(default=None, max_length=100, examples=["task"])
-    parent_id: str | None = Field(default=None, max_length=100, description="Parent Thing ID for hierarchical nesting")
     checkin_date: datetime | None = Field(
         default=None, description="Date when this Thing should surface in the briefing"
     )
@@ -78,7 +77,6 @@ class ThingUpdate(BaseModel):
 
     title: str | None = Field(default=None, min_length=1, max_length=500)
     type_hint: str | None = Field(default=None, max_length=100)
-    parent_id: str | None = Field(default=None, max_length=100, description="Parent Thing ID for hierarchical nesting")
     checkin_date: datetime | None = Field(
         default=None, description="Date when this Thing should surface in the briefing"
     )
@@ -111,7 +109,6 @@ class Thing(BaseModel):
     id: str
     title: str
     type_hint: str | None
-    parent_id: str | None
     checkin_date: datetime | None
     importance: int
     active: bool
@@ -123,6 +120,7 @@ class Thing(BaseModel):
     open_questions: list[str] | None = None
     children_count: int | None = None
     completed_count: int | None = None
+    parent_ids: list[str] | None = None
 
     model_config = {"from_attributes": True}
 

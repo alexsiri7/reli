@@ -53,7 +53,6 @@ def upgrade() -> None:
     sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('title', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('type_hint', sa.Text(), nullable=True),
-    sa.Column('parent_id', sa.Text(), nullable=True),
     sa.Column('checkin_date', sa.DateTime(), nullable=True),
     sa.Column('priority', sa.Integer(), nullable=True),
     sa.Column('importance', sa.Integer(), nullable=False),

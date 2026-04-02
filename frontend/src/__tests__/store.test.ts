@@ -5,7 +5,7 @@ const mockThing = {
   id: 't1',
   title: 'Test Thing',
   type_hint: 'task' as const,
-  parent_id: null,
+  parent_ids: null,
   checkin_date: null,
   priority: 2,
   importance: 2,

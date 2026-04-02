@@ -102,9 +102,21 @@ export function DetailPanel() {
   // Resolve a Thing by ID — check local store first, fall back to minimal display
   const resolveThing = (id: string) => things.find(t => t.id === id)
 
-  // Parent/children from the store
-  const children = thing ? things.filter(t => t.parent_id === thing.id) : []
-  const parent = thing?.parent_id ? things.find(t => t.id === thing.parent_id) : null
+  // Parent/children derived from relationships (parent-of type)
+  const children = useMemo(() => {
+    if (!thing || !detailRelationships) return []
+    const childIds = detailRelationships
+      .filter(r => r.from_thing_id === thing.id && r.relationship_type === 'parent-of')
+      .map(r => r.to_thing_id)
+    return things.filter(t => childIds.includes(t.id))
+  }, [thing, detailRelationships, things])
+  const parent = useMemo(() => {
+    if (!thing || !detailRelationships) return null
+    const parentRel = detailRelationships.find(
+      r => r.to_thing_id === thing.id && r.relationship_type === 'parent-of'
+    )
+    return parentRel ? things.find(t => t.id === parentRel.from_thing_id) ?? null : null
+  }, [thing, detailRelationships, things])
 
   // Separate notes from other data entries
   const notes = thing?.data?.notes != null ? String(thing.data.notes) : null

@@ -21,16 +21,16 @@ from backend.sweep import (
 
 def _insert_thing(conn, thing_id: str, title: str, **kwargs) -> None:
     now = kwargs.pop("updated_at", date.today().isoformat())
+    parent_id = kwargs.pop("parent_id", None)
     conn.execute(
         """INSERT INTO things
-           (id, title, type_hint, parent_id, checkin_date, active, surface,
+           (id, title, type_hint, checkin_date, active, surface,
             data, open_questions, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
         (
             thing_id,
             title,
             kwargs.get("type_hint"),
-            kwargs.get("parent_id"),
             kwargs.get("checkin_date"),
             int(kwargs.get("active", True)),
             json.dumps(kwargs.get("data")) if kwargs.get("data") else None,
@@ -39,6 +39,12 @@ def _insert_thing(conn, thing_id: str, title: str, **kwargs) -> None:
             now,
         ),
     )
+    if parent_id:
+        import uuid
+        conn.execute(
+            "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) VALUES (?, ?, ?, ?)",
+            (str(uuid.uuid4()), parent_id, thing_id, "parent-of"),
+        )
 
 
 def _make_candidate(

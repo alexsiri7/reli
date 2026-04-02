@@ -113,15 +113,27 @@ def _fetch_with_family(session: Session, seed_ids: list[str]) -> list[dict[str, 
         rec = session.get(ThingRecord, thing_id)
         if rec:
             _add_record(rec)
-            if rec.parent_id:
-                parent = session.get(ThingRecord, rec.parent_id)
+            # Fetch parent-of / child-of related Things via relationships
+            parent_rels = session.exec(
+                select(ThingRelationshipRecord).where(
+                    ThingRelationshipRecord.to_thing_id == thing_id,
+                    ThingRelationshipRecord.relationship_type == "parent-of",
+                )
+            ).all()
+            for pr in parent_rels:
+                parent = session.get(ThingRecord, pr.from_thing_id)
                 if parent:
                     _add_record(parent)
-            children = session.exec(
-                select(ThingRecord).where(ThingRecord.parent_id == thing_id)
+            child_rels = session.exec(
+                select(ThingRelationshipRecord).where(
+                    ThingRelationshipRecord.from_thing_id == thing_id,
+                    ThingRelationshipRecord.relationship_type == "parent-of",
+                )
             ).all()
-            for child in children:
-                _add_record(child)
+            for cr in child_rels:
+                child = session.get(ThingRecord, cr.to_thing_id)
+                if child:
+                    _add_record(child)
             rels = session.exec(
                 select(ThingRelationshipRecord).where(
                     or_(

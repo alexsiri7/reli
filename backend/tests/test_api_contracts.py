@@ -28,7 +28,6 @@ def assert_thing_shape(obj: dict) -> None:
     assert isinstance(obj["id"], str)
     assert isinstance(obj["title"], str)
     assert obj["type_hint"] is None or isinstance(obj["type_hint"], str)
-    assert obj["parent_id"] is None or isinstance(obj["parent_id"], str)
     assert obj["checkin_date"] is None or isinstance(obj["checkin_date"], str)
     assert isinstance(obj["importance"], int)
     assert isinstance(obj["active"], bool)
@@ -191,7 +190,7 @@ class TestThingsContract:
         created = _create_thing(client, title="Nullables")
         body = client.get(f"/api/things/{created['id']}").json()
         # These fields should exist and be null, not absent
-        for field in ("type_hint", "parent_id", "checkin_date", "data"):
+        for field in ("type_hint", "checkin_date", "data"):
             assert field in body, f"field '{field}' missing from response"
 
 

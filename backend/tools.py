@@ -283,7 +283,6 @@ def create_thing(
             id=thing_id,
             title=title,
             type_hint=type_hint or None,
-            parent_id=None,
             checkin_date=datetime.fromisoformat(checkin_date) if checkin_date else None,
             importance=importance,
             active=True,

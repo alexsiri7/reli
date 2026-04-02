@@ -45,15 +45,6 @@ class TestCreateThing:
         assert data["importance"] == 0
         assert data["data"] == {"notes": "some notes"}
 
-    def test_create_with_valid_parent(self, client):
-        parent = create_thing(client, title="Parent")
-        child = create_thing(client, title="Child", parent_id=parent["id"])
-        assert child["parent_id"] == parent["id"]
-
-    def test_create_with_invalid_parent_returns_404(self, client):
-        resp = client.post("/api/things", json={"title": "Orphan", "parent_id": "nonexistent-id"})
-        assert resp.status_code == 404
-
     def test_create_empty_title_returns_422(self, client):
         resp = client.post("/api/things", json={"title": ""})
         assert resp.status_code == 422
@@ -157,16 +148,6 @@ class TestUpdateThing:
 
     def test_update_nonexistent_returns_404(self, client):
         resp = client.patch("/api/things/no-such-id", json={"title": "Ghost"})
-        assert resp.status_code == 404
-
-    def test_update_self_parent_returns_422(self, client):
-        thing = create_thing(client, title="Self Loop")
-        resp = client.patch(f"/api/things/{thing['id']}", json={"parent_id": thing["id"]})
-        assert resp.status_code == 422
-
-    def test_update_invalid_parent_returns_404(self, client):
-        thing = create_thing(client, title="Lost Child")
-        resp = client.patch(f"/api/things/{thing['id']}", json={"parent_id": "ghost-parent"})
         assert resp.status_code == 404
 
     def test_update_upserts_vector_store(self, client, mock_vector_store):

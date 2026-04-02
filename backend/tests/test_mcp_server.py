@@ -123,13 +123,6 @@ class TestCreateThing:
         assert json.loads(call_kwargs["open_questions_json"]) == ["What time?"]
 
     @patch("backend.mcp_server.shared_tools.create_thing")
-    def test_create_with_parent_id(self, mock_create: MagicMock) -> None:
-        mock_create.return_value = {"id": "child-1", "title": "Sub-task", "parent_id": "parent-1"}
-        create_thing(title="Sub-task", parent_id="parent-1")
-        # parent_id is not passed through to shared_tools (not supported yet)
-        mock_create.assert_called_once()
-
-    @patch("backend.mcp_server.shared_tools.create_thing")
     def test_create_defaults(self, mock_create: MagicMock) -> None:
         mock_create.return_value = {"id": "new-3", "title": "Note"}
         create_thing(title="Note")
@@ -172,7 +165,6 @@ class TestUpdateThing:
             type_hint="task",
             data={"note": "extra"},
             importance=1,
-            parent_id="p-1",
             checkin_date="2026-04-01",
             active=True,
             surface=False,
@@ -697,7 +689,6 @@ class TestPromptResources:
         for field in (
             "title",
             "type_hint",
-            "parent_id",
             "checkin_date",
             "importance",
             "active",

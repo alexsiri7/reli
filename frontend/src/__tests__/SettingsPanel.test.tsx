@@ -199,7 +199,6 @@ const makeProfile = (overrides: Record<string, unknown> = {}) => ({
     id: 't1',
     title: 'Alice',
     type_hint: 'person',
-    parent_id: null,
     checkin_date: null,
     priority: 3,
     active: true,

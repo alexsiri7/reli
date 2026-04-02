@@ -21,8 +21,8 @@ Rules:
   and/or thing_ids to fetch.
 - "search_queries": new text queries to search for (do NOT repeat previous queries).
 - "thing_ids": specific Thing UUIDs to fetch directly. Use this to follow
-  relationships — if a found Thing references another Thing by ID (in its data,
-  relationships, or parent_id), include that ID here to pull in the full context.
+  relationships — if a found Thing references another Thing by ID (in its data
+  or relationships), include that ID here to pull in the full context.
 - Look at relationship data in the results: if a Thing has relationships pointing
   to other Things you haven't seen yet, request those IDs.
 - If the user's request involves chaining lookups (e.g. "book near my sister's

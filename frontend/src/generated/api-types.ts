@@ -25,7 +25,6 @@ export interface Thing {
   id: string
   title: string
   type_hint: string | null
-  parent_id: string | null
   checkin_date: string | null
   importance: number
   active: boolean
@@ -37,6 +36,7 @@ export interface Thing {
   open_questions: string[] | null
   children_count: number | null
   completed_count: number | null
+  parent_ids: string[] | null
 }
 
 export interface GraphNode {
@@ -392,7 +392,6 @@ export const ThingSchema = z.object({
   id: z.string(),
   title: z.string(),
   type_hint: z.string().nullable(),
-  parent_id: z.string().nullable(),
   checkin_date: z.string().nullable(),
   importance: z.number(),
   active: z.boolean(),
@@ -404,6 +403,7 @@ export const ThingSchema = z.object({
   open_questions: z.array(z.string()).nullable().default(null),
   children_count: z.number().nullable().default(null),
   completed_count: z.number().nullable().default(null),
+  parent_ids: z.array(z.string()).nullable().default(null),
 })
 
 export const GraphNodeSchema = z.object({
