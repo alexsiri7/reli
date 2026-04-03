@@ -71,7 +71,7 @@ if not _url.startswith("sqlite"):
 
 engine = create_engine(_url, connect_args=_connect_args, echo=False, **_pool_args)
 
-# SQLite-specific PRAGMAs (WAL mode, foreign keys).
+# SQLite-specific PRAGMAs (WAL mode, foreign keys, busy timeout).
 if _url.startswith("sqlite"):
 
     @event.listens_for(engine, "connect")
@@ -79,6 +79,8 @@ if _url.startswith("sqlite"):
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA foreign_keys=ON")
+        # Wait up to 5 s when the database is locked instead of failing immediately.
+        cursor.execute("PRAGMA busy_timeout=5000")
         cursor.close()
 
 
