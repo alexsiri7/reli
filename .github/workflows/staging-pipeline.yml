@@ -1,5 +1,14 @@
 name: Staging → Production Pipeline
 
+# Required secrets:
+#   RAILWAY_TOKEN          — Railway project API token (Settings → Tokens)
+#   RAILWAY_STAGING_URL    — Full URL of the Railway staging service (e.g. https://reli-staging.up.railway.app)
+#   RAILWAY_PRODUCTION_URL — Full URL of the Railway production service (e.g. https://reli.up.railway.app)
+#
+# Required Railway project setup:
+#   - One project with two environments: staging and production
+#   - Service named "reli" in both environments
+
 on:
   workflow_run:
     workflows: ["CI"]
@@ -15,51 +24,26 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
-    permissions:
-      packages: read
     steps:
       - uses: actions/checkout@v4
 
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
 
-      - name: Resolve commit SHA
-        id: sha
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Deploy staging via SSH
-        uses: appleboy/ssh-action@v1
+      - name: Deploy to Railway staging
         env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USER: ${{ github.actor }}
-          DEPLOY_SHA: ${{ steps.sha.outputs.sha }}
-        with:
-          host: 100.120.193.82
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.SSH_DEPLOY_KEY }}
-          envs: DEPLOY_SHA,GHCR_TOKEN,GHCR_USER
-          script: |
-            IMAGE="ghcr.io/alexsiri7/reli"
-
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            docker pull "$IMAGE:$DEPLOY_SHA"
-
-            cd /mnt/ext-fast/gc/rigs/reli
-            git pull --rebase
-            RELI_IMAGE_TAG="$DEPLOY_SHA" docker compose -f docker-compose.staging.yml up -d
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway up \
+            --service reli \
+            --environment staging \
+            --detach
 
       - name: Wait for staging health
         run: |
-          echo "Polling http://100.120.193.82:8001/healthz ..."
+          echo "Polling ${{ secrets.RAILWAY_STAGING_URL }}/healthz ..."
           for i in $(seq 1 20); do
-            if curl -sf --max-time 5 http://100.120.193.82:8001/healthz | grep -q '"status":"ok"'; then
+            if curl -sf --max-time 5 "${{ secrets.RAILWAY_STAGING_URL }}/healthz" | grep -q '"status":"ok"'; then
               echo "Staging healthy after attempt $i"
               exit 0
             fi
@@ -69,20 +53,12 @@ jobs:
           echo "Staging failed to become healthy after 20 attempts"
           exit 1
 
-    outputs:
-      deploy_sha: ${{ steps.sha.outputs.sha }}
-
   staging-e2e:
     name: Staging E2E smoke tests
     runs-on: ubuntu-latest
     needs: deploy-staging
     steps:
       - uses: actions/checkout@v4
-
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
@@ -105,74 +81,38 @@ jobs:
 
       - name: Run smoke tests against staging
         env:
-          BASE_URL: http://100.120.193.82:8001
+          BASE_URL: ${{ secrets.RAILWAY_STAGING_URL }}
         run: npm --prefix frontend run test:smoke
 
   deploy-production:
     name: Deploy to production
     runs-on: ubuntu-latest
     needs: [deploy-staging, staging-e2e]
-    permissions:
-      packages: read
     steps:
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+      - uses: actions/checkout@v4
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway production
         env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USER: ${{ github.actor }}
-          DEPLOY_SHA: ${{ needs.deploy-staging.outputs.deploy_sha }}
-        with:
-          host: 100.120.193.82
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.SSH_DEPLOY_KEY }}
-          envs: DEPLOY_SHA,GHCR_TOKEN,GHCR_USER
-          script: |
-            IMAGE="ghcr.io/alexsiri7/reli"
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway up \
+            --service reli \
+            --environment production \
+            --detach
 
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-
-            # Tag current running image as :rollback before deploying
-            CURRENT_ID=$(docker inspect --format='{{.Image}}' reli-reli-1 2>/dev/null || true)
-            if [ -n "$CURRENT_ID" ]; then
-              docker tag "$CURRENT_ID" "$IMAGE:rollback"
+      - name: Wait for production health
+        run: |
+          echo "Polling ${{ secrets.RAILWAY_PRODUCTION_URL }}/healthz ..."
+          for i in $(seq 1 20); do
+            if curl -sf --max-time 5 "${{ secrets.RAILWAY_PRODUCTION_URL }}/healthz" | grep -q '"status":"ok"'; then
+              echo "Production healthy after attempt $i"
+              exit 0
             fi
-
-            # Pull the new image (should already be cached from staging)
-            docker pull "$IMAGE:$DEPLOY_SHA"
-
-            # Update and restart production
-            cd /mnt/ext-fast/gc/rigs/reli
-            git pull --rebase
-            RELI_IMAGE_TAG="$DEPLOY_SHA" docker compose up -d
-
-            # Verify the container is healthy
-            echo "Waiting for health check..."
-            HEALTHY=false
-            for i in 1 2 3 4 5; do
-              sleep 3
-              if curl -sf --max-time 5 http://localhost:8000/healthz | grep -q '"status":"ok"'; then
-                HEALTHY=true
-                break
-              fi
-              echo "Health check attempt $i failed, retrying..."
-            done
-
-            if [ "$HEALTHY" = true ]; then
-              echo "Deploy successful: $DEPLOY_SHA (health check passed)"
-            else
-              echo "Deploy FAILED — health check did not pass after 5 attempts"
-              echo "Rolling back to previous image..."
-              RELI_IMAGE_TAG=rollback docker compose up -d
-              sleep 5
-              if curl -sf --max-time 5 http://localhost:8000/healthz | grep -q '"status":"ok"'; then
-                echo "Rollback successful — previous version is healthy"
-              else
-                echo "WARNING: Rollback version also failed health check"
-              fi
-              exit 1
-            fi
+            echo "Attempt $i/20 failed, waiting 30s..."
+            sleep 30
+          done
+          echo "Production failed to become healthy after 20 attempts"
+          exit 1
