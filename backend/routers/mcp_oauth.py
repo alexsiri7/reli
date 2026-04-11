@@ -57,7 +57,7 @@ def _base_url() -> str:
 def protected_resource_metadata() -> JSONResponse:
     base = _base_url()
     return JSONResponse({
-        "resource": f"{base}/mcp",
+        "resource": f"{base}/mcp/",
         "authorization_servers": [base],
         "scopes_supported": ["mcp"],
     })
