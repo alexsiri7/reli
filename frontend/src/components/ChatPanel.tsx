@@ -157,6 +157,7 @@ function CalendarSources({ events }: { events: CalendarEvent[] }) {
 function ActionAppliedCard({ changes }: { changes: AppliedChanges }) {
   const thingTypes = useStore(s => s.thingTypes)
   const openThingDetail = useStore(s => s.openThingDetail)
+  const [inferredOpen, setInferredOpen] = useState(false)
 
   const contextThings = changes.context_things ?? []
   const created = changes.created ?? []
@@ -221,43 +222,54 @@ function ActionAppliedCard({ changes }: { changes: AppliedChanges }) {
         </div>
       )}
 
-      {/* Inferred connections */}
+      {/* Inferred connections — collapsed by default */}
       {hasInferredConnections && (
         <div>
-          <p className="text-label text-on-surface-variant mb-1">Inferred connections</p>
-          <div className="space-y-0.5">
-            {contextThings.map((t: ContextThing) => (
-              <button
-                key={t.id}
-                onClick={() => openThingDetail(t.id)}
-                className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-primary transition-colors w-full text-left cursor-pointer"
-              >
-                <span>{typeIcon(t.type_hint, thingTypes)}</span>
-                <span className="truncate">{t.title}</span>
-                {t.type_hint && (
-                  <span className="text-[10px] text-on-surface-variant/60 capitalize ml-auto shrink-0">{t.type_hint}</span>
-                )}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => setInferredOpen(o => !o)}
+            className="flex items-center gap-1 text-label text-on-surface-variant hover:text-on-surface transition-colors w-full text-left cursor-pointer"
+          >
+            <svg
+              className={`w-3 h-3 shrink-0 transition-transform ${inferredOpen ? 'rotate-90' : ''}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+            Inferred connections ({contextThings.length})
+          </button>
+          {inferredOpen && (
+            <div className="space-y-0.5 mt-1">
+              {contextThings.map((t: ContextThing) => (
+                <button
+                  key={t.id}
+                  onClick={() => openThingDetail(t.id)}
+                  className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-primary transition-colors w-full text-left cursor-pointer"
+                >
+                  <span>{typeIcon(t.type_hint, thingTypes)}</span>
+                  <span className="truncate">{t.title}</span>
+                  {t.type_hint && (
+                    <span className="text-[10px] text-on-surface-variant/60 capitalize ml-auto shrink-0">{t.type_hint}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-/** Context chips — bottom bar showing context Things as pills */
+/** Context chips — bottom bar showing created/updated Things as pills */
 function ContextChips({ changes }: { changes: AppliedChanges }) {
   const thingTypes = useStore(s => s.thingTypes)
   const openThingDetail = useStore(s => s.openThingDetail)
-  const contextThings = changes.context_things ?? []
   const created = changes.created ?? []
   const updated = changes.updated ?? []
 
   const allThings = [
     ...created.map(c => ({ ...c, kind: 'created' as const })),
     ...updated.map(u => ({ ...u, kind: 'updated' as const })),
-    ...contextThings.map(t => ({ ...t, kind: 'context' as const })),
   ]
 
   if (allThings.length === 0) return null
