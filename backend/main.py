@@ -247,10 +247,10 @@ _default_origins = ["http://localhost:5173", "http://localhost:3000"]
 _extra_origins = [o.strip() for o in _app_settings.CORS_ORIGINS.split(",") if o.strip()] if _app_settings.CORS_ORIGINS else []
 _all_origins = _default_origins + _extra_origins
 
-# MCP OAuth endpoints must accept cross-origin requests from any MCP client.
+# MCP endpoints must accept cross-origin requests from any MCP client.
 # Use a separate permissive CORS middleware for those paths, and the
 # restrictive one for everything else.
-_MCP_CORS_PREFIXES = ("/oauth/", "/.well-known/")
+_MCP_CORS_PREFIXES = ("/oauth/", "/.well-known/", "/mcp")
 
 
 class _MCPCorsMiddleware(BaseHTTPMiddleware):
