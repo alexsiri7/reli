@@ -62,7 +62,8 @@ mcp = FastMCP(
         "and deadline conflicts. "
         "Use the prompt resources (reasoning-agent, context-agent, response-agent) to "
         "adopt a specific Reli agent persona with the right tools — becoming Reli, not "
-        "just talking to it. Use thing-schema for the full data model reference. "
+        "just talking to it. Use usage-guide to learn the correct workflow. "
+        "Use thing-schema for the full data model reference. "
         "Use reli_think for AI-powered reasoning over complex natural language requests."
     ),
     # Path is "/" because FastAPI mounts us at /mcp — the combined path is /mcp/
@@ -424,6 +425,20 @@ def reasoning_agent_prompt() -> str:
 def response_agent_prompt() -> str:
     """Reli response agent — produces the final user-facing reply."""
     return _load_prompt("response-agent")
+
+
+@mcp.prompt(
+    name="usage-guide",
+    description=(
+        "How to use Reli correctly: the golden rule of searching before acting, "
+        "core CRUD workflow, knowledge graph structure (Things and types), "
+        "when to use reli_think, and how to surface briefings and conflicts. "
+        "Read this first if you are new to Reli or unsure of the correct workflow."
+    ),
+)
+def usage_guide() -> str:
+    """Reli usage guide — correct workflow for MCP clients."""
+    return _load_prompt("usage-guide")
 
 
 @mcp.prompt(

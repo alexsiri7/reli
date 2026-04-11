@@ -29,6 +29,7 @@ from backend.mcp_server import (
     response_agent_prompt,
     thing_schema_reference,
     update_thing,
+    usage_guide,
 )
 
 # ---------------------------------------------------------------------------
@@ -730,6 +731,30 @@ class TestPromptResources:
         assert "open_questions" in result
         assert "knowledge gap" in result.lower() or "unresolved" in result.lower()
 
+    def test_usage_guide_returns_string(self) -> None:
+        result = usage_guide()
+        assert isinstance(result, str)
+        assert len(result) > 100
+
+    def test_usage_guide_covers_search_first_rule(self) -> None:
+        result = usage_guide()
+        assert "fetch_context" in result
+        assert "search" in result.lower() or "Search" in result
+
+    def test_usage_guide_covers_workflow(self) -> None:
+        result = usage_guide()
+        for term in ("create_thing", "update_thing", "create_relationship"):
+            assert term in result, f"Missing tool reference '{term}'"
+
+    def test_usage_guide_covers_reli_think(self) -> None:
+        result = usage_guide()
+        assert "reli_think" in result
+
+    def test_usage_guide_covers_type_hints(self) -> None:
+        result = usage_guide()
+        for type_hint in ("task", "note", "project", "person", "event"):
+            assert type_hint in result, f"Missing type hint '{type_hint}'"
+
     def test_prompts_registered_on_mcp_server(self) -> None:
         """Verify all prompts are registered on the FastMCP server instance."""
         import asyncio
@@ -740,6 +765,7 @@ class TestPromptResources:
         assert "reasoning-agent" in names
         assert "response-agent" in names
         assert "thing-schema" in names
+        assert "usage-guide" in names
 
     def test_prompts_have_descriptions(self) -> None:
         """Each prompt must have a non-empty description."""
