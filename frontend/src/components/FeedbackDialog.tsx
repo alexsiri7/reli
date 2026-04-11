@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { captureScreenshot } from '../screenshot'
+import { ScreenshotEditor } from './ScreenshotEditor'
 import { useStore } from '../store'
 
 const CATEGORIES = [
@@ -21,6 +23,54 @@ export function FeedbackDialog() {
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ success: boolean; issueUrl?: string; error?: string } | null>(null)
 
+  // Screenshot state
+  const [capturedCanvas, setCapturedCanvas] = useState<HTMLCanvasElement | null>(null)
+  const [screenshotDataUrl, setScreenshotDataUrl] = useState<string | null>(null)
+  const [capturing, setCapturing] = useState(false)
+  const [captureError, setCaptureError] = useState<string | null>(null)
+  // Hide dialog during capture so it doesn't appear in the screenshot
+  const [dialogVisible, setDialogVisible] = useState(true)
+
+  const handleCaptureScreenshot = useCallback(async () => {
+    setCaptureError(null)
+    setCapturing(true)
+    setDialogVisible(false)
+    try {
+      await new Promise(resolve => setTimeout(resolve, 350))
+      const c = await captureScreenshot()
+      setCapturedCanvas(c)
+    } catch {
+      setCaptureError('Screenshot capture failed.')
+      setDialogVisible(true)
+    } finally {
+      setCapturing(false)
+    }
+  }, [])
+
+  function handleEditorConfirm(dataUrl: string) {
+    const base64Part = dataUrl.split(',')[1] ?? ''
+    const approxBytes = Math.ceil((base64Part.length * 3) / 4)
+    if (approxBytes > 2 * 1024 * 1024) {
+      setCaptureError('Screenshot exceeds 2 MB limit.')
+      setCapturedCanvas(null)
+      setDialogVisible(true)
+      return
+    }
+    setScreenshotDataUrl(dataUrl)
+    setCapturedCanvas(null)
+    setDialogVisible(true)
+  }
+
+  function handleEditorCancel() {
+    setCapturedCanvas(null)
+    setDialogVisible(true)
+  }
+
+  function handleRemoveScreenshot() {
+    setScreenshotDataUrl(null)
+    setCaptureError(null)
+  }
+
   const handleSubmit = async () => {
     if (!message.trim()) return
     setSubmitting(true)
@@ -31,10 +81,12 @@ export function FeedbackDialog() {
         message: message.trim(),
         user_agent: navigator.userAgent,
         url: window.location.href,
+        screenshot: screenshotDataUrl ?? undefined,
       })
       setResult(res)
       if (res.success) {
         setMessage('')
+        setScreenshotDataUrl(null)
       }
     } catch {
       setResult({ success: false, error: 'Failed to submit feedback.' })
@@ -43,8 +95,27 @@ export function FeedbackDialog() {
     }
   }
 
+  // Show annotation editor after capture
+  if (capturedCanvas) {
+    return (
+      <ScreenshotEditor
+        canvas={capturedCanvas}
+        onConfirm={handleEditorConfirm}
+        onCancel={handleEditorCancel}
+      />
+    )
+  }
+
+  // Invisible while waiting for page repaint before capture
+  if (!dialogVisible) {
+    return null
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      data-screenshot-exclude="true"
+    >
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md mx-4">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -141,6 +212,44 @@ export function FeedbackDialog() {
                 <p className="text-[10px] text-gray-400 dark:text-gray-400 mt-1">
                   Browser and app info will be included automatically.
                 </p>
+              </div>
+
+              {/* Screenshot */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Screenshot <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                {screenshotDataUrl ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={screenshotDataUrl}
+                      alt="Attached screenshot"
+                      className="rounded-lg border border-gray-200 dark:border-gray-700 max-h-32 max-w-full object-contain"
+                    />
+                    <button
+                      onClick={handleRemoveScreenshot}
+                      title="Remove screenshot"
+                      className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-gray-500 text-white flex items-center justify-center hover:bg-red-500 transition-colors text-sm leading-none"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleCaptureScreenshot}
+                    disabled={capturing}
+                    className="flex items-center gap-2 px-3 py-2 text-xs rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-indigo-400 hover:text-indigo-500 dark:hover:border-indigo-500 dark:hover:text-indigo-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    {capturing ? 'Capturing…' : 'Capture Screenshot'}
+                  </button>
+                )}
+                {captureError && (
+                  <p className="text-[10px] text-red-500 dark:text-red-400 mt-1">{captureError}</p>
+                )}
               </div>
 
               {result?.error && (

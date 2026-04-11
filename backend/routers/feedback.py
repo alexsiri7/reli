@@ -1,5 +1,6 @@
 """Feedback endpoint: creates GitHub issues with app context."""
 
+import base64
 import logging
 
 import httpx
@@ -14,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
+GITHUB_UPLOADS_URL = "https://uploads.github.com/repos/{repo}/issues/uploads"
+
 
 class FeedbackRequest(BaseModel):
     """User feedback submission."""
@@ -22,6 +25,10 @@ class FeedbackRequest(BaseModel):
     message: str = Field(min_length=1, max_length=5000)
     user_agent: str = ""
     url: str = ""
+    screenshot: str | None = Field(
+        default=None,
+        description="Optional JPEG screenshot as a data URL (data:image/jpeg;base64,...). Max 2 MB.",
+    )
 
 
 class FeedbackResponse(BaseModel):
@@ -35,6 +42,57 @@ class FeedbackResponse(BaseModel):
 def _category_label(category: str) -> str:
     labels = {"bug": "bug", "feature": "enhancement"}
     return labels.get(category, "feedback")
+
+
+async def _upload_screenshot(
+    client: httpx.AsyncClient,
+    token: str,
+    repo: str,
+    data_url: str,
+) -> str | None:
+    """Upload a base64 screenshot to GitHub's issue uploads CDN.
+
+    Returns the markdown image URL on success, or None if upload fails.
+    The GitHub uploads endpoint accepts binary data and returns a URL that
+    can be embedded in issue bodies.
+    """
+    # Parse data URL: "data:<mime>;base64,<data>"
+    try:
+        header, b64data = data_url.split(",", 1)
+        mime = header.split(";")[0].replace("data:", "") or "image/jpeg"
+        image_bytes = base64.b64decode(b64data)
+    except Exception:
+        logger.warning("Failed to decode screenshot data URL")
+        return None
+
+    ext = "jpg" if "jpeg" in mime else "png"
+    upload_url = GITHUB_UPLOADS_URL.format(repo=repo)
+
+    try:
+        resp = await client.post(
+            upload_url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": mime,
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            content=image_bytes,
+            params={"name": f"screenshot.{ext}"},
+            timeout=30.0,
+        )
+        if resp.status_code in (200, 201):
+            data = resp.json()
+            url = data.get("href") or data.get("url")
+            if url:
+                return f"![Screenshot]({url})"
+        logger.warning(
+            "Screenshot upload returned %s: %s", resp.status_code, resp.text[:200]
+        )
+    except Exception as exc:
+        logger.warning("Screenshot upload failed: %s", exc)
+
+    return None
 
 
 @router.post("", response_model=FeedbackResponse, summary="Submit feedback")
@@ -64,6 +122,14 @@ async def submit_feedback(
 
     context_section = "\n".join(context_lines)
     issue_body = f"{body.message}\n\n---\n\n{context_section}" if context_lines else body.message
+
+    # Attach screenshot if provided
+    if body.screenshot:
+        screenshot_md = await _upload_screenshot(client, token, repo, body.screenshot)
+        if screenshot_md:
+            issue_body += f"\n\n{screenshot_md}"
+        else:
+            issue_body += "\n\n*(Screenshot was included but could not be uploaded.)*"
 
     # Map category to title prefix
     prefix_map = {"bug": "Bug", "feature": "Feature request", "other": "Feedback"}
