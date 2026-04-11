@@ -246,18 +246,16 @@ function ActionAppliedCard({ changes }: { changes: AppliedChanges }) {
   )
 }
 
-/** Context chips — bottom bar showing context Things as pills */
+/** Context chips — bottom bar showing created/updated Things as pills */
 function ContextChips({ changes }: { changes: AppliedChanges }) {
   const thingTypes = useStore(s => s.thingTypes)
   const openThingDetail = useStore(s => s.openThingDetail)
-  const contextThings = changes.context_things ?? []
   const created = changes.created ?? []
   const updated = changes.updated ?? []
 
   const allThings = [
     ...created.map(c => ({ ...c, kind: 'created' as const })),
     ...updated.map(u => ({ ...u, kind: 'updated' as const })),
-    ...contextThings.map(t => ({ ...t, kind: 'context' as const })),
   ]
 
   if (allThings.length === 0) return null
