@@ -1,5 +1,6 @@
 """Tests for POST /chat multi-agent pipeline endpoint."""
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -241,6 +242,45 @@ class TestChatPipeline:
     async def test_chat_invalid_request_returns_422(self, async_client):
         resp = await async_client.post("/api/chat", json={"session_id": "", "message": ""})
         assert resp.status_code == 422
+
+    async def test_chat_applied_changes_with_datetime_serializes_correctly(self, async_client):
+        """Regression test: datetime objects in applied_changes must not cause TypeError.
+
+        When tools like create_thing return Thing dicts via model_dump(), datetime
+        fields (created_at, updated_at, checkin_date) are Python datetime objects.
+        These must be serialized to ISO strings before the dict is stored in the
+        JSON applied_changes column (GH #547).
+        """
+        now = datetime.now(timezone.utc)
+        reasoning_with_datetime = {
+            "applied_changes": {
+                "created": [
+                    {
+                        "id": "thing-dt-test",
+                        "title": "Datetime Test Thing",
+                        "type_hint": "task",
+                        "importance": 2,
+                        "created_at": now,  # raw datetime — triggers the bug before fix
+                        "updated_at": now,
+                    }
+                ],
+                "updated": [],
+                "deleted": [],
+                "merged": [],
+                "relationships_created": [],
+            },
+            "questions_for_user": [],
+            "priority_question": "",
+            "reasoning_summary": "Created a thing with datetime fields.",
+            "briefing_mode": False,
+        }
+        patches = _patch_agents(reasoning_result=reasoning_with_datetime)
+        with patches[0], patches[1]:
+            resp = await async_client.post(
+                "/api/chat",
+                json={"session_id": "datetime-sess", "message": "Create a task"},
+            )
+        assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.text}"
 
 
 # ---------------------------------------------------------------------------

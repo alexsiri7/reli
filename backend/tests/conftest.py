@@ -48,10 +48,13 @@ def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
     # Point the legacy raw-sqlite helpers at the temp DB
     monkeypatch.setattr(db_module, "DB_PATH", tmp_db_path)
 
-    # Create a SQLModel engine for the temp DB
+    # Create a SQLModel engine for the temp DB (json_serializer matches production)
+    from backend.db_engine import _json_serializer
+
     test_engine = create_engine(
         f"sqlite:///{tmp_db_path}",
         connect_args={"check_same_thread": False},
+        json_serializer=_json_serializer,
     )
     SQLModel.metadata.create_all(test_engine)
 

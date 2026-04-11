@@ -29,7 +29,9 @@ _ENTITY_TYPES = {"person", "place", "event", "concept", "reference", "preference
 
 def _thing_to_dict(record: ThingRecord) -> dict[str, Any]:
     """Convert a ThingRecord to a plain dict matching the legacy sqlite3.Row format."""
-    d = record.model_dump()
+    # mode='json' ensures datetime fields are serialized to ISO strings,
+    # preventing TypeError when this dict is stored in the JSON applied_changes column.
+    d = record.model_dump(mode="json")
     # Legacy code expects 'priority' key
     d.setdefault("priority", record.priority)
     return d
@@ -43,7 +45,7 @@ def _rel_to_dict(record: ThingRelationshipRecord) -> dict[str, Any]:
         "to_thing_id": record.to_thing_id,
         "relationship_type": record.relationship_type,
         "metadata": record.metadata_,
-        "created_at": record.created_at,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
     }
 
 
