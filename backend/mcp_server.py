@@ -701,8 +701,15 @@ class _TokenAuthMiddleware:
             provided = auth_header[7:]
 
             # 1. Static token match (legacy / backward compat)
-            if static_token and provided == static_token:
+            import secrets as _secrets
+
+            if static_token and _secrets.compare_digest(provided, static_token):
                 authorized = True
+                from .auth import _resolve_api_token_user
+
+                resolved_uid = _resolve_api_token_user()
+                if resolved_uid:
+                    _current_user_id.set(resolved_uid)
 
             # 2. JWT validation (OAuth flow)
             if not authorized and secret_key:

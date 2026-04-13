@@ -122,9 +122,16 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"Missing required production env vars: {', '.join(missing)}"
                 )
-        if not self.SECRET_KEY:
+        if not self.SECRET_KEY and not self.RELI_API_TOKEN:
+            auth_disabled = os.getenv("AUTH_DISABLED", "").lower() in ("true", "1", "yes")
+            if not auth_disabled:
+                raise ValueError(
+                    "SECRET_KEY or RELI_API_TOKEN must be set. "
+                    "To intentionally run without auth, set AUTH_DISABLED=true"
+                )
             warnings.warn(
-                "SECRET_KEY is empty — authentication is DISABLED", stacklevel=2
+                "SECRET_KEY is empty — authentication is DISABLED (AUTH_DISABLED=true)",
+                stacklevel=2,
             )
         return self
 
