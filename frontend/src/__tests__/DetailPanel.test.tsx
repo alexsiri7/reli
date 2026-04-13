@@ -69,7 +69,7 @@ describe('DetailPanel', () => {
   it('renders type badge', () => {
     render(<DetailPanel />)
     // The type badge contains icon + space + type_hint, so use a function matcher
-    expect(screen.getByText((_, el) => el?.textContent?.includes('task') && el?.classList?.contains('capitalize') || false)).toBeInTheDocument()
+    expect(screen.getByText((_, el) => !!(el?.textContent?.includes('task') && el?.classList?.contains('capitalize')))).toBeInTheDocument()
   })
 
   it('renders importance label', () => {
