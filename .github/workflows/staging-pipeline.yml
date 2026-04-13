@@ -101,7 +101,7 @@ jobs:
             ${{ runner.os }}-node-
 
       - name: Install dependencies
-        run: npm --prefix frontend ci
+        run: npm --prefix frontend ci --legacy-peer-deps
 
       - name: Install Playwright browsers
         run: npx --prefix frontend playwright install --with-deps chromium
