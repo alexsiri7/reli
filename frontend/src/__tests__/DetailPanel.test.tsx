@@ -181,6 +181,13 @@ describe('DetailPanel', () => {
     expect(screen.getByText('Parent Thing')).toBeInTheDocument()
   })
 
+  it('renders empty state without crashing when detailThing is populated but detailThingId is null', () => {
+    storeState.detailThingId = null
+    storeState.detailThing = baseThing
+    render(<DetailPanel />)
+    expect(screen.getByText('Click any Thing in the sidebar to see its details and relationships.')).toBeInTheDocument()
+  })
+
   it('navigates on child click', () => {
     const child: Thing = { ...baseThing, id: 't2', title: 'Child Thing' }
     storeState.things = [baseThing, child]
