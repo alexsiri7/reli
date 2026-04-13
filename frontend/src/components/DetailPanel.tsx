@@ -81,6 +81,22 @@ export function DetailPanel() {
     return groups
   }, [detailRelationships, detailThingId, things])
 
+  // Parent/children derived from relationships (parent-of type) — must be before early return
+  const children = useMemo(() => {
+    if (!detailThing || !detailRelationships) return []
+    const childIds = detailRelationships
+      .filter(r => r.from_thing_id === detailThing.id && r.relationship_type === 'parent-of')
+      .map(r => r.to_thing_id)
+    return things.filter(t => childIds.includes(t.id))
+  }, [detailThing, detailRelationships, things])
+  const parent = useMemo(() => {
+    if (!detailThing || !detailRelationships) return null
+    const parentRel = detailRelationships.find(
+      r => r.to_thing_id === detailThing.id && r.relationship_type === 'parent-of'
+    )
+    return parentRel ? things.find(t => t.id === parentRel.from_thing_id) ?? null : null
+  }, [detailThing, detailRelationships, things])
+
   if (!detailThingId) {
     return (
       <div className="hidden md:flex w-80 shrink-0 flex-col items-center justify-center gap-3 bg-surface dark:bg-surface text-center px-6">
@@ -103,22 +119,6 @@ export function DetailPanel() {
 
   // Resolve a Thing by ID — check local store first, fall back to minimal display
   const resolveThing = (id: string) => things.find(t => t.id === id)
-
-  // Parent/children derived from relationships (parent-of type)
-  const children = useMemo(() => {
-    if (!thing || !detailRelationships) return []
-    const childIds = detailRelationships
-      .filter(r => r.from_thing_id === thing.id && r.relationship_type === 'parent-of')
-      .map(r => r.to_thing_id)
-    return things.filter(t => childIds.includes(t.id))
-  }, [thing, detailRelationships, things])
-  const parent = useMemo(() => {
-    if (!thing || !detailRelationships) return null
-    const parentRel = detailRelationships.find(
-      r => r.to_thing_id === thing.id && r.relationship_type === 'parent-of'
-    )
-    return parentRel ? things.find(t => t.id === parentRel.from_thing_id) ?? null : null
-  }, [thing, detailRelationships, things])
 
   // Separate notes from other data entries
   const notes = thing?.data?.notes != null ? String(thing.data.notes) : null
