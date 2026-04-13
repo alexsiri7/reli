@@ -52,7 +52,8 @@ jobs:
             docker pull "$IMAGE:$DEPLOY_SHA"
 
             cd /mnt/ext-fast/gc/rigs/reli
-            git pull --rebase
+            git fetch origin main
+            git reset --hard origin/main
             RELI_IMAGE_TAG="$DEPLOY_SHA" docker compose -f docker-compose.staging.yml up -d
 
       - name: Wait for staging health
