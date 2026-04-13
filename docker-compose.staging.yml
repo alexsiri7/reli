@@ -7,7 +7,7 @@ services:
     image: ghcr.io/alexsiri7/reli:${RELI_IMAGE_TAG:-latest}
     container_name: reli-staging
     ports:
-      - "127.0.0.1:8001:8000"
+      - "0.0.0.0:8001:8000"
     volumes:
       - ./data-staging:/app/data
     environment:
