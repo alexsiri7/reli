@@ -42,9 +42,10 @@ def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
     used in tests).  The legacy ``database.db()`` context manager is patched
     so test files that still use raw ``sqlite3`` connections hit the same DB.
     """
+    from sqlmodel import Session, SQLModel, create_engine
+
     import backend.database as db_module
     import backend.db_engine as engine_module
-    from sqlmodel import SQLModel, Session, create_engine
 
     # Point the legacy raw-sqlite helpers at the temp DB
     monkeypatch.setattr(db_module, "DB_PATH", tmp_db_path)

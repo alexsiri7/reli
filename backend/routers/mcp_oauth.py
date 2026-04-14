@@ -29,7 +29,7 @@ from ..oauth_state import (
     mcp_refresh_tokens,
     mcp_registered_clients,
 )
-from .auth import AUTH_SCOPES, GOOGLE_REDIRECT_URI, JWT_EXPIRY_SECONDS, _client_config, _create_jwt, _upsert_user
+from .auth import AUTH_SCOPES, GOOGLE_REDIRECT_URI, JWT_EXPIRY_SECONDS, _client_config, _create_jwt
 
 logger = logging.getLogger(__name__)
 

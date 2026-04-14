@@ -16,7 +16,7 @@ import contextvars
 import json
 import logging
 import os
-import sys
+import secrets
 from pathlib import Path
 from typing import Any
 
@@ -701,9 +701,7 @@ class _TokenAuthMiddleware:
             provided = auth_header[7:]
 
             # 1. Static token match (legacy / backward compat)
-            import secrets as _secrets
-
-            if static_token and _secrets.compare_digest(provided, static_token):
+            if static_token and secrets.compare_digest(provided, static_token):
                 authorized = True
                 from .auth import _resolve_api_token_user
 

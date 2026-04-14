@@ -11,11 +11,11 @@ from sqlalchemy import func, text
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
-from ..db_engine import get_session, user_filter_clause, user_filter_text
-from ..db_models import ThingRecord, ThingRelationshipRecord, ThingTypeRecord
-from ..db_models import MergeHistoryRecord as MergeHistoryDBRecord
 
 from ..auth import require_user
+from ..db_engine import get_session, user_filter_clause, user_filter_text
+from ..db_models import MergeHistoryRecord as MergeHistoryDBRecord
+from ..db_models import ThingRecord, ThingRelationshipRecord
 from ..models import (
     GraphEdge,
     GraphNode,
@@ -83,7 +83,6 @@ def _record_to_thing(record: ThingRecord) -> Thing:
 # Keep _row_to_thing for backward compat (imported by other modules)
 def _row_to_thing(row: Any) -> Thing:
     """Convert a sqlite3.Row to a Thing response model. Legacy compat wrapper."""
-    import sqlite3
     if isinstance(row, ThingRecord):
         return _record_to_thing(row)
     # Legacy sqlite3.Row handling
@@ -335,8 +334,9 @@ def list_things(
     # Compute child stats and parent_ids from parent-of relationships
     thing_ids = [t.id for t in things]
     if thing_ids:
-        from sqlalchemy import case as sa_case
         from collections import defaultdict
+
+        from sqlalchemy import case as sa_case
 
         # Fetch all parent-of relationships involving these Things
         parent_of_rels = session.exec(

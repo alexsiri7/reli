@@ -13,9 +13,10 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
+import backend.db_engine as _engine_mod
+
 from ..auth import require_user
 from ..config import settings
-import backend.db_engine as _engine_mod
 from ..db_models import GoogleTokenRecord
 from ..token_encryption import decrypt_or_plaintext, encrypt
 
