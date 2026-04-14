@@ -89,10 +89,53 @@ class TestJWTAuth:
         assert "Not authenticated" in resp.json()["detail"]
 
     def test_api_bypassed_when_no_secret_key(self, patched_db):
-        """When SECRET_KEY is empty, auth is disabled for local dev."""
-        with patch("backend.auth.SECRET_KEY", ""):
+        """When neither SECRET_KEY nor RELI_API_TOKEN is set, auth is disabled for local dev."""
+        with (
+            patch("backend.auth.SECRET_KEY", ""),
+            patch("backend.auth._API_TOKEN", ""),  # explicit: test the fully-disabled path
+        ):
             from backend.main import app
 
             with TestClient(app) as c:
                 resp = c.get("/api/things")
                 assert resp.status_code == 200
+
+
+class TestApiTokenWithoutSecretKey:
+    """Staging scenario: RELI_API_TOKEN set, SECRET_KEY absent."""
+
+    @pytest.fixture()
+    def staging_client(self, patched_db):
+        """TestClient simulating staging: API token set, no SECRET_KEY."""
+        with (
+            patch("backend.auth.SECRET_KEY", ""),
+            patch("backend.auth._API_TOKEN", "staging-token-abc"),
+        ):
+            from backend.main import app
+
+            with TestClient(app) as c:
+                yield c
+
+    def test_unauthenticated_request_rejected_when_api_token_set(self, staging_client):
+        """When RELI_API_TOKEN is configured but no Bearer token is provided, reject with 401."""
+        resp = staging_client.get("/api/things")
+        assert resp.status_code == 401
+        assert "Not authenticated" in resp.json()["detail"]
+
+    def test_valid_bearer_token_accepted_when_secret_key_absent(self, staging_client):
+        """Valid Bearer token must still work even when SECRET_KEY is not set."""
+        resp = staging_client.get(
+            "/api/things",
+            headers={"Authorization": "Bearer staging-token-abc"},
+        )
+        # Auth passes (not 401) — actual status depends on whether a user record exists
+        assert resp.status_code != 401
+
+    def test_invalid_bearer_token_rejected_when_secret_key_absent(self, staging_client):
+        """Invalid Bearer token must receive 401 in staging config."""
+        resp = staging_client.get(
+            "/api/things",
+            headers={"Authorization": "Bearer wrong-token"},
+        )
+        assert resp.status_code == 401
+        assert "Invalid API token" in resp.json()["detail"]
