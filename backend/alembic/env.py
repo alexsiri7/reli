@@ -6,10 +6,9 @@ are never hardcoded in alembic.ini.
 
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool, text
-
 from alembic import context
 from alembic.script import ScriptDirectory
+from sqlalchemy import engine_from_config, pool, text
 
 from backend.alembic.safety import check_pending_migrations
 
@@ -22,8 +21,9 @@ if config.config_file_name is not None:
 
 # -- Import SQLModel metadata ------------------------------------------------
 # Import all models so SQLModel.metadata knows about every table.
-from backend import db_models as _db_models  # noqa: F401, E402
 from sqlmodel import SQLModel  # noqa: E402
+
+from backend import db_models as _db_models  # noqa: F401, E402
 
 target_metadata = SQLModel.metadata
 
@@ -72,9 +72,7 @@ def run_migrations_online() -> None:
         # Safety check: scan pending migrations for destructive DDL
         script_dir = ScriptDirectory.from_config(config)
         try:
-            result = connection.execute(
-                text("SELECT version_num FROM alembic_version")
-            )
+            result = connection.execute(text("SELECT version_num FROM alembic_version"))
             current_heads = {row[0] for row in result}
         except Exception:
             # Table doesn't exist yet (fresh database) — all migrations pending

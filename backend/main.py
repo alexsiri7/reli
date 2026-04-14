@@ -69,9 +69,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_tracing()
 
     # Run Alembic migrations to ensure schema is up-to-date.
-    from alembic.config import Config as AlembicConfig
-    from alembic import command as alembic_command
     import pathlib as _pathlib
+
+    from alembic import command as alembic_command
+    from alembic.config import Config as AlembicConfig
 
     _alembic_ini = _pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
     _migration_ok = False
@@ -91,6 +92,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # If migrations failed, create_all creates missing tables so the app can start.
     if not _migration_ok:
         from sqlmodel import SQLModel as _SQLModel
+
         try:
             _SQLModel.metadata.create_all(_db_engine)
             logger.info("Schema created via SQLModel.metadata.create_all fallback.")
@@ -250,7 +252,9 @@ app = FastAPI(
 )
 
 _default_origins = ["http://localhost:5173", "http://localhost:3000"]
-_extra_origins = [o.strip() for o in _app_settings.CORS_ORIGINS.split(",") if o.strip()] if _app_settings.CORS_ORIGINS else []
+_extra_origins = (
+    [o.strip() for o in _app_settings.CORS_ORIGINS.split(",") if o.strip()] if _app_settings.CORS_ORIGINS else []
+)
 _all_origins = _default_origins + _extra_origins
 
 # MCP endpoints must accept cross-origin requests from any MCP client.
@@ -262,7 +266,9 @@ _MCP_CORS_PREFIXES = ("/oauth/", "/.well-known/", "/mcp")
 class _MCPCorsMiddleware(BaseHTTPMiddleware):
     """Allow any origin on MCP OAuth / well-known endpoints."""
 
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[StarletteResponse]]) -> StarletteResponse:  # type: ignore[override]
+    async def dispatch(  # type: ignore[override]
+        self, request: Request, call_next: Callable[[Request], Awaitable[StarletteResponse]]
+    ) -> StarletteResponse:
         path = request.url.path
         is_mcp = any(path.startswith(p) for p in _MCP_CORS_PREFIXES)
         if not is_mcp:
@@ -340,6 +346,7 @@ def health() -> dict[str, str]:
 def health_detailed() -> dict:
     """Detailed health check with DB, pgvector, and performance metrics."""
     from sqlalchemy import text
+
     from .db_engine import engine as _db_engine
     from .vector_store import vector_count
 
@@ -392,6 +399,7 @@ app.mount("/mcp", create_mcp_asgi_app(_app_settings.MCP_API_TOKEN))
 @app.api_route("/mcp", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
 def mcp_redirect(request: Request) -> RedirectResponse:
     return RedirectResponse(url=f"{mcp_oauth._base_url()}/mcp/", status_code=307)
+
 
 # Serve React SPA (only when the built dist directory exists)
 if _FRONTEND_DIST.is_dir():
