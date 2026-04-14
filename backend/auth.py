@@ -67,7 +67,10 @@ async def require_user(request: Request) -> str:
         )
 
     if not SECRET_KEY:
-        return ""
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
 
     # --- Cookie-based JWT auth (web UI) ---
     token = request.cookies.get(COOKIE_NAME)
