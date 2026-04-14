@@ -85,11 +85,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.exception("Alembic migration failed — checking schema state.")
     else:
-        logger.warning("alembic.ini not found at %s — skipping migrations.", _alembic_ini)
+        logger.warning(
+            "alembic.ini not found at %s — skipping migrations; will attempt create_all fallback.",
+            _alembic_ini,
+        )
 
-    # Ensure schema exists regardless of migration outcome.
-    # If migrations succeeded, create_all is a no-op (tables already exist).
-    # If migrations failed, create_all creates missing tables so the app can start.
+    # Fallback: if migrations failed or alembic.ini was missing, use create_all to
+    # ensure the schema exists so the app can start. On a live DB this is safe —
+    # SQLAlchemy emits CREATE TABLE IF NOT EXISTS for each table.
     if not _migration_ok:
         from sqlmodel import SQLModel as _SQLModel
 
@@ -97,7 +100,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             _SQLModel.metadata.create_all(_db_engine)
             logger.info("Schema created via SQLModel.metadata.create_all fallback.")
         except Exception:
-            logger.exception("create_all fallback also failed — app may be broken.")
+            logger.exception(
+                "create_all fallback also failed — app starting in degraded state. "
+                "Ensure /api/health readiness probes are configured."
+            )
     await start_scheduler()
 
     # Start MCP session manager (required for streamable HTTP transport).

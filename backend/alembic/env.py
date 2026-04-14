@@ -4,6 +4,7 @@ Reads the database URL from backend.config.settings so credentials
 are never hardcoded in alembic.ini.
 """
 
+import logging
 from logging.config import fileConfig
 
 from alembic import context
@@ -11,6 +12,9 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import engine_from_config, pool, text
 
 from backend.alembic.safety import check_pending_migrations
+from backend.alembic.utils import build_connect_args
+
+logger = logging.getLogger(__name__)
 
 # -- Alembic Config object ---------------------------------------------------
 config = context.config
@@ -55,11 +59,7 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode (with a live database connection)."""
     _db_url = config.get_main_option("sqlalchemy.url") or ""
-    _connect_args: dict = {}
-    if "asyncpg" in _db_url:
-        _connect_args = {"timeout": 10}  # asyncpg uses 'timeout', not 'connect_timeout'
-    elif not _db_url.startswith("sqlite"):
-        _connect_args = {"connect_timeout": 10}  # psycopg2 / other PostgreSQL drivers
+    _connect_args = build_connect_args(_db_url)
 
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -75,7 +75,12 @@ def run_migrations_online() -> None:
             result = connection.execute(text("SELECT version_num FROM alembic_version"))
             current_heads = {row[0] for row in result}
         except Exception:
-            # Table doesn't exist yet (fresh database) — all migrations pending
+            # Could be: table doesn't exist (fresh DB) or a connection/permission error.
+            # Either way treat as all-pending, but log so we can distinguish in production.
+            logger.warning(
+                "Could not read alembic_version (fresh DB or connection issue) — treating all migrations as pending",
+                exc_info=True,
+            )
             current_heads = set()
             connection.rollback()
 
