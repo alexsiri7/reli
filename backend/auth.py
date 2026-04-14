@@ -102,5 +102,3 @@ async def require_user(request: Request) -> str:
         )
 
     return user_id
-
-
