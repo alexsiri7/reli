@@ -9,6 +9,6 @@ def build_connect_args(db_url: str) -> dict:
     """
     if "asyncpg" in db_url:
         return {"timeout": 10}
-    elif not db_url.startswith("sqlite"):
+    if not db_url.startswith("sqlite"):
         return {"connect_timeout": 10}
     return {}
