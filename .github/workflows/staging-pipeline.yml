@@ -52,7 +52,10 @@ jobs:
             docker pull "$IMAGE:$DEPLOY_SHA"
 
             cd /mnt/ext-fast/gc/rigs/reli
-            git pull --rebase
+            # fetch+reset instead of pull --rebase: handles server-side unstaged changes cleanly
+            # Note: resets tracked files only; untracked files (.env, etc.) are preserved
+            git fetch origin main
+            git reset --hard origin/main
             RELI_IMAGE_TAG="$DEPLOY_SHA" docker compose -f docker-compose.staging.yml up -d
 
       - name: Wait for staging health
@@ -98,7 +101,7 @@ jobs:
             ${{ runner.os }}-node-
 
       - name: Install dependencies
-        run: npm --prefix frontend ci
+        run: npm --prefix frontend ci --legacy-peer-deps
 
       - name: Install Playwright browsers
         run: npx --prefix frontend playwright install --with-deps chromium
