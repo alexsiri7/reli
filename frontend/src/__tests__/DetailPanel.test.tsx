@@ -69,7 +69,7 @@ describe('DetailPanel', () => {
   it('renders type badge', () => {
     render(<DetailPanel />)
     // The type badge contains icon + space + type_hint, so use a function matcher
-    expect(screen.getByText((_, el) => el?.textContent?.includes('task') && el?.classList?.contains('capitalize') || false)).toBeInTheDocument()
+    expect(screen.getByText((_, el) => !!(el?.textContent?.includes('task') && el?.classList?.contains('capitalize')))).toBeInTheDocument()
   })
 
   it('renders importance label', () => {
@@ -197,5 +197,16 @@ describe('DetailPanel', () => {
     render(<DetailPanel />)
     fireEvent.click(screen.getByText('Child Thing'))
     expect(navigateThingDetail).toHaveBeenCalledWith('t2')
+  })
+
+  it('does not render children or parent sections when detailThing is null', () => {
+    storeState.detailThing = null
+    storeState.detailLoading = false
+    storeState.detailRelationships = [
+      { id: 'r1', from_thing_id: 't1', to_thing_id: 't2', relationship_type: 'parent-of', metadata: null, created_at: '2026-01-01T00:00:00Z' },
+    ]
+    render(<DetailPanel />)
+    expect(screen.queryByText(/Children/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Parent')).not.toBeInTheDocument()
   })
 })

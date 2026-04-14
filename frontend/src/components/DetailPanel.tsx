@@ -81,7 +81,7 @@ export function DetailPanel() {
     return groups
   }, [detailRelationships, detailThingId, things])
 
-  // Parent/children derived from relationships (parent-of type)
+  // Parent/children derived from relationships (parent-of type) — must be before early return
   const children = useMemo(() => {
     if (!detailThing || !detailRelationships) return []
     const childIds = detailRelationships
@@ -203,16 +203,12 @@ export function DetailPanel() {
               {/* Importance + check-in date */}
               <div className="flex items-center gap-3 text-body text-on-surface-variant">
                 <span>{importanceLabel(thing.importance)}</span>
-                {thing.checkin_date && (() => {
-                  const overdue = isOverdue(thing.checkin_date)
-                  const dateLabel = formatDate(thing.checkin_date)
-                  return (
-                    <span className={`inline-flex items-center gap-1 ${overdue ? 'text-ideas font-semibold' : ''}`}>
-                      <span className="shrink-0">{overdue ? '\u26a0' : '\ud83d\udcc5'}</span>
-                      <span>{dateLabel}</span>
-                    </span>
-                  )
-                })()}
+                {thing.checkin_date && (
+                  <span className={`inline-flex items-center gap-1 ${isOverdue(thing.checkin_date) ? 'text-ideas font-semibold' : ''}`}>
+                    <span className="shrink-0">{isOverdue(thing.checkin_date) ? '\u26a0' : '\ud83d\udcc5'}</span>
+                    <span>{formatDate(thing.checkin_date)}</span>
+                  </span>
+                )}
               </div>
 
               {/* ── NOTES ── */}
