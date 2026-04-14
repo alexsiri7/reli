@@ -1,5 +1,58 @@
 # Agent Instructions
 
+## Infrastructure & Deployment
+
+This project is deployed on **Railway**.
+
+### Railway CLI
+
+The `railway` CLI is installed at `/home/asiri/.local/bin/railway`. Use it to check deploy status, view logs, and manage services.
+
+```bash
+# Check latest deployment status
+railway logs --service reli --environment production --num 50
+
+# View staging logs
+railway logs --service reli --environment staging --num 50
+
+# View deploy history
+railway deployment list --service reli --environment production
+
+# Trigger a redeploy
+railway up --service reli --environment production
+
+# Check service status
+railway status
+```
+
+### Project Details
+
+| Key | Value |
+|-----|-------|
+| Project | reli |
+| Project ID | e0e490c5-566e-4be7-8df1-4b64049e1b86 |
+| Service | reli |
+| Service ID | b58735a7-10fe-4e5a-8ff0-5e893ec83287 |
+| Environments | production, staging |
+| Production URL | (check Railway dashboard) |
+| Staging URL | (check Railway dashboard) |
+
+### Deploy Flow
+
+1. PR merged to `main` → CI runs
+2. Staging pipeline: deploy to staging → E2E smoke tests → promote to production
+3. See `.github/workflows/staging-pipeline.yml` for the full pipeline
+
+### Troubleshooting Deploys
+
+When a deploy or staging pipeline fails:
+1. Check build logs: `railway logs --service reli --environment production --num 100`
+2. Check staging logs: `railway logs --service reli --environment staging --num 100`
+3. Check the GitHub Actions run logs: `gh run view <run-id> --log-failed`
+4. Check Railway dashboard: `railway open`
+5. Check deploy history: `railway deployment list --service reli`
+6. Common issues: missing env vars, database migration failures, health check timeout, staging pipeline SSH/Tailscale issues
+
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
 ## Quick Reference

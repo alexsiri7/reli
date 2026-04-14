@@ -173,9 +173,7 @@ def test_settings_production_with_secrets_passes():
     """Settings should not raise when required secrets are provided in production."""
     from backend.config import Settings
 
-    with patch.dict(
-        "os.environ", {"RAILWAY_ENVIRONMENT_NAME": "production"}, clear=False
-    ):
+    with patch.dict("os.environ", {"RAILWAY_ENVIRONMENT_NAME": "production"}, clear=False):
         s = Settings(SECRET_KEY="supersecret", REQUESTY_API_KEY="key123")
         assert s.SECRET_KEY == "supersecret"
         assert s.REQUESTY_API_KEY == "key123"
@@ -214,3 +212,26 @@ def test_settings_empty_secret_key_warns():
             Settings(SECRET_KEY="", REQUESTY_API_KEY="somekey")
             secret_warnings = [x for x in w if "authentication is DISABLED" in str(x.message)]
             assert len(secret_warnings) >= 1
+
+
+def test_settings_partial_auth_warns_about_cookie_only():
+    """When SECRET_KEY is empty but RELI_API_TOKEN is set, warn only about cookie auth."""
+    from backend.config import Settings
+
+    env_overrides = {
+        "RAILWAY_ENVIRONMENT_NAME": "",
+        "PRODUCTION": "",
+    }
+    with patch.dict("os.environ", env_overrides, clear=False):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            Settings(SECRET_KEY="", RELI_API_TOKEN="staging-token", REQUESTY_API_KEY="key")
+            messages = [str(x.message) for x in w]
+
+            # Should warn about cookie auth being disabled
+            assert any("cookie-based auth" in m for m in messages), f"Expected cookie-auth warning, got: {messages}"
+
+            # Must NOT say authentication is fully disabled
+            assert not any("authentication is DISABLED" in m for m in messages), (
+                "Should not claim auth fully disabled when API token is set"
+            )

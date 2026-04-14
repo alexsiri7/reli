@@ -133,6 +133,11 @@ class Settings(BaseSettings):
                 "SECRET_KEY is empty — authentication is DISABLED (AUTH_DISABLED=true)",
                 stacklevel=2,
             )
+        elif not self.SECRET_KEY:
+            warnings.warn(
+                "SECRET_KEY is empty — cookie-based auth (Google OAuth) is DISABLED",
+                stacklevel=2,
+            )
         return self
 
     @model_validator(mode="after")

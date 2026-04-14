@@ -171,6 +171,7 @@ Both data stores contain production data. Handle with care.
 | `GOOGLE_CLIENT_ID` | Yes | — | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Yes | — | Google OAuth client secret |
 | `SECRET_KEY` | Yes | — | JWT signing secret |
+| `RELI_API_TOKEN` | No | — | Static bearer token for API auth; enables token-based access without Google OAuth |
 | `DATA_DIR` | No | `backend/` | Directory for `reli.db` |
 | `LOG_LEVEL` | No | `INFO` | Log verbosity: DEBUG, INFO, WARNING |
 | `OLLAMA_MODEL` | No | — | Local model for context agent |
