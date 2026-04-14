@@ -69,27 +69,41 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_tracing()
 
     # Run Alembic migrations to ensure schema is up-to-date.
-    from alembic.config import Config as AlembicConfig
-    from alembic import command as alembic_command
     import pathlib as _pathlib
 
+    from alembic import command as alembic_command
+    from alembic.config import Config as AlembicConfig
+
     _alembic_ini = _pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
+    _migration_ok = False
     if _alembic_ini.exists():
         try:
             _alembic_cfg = AlembicConfig(str(_alembic_ini))
             alembic_command.upgrade(_alembic_cfg, "head")
             logger.info("Alembic migrations applied successfully.")
+            _migration_ok = True
         except Exception:
-            logger.exception("Alembic migration failed — starting with existing schema.")
+            logger.exception("Alembic migration failed — checking schema state.")
     else:
-        logger.warning("alembic.ini not found at %s — skipping migrations.", _alembic_ini)
+        logger.warning(
+            "alembic.ini not found at %s — skipping migrations; will attempt create_all fallback.",
+            _alembic_ini,
+        )
 
-    # Legacy SQLite init — only when not using an external database
-    from .config import settings as _settings
-
-    if not _settings.DATABASE_URL:
+    # Fallback: if migrations failed or alembic.ini was missing, use create_all to
+    # ensure the schema exists so the app can start. On a live DB this is safe —
+    # SQLAlchemy emits CREATE TABLE IF NOT EXISTS for each table.
+    if not _migration_ok:
         from sqlmodel import SQLModel as _SQLModel
-        _SQLModel.metadata.create_all(_db_engine)
+
+        try:
+            _SQLModel.metadata.create_all(_db_engine)
+            logger.info("Schema created via SQLModel.metadata.create_all fallback.")
+        except Exception:
+            logger.exception(
+                "create_all fallback also failed — app starting in degraded state. "
+                "Ensure /api/health readiness probes are configured."
+            )
     await start_scheduler()
 
     # Start MCP session manager (required for streamable HTTP transport).
@@ -244,7 +258,9 @@ app = FastAPI(
 )
 
 _default_origins = ["http://localhost:5173", "http://localhost:3000"]
-_extra_origins = [o.strip() for o in _app_settings.CORS_ORIGINS.split(",") if o.strip()] if _app_settings.CORS_ORIGINS else []
+_extra_origins = (
+    [o.strip() for o in _app_settings.CORS_ORIGINS.split(",") if o.strip()] if _app_settings.CORS_ORIGINS else []
+)
 _all_origins = _default_origins + _extra_origins
 
 # MCP endpoints must accept cross-origin requests from any MCP client.
@@ -256,7 +272,9 @@ _MCP_CORS_PREFIXES = ("/oauth/", "/.well-known/", "/mcp")
 class _MCPCorsMiddleware(BaseHTTPMiddleware):
     """Allow any origin on MCP OAuth / well-known endpoints."""
 
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[StarletteResponse]]) -> StarletteResponse:  # type: ignore[override]
+    async def dispatch(  # type: ignore[override]
+        self, request: Request, call_next: Callable[[Request], Awaitable[StarletteResponse]]
+    ) -> StarletteResponse:
         path = request.url.path
         is_mcp = any(path.startswith(p) for p in _MCP_CORS_PREFIXES)
         if not is_mcp:
@@ -334,6 +352,7 @@ def health() -> dict[str, str]:
 def health_detailed() -> dict:
     """Detailed health check with DB, pgvector, and performance metrics."""
     from sqlalchemy import text
+
     from .db_engine import engine as _db_engine
     from .vector_store import vector_count
 
@@ -386,6 +405,7 @@ app.mount("/mcp", create_mcp_asgi_app(_app_settings.MCP_API_TOKEN))
 @app.api_route("/mcp", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
 def mcp_redirect(request: Request) -> RedirectResponse:
     return RedirectResponse(url=f"{mcp_oauth._base_url()}/mcp/", status_code=307)
+
 
 # Serve React SPA (only when the built dist directory exists)
 if _FRONTEND_DIST.is_dir():
