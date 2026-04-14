@@ -122,9 +122,15 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"Missing required production env vars: {', '.join(missing)}"
                 )
-        if not self.SECRET_KEY:
+        if not self.SECRET_KEY and not self.RELI_API_TOKEN:
             warnings.warn(
-                "SECRET_KEY is empty — authentication is DISABLED", stacklevel=2
+                "SECRET_KEY and RELI_API_TOKEN are both empty — authentication is DISABLED",
+                stacklevel=2,
+            )
+        elif not self.SECRET_KEY:
+            warnings.warn(
+                "SECRET_KEY is empty — cookie-based auth (Google OAuth) is DISABLED",
+                stacklevel=2,
             )
         return self
 
