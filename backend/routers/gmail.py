@@ -17,6 +17,7 @@ from ..auth import require_user
 from ..config import settings
 import backend.db_engine as _engine_mod
 from ..db_models import GoogleTokenRecord
+from ..token_encryption import decrypt_or_plaintext, encrypt
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +92,11 @@ def _save_token(creds: Any, user_id: str = "") -> None:
             ).first()
 
         if existing:
-            existing.access_token = creds.token
-            existing.refresh_token = creds.refresh_token or existing.refresh_token
+            existing.access_token = encrypt(creds.token) if creds.token else existing.access_token
+            existing.refresh_token = encrypt(creds.refresh_token) if creds.refresh_token else existing.refresh_token
             existing.token_uri = creds.token_uri
             existing.client_id = creds.client_id
-            existing.client_secret = creds.client_secret
+            existing.client_secret = encrypt(creds.client_secret) if creds.client_secret else existing.client_secret
             existing.expiry = expiry_str
             existing.scopes = scopes_str
             existing.updated_at = now
@@ -104,11 +105,11 @@ def _save_token(creds: Any, user_id: str = "") -> None:
             record = GoogleTokenRecord(
                 user_id=uid,
                 service="gmail",
-                access_token=creds.token,
-                refresh_token=creds.refresh_token,
+                access_token=encrypt(creds.token) if creds.token else "",
+                refresh_token=encrypt(creds.refresh_token) if creds.refresh_token else "",
                 token_uri=creds.token_uri,
                 client_id=creds.client_id,
-                client_secret=creds.client_secret,
+                client_secret=encrypt(creds.client_secret) if creds.client_secret else "",
                 expiry=expiry_str,
                 scopes=scopes_str,
                 updated_at=now,
@@ -145,12 +146,15 @@ def _load_creds(user_id: str = "") -> Any:
             ).first()
 
     if row:
+        access_token, _ = decrypt_or_plaintext(row.access_token) if row.access_token else ("", False)
+        refresh_token, _ = decrypt_or_plaintext(row.refresh_token) if row.refresh_token else ("", False)
+        client_secret, _ = decrypt_or_plaintext(row.client_secret) if row.client_secret else ("", False)
         creds = Credentials(
-            token=row.access_token,
-            refresh_token=row.refresh_token,
+            token=access_token,
+            refresh_token=refresh_token,
             token_uri=row.token_uri,
             client_id=row.client_id,
-            client_secret=row.client_secret,
+            client_secret=client_secret,
         )
         if row.expiry:
             creds.expiry = datetime.fromisoformat(row.expiry).replace(tzinfo=None)

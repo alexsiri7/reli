@@ -155,6 +155,11 @@ def oauth_authorize(
         raise HTTPException(status_code=400, detail="Only code_challenge_method=S256 is supported")
     if not redirect_uri:
         raise HTTPException(status_code=400, detail="redirect_uri is required")
+    registered = mcp_registered_clients.get(client_id)
+    if not registered:
+        raise HTTPException(status_code=400, detail="Unknown client_id — register first via POST /oauth/register")
+    if redirect_uri not in registered.get("redirect_uris", []):
+        raise HTTPException(status_code=400, detail="redirect_uri not registered for this client")
     if not code_challenge:
         raise HTTPException(status_code=400, detail="code_challenge is required (PKCE required)")
 

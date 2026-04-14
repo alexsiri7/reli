@@ -751,7 +751,9 @@ def get_orphan_relationships(
     session: Session = Depends(get_session),
 ) -> list[Relationship]:
     """Return relationships where from_thing_id or to_thing_id doesn't exist."""
-    thing_ids = select(ThingRecord.id)
+    thing_ids = select(ThingRecord.id).where(
+        user_filter_clause(ThingRecord.user_id, user_id)
+    )
     stmt = select(ThingRelationshipRecord).where(
         or_(
             ThingRelationshipRecord.from_thing_id.not_in(thing_ids),  # type: ignore[union-attr]
@@ -771,7 +773,9 @@ def cleanup_orphan_relationships(
     import logging as _logging
 
     _logger = _logging.getLogger(__name__)
-    thing_ids_subq = select(ThingRecord.id)
+    thing_ids_subq = select(ThingRecord.id).where(
+        user_filter_clause(ThingRecord.user_id, user_id)
+    )
     orphans = session.exec(
         select(ThingRelationshipRecord).where(
             or_(
@@ -883,11 +887,20 @@ def create_relationship(
 @router.delete("/relationships/{rel_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a relationship")
 def delete_relationship(
     rel_id: str,
+    user_id: str = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> None:
     """Delete a relationship by ID."""
     record = session.get(ThingRelationshipRecord, rel_id)
     if not record:
         raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
+    if user_id:
+        from_thing = session.get(ThingRecord, record.from_thing_id)
+        to_thing = session.get(ThingRecord, record.to_thing_id)
+        if not (
+            (from_thing and from_thing.user_id == user_id)
+            or (to_thing and to_thing.user_id == user_id)
+        ):
+            raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
     session.delete(record)
     session.commit()
