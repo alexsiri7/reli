@@ -25,7 +25,7 @@ services:
       - GOOGLE_AUTH_REDIRECT_URI=${GOOGLE_AUTH_REDIRECT_URI:-}
       - RELI_BASE_URL=${RELI_BASE_URL:-}
       - SECRET_KEY=${SECRET_KEY:-}
-      - RELI_API_TOKEN=${RELI_API_TOKEN:-}
+      - RELI_API_TOKEN=${RELI_API_TOKEN:-reli-staging-placeholder}  # Override at deploy time with a real secret
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=staging
       - DATABASE_URL=${DATABASE_URL:-}
