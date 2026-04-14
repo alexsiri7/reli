@@ -33,6 +33,7 @@ def _resolve_api_token_user() -> str:
     from sqlmodel import Session, select
 
     import backend.db_engine as _engine_mod
+
     from .db_models import UserRecord
 
     try:
