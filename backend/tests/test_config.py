@@ -173,9 +173,7 @@ def test_settings_production_with_secrets_passes():
     """Settings should not raise when required secrets are provided in production."""
     from backend.config import Settings
 
-    with patch.dict(
-        "os.environ", {"RAILWAY_ENVIRONMENT_NAME": "production"}, clear=False
-    ):
+    with patch.dict("os.environ", {"RAILWAY_ENVIRONMENT_NAME": "production"}, clear=False):
         s = Settings(SECRET_KEY="supersecret", REQUESTY_API_KEY="key123")
         assert s.SECRET_KEY == "supersecret"
         assert s.REQUESTY_API_KEY == "key123"
@@ -231,9 +229,9 @@ def test_settings_partial_auth_warns_about_cookie_only():
             messages = [str(x.message) for x in w]
 
             # Should warn about cookie auth being disabled
-            assert any("cookie-based auth" in m for m in messages), \
-                f"Expected cookie-auth warning, got: {messages}"
+            assert any("cookie-based auth" in m for m in messages), f"Expected cookie-auth warning, got: {messages}"
 
             # Must NOT say authentication is fully disabled
-            assert not any("authentication is DISABLED" in m for m in messages), \
+            assert not any("authentication is DISABLED" in m for m in messages), (
                 "Should not claim auth fully disabled when API token is set"
+            )
