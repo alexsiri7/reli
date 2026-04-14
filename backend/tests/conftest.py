@@ -21,6 +21,7 @@ os.environ.setdefault("SENTRY_DSN", "")
 # test_auth.py patches backend.auth.SECRET_KEY directly for auth-enabled tests.
 os.environ["SECRET_KEY"] = ""
 os.environ["RELI_API_TOKEN"] = ""
+os.environ.setdefault("AUTH_DISABLED", "true")
 
 # ---------------------------------------------------------------------------
 # Database fixtures
