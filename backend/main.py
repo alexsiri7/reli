@@ -74,22 +74,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     import pathlib as _pathlib
 
     _alembic_ini = _pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
+    _migration_ok = False
     if _alembic_ini.exists():
         try:
             _alembic_cfg = AlembicConfig(str(_alembic_ini))
             alembic_command.upgrade(_alembic_cfg, "head")
             logger.info("Alembic migrations applied successfully.")
+            _migration_ok = True
         except Exception:
-            logger.exception("Alembic migration failed — starting with existing schema.")
+            logger.exception("Alembic migration failed — checking schema state.")
     else:
         logger.warning("alembic.ini not found at %s — skipping migrations.", _alembic_ini)
 
-    # Legacy SQLite init — only when not using an external database
-    from .config import settings as _settings
-
-    if not _settings.DATABASE_URL:
+    # Ensure schema exists regardless of migration outcome.
+    # If migrations succeeded, create_all is a no-op (tables already exist).
+    # If migrations failed, create_all creates missing tables so the app can start.
+    if not _migration_ok:
         from sqlmodel import SQLModel as _SQLModel
-        _SQLModel.metadata.create_all(_db_engine)
+        try:
+            _SQLModel.metadata.create_all(_db_engine)
+            logger.info("Schema created via SQLModel.metadata.create_all fallback.")
+        except Exception:
+            logger.exception("create_all fallback also failed — app may be broken.")
     await start_scheduler()
 
     # Start MCP session manager (required for streamable HTTP transport).

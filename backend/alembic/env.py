@@ -54,11 +54,18 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode (with a live database connection)."""
+    _db_url = config.get_main_option("sqlalchemy.url") or ""
+    _connect_args: dict = {}
+    if "asyncpg" in _db_url:
+        _connect_args = {"timeout": 10}  # asyncpg uses 'timeout', not 'connect_timeout'
+    elif not _db_url.startswith("sqlite"):
+        _connect_args = {"connect_timeout": 10}  # psycopg2 / other PostgreSQL drivers
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args={"connect_timeout": 10},
+        connect_args=_connect_args,
     )
 
     with connectable.connect() as connection:
