@@ -1,6 +1,5 @@
 """Google OAuth2 login + JWT session authentication."""
 
-import json
 import logging
 import secrets
 import threading
@@ -12,14 +11,13 @@ from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from google_auth_oauthlib.flow import Flow
-
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
-from ..db_models import UserRecord, ThingRecord
 
 from ..config import settings
+from ..db_models import ThingRecord, UserRecord
 from ..oauth_state import (
     cleanup_and_get,
     cleanup_and_pop,
@@ -90,9 +88,7 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
     now = datetime.now(timezone.utc)
     user_id: str
     with Session(_engine_mod.engine) as session:
-        existing = session.exec(
-            select(UserRecord).where(UserRecord.google_id == google_id)
-        ).first()
+        existing = session.exec(select(UserRecord).where(UserRecord.google_id == google_id)).first()
         if existing:
             user_id = existing.id
             existing.email = email
@@ -118,9 +114,7 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
             except IntegrityError:
                 session.rollback()
                 # Concurrent request created the same user — fetch the winner
-                existing = session.exec(
-                    select(UserRecord).where(UserRecord.google_id == google_id)
-                ).first()
+                existing = session.exec(select(UserRecord).where(UserRecord.google_id == google_id)).first()
                 if existing is None:
                     raise  # unexpected: re-raise if still not found
                 user_id = existing.id
@@ -239,14 +233,18 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
     if mcp_session:
         # Issue a short-lived auth code for the MCP client to exchange
         auth_code = secrets.token_urlsafe(32)
-        cleanup_and_store(mcp_auth_codes, auth_code, {
-            "user_id": user_id,
-            "email": email,
-            "code_challenge": mcp_session["code_challenge"],
-            "code_challenge_method": mcp_session["code_challenge_method"],
-            "redirect_uri": mcp_session["redirect_uri"],
-            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=MCP_AUTH_CODE_TTL_SECONDS),
-        })
+        cleanup_and_store(
+            mcp_auth_codes,
+            auth_code,
+            {
+                "user_id": user_id,
+                "email": email,
+                "code_challenge": mcp_session["code_challenge"],
+                "code_challenge_method": mcp_session["code_challenge_method"],
+                "redirect_uri": mcp_session["redirect_uri"],
+                "expires_at": datetime.now(timezone.utc) + timedelta(seconds=MCP_AUTH_CODE_TTL_SECONDS),
+            },
+        )
         client_redirect = mcp_session["redirect_uri"]
         client_state = mcp_session.get("client_state", "")
         sep = "&" if "?" in client_redirect else "?"
