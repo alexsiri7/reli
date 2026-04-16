@@ -129,11 +129,7 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
                 existing.picture = picture
                 existing.updated_at = now
                 session.add(existing)
-                try:
-                    session.commit()
-                except Exception:
-                    logger.exception("_upsert_user: failed to update winner row for google_id=%s", google_id)
-                    raise
+                session.commit()
                 return user_id
             _create_user_thing_sqlmodel(session, user_id, name, email, google_id, now)
     return user_id
