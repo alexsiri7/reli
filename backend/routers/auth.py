@@ -113,6 +113,12 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
                 session.commit()
             except IntegrityError:
                 session.rollback()
+                # Assumes the only unique constraint on UserRecord that can fire here is
+                # google_id — if the schema gains additional unique indexes, revisit.
+                logger.warning(
+                    "_upsert_user: IntegrityError on INSERT for google_id=%s — concurrent winner, retrying",
+                    google_id,
+                )
                 # Concurrent request created the same user — fetch the winner
                 existing = session.exec(select(UserRecord).where(UserRecord.google_id == google_id)).first()
                 if existing is None:
@@ -123,7 +129,11 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
                 existing.picture = picture
                 existing.updated_at = now
                 session.add(existing)
-                session.commit()
+                try:
+                    session.commit()
+                except Exception:
+                    logger.exception("_upsert_user: failed to update winner row for google_id=%s", google_id)
+                    raise
                 return user_id
             _create_user_thing_sqlmodel(session, user_id, name, email, google_id, now)
     return user_id

@@ -5,6 +5,10 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session
+
+from backend.routers.auth import _upsert_user
 
 
 @pytest.fixture()
@@ -21,12 +25,7 @@ class TestUpsertUserConcurrency:
     """Test that concurrent OAuth callbacks don't crash on duplicate insert."""
 
     def test_upsert_user_handles_integrity_error(self, patched_db):
-        """Simulated race: INSERT fails with IntegrityError, retry finds winner."""
-        from sqlalchemy.exc import IntegrityError
-        from sqlmodel import Session
-
-        from backend.routers.auth import _upsert_user
-
+        """Simulated race: commit succeeds then IntegrityError is raised; retry finds the winner row."""
         original_commit = Session.commit
         call_count = 0
 
@@ -40,9 +39,7 @@ class TestUpsertUserConcurrency:
                 raise IntegrityError("mock", {}, Exception("unique violation"))
             return original_commit(self)
 
-        from unittest.mock import patch as _patch
-
-        with _patch.object(Session, "commit", commit_that_races):
+        with patch.object(Session, "commit", commit_that_races):
             # _upsert_user will: try INSERT -> commit_that_races commits it
             # then raises IntegrityError -> rollback -> re-SELECT finds the
             # row (it was committed) -> updates it -> second commit succeeds
@@ -50,6 +47,18 @@ class TestUpsertUserConcurrency:
 
         assert user_id is not None
         assert user_id.startswith("u-")
+        assert call_count == 2  # initial commit + retry commit both ran
+
+    def test_upsert_user_reraises_unexpected_integrity_error(self, patched_db):
+        """IntegrityError with no concurrent winner should propagate."""
+
+        def commit_that_fails_cold(self):
+            # Do NOT insert first — simulates a non-race IntegrityError (no winner row)
+            raise IntegrityError("mock", {}, Exception("unexpected constraint"))
+
+        with patch.object(Session, "commit", commit_that_fails_cold):
+            with pytest.raises(IntegrityError):
+                _upsert_user("google-unexpected", "err@example.com", "Err", None)
 
 
 class TestUserThingCreation:
@@ -57,7 +66,6 @@ class TestUserThingCreation:
 
     def test_upsert_user_creates_thing_for_new_user(self, patched_db):
         from backend.database import db
-        from backend.routers.auth import _upsert_user
 
         user_id = _upsert_user("google-123", "alice@example.com", "Alice", None)
 
@@ -76,7 +84,6 @@ class TestUserThingCreation:
 
     def test_upsert_user_no_duplicate_thing_on_repeat_login(self, patched_db):
         from backend.database import db
-        from backend.routers.auth import _upsert_user
 
         user_id = _upsert_user("google-123", "alice@example.com", "Alice", None)
         _upsert_user("google-123", "alice@example.com", "Alice", None)
