@@ -13,7 +13,8 @@ from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from google_auth_oauthlib.flow import Flow
 
-from sqlmodel import Session
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
 from ..db_models import UserRecord, ThingRecord
@@ -89,7 +90,6 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
     now = datetime.now(timezone.utc)
     user_id: str
     with Session(_engine_mod.engine) as session:
-        from sqlmodel import select
         existing = session.exec(
             select(UserRecord).where(UserRecord.google_id == google_id)
         ).first()
@@ -113,7 +113,24 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
                 updated_at=now,
             )
             session.add(user_record)
-            session.commit()
+            try:
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                # Concurrent request created the same user — fetch the winner
+                existing = session.exec(
+                    select(UserRecord).where(UserRecord.google_id == google_id)
+                ).first()
+                if existing is None:
+                    raise  # unexpected: re-raise if still not found
+                user_id = existing.id
+                existing.email = email
+                existing.name = name
+                existing.picture = picture
+                existing.updated_at = now
+                session.add(existing)
+                session.commit()
+                return user_id
             _create_user_thing_sqlmodel(session, user_id, name, email, google_id, now)
     return user_id
 

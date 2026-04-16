@@ -17,6 +17,41 @@ def authed_client(patched_db):
             yield c
 
 
+class TestUpsertUserConcurrency:
+    """Test that concurrent OAuth callbacks don't crash on duplicate insert."""
+
+    def test_upsert_user_handles_integrity_error(self, patched_db):
+        """Simulated race: INSERT fails with IntegrityError, retry finds winner."""
+        from sqlalchemy.exc import IntegrityError
+        from sqlmodel import Session
+
+        from backend.routers.auth import _upsert_user
+
+        original_commit = Session.commit
+        call_count = 0
+
+        def commit_that_races(self):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Simulate the concurrent winner by inserting the row first
+                original_commit(self)
+                # Now raise as if a second concurrent request hit a conflict
+                raise IntegrityError("mock", {}, Exception("unique violation"))
+            return original_commit(self)
+
+        from unittest.mock import patch as _patch
+
+        with _patch.object(Session, "commit", commit_that_races):
+            # _upsert_user will: try INSERT -> commit_that_races commits it
+            # then raises IntegrityError -> rollback -> re-SELECT finds the
+            # row (it was committed) -> updates it -> second commit succeeds
+            user_id = _upsert_user("google-race", "racer@example.com", "Racer", None)
+
+        assert user_id is not None
+        assert user_id.startswith("u-")
+
+
 class TestUserThingCreation:
     """Test that a Thing is auto-created for new OAuth users."""
 
