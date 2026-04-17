@@ -35,6 +35,9 @@ run_typecheck() {
 
     echo "=== Typecheck (backend) ==="
     mypy backend/
+
+    echo "=== Generated types fresh check ==="
+    cd frontend && npm run check:types-fresh && cd ..
 }
 
 run_test() {
