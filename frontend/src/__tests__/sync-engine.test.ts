@@ -127,7 +127,7 @@ describe('syncPendingOps', () => {
     // Should only fail once (break on first network error)
     const failEvents = events.filter(e => e.type === 'sync:op-fail')
     expect(failEvents).toHaveLength(1)
-    expect(failEvents[0].error).toContain('Network offline')
+    expect(failEvents[0]!.error).toContain('Network offline')
     expect(mockRemovePendingOp).not.toHaveBeenCalled()
   })
 
