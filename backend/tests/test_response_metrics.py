@@ -35,20 +35,16 @@ class TestResponseMetricsMiddleware:
     """Integration: middleware records timings on requests."""
 
     def test_middleware_logs_request(self, client):
-        """Verify the middleware is active by checking avg changes after a request."""
-        from backend.response_metrics import metrics_store
+        """Verify the middleware is active by checking it records timings."""
+        from backend.response_metrics import MetricsStore, ResponseMetricsMiddleware
+        from unittest.mock import patch
 
-        avg_before = metrics_store.avg_response_time_ms()
-        # Make several requests so the buffer content changes
-        for _ in range(3):
-            client.get("/healthz")
-        avg_after = metrics_store.avg_response_time_ms()
-        # After requests, avg should be a number (not None)
-        assert avg_after is not None
-        # If buffer was empty before, avg changed from None to a value
-        # If buffer was full, avg likely changed due to new entries
-        if avg_before is None:
-            assert avg_after > 0
+        fresh_store = MetricsStore()
+        with patch("backend.response_metrics.metrics_store", fresh_store):
+            for _ in range(3):
+                client.get("/healthz")
+        assert fresh_store.request_count() == 3
+        assert fresh_store.avg_response_time_ms() is not None
 
 
 class TestHealthDetailed:
@@ -64,7 +60,7 @@ class TestHealthDetailed:
         assert isinstance(body["db_connected"], bool)
         assert isinstance(body["chromadb_connected"], bool)
         assert isinstance(body["vector_count"], int)
-        assert body["avg_response_time_ms"] is None or isinstance(body["avg_response_time_ms"], (int, float))
+        assert body["avg_response_time_ms"] is None or body["avg_response_time_ms"] > 0
         assert isinstance(body["recent_request_count"], int)
 
     def test_health_db_connected(self, client):
