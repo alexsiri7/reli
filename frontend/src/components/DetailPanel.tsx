@@ -131,6 +131,7 @@ export function DetailPanel() {
     type.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
 
   const colors = typeColorClasses(thing?.type_hint ?? null)
+  const checkinOverdue = thing?.checkin_date ? isOverdue(thing.checkin_date) : false
 
   return (
     <>
@@ -204,8 +205,8 @@ export function DetailPanel() {
               <div className="flex items-center gap-3 text-body text-on-surface-variant">
                 <span>{importanceLabel(thing.importance)}</span>
                 {thing.checkin_date && (
-                  <span className={`inline-flex items-center gap-1 ${isOverdue(thing.checkin_date) ? 'text-ideas font-semibold' : ''}`}>
-                    <span className="shrink-0">{isOverdue(thing.checkin_date) ? '\u26a0' : '\ud83d\udcc5'}</span>
+                  <span className={`inline-flex items-center gap-1 ${checkinOverdue ? 'text-ideas font-semibold' : ''}`}>
+                    <span className="shrink-0">{checkinOverdue ? '\u26a0' : '\ud83d\udcc5'}</span>
                     <span>{formatDate(thing.checkin_date)}</span>
                   </span>
                 )}
