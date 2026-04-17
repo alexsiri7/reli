@@ -83,7 +83,7 @@ test.describe('Smoke – static assets', () => {
 
     await page.goto('/')
     // Wait for the app to initialize (login page or main UI)
-    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
+    await page.waitForLoadState('load', { timeout: 15_000 })
 
     // No uncaught JS errors during page load
     expect(jsErrors).toEqual([])
@@ -98,7 +98,7 @@ test.describe('Smoke – static assets', () => {
     })
 
     await page.goto('/')
-    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
+    await page.waitForLoadState('load', { timeout: 15_000 })
 
     expect(failedResources).toEqual([])
   })

@@ -85,7 +85,8 @@ async function waitForMobileChat(page: Page) {
       transition-duration: 0s !important;
     }`,
   })
-  await page.waitForTimeout(500)
+  // Wait for chat input to be visible after animation disable
+  await expect(page.getByPlaceholder('Message Reli').last()).toBeVisible()
 }
 
 const SNAPSHOT_OPTS = { maxDiffPixelRatio: 0.02 }
@@ -124,10 +125,7 @@ for (const vp of MOBILE_VIEWPORTS) {
       await page.goto('/')
       await waitForMobileChat(page)
       // Wait for messages to render
-      await page
-        .waitForSelector('[class*="rounded-2xl"]', { timeout: 5_000 })
-        .catch(() => {})
-      await page.waitForTimeout(300)
+      await expect(page.locator('[class*="rounded-2xl"]').first()).toBeVisible({ timeout: 5_000 })
 
       await expect(page).toHaveScreenshot(
         `mobile-chat-messages-${vp.name}.png`,
@@ -146,9 +144,7 @@ for (const vp of MOBILE_VIEWPORTS) {
       await interceptApi(page, { history: true })
       await page.goto('/')
       await waitForMobileChat(page)
-      await page
-        .waitForSelector('[class*="rounded-2xl"]', { timeout: 5_000 })
-        .catch(() => {})
+      await expect(page.locator('[class*="rounded-2xl"]').first()).toBeVisible({ timeout: 5_000 })
 
       // Simulate mobile keyboard by shrinking the viewport height
       const keyboardHeight = 260
@@ -156,7 +152,8 @@ for (const vp of MOBILE_VIEWPORTS) {
         width: vp.width,
         height: vp.height - keyboardHeight,
       })
-      await page.waitForTimeout(300)
+      // Wait for input to be visible after viewport resize
+      await expect(page.getByPlaceholder('Message Reli').last()).toBeVisible()
 
       await expect(page).toHaveScreenshot(
         `mobile-chat-keyboard-${vp.name}.png`,

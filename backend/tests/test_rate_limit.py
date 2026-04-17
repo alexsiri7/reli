@@ -21,19 +21,43 @@ class TestBucket:
             assert bucket.consume() is True
         assert bucket.consume() is False
 
-    def test_refill(self):
-        import time
+    def test_refill(self, monkeypatch: pytest.MonkeyPatch):
+        import time as time_mod
 
-        bucket = _Bucket(tokens=1.0, max_tokens=2.0, refill_rate=100.0)  # fast refill
+        fake_time = [1000.0]
+        monkeypatch.setattr(time_mod, "monotonic", lambda: fake_time[0])
+
+        bucket = _Bucket(tokens=1.0, max_tokens=2.0, refill_rate=100.0, last_refill=fake_time[0])
         assert bucket.consume() is True
         assert bucket.consume() is False
-        time.sleep(0.05)  # wait for refill
+
+        # Advance fake clock by 0.05s → 5 tokens refilled (capped at max_tokens=2)
+        fake_time[0] += 0.05
         assert bucket.consume() is True
 
     def test_retry_after(self):
         bucket = _Bucket(tokens=0.0, max_tokens=5.0, refill_rate=1.0)
         assert bucket.retry_after > 0
         assert bucket.retry_after <= 1.0
+
+    def test_refill_caps_at_max_tokens(self, monkeypatch: pytest.MonkeyPatch):
+        """After a long idle period, tokens should not exceed max_tokens."""
+        import time as time_mod
+
+        fake_time = [1000.0]
+        monkeypatch.setattr(time_mod, "monotonic", lambda: fake_time[0])
+
+        bucket = _Bucket(tokens=0.0, max_tokens=5.0, refill_rate=1.0, last_refill=fake_time[0])
+        # Advance by 10x the refill period (600s for 5 tokens at 1/s)
+        fake_time[0] += 600.0
+        assert bucket.consume() is True
+        # After consume, tokens should be capped at max_tokens - 1
+        assert bucket.tokens <= 4.0
+
+    def test_retry_after_returns_zero_when_tokens_available(self):
+        """retry_after is 0 when tokens are available."""
+        bucket = _Bucket(tokens=3.0, max_tokens=5.0, refill_rate=1.0)
+        assert bucket.retry_after == 0.0
 
 
 # ---------------------------------------------------------------------------
