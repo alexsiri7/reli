@@ -14,7 +14,7 @@ def test_stop_nudge_type_maps_proactive_prefix(client: TestClient) -> None:
 
 
 def test_stop_nudge_type_unknown_prefix_falls_back_to_prefix(client: TestClient) -> None:
-    """Unknown prefix (first underscore-delimited segment) is used as the nudge_type."""
+    """Unknown prefix suppresses that prefix and does NOT create a preference."""
     # "future_xyz_birthday" → split("_")[0] → "future" (fallback since not in _PREFIX_TO_NUDGE_TYPE)
     nudge_id = "future_xyz_birthday"
     resp = client.post(f"/api/nudges/{nudge_id}/stop")
@@ -22,6 +22,7 @@ def test_stop_nudge_type_unknown_prefix_falls_back_to_prefix(client: TestClient)
     body = resp.json()
     assert body["ok"] is True
     assert body["suppressed_type"] == "future"
+    assert "preference" not in body
 
 
 def test_stop_nudge_type_no_underscore_id(client: TestClient) -> None:
@@ -86,3 +87,15 @@ def test_get_nudges_returns_list(client: TestClient) -> None:
     resp = client.get("/api/nudges")
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
+
+
+def test_conf_label_boundaries() -> None:
+    """_conf_label maps float confidence values to correct display labels at all boundaries."""
+    from backend.routers.nudges import _conf_label
+
+    assert _conf_label(0.95) == "strong"   # capped max
+    assert _conf_label(0.7) == "strong"    # exact strong boundary
+    assert _conf_label(0.69) == "moderate"
+    assert _conf_label(0.5) == "moderate"  # exact moderate boundary
+    assert _conf_label(0.49) == "emerging"
+    assert _conf_label(0.0) == "emerging"  # floor

@@ -138,3 +138,72 @@ describe('store: clearChatPrefill', () => {
     expect(useStore.getState().chatPrefill).toBeNull()
   })
 })
+
+describe('store: stopNudgeType', () => {
+  const mockNudge = {
+    id: 'proactive_abc123_birthday',
+    nudge_type: 'approaching_date',
+    message: 'birthday reminder',
+    thing_id: 'abc123',
+    thing_title: 'Birthday',
+    thing_type_hint: null,
+    days_away: 3,
+    primary_action_label: null,
+  }
+
+  beforeEach(() => {
+    useStore.setState({
+      nudges: [mockNudge],
+      preferenceToasts: [],
+    })
+  })
+
+  it('adds a preferenceToast when backend returns preference', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          suppressed_type: 'approaching_date',
+          preference: {
+            id: 'pref-abc12345',
+            title: 'Prefers fewer date-based reminders',
+            confidence_label: 'moderate',
+            action: 'created',
+          },
+        }),
+      })
+      .mockResolvedValue({ ok: true, json: async () => [] }) // fetchBriefing
+    )
+
+    await useStore.getState().stopNudgeType('proactive_abc123_birthday')
+
+    const toasts = useStore.getState().preferenceToasts
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0]!.title).toBe('Prefers fewer date-based reminders')
+    expect(toasts[0]!.confidenceLabel).toBe('moderate')
+    expect(toasts[0]!.action).toBe('created')
+  })
+
+  it('does not add a toast when backend returns no preference (unknown nudge type)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, suppressed_type: 'future' }),
+    }))
+
+    await useStore.getState().stopNudgeType('future_xyz_birthday')
+
+    expect(useStore.getState().preferenceToasts).toHaveLength(0)
+  })
+
+  it('removes the nudge optimistically', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, suppressed_type: 'approaching_date' }),
+    }))
+
+    await useStore.getState().stopNudgeType('proactive_abc123_birthday')
+
+    expect(useStore.getState().nudges.find(n => n.id === 'proactive_abc123_birthday')).toBeUndefined()
+  })
+})
