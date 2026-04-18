@@ -48,6 +48,7 @@ from .routers import (  # noqa: E402
     focus,
     gmail,
     mcp_oauth,
+    nudges,
     preferences,
     proactive,
     settings,
@@ -330,6 +331,7 @@ app.include_router(briefing.router, prefix="/api", dependencies=_api_deps)
 app.include_router(chat.router, prefix="/api", dependencies=_api_deps)
 app.include_router(gmail.router, prefix="/api", dependencies=_api_deps)
 app.include_router(calendar.router, prefix="/api", dependencies=_api_deps)
+app.include_router(nudges.router, prefix="/api", dependencies=_api_deps)
 app.include_router(proactive.router, prefix="/api", dependencies=_api_deps)
 app.include_router(conflicts.router, prefix="/api", dependencies=_api_deps)
 app.include_router(settings.router, prefix="/api", dependencies=_api_deps)

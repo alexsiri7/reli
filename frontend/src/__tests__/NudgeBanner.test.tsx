@@ -76,9 +76,18 @@ describe('NudgeBanner', () => {
 
   it('renders thing type icon when thing_type_hint is set', () => {
     render(<NudgeBanner nudge={baseMockNudge} />)
-    // typeIcon('person') returns the person emoji
     const messageEl = screen.getByText("Mom's birthday is in 3 days")
-    expect(messageEl.parentElement?.textContent).toContain("Mom's birthday is in 3 days")
+    const parentText = messageEl.parentElement?.textContent ?? ''
+    expect(parentText).toContain("Mom's birthday is in 3 days")
+    // Verify the icon span is rendered inside the message element
+    const iconSpan = messageEl.querySelector('span')
+    expect(iconSpan).toBeInTheDocument()
+  })
+
+  it('calls openThingDetail with thing_id when primary action button is clicked', async () => {
+    render(<NudgeBanner nudge={baseMockNudge} />)
+    await userEvent.click(screen.getByText('View Details'))
+    expect(mockOpenThingDetail).toHaveBeenCalledWith('abc123')
   })
 
   it('does not crash when thing_type_hint is null', () => {
