@@ -57,6 +57,30 @@ def test_stop_nudge_type_is_idempotent(client: TestClient) -> None:
     assert resp2.json()["suppressed_type"] == "approaching_date"
 
 
+def test_stop_creates_preference_thing(client: TestClient) -> None:
+    """Stopping a nudge type creates a preference Thing with correct data."""
+    resp = client.post("/api/nudges/proactive_abc123_birthday/stop")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["preference"]["action"] == "created"
+    assert body["preference"]["title"] == "Prefers fewer date-based reminders"
+    assert body["preference"]["confidence_label"] == "moderate"
+
+
+def test_stop_updates_preference_on_repeat(client: TestClient) -> None:
+    """Second stop (different nudge, same type) updates the existing preference."""
+    resp1 = client.post("/api/nudges/proactive_abc123_birthday/stop")
+    assert resp1.status_code == 200
+    assert resp1.json()["preference"]["action"] == "created"
+
+    resp2 = client.post("/api/nudges/proactive_xyz999_deadline/stop")
+    assert resp2.status_code == 200
+    body2 = resp2.json()
+    assert body2["preference"]["action"] == "updated"
+    assert body2["preference"]["confidence_label"] in ("moderate", "strong")
+
+
 def test_get_nudges_returns_list(client: TestClient) -> None:
     """GET /api/nudges returns an empty list when there are no matching things."""
     resp = client.get("/api/nudges")
