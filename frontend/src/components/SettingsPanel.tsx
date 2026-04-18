@@ -372,7 +372,9 @@ function MyProfileSection() {
     return (
       <div>
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">My Profile</h3>
-        <p className="text-xs text-gray-400 dark:text-gray-400">Profile not available.</p>
+        <p className="text-xs text-gray-400 dark:text-gray-400">
+          As we talk, I'll learn how you like to work. You can always edit what I've picked up.
+        </p>
       </div>
     )
   }
