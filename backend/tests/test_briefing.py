@@ -60,6 +60,36 @@ class TestBriefing:
         titles = _briefing_titles(resp.json())
         assert "Inactive Task" not in titles
 
+    def test_preference_things_appear_in_briefing(self, client):
+        """Learned preferences (type_hint='preference') must appear in learned_preferences."""
+        resp = client.post("/api/things", json={
+            "title": "Prefers afternoon meetings",
+            "type_hint": "preference",
+            "data": {"confidence": 0.6, "category": "scheduling"},
+        })
+        assert resp.status_code == 201
+        pref_id = resp.json()["id"]
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "learned_preferences" in data
+        ids = [p["id"] for p in data["learned_preferences"]]
+        assert pref_id in ids
+
+    def test_preference_confidence_label_in_briefing(self, client):
+        """confidence_label is correctly derived from float confidence."""
+        client.post("/api/things", json={
+            "title": "Cost conscious",
+            "type_hint": "preference",
+            "data": {"confidence": 0.8, "category": "spending"},
+        })
+        resp = client.get("/api/briefing")
+        prefs = resp.json()["learned_preferences"]
+        cost_pref = next((p for p in prefs if p["title"] == "Cost conscious"), None)
+        assert cost_pref is not None
+        assert cost_pref["confidence_label"] == "strong"
+
     def test_things_without_checkin_date_excluded(self, client):
         _create_thing(client, "No Date Thing")
         resp = client.get("/api/briefing")

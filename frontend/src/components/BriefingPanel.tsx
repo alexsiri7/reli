@@ -1,6 +1,7 @@
+import { useState, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { SweepFinding, BriefingItem } from '../store'
+import type { SweepFinding, BriefingItem, LearnedPreference } from '../store'
 
 const FINDING_TYPE_ICONS: Record<string, string> = {
   approaching_date: '\u23F0',
@@ -140,6 +141,66 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
   )
 }
 
+const CONFIDENCE_COLORS: Record<string, string> = {
+  strong: 'bg-green-500',
+  moderate: 'bg-yellow-500',
+  emerging: 'bg-blue-400',
+}
+
+function LearnedPreferenceCard({
+  pref,
+  onFeedback,
+}: {
+  pref: LearnedPreference
+  onFeedback: (id: string, accurate: boolean) => void
+}) {
+  const [feedbackSent, setFeedbackSent] = useState<boolean | null>(null)
+  const dotColor = CONFIDENCE_COLORS[pref.confidence_label] ?? 'bg-primary'
+
+  const handleFeedback = useCallback((accurate: boolean) => {
+    if (feedbackSent !== null) return
+    setFeedbackSent(accurate)
+    onFeedback(pref.id, accurate)
+  }, [feedbackSent, onFeedback, pref.id])
+
+  return (
+    <div className="group rounded-xl bg-surface-container-low hover:bg-surface-container-high/60 transition-colors overflow-hidden">
+      <div className="flex items-start gap-3 py-3 px-4">
+        <div className={`w-1 self-stretch rounded-full shrink-0 ${dotColor}`} />
+        <div className="flex items-center gap-2 mt-0.5 shrink-0">
+          <span className="text-sm">{'\u{1F9E0}'}</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-on-surface leading-snug">{pref.title}</p>
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className="text-xs text-on-surface-variant capitalize">{pref.confidence_label}</span>
+            {feedbackSent === null ? (
+              <>
+                <button
+                  onClick={() => handleFeedback(true)}
+                  className="text-xs text-primary hover:text-primary/80 font-medium"
+                >
+                  That&apos;s right
+                </button>
+                <button
+                  onClick={() => handleFeedback(false)}
+                  className="text-xs text-on-surface-variant hover:text-ideas"
+                >
+                  Not really
+                </button>
+              </>
+            ) : (
+              <span className="text-xs text-on-surface-variant">
+                {feedbackSent ? 'Thanks!' : 'Got it'}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function StatCard({ label, value, suffix, accent }: { label: string; value: number | string; suffix?: string; accent?: string }) {
   return (
     <div className="glass rounded-xl p-4 flex-1 min-w-0 text-center">
@@ -154,19 +215,21 @@ function StatCard({ label, value, suffix, accent }: { label: string; value: numb
 
 export function BriefingPanel() {
   const {
-    theOneThing, secondaryItems, briefingStats, findings,
-    setRightView, openThingDetail, dismissFinding, snoozeFinding, actOnFinding,
+    theOneThing, secondaryItems, briefingStats, findings, learnedPreferences,
+    setRightView, openThingDetail, dismissFinding, snoozeFinding, actOnFinding, submitPreferenceFeedback,
   } = useStore(
     useShallow(s => ({
       theOneThing: s.theOneThing,
       secondaryItems: s.secondaryItems,
       briefingStats: s.briefingStats,
       findings: s.findings,
+      learnedPreferences: s.learnedPreferences,
       setRightView: s.setRightView,
       openThingDetail: s.openThingDetail,
       dismissFinding: s.dismissFinding,
       snoozeFinding: s.snoozeFinding,
       actOnFinding: s.actOnFinding,
+      submitPreferenceFeedback: s.submitPreferenceFeedback,
     }))
   )
 
@@ -176,7 +239,7 @@ export function BriefingPanel() {
     snoozeFinding(id, tomorrow.toISOString().slice(0, 10))
   }
 
-  const hasContent = theOneThing || secondaryItems.length > 0 || findings.length > 0
+  const hasContent = theOneThing || secondaryItems.length > 0 || findings.length > 0 || learnedPreferences.length > 0
 
   return (
     <div className="flex-1 flex flex-col bg-canvas min-w-0 min-h-0">
@@ -230,6 +293,27 @@ export function BriefingPanel() {
                   key={item.thing.id}
                   item={item}
                   onClick={() => openThingDetail(item.thing.id)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* I Noticed — learned preferences */}
+        {learnedPreferences.length > 0 && (
+          <section className="px-6 pb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <p className="text-label text-on-surface-variant">I Noticed</p>
+              <span className="text-[10px] text-on-surface-variant bg-surface-container-high px-1.5 py-0.5 rounded-full">
+                AI-Learned
+              </span>
+            </div>
+            <div className="space-y-2">
+              {learnedPreferences.map(pref => (
+                <LearnedPreferenceCard
+                  key={pref.id}
+                  pref={pref}
+                  onFeedback={submitPreferenceFeedback}
                 />
               ))}
             </div>

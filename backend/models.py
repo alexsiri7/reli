@@ -345,12 +345,19 @@ class BriefingItem(BaseModel):
     reasons: list[str]
 
 
+class LearnedPreference(BaseModel):
+    id: str
+    title: str
+    confidence_label: str  # "emerging", "moderate", or "strong"
+
+
 class BriefingResponse(BaseModel):
     date: str
     the_one_thing: BriefingItem | None = None
     secondary: list[BriefingItem] = []
     parking_lot: list[dict[str, Any]] = []
     findings: list[SweepFinding] = []
+    learned_preferences: list[LearnedPreference] = []
     total: int
     stats: dict[str, int] = {}
 

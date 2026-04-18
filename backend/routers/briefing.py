@@ -16,6 +16,7 @@ from ..models import (
     BriefingItem,
     BriefingPreferences,
     BriefingResponse,
+    LearnedPreference,
     MorningBriefing,
     MorningBriefingContent,
     SweepFinding,
@@ -55,6 +56,16 @@ def _record_to_finding(record: SweepFindingRecord, thing: Thing | None = None) -
         snoozed_until=record.snoozed_until,
         thing=thing,
     )
+
+
+def _confidence_label(data: dict) -> str:
+    """Convert raw preference data to a human-readable confidence label."""
+    if "patterns" in data and isinstance(data["patterns"], list) and data["patterns"]:
+        return str(data["patterns"][0].get("confidence", "emerging"))
+    conf = data.get("confidence", 0.0)
+    if not isinstance(conf, (int, float)):
+        return "emerging"
+    return "strong" if conf >= 0.7 else "moderate" if conf >= 0.5 else "emerging"
 
 
 @router.get("", response_model=BriefingResponse, summary="Daily Briefing")
@@ -99,6 +110,21 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
             )
         )
         finding_results = session.exec(finding_stmt).all()
+
+    # Learned preference Things for "I Noticed" section
+    pref_records = [r for r in all_active if r.type_hint == "preference"]
+    learned_preferences = []
+    for r in pref_records[:5]:
+        try:
+            raw = json.loads(r.data) if isinstance(r.data, str) else (r.data or {})
+            data = raw if isinstance(raw, dict) else {}
+        except (json.JSONDecodeError, TypeError):
+            data = {}
+        learned_preferences.append(LearnedPreference(
+            id=r.id,
+            title=r.title,
+            confidence_label=_confidence_label(data),
+        ))
 
     # Filter checkin-due things from all_active (avoids a separate query)
     thing_records = sorted(
@@ -157,6 +183,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
         secondary=secondary,
         parking_lot=parking_lot,
         findings=findings,
+        learned_preferences=learned_preferences,
         total=len(scored) + len(findings),
     )
 
