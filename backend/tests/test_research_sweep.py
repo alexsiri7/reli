@@ -11,7 +11,6 @@ import pytest
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
-from backend.database import db
 from backend.db_models import SweepFindingRecord, ThingRecord
 from backend.research_sweep import (
     _get_open_questions,
@@ -51,6 +50,7 @@ def _make_thing(
 
 
 def _insert_thing_with_questions(
+    db,
     title: str,
     importance: int = 1,
     questions: list[str] | None = None,
@@ -181,9 +181,10 @@ class TestGetOpenQuestions:
 
 class TestRunResearchSweep:
     @pytest.mark.asyncio
-    async def test_creates_finding_and_stores_research_data(self):
+    async def test_creates_finding_and_stores_research_data(self, db):
         """Successful web search creates SweepFinding and updates Thing.data."""
         tid = _insert_thing_with_questions(
+            db,
             "Spain Trip",
             questions=["What is the visa requirement for Spain?"],
         )
@@ -232,10 +233,11 @@ class TestRunResearchSweep:
             assert "Spain Trip" in findings[0].message
 
     @pytest.mark.asyncio
-    async def test_preserves_existing_thing_data_on_merge(self):
+    async def test_preserves_existing_thing_data_on_merge(self, db):
         """research_sweep must not overwrite other keys in Thing.data."""
         existing_data = {"custom_key": "important_value", "notes": [1, 2, 3]}
         tid = _insert_thing_with_questions(
+            db,
             "Trip",
             questions=["Best hotel?"],
             data=existing_data,
@@ -264,9 +266,10 @@ class TestRunResearchSweep:
             assert "research" in thing.data
 
     @pytest.mark.asyncio
-    async def test_does_not_mutate_updated_at(self):
+    async def test_does_not_mutate_updated_at(self, db):
         """research_sweep must NOT update Thing.updated_at (would break cooldown)."""
         tid = _insert_thing_with_questions(
+            db,
             "Test Thing",
             questions=["A question?"],
         )
@@ -298,9 +301,9 @@ class TestRunResearchSweep:
             assert thing_after.updated_at == original_updated_at
 
     @pytest.mark.asyncio
-    async def test_action_none_does_not_execute_lookup(self):
+    async def test_action_none_does_not_execute_lookup(self, db):
         """LLM deciding action=none should not increment lookups_executed."""
-        _insert_thing_with_questions("Vague idea", questions=["What should I do?"])
+        _insert_thing_with_questions(db, "Vague idea", questions=["What should I do?"])
 
         mock_llm = json.dumps({"action": "none", "query": None, "reason": "needs user decision"})
 
@@ -311,10 +314,10 @@ class TestRunResearchSweep:
         assert result.findings_created == 0
 
     @pytest.mark.asyncio
-    async def test_respects_max_lookups_cap(self):
+    async def test_respects_max_lookups_cap(self, db):
         """Only MAX_LOOKUPS_PER_RUN (10) Things are processed even if more are eligible."""
         for i in range(15):
-            _insert_thing_with_questions(f"Thing {i}", questions=["question?"])
+            _insert_thing_with_questions(db, f"Thing {i}", questions=["question?"])
 
         mock_llm = json.dumps({"action": "web_search", "query": "query", "reason": "r"})
         mock_result_obj = type("R", (), {
@@ -334,9 +337,9 @@ class TestRunResearchSweep:
         assert result.lookups_executed <= 10
 
     @pytest.mark.asyncio
-    async def test_skips_low_importance_things(self):
+    async def test_skips_low_importance_things(self, db):
         """Things with importance > 2 (low/backlog) should not be researched."""
-        _insert_thing_with_questions("Low priority", importance=3, questions=["question?"])
+        _insert_thing_with_questions(db, "Low priority", importance=3, questions=["question?"])
 
         with patch("backend.agents._chat", new_callable=AsyncMock) as mock_llm:
             result = await run_research_sweep()
@@ -345,9 +348,9 @@ class TestRunResearchSweep:
         assert result.things_researched == 0
 
     @pytest.mark.asyncio
-    async def test_invalid_llm_json_continues_to_next_thing(self):
+    async def test_invalid_llm_json_continues_to_next_thing(self, db):
         """Invalid LLM JSON for one Thing should not crash sweep."""
-        _insert_thing_with_questions("Trip", questions=["question?"])
+        _insert_thing_with_questions(db, "Trip", questions=["question?"])
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value="not json"):
             result = await run_research_sweep()
@@ -356,9 +359,9 @@ class TestRunResearchSweep:
         assert result.findings_created == 0
 
     @pytest.mark.asyncio
-    async def test_empty_lookup_results_creates_no_finding(self):
+    async def test_empty_lookup_results_creates_no_finding(self, db):
         """If lookup returns no results, no finding is created."""
-        _insert_thing_with_questions("Trip", questions=["question?"])
+        _insert_thing_with_questions(db, "Trip", questions=["question?"])
 
         mock_llm = json.dumps({"action": "web_search", "query": "query", "reason": "r"})
 

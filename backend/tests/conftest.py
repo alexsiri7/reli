@@ -36,19 +36,15 @@ def tmp_db_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Patch both legacy and ORM database modules to use a temp SQLite file.
+    """Patch the ORM database module to use a temp SQLite file.
 
     Creates tables via ``SQLModel.metadata.create_all()`` (Alembic is not
-    used in tests).  The legacy ``database.db()`` context manager is patched
-    so test files that still use raw ``sqlite3`` connections hit the same DB.
+    used in tests).  Tests that need raw ``sqlite3`` access should also
+    request the ``db`` fixture, which wraps the same temp DB path.
     """
     from sqlmodel import Session, SQLModel, create_engine
 
-    import backend.database as db_module
     import backend.db_engine as engine_module
-
-    # Point the legacy raw-sqlite helpers at the temp DB
-    monkeypatch.setattr(db_module, "DB_PATH", tmp_db_path)
 
     # Create a SQLModel engine for the temp DB
     test_engine = create_engine(
@@ -92,6 +88,34 @@ def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     # Dispose the test engine to release all connections
     test_engine.dispose()
+
+
+@pytest.fixture()
+def db(patched_db: Path):
+    """Raw sqlite3 context manager pointing at the test database.
+
+    Drop-in replacement for the deleted ``backend.database.db()`` import.
+    Tests use ``with db() as conn: ...`` identically.
+    """
+    import sqlite3
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _db():
+        conn = sqlite3.connect(str(patched_db), timeout=5)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    return _db
 
 
 # ---------------------------------------------------------------------------
