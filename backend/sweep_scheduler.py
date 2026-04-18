@@ -179,7 +179,7 @@ async def _run_sweep_for_user(user_id: str) -> None:
             except Exception:
                 logger.exception("Comm style sweep failed for user %s", user_label)
 
-            # Dependency sweep: LLM-powered implicit dependency detection
+            # Dependency sweep: LLM-powered implicit dependency detection (runs even when no candidates)
             try:
                 from .dependency_sweep import run_dependency_sweep
 
