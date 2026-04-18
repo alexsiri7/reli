@@ -144,15 +144,7 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
 
         # Skip if ALL pairs already have depends-on/blocks
         child_ids = [c["id"] for c in children]
-        all_covered = True
-        for i, a in enumerate(child_ids):
-            for b in child_ids[i + 1:]:
-                if (a, b) not in existing_deps:
-                    all_covered = False
-                    break
-            if not all_covered:
-                break
-        if all_covered:
+        if all((a, b) in existing_deps for i, a in enumerate(child_ids) for b in child_ids[i + 1:]):
             continue
 
         # Cap cluster size
