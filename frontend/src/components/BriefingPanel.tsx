@@ -297,7 +297,7 @@ export function BriefingPanel() {
         <section className="px-6 pt-8 pb-4">
           <h1 className="text-display text-on-surface font-bold">{getGreeting()}</h1>
           <p className="md:hidden text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mt-1">
-            {formatGreetingDate().toUpperCase()}
+            {formatGreetingDate()}
           </p>
           <p className="hidden md:block text-body text-on-surface-variant mt-1">{formatGreetingDate()}</p>
         </section>
