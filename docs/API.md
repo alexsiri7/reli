@@ -311,6 +311,7 @@ Background cleanup and reflection runs.
 | POST | `/api/sweep/run` | Trigger a nightly sweep run |
 | GET | `/api/sweep/runs` | List sweep run history |
 | POST | `/api/sweep/connections` | Trigger connection sweep |
+| POST | `/api/sweep/dependencies` | Detect implicit dependencies between Things via LLM |
 
 ---
 

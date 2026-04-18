@@ -47,7 +47,7 @@ class DependencyCluster:
 
     cluster_id: str  # e.g., "project-<project_id>"
     label: str  # Human-readable label for prompt
-    things: list[dict] = field(default_factory=list)  # {id, title, type_hint, checkin_date, data}
+    things: list[dict] = field(default_factory=list)  # {id, title, type_hint, checkin_date, data, user_id}
     user_id: str = ""
 
 
@@ -77,7 +77,7 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
     """
     with Session(_engine_mod.engine) as session:
         # Get all active Things
-        thing_stmt = select(ThingRecord).where(ThingRecord.active == True)  # noqa: E712
+        thing_stmt = select(ThingRecord).where(ThingRecord.active == True)  # noqa: E712 — SQLAlchemy requires == for column comparisons; `is True` evaluates in Python, not SQL
         if user_id:
             thing_stmt = thing_stmt.where(
                 user_filter_clause(ThingRecord.user_id, user_id)
@@ -95,16 +95,19 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
             for t in things
         }
 
-        # Get project parent-of relationships
+        # Get project parent-of relationships (scoped to user's things)
+        user_thing_ids = list(thing_map.keys())
         parent_stmt = (
             select(ThingRelationshipRecord)
             .where(ThingRelationshipRecord.relationship_type == "parent-of")
+            .where(ThingRelationshipRecord.from_thing_id.in_(user_thing_ids))  # type: ignore[union-attr]
         )
         parent_rels = session.exec(parent_stmt).all()
 
-        # Get existing depends-on/blocks relationships for dedup
+        # Get existing depends-on/blocks relationships for dedup (scoped to user's things)
         dep_stmt = select(ThingRelationshipRecord).where(
-            ThingRelationshipRecord.relationship_type.in_(["depends-on", "blocks"])  # type: ignore[union-attr]
+            ThingRelationshipRecord.relationship_type.in_(["depends-on", "blocks"]),  # type: ignore[union-attr]
+            ThingRelationshipRecord.from_thing_id.in_(user_thing_ids),               # type: ignore[union-attr]
         )
         dep_rels = session.exec(dep_stmt).all()
         existing_deps: set[tuple[str, str]] = set()
@@ -237,7 +240,7 @@ def _format_cluster_for_llm(cluster: DependencyCluster) -> str:
                     if key in data:
                         deadline = f", deadline: {data[key]}"
                         break
-            except Exception:
+            except (json.JSONDecodeError, TypeError):
                 pass
         lines.append(f'- "{t["title"]}"{type_str} (id={t["id"]}{checkin}{deadline})')
     return "\n".join(lines)
@@ -260,18 +263,27 @@ async def detect_cluster_dependencies(
     all_findings: list[dict] = []
 
     for cluster in clusters:
-        prompt = _format_cluster_for_llm(cluster)
-        cluster_thing_ids = {t["id"] for t in cluster.things}
+        try:
+            prompt = _format_cluster_for_llm(cluster)
+            cluster_thing_ids = {t["id"] for t in cluster.things}
 
-        raw = await _chat(
-            messages=[
-                {"role": "system", "content": DEPENDENCY_DETECTION_SYSTEM},
-                {"role": "user", "content": prompt},
-            ],
-            model=None,
-            response_format={"type": "json_object"},
-            usage_stats=usage_stats,
-        )
+            raw = await _chat(
+                messages=[
+                    {"role": "system", "content": DEPENDENCY_DETECTION_SYSTEM},
+                    {"role": "user", "content": prompt},
+                ],
+                model=None,
+                response_format={"type": "json_object"},
+                usage_stats=usage_stats,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Dependency sweep: LLM call failed for cluster %s (%s): %s",
+                cluster.cluster_id,
+                cluster.label,
+                exc,
+            )
+            continue
 
         try:
             parsed = json.loads(raw)
@@ -288,139 +300,149 @@ async def detect_cluster_dependencies(
             raw_conflicts = []
 
         now = datetime.now(timezone.utc)
-        now_iso = now.isoformat()
 
-        with Session(_engine_mod.engine) as session:
-            # Process dependencies → ConnectionSuggestionRecord
-            for dep in raw_deps:
-                if not isinstance(dep, dict):
-                    continue
+        try:
+            with Session(_engine_mod.engine) as session:
+                # Process dependencies → ConnectionSuggestionRecord
+                for dep in raw_deps:
+                    if not isinstance(dep, dict):
+                        continue
 
-                from_id = dep.get("from_id", "")
-                to_id = dep.get("to_id", "")
-                if not from_id or not to_id:
-                    continue
+                    from_id = dep.get("from_id", "")
+                    to_id = dep.get("to_id", "")
+                    if not from_id or not to_id:
+                        continue
 
-                # Validate IDs are in this cluster
-                if from_id not in cluster_thing_ids or to_id not in cluster_thing_ids:
-                    continue
+                    # Validate IDs are in this cluster
+                    if from_id not in cluster_thing_ids or to_id not in cluster_thing_ids:
+                        continue
 
-                confidence = dep.get("confidence", 0.0)
-                if not isinstance(confidence, (int, float)):
-                    confidence = 0.0
-                confidence = max(0.0, min(1.0, float(confidence)))
-                if confidence < 0.6:
-                    continue
+                    confidence = dep.get("confidence", 0.0)
+                    if not isinstance(confidence, (int, float)):
+                        confidence = 0.0
+                    confidence = max(0.0, min(1.0, float(confidence)))
+                    if confidence < 0.6:
+                        continue
 
-                rel_type = str(dep.get("relationship_type", "depends-on")).strip()
-                if not rel_type:
-                    rel_type = "depends-on"
+                    rel_type = str(dep.get("relationship_type", "depends-on")).strip()
+                    if not rel_type:
+                        rel_type = "depends-on"
 
-                reason = str(dep.get("reason", "")).strip()
-                if not reason:
-                    continue
+                    reason = str(dep.get("reason", "")).strip()
+                    if not reason:
+                        continue
 
-                # Check for existing suggestion (pending/deferred)
-                existing = session.exec(
-                    select(ConnectionSuggestionRecord).where(
-                        ConnectionSuggestionRecord.status.in_(["pending", "deferred"]),  # type: ignore[union-attr]
-                        ConnectionSuggestionRecord.from_thing_id == from_id,
-                        ConnectionSuggestionRecord.to_thing_id == to_id,
+                    # Check for existing suggestion (pending/deferred)
+                    existing = session.exec(
+                        select(ConnectionSuggestionRecord).where(
+                            ConnectionSuggestionRecord.status.in_(["pending", "deferred"]),  # type: ignore[union-attr]
+                            ConnectionSuggestionRecord.from_thing_id == from_id,
+                            ConnectionSuggestionRecord.to_thing_id == to_id,
+                        )
+                    ).first()
+                    if existing:
+                        continue
+
+                    # Check reverse direction too
+                    existing_rev = session.exec(
+                        select(ConnectionSuggestionRecord).where(
+                            ConnectionSuggestionRecord.status.in_(["pending", "deferred"]),  # type: ignore[union-attr]
+                            ConnectionSuggestionRecord.from_thing_id == to_id,
+                            ConnectionSuggestionRecord.to_thing_id == from_id,
+                        )
+                    ).first()
+                    if existing_rev:
+                        continue
+
+                    # Check for existing relationship in this direction
+                    # (Phase 1 clustering already pre-filters fully-covered pairs, so false
+                    #  negatives here are rare and harmless — the suggestion will be deduped
+                    #  by the reverse-direction suggestion check above if it exists.)
+                    existing_rel = session.exec(
+                        select(ThingRelationshipRecord).where(
+                            ThingRelationshipRecord.from_thing_id == from_id,
+                            ThingRelationshipRecord.to_thing_id == to_id,
+                        )
+                    ).first()
+                    if existing_rel:
+                        continue
+
+                    sugg_id = f"cs-{uuid.uuid4().hex[:8]}"
+                    from_thing = session.get(ThingRecord, from_id)
+                    sugg_user_id = from_thing.user_id if from_thing else None
+
+                    suggestion = ConnectionSuggestionRecord(
+                        id=sugg_id,
+                        from_thing_id=from_id,
+                        to_thing_id=to_id,
+                        suggested_relationship_type=rel_type,
+                        reason=reason,
+                        confidence=confidence,
+                        status="pending",
+                        created_at=now,
+                        user_id=sugg_user_id,
                     )
-                ).first()
-                if existing:
-                    continue
+                    session.add(suggestion)
+                    all_suggestions.append({
+                        "id": sugg_id,
+                        "from_thing_id": from_id,
+                        "to_thing_id": to_id,
+                        "suggested_relationship_type": rel_type,
+                        "reason": reason,
+                        "confidence": confidence,
+                    })
 
-                # Check reverse direction too
-                existing_rev = session.exec(
-                    select(ConnectionSuggestionRecord).where(
-                        ConnectionSuggestionRecord.status.in_(["pending", "deferred"]),  # type: ignore[union-attr]
-                        ConnectionSuggestionRecord.from_thing_id == to_id,
-                        ConnectionSuggestionRecord.to_thing_id == from_id,
-                    )
-                ).first()
-                if existing_rev:
-                    continue
+                # Process conflicts → SweepFindingRecord
+                for conflict in raw_conflicts:
+                    if not isinstance(conflict, dict):
+                        continue
 
-                # Check for existing relationship
-                existing_rel = session.exec(
-                    select(ThingRelationshipRecord).where(
-                        ThingRelationshipRecord.from_thing_id == from_id,
-                        ThingRelationshipRecord.to_thing_id == to_id,
-                    )
-                ).first()
-                if existing_rel:
-                    continue
+                    thing_id = conflict.get("thing_id", "")
+                    if not thing_id or thing_id not in cluster_thing_ids:
+                        continue
 
-                sugg_id = f"cs-{uuid.uuid4().hex[:8]}"
-                from_thing = session.get(ThingRecord, from_id)
-                sugg_user_id = from_thing.user_id if from_thing else None
+                    message = str(conflict.get("message", "")).strip()
+                    if not message:
+                        continue
 
-                suggestion = ConnectionSuggestionRecord(
-                    id=sugg_id,
-                    from_thing_id=from_id,
-                    to_thing_id=to_id,
-                    suggested_relationship_type=rel_type,
-                    reason=reason,
-                    confidence=confidence,
-                    status="pending",
-                    created_at=datetime.fromisoformat(now_iso),
-                    user_id=sugg_user_id,
-                )
-                session.add(suggestion)
-                all_suggestions.append({
-                    "id": sugg_id,
-                    "from_thing_id": from_id,
-                    "to_thing_id": to_id,
-                    "suggested_relationship_type": rel_type,
-                    "reason": reason,
-                    "confidence": confidence,
-                })
+                    priority = conflict.get("priority", 2)
+                    if not isinstance(priority, int) or priority < 0 or priority > 3:
+                        priority = 2
 
-            # Process conflicts → SweepFindingRecord
-            for conflict in raw_conflicts:
-                if not isinstance(conflict, dict):
-                    continue
+                    expires_at = now + timedelta(days=7)
 
-                thing_id = conflict.get("thing_id", "")
-                if not thing_id or thing_id not in cluster_thing_ids:
-                    continue
+                    # Resolve user_id from thing
+                    thing_rec = session.get(ThingRecord, thing_id)
+                    finding_user_id = thing_rec.user_id if thing_rec else (user_id or None)
 
-                message = str(conflict.get("message", "")).strip()
-                if not message:
-                    continue
+                    finding_id = f"sf-{uuid.uuid4().hex[:8]}"
+                    session.add(SweepFindingRecord(
+                        id=finding_id,
+                        thing_id=thing_id,
+                        finding_type="llm_conflict",
+                        message=message,
+                        priority=priority,
+                        dismissed=False,
+                        created_at=now,
+                        expires_at=expires_at,
+                        user_id=finding_user_id,
+                    ))
+                    all_findings.append({
+                        "id": finding_id,
+                        "thing_id": thing_id,
+                        "finding_type": "llm_conflict",
+                        "message": message,
+                        "priority": priority,
+                    })
 
-                priority = conflict.get("priority", 2)
-                if not isinstance(priority, int) or priority < 0 or priority > 3:
-                    priority = 2
-
-                expires_at = now + timedelta(days=7)
-
-                # Resolve user_id from thing
-                thing_rec = session.get(ThingRecord, thing_id)
-                finding_user_id = thing_rec.user_id if thing_rec else (user_id or None)
-
-                finding_id = f"sf-{uuid.uuid4().hex[:8]}"
-                session.add(SweepFindingRecord(
-                    id=finding_id,
-                    thing_id=thing_id,
-                    finding_type="llm_conflict",
-                    message=message,
-                    priority=priority,
-                    dismissed=False,
-                    created_at=now,
-                    expires_at=expires_at,
-                    user_id=finding_user_id,
-                ))
-                all_findings.append({
-                    "id": finding_id,
-                    "thing_id": thing_id,
-                    "finding_type": "llm_conflict",
-                    "message": message,
-                    "priority": priority,
-                })
-
-            session.commit()
+                session.commit()
+        except Exception as exc:
+            logger.warning(
+                "Dependency sweep: DB write failed for cluster %s: %s",
+                cluster.cluster_id,
+                exc,
+            )
+            continue
 
     return DependencyDetectionResult(
         clusters_found=len(clusters),
