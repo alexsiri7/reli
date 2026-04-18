@@ -381,6 +381,44 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByText('Add person'))
     expect(screen.getByPlaceholderText('Add person…')).toBeInTheDocument()
   })
+
+  it('renders mobile hero card when theOneThing is set', () => {
+    setMobileViewport()
+    const oneThing = {
+      thing: makeThing({ id: 'ot1', title: 'Finish auth refactor', checkin_date: '2026-04-20' }),
+      reasons: ['Overdue by 3 days'],
+      importance: 3,
+      urgency: 3,
+      score: 0.9,
+    }
+    mockState = {
+      things: [makeThing()],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      theOneThing: oneThing,
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    expect(screen.getAllByText('Finish auth refactor').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('The One Thing').length).toBeGreaterThan(0)
+  })
+
+  it('renders user avatar on mobile when currentUser has picture', () => {
+    setMobileViewport()
+    mockState = {
+      things: [],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      currentUser: { id: 'u1', name: 'Alex', email: 'alex@example.com', picture: 'https://example.com/avatar.jpg' },
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    const avatars = screen.getAllByAltText('Alex')
+    expect(avatars.length).toBeGreaterThan(0)
+    expect(avatars[0]).toHaveAttribute('src', 'https://example.com/avatar.jpg')
+  })
 })
 
 describe('Sidebar: progressive disclosure thresholds', () => {

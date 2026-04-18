@@ -9,6 +9,22 @@ from pydantic import BaseModel, Field, field_validator
 # Maximum serialized size for arbitrary JSON dict fields (100 KB).
 _MAX_DATA_JSON_BYTES = 100_000
 
+
+def _validate_data_size(v: "dict[str, Any] | None") -> "dict[str, Any] | None":
+    if v is not None and len(json.dumps(v)) > _MAX_DATA_JSON_BYTES:
+        raise ValueError(f"data payload must be under {_MAX_DATA_JSON_BYTES} bytes when JSON-serialized")
+    return v
+
+
+def _validate_open_questions(v: "list[str] | None") -> "list[str] | None":
+    if v is not None:
+        if len(v) > 100:
+            raise ValueError("open_questions may contain at most 100 items")
+        for q in v:
+            if len(q) > 2000:
+                raise ValueError("each open_question must be at most 2000 characters")
+    return v
+
 # ── Thing Types ───────────────────────────────────────────────────────────────
 
 
@@ -56,20 +72,12 @@ class ThingCreate(BaseModel):
     @field_validator("data")
     @classmethod
     def data_max_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
-        if v is not None and len(json.dumps(v)) > _MAX_DATA_JSON_BYTES:
-            raise ValueError(f"data payload must be under {_MAX_DATA_JSON_BYTES} bytes when JSON-serialized")
-        return v
+        return _validate_data_size(v)
 
     @field_validator("open_questions")
     @classmethod
     def open_questions_limits(cls, v: list[str] | None) -> list[str] | None:
-        if v is not None:
-            if len(v) > 100:
-                raise ValueError("open_questions may contain at most 100 items")
-            for q in v:
-                if len(q) > 2000:
-                    raise ValueError("each open_question must be at most 2000 characters")
-        return v
+        return _validate_open_questions(v)
 
 
 class ThingUpdate(BaseModel):
@@ -89,20 +97,12 @@ class ThingUpdate(BaseModel):
     @field_validator("data")
     @classmethod
     def data_max_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
-        if v is not None and len(json.dumps(v)) > _MAX_DATA_JSON_BYTES:
-            raise ValueError(f"data payload must be under {_MAX_DATA_JSON_BYTES} bytes when JSON-serialized")
-        return v
+        return _validate_data_size(v)
 
     @field_validator("open_questions")
     @classmethod
     def open_questions_limits(cls, v: list[str] | None) -> list[str] | None:
-        if v is not None:
-            if len(v) > 100:
-                raise ValueError("open_questions may contain at most 100 items")
-            for q in v:
-                if len(q) > 2000:
-                    raise ValueError("each open_question must be at most 2000 characters")
-        return v
+        return _validate_open_questions(v)
 
 
 class Thing(BaseModel):

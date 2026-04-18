@@ -146,4 +146,55 @@ test.describe('Visual regression – mobile 390×844', () => {
       animations: 'disabled',
     })
   })
+
+  test('briefing tab – populated', async ({ page }) => {
+    const MOCK_THING = {
+      id: 'briefing-thing-1',
+      title: 'Finish the auth module refactor',
+      type_hint: 'task',
+      parent_ids: null,
+      checkin_date: '2026-04-20',
+      priority: 1,
+      active: true,
+      surface: false,
+      data: null,
+      created_at: '2026-03-01T10:00:00Z',
+      updated_at: '2026-03-01T10:00:00Z',
+      last_referenced: null,
+      open_questions: null,
+      children_count: 0,
+      completed_count: 0,
+    }
+    await page.route('**/api/briefing', route =>
+      route.fulfill({
+        json: {
+          the_one_thing: {
+            thing: MOCK_THING,
+            reasons: ['Overdue by 3 days'],
+            importance: 3,
+            urgency: 3,
+            score: 0.91,
+          },
+          secondary: [],
+          findings: [],
+          learned_preferences: [],
+          stats: { active_things: 12, checkin_due: 3, overdue: 1 },
+        },
+        status: 200,
+      })
+    )
+    await interceptApi(page, { things: true })
+    await page.goto('/')
+    await waitForApp(page)
+
+    // Navigate to the Briefing tab
+    await page.click('nav.fixed.bottom-0 button:has-text("Briefing")')
+    await page.waitForTimeout(300)
+
+    await expect(page).toHaveScreenshot('mobile-briefing-tab-populated.png', {
+      ...SNAPSHOT_OPTS,
+      animations: 'disabled',
+      mask: [page.locator('p.text-xs')],
+    })
+  })
 })

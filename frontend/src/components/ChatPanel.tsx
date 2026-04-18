@@ -907,20 +907,23 @@ export function ChatPanel() {
 
       {/* Mobile context pills — horizontal scrollable bar */}
       {!collapsed && activeContextThings.length > 0 && (
-        <div className="md:hidden shrink-0 px-4 py-2 border-b border-on-surface-variant/10 bg-surface-container-low">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-primary shrink-0">Context Active</span>
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {activeContextThings.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => openThingDetailStore(t.id)}
-                  className="shrink-0 px-2.5 py-1 rounded-full text-xs font-medium bg-surface-container-high text-on-surface hover:bg-primary/20 hover:text-primary transition-colors whitespace-nowrap"
-                >
-                  {typeIcon(t.type_hint, thingTypes)} {t.title}
-                </button>
-              ))}
-            </div>
+        <div className="md:hidden shrink-0 px-4 pt-3 pb-2 border-b border-white/5 bg-surface-container-low">
+          {/* Label + horizontal divider */}
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant shrink-0">Context Active</span>
+            <div className="h-px flex-1 bg-white/5" />
+          </div>
+          {/* Pills — horizontal scroll */}
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            {activeContextThings.map(t => (
+              <button
+                key={t.id}
+                onClick={() => openThingDetailStore(t.id)}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-surface-container-low border border-white/5 text-on-surface hover:bg-primary/20 hover:text-primary transition-colors whitespace-nowrap"
+              >
+                {typeIcon(t.type_hint, thingTypes)} {t.title}
+              </button>
+            ))}
           </div>
         </div>
       )}

@@ -162,4 +162,25 @@ describe('ChatPanel', () => {
     expect(screen.getByText('Test nudge message')).toBeInTheDocument()
     mockStore.nudges = []
   })
+
+  it('renders context pills bar when messages have context things', () => {
+    mockStore.messages = [
+      {
+        id: '1',
+        session_id: 's',
+        role: 'assistant',
+        content: 'I referenced some things.',
+        applied_changes: {
+          context_things: [{ id: 'ctx-1', title: 'Auth Refactor', type_hint: 'task' }],
+          referenced_things: [],
+        } as never,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:00:00Z',
+      },
+    ]
+    render(<ChatPanel />)
+    expect(screen.getByText('Context Active')).toBeInTheDocument()
+    expect(screen.getAllByText('Auth Refactor').length).toBeGreaterThan(0)
+    mockStore.messages = []
+  })
 })

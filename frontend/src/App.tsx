@@ -166,43 +166,40 @@ function App() {
         </div>
         <DetailPanel />
       </div>
-      {/* Mobile bottom tab bar — obsidian surface with primary-colored active indicator */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex bg-canvas border-t border-surface-container-high safe-area-pb">
+      {/* Mobile bottom tab bar — frosted glass with dot indicator */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex justify-around items-center h-20 px-8 safe-area-pb bg-canvas/80 backdrop-blur-xl border-t border-white/5 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
         <button
           onClick={() => setMobileView('things')}
-          className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold uppercase tracking-widest transition-colors ${
-            mobileView === 'things'
-              ? 'text-primary'
-              : 'text-on-surface-variant'
+          className={`relative flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold uppercase tracking-widest transition-all active:scale-90 duration-300 ease-out ${
+            mobileView === 'things' ? 'text-primary' : 'text-on-surface-variant'
           }`}
         >
-          <svg className={`w-5 h-5 ${mobileView === 'things' ? 'text-primary' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          {mobileView === 'things' && <span className="absolute -top-3 w-1 h-1 rounded-full bg-primary" />}
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" />
           </svg>
           Things
         </button>
         <button
           onClick={() => setMobileView('chat')}
-          className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold uppercase tracking-widest transition-colors ${
-            mobileView === 'chat'
-              ? 'text-primary'
-              : 'text-on-surface-variant'
+          className={`relative flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold uppercase tracking-widest transition-all active:scale-90 duration-300 ease-out ${
+            mobileView === 'chat' ? 'text-primary' : 'text-on-surface-variant'
           }`}
         >
-          <svg className={`w-5 h-5 ${mobileView === 'chat' ? 'text-primary' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          {mobileView === 'chat' && <span className="absolute -top-3 w-1 h-1 rounded-full bg-primary" />}
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
           </svg>
           Chat
         </button>
         <button
           onClick={() => setMobileView('briefing')}
-          className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold uppercase tracking-widest transition-colors ${
-            mobileView === 'briefing'
-              ? 'text-primary'
-              : 'text-on-surface-variant'
+          className={`relative flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold uppercase tracking-widest transition-all active:scale-90 duration-300 ease-out ${
+            mobileView === 'briefing' ? 'text-primary' : 'text-on-surface-variant'
           }`}
         >
-          <svg className={`w-5 h-5 ${mobileView === 'briefing' ? 'text-primary' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          {mobileView === 'briefing' && <span className="absolute -top-3 w-1 h-1 rounded-full bg-primary" />}
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
           </svg>
           Briefing
