@@ -9,6 +9,7 @@ const clearSearch = vi.fn()
 const openThingDetail = vi.fn()
 const setMainView = vi.fn()
 
+// Set before render() — reassigning after render won't trigger re-render
 let mockMainView = 'list'
 
 const mockThings = [
@@ -174,6 +175,14 @@ describe('CommandPalette', () => {
     render(<CommandPalette />)
     fireEvent.mouseDown(screen.getByText('Switch to Calendar View'))
     expect(setMainView).toHaveBeenCalledWith('calendar')
+    expect(closeCommandPalette).toHaveBeenCalled()
+  })
+
+  it('calls setMainView("list") when calendar command executed from calendar view', () => {
+    mockMainView = 'calendar'
+    render(<CommandPalette />)
+    fireEvent.mouseDown(screen.getByText('Switch to List View'))
+    expect(setMainView).toHaveBeenCalledWith('list')
     expect(closeCommandPalette).toHaveBeenCalled()
   })
 })
