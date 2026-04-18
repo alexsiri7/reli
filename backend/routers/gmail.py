@@ -37,6 +37,17 @@ GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 TOKEN_PATH = Path(settings.DATA_DIR) / "gmail_token.json"
 
 
+def _google_client_config() -> dict:
+    return {
+        "web": {
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
+
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -267,14 +278,7 @@ def gmail_auth_url(request: Request, user_id: str = Depends(require_user)) -> di
     redirect_uri = str(request.base_url).rstrip("/") + "/api/gmail/callback"
 
     flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-            }
-        },
+        _google_client_config(),
         scopes=GMAIL_SCOPES,
         redirect_uri=redirect_uri,
     )
@@ -306,14 +310,7 @@ def gmail_callback(
     redirect_uri = str(request.base_url).rstrip("/") + "/api/gmail/callback"
 
     flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-            }
-        },
+        _google_client_config(),
         scopes=GMAIL_SCOPES,
         redirect_uri=redirect_uri,
     )
