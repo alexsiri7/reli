@@ -15,8 +15,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import String, cast
 from sqlmodel import Session, select
 
-from ..auth import require_user
 import backend.db_engine as _engine_mod
+
+from ..auth import require_user
 from ..db_engine import user_filter_clause
 from ..db_models import NudgeDismissalRecord, NudgeSuppressionRecord, ThingRecord
 from ..models import Nudge
@@ -192,10 +193,6 @@ def dismiss_nudge(nudge_id: str, user_id: str = Depends(require_user)) -> dict:
     return {"ok": True}
 
 
-_PREFIX_TO_NUDGE_TYPE: dict[str, str] = {
-    "proactive": "approaching_date",
-}
-
 _NUDGE_TYPE_TO_PREF_TITLE: dict[str, str] = {
     "approaching_date": "Prefers fewer date-based reminders",
 }
@@ -211,7 +208,6 @@ def _conf_label(conf: float) -> str:
     if conf >= 0.5:
         return "moderate"
     return "emerging"
-
 
 
 @router.post("/{nudge_id}/stop", summary="Stop nudges of this type (preference signal)")

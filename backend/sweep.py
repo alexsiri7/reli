@@ -854,7 +854,6 @@ def assign_checkin_dates(
     → today+7d.  Does not modify updated_at.  Returns count of Things updated.
     """
     _EVENT_KEYS = {"event_date", "starts_at", "start_date", "date"}
-    _DEADLINE_KEYS = {"deadline", "due_date", "due", "ends_at", "end_date"}
 
     stmt = (
         select(ThingRecord.id)

@@ -7,19 +7,20 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import httplib2
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
-import httplib2
 from google_auth_httplib2 import AuthorizedHttp
+from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 logger = logging.getLogger(__name__)
 
 from sqlmodel import Session, select
 
-from .config import settings
 import backend.db_engine as _engine_mod
+
+from .config import settings
 from .db_models import GoogleTokenRecord
 from .token_encryption import decrypt_or_plaintext, encrypt
 

@@ -12,15 +12,16 @@ from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from sqlalchemy import String, cast, func
+from sqlmodel import Session, or_, select
+
+import backend.db_engine as _engine_mod
+
 from .agents import (
     REQUESTY_REASONING_MODEL,
     REQUESTY_RESPONSE_MODEL,
     UsageStats,
 )
-from sqlalchemy import String, cast, func
-from sqlmodel import Session, or_, select
-
-import backend.db_engine as _engine_mod
 from .db_engine import user_filter_clause
 from .db_models import ChatHistoryRecord, ThingRecord, ThingRelationshipRecord
 from .google_calendar import fetch_upcoming_events
