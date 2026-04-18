@@ -163,7 +163,7 @@ describe('ChatPanel', () => {
     mockStore.nudges = []
   })
 
-  it('renders context pills bar when messages have context things', () => {
+  it('renders context dropdown pills when messages have context things', () => {
     mockStore.messages = [
       {
         id: '1',
@@ -179,8 +179,10 @@ describe('ChatPanel', () => {
       },
     ]
     render(<ChatPanel />)
-    expect(screen.getByText('Context Active')).toBeInTheDocument()
-    expect(screen.getAllByText('Auth Refactor').length).toBeGreaterThan(0)
+    expect(screen.getByTestId('pill-inferred')).toBeInTheDocument()
+    expect(screen.queryByText('Auth Refactor')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('▾ details'))
+    expect(screen.getByText('Auth Refactor')).toBeInTheDocument()
     mockStore.messages = []
   })
 })
