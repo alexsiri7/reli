@@ -30,6 +30,12 @@ function getGreeting(): string {
   return 'Good Evening'
 }
 
+function getTomorrowISO(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
 function SectionCard({ title, accent, children }: {
   title: string
   accent: string
@@ -251,12 +257,6 @@ export function BriefingPanel() {
       openChatWithContext: s.openChatWithContext,
     }))
   )
-
-  const getTomorrowISO = () => {
-    const d = new Date()
-    d.setDate(d.getDate() + 1)
-    return d.toISOString().slice(0, 10)
-  }
 
   const handleSnooze = (id: string) => snoozeFinding(id, getTomorrowISO())
 

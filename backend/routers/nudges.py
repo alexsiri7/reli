@@ -213,12 +213,13 @@ def _conf_label(conf: float) -> str:
     return "emerging"
 
 
+
 @router.post("/{nudge_id}/stop", summary="Stop nudges of this type (preference signal)")
 def stop_nudge_type(nudge_id: str, user_id: str = Depends(require_user)) -> dict:
     """Suppress all nudges of this type and record a negative preference signal."""
     # Extract nudge_type from nudge_id (format: "{type}_{thing_id}_{key}")
     prefix = nudge_id.split("_")[0] if "_" in nudge_id else nudge_id
-    nudge_type = _PREFIX_TO_NUDGE_TYPE.get(prefix, prefix)
+    nudge_type = "approaching_date" if prefix == "proactive" else prefix
 
     today_str = date.today().isoformat()
     with Session(_engine_mod.engine) as session:

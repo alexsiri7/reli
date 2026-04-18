@@ -40,7 +40,7 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H 100.120.193.82 >> ~/.ssh/known_hosts
-          if ! grep -q "100.120.193.82" ~/.ssh/known_hosts; then
+          if ! ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1; then
             echo "ERROR: ssh-keyscan produced no output — host may be unreachable"
             exit 1
           fi
@@ -140,7 +140,7 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H 100.120.193.82 >> ~/.ssh/known_hosts
-          if ! grep -q "100.120.193.82" ~/.ssh/known_hosts; then
+          if ! ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1; then
             echo "ERROR: ssh-keyscan produced no output — host may be unreachable"
             exit 1
           fi
