@@ -113,6 +113,26 @@ def _log_run(
         session.commit()
 
 
+async def _run_dependency_sweep_for_user(user_id: str, user_label: str) -> None:
+    """Run the dependency detection sweep for one user, logging results."""
+    from .dependency_sweep import run_dependency_sweep
+
+    try:
+        async with asyncio.timeout(300):
+            dep_result = await run_dependency_sweep(user_id=user_id)
+        if dep_result.suggestions_created or dep_result.findings_created:
+            logger.info(
+                "Dependency sweep [%s]: %d suggestions, %d findings",
+                user_label,
+                dep_result.suggestions_created,
+                dep_result.findings_created,
+            )
+    except TimeoutError:
+        logger.error("Dependency sweep timed out for user %s (300s limit)", user_label)
+    except Exception:
+        logger.exception("Dependency sweep failed for user %s", user_label)
+
+
 async def _run_sweep_for_user(user_id: str) -> None:
     """Execute one sweep cycle for a single user."""
     from .sweep import collect_candidates, dismiss_stale_findings, reflect_on_candidates
@@ -180,22 +200,7 @@ async def _run_sweep_for_user(user_id: str) -> None:
                 logger.exception("Comm style sweep failed for user %s", user_label)
 
             # Dependency sweep: LLM-powered implicit dependency detection (runs even when no candidates)
-            try:
-                from .dependency_sweep import run_dependency_sweep
-
-                async with asyncio.timeout(300):
-                    dep_result = await run_dependency_sweep(user_id=user_id)
-                if dep_result.suggestions_created or dep_result.findings_created:
-                    logger.info(
-                        "Dependency sweep [%s]: %d suggestions, %d findings",
-                        user_label,
-                        dep_result.suggestions_created,
-                        dep_result.findings_created,
-                    )
-            except TimeoutError:
-                logger.error("Dependency sweep timed out for user %s (300s limit)", user_label)
-            except Exception:
-                logger.exception("Dependency sweep failed for user %s", user_label)
+            await _run_dependency_sweep_for_user(user_id, user_label)
 
             # Still generate morning briefing (captures priorities, overdue, blockers)
             try:
@@ -286,22 +291,7 @@ async def _run_sweep_for_user(user_id: str) -> None:
         )
 
         # Dependency sweep: LLM-powered implicit dependency detection
-        try:
-            from .dependency_sweep import run_dependency_sweep
-
-            async with asyncio.timeout(300):
-                dep_result = await run_dependency_sweep(user_id=user_id)
-            if dep_result.suggestions_created or dep_result.findings_created:
-                logger.info(
-                    "Dependency sweep [%s]: %d suggestions, %d findings",
-                    user_label,
-                    dep_result.suggestions_created,
-                    dep_result.findings_created,
-                )
-        except TimeoutError:
-            logger.error("Dependency sweep timed out for user %s (300s limit)", user_label)
-        except Exception:
-            logger.exception("Dependency sweep failed for user %s", user_label)
+        await _run_dependency_sweep_for_user(user_id, user_label)
 
         # Generate morning briefing after sweep completes
         try:
