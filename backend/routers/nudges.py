@@ -25,28 +25,22 @@ router = APIRouter(prefix="/nudges", tags=["nudges"])
 DAILY_NUDGE_LIMIT = 3
 
 # Keys in the data JSON that hold date values (mirrors proactive.py).
-_RECURRING_KEYS = {"birthday", "anniversary", "born", "date_of_birth", "dob"}
-_ONESHOT_KEYS = {
-    "deadline", "due_date", "due", "event_date",
-    "starts_at", "start_date", "ends_at", "end_date", "date",
-}
-_ALL_DATE_KEYS = _RECURRING_KEYS | _ONESHOT_KEYS
-
-_KEY_LABELS: dict[str, str] = {
-    "birthday": "Birthday",
-    "anniversary": "Anniversary",
-    "born": "Birthday",
-    "date_of_birth": "Birthday",
-    "dob": "Birthday",
-    "deadline": "Deadline",
-    "due_date": "Due",
-    "due": "Due",
-    "event_date": "Event",
-    "starts_at": "Starts",
-    "start_date": "Starts",
-    "ends_at": "Ends",
-    "end_date": "Ends",
-    "date": "Date",
+# recurring=True means the date repeats yearly (e.g. birthday).
+_DATE_KEY_CONFIG: dict[str, tuple[bool, str]] = {
+    "birthday":     (True,  "Birthday"),
+    "anniversary":  (True,  "Anniversary"),
+    "born":         (True,  "Birthday"),
+    "date_of_birth":(True,  "Birthday"),
+    "dob":          (True,  "Birthday"),
+    "deadline":     (False, "Deadline"),
+    "due_date":     (False, "Due"),
+    "due":          (False, "Due"),
+    "event_date":   (False, "Event"),
+    "starts_at":    (False, "Starts"),
+    "start_date":   (False, "Starts"),
+    "ends_at":      (False, "Ends"),
+    "end_date":     (False, "Ends"),
+    "date":         (False, "Date"),
 }
 
 _DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
@@ -141,12 +135,14 @@ def get_nudges(user_id: str = Depends(require_user)) -> list[Nudge]:
             continue
         for key, value in data.items():
             key_lower = key.lower().replace(" ", "_")
-            if key_lower not in _ALL_DATE_KEYS:
+            key_config = _DATE_KEY_CONFIG.get(key_lower)
+            if key_config is None:
                 continue
             parsed = _parse_date(value)
             if parsed is None:
                 continue
-            if key_lower in _RECURRING_KEYS:
+            is_recurring, label = key_config
+            if is_recurring:
                 days = _days_until_recurring(parsed, today)
             else:
                 days = (parsed - today).days
@@ -154,7 +150,6 @@ def get_nudges(user_id: str = Depends(require_user)) -> list[Nudge]:
                     continue
             if days > 7:
                 continue
-            label = _KEY_LABELS.get(key_lower, key.replace("_", " ").title())
             if days == 0:
                 reason = f"{label} today"
             elif days == 1:

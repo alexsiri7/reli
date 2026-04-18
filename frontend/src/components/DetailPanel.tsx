@@ -126,7 +126,6 @@ export function DetailPanel() {
     ? Object.entries(thing.data).filter(([key]) => key !== 'notes')
     : []
 
-  // Format relationship type for display: "related_to" -> "Related to"
   const formatRelType = (type: string) =>
     type.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
 

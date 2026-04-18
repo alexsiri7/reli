@@ -4,26 +4,15 @@ import { useStore } from '../store'
 import type { SweepFinding, BriefingItem, LearnedPreference } from '../store'
 import { NudgeBanner } from './NudgeBanner'
 
-const FINDING_TYPE_ICONS: Record<string, string> = {
-  approaching_date: '\u23F0',
-  stale: '\u{1F4A4}',
-  neglected: '\u{1F6A8}',
-  overdue_checkin: '\u{1F4C5}',
-  orphan: '\u{1F50D}',
-  inconsistency: '\u26A0\uFE0F',
-  open_question: '\u2753',
-  connection: '\u{1F517}',
-}
-
-const FINDING_TYPE_COLORS: Record<string, string> = {
-  approaching_date: 'bg-events',
-  stale: 'bg-on-surface-variant',
-  neglected: 'bg-ideas',
-  overdue_checkin: 'bg-ideas',
-  orphan: 'bg-primary',
-  inconsistency: 'bg-events',
-  open_question: 'bg-people',
-  connection: 'bg-projects',
+const FINDING_TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
+  approaching_date: { icon: '\u23F0', color: 'bg-events' },
+  stale: { icon: '\u{1F4A4}', color: 'bg-on-surface-variant' },
+  neglected: { icon: '\u{1F6A8}', color: 'bg-ideas' },
+  overdue_checkin: { icon: '\u{1F4C5}', color: 'bg-ideas' },
+  orphan: { icon: '\u{1F50D}', color: 'bg-primary' },
+  inconsistency: { icon: '\u26A0\uFE0F', color: 'bg-events' },
+  open_question: { icon: '\u2753', color: 'bg-people' },
+  connection: { icon: '\u{1F517}', color: 'bg-projects' },
 }
 
 function formatGreetingDate(): string {
@@ -115,8 +104,9 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
   onSnooze: (id: string) => void
   onAct: (finding: SweepFinding) => void
 }) {
-  const icon = FINDING_TYPE_ICONS[finding.finding_type] ?? '\u{1F4CB}'
-  const dotColor = FINDING_TYPE_COLORS[finding.finding_type] ?? 'bg-primary'
+  const typeConfig = FINDING_TYPE_CONFIG[finding.finding_type]
+  const icon = typeConfig?.icon ?? '\u{1F4CB}'
+  const dotColor = typeConfig?.color ?? 'bg-primary'
   return (
     <div className="group rounded-xl bg-surface-container-low hover:bg-surface-container-high/60 transition-colors overflow-hidden">
       <div className="flex items-start gap-3 py-3 px-4">
