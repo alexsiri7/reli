@@ -177,12 +177,21 @@ Measure the ratio of chat-created vs. direct-created Things. A healthy ratio is 
 
 A spotlight-style command palette for fast access:
 
-- **Search Things** — fuzzy search by title, type, or content
-- **Quick actions** — "Add task", "Show briefing", "What's next?"
+- **Search Things** — type any query to search by title and type
+- **Quick actions** — built-in shortcuts for common actions
 - **Navigation** — "Go to Projects", "Open settings"
-- **Chat shortcuts** — "Ask about [Thing]", "Plan my week"
 
-The command palette should be the fastest way to do anything in Reli. It leverages the existing vector search for fuzzy matching.
+The command palette should be the fastest way to do anything in Reli. It uses title-based search (SQL LIKE) for Thing results; semantic search may be added in a future iteration.
+
+#### Query prefix syntax
+
+| Prefix | Behavior | Example |
+|--------|----------|---------|
+| (none) | Search Things + show Quick Actions | `proposal draft` |
+| `>` | Show only Quick Actions (hide Things) | `> add task` |
+| `#type` | Filter Things by type, then search | `#task proposal` |
+
+Supported type values match Thing `type_hint` values: `task`, `project`, `note`, `person`, `idea`, `goal`, `preference`.
 
 ### Keyboard shortcuts
 

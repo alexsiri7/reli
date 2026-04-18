@@ -36,8 +36,8 @@ function parseQuery(raw: string): ParsedQuery {
 }
 
 type ResultItem =
-  | { kind: 'thing'; thing: Thing; globalIdx: number }
-  | { kind: 'command'; command: Command; globalIdx: number }
+  | { kind: 'thing'; thing: Thing }
+  | { kind: 'command'; command: Command }
 
 export function CommandPalette() {
   const closeCommandPalette = useStore(s => s.closeCommandPalette)
@@ -128,11 +128,13 @@ export function CommandPalette() {
     ? searchResults.filter(t => t.type_hint === typeFilter)
     : searchResults
 
-  // Things group: either recent (empty query) or search results
+  // Things group: either recent (empty query), type-filtered from cache, or search results
   const thingItems: Thing[] = actionsOnly
     ? []
     : query.trim()
-      ? filteredSearchResults.slice(0, 10)
+      ? typeFilter && !thingQuery
+        ? things.filter(t => t.active && t.type_hint === typeFilter).slice(0, 10)
+        : filteredSearchResults.slice(0, 10)
       : recentThings
 
   // Actions group: existing commands filtered by thingQuery
@@ -144,10 +146,10 @@ export function CommandPalette() {
         (c.description ?? '').toLowerCase().includes(thingQuery.toLowerCase())
       )
 
-  // Build flat list with globalIdx for keyboard nav
+  // Build flat list for keyboard nav
   const flatItems: ResultItem[] = []
-  thingItems.forEach(thing => flatItems.push({ kind: 'thing', thing, globalIdx: flatItems.length }))
-  actionItems.forEach(command => flatItems.push({ kind: 'command', command, globalIdx: flatItems.length }))
+  thingItems.forEach(thing => flatItems.push({ kind: 'thing', thing }))
+  actionItems.forEach(command => flatItems.push({ kind: 'command', command }))
 
   const [activeIdx, setActiveIdx] = useState(0)
 
@@ -159,14 +161,19 @@ export function CommandPalette() {
       return
     }
     if (actionsOnly) return
+    // When only a typeFilter is set (no text), thingItems handles filtering client-side
+    if (!thingQuery) return
     debounceRef.current = setTimeout(() => {
-      searchThings(thingQuery || ' ')
+      searchThings(thingQuery)
     }, 250)
   }, [thingQuery, typeFilter, actionsOnly, searchThings, clearSearch])
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => { clearSearch() }
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      clearSearch()
+    }
   }, [clearSearch])
 
   // Focus input on open

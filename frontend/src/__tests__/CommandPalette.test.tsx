@@ -111,4 +111,42 @@ describe('CommandPalette', () => {
     fireEvent.change(screen.getByPlaceholderText('Search everything…'), { target: { value: '> new' } })
     expect(screen.queryByText('Send proposal draft')).not.toBeInTheDocument()
   })
+
+  it('filters Things by type with # prefix and hides Quick Actions group', () => {
+    render(<CommandPalette />)
+    fireEvent.change(screen.getByPlaceholderText('Search everything…'), { target: { value: '#task' } })
+    // Only the task-type Thing should appear (t1), not the project-type (t2)
+    expect(screen.getByText('Send proposal draft')).toBeInTheDocument()
+    expect(screen.queryByText('Website redesign')).not.toBeInTheDocument()
+    // Actions group should be suppressed when typeFilter is active
+    expect(screen.queryByText(/Quick Actions/i)).not.toBeInTheDocument()
+  })
+
+  it('calls searchThings with text portion when # prefix has trailing query', async () => {
+    render(<CommandPalette />)
+    fireEvent.change(screen.getByPlaceholderText('Search everything…'), { target: { value: '#task proposal' } })
+    await vi.waitFor(() => expect(searchThings).toHaveBeenCalledWith('proposal'), { timeout: 400 })
+  })
+
+  it('navigates to second item with ArrowDown then opens it on Enter', () => {
+    render(<CommandPalette />)
+    const input = screen.getByPlaceholderText('Search everything…')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(openThingDetail).toHaveBeenCalledWith('t2')
+    expect(closeCommandPalette).toHaveBeenCalled()
+  })
+
+  it('opens Thing detail on click', () => {
+    render(<CommandPalette />)
+    fireEvent.mouseDown(screen.getByText('Send proposal draft'))
+    expect(openThingDetail).toHaveBeenCalledWith('t1')
+    expect(closeCommandPalette).toHaveBeenCalled()
+  })
+
+  it('clears search results on unmount', () => {
+    const { unmount } = render(<CommandPalette />)
+    unmount()
+    expect(clearSearch).toHaveBeenCalled()
+  })
 })
