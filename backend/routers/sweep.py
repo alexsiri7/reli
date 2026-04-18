@@ -105,3 +105,24 @@ async def run_connection_sweep() -> dict[str, Any]:
         "suggestions": result.suggestions,
         "usage": result.usage,
     }
+
+
+@router.post("/dependencies", summary="Run dependency detection sweep")
+async def run_dependency_sweep_endpoint(user_id: str = Depends(require_user)) -> dict[str, Any]:
+    """Run the dependency detection sweep: find clusters of related Things,
+    detect implicit dependencies via LLM, surface conflicts as sweep findings.
+
+    Creates ConnectionSuggestion records for detected dependencies (user reviews)
+    and SweepFinding records for detected conflicts (shown in briefing).
+    """
+    from ..dependency_sweep import run_dependency_sweep as _run
+
+    result = await _run(user_id=user_id)
+    return {
+        "clusters_found": result.clusters_found,
+        "suggestions_created": result.suggestions_created,
+        "findings_created": result.findings_created,
+        "suggestions": result.suggestions,
+        "findings": result.findings,
+        "usage": result.usage,
+    }
