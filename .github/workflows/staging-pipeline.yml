@@ -179,3 +179,26 @@ jobs:
               fi
               exit 1
             fi
+
+      - name: Notify prod landing
+        if: success()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_SHA: ${{ needs.deploy-staging.outputs.deploy_sha }}
+        run: |
+          [ -z "$NTFY_TOPIC" ] && exit 0
+          pr=$(gh api "repos/${{ github.repository }}/commits/$DEPLOY_SHA/pulls" --jq '.[0].number // empty')
+          body="direct push: $(git log -1 --pretty=%s "$DEPLOY_SHA" 2>/dev/null || echo "$DEPLOY_SHA")"
+          if [ -n "$pr" ]; then
+            if gh pr view "$pr" --repo "${{ github.repository }}" --json labels --jq '.labels[].name' | grep -qx 'no-ntfy'; then
+              echo "PR #$pr has no-ntfy label — skipping"
+              exit 0
+            fi
+            title=$(gh pr view "$pr" --repo "${{ github.repository }}" --json title --jq '.title')
+            body="PR #$pr: $title"
+          fi
+          curl -s -o /dev/null \
+            -H "Title: ${{ github.event.repository.name }} landed in prod" \
+            -H "Tags: tada" \
+            -d "$body" "ntfy.sh/$NTFY_TOPIC"
