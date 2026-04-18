@@ -29,6 +29,20 @@ function formatReliTimestamp(iso: string, isUser: boolean): string {
   return isUser ? ts : `RELI / ${ts}`
 }
 
+function ExpandChevron({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+  )
+}
+
 function WebSources({ results }: { results: WebSearchResult[] }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -40,15 +54,7 @@ function WebSources({ results }: { results: WebSearchResult[] }) {
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
       >
-        <svg
-          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ExpandChevron expanded={expanded} />
         {results.length} source{results.length !== 1 ? 's' : ''}
       </button>
       {expanded && (
@@ -82,15 +88,7 @@ function GmailSources({ messages }: { messages: GmailMessage[] }) {
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-1 text-xs font-medium text-ideas hover:text-ideas/80 transition-colors"
       >
-        <svg
-          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ExpandChevron expanded={expanded} />
         {messages.length} email{messages.length !== 1 ? 's' : ''}
       </button>
       {expanded && (
@@ -122,15 +120,7 @@ function CalendarSources({ events }: { events: CalendarEvent[] }) {
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-1 text-xs font-medium text-events hover:text-events/80 transition-colors"
       >
-        <svg
-          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        <ExpandChevron expanded={expanded} />
         {events.length} event{events.length !== 1 ? 's' : ''}
       </button>
       {expanded && (

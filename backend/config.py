@@ -19,6 +19,10 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _parse_bool_env(value: str) -> bool:
+    return value.lower() not in ("false", "0", "no")
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables and .env file."""
 
@@ -167,7 +171,7 @@ class Settings(BaseSettings):
 
     @property
     def phoenix_enabled_bool(self) -> bool:
-        return self.PHOENIX_ENABLED.lower() not in ("false", "0", "no")
+        return _parse_bool_env(self.PHOENIX_ENABLED)
 
     # --- Sweep scheduler ---
     SWEEP_ENABLED: str = "true"
@@ -176,11 +180,11 @@ class Settings(BaseSettings):
 
     @property
     def rate_limit_enabled_bool(self) -> bool:
-        return self.RATE_LIMIT_ENABLED.lower() not in ("false", "0", "no")
+        return _parse_bool_env(self.RATE_LIMIT_ENABLED)
 
     @property
     def sweep_enabled_bool(self) -> bool:
-        return self.SWEEP_ENABLED.lower() not in ("false", "0", "no")
+        return _parse_bool_env(self.SWEEP_ENABLED)
 
 
 settings = Settings()
