@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { Thing } from '../store'
@@ -67,11 +67,9 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
-  // Reset when opened
+  // Focus input when opened (DOM side effect only)
   useEffect(() => {
     if (commandPaletteOpen) {
-      setQuery('')
-      setSelectedIndex(0)
       setTimeout(() => inputRef.current?.focus(), 0)
     }
   }, [commandPaletteOpen])
@@ -79,9 +77,10 @@ export function CommandPalette() {
   const close = useCallback(() => {
     closeCommandPalette()
     setQuery('')
+    setSelectedIndex(0)
   }, [closeCommandPalette])
 
-  const actions: Action[] = [
+  const actions: Action[] = useMemo(() => [
     {
       id: 'new-thing',
       label: 'New Thing',
@@ -143,50 +142,51 @@ export function CommandPalette() {
         setTimeout(() => document.getElementById('chat-input')?.focus(), 50)
       },
     },
-  ]
-
-  // Parse prefix filters
-  const isActionFilter = query.startsWith('>')
-  const typeFilterMatch = query.match(/^#(\w*)/)
-  const typeFilter = typeFilterMatch ? (typeFilterMatch[1] ?? '').toLowerCase() : null
-  const rawQuery = isActionFilter
-    ? query.slice(1).trim()
-    : typeFilter !== null
-    ? query.slice(typeFilterMatch![0].length).trim()
-    : query.trim()
-
-  // Filter + score things
-  const matchedThings: Thing[] = !isActionFilter
-    ? (rawQuery
-        ? things
-            .filter(t => fuzzyMatch(rawQuery, t.title) || (t.type_hint && fuzzyMatch(rawQuery, t.type_hint)))
-            .filter(t => !typeFilter || (t.type_hint ?? '').toLowerCase().includes(typeFilter))
-            .sort((a, b) => fuzzyScore(rawQuery, b.title) - fuzzyScore(rawQuery, a.title))
-            .slice(0, 7)
-        : typeFilter
-        ? things.filter(t => (t.type_hint ?? '').toLowerCase().includes(typeFilter)).slice(0, 7)
-        : things.slice(0, 5) // recent items when empty
-      )
-    : []
-
-  const matchedActions: Action[] = !typeFilter
-    ? (rawQuery
-        ? actions.filter(a =>
-            fuzzyMatch(rawQuery, a.label) ||
-            (a.keywords && fuzzyMatch(rawQuery, a.keywords))
-          )
-        : actions
-      )
-    : []
+  ], [close, setMobileView, toggleSidebar, setMainView, openSettings, openFeedback])
 
   type ResultItem =
     | { kind: 'thing'; thing: Thing }
     | { kind: 'action'; action: Action }
 
-  const results: ResultItem[] = [
-    ...matchedThings.map(t => ({ kind: 'thing' as const, thing: t })),
-    ...matchedActions.map(a => ({ kind: 'action' as const, action: a })),
-  ]
+  // Parse prefix filters and build results, memoized to keep stable references
+  const results: ResultItem[] = useMemo(() => {
+    const isActionFilter = query.startsWith('>')
+    const typeFilterMatch = query.match(/^#(\w*)/)
+    const typeFilter = typeFilterMatch ? (typeFilterMatch[1] ?? '').toLowerCase() : null
+    const rawQuery = isActionFilter
+      ? query.slice(1).trim()
+      : typeFilter !== null
+      ? query.slice(typeFilterMatch![0].length).trim()
+      : query.trim()
+
+    const matchedThings: Thing[] = !isActionFilter
+      ? (rawQuery
+          ? things
+              .filter(t => fuzzyMatch(rawQuery, t.title) || (t.type_hint && fuzzyMatch(rawQuery, t.type_hint)))
+              .filter(t => !typeFilter || (t.type_hint ?? '').toLowerCase().includes(typeFilter))
+              .sort((a, b) => fuzzyScore(rawQuery, b.title) - fuzzyScore(rawQuery, a.title))
+              .slice(0, 7)
+          : typeFilter
+          ? things.filter(t => (t.type_hint ?? '').toLowerCase().includes(typeFilter)).slice(0, 7)
+          : things.slice(0, 5)
+        )
+      : []
+
+    const matchedActions: Action[] = !typeFilter
+      ? (rawQuery
+          ? actions.filter(a =>
+              fuzzyMatch(rawQuery, a.label) ||
+              (a.keywords && fuzzyMatch(rawQuery, a.keywords))
+            )
+          : actions
+        )
+      : []
+
+    return [
+      ...matchedThings.map(t => ({ kind: 'thing' as const, thing: t })),
+      ...matchedActions.map(a => ({ kind: 'action' as const, action: a })),
+    ]
+  }, [query, things, actions])
 
   const clampedIndex = Math.min(selectedIndex, Math.max(0, results.length - 1))
 
@@ -224,11 +224,6 @@ export function CommandPalette() {
     }
   }, [clampedIndex])
 
-  // Reset selection when results change
-  useEffect(() => {
-    setSelectedIndex(0)
-  }, [query])
-
   if (!commandPaletteOpen) return null
 
   return (
@@ -249,7 +244,7 @@ export function CommandPalette() {
             ref={inputRef}
             type="text"
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => { setQuery(e.target.value); setSelectedIndex(0) }}
             onKeyDown={handleKeyDown}
             placeholder="Search things or type > for actions, #type to filter…"
             className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none"
