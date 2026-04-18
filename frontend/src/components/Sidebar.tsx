@@ -415,10 +415,29 @@ function loadSidebarWidth(): number {
   return SIDEBAR_DEFAULT_WIDTH
 }
 
+function singularize(label: string): string {
+  if (label === 'People') return 'person'
+  if (label.endsWith('ies')) return label.slice(0, -3) + 'y'
+  return label.slice(0, -1).toLowerCase()
+}
+
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, theOneThing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView, sidebarOpen, setSidebarOpen } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, theOneThing: s.theOneThing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView, sidebarOpen: s.sidebarOpen, setSidebarOpen: s.setSidebarOpen })))
+  const { currentUser, logout, things, thingTypes, briefing, theOneThing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView, sidebarOpen, setSidebarOpen, createThing } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, theOneThing: s.theOneThing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView, sidebarOpen: s.sidebarOpen, setSidebarOpen: s.setSidebarOpen, createThing: s.createThing })))
   const disclosure = useProgressiveDisclosure()
   const [searchQuery, setSearchQuery] = useState('')
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  const toggleSection = useCallback((type: string) => {
+    setCollapsedSections(prev => {
+      const next = new Set(prev)
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
+      return next
+    })
+  }, [])
+  const [quickAddSection, setQuickAddSection] = useState<string | null>(null)
+  const [quickAddTitle, setQuickAddTitle] = useState('')
+  const [quickAddSaving, setQuickAddSaving] = useState(false)
+  const [quickAddError, setQuickAddError] = useState<string | null>(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -487,6 +506,22 @@ export function Sidebar() {
     }, 250)
   }, [searchThings, clearSearch])
 
+  const handleQuickAddSubmit = useCallback(async (type: string) => {
+    const trimmed = quickAddTitle.trim()
+    if (!trimmed) return
+    setQuickAddSaving(true)
+    setQuickAddError(null)
+    try {
+      await createThing(trimmed, type)
+      setQuickAddSection(null)
+      setQuickAddTitle('')
+    } catch (err) {
+      setQuickAddError(err instanceof Error ? err.message : 'Failed to create')
+    } finally {
+      setQuickAddSaving(false)
+    }
+  }, [quickAddTitle, createThing])
+
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false)
   const filterDropdownRef = useRef<HTMLDivElement>(null)
 
@@ -549,7 +584,7 @@ export function Sidebar() {
 
   // Group active things by type, excluding children of projects (shown under parent)
   const activeGroups = useMemo(() => {
-    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal', 'preference'] as const
+    const TYPE_ORDER = ['task', 'project', 'person', 'idea', 'note', 'goal', 'journal', 'preference'] as const
     const FALLBACK_LABELS: Record<string, string> = {
       project: 'Projects',
       goal: 'Goals',
@@ -558,6 +593,7 @@ export function Sidebar() {
       idea: 'Ideas',
       journal: 'Journal',
       preference: 'Preferences',
+      person: 'People',
     }
     // Build label map from DB types (pluralise by appending 's')
     const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
@@ -614,11 +650,11 @@ export function Sidebar() {
 
   // Available types for the filter dropdown (derived from active things)
   const availableTypes = useMemo(() => {
-    const TYPE_ORDER = ['project', 'goal', 'task', 'note', 'idea', 'journal', 'preference']
+    const TYPE_ORDER = ['task', 'project', 'person', 'idea', 'note', 'goal', 'journal', 'preference']
     const FALLBACK_LABELS: Record<string, string> = {
       project: 'Projects', goal: 'Goals', task: 'Tasks',
       note: 'Notes', idea: 'Ideas', journal: 'Journal',
-      preference: 'Preferences',
+      preference: 'Preferences', person: 'People',
     }
     const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
     for (const tt of thingTypes) {
@@ -1108,12 +1144,49 @@ export function Sidebar() {
         {/* Active Things grouped by type */}
         {activeGroups.map(group => (
           <section key={group.type} className="py-2">
-            <h2 className="px-4 pb-1 text-label font-semibold text-on-surface-variant flex items-center gap-1.5">
+            <button
+              onClick={() => toggleSection(group.type)}
+              aria-expanded={!collapsedSections.has(group.type)}
+              className="w-full px-4 pb-1 text-label font-semibold text-on-surface-variant flex items-center gap-1.5 hover:text-on-surface transition-colors"
+            >
               <span>{group.icon}</span>
               <span>{group.label}</span>
-              <span className="ml-auto text-[10px] font-normal tabular-nums">{group.items.length}</span>
-            </h2>
-            {group.items.map(t => <ThingCard key={t.id} thing={t} />)}
+              <span className="ml-auto flex items-center gap-1">
+                <span className="text-[10px] font-normal tabular-nums">{group.items.length}</span>
+                <span className="text-[10px]">{collapsedSections.has(group.type) ? '►' : '▼'}</span>
+              </span>
+            </button>
+            {!collapsedSections.has(group.type) && (
+              <>
+                {group.items.map(t => <ThingCard key={t.id} thing={t} />)}
+                {quickAddSection === group.type ? (
+                  <form
+                    className="px-4 pb-2"
+                    onSubmit={e => { e.preventDefault(); handleQuickAddSubmit(group.type) }}
+                  >
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder={`Add ${singularize(group.label)}…`}
+                      value={quickAddTitle}
+                      onChange={e => setQuickAddTitle(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') { setQuickAddSection(null); setQuickAddTitle('') } }}
+                      disabled={quickAddSaving}
+                      className="w-full text-xs bg-surface-container-high rounded px-2 py-1.5 text-on-surface placeholder-on-surface-variant/60 outline-none border border-on-surface-variant/20 focus:border-primary"
+                    />
+                    {quickAddError && <p className="text-[10px] text-ideas mt-1">{quickAddError}</p>}
+                  </form>
+                ) : (
+                  <button
+                    onClick={() => { setQuickAddSection(group.type); setQuickAddTitle(''); setQuickAddError(null) }}
+                    className="mx-4 mb-1 text-[11px] text-on-surface-variant/60 hover:text-primary transition-colors flex items-center gap-0.5"
+                  >
+                    <span>+</span>
+                    <span>Add {singularize(group.label)}</span>
+                  </button>
+                )}
+              </>
+            )}
           </section>
         ))}
 
