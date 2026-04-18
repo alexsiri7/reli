@@ -116,6 +116,11 @@ def _get_open_questions(thing: ThingRecord) -> list[str]:
             if isinstance(parsed, list):
                 return parsed
         except (json.JSONDecodeError, TypeError):
+            logger.debug(
+                "Thing %s has malformed open_questions (not valid JSON list): %r",
+                getattr(thing, "id", "unknown"),
+                raw[:100],
+            )
             return []
     if isinstance(raw, list):
         return raw
@@ -159,7 +164,7 @@ async def _execute_lookup(action: str, query: str | None, user_id: str) -> list[
         out = []
         for r in results:
             d = r.to_dict()
-            # Truncate snippets to 500 chars to respect Thing.data 100KB limit
+            # Cap snippet length for LLM readability; 500 chars is well under any storage budget
             if len(d.get("snippet", "")) > 500:
                 d["snippet"] = d["snippet"][:500]
             out.append(d)
@@ -194,7 +199,11 @@ async def _execute_lookup(action: str, query: str | None, user_id: str) -> list[
                 })
             return msgs
         except Exception as exc:
-            logger.warning("Gmail lookup failed (user may not be connected): %s", exc)
+            logger.warning(
+                "Gmail lookup failed (%s — user may not be connected or quota exceeded): %s",
+                type(exc).__name__,
+                exc,
+            )
             return []
 
     if action == "calendar_check":
@@ -208,7 +217,7 @@ async def _execute_lookup(action: str, query: str | None, user_id: str) -> list[
             ]
             return matched if matched else events[:5]
         except Exception as exc:
-            logger.warning("Calendar lookup failed: %s", exc)
+            logger.warning("Calendar lookup failed (%s): %s", type(exc).__name__, exc)
             return []
 
     return []
@@ -225,8 +234,8 @@ async def run_research_sweep(
 ) -> ResearchSweepResult:
     """Run proactive research sweep for Things with open questions.
 
-    If *candidates* is None, loads active Things with open_questions directly
-    from the database.
+    If *candidates* is None, loads active (importance <= MIN_IMPORTANCE) Things
+    with open_questions directly from the database.
     """
     from .agents import UsageStats
 
@@ -235,23 +244,27 @@ async def run_research_sweep(
 
     # 1. Load candidates if not provided
     if candidates is None:
-        with Session(_engine_mod.engine) as session:
-            stmt = (
-                select(ThingRecord)
-                .where(
-                    ThingRecord.active == True,  # noqa: E712
-                    ThingRecord.open_questions.isnot(None),  # type: ignore[union-attr]
-                    ThingRecord.importance <= MIN_IMPORTANCE,
+        try:
+            with Session(_engine_mod.engine) as session:
+                stmt = (
+                    select(ThingRecord)
+                    .where(
+                        ThingRecord.active == True,  # noqa: E712
+                        ThingRecord.open_questions.isnot(None),  # type: ignore[union-attr]
+                        ThingRecord.importance <= MIN_IMPORTANCE,
+                    )
                 )
-            )
-            if user_id:
-                stmt = stmt.where(
-                    user_filter_clause(ThingRecord.user_id, user_id)
-                )
-            candidates = list(session.exec(stmt).all())
-            # Detach from session so we can use them outside
-            for c in candidates:
-                session.expunge(c)
+                if user_id:
+                    stmt = stmt.where(
+                        user_filter_clause(ThingRecord.user_id, user_id)
+                    )
+                candidates = list(session.exec(stmt).all())
+                # Detach from session so we can use them outside
+                for c in candidates:
+                    session.expunge(c)
+        except Exception as exc:
+            logger.warning("Research sweep: candidate load failed: %s", exc)
+            return result  # return empty ResearchSweepResult
 
     # 2. Filter by _should_skip and sort by importance (most important first)
     eligible = [t for t in candidates if not _should_skip(t) and _get_open_questions(t)]
@@ -308,7 +321,9 @@ async def run_research_sweep(
 
                 old_data = record.data if isinstance(record.data, dict) else {}
                 record.data = {**old_data, "research": research_data}
-                record.updated_at = now
+                # Do NOT touch record.updated_at — research is background enrichment,
+                # not a user edit; mutating updated_at would break the 7-day cooldown
+                # (_should_skip compares updated_at against last_research timestamp)
 
                 # 6. Create SweepFindingRecord
                 top_result_title = ""

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
+
 from ..auth import require_user
 from ..db_engine import user_filter_clause
 from ..db_models import SweepRunRecord
@@ -38,7 +39,8 @@ async def run_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
 
     candidates = collect_candidates(user_id=user_id)
 
-    # Phase 2.5: Proactive research — fetch external data for Things with open questions
+    # Phase 2.5: Proactive research — fetch external data for Things with open questions.
+    # Results are stored in Thing.data['research'] and visible to reflection on NEXT sweep cycle.
     research_result: ResearchSweepResult = await run_research_sweep(user_id=user_id)
 
     result: ReflectionResult = await reflect_on_candidates(candidates, user_id=user_id)
