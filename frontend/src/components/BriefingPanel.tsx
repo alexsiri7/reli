@@ -180,9 +180,7 @@ export function LearnedPreferenceCard({
     <div className="group rounded-xl bg-surface-container-low hover:bg-surface-container-high/60 transition-colors overflow-hidden">
       <div className="flex items-start gap-3 py-3 px-4">
         <div className={`w-1 self-stretch rounded-full shrink-0 ${dotColor}`} />
-        <div className="flex items-center gap-2 mt-0.5 shrink-0">
-          <span className="text-sm">{'\u{1F9E0}'}</span>
-        </div>
+        <span className="text-sm mt-0.5 shrink-0">{'\u{1F9E0}'}</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm text-on-surface leading-snug">{pref.title}</p>
           <div className="flex items-center gap-2 mt-1.5">
