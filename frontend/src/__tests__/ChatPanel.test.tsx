@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { Nudge } from '../generated/api-types'
 
 type Msg = {
@@ -17,6 +17,8 @@ type Msg = {
   model?: string | null
 }
 
+const mockClearChatPrefill = vi.fn()
+
 const mockStore = {
   messages: [] as Msg[],
   things: [] as unknown[],
@@ -31,6 +33,8 @@ const mockStore = {
   googleSeedLoading: false,
   calendarStatus: { configured: false, connected: false },
   nudges: [] as Nudge[],
+  chatPrefill: null as string | null,
+  clearChatPrefill: mockClearChatPrefill,
 }
 
 const mockDismissNudge = vi.fn()
@@ -72,6 +76,7 @@ beforeEach(() => {
   mockStore.chatLoading = false
   mockStore.historyLoading = false
   mockStore.hasMoreHistory = false
+  mockClearChatPrefill.mockReset()
 })
 
 describe('ChatPanel', () => {
@@ -182,5 +187,16 @@ describe('ChatPanel', () => {
     expect(screen.getByText('Context Active')).toBeInTheDocument()
     expect(screen.getAllByText('Auth Refactor').length).toBeGreaterThan(0)
     mockStore.messages = []
+  })
+
+  it('populates textarea from chatPrefill and clears it', async () => {
+    mockStore.chatPrefill = 'Let\'s talk about "Write proposal"'
+    render(<ChatPanel />)
+    const textarea = screen.getByPlaceholderText('Message Reli…')
+    await waitFor(() => {
+      expect(textarea).toHaveValue('Let\'s talk about "Write proposal"')
+    })
+    expect(mockClearChatPrefill).toHaveBeenCalledTimes(1)
+    mockStore.chatPrefill = null
   })
 })

@@ -752,7 +752,7 @@ function InteractionStyleSelector({ style, onChange }: { style: InteractionStyle
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus, gmailStatus, nudges } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus, gmailStatus, nudges, chatPrefill, clearChatPrefill } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -770,6 +770,8 @@ export function ChatPanel() {
       calendarStatus: s.calendarStatus,
       gmailStatus: s.gmailStatus,
       nudges: s.nudges,
+      chatPrefill: s.chatPrefill,
+      clearChatPrefill: s.clearChatPrefill,
     }))
   )
   const { isOnline } = useNetworkStatus()
@@ -815,6 +817,17 @@ export function ChatPanel() {
   useEffect(() => {
     registerChatInputFocus(() => inputRef.current?.focus())
   }, [registerChatInputFocus])
+
+  // Consume chatPrefill from store (e.g. briefing "Chat" action)
+  useEffect(() => {
+    if (!chatPrefill) return
+    const prefill = chatPrefill
+    clearChatPrefill()
+    queueMicrotask(() => {
+      setInput(prefill)
+      inputRef.current?.focus()
+    })
+  }, [chatPrefill, clearChatPrefill])
 
   // Scroll to bottom instantly on initial mount
   const hasMountScrolled = useRef(false)

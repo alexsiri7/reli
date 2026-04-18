@@ -120,3 +120,21 @@ describe('store: clearError', () => {
     expect(useStore.getState().error).toBeNull()
   })
 })
+
+describe('store: openChatWithContext', () => {
+  it('sets chatPrefill, rightView, mobileView', () => {
+    useStore.getState().openChatWithContext('thing-1', 'Write proposal')
+    const state = useStore.getState()
+    expect(state.chatPrefill).toBe('Let\'s talk about "Write proposal"')
+    expect(state.rightView).toBe('chat')
+    expect(state.mobileView).toBe('chat')
+  })
+})
+
+describe('store: clearChatPrefill', () => {
+  it('nulls chatPrefill', () => {
+    useStore.setState({ chatPrefill: 'something' })
+    useStore.getState().clearChatPrefill()
+    expect(useStore.getState().chatPrefill).toBeNull()
+  })
+})
