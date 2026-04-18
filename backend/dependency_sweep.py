@@ -16,7 +16,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
-from sqlmodel import Session, select
+from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
 from .db_engine import user_filter_clause
@@ -324,26 +324,17 @@ async def detect_cluster_dependencies(
                     if not reason:
                         continue
 
-                    # Check for existing suggestion (pending/deferred)
+                    # Check for existing suggestion in either direction
                     existing = session.exec(
                         select(ConnectionSuggestionRecord).where(
                             ConnectionSuggestionRecord.status.in_(["pending", "deferred"]),  # type: ignore[union-attr]
-                            ConnectionSuggestionRecord.from_thing_id == from_id,
-                            ConnectionSuggestionRecord.to_thing_id == to_id,
+                            or_(
+                                (ConnectionSuggestionRecord.from_thing_id == from_id) & (ConnectionSuggestionRecord.to_thing_id == to_id),
+                                (ConnectionSuggestionRecord.from_thing_id == to_id) & (ConnectionSuggestionRecord.to_thing_id == from_id),
+                            ),
                         )
                     ).first()
                     if existing:
-                        continue
-
-                    # Check reverse direction too
-                    existing_rev = session.exec(
-                        select(ConnectionSuggestionRecord).where(
-                            ConnectionSuggestionRecord.status.in_(["pending", "deferred"]),  # type: ignore[union-attr]
-                            ConnectionSuggestionRecord.from_thing_id == to_id,
-                            ConnectionSuggestionRecord.to_thing_id == from_id,
-                        )
-                    ).first()
-                    if existing_rev:
                         continue
 
                     # Check for existing relationship in this direction
