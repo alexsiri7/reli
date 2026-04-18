@@ -403,20 +403,23 @@ const STAGE_LABELS: Record<string, string> = {
   response: 'Writing response\u2026',
 }
 
+const STAGES = ['context', 'reasoning', 'response']
+
 function StreamingIndicator({ stage }: { stage: StreamingStage }) {
   if (!stage) return null
   const label = STAGE_LABELS[stage] ?? stage
+  const currentIdx = STAGES.indexOf(stage)
 
   return (
     <div className="flex items-center gap-2 text-xs text-on-surface-variant py-1">
       <span className="flex gap-0.5">
-        {['context', 'reasoning', 'response'].map(s => (
+        {STAGES.map((s, idx) => (
           <span
             key={s}
             className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
               s === stage
                 ? 'bg-primary animate-pulse'
-                : ['context', 'reasoning', 'response'].indexOf(s) < ['context', 'reasoning', 'response'].indexOf(stage)
+                : idx < currentIdx
                   ? 'bg-primary/60'
                   : 'bg-on-surface-variant/30'
             }`}

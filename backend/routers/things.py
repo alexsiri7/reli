@@ -1,9 +1,12 @@
 """CRUD endpoints for Things."""
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -302,9 +305,8 @@ def search_things(
                     seen_ids.add(r.id)
                     results.append((r, 2))
 
-    # Sort by rank (direct matches first), then by updated_at descending
-    results.sort(key=lambda x: (x[1], x[0].updated_at), reverse=False)
-    # Re-sort: rank ascending, then updated_at descending within each rank
+    # Sort: rank ascending (direct matches first), newest first within each rank
+    results.sort(key=lambda x: x[0].updated_at, reverse=True)
     results.sort(key=lambda x: x[1])
 
     return [_row_to_thing(r) for r, _rank in results[:limit]]
@@ -770,9 +772,6 @@ def cleanup_orphan_relationships(
     user_id: str = Depends(require_user),
 ) -> OrphanCleanupResult:
     """Delete all orphan relationships where from/to thing no longer exists."""
-    import logging as _logging
-
-    _logger = _logging.getLogger(__name__)
     thing_ids_subq = select(ThingRecord.id).where(
         user_filter_clause(ThingRecord.user_id, user_id)
     )
