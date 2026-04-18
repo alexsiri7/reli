@@ -284,7 +284,8 @@ def create_event(
     description: str = "",
     user_id: str = "",
 ) -> dict[str, Any]:
-    """Create a calendar event. Returns the created event dict, or empty dict if not connected."""
+    """Create a calendar event. start/end must be UTC ISO-8601 (e.g. "2026-04-22T18:00:00Z").
+    Returns the created event dict, or empty dict if not connected."""
     creds = get_credentials(user_id=user_id)
     if not creds:
         return {}
@@ -337,20 +338,24 @@ def update_event(
 
         # Fetch current event to patch only changed fields
         existing = service.events().get(calendarId="primary", eventId=event_id).execute()
+    except Exception:
+        logger.warning("Google Calendar update_event: failed to fetch existing event (id=%s)", event_id, exc_info=True)
+        return {}
 
-        if summary is not None:
-            existing["summary"] = summary
-        if start is not None:
-            existing.setdefault("start", {})["dateTime"] = start
-            existing["start"].setdefault("timeZone", "UTC")
-        if end is not None:
-            existing.setdefault("end", {})["dateTime"] = end
-            existing["end"].setdefault("timeZone", "UTC")
-        if location is not None:
-            existing["location"] = location
-        if description is not None:
-            existing["description"] = description
+    if summary is not None:
+        existing["summary"] = summary
+    if start is not None:
+        existing.setdefault("start", {})["dateTime"] = start
+        existing["start"].setdefault("timeZone", "UTC")
+    if end is not None:
+        existing.setdefault("end", {})["dateTime"] = end
+        existing["end"].setdefault("timeZone", "UTC")
+    if location is not None:
+        existing["location"] = location
+    if description is not None:
+        existing["description"] = description
 
+    try:
         event = service.events().update(
             calendarId="primary", eventId=event_id, body=existing
         ).execute()
@@ -362,5 +367,5 @@ def update_event(
             "html_link": event.get("htmlLink", ""),
         }
     except Exception:
-        logger.warning("Google Calendar update_event failed", exc_info=True)
+        logger.warning("Google Calendar update_event: failed to write update (id=%s)", event_id, exc_info=True)
         return {}

@@ -51,13 +51,6 @@ class TestCreateEvent:
             "end": {},
             "htmlLink": "",
         }
-        captured_body = {}
-
-        def capture_insert(**kwargs):
-            captured_body.update(kwargs.get("body", {}))
-            return mock_service.events().insert()
-
-        mock_service.events().insert = capture_insert
 
         with (
             patch("backend.google_calendar.get_credentials", return_value=MagicMock()),
@@ -68,7 +61,10 @@ class TestCreateEvent:
 
             create_event("Test", "2026-04-22T18:00:00Z", "2026-04-22T19:00:00Z", location="Room 1")
 
-        assert captured_body.get("location") == "Room 1"
+        insert_call = mock_service.events().insert.call_args
+        assert insert_call is not None
+        body = insert_call.kwargs.get("body") or insert_call.args[0]
+        assert body.get("location") == "Room 1"
 
 
 class TestUpdateEvent:
@@ -107,3 +103,18 @@ class TestUpdateEvent:
 
         assert result["id"] == "evt_123"
         assert result["summary"] == "New Title"
+
+    def test_returns_empty_on_api_exception(self):
+        """Verify that an API exception on GET returns empty dict."""
+        mock_service = MagicMock()
+        mock_service.events().get().execute.side_effect = Exception("API error")
+
+        with (
+            patch("backend.google_calendar.get_credentials", return_value=MagicMock()),
+            patch("backend.google_calendar.build", return_value=mock_service),
+            patch("backend.google_calendar.AuthorizedHttp", return_value=MagicMock()),
+        ):
+            from backend.google_calendar import update_event
+
+            result = update_event("evt_123", summary="New Title")
+        assert result == {}

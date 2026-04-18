@@ -959,7 +959,9 @@ def calendar_create_event(
     """Create a Google Calendar event and store its ID on the Thing.
 
     Returns the created event dict (with 'id', 'summary', 'html_link'),
-    or an error dict if calendar is not connected or Thing not found.
+    or an error dict if calendar is not connected or creation fails.
+    Note: if thing_id is invalid, the event is still created but the ID
+    will not be stored on the Thing.
     """
     from . import google_calendar as gc
 
@@ -980,11 +982,18 @@ def calendar_create_event(
     # Store the calendar event ID on the Thing
     calendar_event_id = event.get("id", "")
     if calendar_event_id and thing_id:
-        update_thing(
+        link_result = update_thing(
             thing_id=thing_id,
             data_json=json.dumps({"calendar_event_id": calendar_event_id}),
             user_id=user_id,
         )
+        if "error" in link_result:
+            logger.warning(
+                "calendar_create_event: created calendar event %s but failed to store id on Thing %s: %s",
+                calendar_event_id,
+                thing_id,
+                link_result["error"],
+            )
 
     return event
 
