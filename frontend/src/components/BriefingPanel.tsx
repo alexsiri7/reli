@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { SweepFinding, BriefingItem, LearnedPreference } from '../store'
+import type { SweepFinding, BriefingItem, LearnedPreference, CalendarEvent } from '../store'
 import { NudgeBanner } from './NudgeBanner'
 
 const FINDING_TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
@@ -30,71 +30,73 @@ function getGreeting(): string {
   return 'Good Evening'
 }
 
-function urgencyLabel(urgency: number): { text: string; className: string } {
-  if (urgency >= 0.8) return { text: 'Urgent', className: 'text-ideas' }
-  if (urgency >= 0.5) return { text: 'Soon', className: 'text-events' }
-  return { text: 'Upcoming', className: 'text-on-surface-variant' }
-}
-
-function OneThingCard({ item, onClick }: { item: BriefingItem; onClick: () => void }) {
-  const urg = urgencyLabel(item.urgency)
+function SectionCard({ title, accent, children }: {
+  title: string
+  accent: string
+  children: React.ReactNode
+}) {
   return (
-    <>
-      {/* Mobile card — border-l-4 with decorative star */}
-      <button
-        onClick={onClick}
-        className="md:hidden w-full text-left relative overflow-hidden rounded-2xl p-6 bg-surface-container-high shadow-2xl border-l-4 border-primary hover:bg-surface-container-high/90 transition-colors cursor-pointer"
-      >
-        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none" aria-hidden>
-          <svg className="w-16 h-16 text-primary" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-          </svg>
-        </div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-primary mb-3 block">The One Thing</p>
-        <h3 className="text-2xl font-bold leading-tight text-on-surface mb-3">{item.thing.title}</h3>
-        {item.reasons.length > 0 && (
-          <p className="text-sm text-on-surface-variant">{item.reasons[0]}</p>
-        )}
-        <div className="flex items-center gap-2 mt-3">
-          <span className={`text-label font-medium ${urg.className}`}>{urg.text}</span>
-          <span className="text-label text-on-surface-variant">· Score {item.score.toFixed(1)}</span>
-        </div>
-      </button>
-      {/* Desktop card — existing glass style */}
-      <button
-        onClick={onClick}
-        className="hidden md:block w-full text-left glass rounded-2xl p-6 hover:bg-surface-container-high/80 transition-colors cursor-pointer"
-      >
-        <p className="text-label text-on-surface-variant mb-2">The One Thing</p>
-        <h3 className="text-headline text-on-surface font-semibold mb-3 leading-tight">{item.thing.title}</h3>
-        {item.reasons.length > 0 && (
-          <p className="text-body text-on-surface-variant mb-3">{item.reasons[0]}</p>
-        )}
-        <div className="flex items-center gap-3">
-          <span className={`text-label font-medium ${urg.className}`}>{urg.text}</span>
-          <span className="text-label text-on-surface-variant">Score {item.score.toFixed(1)}</span>
-        </div>
-      </button>
-    </>
+    <section className="px-6 pb-6">
+      <p className={`text-label font-semibold mb-2 ${accent}`}>{title}</p>
+      <div className="space-y-2">{children}</div>
+    </section>
   )
 }
 
-function PriorityFocusCard({ item, onClick }: { item: BriefingItem; onClick: () => void }) {
+function TodayEventRow({ event }: { event: CalendarEvent }) {
+  const startTime = event.all_day ? 'All day' : new Date(event.start).toLocaleTimeString('en-US', {
+    hour: 'numeric', minute: '2-digit',
+  })
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left rounded-xl p-4 bg-surface-container-low hover:bg-surface-container-high transition-colors cursor-pointer flex items-center gap-4"
-    >
+    <div className="flex items-start gap-3 py-2 px-4">
+      <span className="text-xs text-on-surface-variant tabular-nums shrink-0 pt-0.5 w-16">{startTime}</span>
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-on-surface font-medium truncate">{item.thing.title}</p>
-        {item.reasons.length > 0 && (
-          <p className="text-xs text-on-surface-variant mt-0.5 truncate">{item.reasons[0]}</p>
+        <p className="text-sm text-on-surface leading-snug">{event.summary}</p>
+        {event.location && (
+          <p className="text-xs text-on-surface-variant mt-0.5 truncate">{event.location}</p>
         )}
       </div>
-      <span className="gradient-cta text-xs font-medium px-3 py-1.5 rounded-lg shrink-0">
-        Focus
-      </span>
-    </button>
+    </div>
+  )
+}
+
+export function DueTodayRow({ item, onDone, onSnooze, onChat }: {
+  item: BriefingItem
+  onDone: (id: string) => void
+  onSnooze: (id: string) => void
+  onChat: (id: string, title: string) => void
+}) {
+  return (
+    <div className="group rounded-xl bg-surface-container-low hover:bg-surface-container-high/60 transition-colors overflow-hidden">
+      <div className="flex items-start gap-3 py-3 px-4">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-on-surface font-medium leading-snug">{item.thing.title}</p>
+          {item.reasons.length > 0 && (
+            <p className="text-xs text-on-surface-variant mt-0.5 truncate">{item.reasons[0]}</p>
+          )}
+          <div className="flex items-center gap-2 mt-1.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => onDone(item.thing.id)}
+              className="text-xs text-primary hover:text-primary/80 font-medium"
+            >
+              Done
+            </button>
+            <button
+              onClick={() => onSnooze(item.thing.id)}
+              className="text-xs text-on-surface-variant hover:text-on-surface"
+            >
+              Snooze
+            </button>
+            <button
+              onClick={() => onChat(item.thing.id, item.thing.title)}
+              className="text-xs text-on-surface-variant hover:text-on-surface"
+            >
+              Chat
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -224,7 +226,9 @@ function StatCard({ label, value, suffix, accent }: { label: string; value: numb
 export function BriefingPanel() {
   const {
     theOneThing, secondaryItems, briefingStats, findings, learnedPreferences, nudges,
-    setRightView, openThingDetail, dismissFinding, snoozeFinding, actOnFinding, submitPreferenceFeedback,
+    morningBriefing, calendarEvents,
+    setRightView, dismissFinding, snoozeFinding, actOnFinding,
+    submitPreferenceFeedback, updateThing, snoozeThing, openChatWithContext,
   } = useStore(
     useShallow(s => ({
       theOneThing: s.theOneThing,
@@ -233,12 +237,16 @@ export function BriefingPanel() {
       findings: s.findings,
       learnedPreferences: s.learnedPreferences,
       nudges: s.nudges,
+      morningBriefing: s.morningBriefing,
+      calendarEvents: s.calendarEvents,
       setRightView: s.setRightView,
-      openThingDetail: s.openThingDetail,
       dismissFinding: s.dismissFinding,
       snoozeFinding: s.snoozeFinding,
       actOnFinding: s.actOnFinding,
       submitPreferenceFeedback: s.submitPreferenceFeedback,
+      updateThing: s.updateThing,
+      snoozeThing: s.snoozeThing,
+      openChatWithContext: s.openChatWithContext,
     }))
   )
 
@@ -248,7 +256,25 @@ export function BriefingPanel() {
     snoozeFinding(id, tomorrow.toISOString().slice(0, 10))
   }
 
-  const hasContent = theOneThing || secondaryItems.length > 0 || findings.length > 0 || learnedPreferences.length > 0
+  const handleDoneThing = (id: string) => {
+    updateThing(id, { active: false })
+  }
+
+  const handleSnoozeThing = (id: string) => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    snoozeThing(id, tomorrow.toISOString().slice(0, 10))
+  }
+
+  const todayISO = new Date().toISOString().slice(0, 10)
+  const todayEvents = calendarEvents.filter(e => e.start.slice(0, 10) === todayISO)
+
+  const dueTodayItems = [
+    ...(theOneThing ? [theOneThing] : []),
+    ...secondaryItems,
+  ]
+
+  const hasContent = dueTodayItems.length > 0 || findings.length > 0 || learnedPreferences.length > 0 || todayEvents.length > 0
 
   return (
     <div className="flex-1 flex flex-col bg-canvas min-w-0 min-h-0">
@@ -292,74 +318,65 @@ export function BriefingPanel() {
           <p className="hidden md:block text-body text-on-surface-variant mt-1">{formatGreetingDate()}</p>
         </section>
 
-        {/* The One Thing hero card */}
-        {theOneThing && (
-          <section className="px-6 pb-6">
-            <OneThingCard
-              item={theOneThing}
-              onClick={() => openThingDetail(theOneThing.thing.id)}
-            />
+        {/* NLP Summary */}
+        {morningBriefing?.content.summary && (
+          <section className="px-6 pb-4">
+            <p className="text-body text-on-surface-variant italic leading-relaxed">
+              {morningBriefing.content.summary}
+            </p>
           </section>
         )}
 
-        {/* Priority Focus — first secondary item */}
-        {secondaryItems.length > 0 && (
-          <section className="px-6 pb-6">
-            <p className="text-label text-on-surface-variant mb-2">Priority Focus</p>
-            <div className="space-y-2">
-              {secondaryItems.slice(0, 3).map(item => (
-                <PriorityFocusCard
-                  key={item.thing.id}
-                  item={item}
-                  onClick={() => openThingDetail(item.thing.id)}
-                />
-              ))}
+        {/* Today's Schedule — only when calendar events exist for today */}
+        {todayEvents.length > 0 && (
+          <SectionCard title="Today's Schedule" accent="text-green-500">
+            <div className="rounded-xl bg-surface-container-low overflow-hidden">
+              {todayEvents.map(e => <TodayEventRow key={e.id} event={e} />)}
             </div>
-          </section>
+          </SectionCard>
         )}
 
-        {/* I Noticed — learned preferences */}
-        {learnedPreferences.length > 0 && (
-          <section className="px-6 pb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <p className="text-label text-on-surface-variant">I Noticed</p>
-              <span className="text-[10px] text-on-surface-variant bg-surface-container-high px-1.5 py-0.5 rounded-full">
-                AI-Learned
-              </span>
-            </div>
-            <div className="space-y-2">
-              {learnedPreferences.map(pref => (
-                <LearnedPreferenceCard
-                  key={pref.id}
-                  pref={pref}
-                  onFeedback={submitPreferenceFeedback}
-                />
-              ))}
-            </div>
-          </section>
+        {/* Due Today */}
+        {dueTodayItems.length > 0 && (
+          <SectionCard title="Due Today" accent="text-indigo-400">
+            {dueTodayItems.map(item => (
+              <DueTodayRow
+                key={item.thing.id}
+                item={item}
+                onDone={handleDoneThing}
+                onSnooze={handleSnoozeThing}
+                onChat={openChatWithContext}
+              />
+            ))}
+          </SectionCard>
         )}
 
-        {/* Findings from Sweep */}
+        {/* Needs Attention */}
         {findings.length > 0 && (
-          <section className="px-6 pb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <p className="text-label text-on-surface-variant">Findings from Sweep</p>
-              <span className="text-[10px] text-on-surface-variant bg-surface-container-high px-1.5 py-0.5 rounded-full">
-                AI-Generated Insights
-              </span>
-            </div>
-            <div className="space-y-2">
-              {findings.slice(0, 6).map(f => (
-                <FindingCard
-                  key={f.id}
-                  finding={f}
-                  onDismiss={dismissFinding}
-                  onSnooze={handleSnooze}
-                  onAct={actOnFinding}
-                />
-              ))}
-            </div>
-          </section>
+          <SectionCard title="Needs Attention" accent="text-amber-500">
+            {findings.slice(0, 6).map(f => (
+              <FindingCard
+                key={f.id}
+                finding={f}
+                onDismiss={dismissFinding}
+                onSnooze={handleSnooze}
+                onAct={actOnFinding}
+              />
+            ))}
+          </SectionCard>
+        )}
+
+        {/* I Noticed */}
+        {learnedPreferences.length > 0 && (
+          <SectionCard title="I Noticed" accent="text-purple-400">
+            {learnedPreferences.map(pref => (
+              <LearnedPreferenceCard
+                key={pref.id}
+                pref={pref}
+                onFeedback={submitPreferenceFeedback}
+              />
+            ))}
+          </SectionCard>
         )}
 
         {/* Stats footer */}

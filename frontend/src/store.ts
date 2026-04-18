@@ -281,6 +281,9 @@ interface ReliState {
   actOnFinding: (finding: SweepFinding) => void
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
   updateThing: (id: string, updates: Record<string, unknown>) => Promise<void>
+  chatPrefill: string | null
+  openChatWithContext: (thingId: string, title: string) => void
+  clearChatPrefill: () => void
   fetchHistory: () => Promise<void>
   fetchOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
@@ -538,6 +541,7 @@ export const useStore = create<ReliState>((set, get) => ({
   gmailStatus: { connected: false, email: null },
   morningBriefing: null,
   morningBriefingLoading: false,
+  chatPrefill: null,
   briefingPreferences: null,
 
   nudges: [],
@@ -851,6 +855,15 @@ export const useStore = create<ReliState>((set, get) => ({
       get().openThingDetail(finding.thing_id)
     }
   },
+
+  openChatWithContext: (_thingId: string, title: string) => {
+    set({
+      chatPrefill: `Let's talk about "${title}"`,
+      rightView: 'chat',
+      mobileView: 'chat',
+    })
+  },
+  clearChatPrefill: () => set({ chatPrefill: null }),
 
   snoozeThing: async (id: string, checkinDate: string | null) => {
     try {
