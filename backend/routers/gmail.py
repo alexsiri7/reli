@@ -3,6 +3,7 @@
 import base64
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ from ..auth import require_user
 from ..config import settings
 from ..db_models import GoogleTokenRecord
 from ..token_encryption import decrypt_or_plaintext, encrypt
+from ..tools import create_thing
 
 logger = logging.getLogger(__name__)
 
@@ -412,10 +414,6 @@ def get_thread(thread_id: str, user_id: str = Depends(require_user)) -> GmailThr
 @router.post("/seed", summary="Seed Things from recent Gmail senders")
 def seed_from_gmail(user_id: str = Depends(require_user)) -> dict[str, Any]:
     """Fetch recent Gmail threads and create Person Things for unique senders."""
-    import re
-
-    from ..tools import create_thing
-
     service = _get_service(user_id=user_id)
 
     threads_result = (
@@ -429,7 +427,7 @@ def seed_from_gmail(user_id: str = Depends(require_user)) -> dict[str, Any]:
     created: list[dict[str, str]] = []
     seen_senders: set[str] = set()
 
-    for thread_meta in threads[:20]:
+    for thread_meta in threads:  # maxResults=20 already limits this
         try:
             thread = (
                 service.users()

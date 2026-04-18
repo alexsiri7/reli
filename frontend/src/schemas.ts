@@ -145,6 +145,11 @@ export const CalendarStatusSchema = z.object({
   connected: z.boolean(),
 })
 
+export const GmailStatusSchema = z.object({
+  connected: z.boolean(),
+  email: z.string().nullable(),
+})
+
 export const SessionStatsSchema = z.object({
   prompt_tokens: z.number(),
   completion_tokens: z.number(),

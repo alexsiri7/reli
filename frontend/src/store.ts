@@ -21,6 +21,7 @@ import {
   ChatResponseSchema,
   SessionStatsSchema,
   CalendarStatusSchema,
+  GmailStatusSchema,
   CalendarEventSchema,
   ModelSettingsSchema,
   UserSettingsSchema,
@@ -160,6 +161,11 @@ export interface CalendarStatus {
   connected: boolean
 }
 
+export interface GmailStatus {
+  connected: boolean
+  email: string | null
+}
+
 export type InteractionStyle = 'auto' | 'coach' | 'consultant'
 
 export type ChatMode = 'normal' | 'planning'
@@ -221,6 +227,7 @@ interface ReliState {
   error: string | null
   calendarStatus: CalendarStatus
   calendarEvents: CalendarEvent[]
+  gmailStatus: GmailStatus
 
   morningBriefing: MorningBriefing | null
   morningBriefingLoading: boolean
@@ -276,6 +283,7 @@ interface ReliState {
   sendMessage: (text: string) => Promise<void>
   clearError: () => void
   fetchCalendarStatus: () => Promise<void>
+  fetchGmailStatus: () => Promise<void>
   fetchCalendarEvents: () => Promise<void>
   connectCalendar: () => Promise<void>
   disconnectCalendar: () => Promise<void>
@@ -523,6 +531,7 @@ export const useStore = create<ReliState>((set, get) => ({
   error: null,
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [],
+  gmailStatus: { connected: false, email: null },
   morningBriefing: null,
   morningBriefingLoading: false,
   briefingPreferences: null,
@@ -1093,6 +1102,17 @@ export const useStore = create<ReliState>((set, get) => ({
       if (!res.ok) return
       const data: CalendarStatus = validateResponse(CalendarStatusSchema, await res.json(), '/calendar/status')
       set({ calendarStatus: data })
+    } catch {
+      // ignore
+    }
+  },
+
+  fetchGmailStatus: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/gmail/status`)
+      if (!res.ok) return
+      const data: GmailStatus = validateResponse(GmailStatusSchema, await res.json(), '/gmail/status')
+      set({ gmailStatus: data })
     } catch {
       // ignore
     }

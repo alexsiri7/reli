@@ -748,7 +748,7 @@ function InteractionStyleSelector({ style, onChange }: { style: InteractionStyle
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus, gmailStatus } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -764,6 +764,7 @@ export function ChatPanel() {
       seedFromGoogle: s.seedFromGoogle,
       googleSeedLoading: s.googleSeedLoading,
       calendarStatus: s.calendarStatus,
+      gmailStatus: s.gmailStatus,
     }))
   )
   const { isOnline } = useNetworkStatus()
@@ -969,8 +970,8 @@ export function ChatPanel() {
                     ))}
                   </div>
 
-                  {/* Google import button — only if calendar is connected */}
-                  {calendarStatus?.connected && (
+                  {/* Google import button — show if calendar or Gmail is connected */}
+                  {(calendarStatus?.connected || gmailStatus?.connected) && (
                     <div className="ml-10 mt-2 border-t border-on-surface-variant/10 pt-4">
                       <p className="text-label text-on-surface-variant tracking-widest mb-2">OR IMPORT YOUR DATA</p>
                       <button

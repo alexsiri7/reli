@@ -523,6 +523,18 @@ class ChatPipeline:
     # Calendar data fetching
     # ------------------------------------------------------------------
 
+    def _is_new_user(self) -> bool:
+        """Return True if this user has no surfaced, active Things (new-user onboarding)."""
+        with Session(_engine_mod.engine) as session:
+            surfaced_count = session.exec(
+                select(func.count(ThingRecord.id)).where(
+                    user_filter_clause(ThingRecord.user_id, self.user_id),
+                    ThingRecord.surface == True,
+                    ThingRecord.active == True,
+                )
+            ).one()
+        return surfaced_count == 0
+
     def _fetch_calendar_events(self) -> list[dict] | None:
         """Fetch upcoming calendar events if Google Calendar is connected."""
         if gcal_connected(user_id=self.user_id):
@@ -600,15 +612,7 @@ class ChatPipeline:
         warm_context = _fetch_warm_context(session_id, self.user_id) if session_id else []
 
         # Detect new user (0 surfaced, active Things) for onboarding mode
-        with Session(_engine_mod.engine) as session:
-            surfaced_count = session.exec(
-                select(func.count(ThingRecord.id)).where(
-                    user_filter_clause(ThingRecord.user_id, self.user_id),
-                    ThingRecord.surface == True,
-                    ThingRecord.active == True,
-                )
-            ).one()
-        is_new_user = surfaced_count == 0
+        is_new_user = self._is_new_user()
 
         with _tracer.start_as_current_span("reli.pipeline") as pipeline_span:
             pipeline_span.set_attribute("reli.user_id", self.user_id)
@@ -762,15 +766,7 @@ class ChatPipeline:
         warm_context = _fetch_warm_context(session_id, self.user_id) if session_id else []
 
         # Detect new user (0 surfaced, active Things) for onboarding mode
-        with Session(_engine_mod.engine) as session:
-            surfaced_count = session.exec(
-                select(func.count(ThingRecord.id)).where(
-                    user_filter_clause(ThingRecord.user_id, self.user_id),
-                    ThingRecord.surface == True,
-                    ThingRecord.active == True,
-                )
-            ).one()
-        is_new_user = surfaced_count == 0
+        is_new_user = self._is_new_user()
 
         with _tracer.start_as_current_span("reli.pipeline.stream") as pipeline_span:
             pipeline_span.set_attribute("reli.user_id", self.user_id)
