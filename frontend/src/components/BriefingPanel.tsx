@@ -50,26 +50,43 @@ function urgencyLabel(urgency: number): { text: string; className: string } {
 function OneThingCard({ item, onClick }: { item: BriefingItem; onClick: () => void }) {
   const urg = urgencyLabel(item.urgency)
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left glass rounded-2xl p-6 hover:bg-surface-container-high/80 transition-colors cursor-pointer"
-    >
-      <p className="text-label text-on-surface-variant mb-2">The One Thing</p>
-      <h3 className="text-headline text-on-surface font-semibold mb-3 leading-tight">
-        {item.thing.title}
-      </h3>
-      {item.reasons.length > 0 && (
-        <p className="text-body text-on-surface-variant mb-3">
-          {item.reasons[0]}
-        </p>
-      )}
-      <div className="flex items-center gap-3">
-        <span className={`text-label font-medium ${urg.className}`}>{urg.text}</span>
-        <span className="text-label text-on-surface-variant">
-          Score {item.score.toFixed(1)}
-        </span>
-      </div>
-    </button>
+    <>
+      {/* Mobile card — border-l-4 with decorative star */}
+      <button
+        onClick={onClick}
+        className="md:hidden w-full text-left relative overflow-hidden rounded-2xl p-6 bg-surface-container-high shadow-2xl border-l-4 border-primary hover:bg-surface-container-high/90 transition-colors cursor-pointer"
+      >
+        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none" aria-hidden>
+          <svg className="w-16 h-16 text-primary" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          </svg>
+        </div>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-primary mb-3 block">The One Thing</p>
+        <h3 className="text-2xl font-bold leading-tight text-on-surface mb-3">{item.thing.title}</h3>
+        {item.reasons.length > 0 && (
+          <p className="text-sm text-on-surface-variant">{item.reasons[0]}</p>
+        )}
+        <div className="flex items-center gap-2 mt-3">
+          <span className={`text-label font-medium ${urg.className}`}>{urg.text}</span>
+          <span className="text-label text-on-surface-variant">· Score {item.score.toFixed(1)}</span>
+        </div>
+      </button>
+      {/* Desktop card — existing glass style */}
+      <button
+        onClick={onClick}
+        className="hidden md:block w-full text-left glass rounded-2xl p-6 hover:bg-surface-container-high/80 transition-colors cursor-pointer"
+      >
+        <p className="text-label text-on-surface-variant mb-2">The One Thing</p>
+        <h3 className="text-headline text-on-surface font-semibold mb-3 leading-tight">{item.thing.title}</h3>
+        {item.reasons.length > 0 && (
+          <p className="text-body text-on-surface-variant mb-3">{item.reasons[0]}</p>
+        )}
+        <div className="flex items-center gap-3">
+          <span className={`text-label font-medium ${urg.className}`}>{urg.text}</span>
+          <span className="text-label text-on-surface-variant">Score {item.score.toFixed(1)}</span>
+        </div>
+      </button>
+    </>
   )
 }
 
@@ -279,7 +296,10 @@ export function BriefingPanel() {
         {/* Greeting */}
         <section className="px-6 pt-8 pb-4">
           <h1 className="text-display text-on-surface font-bold">{getGreeting()}</h1>
-          <p className="text-body text-on-surface-variant mt-1">{formatGreetingDate()}</p>
+          <p className="md:hidden text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mt-1">
+            {formatGreetingDate().toUpperCase()}
+          </p>
+          <p className="hidden md:block text-body text-on-surface-variant mt-1">{formatGreetingDate()}</p>
         </section>
 
         {/* The One Thing hero card */}
@@ -355,7 +375,23 @@ export function BriefingPanel() {
         {/* Stats footer */}
         {briefingStats && (
           <section className="px-6 pb-20 md:pb-8">
-            <div className="flex gap-3">
+            {/* Mobile stats — border-top, 3-col grid, gradient text */}
+            <div className="md:hidden grid grid-cols-3 gap-4 py-6 border-t border-white/5">
+              <div className="text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Active</p>
+                <p className="text-2xl font-black bg-gradient-to-br from-primary-container to-primary bg-clip-text text-transparent">{briefingStats.active_things}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Due</p>
+                <p className="text-2xl font-black text-events">{briefingStats.checkin_due}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Overdue</p>
+                <p className="text-2xl font-black text-ideas">{briefingStats.overdue}</p>
+              </div>
+            </div>
+            {/* Desktop stats — existing glass cards */}
+            <div className="hidden md:flex gap-3">
               <StatCard label="Active Things" value={briefingStats.active_things} />
               <StatCard label="Check-in Due" value={briefingStats.checkin_due} accent="text-events" />
               <StatCard label="Overdue" value={briefingStats.overdue} accent="text-ideas" />

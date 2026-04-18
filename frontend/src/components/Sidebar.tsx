@@ -713,6 +713,12 @@ export function Sidebar() {
         <div className="px-4 py-4 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
+              {/* Mobile: show user avatar */}
+              {currentUser?.picture && (
+                <div className="md:hidden w-8 h-8 rounded-full overflow-hidden border border-white/5 shrink-0">
+                  <img src={currentUser.picture} alt={currentUser.name ?? 'User'} className="w-full h-full object-cover" />
+                </div>
+              )}
               <div className="w-7 h-7 rounded bg-primary-container flex items-center justify-center">
                 <img src="/logo.svg" alt="Reli" className="h-4 w-4" />
               </div>
@@ -895,8 +901,36 @@ export function Sidebar() {
             {/* The One Thing — hero card */}
             {theOneThing && (
               <div className="px-4 pt-3 pb-1">
+                {/* Mobile hero card — gradient glow, prominent typography */}
                 <div
-                  className="glass p-5 rounded-2xl cursor-pointer hover:bg-surface-container-high/80 transition-colors"
+                  className="md:hidden relative group cursor-pointer active:scale-[0.98] transition-transform duration-300"
+                  onClick={() => useStore.getState().openThingDetail(theOneThing.thing.id)}
+                  role="button"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary to-primary/20 blur-xl opacity-20 group-hover:opacity-30 transition-opacity rounded-2xl" />
+                  <div className="relative bg-surface-container-high p-6 rounded-2xl border border-white/5 overflow-hidden">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-ideas animate-pulse shrink-0" />
+                        <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-on-surface-variant">The One Thing</span>
+                      </div>
+                      <h3 className="text-2xl font-black tracking-tighter text-on-surface leading-tight">
+                        {theOneThing.thing.title}
+                      </h3>
+                      {theOneThing.reasons.length > 0 && (
+                        <p className="text-sm text-on-surface-variant leading-snug">{theOneThing.reasons[0]}</p>
+                      )}
+                      {theOneThing.thing.checkin_date && (
+                        <p className="text-sm font-medium text-primary">
+                          Due {new Date(theOneThing.thing.checkin_date).toLocaleDateString(undefined, { weekday: 'long' })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {/* Desktop hero card — existing glass card */}
+                <div
+                  className="hidden md:block glass p-5 rounded-2xl cursor-pointer hover:bg-surface-container-high/80 transition-colors"
                   onClick={() => useStore.getState().openThingDetail(theOneThing.thing.id)}
                   role="button"
                 >
