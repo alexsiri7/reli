@@ -13,10 +13,12 @@ from ..auth import require_user
 from ..db_engine import user_filter_clause
 from ..db_models import SweepRunRecord
 from ..sweep import (
+    BreakdownResult,
     GapQuestionResult,
     PatternAggregationResult,
     ReflectionResult,
     aggregate_personality_patterns,
+    auto_breakdown_broad_things,
     collect_candidates,
     find_incomplete_things,
     generate_gap_questions,
@@ -35,6 +37,10 @@ async def run_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
     Returns the candidates found and the findings created by LLM reflection.
     """
     candidates = collect_candidates(user_id=user_id)
+
+    # Phase 1.5: Auto-breakdown broad Things that lack subtasks
+    breakdown_result: BreakdownResult = await auto_breakdown_broad_things(user_id=user_id)
+
     result: ReflectionResult = await reflect_on_candidates(candidates, user_id=user_id)
 
     # Phase 3: Aggregate personality patterns from behavioral signals
@@ -42,6 +48,8 @@ async def run_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
 
     return {
         "candidates_found": len(candidates),
+        "breakdown_things_created": breakdown_result.things_created,
+        "breakdown_findings_created": breakdown_result.findings_created,
         "findings_created": result.findings_created,
         "findings": result.findings,
         "personality_patterns_updated": pattern_result.patterns_updated,
