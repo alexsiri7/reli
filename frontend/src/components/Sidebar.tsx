@@ -571,10 +571,13 @@ export function Sidebar() {
 
   useEffect(() => {
     const mql = window.matchMedia('(min-width: 768px)')
-    const handler = (e: MediaQueryListEvent) => setIsOpen(e.matches)
+    const handler = (e: MediaQueryListEvent) => {
+      setIsOpenLocal(e.matches)
+      setSidebarOpen(e.matches)
+    }
     mql.addEventListener('change', handler)
     return () => mql.removeEventListener('change', handler)
-  }, [])
+  }, [setSidebarOpen])
 
   const upcoming = things
     .filter(t => t.checkin_date != null)

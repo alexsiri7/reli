@@ -34,30 +34,40 @@ jobs:
             echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H 100.120.193.82 >> ~/.ssh/known_hosts
+          if ! grep -q "100.120.193.82" ~/.ssh/known_hosts; then
+            echo "ERROR: ssh-keyscan produced no output — host may be unreachable"
+            exit 1
+          fi
+
       - name: Deploy staging via SSH
-        uses: appleboy/ssh-action@v1
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
           DEPLOY_SHA: ${{ steps.sha.outputs.sha }}
-        with:
-          host: 100.120.193.82
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.SSH_DEPLOY_KEY }}
-          envs: DEPLOY_SHA,GHCR_TOKEN,GHCR_USER
-          script: |
-            IMAGE="ghcr.io/alexsiri7/reli"
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=30 -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@100.120.193.82 << EOF
+          export GHCR_TOKEN="${GHCR_TOKEN}"
+          export GHCR_USER="${GHCR_USER}"
+          export DEPLOY_SHA="${DEPLOY_SHA}"
+          IMAGE="ghcr.io/alexsiri7/reli"
 
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            docker pull "$IMAGE:$DEPLOY_SHA"
+          echo "\$GHCR_TOKEN" | docker login ghcr.io -u "\$GHCR_USER" --password-stdin
+          docker pull "\$IMAGE:\$DEPLOY_SHA"
 
-            cd /mnt/ext-fast/gc/rigs/reli
-            # fetch+reset instead of pull --rebase: handles server-side unstaged changes cleanly
-            # Note: resets tracked files only; untracked files (.env, etc.) are preserved
-            git fetch origin main
-            git reset --hard origin/main
-            docker rm -f reli-staging 2>/dev/null || true
-            RELI_IMAGE_TAG="$DEPLOY_SHA" docker compose -f docker-compose.staging.yml up -d --remove-orphans
+          cd /mnt/ext-fast/gc/rigs/reli
+          # fetch+reset instead of pull --rebase: handles server-side unstaged changes cleanly
+          # Note: resets tracked files only; untracked files (.env, etc.) are preserved
+          git fetch origin main
+          git reset --hard origin/main
+          docker rm -f reli-staging 2>/dev/null || true
+          RELI_IMAGE_TAG="\$DEPLOY_SHA" docker compose -f docker-compose.staging.yml up -d --remove-orphans
+          EOF
 
       - name: Wait for staging health
         run: |
@@ -124,62 +134,72 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H 100.120.193.82 >> ~/.ssh/known_hosts
+          if ! grep -q "100.120.193.82" ~/.ssh/known_hosts; then
+            echo "ERROR: ssh-keyscan produced no output — host may be unreachable"
+            exit 1
+          fi
+
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
           DEPLOY_SHA: ${{ needs.deploy-staging.outputs.deploy_sha }}
-        with:
-          host: 100.120.193.82
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.SSH_DEPLOY_KEY }}
-          envs: DEPLOY_SHA,GHCR_TOKEN,GHCR_USER
-          script: |
-            IMAGE="ghcr.io/alexsiri7/reli"
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=30 -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@100.120.193.82 << EOF
+          export GHCR_TOKEN="${GHCR_TOKEN}"
+          export GHCR_USER="${GHCR_USER}"
+          export DEPLOY_SHA="${DEPLOY_SHA}"
+          IMAGE="ghcr.io/alexsiri7/reli"
 
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          echo "\$GHCR_TOKEN" | docker login ghcr.io -u "\$GHCR_USER" --password-stdin
 
-            # Tag current running image as :rollback before deploying
-            CURRENT_ID=$(docker inspect --format='{{.Image}}' reli-reli-1 2>/dev/null || true)
-            if [ -n "$CURRENT_ID" ]; then
-              docker tag "$CURRENT_ID" "$IMAGE:rollback"
+          # Tag current running image as :rollback before deploying
+          CURRENT_ID=\$(docker inspect --format='{{.Image}}' reli-reli-1 2>/dev/null || true)
+          if [ -n "\$CURRENT_ID" ]; then
+            docker tag "\$CURRENT_ID" "\$IMAGE:rollback"
+          fi
+
+          # Pull the new image (should already be cached from staging)
+          docker pull "\$IMAGE:\$DEPLOY_SHA"
+
+          # Update and restart production
+          cd /mnt/ext-fast/gc/rigs/reli
+          git pull --rebase
+          RELI_IMAGE_TAG="\$DEPLOY_SHA" docker compose up -d
+
+          # Verify the container is healthy
+          echo "Waiting for health check..."
+          HEALTHY=false
+          for i in 1 2 3 4 5; do
+            sleep 3
+            if curl -sf --max-time 5 http://localhost:8000/healthz | grep -q '"status":"ok"'; then
+              HEALTHY=true
+              break
             fi
+            echo "Health check attempt \$i failed, retrying..."
+          done
 
-            # Pull the new image (should already be cached from staging)
-            docker pull "$IMAGE:$DEPLOY_SHA"
-
-            # Update and restart production
-            cd /mnt/ext-fast/gc/rigs/reli
-            git pull --rebase
-            RELI_IMAGE_TAG="$DEPLOY_SHA" docker compose up -d
-
-            # Verify the container is healthy
-            echo "Waiting for health check..."
-            HEALTHY=false
-            for i in 1 2 3 4 5; do
-              sleep 3
-              if curl -sf --max-time 5 http://localhost:8000/healthz | grep -q '"status":"ok"'; then
-                HEALTHY=true
-                break
-              fi
-              echo "Health check attempt $i failed, retrying..."
-            done
-
-            if [ "$HEALTHY" = true ]; then
-              echo "Deploy successful: $DEPLOY_SHA (health check passed)"
+          if [ "\$HEALTHY" = true ]; then
+            echo "Deploy successful: \$DEPLOY_SHA (health check passed)"
+          else
+            echo "Deploy FAILED — health check did not pass after 5 attempts"
+            echo "Rolling back to previous image..."
+            RELI_IMAGE_TAG=rollback docker compose up -d
+            sleep 5
+            if curl -sf --max-time 5 http://localhost:8000/healthz | grep -q '"status":"ok"'; then
+              echo "Rollback successful — previous version is healthy"
             else
-              echo "Deploy FAILED — health check did not pass after 5 attempts"
-              echo "Rolling back to previous image..."
-              RELI_IMAGE_TAG=rollback docker compose up -d
-              sleep 5
-              if curl -sf --max-time 5 http://localhost:8000/healthz | grep -q '"status":"ok"'; then
-                echo "Rollback successful — previous version is healthy"
-              else
-                echo "WARNING: Rollback version also failed health check"
-              fi
-              exit 1
+              echo "WARNING: Rollback version also failed health check"
             fi
+            exit 1
+          fi
+          EOF
 
       - name: Notify prod landing
         if: success()
