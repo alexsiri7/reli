@@ -175,8 +175,6 @@ export function CommandPalette() {
             fuzzyMatch(rawQuery, a.label) ||
             (a.keywords && fuzzyMatch(rawQuery, a.keywords))
           )
-        : isActionFilter
-        ? actions
         : actions
       )
     : []
@@ -273,19 +271,18 @@ export function CommandPalette() {
                 {rawQuery ? 'Things' : 'Recent Things'}
               </p>
               {matchedThings.map((thing, i) => {
-                const idx = i
-                const isSelected = idx === clampedIndex
+                const isSelected = i === clampedIndex
                 return (
                   <button
                     key={thing.id}
-                    data-index={idx}
+                    data-index={i}
                     className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors ${
                       isSelected
                         ? 'bg-indigo-50 dark:bg-indigo-900/30'
                         : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
                     }`}
                     onClick={() => { openThingDetail(thing.id); setMobileView('things'); close() }}
-                    onMouseEnter={() => setSelectedIndex(idx)}
+                    onMouseEnter={() => setSelectedIndex(i)}
                   >
                     <span className="text-base shrink-0">{typeIcon(thing.type_hint)}</span>
                     <div className="flex-1 min-w-0">
