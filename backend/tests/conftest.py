@@ -36,11 +36,11 @@ def tmp_db_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Patch both legacy and ORM database modules to use a temp SQLite file.
+    """Patch the ORM database module to use a temp SQLite file.
 
     Creates tables via ``SQLModel.metadata.create_all()`` (Alembic is not
-    used in tests).  The legacy ``database.db()`` context manager is patched
-    so test files that still use raw ``sqlite3`` connections hit the same DB.
+    used in tests).  Tests that need raw ``sqlite3`` access should also
+    request the ``db`` fixture, which wraps the same temp DB path.
     """
     from sqlmodel import Session, SQLModel, create_engine
 
