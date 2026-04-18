@@ -39,7 +39,11 @@ async def run_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
     candidates = collect_candidates(user_id=user_id)
 
     # Phase 1.5: Auto-breakdown broad Things that lack subtasks
-    breakdown_result: BreakdownResult = await auto_breakdown_broad_things(user_id=user_id)
+    try:
+        breakdown_result: BreakdownResult = await auto_breakdown_broad_things(user_id=user_id)
+    except Exception:
+        logger.warning("Auto-breakdown phase failed, skipping", exc_info=True)
+        breakdown_result = BreakdownResult()
 
     result: ReflectionResult = await reflect_on_candidates(candidates, user_id=user_id)
 
@@ -49,6 +53,7 @@ async def run_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
     return {
         "candidates_found": len(candidates),
         "breakdown_things_created": breakdown_result.things_created,
+        "breakdown_relationships_created": breakdown_result.relationships_created,
         "breakdown_findings_created": breakdown_result.findings_created,
         "findings_created": result.findings_created,
         "findings": result.findings,

@@ -474,7 +474,7 @@ def find_broad_things_without_subtasks(session: Session, user_id: str = "") -> l
 
     A Thing qualifies if:
     - It's active with type_hint in ('project', 'event', 'goal', 'trip')
-    - importance <= 2 (only break down high-priority Things)
+    - importance <= 2 (skip explicitly low-priority Things; 2 is the default)
     - It has NO active children via 'parent-of' relationship
     """
     _p = ThingRecord.__table__.alias("p")
@@ -1713,7 +1713,7 @@ async def generate_gap_questions(
 
 
 # ---------------------------------------------------------------------------
-# Phase 3a.5: Auto task breakdown for broad Things
+# Phase 1.5: Auto task breakdown for broad Things
 # ---------------------------------------------------------------------------
 
 BREAKDOWN_SYSTEM = """You are a PA that auto-creates subtasks for broad Things.
@@ -1832,8 +1832,6 @@ async def auto_breakdown_broad_things(
                     logger.warning("Failed to create subtask %r: %s", title, result["error"])
                     continue
                 subtask_id = result["id"]
-                things_created += 1
-                created_titles.append(title)
 
                 rel = _tools.create_relationship(
                     from_thing_id=thing_id,
@@ -1841,8 +1839,17 @@ async def auto_breakdown_broad_things(
                     relationship_type="parent-of",
                     user_id=user_id,
                 )
-                if "error" not in rel and rel.get("status") != "duplicate":
+                if "error" in rel:
+                    logger.warning(
+                        "Failed to link subtask %r to parent %s: %s",
+                        title, thing_id, rel["error"],
+                    )
+                    continue  # don't count an unlinked task
+
+                things_created += 1
+                if rel.get("status") != "duplicate":
                     relationships_created += 1
+                created_titles.append(title)
 
             if created_titles:
                 titles_str = ", ".join(created_titles)

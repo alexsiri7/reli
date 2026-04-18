@@ -10,6 +10,7 @@ from backend.database import db
 from backend.sweep import (
     SweepCandidate,
     _format_candidates_for_llm,
+    auto_breakdown_broad_things,
     dismiss_stale_findings,
     reflect_on_candidates,
 )
@@ -317,6 +318,12 @@ class TestSweepRouter:
         assert "findings_created" in data
         assert data["findings_created"] == 1
         assert "usage" in data
+        assert "breakdown_things_created" in data
+        assert "breakdown_relationships_created" in data
+        assert "breakdown_findings_created" in data
+        assert isinstance(data["breakdown_things_created"], int)
+        assert isinstance(data["breakdown_relationships_created"], int)
+        assert isinstance(data["breakdown_findings_created"], int)
 
     @pytest.mark.asyncio
     async def test_run_sweep_endpoint_returns_run_history(self, async_client, patched_db):
@@ -416,3 +423,97 @@ class TestDismissStaleFindings:
 
         count = dismiss_stale_findings()
         assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# auto_breakdown_broad_things
+# ---------------------------------------------------------------------------
+
+
+def _make_broad_candidate(
+    thing_id: str = "p1",
+    title: str = "Japan Trip",
+    type_hint: str = "trip",
+    importance: int = 1,
+) -> SweepCandidate:
+    return SweepCandidate(
+        thing_id=thing_id,
+        thing_title=title,
+        finding_type="broad_thing_no_subtasks",
+        message=f"Broad {type_hint} with no subtasks: {title}",
+        priority=2,
+        extra={"type_hint": type_hint, "importance": importance},
+    )
+
+
+class TestAutoBreakdownBroadThings:
+    @pytest.mark.asyncio
+    async def test_empty_candidates_returns_zero_result(self, patched_db):
+        result = await auto_breakdown_broad_things(candidates=[])
+        assert result.things_created == 0
+        assert result.findings_created == 0
+        assert result.relationships_created == 0
+
+    @pytest.mark.asyncio
+    async def test_happy_path_creates_subtasks_and_finding(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Japan Trip", type_hint="trip")
+
+        candidate = _make_broad_candidate(thing_id="p1")
+        llm_response = json.dumps({
+            "things": [
+                {
+                    "thing_id": "p1",
+                    "subtasks": ["Book flights", "Reserve hotel", "Get travel insurance"],
+                }
+            ]
+        })
+
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
+            result = await auto_breakdown_broad_things(candidates=[candidate])
+
+        assert result.things_created == 3
+        assert result.relationships_created == 3
+        assert result.findings_created == 1
+
+        with db() as conn:
+            rows = conn.execute("SELECT * FROM sweep_findings").fetchall()
+        assert len(rows) == 1
+        assert "Japan Trip" in rows[0]["message"]
+        assert "Book flights" in rows[0]["message"]
+
+    @pytest.mark.asyncio
+    async def test_invalid_json_returns_gracefully(self, patched_db):
+        candidate = _make_broad_candidate()
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value="not valid json {{"):
+            result = await auto_breakdown_broad_things(candidates=[candidate])
+        assert result.things_created == 0
+        assert result.findings_created == 0
+
+    @pytest.mark.asyncio
+    async def test_hallucinated_thing_id_is_rejected(self, patched_db):
+        """LLM must not be able to create subtasks for Things not in the candidate set."""
+        candidate = _make_broad_candidate(thing_id="real-id")
+        llm_response = json.dumps({
+            "things": [
+                {"thing_id": "injected-fake-id", "subtasks": ["Malicious subtask"]}
+            ]
+        })
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
+            result = await auto_breakdown_broad_things(candidates=[candidate])
+        assert result.things_created == 0
+
+    @pytest.mark.asyncio
+    async def test_subtasks_capped_at_five(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Big Project", type_hint="project")
+        candidate = _make_broad_candidate(thing_id="p1", title="Big Project", type_hint="project")
+        llm_response = json.dumps({
+            "things": [{
+                "thing_id": "p1",
+                "subtasks": ["T1", "T2", "T3", "T4", "T5", "T6", "T7"],  # 7 items, capped to 5
+            }]
+        })
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
+            result = await auto_breakdown_broad_things(candidates=[candidate])
+        assert result.things_created == 5

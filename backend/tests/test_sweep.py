@@ -12,6 +12,7 @@ from backend.sweep import (
 from backend.sweep import (
     collect_candidates,
     find_approaching_dates,
+    find_broad_things_without_subtasks,
     find_completed_projects,
     find_cross_project_duplicate_effort,
     find_cross_project_resource_conflicts,
@@ -1161,3 +1162,77 @@ class TestIncompleteThings:
         results = collect_candidates()
         types = {c.finding_type for c in results}
         assert "incomplete" in types
+
+
+# ---------------------------------------------------------------------------
+# Broad Things without subtasks
+# ---------------------------------------------------------------------------
+
+
+class TestBroadThingsWithoutSubtasks:
+    def test_project_with_no_children_detected(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "My Trip", type_hint="trip")
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 1
+        assert results[0].thing_id == "p1"
+        assert results[0].finding_type == "broad_thing_no_subtasks"
+        assert results[0].extra["type_hint"] == "trip"
+
+    def test_all_four_broad_types_detected(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "pr", "Project", type_hint="project")
+            _insert_thing(conn, "ev", "Event",   type_hint="event")
+            _insert_thing(conn, "go", "Goal",    type_hint="goal")
+            _insert_thing(conn, "tr", "Trip",    type_hint="trip")
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        ids = {r.thing_id for r in results}
+        assert ids == {"pr", "ev", "go", "tr"}
+
+    def test_with_active_child_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "proj", "Project With Tasks", type_hint="project")
+            _insert_thing(conn, "c1", "Task A", parent_id="proj", active=True)
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 0
+
+    def test_only_inactive_children_still_detected(self, patched_db):
+        """Inactive children must not count — parent still needs breakdown."""
+        with db() as conn:
+            _insert_thing(conn, "proj", "Project", type_hint="project")
+            _insert_thing(conn, "c1", "Done Task", parent_id="proj", active=False)
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 1  # still needs subtasks
+
+    def test_importance_threshold_boundary(self, patched_db):
+        """importance=2 included, importance=3 excluded."""
+        with db() as conn:
+            _insert_thing(conn, "hi", "Medium Pri", type_hint="goal")
+            conn.execute("UPDATE things SET importance = 2 WHERE id = 'hi'")
+            _insert_thing(conn, "lo", "Low Pri", type_hint="goal")
+            conn.execute("UPDATE things SET importance = 3 WHERE id = 'lo'")
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        ids = [r.thing_id for r in results]
+        assert "hi" in ids
+        assert "lo" not in ids
+
+    def test_non_broad_type_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "t1", "A Task",   type_hint="task")
+            _insert_thing(conn, "t2", "A Note",   type_hint="note")
+            _insert_thing(conn, "t3", "A Person", type_hint="person")
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 0
+
+    def test_inactive_parent_excluded(self, patched_db):
+        with db() as conn:
+            _insert_thing(conn, "proj", "Done Project", type_hint="project", active=False)
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 0
