@@ -58,14 +58,11 @@ def _create_thing(client, title: str, checkin_date: str | None = None, active: b
 
 
 def _briefing_titles(data: dict) -> list[str]:
-    """Extract all Thing titles from the new briefing response shape."""
     titles = []
-    if data.get("the_one_thing"):
-        titles.append(data["the_one_thing"]["thing"]["title"])
-    for item in data.get("secondary", []):
-        titles.append(item["thing"]["title"])
-    for item in data.get("parking_lot", []):
-        titles.append(item["title"])
+    if t := data.get("the_one_thing"):
+        titles.append(t["thing"]["title"])
+    titles.extend(item["thing"]["title"] for item in data.get("secondary", []))
+    titles.extend(item["title"] for item in data.get("parking_lot", []))
     return titles
 
 

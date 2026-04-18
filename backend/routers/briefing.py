@@ -77,7 +77,11 @@ def _confidence_label(data: dict) -> str:
         conf = data.get("confidence", 0.0)
         if not isinstance(conf, (int, float)):
             return "emerging"
-    return "strong" if conf >= 0.7 else "moderate" if conf >= 0.5 else "emerging"
+    if conf >= 0.7:
+        return "strong"
+    if conf >= 0.5:
+        return "moderate"
+    return "emerging"
 
 
 @router.get("", response_model=BriefingResponse, summary="Daily Briefing")
@@ -192,7 +196,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
         {"thing_id": s.thing["id"], "title": s.thing["title"],
          "importance": s.importance, "urgency": s.urgency}
         for s in scored[6:]
-    ] if len(scored) > 6 else []
+    ]
 
     return BriefingResponse(
         date=target.isoformat(),
