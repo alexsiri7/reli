@@ -16,6 +16,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
+from sqlalchemy import or_
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
@@ -324,26 +325,17 @@ async def detect_cluster_dependencies(
                     if not reason:
                         continue
 
-                    # Check for existing suggestion (pending/deferred)
-                    existing = session.exec(
+                    # Check for existing suggestion in either direction (pending/deferred)
+                    existing_sugg = session.exec(
                         select(ConnectionSuggestionRecord).where(
                             ConnectionSuggestionRecord.status.in_(["pending", "deferred"]),  # type: ignore[union-attr]
-                            ConnectionSuggestionRecord.from_thing_id == from_id,
-                            ConnectionSuggestionRecord.to_thing_id == to_id,
+                            or_(
+                                (ConnectionSuggestionRecord.from_thing_id == from_id) & (ConnectionSuggestionRecord.to_thing_id == to_id),
+                                (ConnectionSuggestionRecord.from_thing_id == to_id) & (ConnectionSuggestionRecord.to_thing_id == from_id),
+                            ),
                         )
                     ).first()
-                    if existing:
-                        continue
-
-                    # Check reverse direction too
-                    existing_rev = session.exec(
-                        select(ConnectionSuggestionRecord).where(
-                            ConnectionSuggestionRecord.status.in_(["pending", "deferred"]),  # type: ignore[union-attr]
-                            ConnectionSuggestionRecord.from_thing_id == to_id,
-                            ConnectionSuggestionRecord.to_thing_id == from_id,
-                        )
-                    ).first()
-                    if existing_rev:
+                    if existing_sugg:
                         continue
 
                     # Check for existing relationship in this direction
