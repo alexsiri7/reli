@@ -7,6 +7,7 @@ import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInpu
 import { useTTS, ttsSupported } from '../hooks/useTTS'
 import { useNetworkStatus } from '../hooks/useNetworkStatus'
 import { useProgressiveDisclosure } from '../hooks/useProgressiveDisclosure'
+import { NudgeBanner } from './NudgeBanner'
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso)
@@ -751,7 +752,7 @@ function InteractionStyleSelector({ style, onChange }: { style: InteractionStyle
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus, gmailStatus } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus, gmailStatus, nudges } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -768,6 +769,7 @@ export function ChatPanel() {
       googleSeedLoading: s.googleSeedLoading,
       calendarStatus: s.calendarStatus,
       gmailStatus: s.gmailStatus,
+      nudges: s.nudges,
     }))
   )
   const { isOnline } = useNetworkStatus()
@@ -931,6 +933,13 @@ export function ChatPanel() {
             className="flex-1 overflow-y-auto px-5 py-4"
             onScroll={handleScroll}
           >
+            {nudges.length > 0 && (
+              <section className="pb-2">
+                {nudges.map(nudge => (
+                  <NudgeBanner key={nudge.id} nudge={nudge} />
+                ))}
+              </section>
+            )}
             {historyLoading && hasMoreHistory && (
               <div className="flex justify-center py-2">
                 <span className="w-4 h-4 border-2 border-on-surface-variant/30 border-t-primary rounded-full animate-spin" />

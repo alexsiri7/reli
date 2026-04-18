@@ -610,7 +610,6 @@ export function Sidebar() {
       return !isChildOfProject && t.type_hint !== 'preference'
     })
 
-    // Apply client-side filters
     const filterQ = thingFilterQuery.trim().toLowerCase()
     if (filterQ) {
       standalone = standalone.filter(t => t.title.toLowerCase().includes(filterQ))

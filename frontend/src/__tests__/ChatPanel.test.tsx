@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import type { Nudge } from '../generated/api-types'
 
 type Msg = {
   id: string | number
@@ -29,10 +30,24 @@ const mockStore = {
   seedFromGoogle: vi.fn().mockResolvedValue({ count: 0 }),
   googleSeedLoading: false,
   calendarStatus: { configured: false, connected: false },
+  nudges: [] as Nudge[],
 }
 
+const mockDismissNudge = vi.fn()
+const mockStopNudgeType = vi.fn()
+const mockOpenThingDetail = vi.fn()
+
 vi.mock('../store', () => ({
-  useStore: (selector: (s: typeof mockStore) => unknown) => selector(mockStore),
+  useStore: Object.assign(
+    (selector: (s: typeof mockStore) => unknown) => selector(mockStore),
+    {
+      getState: () => ({
+        dismissNudge: mockDismissNudge,
+        stopNudgeType: mockStopNudgeType,
+        openThingDetail: mockOpenThingDetail,
+      }),
+    }
+  ),
 }))
 
 vi.mock('../hooks/useVoiceInput', () => ({
@@ -130,5 +145,21 @@ describe('ChatPanel', () => {
     mockStore.hasMoreHistory = true
     render(<ChatPanel />)
     expect(screen.queryByText("What's on your mind?")).not.toBeInTheDocument()
+  })
+
+  it('renders NudgeBanner when nudges are present', () => {
+    mockStore.nudges = [{
+      id: 'proactive_abc_birthday',
+      nudge_type: 'approaching_date',
+      message: 'Test nudge message',
+      thing_id: 'abc',
+      thing_title: 'Test',
+      thing_type_hint: null,
+      days_away: 1,
+      primary_action_label: null,
+    }]
+    render(<ChatPanel />)
+    expect(screen.getByText('Test nudge message')).toBeInTheDocument()
+    mockStore.nudges = []
   })
 })

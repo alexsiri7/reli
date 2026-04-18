@@ -756,23 +756,10 @@ export const useStore = create<ReliState>((set, get) => ({
       const res = await apiFetch(`${BASE}/briefing`)
       if (!res.ok) return
       const data = validateResponse(BriefingResponseSchema, await res.json(), '/briefing')
-      // Extract Things from the importance × urgency scored response
       const things: Thing[] = []
-      const theOneThing: BriefingItem | null = data.the_one_thing ? {
-        thing: data.the_one_thing.thing,
-        importance: data.the_one_thing.importance,
-        urgency: data.the_one_thing.urgency,
-        score: data.the_one_thing.score,
-        reasons: data.the_one_thing.reasons,
-      } : null
+      const theOneThing: BriefingItem | null = data.the_one_thing ?? null
       if (data.the_one_thing) things.push(data.the_one_thing.thing)
-      const secondaryItems: BriefingItem[] = (data.secondary ?? []).map((item: { thing: Thing; importance: number; urgency: number; score: number; reasons: string[] }) => ({
-        thing: item.thing,
-        importance: item.importance,
-        urgency: item.urgency,
-        score: item.score,
-        reasons: item.reasons,
-      }))
+      const secondaryItems: BriefingItem[] = data.secondary ?? []
       for (const item of secondaryItems) things.push(item.thing)
       const findings = data.findings ?? []
       const learnedPreferences = data.learned_preferences ?? []
