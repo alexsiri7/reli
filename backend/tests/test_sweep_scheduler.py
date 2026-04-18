@@ -174,6 +174,22 @@ class TestRunSweepForUser:
         assert rows[0]["candidates_found"] == 1
         assert rows[0]["findings_created"] == 2
 
+    @pytest.mark.asyncio
+    async def test_runs_dependency_sweep(self, patched_db, db):
+        mock_dep_result = MagicMock(suggestions_created=1, findings_created=1)
+
+        with (
+            patch("backend.sweep.collect_candidates", return_value=[]),
+            patch(
+                "backend.dependency_sweep.run_dependency_sweep",
+                new_callable=AsyncMock,
+                return_value=mock_dep_result,
+            ) as mock_dep,
+        ):
+            await _run_sweep_for_user("u1")
+
+        mock_dep.assert_called_once_with(user_id="u1")
+
 
 class TestRunSweep:
     @pytest.mark.asyncio

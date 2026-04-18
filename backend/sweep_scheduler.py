@@ -174,6 +174,24 @@ async def _run_sweep_for_user(user_id: str) -> None:
             except Exception:
                 logger.exception("Comm style sweep failed for user %s", user_label)
 
+            # Dependency sweep: LLM-powered implicit dependency detection
+            try:
+                from .dependency_sweep import run_dependency_sweep
+
+                async with asyncio.timeout(300):
+                    dep_result = await run_dependency_sweep(user_id=user_id)
+                if dep_result.suggestions_created or dep_result.findings_created:
+                    logger.info(
+                        "Dependency sweep [%s]: %d suggestions, %d findings",
+                        user_label,
+                        dep_result.suggestions_created,
+                        dep_result.findings_created,
+                    )
+            except TimeoutError:
+                logger.error("Dependency sweep timed out for user %s (300s limit)", user_label)
+            except Exception:
+                logger.exception("Dependency sweep failed for user %s", user_label)
+
             # Still generate morning briefing (captures priorities, overdue, blockers)
             try:
                 from .morning_briefing import generate_morning_briefing, store_morning_briefing
@@ -261,6 +279,24 @@ async def _run_sweep_for_user(user_id: str) -> None:
             result.findings_created,
             result.usage,
         )
+
+        # Dependency sweep: LLM-powered implicit dependency detection
+        try:
+            from .dependency_sweep import run_dependency_sweep
+
+            async with asyncio.timeout(300):
+                dep_result = await run_dependency_sweep(user_id=user_id)
+            if dep_result.suggestions_created or dep_result.findings_created:
+                logger.info(
+                    "Dependency sweep [%s]: %d suggestions, %d findings",
+                    user_label,
+                    dep_result.suggestions_created,
+                    dep_result.findings_created,
+                )
+        except TimeoutError:
+            logger.error("Dependency sweep timed out for user %s (300s limit)", user_label)
+        except Exception:
+            logger.exception("Dependency sweep failed for user %s", user_label)
 
         # Generate morning briefing after sweep completes
         try:
