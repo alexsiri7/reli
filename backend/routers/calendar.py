@@ -1,5 +1,6 @@
 """Google Calendar read-only integration endpoints."""
 
+import json
 import logging
 from typing import Any
 
@@ -15,6 +16,7 @@ from ..google_calendar import (
     is_configured,
     is_connected,
 )
+from ..tools import create_thing
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,41 @@ def calendar_events(
 
     events = fetch_upcoming_events(max_results=max_results, days_ahead=days_ahead, user_id=user_id)
     return {"events": events, "count": len(events)}
+
+
+@router.post("/seed", summary="Seed Things from upcoming calendar events")
+def seed_from_calendar(user_id: str = Depends(require_user)) -> dict[str, Any]:
+    """Fetch upcoming calendar events and create a Thing for each."""
+    if not is_connected(user_id=user_id):
+        raise HTTPException(status_code=400, detail="Calendar not connected")
+
+    events = fetch_upcoming_events(max_results=20, days_ahead=14, user_id=user_id)
+
+    created = []
+    for event in events:
+        title = event.get("summary", "Untitled Event")
+        start = event.get("start", "")
+        attendees = event.get("attendees", [])
+        data = {
+            "calendar_event_id": event.get("id"),
+            "location": event.get("location"),
+            "source": "calendar_seed",
+        }
+
+        result = create_thing(
+            title=title,
+            type_hint="event",
+            importance=2,
+            checkin_date=start[:10] if start else "",
+            surface=True,
+            data_json=json.dumps(data),
+            open_questions_json="[]",
+            user_id=user_id,
+        )
+        if "error" not in result:
+            created.append({"id": result.get("id"), "title": title})
+
+    return {"created": created, "count": len(created)}
 
 
 @router.delete("/disconnect", summary="Disconnect Google Calendar")

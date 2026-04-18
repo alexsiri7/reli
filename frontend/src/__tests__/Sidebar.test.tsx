@@ -190,7 +190,7 @@ describe('Sidebar', () => {
   it('shows empty state when no things', () => {
     mockState = { things: [], briefing: [], loading: false, snoozeThing: vi.fn(), ...calendarDefaults }
     render(<Sidebar />)
-    expect(screen.getByText('Start by typing in the chat…')).toBeInTheDocument()
+    expect(screen.getByText('Things you mention in chat appear here')).toBeInTheDocument()
   })
 
   it('renders Things list', () => {

@@ -280,6 +280,10 @@ interface ReliState {
   connectCalendar: () => Promise<void>
   disconnectCalendar: () => Promise<void>
 
+  // Google seed (onboarding)
+  googleSeedLoading: boolean
+  seedFromGoogle: () => Promise<{ count: number }>
+
   // Things list filter (client-side, persists across panel switches)
   thingFilterQuery: string
   thingFilterTypes: string[]
@@ -1134,6 +1138,29 @@ export const useStore = create<ReliState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  // Google seed (onboarding)
+  googleSeedLoading: false,
+  seedFromGoogle: async () => {
+    set({ googleSeedLoading: true })
+    try {
+      const [calRes, gmailRes] = await Promise.allSettled([
+        apiFetch(`${BASE}/calendar/seed`, { method: 'POST' }),
+        apiFetch(`${BASE}/gmail/seed`, { method: 'POST' }),
+      ])
+      let count = 0
+      for (const res of [calRes, gmailRes]) {
+        if (res.status === 'fulfilled' && res.value.ok) {
+          const data = await res.value.json()
+          count += data.count ?? 0
+        }
+      }
+      await get().fetchThings()
+      return { count }
+    } finally {
+      set({ googleSeedLoading: false })
+    }
+  },
 
   // Things list filter
   thingFilterQuery: '',

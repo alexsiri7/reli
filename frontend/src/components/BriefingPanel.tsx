@@ -274,9 +274,9 @@ export function BriefingPanel() {
         {!hasContent && (
           <div className="flex flex-col items-center justify-center h-64 text-center px-6">
             <p className="text-4xl mb-3">{'\u2600\uFE0F'}</p>
-            <p className="text-sm font-medium text-on-surface">No briefing yet</p>
+            <p className="text-sm font-medium text-on-surface">Your morning briefing</p>
             <p className="text-xs text-on-surface-variant mt-1">
-              Add some Things with check-in dates and your briefing will appear here.
+              Your morning briefing shows up here once you have Things with check-in dates.
             </p>
           </div>
         )}

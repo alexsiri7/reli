@@ -748,7 +748,7 @@ function InteractionStyleSelector({ style, onChange }: { style: InteractionStyle
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -761,6 +761,9 @@ export function ChatPanel() {
       setChatMode: s.setChatMode,
       interactionStyle: s.interactionStyle,
       setInteractionStyle: s.setInteractionStyle,
+      seedFromGoogle: s.seedFromGoogle,
+      googleSeedLoading: s.googleSeedLoading,
+      calendarStatus: s.calendarStatus,
     }))
   )
   const { isOnline } = useNetworkStatus()
@@ -931,46 +934,61 @@ export function ChatPanel() {
             )}
             {messages.length === 0 && !historyLoading && (
               disclosure.showOnboarding ? (
-                <div className="flex flex-col items-center justify-center h-full text-center px-6">
-                  <div className="w-16 h-16 rounded-2xl gradient-cta flex items-center justify-center mb-4">
-                    <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
-                    </svg>
+                <div className="flex flex-col h-full overflow-y-auto px-4 py-6 gap-4">
+                  {/* Synthetic welcome message as assistant chat bubble */}
+                  <div className="flex gap-3 max-w-[85%]">
+                    <div className="w-7 h-7 rounded-full gradient-cta flex-shrink-0 flex items-center justify-center mt-0.5">
+                      <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                      </svg>
+                    </div>
+                    <div className="bg-surface-container rounded-2xl rounded-tl-sm px-4 py-3">
+                      <p className="text-body text-on-surface">
+                        Welcome! I'm Reli, your personal knowledge assistant. I help you keep track of everything that matters — projects, tasks, people, and ideas.
+                      </p>
+                      <p className="text-body text-on-surface mt-2">
+                        Let's get to know each other. What are you working on this week?
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="text-title text-on-surface">Welcome to Reli</h3>
-                  <p className="text-body text-on-surface-variant mt-2 max-w-xs">
-                    Reli helps you keep track of everything that matters. Start by telling me what's on your mind.
-                  </p>
-                  <div className="mt-4 space-y-2 text-left w-full max-w-xs">
-                    <p className="text-label text-on-surface-variant tracking-widest">Try saying...</p>
-                    <button
-                      onClick={() => {
-                        const input = document.querySelector<HTMLTextAreaElement>('textarea')
-                        if (input) { input.value = 'I need to finish my project proposal by Friday'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
-                      }}
-                      className="w-full text-left px-3 py-2 text-body text-on-surface bg-surface-container-high rounded-xl hover:bg-surface-container-high/80 transition-colors"
-                    >
-                      "I need to finish my project proposal by Friday"
-                    </button>
-                    <button
-                      onClick={() => {
-                        const input = document.querySelector<HTMLTextAreaElement>('textarea')
-                        if (input) { input.value = 'Remind me to call the dentist next week'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
-                      }}
-                      className="w-full text-left px-3 py-2 text-body text-on-surface bg-surface-container-high rounded-xl hover:bg-surface-container-high/80 transition-colors"
-                    >
-                      "Remind me to call the dentist next week"
-                    </button>
-                    <button
-                      onClick={() => {
-                        const input = document.querySelector<HTMLTextAreaElement>('textarea')
-                        if (input) { input.value = 'I have an idea for a new side project'; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus() }
-                      }}
-                      className="w-full text-left px-3 py-2 text-body text-on-surface bg-surface-container-high rounded-xl hover:bg-surface-container-high/80 transition-colors"
-                    >
-                      "I have an idea for a new side project"
-                    </button>
+
+                  {/* Suggestion pills */}
+                  <div className="ml-10 space-y-2">
+                    {[
+                      "I'm preparing a project proposal due next week",
+                      "I have a job interview coming up I need to prep for",
+                      "I'm launching a side project and have a lot to track",
+                    ].map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        onClick={() => setInput(suggestion)}
+                        className="block w-full text-left px-3 py-2 text-body text-on-surface bg-surface-container-high rounded-xl hover:bg-surface-container-high/80 transition-colors"
+                      >
+                        "{suggestion}"
+                      </button>
+                    ))}
                   </div>
+
+                  {/* Google import button — only if calendar is connected */}
+                  {calendarStatus?.connected && (
+                    <div className="ml-10 mt-2 border-t border-on-surface-variant/10 pt-4">
+                      <p className="text-label text-on-surface-variant tracking-widest mb-2">OR IMPORT YOUR DATA</p>
+                      <button
+                        onClick={() => { seedFromGoogle().catch(() => {}) }}
+                        disabled={googleSeedLoading}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-container-high/80 text-body text-on-surface transition-colors disabled:opacity-50"
+                      >
+                        {googleSeedLoading ? (
+                          <span className="w-4 h-4 border-2 border-on-surface/20 border-t-on-surface rounded-full animate-spin" />
+                        ) : (
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                          </svg>
+                        )}
+                        {googleSeedLoading ? 'Importing\u2026' : 'Import from Calendar & Gmail'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center">

@@ -407,3 +407,79 @@ def get_thread(thread_id: str, user_id: str = Depends(require_user)) -> GmailThr
     subject = thread_messages[0].subject if thread_messages else "(no subject)"
 
     return GmailThread(id=thread_id, subject=subject, messages=thread_messages)
+
+
+@router.post("/seed", summary="Seed Things from recent Gmail senders")
+def seed_from_gmail(user_id: str = Depends(require_user)) -> dict[str, Any]:
+    """Fetch recent Gmail threads and create Person Things for unique senders."""
+    import re
+
+    from ..tools import create_thing
+
+    service = _get_service(user_id=user_id)
+
+    threads_result = (
+        service.users()
+        .threads()
+        .list(userId="me", maxResults=20, labelIds=["INBOX"])
+        .execute()
+    )
+    threads = threads_result.get("threads", [])
+
+    created: list[dict[str, str]] = []
+    seen_senders: set[str] = set()
+
+    for thread_meta in threads[:20]:
+        try:
+            thread = (
+                service.users()
+                .threads()
+                .get(
+                    userId="me",
+                    id=thread_meta["id"],
+                    format="metadata",
+                    metadataHeaders=["From", "Subject"],
+                )
+                .execute()
+            )
+        except Exception:
+            continue
+
+        messages = thread.get("messages", [])
+        if not messages:
+            continue
+
+        headers = {
+            h["name"]: h["value"]
+            for h in messages[0].get("payload", {}).get("headers", [])
+        }
+        sender_raw = headers.get("From", "")
+
+        # Extract email from "Name <email>" format
+        email_match = re.search(r"<([^>]+)>", sender_raw)
+        sender_email = email_match.group(1) if email_match else sender_raw
+        sender_name = sender_raw.split("<")[0].strip().strip('"') or sender_email
+
+        # Skip noreply/duplicate senders
+        if (
+            not sender_email
+            or "noreply" in sender_email.lower()
+            or sender_email in seen_senders
+        ):
+            continue
+
+        seen_senders.add(sender_email)
+        result = create_thing(
+            title=sender_name or sender_email,
+            type_hint="person",
+            importance=1,
+            checkin_date="",
+            surface=True,
+            data_json=json.dumps({"email": sender_email, "source": "gmail_seed"}),
+            open_questions_json="[]",
+            user_id=user_id,
+        )
+        if "error" not in result:
+            created.append({"id": result.get("id", ""), "title": sender_name or sender_email})
+
+    return {"created": created, "count": len(created)}
