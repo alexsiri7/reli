@@ -64,8 +64,7 @@ class TestUpsertUserConcurrency:
 class TestUserThingCreation:
     """Test that a Thing is auto-created for new OAuth users."""
 
-    def test_upsert_user_creates_thing_for_new_user(self, patched_db):
-        from backend.database import db
+    def test_upsert_user_creates_thing_for_new_user(self, patched_db, db):
 
         user_id = _upsert_user("google-123", "alice@example.com", "Alice", None)
 
@@ -82,8 +81,7 @@ class TestUserThingCreation:
         assert data["email"] == "alice@example.com"
         assert data["google_id"] == "google-123"
 
-    def test_upsert_user_no_duplicate_thing_on_repeat_login(self, patched_db):
-        from backend.database import db
+    def test_upsert_user_no_duplicate_thing_on_repeat_login(self, patched_db, db):
 
         user_id = _upsert_user("google-123", "alice@example.com", "Alice", None)
         _upsert_user("google-123", "alice@example.com", "Alice", None)

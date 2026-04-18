@@ -13,7 +13,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from backend.database import db
 from backend.summarization_agent import create_summary
 from backend.routers.chat import _fetch_history, _maybe_trigger_summarization
 
@@ -49,7 +48,7 @@ def _insert_messages(conn, user_id, messages, session_id="sess-1"):
 class TestFetchHistory:
     """Test that _fetch_history correctly uses summaries when available."""
 
-    def test_fallback_to_raw_history_without_summary(self, patched_db):
+    def test_fallback_to_raw_history_without_summary(self, patched_db, db):
         """Without a summary, returns raw history messages."""
         user_id = "test-user"
         with db() as conn:
@@ -71,7 +70,7 @@ class TestFetchHistory:
         assert history[0]["content"] == "Hello"
         assert history[3]["content"] == "I'm great!"
 
-    def test_uses_summary_plus_recent_messages(self, patched_db):
+    def test_uses_summary_plus_recent_messages(self, patched_db, db):
         """With a summary, returns summary as system message + only recent messages."""
         user_id = "test-user"
         with db() as conn:
@@ -115,7 +114,7 @@ class TestFetchHistory:
         assert non_system[0]["content"] == "Old message 2"
         assert non_system[-1]["content"] == "New response"
 
-    def test_summary_excludes_old_messages(self, patched_db):
+    def test_summary_excludes_old_messages(self, patched_db, db):
         """Messages before the summary cutoff are NOT returned."""
         user_id = "test-user"
         with db() as conn:
@@ -142,7 +141,7 @@ class TestFetchHistory:
         assert "Recent message" in all_content
         assert "Recent response" in all_content
 
-    def test_no_user_id_falls_back_to_raw_history(self, patched_db):
+    def test_no_user_id_falls_back_to_raw_history(self, patched_db, db):
         """Without a user_id, summary lookup is skipped."""
         with db() as conn:
             _create_test_user(conn, "test-user")
@@ -160,7 +159,7 @@ class TestFetchHistory:
         assert len(history) == 2
         assert history[0]["content"] == "Hello"
 
-    def test_enrichment_metadata_preserved(self, patched_db):
+    def test_enrichment_metadata_preserved(self, patched_db, db):
         """Assistant messages with applied_changes get structured context_things in history."""
         user_id = "test-user"
         with db() as conn:
@@ -190,7 +189,7 @@ class TestFetchHistory:
 class TestMaybeTriggerSummarization:
     """Test that summarization is triggered at correct intervals."""
 
-    def test_does_not_trigger_below_threshold(self, patched_db):
+    def test_does_not_trigger_below_threshold(self, patched_db, db):
         """No summarization when message count is below threshold."""
         user_id = "test-user"
         with db() as conn:
@@ -202,7 +201,7 @@ class TestMaybeTriggerSummarization:
             mock_summarize.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_triggers_at_threshold(self, patched_db):
+    async def test_triggers_at_threshold(self, patched_db, db):
         """Summarization fires when message count reaches threshold."""
         user_id = "test-user"
         with db() as conn:
@@ -232,7 +231,7 @@ class TestSummarizationNonBlocking:
     """Test that async summarization doesn't block the chat response."""
 
     @pytest.mark.asyncio
-    async def test_chat_endpoint_returns_before_summarization_completes(self, patched_db):
+    async def test_chat_endpoint_returns_before_summarization_completes(self, patched_db, db):
         """The summarization runs in background and doesn't delay the response."""
         user_id = "test-user"
         with db() as conn:
@@ -264,7 +263,7 @@ class TestSummarizationNonBlocking:
             await asyncio.sleep(0.05)
 
     @pytest.mark.asyncio
-    async def test_summarization_error_does_not_crash_pipeline(self, patched_db):
+    async def test_summarization_error_does_not_crash_pipeline(self, patched_db, db):
         """If summarization fails, it logs but doesn't crash."""
         user_id = "test-user"
         with db() as conn:

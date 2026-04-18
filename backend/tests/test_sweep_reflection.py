@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from backend.database import db
 from backend.sweep import (
     SweepCandidate,
     _format_candidates_for_llm,
@@ -107,7 +106,7 @@ class TestFormatCandidates:
 
 class TestReflectOnCandidates:
     @pytest.mark.asyncio
-    async def test_creates_findings_from_llm_response(self, patched_db):
+    async def test_creates_findings_from_llm_response(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "t1", "Budget Report")
 
@@ -342,7 +341,7 @@ def _insert_finding(conn, finding_id: str, thing_id=None, dismissed=0, expires_a
 
 
 class TestDismissStaleFindings:
-    def test_dismisses_findings_for_inactive_things(self, patched_db):
+    def test_dismisses_findings_for_inactive_things(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "t-active", "Active Thing", active=True)
             _insert_thing(conn, "t-inactive", "Inactive Thing", active=False)
@@ -358,7 +357,7 @@ class TestDismissStaleFindings:
         assert f1["dismissed"] == 1
         assert f2["dismissed"] == 0
 
-    def test_dismisses_expired_findings(self, patched_db):
+    def test_dismisses_expired_findings(self, patched_db, db):
         past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         future = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
 
@@ -379,7 +378,7 @@ class TestDismissStaleFindings:
         assert rows["f-future"] == 0
         assert rows["f-none"] == 0
 
-    def test_does_not_dismiss_valid_findings(self, patched_db):
+    def test_does_not_dismiss_valid_findings(self, patched_db, db):
         future = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
 
         with db() as conn:
@@ -396,7 +395,7 @@ class TestDismissStaleFindings:
             ).fetchall()
         assert all(r["dismissed"] == 0 for r in rows)
 
-    def test_returns_correct_count(self, patched_db):
+    def test_returns_correct_count(self, patched_db, db):
         past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
 
         with db() as conn:
@@ -408,7 +407,7 @@ class TestDismissStaleFindings:
         count = dismiss_stale_findings()
         assert count == 3
 
-    def test_skips_already_dismissed(self, patched_db):
+    def test_skips_already_dismissed(self, patched_db, db):
         """Already-dismissed findings should not be counted again."""
         with db() as conn:
             _insert_thing(conn, "t-dead2", "Dead Thing 2", active=False)

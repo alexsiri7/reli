@@ -85,8 +85,7 @@ class TestGetAllUserIds:
         result = _get_all_user_ids()
         assert result == [""]
 
-    def test_returns_user_ids(self, patched_db):
-        from backend.database import db
+    def test_returns_user_ids(self, patched_db, db):
 
         with db() as conn:
             conn.execute(
@@ -102,8 +101,7 @@ class TestGetAllUserIds:
 
 
 class TestLogRun:
-    def test_creates_run_record(self, patched_db):
-        from backend.database import db
+    def test_creates_run_record(self, patched_db, db):
 
         _log_run(
             "sr-test1",
@@ -122,8 +120,7 @@ class TestLogRun:
         assert row["candidates_found"] == 5
         assert row["findings_created"] == 2
 
-    def test_upsert_updates_existing(self, patched_db):
-        from backend.database import db
+    def test_upsert_updates_existing(self, patched_db, db):
 
         _log_run("sr-test2", "", status="running", started_at="2026-01-01T00:00:00Z")
         _log_run(
@@ -144,8 +141,7 @@ class TestLogRun:
 
 class TestRunSweepForUser:
     @pytest.mark.asyncio
-    async def test_no_candidates_logs_completed(self, patched_db):
-        from backend.database import db
+    async def test_no_candidates_logs_completed(self, patched_db, db):
 
         with patch("backend.sweep.collect_candidates", return_value=[]):
             await _run_sweep_for_user("")
@@ -157,8 +153,7 @@ class TestRunSweepForUser:
         assert rows[0]["candidates_found"] == 0
 
     @pytest.mark.asyncio
-    async def test_with_candidates_runs_reflection(self, patched_db):
-        from backend.database import db
+    async def test_with_candidates_runs_reflection(self, patched_db, db):
 
         fake_candidate = MagicMock()
         mock_result = MagicMock(
@@ -182,8 +177,7 @@ class TestRunSweepForUser:
 
 class TestRunSweep:
     @pytest.mark.asyncio
-    async def test_iterates_over_users(self, patched_db):
-        from backend.database import db
+    async def test_iterates_over_users(self, patched_db, db):
 
         with db() as conn:
             conn.execute(
@@ -205,8 +199,7 @@ class TestRunSweep:
         assert "u2" in call_user_ids
 
     @pytest.mark.asyncio
-    async def test_error_in_one_user_doesnt_block_others(self, patched_db):
-        from backend.database import db
+    async def test_error_in_one_user_doesnt_block_others(self, patched_db, db):
 
         with db() as conn:
             conn.execute(

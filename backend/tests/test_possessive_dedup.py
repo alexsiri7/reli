@@ -3,7 +3,6 @@
 import json
 import uuid
 
-from backend.database import db
 
 
 def _insert_thing(conn, title, type_hint="person", data=None):
@@ -29,7 +28,7 @@ def _insert_relationship(conn, from_id, to_id, rel_type):
 
 
 class TestPossessiveDedup:
-    def test_reuses_existing_entity_by_relationship_type(self, patched_db):
+    def test_reuses_existing_entity_by_relationship_type(self, patched_db, db):
         """'my sister Sarah' should reuse existing 'Sister' entity linked by 'sister' rel."""
         from backend.agents import apply_storage_changes
 
@@ -72,7 +71,7 @@ class TestPossessiveDedup:
             row = conn.execute("SELECT title FROM things WHERE id = ?", (sister_id,)).fetchone()
             assert row["title"] == "Sarah"
 
-    def test_no_duplicate_relationship_created(self, patched_db):
+    def test_no_duplicate_relationship_created(self, patched_db, db):
         """When possessive dedup matches, the existing relationship should not be duplicated."""
         from backend.agents import apply_storage_changes
 
@@ -114,7 +113,7 @@ class TestPossessiveDedup:
             ).fetchall()
             assert len(rels) == 1
 
-    def test_creates_new_entity_when_no_existing_relationship(self, patched_db):
+    def test_creates_new_entity_when_no_existing_relationship(self, patched_db, db):
         """If no existing relationship of the type exists, create normally."""
         from backend.agents import apply_storage_changes
 
@@ -151,7 +150,7 @@ class TestPossessiveDedup:
         assert len(result["relationships_created"]) == 1
         assert result["relationships_created"][0]["relationship_type"] == "cousin"
 
-    def test_title_dedup_still_works(self, patched_db):
+    def test_title_dedup_still_works(self, patched_db, db):
         """Exact title match dedup should still work independently of possessive dedup."""
         from backend.agents import apply_storage_changes
 
@@ -178,7 +177,7 @@ class TestPossessiveDedup:
         assert len(result["updated"]) == 1
         assert result["updated"][0]["id"] == existing_id
 
-    def test_does_not_match_different_relationship_type(self, patched_db):
+    def test_does_not_match_different_relationship_type(self, patched_db, db):
         """User has 'sister' relationship; creating with 'doctor' should not match."""
         from backend.agents import apply_storage_changes
 
@@ -214,7 +213,7 @@ class TestPossessiveDedup:
         assert len(result["created"]) == 1
         assert result["created"][0]["title"] == "Dr. Park"
 
-    def test_skips_possessive_dedup_for_non_entity_types(self, patched_db):
+    def test_skips_possessive_dedup_for_non_entity_types(self, patched_db, db):
         """Non-entity type_hints (task, etc.) should not trigger possessive dedup."""
         from backend.agents import apply_storage_changes
 
@@ -249,7 +248,7 @@ class TestPossessiveDedup:
         # Should create new entity since type_hint is "task" (not an entity type)
         assert len(result["created"]) == 1
 
-    def test_preserves_title_when_same(self, patched_db):
+    def test_preserves_title_when_same(self, patched_db, db):
         """When possessive dedup matches and titles are the same, don't update title."""
         from backend.agents import apply_storage_changes
 
@@ -294,7 +293,7 @@ class TestPossessiveDedup:
 class TestCompoundPossessives:
     """Tests for compound/chained possessives like 'my sister's husband Bob'."""
 
-    def test_compound_possessive_creates_chain(self, patched_db):
+    def test_compound_possessive_creates_chain(self, patched_db, db):
         """'my sister's husband Bob' creates sister, Bob, and both relationships."""
         from backend.agents import apply_storage_changes
 
@@ -343,7 +342,7 @@ class TestCompoundPossessives:
         rel_types = {r["relationship_type"] for r in result["relationships_created"]}
         assert rel_types == {"sister", "husband"}
 
-    def test_compound_possessive_reuses_existing_first_link(self, patched_db):
+    def test_compound_possessive_reuses_existing_first_link(self, patched_db, db):
         """'my sister's husband Bob' reuses existing sister entity."""
         from backend.agents import apply_storage_changes
 
@@ -396,7 +395,7 @@ class TestCompoundPossessives:
         assert len(husband_rels) == 1
         assert husband_rels[0]["from_thing_id"] == sister_id
 
-    def test_compound_possessive_dedup_second_link(self, patched_db):
+    def test_compound_possessive_dedup_second_link(self, patched_db, db):
         """If sister already has a husband entity, reuse it via possessive dedup."""
         from backend.agents import apply_storage_changes
 

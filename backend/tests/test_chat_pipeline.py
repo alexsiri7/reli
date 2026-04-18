@@ -251,9 +251,8 @@ class TestChatPipeline:
 class TestFetchUserRelationships:
     """Test depth-limited relationship loading from the user Thing."""
 
-    def test_returns_matching_relationships(self, patched_db):
+    def test_returns_matching_relationships(self, patched_db, db):
         """Only relationships whose related Thing matches a search query are returned."""
-        from backend.database import db
         from backend.pipeline import _fetch_user_relationships
 
         with db() as conn:
@@ -295,18 +294,16 @@ class TestFetchUserRelationships:
         assert len(results) == 1
         assert results[0]["id"] == "project-1"
 
-    def test_empty_queries_returns_nothing(self, patched_db):
+    def test_empty_queries_returns_nothing(self, patched_db, db):
         """No search queries means no relationship loading."""
-        from backend.database import db
         from backend.pipeline import _fetch_user_relationships
 
         with Session(_engine_mod.engine) as session:
             results = _fetch_user_relationships(session, "user-1", [])
             assert results == []
 
-    def test_no_relationships_returns_empty(self, patched_db):
+    def test_no_relationships_returns_empty(self, patched_db, db):
         """User with no relationships returns empty list."""
-        from backend.database import db
         from backend.pipeline import _fetch_user_relationships
 
         with db() as conn:
@@ -318,9 +315,8 @@ class TestFetchUserRelationships:
             results = _fetch_user_relationships(session, "user-1", ["anything"])
         assert results == []
 
-    def test_recently_referenced_sorted_first(self, patched_db):
+    def test_recently_referenced_sorted_first(self, patched_db, db):
         """Things with recent last_referenced should appear before older ones."""
-        from backend.database import db
         from backend.pipeline import _fetch_user_relationships
 
         with db() as conn:
@@ -372,9 +368,8 @@ class TestPreferenceBoost:
             (thing_id, title, type_hint, 2, 1, 1),
         )
 
-    def test_preference_things_sorted_first(self, patched_db):
+    def test_preference_things_sorted_first(self, patched_db, db):
         """Preference Things matching the query appear before entity Things."""
-        from backend.database import db
         from backend.pipeline import _fetch_relevant_things
 
         with db() as conn:
@@ -412,9 +407,8 @@ class TestPreferenceBoost:
         # Preference Thing should come first
         assert result_ids.index("pref-1") < result_ids.index("task-1")
 
-    def test_preference_boost_with_no_preferences(self, patched_db):
+    def test_preference_boost_with_no_preferences(self, patched_db, db):
         """When there are no preference Things, results are unchanged."""
-        from backend.database import db
         from backend.pipeline import _fetch_relevant_things
 
         with db() as conn:
@@ -433,9 +427,8 @@ class TestPreferenceBoost:
         assert len(results) >= 1
         assert any(t["id"] == "task-1" for t in results)
 
-    def test_preference_boost_does_not_duplicate(self, patched_db):
+    def test_preference_boost_does_not_duplicate(self, patched_db, db):
         """Preference Things already in results are not duplicated."""
-        from backend.database import db
         from backend.pipeline import _fetch_relevant_things
 
         with db() as conn:
@@ -463,9 +456,8 @@ class TestPreferenceBoost:
         pref_count = sum(1 for t in results if t["id"] == "pref-1")
         assert pref_count == 1
 
-    def test_preference_ranked_first_via_vector(self, patched_db):
+    def test_preference_ranked_first_via_vector(self, patched_db, db):
         """Preference Things from vector search appear first in results."""
-        from backend.database import db
         from backend.pipeline import _fetch_relevant_things
 
         with db() as conn:
@@ -494,9 +486,8 @@ class TestPreferenceBoost:
         assert "entity-1" in ids
         assert ids.index("pref-1") < ids.index("entity-1")
 
-    def test_no_boost_when_type_hint_is_preference(self, patched_db):
+    def test_no_boost_when_type_hint_is_preference(self, patched_db, db):
         """When caller already filters by type_hint='preference', no extra boost search."""
-        from backend.database import db
         from backend.pipeline import _fetch_relevant_things
 
         with db() as conn:
@@ -524,9 +515,8 @@ class TestPreferenceBoost:
         # No second boost call
         assert boost_called_with_preference.count("preference") == 1
 
-    def test_preference_already_in_seed_moved_to_front(self, patched_db):
+    def test_preference_already_in_seed_moved_to_front(self, patched_db, db):
         """Preference IDs already in seed_ids are reordered to the front."""
-        from backend.database import db
         from backend.pipeline import _fetch_relevant_things
 
         with db() as conn:

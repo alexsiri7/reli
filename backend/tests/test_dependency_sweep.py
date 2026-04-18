@@ -11,7 +11,6 @@ import pytest
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
-from backend.database import db
 from backend.db_models import ConnectionSuggestionRecord, SweepFindingRecord
 from backend.dependency_sweep import (
     DependencyCluster,
@@ -27,6 +26,7 @@ def _fresh_db(patched_db):
 
 
 def _insert_thing(
+    db,
     title: str,
     type_hint: str = "task",
     data: dict | None = None,
@@ -44,7 +44,7 @@ def _insert_thing(
     return thing_id
 
 
-def _insert_relationship(from_id: str, to_id: str, rel_type: str) -> str:
+def _insert_relationship(db, from_id: str, to_id: str, rel_type: str) -> str:
     rel_id = str(uuid.uuid4())
     with db() as conn:
         conn.execute(
@@ -55,13 +55,13 @@ def _insert_relationship(from_id: str, to_id: str, rel_type: str) -> str:
 
 
 class TestFindDependencyClusters:
-    def test_groups_children_of_same_project(self):
+    def test_groups_children_of_same_project(self, db):
         """Tasks sharing a project become a cluster."""
-        proj = _insert_thing("Spain Trip", type_hint="project")
-        task_a = _insert_thing("Book flights")
-        task_b = _insert_thing("Approve holidays")
-        _insert_relationship(proj, task_a, "parent-of")
-        _insert_relationship(proj, task_b, "parent-of")
+        proj = _insert_thing(db, "Spain Trip", type_hint="project")
+        task_a = _insert_thing(db, "Book flights")
+        task_b = _insert_thing(db, "Approve holidays")
+        _insert_relationship(db, proj, task_a, "parent-of")
+        _insert_relationship(db, proj, task_b, "parent-of")
 
         clusters = find_dependency_clusters()
 
@@ -71,22 +71,22 @@ class TestFindDependencyClusters:
         assert task_b in thing_ids
         assert clusters[0].label == "Spain Trip"
 
-    def test_solo_project_child_excluded(self):
+    def test_solo_project_child_excluded(self, db):
         """A project with only one child should not create a cluster."""
-        proj = _insert_thing("Solo Project", type_hint="project")
-        task_a = _insert_thing("Only task")
-        _insert_relationship(proj, task_a, "parent-of")
+        proj = _insert_thing(db, "Solo Project", type_hint="project")
+        task_a = _insert_thing(db, "Only task")
+        _insert_relationship(db, proj, task_a, "parent-of")
 
         clusters = find_dependency_clusters()
         assert len(clusters) == 0
 
-    def test_inactive_things_excluded(self):
+    def test_inactive_things_excluded(self, db):
         """Inactive Things should not appear in clusters."""
-        proj = _insert_thing("Trip", type_hint="project")
-        task_a = _insert_thing("Active task")
-        task_b = _insert_thing("Done task", active=False)
-        _insert_relationship(proj, task_a, "parent-of")
-        _insert_relationship(proj, task_b, "parent-of")
+        proj = _insert_thing(db, "Trip", type_hint="project")
+        task_a = _insert_thing(db, "Active task")
+        task_b = _insert_thing(db, "Done task", active=False)
+        _insert_relationship(db, proj, task_a, "parent-of")
+        _insert_relationship(db, proj, task_b, "parent-of")
 
         clusters = find_dependency_clusters()
         assert len(clusters) == 0  # Only 1 active child → no cluster
@@ -94,30 +94,30 @@ class TestFindDependencyClusters:
     def test_empty_db_returns_empty(self):
         assert find_dependency_clusters() == []
 
-    def test_partially_covered_cluster_still_included(self):
+    def test_partially_covered_cluster_still_included(self, db):
         """A cluster with at least one uncovered pair is included even if others are covered."""
-        proj = _insert_thing("Project", type_hint="project")
-        a = _insert_thing("Task A")
-        b = _insert_thing("Task B")
-        c = _insert_thing("Task C")
-        _insert_relationship(proj, a, "parent-of")
-        _insert_relationship(proj, b, "parent-of")
-        _insert_relationship(proj, c, "parent-of")
+        proj = _insert_thing(db, "Project", type_hint="project")
+        a = _insert_thing(db, "Task A")
+        b = _insert_thing(db, "Task B")
+        c = _insert_thing(db, "Task C")
+        _insert_relationship(db, proj, a, "parent-of")
+        _insert_relationship(db, proj, b, "parent-of")
+        _insert_relationship(db, proj, c, "parent-of")
         # Cover A→B but leave A→C and B→C uncovered
-        _insert_relationship(a, b, "depends-on")
+        _insert_relationship(db, a, b, "depends-on")
 
         clusters = find_dependency_clusters()
         assert len(clusters) == 1
 
-    def test_fully_covered_cluster_skipped(self):
+    def test_fully_covered_cluster_skipped(self, db):
         """A cluster where ALL pairs have existing deps/blocks is skipped."""
-        proj = _insert_thing("Project", type_hint="project")
-        a = _insert_thing("Task A")
-        b = _insert_thing("Task B")
-        _insert_relationship(proj, a, "parent-of")
-        _insert_relationship(proj, b, "parent-of")
+        proj = _insert_thing(db, "Project", type_hint="project")
+        a = _insert_thing(db, "Task A")
+        b = _insert_thing(db, "Task B")
+        _insert_relationship(db, proj, a, "parent-of")
+        _insert_relationship(db, proj, b, "parent-of")
         # Cover the only pair
-        _insert_relationship(a, b, "depends-on")
+        _insert_relationship(db, a, b, "depends-on")
 
         clusters = find_dependency_clusters()
         assert len(clusters) == 0
@@ -167,13 +167,13 @@ class TestFormatClusterForLlm:
 
 class TestDetectClusterDependencies:
     @pytest.mark.asyncio
-    async def test_creates_suggestion_for_high_confidence_dependency(self):
+    async def test_creates_suggestion_for_high_confidence_dependency(self, db):
         """LLM response with confidence >= 0.6 should create a ConnectionSuggestion."""
-        proj = _insert_thing("Spain Trip", type_hint="project")
-        task_a_id = _insert_thing("Book flights")
-        task_b_id = _insert_thing("Approve holidays")
-        _insert_relationship(proj, task_a_id, "parent-of")
-        _insert_relationship(proj, task_b_id, "parent-of")
+        proj = _insert_thing(db, "Spain Trip", type_hint="project")
+        task_a_id = _insert_thing(db, "Book flights")
+        task_b_id = _insert_thing(db, "Approve holidays")
+        _insert_relationship(db, proj, task_a_id, "parent-of")
+        _insert_relationship(db, proj, task_b_id, "parent-of")
 
         mock_response = json.dumps({
             "dependencies": [{
@@ -196,13 +196,13 @@ class TestDetectClusterDependencies:
         assert suggs[0].suggested_relationship_type == "depends-on"
 
     @pytest.mark.asyncio
-    async def test_skips_low_confidence_dependency(self):
+    async def test_skips_low_confidence_dependency(self, db):
         """Confidence < 0.6 should not create a suggestion."""
-        proj = _insert_thing("Trip", type_hint="project")
-        task_a_id = _insert_thing("Task A")
-        task_b_id = _insert_thing("Task B")
-        _insert_relationship(proj, task_a_id, "parent-of")
-        _insert_relationship(proj, task_b_id, "parent-of")
+        proj = _insert_thing(db, "Trip", type_hint="project")
+        task_a_id = _insert_thing(db, "Task A")
+        task_b_id = _insert_thing(db, "Task B")
+        _insert_relationship(db, proj, task_a_id, "parent-of")
+        _insert_relationship(db, proj, task_b_id, "parent-of")
 
         mock_response = json.dumps({
             "dependencies": [{
@@ -221,13 +221,13 @@ class TestDetectClusterDependencies:
         assert result.suggestions_created == 0
 
     @pytest.mark.asyncio
-    async def test_creates_sweep_finding_for_conflict(self):
+    async def test_creates_sweep_finding_for_conflict(self, db):
         """LLM-detected conflict should create a SweepFindingRecord."""
-        proj = _insert_thing("Trip", type_hint="project")
-        task_a_id = _insert_thing("Book flights", checkin_date="2026-05-01")
-        task_b_id = _insert_thing("Approve holidays", checkin_date="2026-04-25")
-        _insert_relationship(proj, task_a_id, "parent-of")
-        _insert_relationship(proj, task_b_id, "parent-of")
+        proj = _insert_thing(db, "Trip", type_hint="project")
+        task_a_id = _insert_thing(db, "Book flights", checkin_date="2026-05-01")
+        task_b_id = _insert_thing(db, "Approve holidays", checkin_date="2026-04-25")
+        _insert_relationship(db, proj, task_a_id, "parent-of")
+        _insert_relationship(db, proj, task_b_id, "parent-of")
 
         mock_response = json.dumps({
             "dependencies": [],
@@ -252,11 +252,11 @@ class TestDetectClusterDependencies:
         assert "flights" in findings[0].message
 
     @pytest.mark.asyncio
-    async def test_invalid_json_from_llm_returns_empty(self):
+    async def test_invalid_json_from_llm_returns_empty(self, db):
         """Invalid LLM JSON should not crash — return empty result."""
-        proj = _insert_thing("Trip", type_hint="project")
-        _insert_relationship(proj, _insert_thing("A"), "parent-of")
-        _insert_relationship(proj, _insert_thing("B"), "parent-of")
+        proj = _insert_thing(db, "Trip", type_hint="project")
+        _insert_relationship(db, proj, _insert_thing(db, "A"), "parent-of")
+        _insert_relationship(db, proj, _insert_thing(db, "B"), "parent-of")
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value="not json"):
             result = await run_dependency_sweep()
@@ -265,13 +265,13 @@ class TestDetectClusterDependencies:
         assert result.findings_created == 0
 
     @pytest.mark.asyncio
-    async def test_does_not_duplicate_existing_suggestion(self):
+    async def test_does_not_duplicate_existing_suggestion(self, db):
         """If a suggestion already exists for a pair, skip creating another."""
-        proj = _insert_thing("Trip", type_hint="project")
-        task_a_id = _insert_thing("Task A")
-        task_b_id = _insert_thing("Task B")
-        _insert_relationship(proj, task_a_id, "parent-of")
-        _insert_relationship(proj, task_b_id, "parent-of")
+        proj = _insert_thing(db, "Trip", type_hint="project")
+        task_a_id = _insert_thing(db, "Task A")
+        task_b_id = _insert_thing(db, "Task B")
+        _insert_relationship(db, proj, task_a_id, "parent-of")
+        _insert_relationship(db, proj, task_b_id, "parent-of")
 
         # Pre-insert existing suggestion
         with Session(_engine_mod.engine) as session:
@@ -304,13 +304,13 @@ class TestDetectClusterDependencies:
         assert result.suggestions_created == 0  # Already existed
 
     @pytest.mark.asyncio
-    async def test_does_not_duplicate_reverse_direction_suggestion(self):
+    async def test_does_not_duplicate_reverse_direction_suggestion(self, db):
         """If a suggestion exists in reverse direction (B→A), skip creating A→B."""
-        proj = _insert_thing("Trip", type_hint="project")
-        task_a_id = _insert_thing("Task A")
-        task_b_id = _insert_thing("Task B")
-        _insert_relationship(proj, task_a_id, "parent-of")
-        _insert_relationship(proj, task_b_id, "parent-of")
+        proj = _insert_thing(db, "Trip", type_hint="project")
+        task_a_id = _insert_thing(db, "Task A")
+        task_b_id = _insert_thing(db, "Task B")
+        _insert_relationship(db, proj, task_a_id, "parent-of")
+        _insert_relationship(db, proj, task_b_id, "parent-of")
 
         # Pre-insert suggestion in REVERSE direction (B→A)
         with Session(_engine_mod.engine) as session:
@@ -344,14 +344,14 @@ class TestDetectClusterDependencies:
         assert result.suggestions_created == 0
 
     @pytest.mark.asyncio
-    async def test_skips_when_relationship_already_exists(self):
+    async def test_skips_when_relationship_already_exists(self, db):
         """If a ThingRelationshipRecord already exists for a pair, skip suggestion."""
-        proj = _insert_thing("Trip", type_hint="project")
-        task_a_id = _insert_thing("Task A")
-        task_b_id = _insert_thing("Task B")
-        _insert_relationship(proj, task_a_id, "parent-of")
-        _insert_relationship(proj, task_b_id, "parent-of")
-        _insert_relationship(task_a_id, task_b_id, "depends-on")  # actual relationship
+        proj = _insert_thing(db, "Trip", type_hint="project")
+        task_a_id = _insert_thing(db, "Task A")
+        task_b_id = _insert_thing(db, "Task B")
+        _insert_relationship(db, proj, task_a_id, "parent-of")
+        _insert_relationship(db, proj, task_b_id, "parent-of")
+        _insert_relationship(db, task_a_id, task_b_id, "depends-on")  # actual relationship
 
         mock_response = json.dumps({
             "dependencies": [{
@@ -370,13 +370,13 @@ class TestDetectClusterDependencies:
         assert result.suggestions_created == 0
 
     @pytest.mark.asyncio
-    async def test_rejects_ids_not_in_cluster(self):
+    async def test_rejects_ids_not_in_cluster(self, db):
         """LLM response referencing IDs outside the cluster should be silently dropped."""
-        proj = _insert_thing("Trip", type_hint="project")
-        task_a_id = _insert_thing("Task A")
-        task_b_id = _insert_thing("Task B")
-        _insert_relationship(proj, task_a_id, "parent-of")
-        _insert_relationship(proj, task_b_id, "parent-of")
+        proj = _insert_thing(db, "Trip", type_hint="project")
+        task_a_id = _insert_thing(db, "Task A")
+        task_b_id = _insert_thing(db, "Task B")
+        _insert_relationship(db, proj, task_a_id, "parent-of")
+        _insert_relationship(db, proj, task_b_id, "parent-of")
 
         mock_response = json.dumps({
             "dependencies": [{
