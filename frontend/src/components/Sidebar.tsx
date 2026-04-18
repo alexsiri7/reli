@@ -927,7 +927,7 @@ export function Sidebar() {
             {disclosure.showBriefing && morningBriefing && <MorningBriefingSection briefing={morningBriefing} />}
 
             {/* Weekly Digest */}
-            {weeklyBriefing && <WeeklyBriefingSection briefing={weeklyBriefing} />}
+            {disclosure.showGraphView && weeklyBriefing && <WeeklyBriefingSection briefing={weeklyBriefing} />}
 
             {/* Briefing empty state */}
             {!loading && !morningBriefing && !weeklyBriefing && findings.length === 0 && briefing.length === 0 && (

@@ -382,3 +382,91 @@ describe('Sidebar', () => {
     expect(screen.getByPlaceholderText('Add person…')).toBeInTheDocument()
   })
 })
+
+describe('Sidebar: progressive disclosure thresholds', () => {
+  const weeklyBriefingMock = {
+    id: 'wb1',
+    week_start: '2026-04-14',
+    generated_at: '2026-04-18T08:00:00Z',
+    content: {
+      summary: 'A great week',
+      week_start: '2026-04-14',
+      week_end: '2026-04-18',
+      completed: [],
+      upcoming: [],
+      new_connections: [],
+      preferences_learned: [],
+      open_questions: [],
+      stats: {},
+    },
+  }
+
+  it('does not show Weekly Digest with 99 things', () => {
+    const things = Array.from({ length: 99 }, (_, i) => makeThing({ id: `t${i}`, title: `Thing ${i}` }))
+    mockState = {
+      things,
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      weeklyBriefing: weeklyBriefingMock,
+    }
+    render(<Sidebar />)
+    expect(screen.queryByText('Weekly Digest')).not.toBeInTheDocument()
+  })
+
+  it('shows Weekly Digest with 100+ things', () => {
+    const things = Array.from({ length: 100 }, (_, i) => makeThing({ id: `t${i}`, title: `Thing ${i}` }))
+    mockState = {
+      things,
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      weeklyBriefing: weeklyBriefingMock,
+    }
+    render(<Sidebar />)
+    expect(screen.getByText('Weekly Digest')).toBeInTheDocument()
+  })
+
+  it('does not show Morning Briefing with fewer than 5 things', () => {
+    const overdueDate = '2026-01-01T00:00:00Z'
+    mockState = {
+      things: [makeThing({ id: 't0', title: 'Thing 0' })],
+      briefing: [makeThing({ id: 'b1', title: 'Overdue Task', checkin_date: overdueDate })],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    expect(screen.queryByText('Morning Briefing')).not.toBeInTheDocument()
+  })
+
+  it('shows Focus section with 20+ things when recommendations exist', () => {
+    const things = Array.from({ length: 20 }, (_, i) => makeThing({ id: `t${i}`, title: `Thing ${i}` }))
+    mockState = {
+      things,
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      focusRecommendations: [{ thing: makeThing({ id: 'fr1', title: 'Focus Me' }), reasons: ['High priority'], score: 0.9 }],
+    }
+    render(<Sidebar />)
+    expect(screen.getByText('Focus')).toBeInTheDocument()
+  })
+
+  it('does not show Focus section with 19 things', () => {
+    const things = Array.from({ length: 19 }, (_, i) => makeThing({ id: `t${i}`, title: `Thing ${i}` }))
+    mockState = {
+      things,
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      focusRecommendations: [{ thing: makeThing({ id: 'fr1', title: 'Focus Me' }), reasons: ['High priority'], score: 0.9 }],
+    }
+    render(<Sidebar />)
+    expect(screen.queryByText('Focus')).not.toBeInTheDocument()
+  })
+})
