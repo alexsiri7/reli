@@ -37,9 +37,13 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H 100.120.193.82 >> ~/.ssh/known_hosts
+          if ! grep -q "100.120.193.82" ~/.ssh/known_hosts; then
+            echo "ERROR: ssh-keyscan produced no output — host may be unreachable"
+            exit 1
+          fi
 
       - name: Deploy staging via SSH
         env:
@@ -47,7 +51,7 @@ jobs:
           GHCR_USER: ${{ github.actor }}
           DEPLOY_SHA: ${{ steps.sha.outputs.sha }}
         run: |
-          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@100.120.193.82 << EOF
+          ssh -o BatchMode=yes -o ConnectTimeout=30 -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@100.120.193.82 << EOF
           export GHCR_TOKEN="${GHCR_TOKEN}"
           export GHCR_USER="${GHCR_USER}"
           export DEPLOY_SHA="${DEPLOY_SHA}"
@@ -133,9 +137,13 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H 100.120.193.82 >> ~/.ssh/known_hosts
+          if ! grep -q "100.120.193.82" ~/.ssh/known_hosts; then
+            echo "ERROR: ssh-keyscan produced no output — host may be unreachable"
+            exit 1
+          fi
 
       - name: Deploy via SSH
         env:
@@ -143,7 +151,7 @@ jobs:
           GHCR_USER: ${{ github.actor }}
           DEPLOY_SHA: ${{ needs.deploy-staging.outputs.deploy_sha }}
         run: |
-          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@100.120.193.82 << EOF
+          ssh -o BatchMode=yes -o ConnectTimeout=30 -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@100.120.193.82 << EOF
           export GHCR_TOKEN="${GHCR_TOKEN}"
           export GHCR_USER="${GHCR_USER}"
           export DEPLOY_SHA="${DEPLOY_SHA}"
