@@ -56,7 +56,7 @@ jobs:
             # Note: resets tracked files only; untracked files (.env, etc.) are preserved
             git fetch origin main
             git reset --hard origin/main
-            RELI_IMAGE_TAG="$DEPLOY_SHA" docker compose -f docker-compose.staging.yml up -d
+            RELI_IMAGE_TAG="$DEPLOY_SHA" docker compose -f docker-compose.staging.yml up -d --remove-orphans
 
       - name: Wait for staging health
         run: |
