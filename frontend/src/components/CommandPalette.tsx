@@ -29,8 +29,8 @@ function parseQuery(raw: string): ParsedQuery {
     return { thingQuery: q.slice(1).trim(), actionsOnly: true, typeFilter: null }
   }
   const typeMatch = q.match(/^#(\w+)\s*(.*)$/)
-  if (typeMatch && typeMatch[1] && typeMatch[2] !== undefined) {
-    return { thingQuery: typeMatch[2].trim(), actionsOnly: false, typeFilter: typeMatch[1].toLowerCase() }
+  if (typeMatch && typeMatch[1]) {
+    return { thingQuery: (typeMatch[2] ?? '').trim(), actionsOnly: false, typeFilter: typeMatch[1].toLowerCase() }
   }
   return { thingQuery: q, actionsOnly: false, typeFilter: null }
 }
@@ -147,9 +147,10 @@ export function CommandPalette() {
       )
 
   // Build flat list for keyboard nav
-  const flatItems: ResultItem[] = []
-  thingItems.forEach(thing => flatItems.push({ kind: 'thing', thing }))
-  actionItems.forEach(command => flatItems.push({ kind: 'command', command }))
+  const flatItems: ResultItem[] = [
+    ...thingItems.map(thing => ({ kind: 'thing' as const, thing })),
+    ...actionItems.map(command => ({ kind: 'command' as const, command })),
+  ]
 
   const [activeIdx, setActiveIdx] = useState(0)
 
@@ -181,10 +182,6 @@ export function CommandPalette() {
     inputRef.current?.focus()
   }, [])
 
-  const runCommand = (cmd: Command) => {
-    cmd.action()
-  }
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
@@ -199,7 +196,7 @@ export function CommandPalette() {
         closeCommandPalette()
         openThingDetail(item.thing.id)
       } else if (item?.kind === 'command') {
-        runCommand(item.command)
+        item.command.action()
       }
     } else if (e.key === 'Escape') {
       e.preventDefault()
@@ -244,19 +241,17 @@ export function CommandPalette() {
               <li className="px-4 py-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide select-none">
                 {!query.trim() ? 'Recent' : 'Things'}
               </li>
-              {thingItems.map(thing => {
-                const gIdx = flatItems.findIndex(i => i.kind === 'thing' && i.thing.id === thing.id)
-                return (
+              {thingItems.map((thing, idx) => (
                   <li
                     key={thing.id}
                     role="option"
-                    aria-selected={gIdx === activeIdx}
+                    aria-selected={idx === activeIdx}
                     className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-sm transition-colors ${
-                      gIdx === activeIdx
+                      idx === activeIdx
                         ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
                         : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}
-                    onMouseEnter={() => setActiveIdx(gIdx)}
+                    onMouseEnter={() => setActiveIdx(idx)}
                     onMouseDown={e => {
                       e.preventDefault()
                       closeCommandPalette()
@@ -271,8 +266,7 @@ export function CommandPalette() {
                       )}
                     </div>
                   </li>
-                )
-              })}
+              ))}
             </>
           )}
 
@@ -282,8 +276,8 @@ export function CommandPalette() {
               <li className="px-4 py-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide select-none">
                 {actionsOnly ? 'Actions' : 'Quick Actions'}
               </li>
-              {actionItems.map(cmd => {
-                const gIdx = flatItems.findIndex(i => i.kind === 'command' && i.command.id === cmd.id)
+              {actionItems.map((cmd, idx) => {
+                const gIdx = thingItems.length + idx
                 return (
                   <li
                     key={cmd.id}
@@ -295,7 +289,7 @@ export function CommandPalette() {
                         : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}
                     onMouseEnter={() => setActiveIdx(gIdx)}
-                    onMouseDown={e => { e.preventDefault(); runCommand(cmd) }}
+                    onMouseDown={e => { e.preventDefault(); cmd.action() }}
                   >
                     <div>
                       <span className="font-medium">{cmd.label}</span>
