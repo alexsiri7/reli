@@ -940,3 +940,99 @@ def get_conflicts(
         }
         for a in alerts
     ]
+
+
+# ---------------------------------------------------------------------------
+# calendar_create_event
+# ---------------------------------------------------------------------------
+
+
+def calendar_create_event(
+    thing_id: str,
+    summary: str,
+    start: str,
+    end: str,
+    location: str = "",
+    description: str = "",
+    user_id: str = "",
+) -> dict[str, Any]:
+    """Create a Google Calendar event and store its ID on the Thing.
+
+    Returns the created event dict (with 'id', 'summary', 'html_link'),
+    or an error dict if calendar is not connected or Thing not found.
+    """
+    from . import google_calendar as gc
+
+    if not gc.is_connected(user_id=user_id):
+        return {"error": "Google Calendar not connected"}
+
+    event = gc.create_event(
+        summary=summary,
+        start=start,
+        end=end,
+        location=location,
+        description=description,
+        user_id=user_id,
+    )
+    if not event:
+        return {"error": "Failed to create calendar event"}
+
+    # Store the calendar event ID on the Thing
+    calendar_event_id = event.get("id", "")
+    if calendar_event_id and thing_id:
+        update_thing(
+            thing_id=thing_id,
+            data_json=json.dumps({"calendar_event_id": calendar_event_id}),
+            user_id=user_id,
+        )
+
+    return event
+
+
+# ---------------------------------------------------------------------------
+# calendar_update_event
+# ---------------------------------------------------------------------------
+
+
+def calendar_update_event(
+    thing_id: str,
+    summary: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    location: str | None = None,
+    description: str | None = None,
+    user_id: str = "",
+) -> dict[str, Any]:
+    """Update an existing Google Calendar event linked to a Thing.
+
+    Reads the event_id from Thing's data.calendar_event_id.
+    Returns the updated event dict, or an error dict.
+    """
+    from . import google_calendar as gc
+
+    if not gc.is_connected(user_id=user_id):
+        return {"error": "Google Calendar not connected"}
+
+    # Get the Thing to find its linked calendar event ID
+    thing = get_thing(thing_id=thing_id, user_id=user_id)
+    if "error" in thing:
+        return thing
+
+    data = thing.get("data") or {}
+    event_id = data.get("calendar_event_id", "")
+    if not event_id:
+        return {"error": "No calendar_event_id found on this Thing — use calendar_create_event first"}
+
+    event = gc.update_event(
+        event_id=event_id,
+        summary=summary,
+        start=start,
+        end=end,
+        location=location,
+        description=description,
+        user_id=user_id,
+    )
+    if not event:
+        return {"error": "Failed to update calendar event"}
+
+    return event

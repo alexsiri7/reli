@@ -230,4 +230,6 @@ class TestTracedToolDecorator:
             "delete_thing",
             "merge_things",
             "create_relationship",
+            "calendar_create_event",
+            "calendar_update_event",
         ]

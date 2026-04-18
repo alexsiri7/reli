@@ -130,6 +130,11 @@ You have tools to query and modify the database. Call them as needed:
 - delete_thing — delete a Thing by ID
 - merge_things — merge a duplicate Thing into a primary Thing
 - create_relationship — create a typed link between two Things
+- calendar_create_event — create a Google Calendar event linked to an event Thing.
+  Call this after create_thing(type_hint="event") when the user provides a date/time.
+  Only call if Google Calendar integration is active (skip silently if it may not be).
+- calendar_update_event — update the Google Calendar event linked to an event Thing.
+  Call this after update_thing() on an event with a known calendar_event_id.
 
 WORKFLOW:
 1. Check if warm context is provided (Things from recent conversation turns).
@@ -789,6 +794,78 @@ def _make_reasoning_tools(
             applied["relationships_created"].append(result)
         return result
 
+    # ------------------------------------------------------------------
+    def calendar_create_event(
+        thing_id: str,
+        summary: str,
+        start: str,
+        end: str,
+        location: str = "",
+        description: str = "",
+    ) -> dict[str, Any]:
+        """Create a Google Calendar event and link it to an event Thing.
+
+        Call this after create_thing(type_hint="event") when the user provides
+        time information. Requires Google Calendar to be connected.
+
+        Args:
+            thing_id: ID of the event Thing to link the calendar event to.
+            summary: Event title (usually same as Thing title).
+            start: Start datetime in ISO-8601 format, e.g. "2026-04-22T18:00:00Z".
+            end: End datetime in ISO-8601 format, e.g. "2026-04-22T19:00:00Z".
+            location: Optional location string.
+            description: Optional event description.
+
+        Returns:
+            Dict with 'id', 'summary', 'html_link', or an error dict.
+        """
+        result = shared_tools.calendar_create_event(
+            thing_id=thing_id,
+            summary=summary,
+            start=start,
+            end=end,
+            location=location,
+            description=description,
+            user_id=user_id,
+        )
+        return result
+
+    # ------------------------------------------------------------------
+    def calendar_update_event(
+        thing_id: str,
+        summary: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        location: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        """Update the Google Calendar event linked to an event Thing.
+
+        Call this after update_thing() on an event-type Thing that already has
+        a calendar_event_id in its data. Requires Google Calendar to be connected.
+
+        Args:
+            thing_id: ID of the event Thing whose calendar event to update.
+            summary: New event title, or None to keep current.
+            start: New start datetime (ISO-8601), or None to keep current.
+            end: New end datetime (ISO-8601), or None to keep current.
+            location: New location, or None to keep current.
+            description: New description, or None to keep current.
+
+        Returns:
+            Dict with 'id', 'summary', 'html_link', or an error dict.
+        """
+        result = shared_tools.calendar_update_event(
+            thing_id=thing_id,
+            summary=summary,
+            start=start,
+            end=end,
+            location=location,
+            description=description,
+            user_id=user_id,
+        )
+        return result
+
     # Wrap each tool with OTEL span instrumentation
     traced_tools = [
         _traced_tool(fetch_context),
@@ -798,6 +875,8 @@ def _make_reasoning_tools(
         _traced_tool(delete_thing),
         _traced_tool(merge_things),
         _traced_tool(create_relationship),
+        _traced_tool(calendar_create_event),
+        _traced_tool(calendar_update_event),
     ]
     return traced_tools, applied, fetched_context
 
