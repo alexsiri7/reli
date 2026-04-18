@@ -1,4 +1,4 @@
-"""Google Calendar read-only integration using OAuth2."""
+"""Google Calendar integration using OAuth2 (read + write)."""
 
 import json
 import logging
@@ -23,7 +23,7 @@ import backend.db_engine as _engine_mod
 from .db_models import GoogleTokenRecord
 from .token_encryption import decrypt_or_plaintext, encrypt
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
 # OAuth client credentials
 GOOGLE_CLIENT_ID = settings.GOOGLE_CLIENT_ID
@@ -274,3 +274,98 @@ def fetch_upcoming_events(
         )
 
     return events
+
+
+def create_event(
+    summary: str,
+    start: str,
+    end: str,
+    location: str = "",
+    description: str = "",
+    user_id: str = "",
+) -> dict[str, Any]:
+    """Create a calendar event. start/end must be UTC ISO-8601 (e.g. "2026-04-22T18:00:00Z").
+    Returns the created event dict, or empty dict if not connected."""
+    creds = get_credentials(user_id=user_id)
+    if not creds:
+        return {}
+
+    try:
+        authorized_http = AuthorizedHttp(creds, http=httplib2.Http(timeout=30))
+        service = build("calendar", "v3", http=authorized_http)
+
+        body: dict[str, Any] = {
+            "summary": summary,
+            "start": {"dateTime": start, "timeZone": "UTC"},
+            "end": {"dateTime": end, "timeZone": "UTC"},
+        }
+        if location:
+            body["location"] = location
+        if description:
+            body["description"] = description
+
+        event = service.events().insert(calendarId="primary", body=body).execute()
+        return {
+            "id": event.get("id", ""),
+            "summary": event.get("summary", ""),
+            "start": event.get("start", {}).get("dateTime", ""),
+            "end": event.get("end", {}).get("dateTime", ""),
+            "html_link": event.get("htmlLink", ""),
+        }
+    except Exception:
+        logger.warning("Google Calendar create_event failed", exc_info=True)
+        return {}
+
+
+def update_event(
+    event_id: str,
+    summary: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    location: str | None = None,
+    description: str | None = None,
+    user_id: str = "",
+) -> dict[str, Any]:
+    """Update an existing calendar event. Only provided fields are changed.
+    Returns the updated event dict, or empty dict if not connected."""
+    creds = get_credentials(user_id=user_id)
+    if not creds:
+        return {}
+
+    try:
+        authorized_http = AuthorizedHttp(creds, http=httplib2.Http(timeout=30))
+        service = build("calendar", "v3", http=authorized_http)
+
+        # Fetch current event to patch only changed fields
+        existing = service.events().get(calendarId="primary", eventId=event_id).execute()
+    except Exception:
+        logger.warning("Google Calendar update_event: failed to fetch existing event (id=%s)", event_id, exc_info=True)
+        return {}
+
+    if summary is not None:
+        existing["summary"] = summary
+    if start is not None:
+        existing.setdefault("start", {})["dateTime"] = start
+        existing["start"].setdefault("timeZone", "UTC")
+    if end is not None:
+        existing.setdefault("end", {})["dateTime"] = end
+        existing["end"].setdefault("timeZone", "UTC")
+    if location is not None:
+        existing["location"] = location
+    if description is not None:
+        existing["description"] = description
+
+    try:
+        event = service.events().update(
+            calendarId="primary", eventId=event_id, body=existing
+        ).execute()
+        return {
+            "id": event.get("id", ""),
+            "summary": event.get("summary", ""),
+            "start": event.get("start", {}).get("dateTime", ""),
+            "end": event.get("end", {}).get("dateTime", ""),
+            "html_link": event.get("htmlLink", ""),
+        }
+    except Exception:
+        logger.warning("Google Calendar update_event: failed to write update (id=%s)", event_id, exc_info=True)
+        return {}

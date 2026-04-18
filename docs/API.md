@@ -214,7 +214,9 @@ Daily briefing: check-in due Things, sweep findings, and learned preferences.
 
 ## Google Calendar (`/api/calendar`)
 
-Read-only calendar integration.
+Read + write calendar integration. Events can be created and updated via the
+reasoning agent tools (`calendar_create_event`, `calendar_update_event`); the
+REST endpoints below cover status, OAuth, and event listing only.
 
 | Method | Path | Description |
 |--------|------|-------------|

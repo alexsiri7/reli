@@ -58,6 +58,9 @@ def _record_to_finding(record: SweepFindingRecord, thing: Thing | None = None) -
     )
 
 
+_VALID_CONFIDENCE_LABELS = {"emerging", "moderate", "strong"}
+
+
 def _confidence_label(data: dict) -> str:
     """Convert raw preference data to a human-readable confidence label.
 
@@ -67,11 +70,10 @@ def _confidence_label(data: dict) -> str:
 
     Returns one of: "emerging" (<0.5), "moderate" (0.5–0.69), or "strong" (>=0.7).
     """
-    _VALID = {"emerging", "moderate", "strong"}
     if "patterns" in data and isinstance(data["patterns"], list) and data["patterns"]:
         raw = data["patterns"][0].get("confidence", 0.0)
         if isinstance(raw, str):
-            return raw if raw in _VALID else "emerging"
+            return raw if raw in _VALID_CONFIDENCE_LABELS else "emerging"
         conf = raw if isinstance(raw, (int, float)) else 0.0
     else:
         conf = data.get("confidence", 0.0)

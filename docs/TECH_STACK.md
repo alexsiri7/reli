@@ -98,7 +98,7 @@ OpenAI-compatible gateway that handles model routing and cost tracking.
 | Service | Purpose | Auth |
 |---------|---------|------|
 | Requesty | LLM gateway (multi-model routing) | API key |
-| Google Calendar | Read-only calendar access | OAuth2 (calendar.readonly) |
+| Google Calendar | Read + write calendar access (create/update events) | OAuth2 (calendar.events) |
 | Gmail | Read-only email access | OAuth2 (gmail.readonly) |
 | Google Search | Web search capability | API key + Custom Search CX |
 | Cloudflare | Tunnel for public access | Tunnel token |

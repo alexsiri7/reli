@@ -278,6 +278,15 @@ the next checkin_date based on importance:
 - Importance 2: check in 5-7 days
 - Importance 3-4: check in 10-14 days
 
+## Google Calendar Sync
+
+When the user provides a specific date and time for an event-type Thing:
+1. After calling `create_thing(type_hint="event", ...)`, call `calendar_create_event` with the thing's ID and the event details (summary, start ISO-8601, end ISO-8601).
+2. When the user updates timing for an event Thing that has a `data.calendar_event_id`, call `calendar_update_event` with the updated fields.
+3. If the user marks an event Thing as inactive (completed/cancelled), do NOT delete the calendar event — just leave it.
+4. Only call calendar tools when start/end times are available. If only a date is known, skip calendar sync and let the user fill in the time.
+5. Calendar sync is best-effort — if calendar_create_event returns an error (e.g. Calendar not connected), continue without failing.
+
 ## MCP Tools
 
 This prompt is designed for use with:
@@ -287,3 +296,5 @@ This prompt is designed for use with:
 - `delete_thing` — delete Things
 - `merge_things` — merge duplicate Things
 - `create_relationship` — create typed links between Things
+- `calendar_create_event` — create a Google Calendar event linked to an event Thing
+- `calendar_update_event` — update a Google Calendar event linked to an event Thing
