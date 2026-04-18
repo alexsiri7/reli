@@ -499,19 +499,17 @@ def find_broad_things_without_subtasks(session: Session, user_id: str = "") -> l
     )
     rows = session.execute(stmt).all()
 
-    candidates: list[SweepCandidate] = []
-    for row in rows:
-        candidates.append(
-            SweepCandidate(
-                thing_id=row.id,
-                thing_title=row.title,
-                finding_type="broad_thing_no_subtasks",
-                message=f"Broad {row.type_hint} with no subtasks: {row.title}",
-                priority=2,
-                extra={"type_hint": row.type_hint or "unknown", "importance": row.importance},
-            )
+    return [
+        SweepCandidate(
+            thing_id=row.id,
+            thing_title=row.title,
+            finding_type="broad_thing_no_subtasks",
+            message=f"Broad {row.type_hint} with no subtasks: {row.title}",
+            priority=2,
+            extra={"type_hint": row.type_hint or "unknown", "importance": row.importance},
         )
-    return candidates
+        for row in rows
+    ]
 
 
 def find_open_questions(session: Session, user_id: str = "") -> list[SweepCandidate]:
