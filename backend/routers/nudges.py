@@ -15,8 +15,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import String, cast
 from sqlmodel import Session, select
 
-from ..auth import require_user
 import backend.db_engine as _engine_mod
+
+from ..auth import require_user
 from ..db_engine import user_filter_clause
 from ..db_models import NudgeDismissalRecord, NudgeSuppressionRecord, ThingRecord
 from ..models import Nudge

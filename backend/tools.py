@@ -16,8 +16,10 @@ from sqlalchemy import text
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
+
 from .db_engine import user_filter_clause
-from .db_models import ThingRecord, ThingRelationshipRecord, MergeHistoryRecord as MergeHistoryDBRecord, ChatHistoryRecord
+from .db_models import ChatHistoryRecord, ThingRecord, ThingRelationshipRecord
+from .db_models import MergeHistoryRecord as MergeHistoryDBRecord
 from .vector_store import delete_thing as vs_delete
 from .vector_store import upsert_thing
 

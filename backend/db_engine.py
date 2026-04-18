@@ -14,11 +14,9 @@ from collections.abc import Generator
 from typing import Any
 
 from sqlalchemy import event
-from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlmodel import Session, SQLModel, create_engine, or_
+from sqlmodel import Session, create_engine, or_
 
 from .config import settings
-
 
 # ---------------------------------------------------------------------------
 # Pure helpers (no engine dependency) — defined early so they're available even
