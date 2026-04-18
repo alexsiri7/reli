@@ -19,10 +19,6 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-def _parse_bool_env(value: str) -> bool:
-    return value.lower() not in ("false", "0", "no")
-
-
 class Settings(BaseSettings):
     """Application settings loaded from environment variables and .env file."""
 
