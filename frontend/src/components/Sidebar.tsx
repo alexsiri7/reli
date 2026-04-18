@@ -415,6 +415,24 @@ function loadSidebarWidth(): number {
   return SIDEBAR_DEFAULT_WIDTH
 }
 
+const TYPE_ORDER = ['task', 'project', 'person', 'idea', 'note', 'goal', 'journal', 'preference'] as const
+
+const FALLBACK_LABELS: Record<string, string> = {
+  project: 'Projects',
+  goal: 'Goals',
+  task: 'Tasks',
+  note: 'Notes',
+  idea: 'Ideas',
+  journal: 'Journal',
+  preference: 'Preferences',
+  person: 'People',
+}
+
+const SEVERITY_COLORS: Record<string, string> = {
+  critical: 'text-ideas',
+  warning: 'text-events',
+}
+
 function singularize(label: string): string {
   if (label === 'People') return 'person'
   if (label.endsWith('ies')) return label.slice(0, -3) + 'y'
@@ -584,17 +602,6 @@ export function Sidebar() {
 
   // Group active things by type, excluding children of projects (shown under parent)
   const activeGroups = useMemo(() => {
-    const TYPE_ORDER = ['task', 'project', 'person', 'idea', 'note', 'goal', 'journal', 'preference'] as const
-    const FALLBACK_LABELS: Record<string, string> = {
-      project: 'Projects',
-      goal: 'Goals',
-      task: 'Tasks',
-      note: 'Notes',
-      idea: 'Ideas',
-      journal: 'Journal',
-      preference: 'Preferences',
-      person: 'People',
-    }
     // Build label map from DB types (pluralise by appending 's')
     const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
     for (const tt of thingTypes) {
@@ -649,12 +656,6 @@ export function Sidebar() {
 
   // Available types for the filter dropdown (derived from active things)
   const availableTypes = useMemo(() => {
-    const TYPE_ORDER = ['task', 'project', 'person', 'idea', 'note', 'goal', 'journal', 'preference']
-    const FALLBACK_LABELS: Record<string, string> = {
-      project: 'Projects', goal: 'Goals', task: 'Tasks',
-      note: 'Notes', idea: 'Ideas', journal: 'Journal',
-      preference: 'Preferences', person: 'People',
-    }
     const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
     for (const tt of thingTypes) {
       if (!typeLabels[tt.name]) {
@@ -982,11 +983,7 @@ export function Sidebar() {
                   {'\u26A0\uFE0F'} Alerts
                 </h2>
                 {conflictAlerts.map((alert, i) => {
-                  const severityColor = alert.severity === 'critical'
-                    ? 'text-ideas'
-                    : alert.severity === 'warning'
-                    ? 'text-events'
-                    : 'text-primary'
+                  const severityColor = SEVERITY_COLORS[alert.severity] ?? 'text-primary'
                   const severityIcon = alert.severity === 'critical' ? '\u{1F6A8}' : alert.severity === 'warning' ? '\u26A0\uFE0F' : '\u2139\uFE0F'
                   const typeIcon = alert.alert_type === 'blocking_chain' ? '\u{1F6D1}' : alert.alert_type === 'schedule_overlap' ? '\u{1F4C5}' : '\u23F0'
                   return (

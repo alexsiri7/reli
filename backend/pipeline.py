@@ -95,10 +95,7 @@ def _parse_thing_open_questions(thing: dict[str, Any]) -> dict[str, Any]:
     if oq and isinstance(oq, str):
         try:
             parsed = json.loads(oq)
-            if isinstance(parsed, list):
-                thing["open_questions"] = parsed
-            else:
-                thing["open_questions"] = None
+            thing["open_questions"] = parsed if isinstance(parsed, list) else None
         except (json.JSONDecodeError, TypeError):
             thing["open_questions"] = None
     return thing

@@ -589,7 +589,7 @@ def _normalize(title: str) -> str:
     t = title.lower().strip()
     for prefix in ("my ", "the ", "a ", "an "):
         if t.startswith(prefix):
-            t = t[len(prefix):]
+            return t[len(prefix):]
     return t
 
 
