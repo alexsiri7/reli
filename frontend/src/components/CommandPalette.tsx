@@ -55,6 +55,8 @@ export function CommandPalette() {
   const things = useStore(s => s.things)
   const thingTypes = useStore(s => s.thingTypes)
   const openThingDetail = useStore(s => s.openThingDetail)
+  const mainView = useStore(s => s.mainView)
+  const setMainView = useStore(s => s.setMainView)
 
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -90,6 +92,15 @@ export function CommandPalette() {
       action: () => {
         closeCommandPalette()
         setChatMode(chatMode === 'normal' ? 'planning' : 'normal')
+      },
+    },
+    {
+      id: 'toggle-calendar',
+      label: mainView === 'calendar' ? 'Switch to List View' : 'Switch to Calendar View',
+      description: 'Toggle calendar view',
+      action: () => {
+        closeCommandPalette()
+        setMainView(mainView === 'calendar' ? 'list' : 'calendar')
       },
     },
     {
@@ -129,13 +140,16 @@ export function CommandPalette() {
     : searchResults
 
   // Things group: either recent (empty query), type-filtered from cache, or search results
-  const thingItems: Thing[] = actionsOnly
-    ? []
-    : query.trim()
-      ? typeFilter && !thingQuery
-        ? things.filter(t => t.active && t.type_hint === typeFilter).slice(0, 10)
-        : filteredSearchResults.slice(0, 10)
-      : recentThings
+  let thingItems: Thing[]
+  if (actionsOnly) {
+    thingItems = []
+  } else if (!query.trim()) {
+    thingItems = recentThings
+  } else if (typeFilter && !thingQuery) {
+    thingItems = things.filter(t => t.active && t.type_hint === typeFilter).slice(0, 10)
+  } else {
+    thingItems = filteredSearchResults.slice(0, 10)
+  }
 
   // Actions group: existing commands filtered by thingQuery
   const actionItems: Command[] = typeFilter
@@ -242,30 +256,30 @@ export function CommandPalette() {
                 {!query.trim() ? 'Recent' : 'Things'}
               </li>
               {thingItems.map((thing, idx) => (
-                  <li
-                    key={thing.id}
-                    role="option"
-                    aria-selected={idx === activeIdx}
-                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-sm transition-colors ${
-                      idx === activeIdx
-                        ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    }`}
-                    onMouseEnter={() => setActiveIdx(idx)}
-                    onMouseDown={e => {
-                      e.preventDefault()
-                      closeCommandPalette()
-                      openThingDetail(thing.id)
-                    }}
-                  >
-                    <span className="text-base shrink-0">{typeIcon(thing.type_hint, thingTypes)}</span>
-                    <div className="min-w-0">
-                      <span className="font-medium truncate block">{thing.title}</span>
-                      {thing.type_hint && (
-                        <span className="text-xs text-gray-400 dark:text-gray-500">{thing.type_hint}</span>
-                      )}
-                    </div>
-                  </li>
+                <li
+                  key={thing.id}
+                  role="option"
+                  aria-selected={idx === activeIdx}
+                  className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-sm transition-colors ${
+                    idx === activeIdx
+                      ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  }`}
+                  onMouseEnter={() => setActiveIdx(idx)}
+                  onMouseDown={e => {
+                    e.preventDefault()
+                    closeCommandPalette()
+                    openThingDetail(thing.id)
+                  }}
+                >
+                  <span className="text-base shrink-0">{typeIcon(thing.type_hint, thingTypes)}</span>
+                  <div className="min-w-0">
+                    <span className="font-medium truncate block">{thing.title}</span>
+                    {thing.type_hint && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500">{thing.type_hint}</span>
+                    )}
+                  </div>
+                </li>
               ))}
             </>
           )}

@@ -7,6 +7,10 @@ const openQuickAdd = vi.fn()
 const searchThings = vi.fn()
 const clearSearch = vi.fn()
 const openThingDetail = vi.fn()
+const setMainView = vi.fn()
+
+// Set before render() — reassigning after render won't trigger re-render
+let mockMainView = 'list'
 
 const mockThings = [
   {
@@ -65,6 +69,8 @@ vi.mock('../store', () => ({
       things: mockThings,
       thingTypes: [],
       openThingDetail,
+      mainView: mockMainView,
+      setMainView,
     }),
 }))
 
@@ -73,6 +79,8 @@ beforeEach(() => {
   searchThings.mockReset()
   clearSearch.mockReset()
   openThingDetail.mockReset()
+  setMainView.mockReset()
+  mockMainView = 'list'
 })
 
 describe('CommandPalette', () => {
@@ -148,5 +156,33 @@ describe('CommandPalette', () => {
     const { unmount } = render(<CommandPalette />)
     unmount()
     expect(clearSearch).toHaveBeenCalled()
+  })
+
+  it('shows "Switch to Calendar View" when in list view', () => {
+    mockMainView = 'list'
+    render(<CommandPalette />)
+    expect(screen.getByText('Switch to Calendar View')).toBeInTheDocument()
+  })
+
+  it('shows "Switch to List View" when in calendar view', () => {
+    mockMainView = 'calendar'
+    render(<CommandPalette />)
+    expect(screen.getByText('Switch to List View')).toBeInTheDocument()
+  })
+
+  it('calls setMainView("calendar") when calendar command executed from list view', () => {
+    mockMainView = 'list'
+    render(<CommandPalette />)
+    fireEvent.mouseDown(screen.getByText('Switch to Calendar View'))
+    expect(setMainView).toHaveBeenCalledWith('calendar')
+    expect(closeCommandPalette).toHaveBeenCalled()
+  })
+
+  it('calls setMainView("list") when calendar command executed from calendar view', () => {
+    mockMainView = 'calendar'
+    render(<CommandPalette />)
+    fireEvent.mouseDown(screen.getByText('Switch to List View'))
+    expect(setMainView).toHaveBeenCalledWith('list')
+    expect(closeCommandPalette).toHaveBeenCalled()
   })
 })
