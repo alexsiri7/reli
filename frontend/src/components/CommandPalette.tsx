@@ -55,6 +55,8 @@ export function CommandPalette() {
   const things = useStore(s => s.things)
   const thingTypes = useStore(s => s.thingTypes)
   const openThingDetail = useStore(s => s.openThingDetail)
+  const mainView = useStore(s => s.mainView)
+  const setMainView = useStore(s => s.setMainView)
 
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -90,6 +92,15 @@ export function CommandPalette() {
       action: () => {
         closeCommandPalette()
         setChatMode(chatMode === 'normal' ? 'planning' : 'normal')
+      },
+    },
+    {
+      id: 'toggle-calendar',
+      label: mainView === 'calendar' ? 'Switch to List View' : 'Switch to Calendar View',
+      description: 'Toggle calendar view',
+      action: () => {
+        closeCommandPalette()
+        setMainView(mainView === 'calendar' ? 'list' : 'calendar')
       },
     },
     {
