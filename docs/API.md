@@ -314,6 +314,28 @@ Background cleanup and reflection runs.
 | GET | `/api/sweep/runs` | List sweep run history |
 | POST | `/api/sweep/connections` | Trigger connection sweep |
 | POST | `/api/sweep/dependencies` | Detect implicit dependencies between Things via LLM |
+| POST | `/api/sweep/research` | Proactive research: fetch external data for Things with open questions |
+
+**`POST /api/sweep/research` response:**
+```json
+{
+  "things_researched": 3,
+  "findings_created": 3,
+  "lookups_executed": 3,
+  "findings": [
+    {
+      "id": "sf-abc12345",
+      "thing_id": "t-...",
+      "thing_title": "Book flights to Tokyo",
+      "action": "web_search",
+      "query": "Tokyo flight prices April 2026",
+      "results_count": 5,
+      "message": "Research for 'Book flights to Tokyo': ..."
+    }
+  ],
+  "usage": { "input_tokens": 120, "output_tokens": 45 }
+}
+```
 
 ---
 

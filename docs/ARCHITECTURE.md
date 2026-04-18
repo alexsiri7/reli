@@ -233,6 +233,7 @@ The sweep scheduler (`sweep_scheduler.py`) runs nightly jobs:
 |-----|---------|
 | Preference sweep | Infers user preferences from conversation patterns |
 | Connection sweep | Detects semantically related Things to suggest connections |
+| Research sweep | Fetches external data (web, Gmail, calendar) for Things with open questions |
 | Morning briefing | Pre-generates the daily briefing |
 
 Scheduler starts at app startup and stops on shutdown (via FastAPI lifespan context).
