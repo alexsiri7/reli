@@ -511,6 +511,7 @@ def prune_stale_open_questions(
 ) -> int:
     """Clear open_questions on active Things not updated in *stale_days*.
 
+    Scoped to *user_id* when provided; operates across all users when omitted.
     Returns the number of Things pruned.
     """
     cutoff = (date.today() - timedelta(days=stale_days)).isoformat()
@@ -532,6 +533,7 @@ def prune_stale_open_questions(
         count += 1
     if count:
         session.commit()
+        logger.info("Pruned stale open_questions from %d thing(s)", count)
     return count
 
 
@@ -1248,6 +1250,7 @@ def collect_candidates(
             _generate_template_gap_questions(session, gap_candidates)
             session.commit()
 
+        # Prune before collection so stale questions don't surface as candidates this sweep.
         prune_stale_open_questions(session, stale_days=stale_days, user_id=user_id)
 
         candidates = (

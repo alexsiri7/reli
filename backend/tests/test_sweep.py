@@ -9,11 +9,8 @@ from sqlmodel import Session
 from backend.db_models import ThingRecord
 from backend.sweep import (
     _generate_template_gap_questions as generate_gap_questions,
-)
-from backend.sweep import (
     collect_candidates,
     find_approaching_dates,
-    prune_stale_open_questions,
     find_completed_projects,
     find_cross_project_duplicate_effort,
     find_cross_project_resource_conflicts,
@@ -25,6 +22,7 @@ from backend.sweep import (
     find_orphan_things,
     find_overdue_checkins,
     find_stale_things,
+    prune_stale_open_questions,
 )
 
 # ---------------------------------------------------------------------------
@@ -506,6 +504,19 @@ class TestPruneStaleOpenQuestions:
         assert not t1.open_questions
         assert t2.open_questions is not None
 
+    def test_empty_list_not_pruned(self, patched_db, db):
+        stale = (date.today() - timedelta(days=15)).isoformat()
+        with db() as conn:
+            conn.execute(
+                """INSERT INTO things (id, title, type_hint, checkin_date, active, surface,
+                   data, open_questions, created_at, updated_at)
+                   VALUES (?, ?, NULL, NULL, 1, 1, NULL, ?, ?, ?)""",
+                ("t1", "Empty List", "[]", stale, stale),
+            )
+        with Session(_engine_mod.engine) as session:
+            count = prune_stale_open_questions(session, stale_days=14)
+        assert count == 0
+
 
 # ---------------------------------------------------------------------------
 # Information gaps
@@ -848,6 +859,16 @@ class TestCollectCandidates:
         results = collect_candidates()
         types = {c.finding_type for c in results}
         assert "cross_project_duplicate_effort" in types
+
+    def test_prune_fires_in_collect_candidates(self, patched_db, db):
+        """Stale open questions are cleared when collect_candidates runs."""
+        stale = (date.today() - timedelta(days=15)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "sq1", "Stale Q", open_questions=["Why?"], updated_at=stale)
+        collect_candidates()
+        with Session(_engine_mod.engine) as session:
+            thing = session.get(ThingRecord, "sq1")
+        assert not thing.open_questions
 
 
 # ---------------------------------------------------------------------------
