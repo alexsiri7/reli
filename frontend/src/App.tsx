@@ -16,6 +16,7 @@ import { usePushNotifications } from './hooks/usePushNotifications'
 import { PreferenceToast } from './components/PreferenceToast'
 import { CommandPalette } from './components/CommandPalette'
 import { QuickAdd } from './components/QuickAdd'
+import { MobileFAB } from './components/MobileFAB'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
 function App() {
@@ -148,6 +149,7 @@ function App() {
       <div className="contents md:hidden">
         <div className={`flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden ${mobileView === 'things' ? '' : 'hidden'}`}>
           <Sidebar />
+          {mobileView === 'things' && <MobileFAB />}
         </div>
         <div className={`flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden ${mobileView === 'chat' ? '' : 'hidden'}`}>
           <ChatPanel />
