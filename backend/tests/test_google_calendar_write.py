@@ -2,13 +2,12 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestCreateEvent:
     def test_returns_empty_when_not_connected(self):
         with patch("backend.google_calendar.get_credentials", return_value=None):
             from backend.google_calendar import create_event
+
             result = create_event("Test Event", "2026-04-22T18:00:00Z", "2026-04-22T19:00:00Z")
         assert result == {}
 
@@ -29,6 +28,7 @@ class TestCreateEvent:
             patch("backend.google_calendar.AuthorizedHttp", return_value=MagicMock()),
         ):
             from backend.google_calendar import create_event
+
             result = create_event(
                 summary="Test Event",
                 start="2026-04-22T18:00:00Z",
@@ -45,7 +45,11 @@ class TestCreateEvent:
         """Verify location is included in the API call body."""
         mock_service = MagicMock()
         mock_service.events().insert().execute.return_value = {
-            "id": "evt1", "summary": "Test", "start": {}, "end": {}, "htmlLink": ""
+            "id": "evt1",
+            "summary": "Test",
+            "start": {},
+            "end": {},
+            "htmlLink": "",
         }
         captured_body = {}
 
@@ -61,6 +65,7 @@ class TestCreateEvent:
             patch("backend.google_calendar.AuthorizedHttp", return_value=MagicMock()),
         ):
             from backend.google_calendar import create_event
+
             create_event("Test", "2026-04-22T18:00:00Z", "2026-04-22T19:00:00Z", location="Room 1")
 
         assert captured_body.get("location") == "Room 1"
@@ -70,6 +75,7 @@ class TestUpdateEvent:
     def test_returns_empty_when_not_connected(self):
         with patch("backend.google_calendar.get_credentials", return_value=None):
             from backend.google_calendar import update_event
+
             result = update_event("evt_123", summary="New Title")
         assert result == {}
 
@@ -80,8 +86,11 @@ class TestUpdateEvent:
             "start": {"dateTime": "2026-04-22T18:00:00Z", "timeZone": "UTC"},
             "end": {"dateTime": "2026-04-22T19:00:00Z", "timeZone": "UTC"},
         }
-        updated_event = {**existing_event, "summary": "New Title",
-                         "htmlLink": "https://calendar.google.com/event?eid=abc"}
+        updated_event = {
+            **existing_event,
+            "summary": "New Title",
+            "htmlLink": "https://calendar.google.com/event?eid=abc",
+        }
 
         mock_service = MagicMock()
         mock_service.events().get().execute.return_value = existing_event
@@ -93,6 +102,7 @@ class TestUpdateEvent:
             patch("backend.google_calendar.AuthorizedHttp", return_value=MagicMock()),
         ):
             from backend.google_calendar import update_event
+
             result = update_event("evt_123", summary="New Title")
 
         assert result["id"] == "evt_123"

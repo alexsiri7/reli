@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from backend.tools import create_thing, calendar_create_event, calendar_update_event
+from backend.tools import calendar_create_event, calendar_update_event, create_thing
 
 
 class TestCalendarCreateEvent:
@@ -43,6 +43,7 @@ class TestCalendarCreateEvent:
 
         # Verify calendar_event_id stored on Thing
         from backend.tools import get_thing
+
         updated = get_thing(thing_id)
         assert updated["data"]["calendar_event_id"] == "cal_event_abc"
 
@@ -76,6 +77,7 @@ class TestCalendarUpdateEvent:
 
     def test_updates_event_when_id_present(self, patched_db):
         import json
+
         thing = create_thing(
             title="Team Meeting",
             type_hint="event",
