@@ -144,10 +144,11 @@ function CalendarSources({ events }: { events: CalendarEvent[] }) {
   )
 }
 
-/** Action Applied card — green SUCCESS badge with created/updated Things */
-function ActionAppliedCard({ changes }: { changes: AppliedChanges }) {
+/** Context dropdown — collapsed pill summary with expand-to-detail toggle */
+function ContextDropdown({ changes }: { changes: AppliedChanges }) {
+  const [expanded, setExpanded] = useState(false)
   const thingTypes = useStore(s => s.thingTypes)
-  const openThingDetail = useStore(s => s.openThingDetail)
+  const openDetail = useStore(s => s.openThingDetail)
 
   const contextThings = changes.context_things ?? []
   const created = changes.created ?? []
@@ -159,112 +160,77 @@ function ActionAppliedCard({ changes }: { changes: AppliedChanges }) {
   if (!hasInferredConnections && !hasEffects) return null
 
   return (
-    <div className="mt-3 rounded-xl border border-projects/20 bg-projects/5 p-3 space-y-2">
-      {/* SUCCESS badge */}
-      {hasEffects && (
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-projects/20 text-projects">
-            SUCCESS
+    <div className="mt-3">
+      {/* Pill summary */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {created.length > 0 && (
+          <span data-testid="pill-created" className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-surface-container-high text-on-surface-variant">
+            +{created.length} created
           </span>
-        </div>
-      )}
-
-      {/* Created/Updated/Deleted items */}
-      {hasEffects && (
-        <div className="space-y-1">
+        )}
+        {updated.length > 0 && (
+          <span data-testid="pill-updated" className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-surface-container-high text-on-surface-variant">
+            ✓ {updated.length} updated
+          </span>
+        )}
+        {deleted.length > 0 && (
+          <span data-testid="pill-deleted" className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-surface-container-high text-on-surface-variant">
+            {deleted.length} deleted
+          </span>
+        )}
+        {hasInferredConnections && (
+          <span data-testid="pill-inferred" className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-primary/10 text-primary">
+            💡 inferred connection
+          </span>
+        )}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
+        >
+          {expanded ? '▴ hide' : '▾ details'}
+        </button>
+      </div>
+      {expanded && (
+        <div className="mt-2 space-y-1">
+          {hasInferredConnections && (
+            <div className="space-y-0.5">
+              {contextThings.map((t: ContextThing) => (
+                <button
+                  key={t.id}
+                  onClick={() => openDetail(t.id)}
+                  data-testid={`context-thing-${t.id}`}
+                  className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-primary transition-colors w-full text-left cursor-pointer"
+                >
+                  <span>{typeIcon(t.type_hint, thingTypes)}</span>
+                  <span className="truncate">{t.title}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {created.map(c => (
             <button
               key={c.id}
-              onClick={() => openThingDetail(c.id)}
-              className="flex items-center gap-2 text-xs w-full text-left hover:text-primary transition-colors cursor-pointer group"
+              onClick={() => openDetail(c.id)}
+              data-testid={`created-thing-${c.id}`}
+              className="flex items-center gap-2 text-xs w-full text-left hover:text-primary transition-colors cursor-pointer"
             >
               <span className="text-projects font-medium shrink-0">Created</span>
-              <span>{typeIcon(c.type_hint, thingTypes)}</span>
-              <span className="truncate text-on-surface group-hover:text-primary">{c.title}</span>
-              <svg className="w-3 h-3 text-on-surface-variant/40 group-hover:text-primary ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-              </svg>
+              <span className="truncate">{c.title}</span>
             </button>
           ))}
           {updated.map(u => (
             <button
               key={u.id}
-              onClick={() => openThingDetail(u.id)}
-              className="flex items-center gap-2 text-xs w-full text-left hover:text-primary transition-colors cursor-pointer group"
+              onClick={() => openDetail(u.id)}
+              data-testid={`updated-thing-${u.id}`}
+              className="flex items-center gap-2 text-xs w-full text-left hover:text-primary transition-colors cursor-pointer"
             >
               <span className="text-events font-medium shrink-0">Updated</span>
-              <span>{typeIcon((u as { type_hint?: string }).type_hint, thingTypes)}</span>
-              <span className="truncate text-on-surface group-hover:text-primary">{u.title}</span>
-              <svg className="w-3 h-3 text-on-surface-variant/40 group-hover:text-primary ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-              </svg>
+              <span className="truncate">{u.title}</span>
             </button>
           ))}
-          {deleted.map(id => (
-            <div
-              key={id}
-              className="flex items-center gap-2 text-xs"
-            >
-              <span className="font-medium text-ideas shrink-0">Deleted</span>
-              <span className="truncate text-on-surface-variant">{id}</span>
-            </div>
-          ))}
         </div>
       )}
-
-      {/* Inferred connections */}
-      {hasInferredConnections && (
-        <div>
-          <p className="text-label text-on-surface-variant mb-1">Inferred connections</p>
-          <div className="space-y-0.5">
-            {contextThings.map((t: ContextThing) => (
-              <button
-                key={t.id}
-                onClick={() => openThingDetail(t.id)}
-                className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-primary transition-colors w-full text-left cursor-pointer"
-              >
-                <span>{typeIcon(t.type_hint, thingTypes)}</span>
-                <span className="truncate">{t.title}</span>
-                {t.type_hint && (
-                  <span className="text-[10px] text-on-surface-variant/60 capitalize ml-auto shrink-0">{t.type_hint}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** Context chips — bottom bar showing context Things as pills */
-function ContextChips({ changes }: { changes: AppliedChanges }) {
-  const thingTypes = useStore(s => s.thingTypes)
-  const openThingDetail = useStore(s => s.openThingDetail)
-  const contextThings = changes.context_things ?? []
-  const created = changes.created ?? []
-  const updated = changes.updated ?? []
-
-  const allThings = [
-    ...created.map(c => ({ ...c, kind: 'created' as const })),
-    ...updated.map(u => ({ ...u, kind: 'updated' as const })),
-    ...contextThings.map(t => ({ ...t, kind: 'context' as const })),
-  ]
-
-  if (allThings.length === 0) return null
-
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap mt-2">
-      {allThings.map(t => (
-        <button
-          key={t.id}
-          onClick={() => openThingDetail(t.id)}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-surface-container-high text-on-surface-variant hover:bg-surface-container-high/80 hover:text-on-surface transition-colors cursor-pointer"
-        >
-          <span className="text-xs">{typeIcon('type_hint' in t ? t.type_hint : undefined, thingTypes)}</span>
-          <span className="truncate max-w-[120px]">{t.title}</span>
-        </button>
-      ))}
     </div>
   )
 }
@@ -544,14 +510,9 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
           )}
         </div>
 
-        {/* Action Applied card */}
+        {/* Context dropdown — collapsed pill summary */}
         {!isUser && msg.applied_changes && (
-          <ActionAppliedCard changes={msg.applied_changes} />
-        )}
-
-        {/* Context chips */}
-        {!isUser && msg.applied_changes && (
-          <ContextChips changes={msg.applied_changes} />
+          <ContextDropdown changes={msg.applied_changes} />
         )}
 
         {/* Reli Suggestion card — for proactive suggestions */}
