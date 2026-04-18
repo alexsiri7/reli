@@ -6,8 +6,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-_logger = logging.getLogger(__name__)
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, text
@@ -39,6 +37,7 @@ from ..vector_store import delete_thing as vs_delete
 from ..vector_store import reindex_all, upsert_thing
 
 router = APIRouter(prefix="/things", tags=["things"])
+_logger = logging.getLogger(__name__)
 
 
 def _parse_dt(val: str | None) -> datetime | None:
