@@ -283,7 +283,6 @@ class _MCPCorsMiddleware(BaseHTTPMiddleware):
 
         origin = request.headers.get("origin", "")
 
-        # Handle preflight
         if request.method == "OPTIONS":
             resp = StarletteResponse(status_code=204)
             resp.headers["Access-Control-Allow-Origin"] = origin or "*"
