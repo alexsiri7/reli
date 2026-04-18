@@ -46,8 +46,10 @@ def _seconds_until(hour: int, minute: int) -> float:
 
 def _get_all_user_ids() -> list[str]:
     """Return all user IDs from the database. Returns [''] if no users exist."""
-    import backend.db_engine as _engine_mod
     from sqlmodel import Session, select
+
+    import backend.db_engine as _engine_mod
+
     from .db_models import UserRecord
 
     with Session(_engine_mod.engine) as session:
@@ -72,8 +74,9 @@ def _log_run(
     completed_at: str | None = None,
 ) -> None:
     """Insert or update a sweep run record."""
-    import backend.db_engine as _engine_mod
     from sqlmodel import Session
+
+    import backend.db_engine as _engine_mod
 
     from .db_models import SweepRunRecord
 
@@ -91,20 +94,22 @@ def _log_run(
             if completed_at:
                 existing.completed_at = datetime.fromisoformat(completed_at)
         else:
-            session.add(SweepRunRecord(
-                id=run_id,
-                user_id=user_id or None,
-                status=status,
-                candidates_found=candidates_found,
-                findings_created=findings_created,
-                model=model,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                cost_usd=cost_usd,
-                error=error,
-                started_at=datetime.fromisoformat(started_at) if started_at else datetime.now(timezone.utc),
-                completed_at=datetime.fromisoformat(completed_at) if completed_at else None,
-            ))
+            session.add(
+                SweepRunRecord(
+                    id=run_id,
+                    user_id=user_id or None,
+                    status=status,
+                    candidates_found=candidates_found,
+                    findings_created=findings_created,
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_usd=cost_usd,
+                    error=error,
+                    started_at=datetime.fromisoformat(started_at) if started_at else datetime.now(timezone.utc),
+                    completed_at=datetime.fromisoformat(completed_at) if completed_at else None,
+                )
+            )
         session.commit()
 
 
@@ -173,6 +178,24 @@ async def _run_sweep_for_user(user_id: str) -> None:
                 logger.error("Comm style sweep timed out for user %s (300s limit)", user_label)
             except Exception:
                 logger.exception("Comm style sweep failed for user %s", user_label)
+
+            # Dependency sweep: LLM-powered implicit dependency detection (runs even when no candidates)
+            try:
+                from .dependency_sweep import run_dependency_sweep
+
+                async with asyncio.timeout(300):
+                    dep_result = await run_dependency_sweep(user_id=user_id)
+                if dep_result.suggestions_created or dep_result.findings_created:
+                    logger.info(
+                        "Dependency sweep [%s]: %d suggestions, %d findings",
+                        user_label,
+                        dep_result.suggestions_created,
+                        dep_result.findings_created,
+                    )
+            except TimeoutError:
+                logger.error("Dependency sweep timed out for user %s (300s limit)", user_label)
+            except Exception:
+                logger.exception("Dependency sweep failed for user %s", user_label)
 
             # Still generate morning briefing (captures priorities, overdue, blockers)
             try:
@@ -261,6 +284,24 @@ async def _run_sweep_for_user(user_id: str) -> None:
             result.findings_created,
             result.usage,
         )
+
+        # Dependency sweep: LLM-powered implicit dependency detection
+        try:
+            from .dependency_sweep import run_dependency_sweep
+
+            async with asyncio.timeout(300):
+                dep_result = await run_dependency_sweep(user_id=user_id)
+            if dep_result.suggestions_created or dep_result.findings_created:
+                logger.info(
+                    "Dependency sweep [%s]: %d suggestions, %d findings",
+                    user_label,
+                    dep_result.suggestions_created,
+                    dep_result.findings_created,
+                )
+        except TimeoutError:
+            logger.error("Dependency sweep timed out for user %s (300s limit)", user_label)
+        except Exception:
+            logger.exception("Dependency sweep failed for user %s", user_label)
 
         # Generate morning briefing after sweep completes
         try:

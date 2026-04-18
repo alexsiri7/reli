@@ -160,12 +160,20 @@ class TestRunSweepForUser:
             findings_created=2,
             usage={"model": "test-model", "prompt_tokens": 50, "completion_tokens": 30, "cost_usd": 0.01},
         )
+        mock_dep_result = MagicMock(suggestions_created=0, findings_created=0)
 
         with (
             patch("backend.sweep.collect_candidates", return_value=[fake_candidate]),
             patch("backend.sweep.reflect_on_candidates", new_callable=AsyncMock, return_value=mock_result),
+            patch(
+                "backend.dependency_sweep.run_dependency_sweep",
+                new_callable=AsyncMock,
+                return_value=mock_dep_result,
+            ) as mock_dep,
         ):
             await _run_sweep_for_user("")
+
+        mock_dep.assert_called_once_with(user_id="")
 
         with db() as conn:
             rows = conn.execute("SELECT * FROM sweep_runs").fetchall()
@@ -173,6 +181,22 @@ class TestRunSweepForUser:
         assert rows[0]["status"] == "completed"
         assert rows[0]["candidates_found"] == 1
         assert rows[0]["findings_created"] == 2
+
+    @pytest.mark.asyncio
+    async def test_runs_dependency_sweep(self, patched_db, db):
+        mock_dep_result = MagicMock(suggestions_created=1, findings_created=1)
+
+        with (
+            patch("backend.sweep.collect_candidates", return_value=[]),
+            patch(
+                "backend.dependency_sweep.run_dependency_sweep",
+                new_callable=AsyncMock,
+                return_value=mock_dep_result,
+            ) as mock_dep,
+        ):
+            await _run_sweep_for_user("u1")
+
+        mock_dep.assert_called_once_with(user_id="u1")
 
 
 class TestRunSweep:

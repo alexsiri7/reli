@@ -19,6 +19,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
+
 from .db_engine import user_filter_clause
 from .db_models import (
     ConnectionSuggestionRecord,
@@ -88,7 +89,11 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
                 "id": t.id,
                 "title": t.title,
                 "type_hint": t.type_hint,
-                "checkin_date": t.checkin_date.isoformat() if isinstance(t.checkin_date, (date, datetime)) else t.checkin_date,
+                "checkin_date": (
+                    t.checkin_date.isoformat()
+                    if isinstance(t.checkin_date, (date, datetime))
+                    else t.checkin_date
+                ),
                 "data": t.data,
                 "user_id": t.user_id,
             }
@@ -118,7 +123,6 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
     # Group children by project
     project_children: dict[str, list[dict]] = {}
     project_titles: dict[str, str] = {}
-    active_ids = set(thing_map.keys())
 
     for rel in parent_rels:
         project = thing_map.get(rel.from_thing_id)
@@ -126,8 +130,6 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
         if not project or not child:
             continue
         if project.get("type_hint") != "project":
-            continue
-        if rel.to_thing_id not in active_ids:
             continue
 
         pid = rel.from_thing_id
