@@ -194,11 +194,17 @@ def dismiss_nudge(nudge_id: str, user_id: str = Depends(require_user)) -> dict:
     return {"ok": True}
 
 
+_PREFIX_TO_NUDGE_TYPE: dict[str, str] = {
+    "proactive": "approaching_date",
+}
+
+
 @router.post("/{nudge_id}/stop", summary="Stop nudges of this type (preference signal)")
 def stop_nudge_type(nudge_id: str, user_id: str = Depends(require_user)) -> dict:
     """Suppress all nudges of this type and record a negative preference signal."""
     # Extract nudge_type from nudge_id (format: "{type}_{thing_id}_{key}")
-    nudge_type = nudge_id.split("_")[0] if "_" in nudge_id else nudge_id
+    prefix = nudge_id.split("_")[0] if "_" in nudge_id else nudge_id
+    nudge_type = _PREFIX_TO_NUDGE_TYPE.get(prefix, prefix)
 
     today_str = date.today().isoformat()
     with Session(_engine_mod.engine) as session:

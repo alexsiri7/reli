@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { SweepFinding, BriefingItem, LearnedPreference } from '../store'
+import { NudgeBanner } from './NudgeBanner'
 
 const FINDING_TYPE_ICONS: Record<string, string> = {
   approaching_date: '\u23F0',
@@ -215,7 +216,7 @@ function StatCard({ label, value, suffix, accent }: { label: string; value: numb
 
 export function BriefingPanel() {
   const {
-    theOneThing, secondaryItems, briefingStats, findings, learnedPreferences,
+    theOneThing, secondaryItems, briefingStats, findings, learnedPreferences, nudges,
     setRightView, openThingDetail, dismissFinding, snoozeFinding, actOnFinding, submitPreferenceFeedback,
   } = useStore(
     useShallow(s => ({
@@ -224,6 +225,7 @@ export function BriefingPanel() {
       briefingStats: s.briefingStats,
       findings: s.findings,
       learnedPreferences: s.learnedPreferences,
+      nudges: s.nudges,
       setRightView: s.setRightView,
       openThingDetail: s.openThingDetail,
       dismissFinding: s.dismissFinding,
@@ -267,6 +269,13 @@ export function BriefingPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {nudges.length > 0 && (
+          <section className="px-6 pt-4">
+            {nudges.map(nudge => (
+              <NudgeBanner key={nudge.id} nudge={nudge} />
+            ))}
+          </section>
+        )}
         {/* Greeting */}
         <section className="px-6 pt-8 pb-4">
           <h1 className="text-display text-on-surface font-bold">{getGreeting()}</h1>

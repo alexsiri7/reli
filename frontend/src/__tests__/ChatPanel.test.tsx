@@ -29,6 +29,7 @@ const mockStore = {
   seedFromGoogle: vi.fn().mockResolvedValue({ count: 0 }),
   googleSeedLoading: false,
   calendarStatus: { configured: false, connected: false },
+  nudges: [],
 }
 
 vi.mock('../store', () => ({
