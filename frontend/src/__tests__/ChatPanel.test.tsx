@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import type { Nudge } from '../generated/api-types'
 
 type Msg = {
   id: string | number
@@ -29,7 +30,7 @@ const mockStore = {
   seedFromGoogle: vi.fn().mockResolvedValue({ count: 0 }),
   googleSeedLoading: false,
   calendarStatus: { configured: false, connected: false },
-  nudges: [],
+  nudges: [] as Nudge[],
 }
 
 const mockDismissNudge = vi.fn()
