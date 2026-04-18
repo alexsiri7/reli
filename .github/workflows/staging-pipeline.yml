@@ -41,7 +41,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H 100.120.193.82 >> ~/.ssh/known_hosts
           if ! ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1; then
-            echo "ERROR: ssh-keyscan produced no output — host may be unreachable"
+            echo "ERROR: host key not found in known_hosts — host may be unreachable or keyscan failed"
             exit 1
           fi
 
@@ -141,7 +141,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H 100.120.193.82 >> ~/.ssh/known_hosts
           if ! ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1; then
-            echo "ERROR: ssh-keyscan produced no output — host may be unreachable"
+            echo "ERROR: host key not found in known_hosts — host may be unreachable or keyscan failed"
             exit 1
           fi
 
