@@ -882,12 +882,7 @@ def assign_checkin_dates(
             parsed = _parse_date_value(data.get(key))
             if not parsed:
                 continue
-            if key in _EVENT_KEYS:
-                new_date = parsed - timedelta(days=14)
-            elif key in _DEADLINE_KEYS:
-                new_date = parsed - timedelta(days=7)
-            else:
-                new_date = parsed - timedelta(days=7)
+            new_date = parsed - timedelta(days=14 if key in _EVENT_KEYS else 7)
             break
 
         # Priority 2: earliest child checkin_date
