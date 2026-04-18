@@ -43,10 +43,13 @@ function SectionCard({ title, accent, children }: {
   )
 }
 
-function TodayEventRow({ event }: { event: CalendarEvent }) {
-  const startTime = event.all_day ? 'All day' : new Date(event.start).toLocaleTimeString('en-US', {
-    hour: 'numeric', minute: '2-digit',
-  })
+export function TodayEventRow({ event }: { event: CalendarEvent }) {
+  const parsed = new Date(event.start)
+  const startTime = event.all_day
+    ? 'All day'
+    : isNaN(parsed.getTime())
+      ? event.start
+      : parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   return (
     <div className="flex items-start gap-3 py-2 px-4">
       <span className="text-xs text-on-surface-variant tabular-nums shrink-0 pt-0.5 w-16">{startTime}</span>
@@ -226,7 +229,7 @@ function StatCard({ label, value, suffix, accent }: { label: string; value: numb
 export function BriefingPanel() {
   const {
     theOneThing, secondaryItems, briefingStats, findings, learnedPreferences, nudges,
-    morningBriefing, calendarEvents,
+    morningBriefing, calendarEvents, error,
     setRightView, dismissFinding, snoozeFinding, actOnFinding,
     submitPreferenceFeedback, updateThing, snoozeThing, openChatWithContext,
   } = useStore(
@@ -239,6 +242,7 @@ export function BriefingPanel() {
       nudges: s.nudges,
       morningBriefing: s.morningBriefing,
       calendarEvents: s.calendarEvents,
+      error: s.error,
       setRightView: s.setRightView,
       dismissFinding: s.dismissFinding,
       snoozeFinding: s.snoozeFinding,
@@ -266,7 +270,7 @@ export function BriefingPanel() {
     snoozeThing(id, tomorrow.toISOString().slice(0, 10))
   }
 
-  const todayISO = new Date().toISOString().slice(0, 10)
+  const todayISO = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD in local TZ
   const todayEvents = calendarEvents.filter(e => e.start.slice(0, 10) === todayISO)
 
   const dueTodayItems = [
@@ -308,6 +312,11 @@ export function BriefingPanel() {
               <NudgeBanner key={nudge.id} nudge={nudge} />
             ))}
           </section>
+        )}
+        {error && (
+          <div className="mx-6 mt-3 px-4 py-2 rounded-xl bg-error/10 text-error text-sm">
+            {error}
+          </div>
         )}
         {/* Greeting */}
         <section className="px-6 pt-8 pb-4">
