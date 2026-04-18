@@ -59,12 +59,24 @@ def _record_to_finding(record: SweepFindingRecord, thing: Thing | None = None) -
 
 
 def _confidence_label(data: dict) -> str:
-    """Convert raw preference data to a human-readable confidence label."""
+    """Convert raw preference data to a human-readable confidence label.
+
+    Handles two storage shapes:
+    - data["patterns"][0]["confidence"] — used by pattern-based preferences
+    - data["confidence"] (float) — used by simple confidence-scored preferences
+
+    Returns one of: "emerging" (<0.5), "moderate" (0.5–0.69), or "strong" (>=0.7).
+    """
+    _VALID = {"emerging", "moderate", "strong"}
     if "patterns" in data and isinstance(data["patterns"], list) and data["patterns"]:
-        return str(data["patterns"][0].get("confidence", "emerging"))
-    conf = data.get("confidence", 0.0)
-    if not isinstance(conf, (int, float)):
-        return "emerging"
+        raw = data["patterns"][0].get("confidence", 0.0)
+        if isinstance(raw, str):
+            return raw if raw in _VALID else "emerging"
+        conf = raw if isinstance(raw, (int, float)) else 0.0
+    else:
+        conf = data.get("confidence", 0.0)
+        if not isinstance(conf, (int, float)):
+            return "emerging"
     return "strong" if conf >= 0.7 else "moderate" if conf >= 0.5 else "emerging"
 
 
@@ -112,8 +124,13 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
         finding_results = session.exec(finding_stmt).all()
 
     # Learned preference Things for "I Noticed" section
-    pref_records = [r for r in all_active if r.type_hint == "preference"]
+    pref_records = sorted(
+        [r for r in all_active if r.type_hint == "preference"],
+        key=lambda r: r.updated_at or r.created_at or "",
+        reverse=True,
+    )
     learned_preferences = []
+    # Cap at 5 to keep the "I Noticed" section scannable
     for r in pref_records[:5]:
         try:
             raw = json.loads(r.data) if isinstance(r.data, str) else (r.data or {})

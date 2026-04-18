@@ -769,11 +769,11 @@ export const useStore = create<ReliState>((set, get) => ({
         overdue: data.stats.overdue ?? 0,
       } : null
       set({ briefing: things, theOneThing, secondaryItems, briefingStats, findings, learnedPreferences })
-      cacheBriefing(things, findings).catch(() => {})
+      cacheBriefing(things, findings, learnedPreferences).catch(() => {})
     } catch {
       if (!navigator.onLine) {
         const cached = await getCachedBriefing().catch(() => undefined)
-        if (cached) set({ briefing: cached.things, findings: cached.findings })
+        if (cached) set({ briefing: cached.things, findings: cached.findings, learnedPreferences: cached.learnedPreferences ?? [] })
       }
     }
   },

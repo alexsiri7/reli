@@ -147,7 +147,7 @@ const CONFIDENCE_COLORS: Record<string, string> = {
   emerging: 'bg-blue-400',
 }
 
-function LearnedPreferenceCard({
+export function LearnedPreferenceCard({
   pref,
   onFeedback,
 }: {

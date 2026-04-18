@@ -95,7 +95,17 @@ async function interceptApi(
 
   // Briefing
   await page.route('**/api/briefing', route =>
-    route.fulfill({ json: { things: [], findings: [] }, status: 200 })
+    route.fulfill({
+      json: {
+        things: [],
+        findings: [],
+        learned_preferences: [
+          { id: 'pref-1', title: 'Prefers async communication', confidence_label: 'strong' },
+          { id: 'pref-2', title: 'Cost-conscious with subscriptions', confidence_label: 'moderate' },
+        ],
+      },
+      status: 200,
+    })
   )
 
   // Chat history (session ID is dynamic, match any)

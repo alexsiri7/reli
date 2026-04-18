@@ -2,6 +2,51 @@
 
 from datetime import date, datetime, timedelta
 
+from backend.routers.briefing import _confidence_label
+
+
+class TestConfidenceLabel:
+    def test_strong(self):
+        assert _confidence_label({"confidence": 0.7}) == "strong"
+        assert _confidence_label({"confidence": 1.0}) == "strong"
+
+    def test_moderate(self):
+        assert _confidence_label({"confidence": 0.5}) == "moderate"
+        assert _confidence_label({"confidence": 0.69}) == "moderate"
+
+    def test_emerging(self):
+        assert _confidence_label({"confidence": 0.0}) == "emerging"
+        assert _confidence_label({"confidence": 0.49}) == "emerging"
+        assert _confidence_label({}) == "emerging"
+
+    def test_non_numeric_confidence_falls_back_to_emerging(self):
+        assert _confidence_label({"confidence": "high"}) == "emerging"
+        assert _confidence_label({"confidence": None}) == "emerging"
+
+    def test_patterns_path_string_label(self):
+        data = {"patterns": [{"confidence": "strong"}], "confidence": 0.1}
+        assert _confidence_label(data) == "strong"
+
+    def test_patterns_path_invalid_string_falls_back_to_emerging(self):
+        data = {"patterns": [{"confidence": "0.8"}]}
+        assert _confidence_label(data) == "emerging"
+
+    def test_patterns_path_float_confidence(self):
+        data = {"patterns": [{"confidence": 0.8}]}
+        assert _confidence_label(data) == "strong"
+
+    def test_patterns_path_float_moderate(self):
+        data = {"patterns": [{"confidence": 0.6}]}
+        assert _confidence_label(data) == "moderate"
+
+    def test_patterns_path_float_emerging(self):
+        data = {"patterns": [{"confidence": 0.3}]}
+        assert _confidence_label(data) == "emerging"
+
+    def test_patterns_empty_falls_through_to_float(self):
+        data = {"patterns": [], "confidence": 0.8}
+        assert _confidence_label(data) == "strong"
+
 
 def _create_thing(client, title: str, checkin_date: str | None = None, active: bool = True) -> dict:
     payload = {"title": title, "active": active}
@@ -89,6 +134,18 @@ class TestBriefing:
         cost_pref = next((p for p in prefs if p["title"] == "Cost conscious"), None)
         assert cost_pref is not None
         assert cost_pref["confidence_label"] == "strong"
+
+    def test_preference_cap_at_five(self, client):
+        """learned_preferences is capped at 5 even when more preferences exist."""
+        for i in range(6):
+            client.post("/api/things", json={
+                "title": f"Preference {i}",
+                "type_hint": "preference",
+                "data": {"confidence": 0.6},
+            })
+        resp = client.get("/api/briefing")
+        prefs = resp.json()["learned_preferences"]
+        assert len(prefs) <= 5
 
     def test_things_without_checkin_date_excluded(self, client):
         _create_thing(client, "No Date Thing")
