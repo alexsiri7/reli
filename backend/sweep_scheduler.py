@@ -46,8 +46,10 @@ def _seconds_until(hour: int, minute: int) -> float:
 
 def _get_all_user_ids() -> list[str]:
     """Return all user IDs from the database. Returns [''] if no users exist."""
-    import backend.db_engine as _engine_mod
     from sqlmodel import Session, select
+
+    import backend.db_engine as _engine_mod
+
     from .db_models import UserRecord
 
     with Session(_engine_mod.engine) as session:
@@ -72,8 +74,9 @@ def _log_run(
     completed_at: str | None = None,
 ) -> None:
     """Insert or update a sweep run record."""
-    import backend.db_engine as _engine_mod
     from sqlmodel import Session
+
+    import backend.db_engine as _engine_mod
 
     from .db_models import SweepRunRecord
 
@@ -91,20 +94,22 @@ def _log_run(
             if completed_at:
                 existing.completed_at = datetime.fromisoformat(completed_at)
         else:
-            session.add(SweepRunRecord(
-                id=run_id,
-                user_id=user_id or None,
-                status=status,
-                candidates_found=candidates_found,
-                findings_created=findings_created,
-                model=model,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                cost_usd=cost_usd,
-                error=error,
-                started_at=datetime.fromisoformat(started_at) if started_at else datetime.now(timezone.utc),
-                completed_at=datetime.fromisoformat(completed_at) if completed_at else None,
-            ))
+            session.add(
+                SweepRunRecord(
+                    id=run_id,
+                    user_id=user_id or None,
+                    status=status,
+                    candidates_found=candidates_found,
+                    findings_created=findings_created,
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_usd=cost_usd,
+                    error=error,
+                    started_at=datetime.fromisoformat(started_at) if started_at else datetime.now(timezone.utc),
+                    completed_at=datetime.fromisoformat(completed_at) if completed_at else None,
+                )
+            )
         session.commit()
 
 
