@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Sidebar } from '../components/Sidebar'
 
 type Thing = {
@@ -174,6 +174,7 @@ const calendarDefaults = {
   focusRecommendations: [],
   sidebarOpen: true,
   setSidebarOpen: vi.fn(),
+  createThing: vi.fn(),
   ...searchDefaults,
   ...filterDefaults,
   ...mergeDefaults,
@@ -307,5 +308,77 @@ describe('Sidebar', () => {
     expect(screen.getByText('Preferences')).toBeInTheDocument()
     // The preference title appears only once (in Preferences section, not in Tasks)
     expect(screen.getAllByText('My Preference')).toHaveLength(1)
+  })
+
+  it('collapses a section when its header is clicked', () => {
+    mockState = {
+      things: [makeThing({ title: 'My Task', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    expect(screen.getByText('My Task')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Tasks').closest('button')!)
+    expect(screen.queryByText('My Task')).not.toBeInTheDocument()
+  })
+
+  it('shows quick-add input when + button is clicked', () => {
+    mockState = {
+      things: [makeThing({ title: 'My Task', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    expect(screen.getByPlaceholderText('Add task…')).toBeInTheDocument()
+  })
+
+  it('calls createThing on quick-add submit', async () => {
+    const createThing = vi.fn().mockResolvedValue(undefined)
+    mockState = {
+      things: [makeThing({ title: 'My Task', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      createThing,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    const input = screen.getByPlaceholderText('Add task…')
+    fireEvent.change(input, { target: { value: 'New task title' } })
+    fireEvent.submit(input.closest('form')!)
+    await waitFor(() => expect(createThing).toHaveBeenCalledWith('New task title', 'task'))
+  })
+
+  it('dismisses quick-add input on Escape', () => {
+    mockState = {
+      things: [makeThing({ title: 'My Task', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    fireEvent.keyDown(screen.getByPlaceholderText('Add task…'), { key: 'Escape' })
+    expect(screen.queryByPlaceholderText('Add task…')).not.toBeInTheDocument()
+  })
+
+  it('uses correct singularized placeholder for People section', () => {
+    mockState = {
+      things: [makeThing({ id: 'p1', title: 'Alice', type_hint: 'person' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add person'))
+    expect(screen.getByPlaceholderText('Add person…')).toBeInTheDocument()
   })
 })

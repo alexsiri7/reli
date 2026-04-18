@@ -42,7 +42,7 @@ export function MobileFAB() {
 
   return (
     <>
-      {/* Inline creation form — slides up from bottom when type selected */}
+      {/* Inline creation form — fixed above tab bar, shown when a type is selected */}
       {activeType !== null && (
         <div className="fixed inset-x-0 bottom-16 z-40 px-4 pb-2">
           <form
@@ -90,7 +90,7 @@ export function MobileFAB() {
             className="fixed inset-0 z-30"
             onClick={() => setOpen(false)}
           />
-          <div className="fixed bottom-20 right-4 z-40 flex flex-col gap-2 items-end">
+          <div className="fixed bottom-36 right-4 z-40 flex flex-col gap-2 items-end">
             {FAB_TYPES.map(({ type, label, icon }) => (
               <button
                 key={type}

@@ -415,6 +415,12 @@ function loadSidebarWidth(): number {
   return SIDEBAR_DEFAULT_WIDTH
 }
 
+function singularize(label: string): string {
+  if (label === 'People') return 'person'
+  if (label.endsWith('ies')) return label.slice(0, -3) + 'y'
+  return label.slice(0, -1).toLowerCase()
+}
+
 export function Sidebar() {
   const { currentUser, logout, things, thingTypes, briefing, theOneThing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView, sidebarOpen, setSidebarOpen, createThing } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, theOneThing: s.theOneThing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView, sidebarOpen: s.sidebarOpen, setSidebarOpen: s.setSidebarOpen, createThing: s.createThing })))
   const disclosure = useProgressiveDisclosure()
@@ -499,12 +505,6 @@ export function Sidebar() {
       searchThings(value)
     }, 250)
   }, [searchThings, clearSearch])
-
-  const singularize = (label: string): string => {
-    if (label === 'People') return 'person'
-    if (label.endsWith('ies')) return label.slice(0, -3) + 'y'
-    return label.slice(0, -1).toLowerCase()
-  }
 
   const handleQuickAddSubmit = useCallback(async (type: string) => {
     const trimmed = quickAddTitle.trim()
@@ -1146,6 +1146,7 @@ export function Sidebar() {
           <section key={group.type} className="py-2">
             <button
               onClick={() => toggleSection(group.type)}
+              aria-expanded={!collapsedSections.has(group.type)}
               className="w-full px-4 pb-1 text-label font-semibold text-on-surface-variant flex items-center gap-1.5 hover:text-on-surface transition-colors"
             >
               <span>{group.icon}</span>
