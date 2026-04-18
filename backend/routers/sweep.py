@@ -34,7 +34,13 @@ async def run_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
 
     Returns the candidates found and the findings created by LLM reflection.
     """
+    from ..research_sweep import ResearchSweepResult, run_research_sweep
+
     candidates = collect_candidates(user_id=user_id)
+
+    # Phase 2.5: Proactive research — fetch external data for Things with open questions
+    research_result: ResearchSweepResult = await run_research_sweep(user_id=user_id)
+
     result: ReflectionResult = await reflect_on_candidates(candidates, user_id=user_id)
 
     # Phase 3: Aggregate personality patterns from behavioral signals
@@ -42,6 +48,8 @@ async def run_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
 
     return {
         "candidates_found": len(candidates),
+        "research_lookups": research_result.lookups_executed,
+        "research_findings": research_result.findings_created,
         "findings_created": result.findings_created,
         "findings": result.findings,
         "personality_patterns_updated": pattern_result.patterns_updated,
@@ -123,6 +131,26 @@ async def run_dependency_sweep_endpoint(user_id: str = Depends(require_user)) ->
         "suggestions_created": result.suggestions_created,
         "findings_created": result.findings_created,
         "suggestions": result.suggestions,
+        "findings": result.findings,
+        "usage": result.usage,
+    }
+
+
+@router.post("/research", summary="Run proactive research sweep")
+async def run_research_sweep_endpoint(user_id: str = Depends(require_user)) -> dict[str, Any]:
+    """Run proactive research: for Things with open questions, fetch external data
+    (web search, Gmail, calendar) and store results in Thing.data['research'].
+
+    Rate-limited to MAX_LOOKUPS_PER_RUN per sweep. Skips Things researched
+    within the last 7 days unless the Thing was updated since then.
+    """
+    from ..research_sweep import run_research_sweep as _run_research
+
+    result = await _run_research(user_id=user_id)
+    return {
+        "things_researched": result.things_researched,
+        "findings_created": result.findings_created,
+        "lookups_executed": result.lookups_executed,
         "findings": result.findings,
         "usage": result.usage,
     }
