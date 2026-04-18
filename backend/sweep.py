@@ -843,6 +843,93 @@ def find_information_gaps(
     return candidates
 
 
+def assign_checkin_dates(
+    session: Session,
+    today: date,
+    user_id: str = "",
+) -> int:
+    """Assign a default checkin_date to active Things that have none.
+
+    Priority: event/deadline date in data JSON → earliest child checkin_date
+    → today+7d.  Does not modify updated_at.  Returns count of Things updated.
+    """
+    _EVENT_KEYS = {"event_date", "starts_at", "start_date", "date"}
+    _DEADLINE_KEYS = {"deadline", "due_date", "due", "ends_at", "end_date"}
+
+    stmt = (
+        select(ThingRecord.id)
+        .where(
+            ThingRecord.active == True,  # noqa: E712
+            ThingRecord.checkin_date.is_(None),
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+    )
+    rows = session.execute(stmt).all()
+    if not rows:
+        return 0
+
+    updated = 0
+    for (thing_id,) in rows:
+        thing = session.get(ThingRecord, thing_id)
+        if not thing:
+            continue
+
+        new_date: date | None = None
+
+        # Priority 1: event/deadline date in data JSON
+        data = thing.data or {}
+        for key in _ONESHOT_KEYS:
+            parsed = _parse_date_value(data.get(key))
+            if not parsed:
+                continue
+            if key in _EVENT_KEYS:
+                new_date = parsed - timedelta(days=14)
+            elif key in _DEADLINE_KEYS:
+                new_date = parsed - timedelta(days=7)
+            else:
+                new_date = parsed - timedelta(days=7)
+            break
+
+        # Priority 2: earliest child checkin_date
+        if new_date is None:
+            child_stmt = (
+                select(func.min(ThingRecord.checkin_date))
+                .select_from(ThingRelationshipRecord.__table__)
+                .join(
+                    ThingRecord.__table__,
+                    ThingRecord.__table__.c.id == ThingRelationshipRecord.__table__.c.to_thing_id,
+                )
+                .where(
+                    ThingRelationshipRecord.__table__.c.from_thing_id == thing_id,
+                    ThingRelationshipRecord.__table__.c.relationship_type == "parent-of",
+                    ThingRecord.__table__.c.active == True,  # noqa: E712
+                    ThingRecord.__table__.c.checkin_date.isnot(None),
+                    ThingRecord.__table__.c.checkin_date >= datetime.combine(today, datetime.min.time()),
+                )
+            )
+            earliest = session.execute(child_stmt).scalar()
+            if earliest is not None:
+                if isinstance(earliest, datetime):
+                    new_date = earliest.date()
+                else:
+                    new_date = earliest
+
+        # Priority 3: default nudge
+        if new_date is None:
+            new_date = today + timedelta(days=7)
+
+        # Clamp: never assign a past date
+        if new_date < today:
+            new_date = today + timedelta(days=1)
+
+        # Don't update updated_at — sweep-assigned dates shouldn't make
+        # a Thing appear "fresh" (which would hide it from stale detection).
+        thing.checkin_date = datetime.combine(new_date, datetime.min.time())
+        updated += 1
+
+    return updated
+
+
 def _generate_template_gap_questions(
     session: Session,
     gap_candidates: list[SweepCandidate],
@@ -1212,6 +1299,12 @@ def collect_candidates(
     today = today or date.today()
 
     with Session(_engine_mod.engine) as session:
+        # Phase 0: assign checkin_dates to undated Things so they're findable this sweep
+        assigned = assign_checkin_dates(session, today, user_id=user_id)
+        if assigned:
+            session.commit()
+            logger.info("assign_checkin_dates: assigned %d Things", assigned)
+
         gap_candidates = find_information_gaps(session, today, user_id=user_id)
         # Generate and store questions on Things with gaps before collecting
         # open_questions — so newly generated questions show up in the same sweep.
