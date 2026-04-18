@@ -6,8 +6,10 @@ POST /nudges/{id}/stop    → suppress this nudge type permanently (preference s
 """
 
 import json
+import logging
 import re
-from datetime import date
+import uuid
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import String, cast
@@ -21,6 +23,7 @@ from ..models import Nudge
 from .things import _record_to_thing
 
 router = APIRouter(prefix="/nudges", tags=["nudges"])
+logger = logging.getLogger(__name__)
 
 DAILY_NUDGE_LIMIT = 3
 
@@ -193,6 +196,22 @@ _PREFIX_TO_NUDGE_TYPE: dict[str, str] = {
     "proactive": "approaching_date",
 }
 
+_NUDGE_TYPE_TO_PREF_TITLE: dict[str, str] = {
+    "approaching_date": "Prefers fewer date-based reminders",
+}
+
+
+def _conf_label(conf: float) -> str:
+    """Map a confidence float (0–1) to a display label.
+
+    >=0.7 → "strong", >=0.5 → "moderate", <0.5 → "emerging".
+    """
+    if conf >= 0.7:
+        return "strong"
+    if conf >= 0.5:
+        return "moderate"
+    return "emerging"
+
 
 @router.post("/{nudge_id}/stop", summary="Stop nudges of this type (preference signal)")
 def stop_nudge_type(nudge_id: str, user_id: str = Depends(require_user)) -> dict:
@@ -232,4 +251,88 @@ def stop_nudge_type(nudge_id: str, user_id: str = Depends(require_user)) -> dict
             ))
 
         session.commit()
-    return {"ok": True, "suppressed_type": nudge_type}
+
+        # Create or update a preference Thing for this nudge type
+        pref_title = _NUDGE_TYPE_TO_PREF_TITLE.get(nudge_type)
+        preference_data = None
+        if pref_title:
+            try:
+                existing_pref = session.exec(
+                    select(ThingRecord).where(
+                        ThingRecord.type_hint == "preference",
+                        ThingRecord.title == pref_title,
+                        user_filter_clause(ThingRecord.user_id, user_id),
+                    )
+                ).first()
+
+                now_dt = datetime.now(timezone.utc)
+                now_str = now_dt.isoformat()
+
+                if existing_pref:
+                    # Update existing preference
+                    data = existing_pref.data
+                    if isinstance(data, str):
+                        try:
+                            data = json.loads(data)
+                        except (ValueError, TypeError):
+                            data = {}
+                    if not isinstance(data, dict):
+                        data = {}
+                    evidence = data.get("evidence") if isinstance(data.get("evidence"), list) else []
+                    evidence.append(f"User stopped '{nudge_type}' nudge type ({today_str})")
+                    evidence = evidence[-10:]  # cap at 10
+                    new_conf = min(data.get("confidence", 0.5) + 0.1, 0.95)
+                    data["confidence"] = new_conf
+                    data["evidence"] = evidence
+                    data["sweep_count"] = data.get("sweep_count", 0) + 1
+                    data["last_sweep"] = now_str
+                    existing_pref.data = data  # type: ignore[assignment]
+                    existing_pref.updated_at = now_dt
+                    session.commit()
+                    preference_data = {
+                        "id": existing_pref.id,
+                        "title": existing_pref.title,
+                        "confidence_label": _conf_label(new_conf),
+                        "action": "updated",
+                    }
+                else:
+                    # Create new preference
+                    thing_id = f"pref-{uuid.uuid4().hex[:8]}"
+                    confidence = 0.6
+                    pref_thing_data = {
+                        "confidence": confidence,
+                        "evidence": [f"User stopped '{nudge_type}' nudge type ({today_str})"],
+                        "category": "productivity",
+                        "last_sweep": now_str,
+                        "sweep_count": 1,
+                    }
+                    new_thing = ThingRecord(
+                        id=thing_id,
+                        title=pref_title,
+                        type_hint="preference",
+                        importance=2,
+                        active=True,
+                        surface=False,
+                        data=pref_thing_data,
+                        created_at=now_dt,
+                        updated_at=now_dt,
+                        user_id=user_id or None,
+                    )
+                    session.add(new_thing)
+                    session.commit()
+                    preference_data = {
+                        "id": thing_id,
+                        "title": pref_title,
+                        "confidence_label": _conf_label(confidence),
+                        "action": "created",
+                    }
+            except Exception:
+                logger.exception(
+                    "Failed to upsert preference Thing for nudge_type=%s user=%s",
+                    nudge_type, user_id,
+                )
+
+    result: dict = {"ok": True, "suppressed_type": nudge_type}
+    if preference_data:
+        result["preference"] = preference_data
+    return result
