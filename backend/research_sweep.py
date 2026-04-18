@@ -83,25 +83,23 @@ def _should_skip(thing: ThingRecord) -> bool:
         return True
 
     # Check cooldown: skip if researched recently and Thing hasn't changed since
-    if isinstance(thing.data, dict):
-        research = thing.data.get("research")
-        if isinstance(research, dict):
-            ts_str = research.get("timestamp")
-            if ts_str:
-                try:
-                    last_research = datetime.fromisoformat(ts_str)
-                    cooldown = datetime.now(timezone.utc) - timedelta(days=RESEARCH_COOLDOWN_DAYS)
-                    if last_research > cooldown:
-                        # Researched recently — only re-research if Thing was updated since
-                        if thing.updated_at.tzinfo is None:
-                            updated = thing.updated_at.replace(tzinfo=timezone.utc)
-                        else:
-                            updated = thing.updated_at
-                        if updated < last_research:
-                            return True
-                except (ValueError, TypeError):
-                    pass
-
+    if not isinstance(thing.data, dict):
+        return False
+    research = thing.data.get("research")
+    if not isinstance(research, dict):
+        return False
+    ts_str = research.get("timestamp")
+    if not ts_str:
+        return False
+    try:
+        last_research = datetime.fromisoformat(ts_str)
+        cooldown = datetime.now(timezone.utc) - timedelta(days=RESEARCH_COOLDOWN_DAYS)
+        if last_research > cooldown:
+            # Researched recently — only re-research if Thing was updated since
+            updated = thing.updated_at if thing.updated_at.tzinfo else thing.updated_at.replace(tzinfo=timezone.utc)
+            return updated < last_research
+    except (ValueError, TypeError):
+        pass
     return False
 
 
@@ -118,7 +116,7 @@ def _get_open_questions(thing: ThingRecord) -> list[str]:
         except (json.JSONDecodeError, TypeError):
             logger.debug(
                 "Thing %s has malformed open_questions (not valid JSON list): %r",
-                getattr(thing, "id", "unknown"),
+                thing.id,
                 raw[:100],
             )
             return []
@@ -132,10 +130,8 @@ async def _decide_research(thing: ThingRecord, usage_stats) -> dict:
     from .agents import _chat
 
     questions = _get_open_questions(thing)
-    prompt = (
-        f"Thing: {thing.title}\n"
-        f"Open questions:\n" + "\n".join(f"- {q}" for q in questions)
-    )
+    questions_text = "\n".join(f"- {q}" for q in questions)
+    prompt = f"Thing: {thing.title}\nOpen questions:\n{questions_text}"
 
     raw = await _chat(
         messages=[

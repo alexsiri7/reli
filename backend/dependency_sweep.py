@@ -318,22 +318,20 @@ async def detect_cluster_dependencies(
                     if confidence < 0.6:
                         continue
 
-                    rel_type = str(dep.get("relationship_type", "depends-on")).strip()
-                    if not rel_type:
-                        rel_type = "depends-on"
+                    rel_type = str(dep.get("relationship_type") or "depends-on").strip()
 
                     reason = str(dep.get("reason", "")).strip()
                     if not reason:
                         continue
 
                     # Check for existing suggestion in either direction
+                    C = ConnectionSuggestionRecord
+                    fwd = (C.from_thing_id == from_id) & (C.to_thing_id == to_id)
+                    rev = (C.from_thing_id == to_id) & (C.to_thing_id == from_id)
                     existing = session.exec(
                         select(ConnectionSuggestionRecord).where(
                             ConnectionSuggestionRecord.status.in_(["pending", "deferred"]),  # type: ignore[union-attr]
-                            or_(
-                                (ConnectionSuggestionRecord.from_thing_id == from_id) & (ConnectionSuggestionRecord.to_thing_id == to_id),
-                                (ConnectionSuggestionRecord.from_thing_id == to_id) & (ConnectionSuggestionRecord.to_thing_id == from_id),
-                            ),
+                            or_(fwd, rev),
                         )
                     ).first()
                     if existing:
