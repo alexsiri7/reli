@@ -1156,12 +1156,12 @@ export const useStore = create<ReliState>((set, get) => ({
   seedFromGoogle: async () => {
     set({ googleSeedLoading: true })
     try {
-      const [calRes, gmailRes] = await Promise.allSettled([
+      const results = await Promise.allSettled([
         apiFetch(`${BASE}/calendar/seed`, { method: 'POST' }),
         apiFetch(`${BASE}/gmail/seed`, { method: 'POST' }),
       ])
       let count = 0
-      for (const res of [calRes, gmailRes]) {
+      for (const res of results) {
         if (res.status === 'fulfilled' && res.value.ok) {
           const data = await res.value.json()
           count += data.count ?? 0

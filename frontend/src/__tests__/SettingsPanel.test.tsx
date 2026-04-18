@@ -293,6 +293,16 @@ describe('MyProfileSection (inline editing)', () => {
     expect(screen.getByText('My Profile')).toBeInTheDocument()
   })
 
+  it('shows onboarding message when profile is not yet available', () => {
+    withModels()
+    storeState.userProfile = null
+    storeState.userProfileLoading = false
+    render(<SettingsPanel />)
+    expect(
+      screen.getByText(/As we talk, I'll learn how you like to work/),
+    ).toBeInTheDocument()
+  })
+
   it('shows relationship graph when relationships exist', () => {
     withModels()
     storeState.userProfile = {
