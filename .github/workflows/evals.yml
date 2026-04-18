@@ -39,10 +39,22 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
 
+      - name: Check API key availability
+        id: check_key
+        run: |
+          if [ -z "${{ secrets.REQUESTY_API_KEY }}" ] && [ -z "${{ secrets.GOOGLE_API_KEY }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "⚠️ No LLM API key configured — skipping evals"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run evals
         id: run_evals
+        if: steps.check_key.outputs.skip != 'true'
         env:
           REQUESTY_API_KEY: ${{ secrets.REQUESTY_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           GOOGLE_GENAI_USE_VERTEXAI: "false"
         run: |
           set +e
@@ -52,7 +64,7 @@ jobs:
           echo "EVAL_RC=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
 
       - name: Post results as PR comment
-        if: always()
+        if: always() && steps.check_key.outputs.skip != 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -113,8 +125,20 @@ jobs:
               body,
             });
 
+      - name: Post skip notice
+        if: always() && steps.check_key.outputs.skip == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '## Eval Results ⏭️\n\nNo LLM API key configured — eval regression check skipped.\n\nTo enable evals, add `REQUESTY_API_KEY` or `GOOGLE_API_KEY` as a repository secret.',
+            });
+
       - name: Fail on regression
-        if: always()
+        if: always() && steps.check_key.outputs.skip != 'true'
         run: |
           if [ "${EVAL_RC:-0}" != "0" ]; then
             echo "Eval regressions detected — merge blocked."
