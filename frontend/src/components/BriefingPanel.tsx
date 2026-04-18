@@ -254,21 +254,19 @@ export function BriefingPanel() {
     }))
   )
 
-  const handleSnooze = (id: string) => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    snoozeFinding(id, tomorrow.toISOString().slice(0, 10))
+  const getTomorrowISO = () => {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    return d.toISOString().slice(0, 10)
   }
+
+  const handleSnooze = (id: string) => snoozeFinding(id, getTomorrowISO())
 
   const handleDoneThing = (id: string) => {
     updateThing(id, { active: false })
   }
 
-  const handleSnoozeThing = (id: string) => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    snoozeThing(id, tomorrow.toISOString().slice(0, 10))
-  }
+  const handleSnoozeThing = (id: string) => snoozeThing(id, getTomorrowISO())
 
   const todayISO = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD in local TZ
   const todayEvents = calendarEvents.filter(e => e.start.slice(0, 10) === todayISO)

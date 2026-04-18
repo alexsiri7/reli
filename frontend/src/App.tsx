@@ -86,13 +86,12 @@ function App() {
 
     // Handle OAuth callback redirect
     const params = new URLSearchParams(window.location.search)
-    if (params.has('calendar_connected') || params.has('calendar_error')) {
+    const calendarRedirected = params.has('calendar_connected') || params.has('calendar_error')
+    const gmailRedirected = params.has('gmail_connected') || params.has('gmail_error')
+    if (calendarRedirected || gmailRedirected) {
       window.history.replaceState({}, '', '/')
-      fetchCalendarStatus()
-    }
-    if (params.has('gmail_connected') || params.has('gmail_error')) {
-      window.history.replaceState({}, '', '/')
-      fetchGmailStatus()
+      if (calendarRedirected) fetchCalendarStatus()
+      if (gmailRedirected) fetchGmailStatus()
     }
 
     return () => clearInterval(interval)
