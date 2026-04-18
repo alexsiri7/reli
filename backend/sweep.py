@@ -506,6 +506,35 @@ def find_open_questions(session: Session, user_id: str = "") -> list[SweepCandid
     return candidates
 
 
+def prune_stale_open_questions(
+    session: Session, stale_days: int = 14, user_id: str = ""
+) -> int:
+    """Clear open_questions on active Things not updated in *stale_days*.
+
+    Returns the number of Things pruned.
+    """
+    cutoff = (date.today() - timedelta(days=stale_days)).isoformat()
+
+    stmt = (
+        select(ThingRecord)
+        .where(
+            ThingRecord.active == True,  # noqa: E712
+            ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
+            cast(ThingRecord.open_questions, String).notin_(["[]", "null"]),
+            ThingRecord.updated_at < cutoff,  # type: ignore[operator]
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+    )
+    things = session.exec(stmt).all()  # type: ignore[arg-type]
+    count = 0
+    for thing in things:
+        thing.open_questions = None  # type: ignore[assignment]
+        count += 1
+    if count:
+        session.commit()
+    return count
+
+
 # ---------------------------------------------------------------------------
 # Gap detection — incomplete Things
 # ---------------------------------------------------------------------------
@@ -1218,6 +1247,8 @@ def collect_candidates(
         if gap_candidates:
             _generate_template_gap_questions(session, gap_candidates)
             session.commit()
+
+        prune_stale_open_questions(session, stale_days=stale_days, user_id=user_id)
 
         candidates = (
             find_approaching_dates(session, today, window_days, user_id=user_id)

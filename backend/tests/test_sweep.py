@@ -5,12 +5,15 @@ from datetime import date, timedelta
 
 import backend.db_engine as _engine_mod
 from sqlmodel import Session
+
+from backend.db_models import ThingRecord
 from backend.sweep import (
     _generate_template_gap_questions as generate_gap_questions,
 )
 from backend.sweep import (
     collect_candidates,
     find_approaching_dates,
+    prune_stale_open_questions,
     find_completed_projects,
     find_cross_project_duplicate_effort,
     find_cross_project_resource_conflicts,
@@ -423,6 +426,85 @@ class TestOpenQuestions:
         with Session(_engine_mod.engine) as session:
             results = find_open_questions(session)
         assert "1 unanswered question:" in results[0].message  # no 's'
+
+
+# ---------------------------------------------------------------------------
+# Prune stale open questions
+# ---------------------------------------------------------------------------
+
+
+class TestPruneStaleOpenQuestions:
+    def test_stale_questions_pruned(self, patched_db, db):
+        with db() as conn:
+            _insert_thing(
+                conn, "t1", "Old Q", open_questions=["Why?"],
+                updated_at=(date.today() - timedelta(days=15)).isoformat(),
+            )
+        with Session(_engine_mod.engine) as session:
+            count = prune_stale_open_questions(session, stale_days=14)
+        assert count == 1
+        with Session(_engine_mod.engine) as session:
+            thing = session.get(ThingRecord, "t1")
+        assert not thing.open_questions
+
+    def test_recent_questions_not_pruned(self, patched_db, db):
+        with db() as conn:
+            _insert_thing(
+                conn, "t1", "Fresh Q", open_questions=["What?"],
+                updated_at=date.today().isoformat(),
+            )
+        with Session(_engine_mod.engine) as session:
+            count = prune_stale_open_questions(session, stale_days=14)
+        assert count == 0
+        with Session(_engine_mod.engine) as session:
+            thing = session.get(ThingRecord, "t1")
+        assert thing.open_questions is not None
+
+    def test_boundary_day_not_pruned(self, patched_db, db):
+        with db() as conn:
+            _insert_thing(
+                conn, "t1", "Boundary Q", open_questions=["When?"],
+                updated_at=(date.today() - timedelta(days=14)).isoformat(),
+            )
+        with Session(_engine_mod.engine) as session:
+            count = prune_stale_open_questions(session, stale_days=14)
+        assert count == 0
+
+    def test_no_questions_skipped(self, patched_db, db):
+        with db() as conn:
+            _insert_thing(
+                conn, "t1", "No Q",
+                updated_at=(date.today() - timedelta(days=15)).isoformat(),
+            )
+        with Session(_engine_mod.engine) as session:
+            count = prune_stale_open_questions(session, stale_days=14)
+        assert count == 0
+
+    def test_inactive_things_skipped(self, patched_db, db):
+        with db() as conn:
+            _insert_thing(
+                conn, "t1", "Inactive Q", open_questions=["Why?"], active=False,
+                updated_at=(date.today() - timedelta(days=15)).isoformat(),
+            )
+        with Session(_engine_mod.engine) as session:
+            count = prune_stale_open_questions(session, stale_days=14)
+        assert count == 0
+
+    def test_user_id_isolation(self, patched_db, db):
+        stale = (date.today() - timedelta(days=15)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "User A Q", open_questions=["Why?"], updated_at=stale)
+            conn.execute("UPDATE things SET user_id = 'user-a' WHERE id = 't1'")
+            _insert_thing(conn, "t2", "User B Q", open_questions=["How?"], updated_at=stale)
+            conn.execute("UPDATE things SET user_id = 'user-b' WHERE id = 't2'")
+        with Session(_engine_mod.engine) as session:
+            count = prune_stale_open_questions(session, stale_days=14, user_id="user-a")
+        assert count == 1
+        with Session(_engine_mod.engine) as session:
+            t1 = session.get(ThingRecord, "t1")
+            t2 = session.get(ThingRecord, "t2")
+        assert not t1.open_questions
+        assert t2.open_questions is not None
 
 
 # ---------------------------------------------------------------------------
