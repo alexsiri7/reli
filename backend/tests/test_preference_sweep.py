@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from backend.database import db
 import backend.db_engine as _engine_mod
 from sqlmodel import Session
 from backend.preference_sweep import (
@@ -68,7 +67,7 @@ def _insert_chat_message(
 
 
 class TestFetchRecentInteractions:
-    def test_fetches_messages_within_window(self, patched_db):
+    def test_fetches_messages_within_window(self, patched_db, db):
         now = datetime.now(timezone.utc)
         recent = (now - timedelta(days=5)).isoformat()
         old = (now - timedelta(days=60)).isoformat()
@@ -84,7 +83,7 @@ class TestFetchRecentInteractions:
         assert len(results) == 2
         assert results[0]["content"] == "Recent message"
 
-    def test_includes_applied_changes(self, patched_db):
+    def test_includes_applied_changes(self, patched_db, db):
         changes = {"created": [{"title": "New Task"}], "updated": []}
         with db() as conn:
             _insert_chat_message(
@@ -100,7 +99,7 @@ class TestFetchRecentInteractions:
         assert len(results) == 1
         assert results[0]["applied_changes"]["created"][0]["title"] == "New Task"
 
-    def test_truncates_long_content(self, patched_db):
+    def test_truncates_long_content(self, patched_db, db):
         long_content = "x" * 1000
         with db() as conn:
             _insert_chat_message(conn, "user", long_content)
@@ -122,7 +121,7 @@ class TestFetchRecentInteractions:
 
 
 class TestFetchExistingPreferences:
-    def test_fetches_preference_things(self, patched_db):
+    def test_fetches_preference_things(self, patched_db, db):
         pref_data = {"confidence": 0.7, "category": "scheduling"}
         with db() as conn:
             _insert_thing(conn, "pref-1", "Prefers mornings", type_hint="preference", data=pref_data)
@@ -135,7 +134,7 @@ class TestFetchExistingPreferences:
         assert results[0]["id"] == "pref-1"
         assert results[0]["data"]["confidence"] == 0.7
 
-    def test_excludes_inactive_preferences(self, patched_db):
+    def test_excludes_inactive_preferences(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "pref-1", "Old pref", type_hint="preference", active=False)
 
@@ -189,7 +188,7 @@ class TestFormatInteractionsForLlm:
 
 class TestAggregatePreferencePatterns:
     @pytest.mark.asyncio
-    async def test_skips_when_too_few_interactions(self, patched_db):
+    async def test_skips_when_too_few_interactions(self, patched_db, db):
         """Should return empty result when fewer than MIN_INTERACTIONS messages."""
         with db() as conn:
             for i in range(MIN_INTERACTIONS - 1):
@@ -200,7 +199,7 @@ class TestAggregatePreferencePatterns:
         assert result.preferences_updated == 0
 
     @pytest.mark.asyncio
-    async def test_creates_new_preference_thing(self, patched_db):
+    async def test_creates_new_preference_thing(self, patched_db, db):
         """Should create a new preference Thing when LLM detects a pattern."""
         with db() as conn:
             for i in range(MIN_INTERACTIONS + 2):
@@ -244,7 +243,7 @@ class TestAggregatePreferencePatterns:
         assert len(data["evidence"]) == 2
 
     @pytest.mark.asyncio
-    async def test_updates_existing_preference(self, patched_db):
+    async def test_updates_existing_preference(self, patched_db, db):
         """Should update confidence and evidence when LLM confirms existing pattern."""
         pref_data = {
             "confidence": 0.5,
@@ -291,7 +290,7 @@ class TestAggregatePreferencePatterns:
         assert "Old evidence 1" in data["evidence"]
 
     @pytest.mark.asyncio
-    async def test_handles_invalid_llm_response(self, patched_db):
+    async def test_handles_invalid_llm_response(self, patched_db, db):
         """Should gracefully handle invalid JSON from the LLM."""
         with db() as conn:
             for i in range(MIN_INTERACTIONS + 2):
@@ -304,7 +303,7 @@ class TestAggregatePreferencePatterns:
         assert result.preferences_updated == 0
 
     @pytest.mark.asyncio
-    async def test_handles_empty_preferences_list(self, patched_db):
+    async def test_handles_empty_preferences_list(self, patched_db, db):
         """Should handle LLM returning empty preferences list."""
         with db() as conn:
             for i in range(MIN_INTERACTIONS + 2):
@@ -319,7 +318,7 @@ class TestAggregatePreferencePatterns:
         assert result.preferences_updated == 0
 
     @pytest.mark.asyncio
-    async def test_clamps_confidence_to_valid_range(self, patched_db):
+    async def test_clamps_confidence_to_valid_range(self, patched_db, db):
         """Confidence should be clamped to 0.0-1.0."""
         with db() as conn:
             for i in range(MIN_INTERACTIONS + 2):
@@ -348,7 +347,7 @@ class TestAggregatePreferencePatterns:
         assert data["confidence"] == 1.0
 
     @pytest.mark.asyncio
-    async def test_ignores_unknown_existing_id(self, patched_db):
+    async def test_ignores_unknown_existing_id(self, patched_db, db):
         """If existing_id doesn't match any preference, create a new one instead."""
         with db() as conn:
             for i in range(MIN_INTERACTIONS + 2):
@@ -375,7 +374,7 @@ class TestAggregatePreferencePatterns:
         assert result.preferences_updated == 0
 
     @pytest.mark.asyncio
-    async def test_evidence_capped_at_ten(self, patched_db):
+    async def test_evidence_capped_at_ten(self, patched_db, db):
         """Merged evidence should be capped at 10 entries."""
         old_evidence = [f"old-{i}" for i in range(9)]
         pref_data = {
@@ -418,7 +417,7 @@ class TestAggregatePreferencePatterns:
 
 
 class TestFetchCommunicationStyleThings:
-    def test_fetches_reli_communication_things(self, patched_db):
+    def test_fetches_reli_communication_things(self, patched_db, db):
         comm_data = {"category": "reli_communication", "patterns": [{"pattern": "no emoji", "confidence": "emerging", "observations": 1}]}
         with db() as conn:
             _insert_thing(conn, "pref-comm", "How user wants Reli to communicate", type_hint="preference", data=comm_data)
@@ -431,7 +430,7 @@ class TestFetchCommunicationStyleThings:
         assert results[0]["id"] == "pref-comm"
         assert results[0]["data"]["category"] == "reli_communication"
 
-    def test_excludes_non_reli_communication_things(self, patched_db):
+    def test_excludes_non_reli_communication_things(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "pref-1", "Regular pref", type_hint="preference", data={"category": "scheduling"})
 
@@ -440,7 +439,7 @@ class TestFetchCommunicationStyleThings:
 
         assert len(results) == 0
 
-    def test_excludes_inactive_things(self, patched_db):
+    def test_excludes_inactive_things(self, patched_db, db):
         comm_data = {"category": "reli_communication", "patterns": []}
         with db() as conn:
             _insert_thing(conn, "pref-old", "Old comm pref", type_hint="preference", active=False, data=comm_data)
@@ -457,7 +456,7 @@ class TestFetchCommunicationStyleThings:
 
 
 class TestFetchExistingPreferencesExclusion:
-    def test_excludes_reli_communication_things(self, patched_db):
+    def test_excludes_reli_communication_things(self, patched_db, db):
         """Regular preference fetch should not include reli_communication Things."""
         comm_data = {"category": "reli_communication", "patterns": []}
         with db() as conn:
@@ -479,7 +478,7 @@ class TestFetchExistingPreferencesExclusion:
 
 class TestAggregateCommunicationStylePatterns:
     @pytest.mark.asyncio
-    async def test_skips_when_too_few_interactions(self, patched_db):
+    async def test_skips_when_too_few_interactions(self, patched_db, db):
         """Should return empty result when fewer than MIN_INTERACTIONS messages."""
         with db() as conn:
             for i in range(MIN_INTERACTIONS - 1):
@@ -491,7 +490,7 @@ class TestAggregateCommunicationStylePatterns:
         assert result.thing_id is None
 
     @pytest.mark.asyncio
-    async def test_creates_new_thing_when_pattern_detected(self, patched_db):
+    async def test_creates_new_thing_when_pattern_detected(self, patched_db, db):
         """Should create a reli_communication Thing when LLM detects a pattern."""
         with db() as conn:
             for i in range(MIN_INTERACTIONS + 2):
@@ -522,7 +521,7 @@ class TestAggregateCommunicationStylePatterns:
         assert data["patterns"][0]["confidence"] == "emerging"
 
     @pytest.mark.asyncio
-    async def test_explicit_pattern_starts_at_established(self, patched_db):
+    async def test_explicit_pattern_starts_at_established(self, patched_db, db):
         """Explicit corrections should start at 'established' confidence."""
         with db() as conn:
             for i in range(MIN_INTERACTIONS + 2):
@@ -545,7 +544,7 @@ class TestAggregateCommunicationStylePatterns:
         assert data["patterns"][0]["confidence"] == "established"
 
     @pytest.mark.asyncio
-    async def test_reinforces_existing_pattern(self, patched_db):
+    async def test_reinforces_existing_pattern(self, patched_db, db):
         """Should increment observations and potentially upgrade confidence."""
         comm_data = {
             "category": "reli_communication",
@@ -576,7 +575,7 @@ class TestAggregateCommunicationStylePatterns:
         assert data["patterns"][0]["confidence"] == "established"  # 2 obs → established
 
     @pytest.mark.asyncio
-    async def test_removes_contradicted_pattern(self, patched_db):
+    async def test_removes_contradicted_pattern(self, patched_db, db):
         """Should remove patterns that are explicitly contradicted."""
         comm_data = {
             "category": "reli_communication",
@@ -608,7 +607,7 @@ class TestAggregateCommunicationStylePatterns:
         assert data["patterns"][0]["pattern"] == "prefers concise"
 
     @pytest.mark.asyncio
-    async def test_consolidates_duplicate_things(self, patched_db):
+    async def test_consolidates_duplicate_things(self, patched_db, db):
         """Should merge multiple reli_communication Things into one."""
         comm_data_1 = {
             "category": "reli_communication",
@@ -648,7 +647,7 @@ class TestAggregateCommunicationStylePatterns:
         assert "prefers bullet points" in patterns
 
     @pytest.mark.asyncio
-    async def test_handles_invalid_llm_response(self, patched_db):
+    async def test_handles_invalid_llm_response(self, patched_db, db):
         """Should gracefully handle invalid JSON from the LLM."""
         with db() as conn:
             for i in range(MIN_INTERACTIONS + 2):
@@ -661,7 +660,7 @@ class TestAggregateCommunicationStylePatterns:
         assert result.patterns_reinforced == 0
 
     @pytest.mark.asyncio
-    async def test_no_changes_when_nothing_detected(self, patched_db):
+    async def test_no_changes_when_nothing_detected(self, patched_db, db):
         """Should return cleanly with no changes when LLM finds nothing."""
         with db() as conn:
             for i in range(MIN_INTERACTIONS + 2):

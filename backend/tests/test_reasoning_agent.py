@@ -101,9 +101,8 @@ class TestChatHistoryTool:
         assert result["count"] == 0
         assert "error" in result
 
-    def test_chat_history_returns_messages(self, patched_db):
+    def test_chat_history_returns_messages(self, patched_db, db):
         """chat_history retrieves messages from the DB."""
-        from backend.database import db
 
         with db() as conn:
             conn.execute(
@@ -125,9 +124,8 @@ class TestChatHistoryTool:
         assert result["messages"][0]["role"] == "user"
         assert result["messages"][1]["role"] == "assistant"
 
-    def test_chat_history_with_search_query(self, patched_db):
+    def test_chat_history_with_search_query(self, patched_db, db):
         """chat_history filters by search_query."""
-        from backend.database import db
 
         with db() as conn:
             conn.execute(

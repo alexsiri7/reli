@@ -123,9 +123,8 @@ class TestBriefingPreferences:
 class TestBriefingPreferencesWithUser:
     """Test preferences persistence with a real user (requires user in DB)."""
 
-    def test_preferences_persist_with_user(self, client):
+    def test_preferences_persist_with_user(self, client, db):
         """Updated preferences persist when a user exists."""
-        from backend.database import db
 
         # Create a test user so user_settings FK works
         with db() as conn:
@@ -153,9 +152,8 @@ class TestBriefingPreferencesWithUser:
             # Without the patch active for GET, it uses '' user_id and returns defaults
             # This is expected - the test verifies the PUT path works
 
-    def test_preferences_affect_briefing_generation(self, patched_db):
+    def test_preferences_affect_briefing_generation(self, patched_db, db):
         """Preferences control what appears in the generated briefing (unit test)."""
-        from backend.database import db
         from backend.morning_briefing import (
             BriefingPreferences,
             generate_morning_briefing,

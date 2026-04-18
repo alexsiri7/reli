@@ -3,7 +3,6 @@
 import json
 from datetime import date, timedelta
 
-from backend.database import db
 import backend.db_engine as _engine_mod
 from sqlmodel import Session
 from backend.sweep import (
@@ -81,7 +80,7 @@ def _insert_relationship(conn, rel_id: str, from_id: str, to_id: str, rel_type: 
 
 
 class TestApproachingDates:
-    def test_checkin_date_within_window(self, patched_db):
+    def test_checkin_date_within_window(self, patched_db, db):
         today = date.today()
         tomorrow = (today + timedelta(days=1)).isoformat()
         with db() as conn:
@@ -93,7 +92,7 @@ class TestApproachingDates:
         assert results[0].finding_type == "approaching_date"
         assert "tomorrow" in results[0].message.lower()
 
-    def test_checkin_date_outside_window(self, patched_db):
+    def test_checkin_date_outside_window(self, patched_db, db):
         today = date.today()
         far_future = (today + timedelta(days=30)).isoformat()
         with db() as conn:
@@ -102,7 +101,7 @@ class TestApproachingDates:
             results = find_approaching_dates(session, today, window_days=7)
         assert len(results) == 0
 
-    def test_data_json_deadline(self, patched_db):
+    def test_data_json_deadline(self, patched_db, db):
         today = date.today()
         in_3_days = (today + timedelta(days=3)).isoformat()
         with db() as conn:
@@ -112,7 +111,7 @@ class TestApproachingDates:
         assert len(results) == 1
         assert "Deadline in 3d" in results[0].message
 
-    def test_recurring_birthday(self, patched_db):
+    def test_recurring_birthday(self, patched_db, db):
         today = date.today()
         # Set birthday to 2 days from now (different year)
         bday = today + timedelta(days=2)
@@ -124,7 +123,7 @@ class TestApproachingDates:
         assert len(results) == 1
         assert results[0].extra["days_away"] == 2
 
-    def test_past_oneshot_date_excluded(self, patched_db):
+    def test_past_oneshot_date_excluded(self, patched_db, db):
         today = date.today()
         past = (today - timedelta(days=5)).isoformat()
         with db() as conn:
@@ -133,7 +132,7 @@ class TestApproachingDates:
             results = find_approaching_dates(session, today, window_days=7)
         assert len(results) == 0
 
-    def test_inactive_thing_excluded(self, patched_db):
+    def test_inactive_thing_excluded(self, patched_db, db):
         today = date.today()
         tomorrow = (today + timedelta(days=1)).isoformat()
         with db() as conn:
@@ -142,7 +141,7 @@ class TestApproachingDates:
             results = find_approaching_dates(session, today, window_days=7)
         assert len(results) == 0
 
-    def test_today_checkin(self, patched_db):
+    def test_today_checkin(self, patched_db, db):
         today = date.today()
         with db() as conn:
             _insert_thing(conn, "t1", "Due Now", checkin_date=f"{today.isoformat()}T09:00:00")
@@ -158,7 +157,7 @@ class TestApproachingDates:
 
 
 class TestStaleThings:
-    def test_stale_thing_detected(self, patched_db):
+    def test_stale_thing_detected(self, patched_db, db):
         today = date.today()
         old_date = (today - timedelta(days=20)).isoformat()
         with db() as conn:
@@ -169,7 +168,7 @@ class TestStaleThings:
         assert results[0].finding_type == "stale"
         assert "20d" in results[0].message
 
-    def test_recently_updated_excluded(self, patched_db):
+    def test_recently_updated_excluded(self, patched_db, db):
         today = date.today()
         recent = (today - timedelta(days=3)).isoformat()
         with db() as conn:
@@ -178,7 +177,7 @@ class TestStaleThings:
             results = find_stale_things(session, today, stale_days=14)
         assert len(results) == 0
 
-    def test_inactive_excluded(self, patched_db):
+    def test_inactive_excluded(self, patched_db, db):
         today = date.today()
         old_date = (today - timedelta(days=20)).isoformat()
         with db() as conn:
@@ -187,7 +186,7 @@ class TestStaleThings:
             results = find_stale_things(session, today, stale_days=14)
         assert len(results) == 0
 
-    def test_high_importance_flagged_as_neglected(self, patched_db):
+    def test_high_importance_flagged_as_neglected(self, patched_db, db):
         """High-importance stale Things should be flagged as 'neglected'."""
         today = date.today()
         old_date = (today - timedelta(days=20)).isoformat()
@@ -202,7 +201,7 @@ class TestStaleThings:
         assert "high-importance" in results[0].message
         assert results[0].extra["is_neglected"] is True
 
-    def test_thing_with_active_children_flagged_as_neglected(self, patched_db):
+    def test_thing_with_active_children_flagged_as_neglected(self, patched_db, db):
         """Stale Things with active children should be flagged as 'neglected'."""
         today = date.today()
         old_date = (today - timedelta(days=20)).isoformat()
@@ -216,7 +215,7 @@ class TestStaleThings:
         assert neglected[0].finding_type == "neglected"
         assert "1 pending subtask" in neglected[0].message
 
-    def test_low_importance_no_children_is_plain_stale(self, patched_db):
+    def test_low_importance_no_children_is_plain_stale(self, patched_db, db):
         """Low-importance stale Things without children are plain 'stale'."""
         today = date.today()
         old_date = (today - timedelta(days=20)).isoformat()
@@ -236,7 +235,7 @@ class TestStaleThings:
 
 
 class TestOverdueCheckins:
-    def test_overdue_checkin_detected(self, patched_db):
+    def test_overdue_checkin_detected(self, patched_db, db):
         today = date.today()
         past = (today - timedelta(days=5)).isoformat()
         with db() as conn:
@@ -248,7 +247,7 @@ class TestOverdueCheckins:
         assert results[0].extra["days_overdue"] == 5
         assert "overdue by 5d" in results[0].message.lower()
 
-    def test_recent_checkin_within_grace_excluded(self, patched_db):
+    def test_recent_checkin_within_grace_excluded(self, patched_db, db):
         """Check-ins within the grace period are not flagged (handled by approaching_dates)."""
         today = date.today()
         yesterday = (today - timedelta(days=0)).isoformat()  # today
@@ -258,7 +257,7 @@ class TestOverdueCheckins:
             results = find_overdue_checkins(session, today, grace_days=1)
         assert len(results) == 0
 
-    def test_inactive_excluded(self, patched_db):
+    def test_inactive_excluded(self, patched_db, db):
         today = date.today()
         past = (today - timedelta(days=10)).isoformat()
         with db() as conn:
@@ -267,7 +266,7 @@ class TestOverdueCheckins:
             results = find_overdue_checkins(session, today, grace_days=1)
         assert len(results) == 0
 
-    def test_severely_overdue_gets_high_priority(self, patched_db):
+    def test_severely_overdue_gets_high_priority(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=10)).isoformat()
         with db() as conn:
@@ -277,7 +276,7 @@ class TestOverdueCheckins:
         assert len(results) == 1
         assert results[0].priority == 1  # high priority for 7+ days overdue
 
-    def test_future_checkin_excluded(self, patched_db):
+    def test_future_checkin_excluded(self, patched_db, db):
         today = date.today()
         future = (today + timedelta(days=5)).isoformat()
         with db() as conn:
@@ -293,7 +292,7 @@ class TestOverdueCheckins:
 
 
 class TestOrphanThings:
-    def test_orphan_detected(self, patched_db):
+    def test_orphan_detected(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "t1", "Lonely Thing")
         with Session(_engine_mod.engine) as session:
@@ -301,7 +300,7 @@ class TestOrphanThings:
         assert len(results) == 1
         assert results[0].finding_type == "orphan"
 
-    def test_thing_with_parent_not_orphan(self, patched_db):
+    def test_thing_with_parent_not_orphan(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "parent", "Parent")
             _insert_thing(conn, "child", "Child", parent_id="parent")
@@ -312,7 +311,7 @@ class TestOrphanThings:
         assert "parent" not in ids
         assert "child" not in ids
 
-    def test_thing_with_relationship_not_orphan(self, patched_db):
+    def test_thing_with_relationship_not_orphan(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "t1", "Connected A")
             _insert_thing(conn, "t2", "Connected B")
@@ -323,7 +322,7 @@ class TestOrphanThings:
         assert "t1" not in ids
         assert "t2" not in ids
 
-    def test_inactive_excluded(self, patched_db):
+    def test_inactive_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "t1", "Inactive Orphan", active=False)
         with Session(_engine_mod.engine) as session:
@@ -337,7 +336,7 @@ class TestOrphanThings:
 
 
 class TestCompletedProjects:
-    def test_all_children_inactive(self, patched_db):
+    def test_all_children_inactive(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "proj", "My Project", type_hint="project")
             _insert_thing(conn, "c1", "Task 1", parent_id="proj", active=False)
@@ -348,7 +347,7 @@ class TestCompletedProjects:
         assert results[0].thing_id == "proj"
         assert results[0].extra["total_children"] == 2
 
-    def test_some_children_active(self, patched_db):
+    def test_some_children_active(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "proj", "Active Project", type_hint="project")
             _insert_thing(conn, "c1", "Done", parent_id="proj", active=False)
@@ -357,14 +356,14 @@ class TestCompletedProjects:
             results = find_completed_projects(session)
         assert len(results) == 0
 
-    def test_project_with_no_children(self, patched_db):
+    def test_project_with_no_children(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "proj", "Empty Project", type_hint="project")
         with Session(_engine_mod.engine) as session:
             results = find_completed_projects(session)
         assert len(results) == 0
 
-    def test_inactive_project_excluded(self, patched_db):
+    def test_inactive_project_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "proj", "Done Project", type_hint="project", active=False)
             _insert_thing(conn, "c1", "Task", parent_id="proj", active=False)
@@ -372,7 +371,7 @@ class TestCompletedProjects:
             results = find_completed_projects(session)
         assert len(results) == 0
 
-    def test_non_project_type_excluded(self, patched_db):
+    def test_non_project_type_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "goal", "My Goal", type_hint="goal")
             _insert_thing(conn, "c1", "Step 1", parent_id="goal", active=False)
@@ -387,7 +386,7 @@ class TestCompletedProjects:
 
 
 class TestOpenQuestions:
-    def test_thing_with_questions(self, patched_db):
+    def test_thing_with_questions(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "t1", "Budget", open_questions=["When is the deadline?", "Who approves?"])
         with Session(_engine_mod.engine) as session:
@@ -397,28 +396,28 @@ class TestOpenQuestions:
         assert "2 unanswered questions" in results[0].message
         assert results[0].extra["question_count"] == 2
 
-    def test_empty_questions_excluded(self, patched_db):
+    def test_empty_questions_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "t1", "No Q", open_questions=[])
         with Session(_engine_mod.engine) as session:
             results = find_open_questions(session)
         assert len(results) == 0
 
-    def test_null_questions_excluded(self, patched_db):
+    def test_null_questions_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "t1", "Null Q")
         with Session(_engine_mod.engine) as session:
             results = find_open_questions(session)
         assert len(results) == 0
 
-    def test_inactive_excluded(self, patched_db):
+    def test_inactive_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "t1", "Inactive Q", open_questions=["Why?"], active=False)
         with Session(_engine_mod.engine) as session:
             results = find_open_questions(session)
         assert len(results) == 0
 
-    def test_single_question_grammar(self, patched_db):
+    def test_single_question_grammar(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "t1", "One Q", open_questions=["What?"])
         with Session(_engine_mod.engine) as session:
@@ -432,7 +431,7 @@ class TestOpenQuestions:
 
 
 class TestInformationGaps:
-    def test_name_only_person(self, patched_db):
+    def test_name_only_person(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=5)).isoformat()
         with db() as conn:
@@ -446,7 +445,7 @@ class TestInformationGaps:
         assert gaps[0].thing_id == "p1"
         assert "Name only" in gaps[0].message
 
-    def test_person_with_data_excluded(self, patched_db):
+    def test_person_with_data_excluded(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=5)).isoformat()
         with db() as conn:
@@ -464,7 +463,7 @@ class TestInformationGaps:
         gaps = [r for r in results if r.extra.get("gap_type") == "name_only_person"]
         assert len(gaps) == 0
 
-    def test_person_with_existing_questions_excluded(self, patched_db):
+    def test_person_with_existing_questions_excluded(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=5)).isoformat()
         with db() as conn:
@@ -482,7 +481,7 @@ class TestInformationGaps:
         gaps = [r for r in results if r.extra.get("gap_type") == "name_only_person"]
         assert len(gaps) == 0
 
-    def test_project_no_deadline(self, patched_db):
+    def test_project_no_deadline(self, patched_db, db):
         today = date.today()
         with db() as conn:
             _insert_thing(conn, "proj", "Conference Planning", type_hint="project")
@@ -493,7 +492,7 @@ class TestInformationGaps:
         assert len(gaps) == 1
         assert "no deadline" in gaps[0].message.lower()
 
-    def test_project_with_deadline_excluded(self, patched_db):
+    def test_project_with_deadline_excluded(self, patched_db, db):
         today = date.today()
         with db() as conn:
             _insert_thing(
@@ -509,7 +508,7 @@ class TestInformationGaps:
         gaps = [r for r in results if r.extra.get("gap_type") == "no_deadline_project"]
         assert len(gaps) == 0
 
-    def test_project_with_checkin_date_excluded(self, patched_db):
+    def test_project_with_checkin_date_excluded(self, patched_db, db):
         today = date.today()
         future = (today + timedelta(days=10)).isoformat()
         with db() as conn:
@@ -526,7 +525,7 @@ class TestInformationGaps:
         gaps = [r for r in results if r.extra.get("gap_type") == "no_deadline_project"]
         assert len(gaps) == 0
 
-    def test_event_no_dates(self, patched_db):
+    def test_event_no_dates(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=5)).isoformat()
         with db() as conn:
@@ -538,7 +537,7 @@ class TestInformationGaps:
         assert len(gaps) == 1
         assert "no dates" in gaps[0].message.lower()
 
-    def test_event_with_date_in_data_excluded(self, patched_db):
+    def test_event_with_date_in_data_excluded(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=5)).isoformat()
         with db() as conn:
@@ -556,7 +555,7 @@ class TestInformationGaps:
         gaps = [r for r in results if r.extra.get("gap_type") == "no_dates"]
         assert len(gaps) == 0
 
-    def test_minimal_data_old_thing(self, patched_db):
+    def test_minimal_data_old_thing(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=20)).isoformat()
         with db() as conn:
@@ -568,7 +567,7 @@ class TestInformationGaps:
         assert len(gaps) == 1
         assert "Minimal data" in gaps[0].message
 
-    def test_minimal_data_recent_thing_excluded(self, patched_db):
+    def test_minimal_data_recent_thing_excluded(self, patched_db, db):
         today = date.today()
         recent = (today - timedelta(days=5)).isoformat()
         with db() as conn:
@@ -579,7 +578,7 @@ class TestInformationGaps:
         gaps = [r for r in results if r.extra.get("gap_type") == "minimal_data"]
         assert len(gaps) == 0  # Too young (< 14 days for minimal_data)
 
-    def test_inactive_excluded(self, patched_db):
+    def test_inactive_excluded(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=20)).isoformat()
         with db() as conn:
@@ -591,7 +590,7 @@ class TestInformationGaps:
 
 
 class TestGenerateGapQuestions:
-    def test_generates_questions_for_person(self, patched_db):
+    def test_generates_questions_for_person(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=5)).isoformat()
         with db() as conn:
@@ -607,7 +606,7 @@ class TestGenerateGapQuestions:
         assert len(questions) >= 1
         assert any("Sarah" in q for q in questions)
 
-    def test_generates_questions_for_project(self, patched_db):
+    def test_generates_questions_for_project(self, patched_db, db):
         today = date.today()
         with db() as conn:
             _insert_thing(conn, "proj", "Trip Planning", type_hint="project")
@@ -622,7 +621,7 @@ class TestGenerateGapQuestions:
         assert len(questions) >= 1
         assert any("done" in q.lower() or "need" in q.lower() for q in questions)
 
-    def test_skips_thing_with_existing_questions(self, patched_db):
+    def test_skips_thing_with_existing_questions(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=5)).isoformat()
         with db() as conn:
@@ -655,7 +654,7 @@ class TestGenerateGapQuestions:
             session.commit()
         assert count == 0  # Should not overwrite existing questions
 
-    def test_collect_candidates_includes_gaps(self, patched_db):
+    def test_collect_candidates_includes_gaps(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=5)).isoformat()
         with db() as conn:
@@ -671,7 +670,7 @@ class TestGenerateGapQuestions:
         questions = json.loads(row["open_questions"])
         assert len(questions) >= 1
 
-    def test_no_ambiguous_user_id_with_join(self, patched_db):
+    def test_no_ambiguous_user_id_with_join(self, patched_db, db):
         """Regression: find_information_gaps must not raise OperationalError: ambiguous column name: user_id
         when called with a user_id and the project-with-children JOIN query executes."""
         today = date.today()
@@ -699,7 +698,7 @@ class TestCollectCandidates:
         results = collect_candidates()
         assert results == []
 
-    def test_combines_all_types(self, patched_db):
+    def test_combines_all_types(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=20)).isoformat()
         tomorrow = (today + timedelta(days=1)).isoformat()
@@ -728,7 +727,7 @@ class TestCollectCandidates:
         assert "completed_project" in types
         assert "open_question" in types
 
-    def test_deduplicates_by_thing_and_type(self, patched_db):
+    def test_deduplicates_by_thing_and_type(self, patched_db, db):
         """Same thing_id + finding_type keeps highest priority."""
         today = date.today()
         # A thing with both checkin_date and a deadline in data — both approaching_date
@@ -745,7 +744,7 @@ class TestCollectCandidates:
         approaching = [c for c in results if c.finding_type == "approaching_date" and c.thing_id == "t1"]
         assert len(approaching) == 1  # deduplicated
 
-    def test_sorted_by_priority_then_title(self, patched_db):
+    def test_sorted_by_priority_then_title(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=20)).isoformat()
         tomorrow = (today + timedelta(days=1)).isoformat()
@@ -757,7 +756,7 @@ class TestCollectCandidates:
         approaching = [c for c in results if c.finding_type == "approaching_date"]
         assert approaching[0].thing_title == "Alpha"
 
-    def test_includes_cross_project_findings(self, patched_db):
+    def test_includes_cross_project_findings(self, patched_db, db):
         """collect_candidates includes cross-project detection types."""
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
@@ -775,7 +774,7 @@ class TestCollectCandidates:
 
 
 class TestCrossProjectSharedBlockers:
-    def test_thing_blocking_in_multiple_projects(self, patched_db):
+    def test_thing_blocking_in_multiple_projects(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
@@ -792,7 +791,7 @@ class TestCrossProjectSharedBlockers:
         assert results[0].priority == 1
         assert results[0].extra["project_count"] == 2
 
-    def test_blocker_in_single_project_excluded(self, patched_db):
+    def test_blocker_in_single_project_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "t1", "Task A", parent_id="p1")
@@ -804,7 +803,7 @@ class TestCrossProjectSharedBlockers:
             results = find_cross_project_shared_blockers(session)
         assert len(results) == 0
 
-    def test_inactive_blocker_excluded(self, patched_db):
+    def test_inactive_blocker_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
@@ -817,7 +816,7 @@ class TestCrossProjectSharedBlockers:
             results = find_cross_project_shared_blockers(session)
         assert len(results) == 0
 
-    def test_depends_on_relationship_type(self, patched_db):
+    def test_depends_on_relationship_type(self, patched_db, db):
         """depends_on is treated as a blocking relationship."""
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
@@ -839,7 +838,7 @@ class TestCrossProjectSharedBlockers:
 
 
 class TestCrossProjectResourceConflicts:
-    def test_person_in_multiple_projects_with_stale_tasks(self, patched_db):
+    def test_person_in_multiple_projects_with_stale_tasks(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=20)).isoformat()
         with db() as conn:
@@ -857,7 +856,7 @@ class TestCrossProjectResourceConflicts:
         assert results[0].finding_type == "cross_project_resource_conflict"
         assert results[0].extra["stale_tasks"] == 1
 
-    def test_person_in_one_project_excluded(self, patched_db):
+    def test_person_in_one_project_excluded(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=20)).isoformat()
         with db() as conn:
@@ -869,7 +868,7 @@ class TestCrossProjectResourceConflicts:
             results = find_cross_project_resource_conflicts(session, today)
         assert len(results) == 0
 
-    def test_no_stale_tasks_excluded(self, patched_db):
+    def test_no_stale_tasks_excluded(self, patched_db, db):
         today = date.today()
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
@@ -883,7 +882,7 @@ class TestCrossProjectResourceConflicts:
             results = find_cross_project_resource_conflicts(session, today)
         assert len(results) == 0
 
-    def test_non_person_excluded(self, patched_db):
+    def test_non_person_excluded(self, patched_db, db):
         today = date.today()
         old = (today - timedelta(days=20)).isoformat()
         with db() as conn:
@@ -905,7 +904,7 @@ class TestCrossProjectResourceConflicts:
 
 
 class TestCrossProjectThematicConnections:
-    def test_similar_titles_across_projects(self, patched_db):
+    def test_similar_titles_across_projects(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
@@ -918,7 +917,7 @@ class TestCrossProjectThematicConnections:
         assert "user" in results[0].extra["shared_words"]
         assert "authentication" in results[0].extra["shared_words"]
 
-    def test_same_project_excluded(self, patched_db):
+    def test_same_project_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "t1", "Design user auth", parent_id="p1")
@@ -927,7 +926,7 @@ class TestCrossProjectThematicConnections:
             results = find_cross_project_thematic_connections(session)
         assert len(results) == 0
 
-    def test_unrelated_titles_excluded(self, patched_db):
+    def test_unrelated_titles_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
@@ -937,7 +936,7 @@ class TestCrossProjectThematicConnections:
             results = find_cross_project_thematic_connections(session)
         assert len(results) == 0
 
-    def test_short_words_excluded(self, patched_db):
+    def test_short_words_excluded(self, patched_db, db):
         """Words shorter than 3 chars should not count."""
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
@@ -949,7 +948,7 @@ class TestCrossProjectThematicConnections:
         # "Do" and "it" are <3 chars, no significant shared words
         assert len(results) == 0
 
-    def test_inactive_excluded(self, patched_db):
+    def test_inactive_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
@@ -966,7 +965,7 @@ class TestCrossProjectThematicConnections:
 
 
 class TestCrossProjectDuplicateEffort:
-    def test_identical_titles_across_projects(self, patched_db):
+    def test_identical_titles_across_projects(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
@@ -978,7 +977,7 @@ class TestCrossProjectDuplicateEffort:
         assert results[0].finding_type == "cross_project_duplicate_effort"
         assert results[0].priority == 2
 
-    def test_case_insensitive_match(self, patched_db):
+    def test_case_insensitive_match(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
@@ -988,7 +987,7 @@ class TestCrossProjectDuplicateEffort:
             results = find_cross_project_duplicate_effort(session)
         assert len(results) == 1
 
-    def test_same_project_excluded(self, patched_db):
+    def test_same_project_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "t1", "Setup database", parent_id="p1")
@@ -997,7 +996,7 @@ class TestCrossProjectDuplicateEffort:
             results = find_cross_project_duplicate_effort(session)
         assert len(results) == 0
 
-    def test_different_titles_excluded(self, patched_db):
+    def test_different_titles_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
@@ -1007,7 +1006,7 @@ class TestCrossProjectDuplicateEffort:
             results = find_cross_project_duplicate_effort(session)
         assert len(results) == 0
 
-    def test_inactive_task_excluded(self, patched_db):
+    def test_inactive_task_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "p2", "Project Beta", type_hint="project")
@@ -1017,7 +1016,7 @@ class TestCrossProjectDuplicateEffort:
             results = find_cross_project_duplicate_effort(session)
         assert len(results) == 0
 
-    def test_inactive_project_excluded(self, patched_db):
+    def test_inactive_project_excluded(self, patched_db, db):
         with db() as conn:
             _insert_thing(conn, "p1", "Project Alpha", type_hint="project")
             _insert_thing(conn, "p2", "Project Beta", type_hint="project", active=False)
@@ -1034,7 +1033,7 @@ class TestCrossProjectDuplicateEffort:
 
 
 class TestIncompleteThings:
-    def test_thing_with_no_data_detected(self, patched_db):
+    def test_thing_with_no_data_detected(self, patched_db, db):
         """A Thing with null data is flagged as incomplete."""
         with db() as conn:
             _insert_thing(conn, "t1", "Bare Task")
@@ -1045,7 +1044,7 @@ class TestIncompleteThings:
         gaps = next(r for r in results if r.thing_id == "t1").extra["gaps"]
         assert "no data" in gaps
 
-    def test_thing_with_dates_not_flagged_for_no_dates(self, patched_db):
+    def test_thing_with_dates_not_flagged_for_no_dates(self, patched_db, db):
         """A Thing with a checkin_date should not be flagged for 'no dates'."""
         today = date.today()
         with db() as conn:
@@ -1062,7 +1061,7 @@ class TestIncompleteThings:
         if t1_results:
             assert "no dates" not in t1_results[0].extra["gaps"]
 
-    def test_thing_with_data_dates_not_flagged(self, patched_db):
+    def test_thing_with_data_dates_not_flagged(self, patched_db, db):
         """A Thing with date keys in data should not be flagged for 'no dates'."""
         with db() as conn:
             _insert_thing(
@@ -1078,7 +1077,7 @@ class TestIncompleteThings:
         if t1_results:
             assert "no dates" not in t1_results[0].extra["gaps"]
 
-    def test_name_only_person_detected(self, patched_db):
+    def test_name_only_person_detected(self, patched_db, db):
         """A person with only a title and no meaningful data is flagged."""
         with db() as conn:
             _insert_thing(conn, "p1", "Jane Doe", type_hint="person")
@@ -1088,7 +1087,7 @@ class TestIncompleteThings:
         assert len(p1_results) == 1
         assert "name-only person" in p1_results[0].extra["gaps"]
 
-    def test_person_with_data_not_name_only(self, patched_db):
+    def test_person_with_data_not_name_only(self, patched_db, db):
         """A person with meaningful data keys is not flagged as name-only."""
         with db() as conn:
             _insert_thing(
@@ -1104,7 +1103,7 @@ class TestIncompleteThings:
         if p1_results:
             assert "name-only person" not in p1_results[0].extra["gaps"]
 
-    def test_task_without_deadline_detected(self, patched_db):
+    def test_task_without_deadline_detected(self, patched_db, db):
         """A task with no deadline/due_date is flagged."""
         with db() as conn:
             _insert_thing(conn, "t1", "Build feature", type_hint="task", data={"notes": "important"})
@@ -1114,7 +1113,7 @@ class TestIncompleteThings:
         assert len(t1_results) == 1
         assert "no deadline" in t1_results[0].extra["gaps"]
 
-    def test_task_with_deadline_not_flagged(self, patched_db):
+    def test_task_with_deadline_not_flagged(self, patched_db, db):
         """A task with a deadline in data is not flagged for 'no deadline'."""
         with db() as conn:
             _insert_thing(
@@ -1130,7 +1129,7 @@ class TestIncompleteThings:
         if t1_results:
             assert "no deadline" not in t1_results[0].extra["gaps"]
 
-    def test_inactive_thing_excluded(self, patched_db):
+    def test_inactive_thing_excluded(self, patched_db, db):
         """Inactive Things should not be flagged."""
         with db() as conn:
             _insert_thing(conn, "t1", "Done Task", active=False)
@@ -1138,7 +1137,7 @@ class TestIncompleteThings:
             results = find_incomplete_things(session)
         assert len(results) == 0
 
-    def test_thing_with_open_questions_excluded(self, patched_db):
+    def test_thing_with_open_questions_excluded(self, patched_db, db):
         """Things that already have open_questions should not be flagged."""
         with db() as conn:
             _insert_thing(conn, "t1", "Already Asked", open_questions=["When is this due?"])
@@ -1146,7 +1145,7 @@ class TestIncompleteThings:
             results = find_incomplete_things(session)
         assert len(results) == 0
 
-    def test_finding_type_is_incomplete(self, patched_db):
+    def test_finding_type_is_incomplete(self, patched_db, db):
         """The finding_type for gap detection should be 'incomplete'."""
         with db() as conn:
             _insert_thing(conn, "t1", "Bare Thing")
@@ -1154,7 +1153,7 @@ class TestIncompleteThings:
             results = find_incomplete_things(session)
         assert results[0].finding_type == "incomplete"
 
-    def test_collect_candidates_includes_incomplete(self, patched_db):
+    def test_collect_candidates_includes_incomplete(self, patched_db, db):
         """collect_candidates should include incomplete findings."""
         with db() as conn:
             _insert_thing(conn, "t1", "Bare Thing")

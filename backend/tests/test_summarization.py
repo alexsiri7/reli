@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.database import db
 from backend.routers.chat import _fetch_history, _maybe_trigger_summarization
 from backend.summarization_agent import (
     DEFAULT_SUMMARY_TRIGGER_N,
@@ -50,7 +49,7 @@ def _insert_messages(conn, user_id, messages, session_id="sess-1"):
 class TestConversationSummariesCRUD:
     """Test conversation_summaries table and CRUD functions."""
 
-    def test_create_and_get_summary(self, patched_db):
+    def test_create_and_get_summary(self, patched_db, db):
         """create_summary persists a row and get_latest_summary retrieves it."""
         user_id = "test-user"
         with db() as conn:
@@ -70,7 +69,7 @@ class TestConversationSummariesCRUD:
         assert latest["messages_summarized_up_to"] == 42
         assert latest["token_count"] == 150
 
-    def test_get_latest_returns_most_recent(self, patched_db):
+    def test_get_latest_returns_most_recent(self, patched_db, db):
         """get_latest_summary returns the summary with highest messages_summarized_up_to."""
         user_id = "test-user"
         with db() as conn:
@@ -89,7 +88,7 @@ class TestConversationSummariesCRUD:
         """get_latest_summary returns None when no summaries exist."""
         assert get_latest_summary("nonexistent-user") is None
 
-    def test_get_messages_since_summary_all_messages(self, patched_db):
+    def test_get_messages_since_summary_all_messages(self, patched_db, db):
         """Without a summary, returns all messages for the user."""
         user_id = "test-user"
         with db() as conn:
@@ -109,7 +108,7 @@ class TestConversationSummariesCRUD:
         assert messages[0]["content"] == "Hello"
         assert messages[2]["content"] == "How are you?"
 
-    def test_get_messages_since_summary_after_summary(self, patched_db):
+    def test_get_messages_since_summary_after_summary(self, patched_db, db):
         """After creating a summary, only returns newer messages."""
         user_id = "test-user"
         with db() as conn:
@@ -143,7 +142,7 @@ class TestConversationSummariesCRUD:
         assert messages[0]["content"] == "Old message 2"
         assert messages[1]["content"] == "New message"
 
-    def test_get_message_count_since_summary(self, patched_db):
+    def test_get_message_count_since_summary(self, patched_db, db):
         """get_message_count_since_summary returns the correct count."""
         user_id = "test-user"
         with db() as conn:
@@ -175,7 +174,7 @@ class TestConversationSummariesCRUD:
 
         assert get_message_count_since_summary(user_id) == 3
 
-    def test_create_summary_default_token_count(self, patched_db):
+    def test_create_summary_default_token_count(self, patched_db, db):
         """create_summary defaults token_count to 0 when omitted."""
         user_id = "test-user"
         with db() as conn:
@@ -187,7 +186,7 @@ class TestConversationSummariesCRUD:
         assert latest is not None
         assert latest["token_count"] == 0
 
-    def test_created_at_is_populated(self, patched_db):
+    def test_created_at_is_populated(self, patched_db, db):
         """create_summary sets created_at timestamp automatically."""
         user_id = "test-user"
         with db() as conn:
@@ -199,7 +198,7 @@ class TestConversationSummariesCRUD:
         assert latest is not None
         assert latest["created_at"] is not None
 
-    def test_user_isolation(self, patched_db):
+    def test_user_isolation(self, patched_db, db):
         """Summaries and messages are isolated per user."""
         with db() as conn:
             _create_test_user(conn, "user-a")
@@ -224,7 +223,7 @@ class TestConversationSummariesCRUD:
 
 
 class TestShouldSummarize:
-    def test_below_threshold(self, patched_db):
+    def test_below_threshold(self, patched_db, db):
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
@@ -232,7 +231,7 @@ class TestShouldSummarize:
 
         assert should_summarize(user_id) is False
 
-    def test_at_threshold(self, patched_db):
+    def test_at_threshold(self, patched_db, db):
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
@@ -244,7 +243,7 @@ class TestShouldSummarize:
 
         assert should_summarize(user_id) is True
 
-    def test_custom_threshold(self, patched_db):
+    def test_custom_threshold(self, patched_db, db):
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
@@ -266,7 +265,7 @@ class TestSummarizeConversation:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_summarizes_messages(self, patched_db):
+    async def test_summarizes_messages(self, patched_db, db):
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
@@ -301,7 +300,7 @@ class TestSummarizeConversation:
         assert "Japan" in latest["summary_text"]
 
     @pytest.mark.asyncio
-    async def test_includes_previous_summary_in_prompt(self, patched_db):
+    async def test_includes_previous_summary_in_prompt(self, patched_db, db):
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
@@ -345,7 +344,7 @@ class TestSummarizeConversation:
         assert "New Messages" in user_prompt
 
     @pytest.mark.asyncio
-    async def test_tracks_usage_stats(self, patched_db):
+    async def test_tracks_usage_stats(self, patched_db, db):
         from backend.agents import UsageStats
 
         user_id = "test-user"
@@ -367,7 +366,7 @@ class TestSummarizeConversation:
         assert usage.api_calls == 1
 
     @pytest.mark.asyncio
-    async def test_truncates_long_messages(self, patched_db):
+    async def test_truncates_long_messages(self, patched_db, db):
         user_id = "test-user"
         with db() as conn:
             _create_test_user(conn, user_id)
@@ -395,7 +394,7 @@ class TestSummarizeConversation:
         assert "[truncated]" in user_prompt
 
     @pytest.mark.asyncio
-    async def test_output_dict_has_all_keys(self, patched_db):
+    async def test_output_dict_has_all_keys(self, patched_db, db):
         """summarize_conversation returns a dict with all expected keys."""
         user_id = "test-user"
         with db() as conn:
@@ -426,7 +425,7 @@ class TestSummarizeConversation:
         assert isinstance(result["cost_usd"], float)
 
     @pytest.mark.asyncio
-    async def test_messages_summarized_up_to_is_last_msg_id(self, patched_db):
+    async def test_messages_summarized_up_to_is_last_msg_id(self, patched_db, db):
         """messages_summarized_up_to should equal the ID of the last message processed."""
         user_id = "test-user"
         with db() as conn:
@@ -456,7 +455,7 @@ class TestSummarizeConversation:
 class TestFetchHistory:
     """Test that _fetch_history uses summary + recent messages when available."""
 
-    def test_without_summary_returns_raw_history(self, patched_db):
+    def test_without_summary_returns_raw_history(self, patched_db, db):
         """Without a summary, returns all messages up to context_window * 2."""
         user_id = "test-user"
         session_id = "sess-1"
@@ -480,7 +479,7 @@ class TestFetchHistory:
         # No system summary message
         assert all(h["role"] in ("user", "assistant") for h in history)
 
-    def test_with_summary_prepends_summary_and_returns_recent(self, patched_db):
+    def test_with_summary_prepends_summary_and_returns_recent(self, patched_db, db):
         """With a summary, returns [summary_system_msg, ...recent_messages]."""
         user_id = "test-user"
         session_id = "sess-1"
@@ -526,7 +525,7 @@ class TestFetchHistory:
         assert recent[0]["content"] == "Old message 2"
         assert recent[-1]["content"] == "New answer"
 
-    def test_without_user_id_falls_back_to_raw_history(self, patched_db):
+    def test_without_user_id_falls_back_to_raw_history(self, patched_db, db):
         """Without user_id, skips summary lookup and returns raw history."""
         session_id = "sess-1"
         with db() as conn:
@@ -542,7 +541,7 @@ class TestFetchHistory:
         assert len(history) == 2
         assert history[0]["role"] == "user"
 
-    def test_summary_excludes_old_messages(self, patched_db):
+    def test_summary_excludes_old_messages(self, patched_db, db):
         """Messages before the summary point should not appear in history."""
         user_id = "test-user"
         session_id = "sess-1"
@@ -578,7 +577,7 @@ class TestFetchHistory:
         contents = [h["content"] for h in history]
         assert not any("Ancient" in c for c in contents if "[Conversation summary]" not in c)
 
-    def test_respects_context_window_limit(self, patched_db):
+    def test_respects_context_window_limit(self, patched_db, db):
         """History with summary is limited to context_window * 2 recent messages."""
         user_id = "test-user"
         session_id = "sess-1"
@@ -617,7 +616,7 @@ class TestFetchHistory:
 class TestMaybeTriggerSummarization:
     """Test that the compression trigger fires correctly."""
 
-    def test_does_not_trigger_below_threshold(self, patched_db):
+    def test_does_not_trigger_below_threshold(self, patched_db, db):
         """No summarization when message count is below threshold."""
         user_id = "test-user"
         with db() as conn:
@@ -628,7 +627,7 @@ class TestMaybeTriggerSummarization:
             _maybe_trigger_summarization(user_id)
             mock_summarize.assert_not_called()
 
-    def test_triggers_at_threshold(self, patched_db):
+    def test_triggers_at_threshold(self, patched_db, db):
         """Summarization is triggered when message count reaches threshold."""
         user_id = "test-user"
         with db() as conn:
@@ -666,7 +665,7 @@ class TestMaybeTriggerSummarization:
             _maybe_trigger_summarization("")
             mock_should.assert_not_called()
 
-    def test_does_not_trigger_after_summary_resets_count(self, patched_db):
+    def test_does_not_trigger_after_summary_resets_count(self, patched_db, db):
         """After summarization resets the count, trigger should not fire again."""
         user_id = "test-user"
         with db() as conn:

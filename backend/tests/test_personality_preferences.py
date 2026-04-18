@@ -60,8 +60,7 @@ class TestLoadPersonalityPreferences:
         result = load_personality_preferences("test-user-123")
         assert result == []
 
-    def test_loads_active_preferences(self, patched_db):
-        from backend.database import db
+    def test_loads_active_preferences(self, patched_db, db):
 
         with db() as conn:
             # Create a user
@@ -92,8 +91,7 @@ class TestLoadPersonalityPreferences:
         assert result[1]["confidence"] == "emerging"
         assert result[1]["observations"] == 1  # default
 
-    def test_inactive_preferences_filtered(self, patched_db):
-        from backend.database import db
+    def test_inactive_preferences_filtered(self, patched_db, db):
 
         with db() as conn:
             conn.execute(
@@ -109,8 +107,7 @@ class TestLoadPersonalityPreferences:
         result = load_personality_preferences("u1")
         assert result == []
 
-    def test_multi_thing_aggregation(self, patched_db):
-        from backend.database import db
+    def test_multi_thing_aggregation(self, patched_db, db):
 
         with db() as conn:
             conn.execute(
@@ -130,8 +127,7 @@ class TestLoadPersonalityPreferences:
         assert "Be direct" in patterns
         assert "Use lists" in patterns
 
-    def test_malformed_data_skipped(self, patched_db):
-        from backend.database import db
+    def test_malformed_data_skipped(self, patched_db, db):
 
         with db() as conn:
             conn.execute(

@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from backend.database import db
 import backend.db_engine as _engine_mod
 from sqlmodel import Session
 from backend.sweep import (
@@ -84,7 +83,7 @@ def _insert_preference(conn, user_id: str, patterns: list[dict], thing_id: str =
 
 
 class TestDetectTitleShortening:
-    def test_no_chat_history(self, patched_db):
+    def test_no_chat_history(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
         cutoff = (date.today() - timedelta(days=30)).isoformat()
@@ -92,7 +91,7 @@ class TestDetectTitleShortening:
             signals = _detect_title_shortening(session, "u1", cutoff)
         assert signals == []
 
-    def test_detects_shortened_titles(self, patched_db):
+    def test_detects_shortened_titles(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             # Reli creates a Thing with a long title
@@ -127,7 +126,7 @@ class TestDetectTitleShortening:
         assert signals[0].count >= 1
         assert signals[0].total >= 1
 
-    def test_no_signal_when_title_lengthened(self, patched_db):
+    def test_no_signal_when_title_lengthened(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             _insert_chat_message(
@@ -166,7 +165,7 @@ class TestDetectTitleShortening:
 
 
 class TestDetectFindingDismissalPatterns:
-    def test_no_findings(self, patched_db):
+    def test_no_findings(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
         cutoff = (date.today() - timedelta(days=30)).isoformat()
@@ -174,7 +173,7 @@ class TestDetectFindingDismissalPatterns:
             signals = _detect_finding_dismissal_patterns(session, "u1", cutoff)
         assert signals == []
 
-    def test_high_dismissal_rate(self, patched_db):
+    def test_high_dismissal_rate(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             # 4 out of 5 stale findings dismissed
@@ -191,7 +190,7 @@ class TestDetectFindingDismissalPatterns:
         assert signals[0].total == 5
         assert "stale" in signals[0].examples
 
-    def test_low_dismissal_rate_no_signal(self, patched_db):
+    def test_low_dismissal_rate_no_signal(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             # 1 out of 5 dismissed — below threshold
@@ -204,7 +203,7 @@ class TestDetectFindingDismissalPatterns:
 
         assert signals == []
 
-    def test_multiple_finding_types(self, patched_db):
+    def test_multiple_finding_types(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             # Stale: 3/4 dismissed (high)
@@ -228,7 +227,7 @@ class TestDetectFindingDismissalPatterns:
 
 
 class TestDetectFindingEngagementPatterns:
-    def test_high_engagement(self, patched_db):
+    def test_high_engagement(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             # 0 out of 4 approaching_date findings dismissed — high engagement
@@ -243,7 +242,7 @@ class TestDetectFindingEngagementPatterns:
         assert signals[0].signal_type == "finding_engagement"
         assert "approaching_date" in signals[0].examples
 
-    def test_low_engagement_no_signal(self, patched_db):
+    def test_low_engagement_no_signal(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             # 3 out of 4 dismissed — low engagement
@@ -334,7 +333,7 @@ class TestMergePatterns:
 
 
 class TestUpsertSweepPreference:
-    def test_creates_new_preference(self, patched_db):
+    def test_creates_new_preference(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
 
@@ -352,7 +351,7 @@ class TestUpsertSweepPreference:
         assert len(data["patterns"]) == 1
         assert data["patterns"][0]["pattern"] == "Be concise"
 
-    def test_updates_existing_preference(self, patched_db):
+    def test_updates_existing_preference(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             _insert_preference(
@@ -392,7 +391,7 @@ class TestCollectBehavioralSignals:
     def test_empty_user_id(self):
         assert collect_behavioral_signals("") == []
 
-    def test_collects_multiple_signal_types(self, patched_db):
+    def test_collects_multiple_signal_types(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             # Add dismissal signal data
@@ -412,7 +411,7 @@ class TestCollectBehavioralSignals:
 
 class TestAggregatePersonalityPatterns:
     @pytest.mark.asyncio
-    async def test_no_signals_returns_empty(self, patched_db):
+    async def test_no_signals_returns_empty(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
 
@@ -421,7 +420,7 @@ class TestAggregatePersonalityPatterns:
         assert result.patterns == []
 
     @pytest.mark.asyncio
-    async def test_full_pipeline_with_mocked_llm(self, patched_db):
+    async def test_full_pipeline_with_mocked_llm(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             # Set up dismissal signals
@@ -453,7 +452,7 @@ class TestAggregatePersonalityPatterns:
         assert data["patterns"][0]["pattern"] == "Reduce staleness alert frequency"
 
     @pytest.mark.asyncio
-    async def test_invalid_llm_response(self, patched_db):
+    async def test_invalid_llm_response(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             for i in range(5):
@@ -465,7 +464,7 @@ class TestAggregatePersonalityPatterns:
         assert result.patterns_updated == 0
 
     @pytest.mark.asyncio
-    async def test_empty_patterns_from_llm(self, patched_db):
+    async def test_empty_patterns_from_llm(self, patched_db, db):
         with db() as conn:
             _insert_user(conn)
             for i in range(5):

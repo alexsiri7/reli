@@ -21,8 +21,7 @@ class TestStalenessEndpoint:
         assert data["stale_threshold_days"] == 14
         assert "as_of" in data
 
-    def test_stale_item_detected(self, client, patched_db):
-        from backend.database import db
+    def test_stale_item_detected(self, client, patched_db, db):
 
         # Create a thing and manually backdate its updated_at
         thing = _create_thing(client, "Old Task")
@@ -47,8 +46,7 @@ class TestStalenessEndpoint:
         overdue = next(o for o in data["overdue_checkins"] if o["thing"]["id"] == thing["id"])
         assert overdue["days_overdue"] >= 5
 
-    def test_custom_stale_days_override(self, client, patched_db):
-        from backend.database import db
+    def test_custom_stale_days_override(self, client, patched_db, db):
 
         thing = _create_thing(client, "Slightly Old")
         # Updated 5 days ago — stale only if threshold is < 5
@@ -68,8 +66,7 @@ class TestStalenessEndpoint:
         stale_ids = [s["thing"]["id"] for s in data["stale_items"]]
         assert thing["id"] in stale_ids
 
-    def test_neglected_vs_stale_distinction(self, client, patched_db):
-        from backend.database import db
+    def test_neglected_vs_stale_distinction(self, client, patched_db, db):
 
         # High-importance thing — should be neglected
         high_pri = _create_thing(client, "Urgent Thing", importance=0)

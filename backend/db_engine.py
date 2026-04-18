@@ -89,20 +89,3 @@ def get_session() -> Generator[Session, None, None]:
     with Session(engine) as session:
         yield session
 
-
-
-def init_sqlmodel_tables() -> None:
-    """Deprecated: schema is now managed by Alembic migrations.
-
-    Run ``alembic upgrade head`` instead.  This function is kept as a
-    no-op so existing call sites don't break during the transition.
-    """
-    import logging
-    import warnings
-
-    msg = (
-        "init_sqlmodel_tables() is deprecated — schema is managed by Alembic. "
-        "Run 'alembic upgrade head' instead."
-    )
-    warnings.warn(msg, DeprecationWarning, stacklevel=2)
-    logging.getLogger(__name__).warning(msg)

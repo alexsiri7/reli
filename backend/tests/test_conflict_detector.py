@@ -16,7 +16,6 @@ from backend.conflict_detector import (
     detect_deadline_conflicts,
     detect_schedule_overlaps,
 )
-from backend.database import db
 
 
 @pytest.fixture(autouse=True)
@@ -25,6 +24,7 @@ def _fresh_db(patched_db):
 
 
 def _insert_thing(
+    db,
     title: str,
     data: dict | None = None,
     checkin_date: str | None = None,
@@ -41,7 +41,7 @@ def _insert_thing(
     return thing_id
 
 
-def _insert_relationship(from_id: str, to_id: str, rel_type: str) -> str:
+def _insert_relationship(db, from_id: str, to_id: str, rel_type: str) -> str:
     rel_id = str(uuid.uuid4())
     with db() as conn:
         conn.execute(
@@ -52,12 +52,12 @@ def _insert_relationship(from_id: str, to_id: str, rel_type: str) -> str:
 
 
 class TestBlockingChains:
-    def test_detects_blocker_with_deadline(self):
+    def test_detects_blocker_with_deadline(self, db):
         """Should detect when a blocked Thing has an approaching deadline."""
         tomorrow = (date.today() + timedelta(days=1)).isoformat()
-        blocked = _insert_thing("Deploy feature", data={"deadline": tomorrow})
-        blocker = _insert_thing("Code review")
-        _insert_relationship(blocker, blocked, "blocks")
+        blocked = _insert_thing(db, "Deploy feature", data={"deadline": tomorrow})
+        blocker = _insert_thing(db, "Code review")
+        _insert_relationship(db, blocker, blocked, "blocks")
 
         with Session(_engine_mod.engine) as session:
             alerts = detect_blocking_chains(session)
@@ -68,12 +68,12 @@ class TestBlockingChains:
         assert "Deploy feature" in alerts[0].message
         assert "Code review" in alerts[0].message
 
-    def test_detects_depends_on_relationship(self):
+    def test_detects_depends_on_relationship(self, db):
         """Should detect depends-on relationships as blockers."""
         next_week = (date.today() + timedelta(days=5)).isoformat()
-        dependent = _insert_thing("Launch", data={"deadline": next_week})
-        dependency = _insert_thing("Build API")
-        _insert_relationship(dependent, dependency, "depends-on")
+        dependent = _insert_thing(db, "Launch", data={"deadline": next_week})
+        dependency = _insert_thing(db, "Build API")
+        _insert_relationship(db, dependent, dependency, "depends-on")
 
         with Session(_engine_mod.engine) as session:
             alerts = detect_blocking_chains(session)
@@ -82,23 +82,23 @@ class TestBlockingChains:
         assert "Launch" in alerts[0].message
         assert "Build API" in alerts[0].message
 
-    def test_inactive_blocker_not_flagged(self):
+    def test_inactive_blocker_not_flagged(self, db):
         """Should not flag if blocker is inactive (completed)."""
         tomorrow = (date.today() + timedelta(days=1)).isoformat()
-        blocked = _insert_thing("Deploy", data={"deadline": tomorrow})
-        blocker = _insert_thing("Review", active=False)
-        _insert_relationship(blocker, blocked, "blocks")
+        blocked = _insert_thing(db, "Deploy", data={"deadline": tomorrow})
+        blocker = _insert_thing(db, "Review", active=False)
+        _insert_relationship(db, blocker, blocked, "blocks")
 
         with Session(_engine_mod.engine) as session:
             alerts = detect_blocking_chains(session)
 
         assert len(alerts) == 0
 
-    def test_no_deadline_still_flagged_as_info(self):
+    def test_no_deadline_still_flagged_as_info(self, db):
         """Should flag active blockers even without a deadline, as info."""
-        blocked = _insert_thing("Feature X")
-        blocker = _insert_thing("Prerequisite Y")
-        _insert_relationship(blocker, blocked, "blocks")
+        blocked = _insert_thing(db, "Feature X")
+        blocker = _insert_thing(db, "Prerequisite Y")
+        _insert_relationship(db, blocker, blocked, "blocks")
 
         with Session(_engine_mod.engine) as session:
             alerts = detect_blocking_chains(session)
@@ -106,12 +106,12 @@ class TestBlockingChains:
         assert len(alerts) == 1
         assert alerts[0].severity == "info"
 
-    def test_overdue_deadline_critical(self):
+    def test_overdue_deadline_critical(self, db):
         """Should flag overdue blocked items as critical."""
         yesterday = (date.today() - timedelta(days=1)).isoformat()
-        blocked = _insert_thing("Overdue task", data={"deadline": yesterday})
-        blocker = _insert_thing("Blocker")
-        _insert_relationship(blocker, blocked, "blocks")
+        blocked = _insert_thing(db, "Overdue task", data={"deadline": yesterday})
+        blocker = _insert_thing(db, "Blocker")
+        _insert_relationship(db, blocker, blocked, "blocks")
 
         with Session(_engine_mod.engine) as session:
             alerts = detect_blocking_chains(session, window_days=14)
@@ -122,16 +122,16 @@ class TestBlockingChains:
 
 
 class TestScheduleOverlaps:
-    def test_detects_overlap_between_related_things(self):
+    def test_detects_overlap_between_related_things(self, db):
         """Should detect overlapping date ranges on related Things."""
         start1 = (date.today() + timedelta(days=1)).isoformat()
         end1 = (date.today() + timedelta(days=5)).isoformat()
         start2 = (date.today() + timedelta(days=3)).isoformat()
         end2 = (date.today() + timedelta(days=7)).isoformat()
 
-        thing_a = _insert_thing("Meeting A", data={"start_date": start1, "end_date": end1})
-        thing_b = _insert_thing("Meeting B", data={"start_date": start2, "end_date": end2})
-        _insert_relationship(thing_a, thing_b, "related-to")
+        thing_a = _insert_thing(db, "Meeting A", data={"start_date": start1, "end_date": end1})
+        thing_b = _insert_thing(db, "Meeting B", data={"start_date": start2, "end_date": end2})
+        _insert_relationship(db, thing_a, thing_b, "related-to")
 
         with Session(_engine_mod.engine) as session:
             alerts = detect_schedule_overlaps(session)
@@ -141,29 +141,29 @@ class TestScheduleOverlaps:
         assert "Meeting A" in alerts[0].message
         assert "Meeting B" in alerts[0].message
 
-    def test_no_overlap_no_alert(self):
+    def test_no_overlap_no_alert(self, db):
         """Should not flag non-overlapping date ranges."""
         start1 = (date.today() + timedelta(days=1)).isoformat()
         end1 = (date.today() + timedelta(days=2)).isoformat()
         start2 = (date.today() + timedelta(days=5)).isoformat()
         end2 = (date.today() + timedelta(days=7)).isoformat()
 
-        thing_a = _insert_thing("Event A", data={"start_date": start1, "end_date": end1})
-        thing_b = _insert_thing("Event B", data={"start_date": start2, "end_date": end2})
-        _insert_relationship(thing_a, thing_b, "related-to")
+        thing_a = _insert_thing(db, "Event A", data={"start_date": start1, "end_date": end1})
+        thing_b = _insert_thing(db, "Event B", data={"start_date": start2, "end_date": end2})
+        _insert_relationship(db, thing_a, thing_b, "related-to")
 
         with Session(_engine_mod.engine) as session:
             alerts = detect_schedule_overlaps(session)
 
         assert len(alerts) == 0
 
-    def test_unrelated_things_not_flagged(self):
+    def test_unrelated_things_not_flagged(self, db):
         """Should not flag overlaps between unrelated Things."""
         start1 = (date.today() + timedelta(days=1)).isoformat()
         end1 = (date.today() + timedelta(days=5)).isoformat()
 
-        _insert_thing("Event A", data={"start_date": start1, "end_date": end1})
-        _insert_thing("Event B", data={"start_date": start1, "end_date": end1})
+        _insert_thing(db, "Event A", data={"start_date": start1, "end_date": end1})
+        _insert_thing(db, "Event B", data={"start_date": start1, "end_date": end1})
 
         with Session(_engine_mod.engine) as session:
             alerts = detect_schedule_overlaps(session)
@@ -172,14 +172,14 @@ class TestScheduleOverlaps:
 
 
 class TestDeadlineConflicts:
-    def test_detects_dependency_deadline_after_dependent(self):
+    def test_detects_dependency_deadline_after_dependent(self, db):
         """Should flag when a dependency is due after its dependent."""
         dep_deadline = (date.today() + timedelta(days=10)).isoformat()
         depn_deadline = (date.today() + timedelta(days=15)).isoformat()
 
-        dependent = _insert_thing("Ship feature", data={"deadline": dep_deadline})
-        dependency = _insert_thing("API ready", data={"deadline": depn_deadline})
-        _insert_relationship(dependent, dependency, "depends-on")
+        dependent = _insert_thing(db, "Ship feature", data={"deadline": dep_deadline})
+        dependency = _insert_thing(db, "API ready", data={"deadline": depn_deadline})
+        _insert_relationship(db, dependent, dependency, "depends-on")
 
         with Session(_engine_mod.engine) as session:
             alerts = detect_deadline_conflicts(session)
@@ -189,28 +189,28 @@ class TestDeadlineConflicts:
         assert "Ship feature" in alerts[0].message
         assert "API ready" in alerts[0].message
 
-    def test_no_conflict_when_dependency_due_first(self):
+    def test_no_conflict_when_dependency_due_first(self, db):
         """Should not flag when dependency deadline is before dependent."""
         dep_deadline = (date.today() + timedelta(days=15)).isoformat()
         depn_deadline = (date.today() + timedelta(days=5)).isoformat()
 
-        dependent = _insert_thing("Ship", data={"deadline": dep_deadline})
-        dependency = _insert_thing("Build", data={"deadline": depn_deadline})
-        _insert_relationship(dependent, dependency, "depends-on")
+        dependent = _insert_thing(db, "Ship", data={"deadline": dep_deadline})
+        dependency = _insert_thing(db, "Build", data={"deadline": depn_deadline})
+        _insert_relationship(db, dependent, dependency, "depends-on")
 
         with Session(_engine_mod.engine) as session:
             alerts = detect_deadline_conflicts(session)
 
         assert len(alerts) == 0
 
-    def test_blocks_relationship_detects_conflict(self):
+    def test_blocks_relationship_detects_conflict(self, db):
         """Should detect deadline conflict via blocks relationship too."""
         blocker_deadline = (date.today() + timedelta(days=20)).isoformat()
         blocked_deadline = (date.today() + timedelta(days=10)).isoformat()
 
-        blocker = _insert_thing("Prerequisite", data={"deadline": blocker_deadline})
-        blocked = _insert_thing("Main task", data={"deadline": blocked_deadline})
-        _insert_relationship(blocker, blocked, "blocks")
+        blocker = _insert_thing(db, "Prerequisite", data={"deadline": blocker_deadline})
+        blocked = _insert_thing(db, "Main task", data={"deadline": blocked_deadline})
+        _insert_relationship(db, blocker, blocked, "blocks")
 
         with Session(_engine_mod.engine) as session:
             alerts = detect_deadline_conflicts(session)
@@ -220,14 +220,14 @@ class TestDeadlineConflicts:
 
 
 class TestDetectAll:
-    def test_combined_and_deduplicated(self):
+    def test_combined_and_deduplicated(self, db):
         """Should combine all detectors and deduplicate."""
         tomorrow = (date.today() + timedelta(days=1)).isoformat()
         next_month = (date.today() + timedelta(days=30)).isoformat()
 
-        blocked = _insert_thing("Urgent task", data={"deadline": tomorrow})
-        blocker = _insert_thing("Blocker task", data={"deadline": next_month})
-        _insert_relationship(blocker, blocked, "blocks")
+        blocked = _insert_thing(db, "Urgent task", data={"deadline": tomorrow})
+        blocker = _insert_thing(db, "Blocker task", data={"deadline": next_month})
+        _insert_relationship(db, blocker, blocked, "blocks")
 
         alerts = detect_all_conflicts()
         # Should have both blocking_chain and deadline_conflict
@@ -247,11 +247,11 @@ class TestConflictsEndpoint:
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
-    def test_get_conflicts_with_data(self, client):
+    def test_get_conflicts_with_data(self, client, db):
         tomorrow = (date.today() + timedelta(days=1)).isoformat()
-        blocked = _insert_thing("Task A", data={"deadline": tomorrow})
-        blocker = _insert_thing("Task B")
-        _insert_relationship(blocker, blocked, "blocks")
+        blocked = _insert_thing(db, "Task A", data={"deadline": tomorrow})
+        blocker = _insert_thing(db, "Task B")
+        _insert_relationship(db, blocker, blocked, "blocks")
 
         resp = client.get("/api/conflicts")
         assert resp.status_code == 200
@@ -261,12 +261,12 @@ class TestConflictsEndpoint:
         assert "thing_ids" in data[0]
         assert "severity" in data[0]
 
-    def test_proactivity_off_returns_empty(self, client):
+    def test_proactivity_off_returns_empty(self, client, db):
         """Setting proactivity_level to 'off' should return no alerts."""
         tomorrow = (date.today() + timedelta(days=1)).isoformat()
-        blocked = _insert_thing("Task A", data={"deadline": tomorrow})
-        blocker = _insert_thing("Task B")
-        _insert_relationship(blocker, blocked, "blocks")
+        blocked = _insert_thing(db, "Task A", data={"deadline": tomorrow})
+        blocker = _insert_thing(db, "Task B")
+        _insert_relationship(db, blocker, blocked, "blocks")
 
         # Set proactivity to off via the settings API
         resp = client.put(

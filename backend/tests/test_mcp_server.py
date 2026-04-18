@@ -769,9 +769,8 @@ def token_client(patched_db):
 
 
 @pytest.fixture()
-def token_client_with_user(patched_db):
+def token_client_with_user(patched_db, db):
     """TestClient with token auth and a user in the database."""
-    from backend.database import db
 
     # Insert a test user
     with db() as conn:

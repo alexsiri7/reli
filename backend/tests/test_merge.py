@@ -3,7 +3,6 @@
 import json
 import uuid
 
-from backend.database import db
 
 
 def _insert_thing(conn, title, type_hint="task", data=None, open_questions=None):
@@ -35,7 +34,7 @@ def _insert_relationship(conn, from_id, to_id, rel_type="related-to"):
 
 
 class TestMergeThings:
-    def test_basic_merge(self, patched_db):
+    def test_basic_merge(self, patched_db, db):
         """Merge combines data and deletes the duplicate."""
         from backend.agents import apply_storage_changes
 
@@ -75,7 +74,7 @@ class TestMergeThings:
             removed = conn.execute("SELECT * FROM things WHERE id = ?", (remove_id,)).fetchone()
             assert removed is None
 
-    def test_merge_repoints_relationships(self, patched_db):
+    def test_merge_repoints_relationships(self, patched_db, db):
         """All relationships from/to the duplicate get re-pointed to the primary."""
         from backend.agents import apply_storage_changes
 
@@ -108,7 +107,7 @@ class TestMergeThings:
             assert rel_map["involves"]["from_thing_id"] == other_id
             assert rel_map["involves"]["to_thing_id"] == keep_id
 
-    def test_merge_removes_self_referential_relationships(self, patched_db):
+    def test_merge_removes_self_referential_relationships(self, patched_db, db):
         """If keep and remove had a relationship between them, it becomes self-ref and is cleaned up."""
         from backend.agents import apply_storage_changes
 
@@ -128,7 +127,7 @@ class TestMergeThings:
             rels = conn.execute("SELECT * FROM thing_relationships").fetchall()
             assert len(rels) == 0  # self-ref should be deleted
 
-    def test_merge_transfers_open_questions(self, patched_db):
+    def test_merge_transfers_open_questions(self, patched_db, db):
         """Open questions from the duplicate are transferred, skipping duplicates."""
         from backend.agents import apply_storage_changes
 
@@ -154,7 +153,7 @@ class TestMergeThings:
             # No duplicates
             assert len(oq) == 3
 
-    def test_merge_skips_nonexistent_ids(self, patched_db):
+    def test_merge_skips_nonexistent_ids(self, patched_db, db):
         """Merge gracefully skips when either ID doesn't exist."""
         from backend.agents import apply_storage_changes
 
@@ -170,7 +169,7 @@ class TestMergeThings:
 
         assert len(result["merged"]) == 0
 
-    def test_merge_skips_same_id(self, patched_db):
+    def test_merge_skips_same_id(self, patched_db, db):
         """Merge skips when keep_id == remove_id."""
         from backend.agents import apply_storage_changes
 
@@ -191,7 +190,7 @@ class TestMergeThings:
             row = conn.execute("SELECT * FROM things WHERE id = ?", (thing_id,)).fetchone()
             assert row is not None
 
-    def test_merge_with_empty_data(self, patched_db):
+    def test_merge_with_empty_data(self, patched_db, db):
         """Merge works when Things have no existing data."""
         from backend.agents import apply_storage_changes
 
@@ -212,7 +211,7 @@ class TestMergeThings:
             data = json.loads(row["data"])
             assert data["name"] == "Bob"
 
-    def test_merge_records_history(self, patched_db):
+    def test_merge_records_history(self, patched_db, db):
         """Merge via apply_storage_changes creates a merge_history record."""
         from backend.agents import apply_storage_changes
 
@@ -247,7 +246,7 @@ class TestMergeThings:
             merged = json.loads(rec["merged_data"])
             assert merged["hobby"] == "chess"
 
-    def test_merge_skipped_no_history(self, patched_db):
+    def test_merge_skipped_no_history(self, patched_db, db):
         """When merge is skipped (nonexistent ID), no history record is created."""
         from backend.agents import apply_storage_changes
 
