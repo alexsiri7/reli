@@ -169,9 +169,13 @@ class Settings(BaseSettings):
     PHOENIX_ENDPOINT: str = "http://localhost:6006/v1/traces"
     OTEL_SERVICE_NAME: str = "reli"
 
+    @staticmethod
+    def _is_truthy(value: str) -> bool:
+        return value.lower() not in ("false", "0", "no")
+
     @property
     def phoenix_enabled_bool(self) -> bool:
-        return _parse_bool_env(self.PHOENIX_ENABLED)
+        return self._is_truthy(self.PHOENIX_ENABLED)
 
     # --- Sweep scheduler ---
     SWEEP_ENABLED: str = "true"
@@ -180,11 +184,11 @@ class Settings(BaseSettings):
 
     @property
     def rate_limit_enabled_bool(self) -> bool:
-        return _parse_bool_env(self.RATE_LIMIT_ENABLED)
+        return self._is_truthy(self.RATE_LIMIT_ENABLED)
 
     @property
     def sweep_enabled_bool(self) -> bool:
-        return _parse_bool_env(self.SWEEP_ENABLED)
+        return self._is_truthy(self.SWEEP_ENABLED)
 
 
 settings = Settings()

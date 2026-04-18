@@ -26,6 +26,9 @@ const mockStore = {
   fetchOlderMessages: vi.fn(),
   sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, cost_usd: 0, per_model: [] },
   registerChatInputFocus: vi.fn(),
+  seedFromGoogle: vi.fn().mockResolvedValue({ count: 0 }),
+  googleSeedLoading: false,
+  calendarStatus: { configured: false, connected: false },
 }
 
 vi.mock('../store', () => ({
@@ -59,7 +62,7 @@ beforeEach(() => {
 describe('ChatPanel', () => {
   it('renders onboarding empty state for new users (no things)', () => {
     render(<ChatPanel />)
-    expect(screen.getByText('Welcome to Reli')).toBeInTheDocument()
+    expect(screen.getByText(/Welcome! I'm Reli/)).toBeInTheDocument()
   })
 
   it('renders empty state prompt for returning users (has things)', () => {

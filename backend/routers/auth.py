@@ -83,6 +83,13 @@ def _decode_jwt(token: str) -> dict[str, str]:
     return result
 
 
+def _apply_profile_fields(user: UserRecord, email: str, name: str, picture: str | None, now: datetime) -> None:
+    user.email = email
+    user.name = name
+    user.picture = picture
+    user.updated_at = now
+
+
 def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> str:
     """Create or update a user from Google profile info. Returns user_id."""
     now = datetime.now(timezone.utc)
@@ -91,10 +98,7 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
         existing = session.exec(select(UserRecord).where(UserRecord.google_id == google_id)).first()
         if existing:
             user_id = existing.id
-            existing.email = email
-            existing.name = name
-            existing.picture = picture
-            existing.updated_at = now
+            _apply_profile_fields(existing, email, name, picture, now)
             session.add(existing)
             session.commit()
         else:
@@ -124,10 +128,7 @@ def _upsert_user(google_id: str, email: str, name: str, picture: str | None) -> 
                 if existing is None:
                     raise  # unexpected: re-raise if still not found
                 user_id = existing.id
-                existing.email = email
-                existing.name = name
-                existing.picture = picture
-                existing.updated_at = now
+                _apply_profile_fields(existing, email, name, picture, now)
                 session.add(existing)
                 session.commit()
                 return user_id

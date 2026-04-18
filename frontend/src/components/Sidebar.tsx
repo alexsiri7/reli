@@ -1225,8 +1225,8 @@ export function Sidebar() {
                   <line x1="20" y1="34" x2="45" y2="45" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2"/>
                 </svg>
                 <div>
-                  <p className="text-sm font-medium text-on-surface-variant">Start by typing in the chat…</p>
-                  <p className="text-xs text-on-surface-variant/70 mt-1">Things you mention appear here — try telling me about a project, goal, or task.</p>
+                  <p className="text-sm font-medium text-on-surface-variant">Things you mention in chat appear here</p>
+                  <p className="text-xs text-on-surface-variant/70 mt-1">Try telling me about a project, goal, or task you're working on.</p>
                 </div>
               </div>
             )}

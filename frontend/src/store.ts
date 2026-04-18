@@ -21,6 +21,7 @@ import {
   ChatResponseSchema,
   SessionStatsSchema,
   CalendarStatusSchema,
+  GmailStatusSchema,
   CalendarEventSchema,
   ModelSettingsSchema,
   UserSettingsSchema,
@@ -160,6 +161,11 @@ export interface CalendarStatus {
   connected: boolean
 }
 
+export interface GmailStatus {
+  connected: boolean
+  email: string | null
+}
+
 export type InteractionStyle = 'auto' | 'coach' | 'consultant'
 
 export type ChatMode = 'normal' | 'planning'
@@ -221,6 +227,7 @@ interface ReliState {
   error: string | null
   calendarStatus: CalendarStatus
   calendarEvents: CalendarEvent[]
+  gmailStatus: GmailStatus
 
   morningBriefing: MorningBriefing | null
   morningBriefingLoading: boolean
@@ -276,9 +283,14 @@ interface ReliState {
   sendMessage: (text: string) => Promise<void>
   clearError: () => void
   fetchCalendarStatus: () => Promise<void>
+  fetchGmailStatus: () => Promise<void>
   fetchCalendarEvents: () => Promise<void>
   connectCalendar: () => Promise<void>
   disconnectCalendar: () => Promise<void>
+
+  // Google seed (onboarding)
+  googleSeedLoading: boolean
+  seedFromGoogle: () => Promise<{ count: number }>
 
   // Things list filter (client-side, persists across panel switches)
   thingFilterQuery: string
@@ -519,6 +531,7 @@ export const useStore = create<ReliState>((set, get) => ({
   error: null,
   calendarStatus: { configured: false, connected: false },
   calendarEvents: [],
+  gmailStatus: { connected: false, email: null },
   morningBriefing: null,
   morningBriefingLoading: false,
   briefingPreferences: null,
@@ -1094,6 +1107,17 @@ export const useStore = create<ReliState>((set, get) => ({
     }
   },
 
+  fetchGmailStatus: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/gmail/status`)
+      if (!res.ok) return
+      const data: GmailStatus = validateResponse(GmailStatusSchema, await res.json(), '/gmail/status')
+      set({ gmailStatus: data })
+    } catch {
+      // ignore
+    }
+  },
+
   fetchCalendarEvents: async () => {
     try {
       const res = await apiFetch(`${BASE}/calendar/events`)
@@ -1134,6 +1158,29 @@ export const useStore = create<ReliState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  // Google seed (onboarding)
+  googleSeedLoading: false,
+  seedFromGoogle: async () => {
+    set({ googleSeedLoading: true })
+    try {
+      const [calRes, gmailRes] = await Promise.allSettled([
+        apiFetch(`${BASE}/calendar/seed`, { method: 'POST' }),
+        apiFetch(`${BASE}/gmail/seed`, { method: 'POST' }),
+      ])
+      let count = 0
+      for (const res of [calRes, gmailRes]) {
+        if (res.status === 'fulfilled' && res.value.ok) {
+          const data = await res.value.json()
+          count += data.count ?? 0
+        }
+      }
+      await get().fetchThings()
+      return { count }
+    } finally {
+      set({ googleSeedLoading: false })
+    }
+  },
 
   // Things list filter
   thingFilterQuery: '',

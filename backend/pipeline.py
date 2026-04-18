@@ -33,6 +33,17 @@ from .vector_store import VECTOR_SEARCH_THRESHOLD, vector_count, vector_search
 logger = logging.getLogger(__name__)
 _tracer = get_tracer()
 
+ONBOARDING_SYSTEM_ADDENDUM = """
+ONBOARDING MODE: This is the user's very first conversation — they have no Things yet.
+Your goals for this session:
+1. Open with a warm welcome and ask what they're working on this week.
+2. As they share details, proactively call create_thing for each task, project, or person they mention.
+3. Ask 2-3 follow-up questions to learn more (e.g., "Who else is involved?", "When does this need to be done?").
+4. After 3 or more Things are created, close with a mini-briefing: "Here's what I know so far: [list]. Tomorrow I'll check in on these."
+5. Keep the tone warm and conversational — not a form or questionnaire.
+Be proactive: don't wait for the user to say "create a thing". Just do it naturally.
+"""
+
 
 # ---------------------------------------------------------------------------
 # Pipeline result types
@@ -512,6 +523,18 @@ class ChatPipeline:
     # Calendar data fetching
     # ------------------------------------------------------------------
 
+    def _is_new_user(self) -> bool:
+        """Return True if this user has no surfaced, active Things (new-user onboarding)."""
+        with Session(_engine_mod.engine) as session:
+            surfaced_count = session.exec(
+                select(func.count(ThingRecord.id)).where(
+                    user_filter_clause(ThingRecord.user_id, self.user_id),
+                    ThingRecord.surface == True,
+                    ThingRecord.active == True,
+                )
+            ).one()
+        return surfaced_count == 0
+
     def _fetch_calendar_events(self) -> list[dict] | None:
         """Fetch upcoming calendar events if Google Calendar is connected."""
         if gcal_connected(user_id=self.user_id):
@@ -588,11 +611,15 @@ class ChatPipeline:
         # Warm start: fetch context Things from recent messages
         warm_context = _fetch_warm_context(session_id, self.user_id) if session_id else []
 
+        # Detect new user (0 surfaced, active Things) for onboarding mode
+        is_new_user = self._is_new_user()
+
         with _tracer.start_as_current_span("reli.pipeline") as pipeline_span:
             pipeline_span.set_attribute("reli.user_id", self.user_id)
             pipeline_span.set_attribute("reli.message_length", len(message))
             pipeline_span.set_attribute("reli.history_length", len(history))
             pipeline_span.set_attribute("reli.warm_context_count", len(warm_context))
+            pipeline_span.set_attribute("reli.is_new_user", is_new_user)
 
             try:
                 # Pre-fetch calendar events (cheap, always useful if connected)
@@ -623,6 +650,7 @@ class ChatPipeline:
                             interaction_style=self.interaction_style,
                             session_id=session_id,
                             warm_context=warm_context,
+                            is_new_user=is_new_user,
                         )
 
                         # Extract context fetched by the reasoning agent's tool
@@ -737,12 +765,16 @@ class ChatPipeline:
         # Warm start: fetch context Things from recent messages
         warm_context = _fetch_warm_context(session_id, self.user_id) if session_id else []
 
+        # Detect new user (0 surfaced, active Things) for onboarding mode
+        is_new_user = self._is_new_user()
+
         with _tracer.start_as_current_span("reli.pipeline.stream") as pipeline_span:
             pipeline_span.set_attribute("reli.user_id", self.user_id)
             pipeline_span.set_attribute("reli.message_length", len(message))
             pipeline_span.set_attribute("reli.history_length", len(history))
             pipeline_span.set_attribute("reli.streaming", True)
             pipeline_span.set_attribute("reli.warm_context_count", len(warm_context))
+            pipeline_span.set_attribute("reli.is_new_user", is_new_user)
 
             try:
                 # Pre-fetch calendar events
@@ -775,6 +807,7 @@ class ChatPipeline:
                             interaction_style=self.interaction_style,
                             session_id=session_id,
                             warm_context=warm_context,
+                            is_new_user=is_new_user,
                         )
 
                         fetched_ctx = reasoning_result.get("fetched_context", {})

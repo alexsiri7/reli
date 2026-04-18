@@ -20,7 +20,7 @@ import { MobileFAB } from './components/MobileFAB'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, feedbackOpen, commandPaletteOpen, quickAddOpen, mainView, mobileView, setMobileView, rightView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges, fetchWeeklyBriefing, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, feedbackOpen, commandPaletteOpen, quickAddOpen, mainView, mobileView, setMobileView, rightView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchGmailStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges, fetchWeeklyBriefing, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
@@ -39,6 +39,7 @@ function App() {
       fetchHistory: s.fetchHistory,
       fetchDailyStats: s.fetchDailyStats,
       fetchCalendarStatus: s.fetchCalendarStatus,
+      fetchGmailStatus: s.fetchGmailStatus,
       fetchProactiveSurfaces: s.fetchProactiveSurfaces,
       fetchFocusRecommendations: s.fetchFocusRecommendations,
       fetchConflictAlerts: s.fetchConflictAlerts,
@@ -79,6 +80,8 @@ function App() {
     fetchMorningBriefing()
     fetchNudges()
     fetchWeeklyBriefing()
+    fetchCalendarStatus()
+    fetchGmailStatus()
     const interval = setInterval(() => { fetchThings(); fetchBriefing(); fetchProactiveSurfaces(); fetchFocusRecommendations(); fetchConflictAlerts() }, 30_000)
 
     // Handle OAuth callback redirect
@@ -87,9 +90,13 @@ function App() {
       window.history.replaceState({}, '', '/')
       fetchCalendarStatus()
     }
+    if (params.has('gmail_connected') || params.has('gmail_error')) {
+      window.history.replaceState({}, '', '/')
+      fetchGmailStatus()
+    }
 
     return () => clearInterval(interval)
-  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges, fetchWeeklyBriefing])
+  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchGmailStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges, fetchWeeklyBriefing])
 
   // Show nothing while checking auth
   if (!authChecked) {

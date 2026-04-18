@@ -3,6 +3,7 @@
 import base64
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ from ..auth import require_user
 from ..config import settings
 from ..db_models import GoogleTokenRecord
 from ..token_encryption import decrypt_or_plaintext, encrypt
+from ..tools import create_thing
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,17 @@ GOOGLE_CLIENT_SECRET = settings.GOOGLE_CLIENT_SECRET
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 # Legacy token file path — used only for migration fallback
 TOKEN_PATH = Path(settings.DATA_DIR) / "gmail_token.json"
+
+
+def _google_client_config() -> dict:
+    return {
+        "web": {
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -265,14 +278,7 @@ def gmail_auth_url(request: Request, user_id: str = Depends(require_user)) -> di
     redirect_uri = str(request.base_url).rstrip("/") + "/api/gmail/callback"
 
     flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-            }
-        },
+        _google_client_config(),
         scopes=GMAIL_SCOPES,
         redirect_uri=redirect_uri,
     )
@@ -304,14 +310,7 @@ def gmail_callback(
     redirect_uri = str(request.base_url).rstrip("/") + "/api/gmail/callback"
 
     flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-            }
-        },
+        _google_client_config(),
         scopes=GMAIL_SCOPES,
         redirect_uri=redirect_uri,
     )
@@ -407,3 +406,75 @@ def get_thread(thread_id: str, user_id: str = Depends(require_user)) -> GmailThr
     subject = thread_messages[0].subject if thread_messages else "(no subject)"
 
     return GmailThread(id=thread_id, subject=subject, messages=thread_messages)
+
+
+@router.post("/seed", summary="Seed Things from recent Gmail senders")
+def seed_from_gmail(user_id: str = Depends(require_user)) -> dict[str, Any]:
+    """Fetch recent Gmail threads and create Person Things for unique senders."""
+    service = _get_service(user_id=user_id)
+
+    threads_result = (
+        service.users()
+        .threads()
+        .list(userId="me", maxResults=20, labelIds=["INBOX"])
+        .execute()
+    )
+    threads = threads_result.get("threads", [])
+
+    created: list[dict[str, str]] = []
+    seen_senders: set[str] = set()
+
+    for thread_meta in threads:  # maxResults=20 already limits this
+        try:
+            thread = (
+                service.users()
+                .threads()
+                .get(
+                    userId="me",
+                    id=thread_meta["id"],
+                    format="metadata",
+                    metadataHeaders=["From", "Subject"],
+                )
+                .execute()
+            )
+        except Exception:
+            continue
+
+        messages = thread.get("messages", [])
+        if not messages:
+            continue
+
+        headers = {
+            h["name"]: h["value"]
+            for h in messages[0].get("payload", {}).get("headers", [])
+        }
+        sender_raw = headers.get("From", "")
+
+        # Extract email from "Name <email>" format
+        email_match = re.search(r"<([^>]+)>", sender_raw)
+        sender_email = email_match.group(1) if email_match else sender_raw
+        sender_name = sender_raw.split("<")[0].strip().strip('"') or sender_email
+
+        # Skip noreply/duplicate senders
+        if (
+            not sender_email
+            or "noreply" in sender_email.lower()
+            or sender_email in seen_senders
+        ):
+            continue
+
+        seen_senders.add(sender_email)
+        result = create_thing(
+            title=sender_name or sender_email,
+            type_hint="person",
+            importance=1,
+            checkin_date="",
+            surface=True,
+            data_json=json.dumps({"email": sender_email, "source": "gmail_seed"}),
+            open_questions_json="[]",
+            user_id=user_id,
+        )
+        if "error" not in result:
+            created.append({"id": result.get("id", ""), "title": sender_name or sender_email})
+
+    return {"created": created, "count": len(created)}
