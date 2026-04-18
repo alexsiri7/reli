@@ -930,7 +930,7 @@ export function Sidebar() {
             {disclosure.showGraphView && weeklyBriefing && <WeeklyBriefingSection briefing={weeklyBriefing} />}
 
             {/* Briefing empty state */}
-            {!loading && !morningBriefing && !weeklyBriefing && findings.length === 0 && briefing.length === 0 && (
+            {!loading && !morningBriefing && !(disclosure.showGraphView && weeklyBriefing) && findings.length === 0 && briefing.length === 0 && (
               <div className="px-4 py-3">
                 <h2 className="pb-1 text-label font-semibold text-on-surface-variant">
                   Daily Briefing

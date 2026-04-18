@@ -1,24 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { useProgressiveDisclosure } from '../hooks/useProgressiveDisclosure'
-
-type Thing = {
-  id: string
-  title: string
-  type_hint: string | null
-  checkin_date: string | null
-  priority: number
-  active: boolean
-  surface: boolean
-  data: Record<string, unknown> | null
-  created_at: string
-  updated_at: string
-  last_referenced: string | null
-  open_questions: string[] | null
-  children_count: number | null
-  completed_count: number | null
-  parent_ids: string[] | null
-}
+import type { Thing } from '../generated/api-types'
 
 let mockState: { things: Thing[] } = { things: [] }
 
@@ -35,7 +18,7 @@ const makeThing = (id: string): Thing => ({
   title: `Thing ${id}`,
   type_hint: 'task',
   checkin_date: null,
-  priority: 2,
+  importance: 2,
   active: true,
   surface: true,
   data: null,
