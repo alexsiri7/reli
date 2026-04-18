@@ -615,7 +615,21 @@ export const useStore = create<ReliState>((set, get) => ({
   stopNudgeType: async (nudgeId: string) => {
     set(s => ({ nudges: s.nudges.filter(n => n.id !== nudgeId) }))
     try {
-      await apiFetch(`${BASE}/nudges/${nudgeId}/stop`, { method: 'POST' })
+      const res = await apiFetch(`${BASE}/nudges/${nudgeId}/stop`, { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.preference) {
+          set(s => ({
+            preferenceToasts: [...s.preferenceToasts, {
+              id: `pref-toast-${Date.now()}-${data.preference.id}`,
+              title: data.preference.title,
+              confidenceLabel: data.preference.confidence_label,
+              action: data.preference.action,
+            }],
+          }))
+          get().fetchBriefing()
+        }
+      }
     } catch {
       // best-effort
     }
