@@ -48,6 +48,7 @@ export type {
   FocusRecommendation,
   ConflictAlert,
   SweepFinding,
+  LearnedPreference,
   MorningBriefingItem,
   MorningBriefingFinding,
   MorningBriefingContent,
@@ -80,6 +81,7 @@ import type {
   FocusRecommendation,
   ConflictAlert,
   SweepFinding,
+  LearnedPreference,
   MorningBriefing,
   BriefingPreferences,
   Nudge,
@@ -217,6 +219,7 @@ interface ReliState {
   secondaryItems: BriefingItem[]
   briefingStats: BriefingStats | null
   findings: SweepFinding[]
+  learnedPreferences: LearnedPreference[]
   messages: ChatMessage[]
   sessionId: string
   sessionStats: SessionStats
@@ -521,6 +524,7 @@ export const useStore = create<ReliState>((set, get) => ({
   secondaryItems: [],
   briefingStats: null,
   findings: [],
+  learnedPreferences: [],
   messages: [],
   sessionId: '',
   sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, cost_usd: 0, per_model: [] },
@@ -771,17 +775,18 @@ export const useStore = create<ReliState>((set, get) => ({
       }))
       for (const item of secondaryItems) things.push(item.thing)
       const findings = data.findings ?? []
+      const learnedPreferences = data.learned_preferences ?? []
       const briefingStats: BriefingStats | null = data.stats ? {
         active_things: data.stats.active_things ?? 0,
         checkin_due: data.stats.checkin_due ?? 0,
         overdue: data.stats.overdue ?? 0,
       } : null
-      set({ briefing: things, theOneThing, secondaryItems, briefingStats, findings })
-      cacheBriefing(things, findings).catch(() => {})
+      set({ briefing: things, theOneThing, secondaryItems, briefingStats, findings, learnedPreferences })
+      cacheBriefing(things, findings, learnedPreferences).catch(() => {})
     } catch {
       if (!navigator.onLine) {
         const cached = await getCachedBriefing().catch(() => undefined)
-        if (cached) set({ briefing: cached.things, findings: cached.findings })
+        if (cached) set({ briefing: cached.things, findings: cached.findings, learnedPreferences: cached.learnedPreferences ?? [] })
       }
     }
   },

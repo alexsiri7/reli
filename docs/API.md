@@ -177,7 +177,7 @@ The primary interface to Reli's multi-agent pipeline.
 
 ## Briefing (`/api/briefing`)
 
-Daily briefing: check-in due Things + sweep findings.
+Daily briefing: check-in due Things, sweep findings, and learned preferences.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -188,6 +188,27 @@ Daily briefing: check-in due Things + sweep findings.
 | POST | `/api/briefing/findings` | Create a sweep finding |
 | PATCH | `/api/briefing/findings/{finding_id}/dismiss` | Dismiss a finding |
 | POST | `/api/briefing/findings/{finding_id}/snooze` | Snooze a finding |
+
+**`GET /api/briefing` response shape:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `date` | string | Briefing date (YYYY-MM-DD) |
+| `the_one_thing` | BriefingItem \| null | Highest-priority item |
+| `secondary` | BriefingItem[] | Secondary priority items |
+| `parking_lot` | object[] | Deferred items |
+| `findings` | SweepFinding[] | Active sweep findings |
+| `learned_preferences` | LearnedPreference[] | Inferred preferences (≤5), shown in "I Noticed" section |
+| `total` | int | Total item count |
+| `stats` | object | Per-type counts |
+
+**`LearnedPreference` shape:**
+
+| Field | Type | Values |
+|-------|------|--------|
+| `id` | string | Thing ID |
+| `title` | string | Preference description |
+| `confidence_label` | string | `"emerging"`, `"moderate"`, `"strong"` |
 
 ---
 

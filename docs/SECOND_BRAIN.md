@@ -146,6 +146,10 @@ Stored as regular Things with `type_hint: preference`. They have:
 | "I'll handle budget later, venue first" | "Does venue-before-budget for events" |
 | "Just book the cheap one" | "Optimizes for cost on travel" |
 
+Learned preferences surface in the daily briefing under the **"I Noticed"**
+section, where users can confirm or correct them. See
+[Sweep output → "I Noticed"](#i-noticed--learned-preferences-in-the-briefing).
+
 ### Context integration
 
 When the user mentions a topic, the context agent surfaces relevant preference
@@ -339,6 +343,23 @@ sidebar. It's a short, prioritized list:
 
 The user can dismiss, snooze, or act on each item. Acting opens the relevant
 Thing in the chat context.
+
+### "I Noticed" — learned preferences in the briefing
+
+The briefing also includes an **"I Noticed"** section showing up to 5 learned
+preferences (Things with `type_hint: preference`). Each preference shows:
+
+- Its title (e.g., "Prefers afternoon meetings")
+- A confidence label: `emerging`, `moderate`, or `strong`
+- Feedback buttons: **"That's right"** (reinforces) / **"Not really"** (flags)
+
+The confidence label is derived from the preference Thing's `confidence` field:
+≥0.7 → `strong`, ≥0.5 → `moderate`, else `emerging`. If the preference uses the
+`patterns` list format, the first pattern's confidence is used.
+
+Feedback routes to the existing preference feedback endpoint
+(`POST /api/preferences/{id}/feedback`) without requiring a separate API call
+from the user.
 
 ### Implementation notes
 

@@ -74,6 +74,13 @@ def assert_briefing_response_shape(obj: dict) -> None:
     assert "the_one_thing" in obj
     assert isinstance(obj["secondary"], list)
     assert isinstance(obj["parking_lot"], list)
+    # Learned preferences
+    assert "learned_preferences" in obj
+    assert isinstance(obj["learned_preferences"], list)
+    for pref in obj["learned_preferences"]:
+        assert isinstance(pref["id"], str)
+        assert isinstance(pref["title"], str)
+        assert pref["confidence_label"] in ("emerging", "moderate", "strong")
 
 
 def assert_calendar_status_shape(obj: dict) -> None:

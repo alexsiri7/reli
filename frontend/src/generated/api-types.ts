@@ -88,6 +88,16 @@ export interface ChatMessage {
   timestamp: string
 }
 
+export interface UsageInfo {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  cost_usd: number
+  api_calls: number
+  model: string
+  per_call_usage: CallUsage[]
+}
+
 export interface ModelUsage {
   model: string
   prompt_tokens: number
@@ -104,16 +114,6 @@ export interface SessionUsage {
   api_calls: number
   cost_usd: number
   per_model: ModelUsage[]
-}
-
-export interface UsageInfo {
-  prompt_tokens: number
-  completion_tokens: number
-  total_tokens: number
-  cost_usd: number
-  api_calls: number
-  model: string
-  per_call_usage: CallUsage[]
 }
 
 export interface ChatResponse {
@@ -139,6 +139,12 @@ export interface SweepFinding {
   thing: Thing | null
 }
 
+export interface LearnedPreference {
+  id: string
+  title: string
+  confidence_label: string
+}
+
 export interface BriefingItem {
   thing: Record<string, unknown>
   importance: number
@@ -153,6 +159,7 @@ export interface BriefingResponse {
   secondary: BriefingItem[]
   parking_lot: Record<string, unknown>[]
   findings: SweepFinding[]
+  learned_preferences: LearnedPreference[]
   total: number
   stats: Record<string, number>
 }
@@ -455,6 +462,16 @@ export const ChatMessageSchema = z.object({
   timestamp: z.string(),
 })
 
+export const UsageInfoSchema = z.object({
+  prompt_tokens: z.number().default(0),
+  completion_tokens: z.number().default(0),
+  total_tokens: z.number().default(0),
+  cost_usd: z.number().default(0.0),
+  api_calls: z.number().default(0),
+  model: z.string().default(""),
+  per_call_usage: z.array(CallUsageSchema).default([]),
+})
+
 export const ModelUsageSchema = z.object({
   model: z.string(),
   prompt_tokens: z.number().default(0),
@@ -471,16 +488,6 @@ export const SessionUsageSchema = z.object({
   api_calls: z.number().default(0),
   cost_usd: z.number().default(0.0),
   per_model: z.array(ModelUsageSchema).default([]),
-})
-
-export const UsageInfoSchema = z.object({
-  prompt_tokens: z.number().default(0),
-  completion_tokens: z.number().default(0),
-  total_tokens: z.number().default(0),
-  cost_usd: z.number().default(0.0),
-  api_calls: z.number().default(0),
-  model: z.string().default(""),
-  per_call_usage: z.array(CallUsageSchema).default([]),
 })
 
 export const ChatResponseSchema = z.object({
@@ -506,6 +513,12 @@ export const SweepFindingSchema = z.object({
   thing: ThingSchema.nullable().default(null),
 })
 
+export const LearnedPreferenceSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  confidence_label: z.string(),
+})
+
 export const BriefingItemSchema = z.object({
   thing: z.record(z.string(), z.unknown()),
   importance: z.number(),
@@ -520,6 +533,7 @@ export const BriefingResponseSchema = z.object({
   secondary: z.array(BriefingItemSchema).default([]),
   parking_lot: z.array(z.record(z.string(), z.unknown())).default([]),
   findings: z.array(SweepFindingSchema).default([]),
+  learned_preferences: z.array(LearnedPreferenceSchema).default([]),
   total: z.number(),
   stats: z.record(z.string(), z.number()).default({}),
 })

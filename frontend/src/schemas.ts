@@ -23,12 +23,14 @@ export {
   MergeResultSchema,
   ConnectionSuggestionThingSchema,
   ConnectionSuggestionSchema,
+  LearnedPreferenceSchema,
   ModelUsageSchema,
 } from './generated/api-types'
 
 import {
   ThingSchema,
   SweepFindingSchema as GeneratedSweepFindingSchema,
+  LearnedPreferenceSchema as GeneratedLearnedPreferenceSchema,
   ModelUsageSchema,
 } from './generated/api-types'
 
@@ -126,6 +128,7 @@ export const BriefingResponseSchema = z.object({
   secondary: z.array(BriefingItemSchema).optional(),
   parking_lot: z.array(z.record(z.string(), z.unknown())).optional(),
   findings: z.array(GeneratedSweepFindingSchema).optional(),
+  learned_preferences: z.array(GeneratedLearnedPreferenceSchema).optional(),
   total: z.number().optional(),
   stats: z.record(z.string(), z.number()).optional(),
 })

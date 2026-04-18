@@ -36,9 +36,6 @@ class TestResponseMetricsMiddleware:
 
     def test_middleware_logs_request(self, client):
         """Verify the middleware is active by checking it records timings."""
-        from backend.response_metrics import MetricsStore, ResponseMetricsMiddleware
-        from unittest.mock import patch
-
         fresh_store = MetricsStore()
         with patch("backend.response_metrics.metrics_store", fresh_store):
             for _ in range(3):
