@@ -1271,7 +1271,7 @@ export function Sidebar() {
                       <button
                         type="submit"
                         disabled={!quickAddTitle.trim() || quickAddSaving}
-                        className="text-xs font-medium px-3 py-1 rounded-lg bg-primary text-on-primary disabled:opacity-50"
+                        className="text-xs font-medium px-3 py-1 rounded-lg bg-primary text-on-primary disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {quickAddSaving ? 'Saving…' : 'Add'}
                       </button>
