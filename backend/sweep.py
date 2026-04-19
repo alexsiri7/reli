@@ -1930,7 +1930,7 @@ async def breakdown_broad_things(
             if not subtasks:
                 continue
 
-            parent_importance = candidate_map.get(thing_id, {}).get("extra", {}).get("importance", 2)
+            parent_importance = candidate_map[thing_id]["extra"].get("importance", 2)
             parent_title = candidate_map[thing_id]["title"]
             created_titles = []
 
