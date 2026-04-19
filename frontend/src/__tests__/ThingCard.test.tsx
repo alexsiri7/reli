@@ -183,7 +183,9 @@ describe('ThingCard', () => {
     render(<ThingCard thing={baseThing} />)
     const checkbox = screen.getByRole('button', { name: 'Mark task done' })
     fireEvent.click(checkbox)
-    // second click during animation — completing guard should block this
+    // Do NOT await or flush between clicks — this tests the synchronous race: the
+    // second click fires before React re-renders (before setCompleting(true) is visible
+    // to the old closure). completingRef.current handles this; state-based completing would not.
     fireEvent.click(checkbox)
     await vi.advanceTimersByTimeAsync(700)
     expect(updateThing).toHaveBeenCalledTimes(1)

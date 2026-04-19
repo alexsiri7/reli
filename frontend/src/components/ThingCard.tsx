@@ -46,6 +46,9 @@ export function ThingCard({ thing, onComplete }: Props) {
     // onComplete reflects optimistic UI state — mirrors how updateThing handles
     // offline/error cases (swallows errors, sets global error state). The
     // in-memory completedTasks list auto-corrects on reload.
+    // Note: completingRef.current is intentionally never reset — updateThing
+    // always resolves (never throws), and onComplete removes the component from
+    // the list on success, so a reset is not needed in practice.
     if (isMounted.current) onComplete?.(thing)
   }
 
