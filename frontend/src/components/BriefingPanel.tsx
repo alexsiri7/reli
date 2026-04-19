@@ -30,15 +30,9 @@ function getGreeting(): string {
   return 'Good Evening'
 }
 
-function getTomorrowISO(): string {
+function futureDateISO(days: number): string {
   const d = new Date()
-  d.setDate(d.getDate() + 1)
-  return d.toISOString().slice(0, 10)
-}
-
-function getNextWeekISO(): string {
-  const d = new Date()
-  d.setDate(d.getDate() + 7)
+  d.setDate(d.getDate() + days)
   return d.toISOString().slice(0, 10)
 }
 
@@ -72,12 +66,12 @@ function SnoozeMenu({ onSelect, onClose }: {
   return (
     <div ref={menuRef} className="absolute z-10 top-full left-0 mt-1 bg-surface-container-high border border-surface-container-highest rounded-xl shadow-lg overflow-hidden text-xs">
       <button className="block w-full text-left px-4 py-2 hover:bg-surface-container-highest"
-        onClick={() => { onSelect(getTomorrowISO()); onClose() }}>Tomorrow</button>
+        onClick={() => { onSelect(futureDateISO(1)); onClose() }}>Tomorrow</button>
       <button className="block w-full text-left px-4 py-2 hover:bg-surface-container-highest"
-        onClick={() => { onSelect(getNextWeekISO()); onClose() }}>Next week</button>
+        onClick={() => { onSelect(futureDateISO(7)); onClose() }}>Next week</button>
       <label className="block px-4 py-2 hover:bg-surface-container-highest cursor-pointer">
         Pick date…
-        <input type="date" className="sr-only" min={getTomorrowISO()}
+        <input type="date" className="sr-only" min={futureDateISO(1)}
           onChange={e => { if (e.target.value) { onSelect(e.target.value); onClose() } }} />
       </label>
     </div>
