@@ -22,6 +22,7 @@ export function ThingCard({ thing, onComplete }: Props) {
   const openThingDetail = useStore(s => s.openThingDetail)
   const [showSnooze, setShowSnooze] = useState(false)
   const [completing, setCompleting] = useState(false)
+  const completingRef = useRef(false)
   const isMounted = useRef(true)
   useEffect(() => () => { isMounted.current = false }, [])
 
@@ -36,7 +37,8 @@ export function ThingCard({ thing, onComplete }: Props) {
 
   const handleCheckbox = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (completing) return
+    if (completingRef.current) return
+    completingRef.current = true
     setCompleting(true)
     // Give animation time to play before the item disappears from the list
     await new Promise(r => setTimeout(r, 600))
@@ -44,13 +46,16 @@ export function ThingCard({ thing, onComplete }: Props) {
     // onComplete reflects optimistic UI state — mirrors how updateThing handles
     // offline/error cases (swallows errors, sets global error state). The
     // in-memory completedTasks list auto-corrects on reload.
+    // Note: completingRef.current is intentionally never reset — updateThing
+    // always resolves (never throws), and onComplete removes the component from
+    // the list on success, so a reset is not needed in practice.
     if (isMounted.current) onComplete?.(thing)
   }
 
   return (
     <div
       className="px-3 py-1 transition-all duration-500"
-      style={completing ? { opacity: 0.3, transform: 'translateY(4px)' } : undefined}
+      style={completing ? { opacity: 0, transform: 'translateY(32px)', pointerEvents: 'none' } : undefined}
     >
       <div
         className="relative flex items-start gap-2 py-1.5 rounded-lg hover:bg-surface-container-high group transition-colors cursor-pointer px-2"

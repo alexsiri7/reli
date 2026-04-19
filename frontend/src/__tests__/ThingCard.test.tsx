@@ -178,6 +178,20 @@ describe('ThingCard', () => {
     vi.useRealTimers()
   })
 
+  it('does not call updateThing twice when checkbox clicked twice during animation', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    render(<ThingCard thing={baseThing} />)
+    const checkbox = screen.getByRole('button', { name: 'Mark task done' })
+    fireEvent.click(checkbox)
+    // Do NOT await or flush between clicks — this tests the synchronous race: the
+    // second click fires before React re-renders (before setCompleting(true) is visible
+    // to the old closure). completingRef.current handles this; state-based completing would not.
+    fireEvent.click(checkbox)
+    await vi.advanceTimersByTimeAsync(700)
+    expect(updateThing).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
   it('does not call onComplete when updateThing never resolves', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     // Simulate a hung request (never resolves nor rejects) — onComplete must not fire
