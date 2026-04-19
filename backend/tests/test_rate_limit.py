@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -228,8 +227,10 @@ class TestRateLimitMiddleware:
             res = client.post("/api/chat")
             assert res.status_code == 200
 
-    def test_warning_logged_on_rate_limit_exceeded(self, caplog):
+    def test_warning_logged_on_rate_limit_exceeded(self):
         """log.warning is emitted with key, path, and retry_after when rate limited."""
+        from unittest.mock import patch
+
         app = _make_app(api_rpm=1)
         client = TestClient(app)
 
@@ -237,11 +238,11 @@ class TestRateLimitMiddleware:
         res = client.get("/api/things")
         assert res.status_code == 200
 
-        with caplog.at_level(logging.WARNING, logger="backend.rate_limit"):
+        with patch("backend.rate_limit.log") as mock_log:
             res = client.get("/api/things")
 
         assert res.status_code == 429
-        assert any(
-            "Rate limit exceeded" in r.message and "retry_after" in r.message
-            for r in caplog.records
-        )
+        mock_log.warning.assert_called_once()
+        call_args = mock_log.warning.call_args[0]
+        assert "Rate limit exceeded" in call_args[0]
+        assert "retry_after" in call_args[0]
