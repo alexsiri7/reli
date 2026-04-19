@@ -61,6 +61,21 @@ const MOCK_THINGS: Record<string, unknown>[] = [
   },
 ]
 
+const MOCK_FINDING = {
+  id: 'finding-1',
+  finding_type: 'stale',
+  message: 'No activity in 30 days',
+  thing_id: 'thing-3',
+  thing: { id: 'thing-3', title: 'Schedule team retrospective' },
+  dismissed: false,
+  snoozed_until: null,
+  priority: 1,
+  expires_at: null,
+  created_at: '2026-03-01T10:00:00Z',
+}
+
+const MOCK_BRIEFING_PREF = { id: 'pref-1', title: 'Prefers async communication', confidence_label: 'strong' }
+
 const MOCK_HISTORY = [
   {
     id: 'msg-1',
@@ -76,7 +91,7 @@ const MOCK_HISTORY = [
  */
 async function interceptApi(
   page: Page,
-  opts: { things?: boolean; history?: boolean } = {}
+  opts: { things?: boolean; history?: boolean; briefing?: boolean } = {}
 ) {
   // Auth — always return a valid user so the app renders the main UI
   await page.route('**/api/auth/me', route =>
@@ -96,17 +111,48 @@ async function interceptApi(
   // Briefing
   await page.route('**/api/briefing', route =>
     route.fulfill({
-      json: {
-        things: [],
-        findings: [],
-        learned_preferences: [
-          { id: 'pref-1', title: 'Prefers async communication', confidence_label: 'strong' },
-          { id: 'pref-2', title: 'Cost-conscious with subscriptions', confidence_label: 'moderate' },
-        ],
-      },
+      json: opts.briefing
+        ? {
+            date: '2026-03-14',
+            the_one_thing: { thing: MOCK_THINGS[0], importance: 3, urgency: 0.9, score: 2.7, reasons: ['Due today'] },
+            secondary: [{ thing: MOCK_THINGS[1], importance: 2, urgency: 0.5, score: 1.0, reasons: ['Check in'] }],
+            parking_lot: [],
+            findings: [MOCK_FINDING],
+            learned_preferences: [MOCK_BRIEFING_PREF],
+            total: 2,
+            stats: { active_things: 12, checkin_due: 3, overdue: 1 },
+          }
+        : {
+            the_one_thing: null,
+            secondary: [],
+            parking_lot: [],
+            findings: [],
+            learned_preferences: [
+              { id: 'pref-1', title: 'Prefers async communication', confidence_label: 'strong' },
+              { id: 'pref-2', title: 'Cost-conscious with subscriptions', confidence_label: 'moderate' },
+            ],
+            total: 0,
+            stats: {},
+          },
       status: 200,
     })
   )
+
+  // Morning briefing NLP summary
+  if (opts.briefing) {
+    await page.route('**/api/briefing/morning', route =>
+      route.fulfill({
+        json: { id: 'mb-1', content: { summary: 'Busy morning — you have a proposal draft due and 3 items to review.' }, generated_at: '2026-03-14T07:00:00Z' },
+        status: 200,
+      })
+    )
+    await page.route('**/api/calendar/status', route =>
+      route.fulfill({ json: { configured: true, connected: false }, status: 200 })
+    )
+    await page.route('**/api/calendar/events', route =>
+      route.fulfill({ json: { events: [] }, status: 200 })
+    )
+  }
 
   // Chat history (session ID is dynamic, match any)
   await page.route('**/api/chat/history/**', route =>
@@ -220,6 +266,51 @@ test.describe('Visual regression – reli frontend', () => {
     await expect(chatPanel).toHaveScreenshot('chat-panel-with-messages.png', {
       ...SNAPSHOT_OPTS,
       animations: 'disabled',
+    })
+  })
+
+  test('briefing panel – populated (desktop)', async ({ page }) => {
+    await interceptApi(page, { things: true, briefing: true })
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.goto('/')
+    await waitForApp(page)
+    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
+    const briefingPanel = page.locator('div.flex-1.flex.flex-col').first()
+    await expect(briefingPanel).toHaveScreenshot('briefing-panel-populated-desktop.png', {
+      ...SNAPSHOT_OPTS, animations: 'disabled',
+    })
+  })
+
+  test('briefing panel – populated (mobile)', async ({ page }) => {
+    await interceptApi(page, { things: true, briefing: true })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+    // Mobile layout uses bottom nav bar instead of aside
+    await page.waitForSelector('nav.fixed.bottom-0', { timeout: 20_000 })
+    await page.addStyleTag({
+      content: `*, *::before, *::after {
+      animation-duration: 0s !important;
+      animation-delay: 0s !important;
+      transition-duration: 0s !important;
+    }`,
+    })
+    await page.waitForTimeout(500)
+    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
+    await expect(page).toHaveScreenshot('briefing-panel-populated-mobile.png', {
+      ...SNAPSHOT_OPTS, animations: 'disabled',
+    })
+  })
+
+  test('briefing panel – populated (dark desktop)', async ({ page }) => {
+    await interceptApi(page, { things: true, briefing: true })
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await page.goto('/')
+    await waitForApp(page)
+    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
+    const briefingPanel = page.locator('div.flex-1.flex.flex-col').first()
+    await expect(briefingPanel).toHaveScreenshot('briefing-panel-populated-dark.png', {
+      ...SNAPSHOT_OPTS, animations: 'disabled',
     })
   })
 
