@@ -314,10 +314,7 @@ export function BriefingPanel() {
   const todayISO = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD in local TZ
   const todayEvents = calendarEvents.filter(e => e.start.slice(0, 10) === todayISO)
 
-  const dueTodayItems = [
-    ...(theOneThing ? [theOneThing] : []),
-    ...secondaryItems,
-  ]
+  const dueTodayItems = theOneThing ? [theOneThing, ...secondaryItems] : secondaryItems
 
   const hasContent = dueTodayItems.length > 0 || findings.length > 0 || learnedPreferences.length > 0 || todayEvents.length > 0
 
