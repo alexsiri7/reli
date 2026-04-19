@@ -452,6 +452,10 @@ export function Sidebar() {
       return next
     })
   }, [])
+  const [completedTasks, setCompletedTasks] = useState<Thing[]>([])
+  const handleTaskComplete = useCallback((thing: Thing) => {
+    setCompletedTasks(prev => [...prev.filter(t => t.id !== thing.id), thing])
+  }, [])
   const [quickAddSection, setQuickAddSection] = useState<string | null>(null)
   const [quickAddTitle, setQuickAddTitle] = useState('')
   const [quickAddSaving, setQuickAddSaving] = useState(false)
@@ -1186,12 +1190,26 @@ export function Sidebar() {
               <span>{group.label}</span>
               <span className="ml-auto flex items-center gap-1">
                 <span className="text-[10px] font-normal tabular-nums">{group.items.length}</span>
-                <span className="text-[10px]">{collapsedSections.has(group.type) ? '►' : '▼'}</span>
+                <svg
+                  className={`w-3 h-3 transition-transform duration-200 ${collapsedSections.has(group.type) ? '-rotate-90' : ''}`}
+                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
               </span>
             </button>
-            {!collapsedSections.has(group.type) && (
-              <>
-                {group.items.map(t => <ThingCard key={t.id} thing={t} />)}
+            <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+              collapsedSections.has(group.type) ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'
+            }`}>
+              <div className="overflow-hidden">
+                {group.items.map(t => (
+                  <ThingCard
+                    key={t.id}
+                    thing={t}
+                    onComplete={group.type === 'task' ? handleTaskComplete : undefined}
+                  />
+                ))}
                 {quickAddSection === group.type ? (
                   <form
                     className="px-4 pb-2"
@@ -1218,8 +1236,22 @@ export function Sidebar() {
                     <span>Add {singularize(group.label)}</span>
                   </button>
                 )}
-              </>
-            )}
+                {group.type === 'task' && completedTasks.length > 0 && (
+                  <div className="mt-1 border-t border-on-surface-variant/10 pt-1 opacity-40">
+                    {completedTasks.map(t => (
+                      <div key={t.id} className="px-5 py-1.5 flex items-center gap-2">
+                        <div className="shrink-0 w-4 h-4 rounded border border-on-surface-variant/30 bg-primary/60 flex items-center justify-center">
+                          <svg className="w-2.5 h-2.5 text-on-primary" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <span className="text-sm line-through text-on-surface-variant truncate flex-1">{t.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </section>
         ))}
 

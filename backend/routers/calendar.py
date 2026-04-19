@@ -91,7 +91,6 @@ def seed_from_calendar(user_id: str = Depends(require_user)) -> dict[str, Any]:
     for event in events:
         title = event.get("summary", "Untitled Event")
         start = event.get("start", "")
-        attendees = event.get("attendees", [])
         data = {
             "calendar_event_id": event.get("id"),
             "location": event.get("location"),

@@ -310,7 +310,7 @@ describe('Sidebar', () => {
     expect(screen.getAllByText('My Preference')).toHaveLength(1)
   })
 
-  it('collapses a section when its header is clicked', () => {
+  it('collapses and re-expands a section when its header is clicked', () => {
     mockState = {
       things: [makeThing({ title: 'My Task', type_hint: 'task' })],
       briefing: [],
@@ -320,8 +320,24 @@ describe('Sidebar', () => {
     }
     render(<Sidebar />)
     expect(screen.getByText('My Task')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('Tasks').closest('button')!)
-    expect(screen.queryByText('My Task')).not.toBeInTheDocument()
+
+    const headerButton = screen.getByText('Tasks').closest('button')!
+    const section = headerButton.closest('section')!
+    const gridWrapper = section.querySelector('.grid')!
+
+    // Initially expanded
+    expect(gridWrapper.className).toContain('grid-rows-[1fr]')
+    expect(gridWrapper.className).not.toContain('grid-rows-[0fr]')
+
+    // Click to collapse
+    fireEvent.click(headerButton)
+    expect(gridWrapper.className).toContain('grid-rows-[0fr]')
+    expect(gridWrapper.className).not.toContain('grid-rows-[1fr]')
+
+    // Click again to expand
+    fireEvent.click(headerButton)
+    expect(gridWrapper.className).toContain('grid-rows-[1fr]')
+    expect(gridWrapper.className).not.toContain('grid-rows-[0fr]')
   })
 
   it('shows quick-add input when + button is clicked', () => {
@@ -506,5 +522,79 @@ describe('Sidebar: progressive disclosure thresholds', () => {
     }
     render(<Sidebar />)
     expect(screen.queryByText('Focus')).not.toBeInTheDocument()
+  })
+})
+
+describe('Sidebar: completed tasks display', () => {
+  it('shows completed task at bottom of Tasks section after checkbox click', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const updateThing = vi.fn().mockResolvedValue(undefined)
+    mockState = {
+      things: [makeThing({ title: 'Finish report', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      updateThing,
+      ...calendarDefaults,
+    }
+
+    render(<Sidebar />)
+
+    // Initially no completed section
+    expect(screen.getByText('Finish report')).toBeInTheDocument()
+    const checkbox = screen.getByLabelText('Mark task done')
+
+    fireEvent.click(checkbox)
+
+    // Advance past the 600ms animation delay
+    await vi.advanceTimersByTimeAsync(700)
+
+    expect(updateThing).toHaveBeenCalledWith(expect.any(String), { active: false })
+
+    // Completed item appears with strikethrough class
+    const completedItems = document.querySelectorAll('.line-through')
+    expect(completedItems.length).toBeGreaterThan(0)
+    expect(completedItems[0]!.textContent).toBe('Finish report')
+
+    vi.useRealTimers()
+  })
+
+  it('does not show completed section for non-task groups', () => {
+    mockState = {
+      things: [makeThing({ id: 'p1', title: 'Alice', type_hint: 'person' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    // No completed section since no tasks were completed
+    expect(document.querySelector('.line-through')).not.toBeInTheDocument()
+  })
+
+  it('deduplicates completed tasks when same task is completed twice', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const updateThing = vi.fn().mockResolvedValue(undefined)
+    const thing = makeThing({ title: 'Dedupe task', type_hint: 'task' })
+    mockState = {
+      things: [thing],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      updateThing,
+      ...calendarDefaults,
+    }
+
+    render(<Sidebar />)
+    const checkbox = screen.getByLabelText('Mark task done')
+
+    // Complete the task once
+    fireEvent.click(checkbox)
+    await vi.advanceTimersByTimeAsync(700)
+
+    // Verify exactly one completed entry (not duplicated)
+    expect(document.querySelectorAll('.line-through').length).toBe(1)
+
+    vi.useRealTimers()
   })
 })
