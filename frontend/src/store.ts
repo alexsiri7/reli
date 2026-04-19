@@ -1543,11 +1543,12 @@ export const useStore = create<ReliState>((set, get) => ({
     if (!res.ok) throw new Error(`Failed to create thing: ${res.status}`)
     const data = validateResponse(ThingSchema, await res.json(), '/things POST')
     if (parentId) {
-      apiFetch(`${BASE}/things/relationships`, {
+      const relRes = await apiFetch(`${BASE}/things/relationships`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ from_thing_id: parentId, to_thing_id: data.id, relationship_type: 'parent-of' }),
-      }).then(r => { if (!r.ok) console.error(`Failed to create parent-of relationship: ${r.status}`) })
+      })
+      if (!relRes.ok) throw new Error(`Failed to create parent-of relationship: ${relRes.status}`)
     }
     // Refresh things list
     get().fetchThings()

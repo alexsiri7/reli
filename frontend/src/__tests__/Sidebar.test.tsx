@@ -405,6 +405,33 @@ describe('Sidebar', () => {
     expect(screen.queryByPlaceholderText('Add task…')).not.toBeInTheDocument()
   })
 
+  it('resets checkin date and parent on Escape', async () => {
+    const projectThing = makeThing({ id: 'proj1', title: 'My Project', type_hint: 'project' })
+    mockState = {
+      things: [makeThing({ title: 'My Task', type_hint: 'task' }), projectThing],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      createThing: vi.fn(),
+    }
+    render(<Sidebar />)
+
+    // Open form and populate new fields
+    fireEvent.click(screen.getByText('Add task'))
+    fireEvent.change(screen.getByLabelText('Check-in date'), { target: { value: '2026-05-01' } })
+    fireEvent.change(screen.getByLabelText('Parent project'), { target: { value: 'proj1' } })
+
+    // Dismiss with Escape
+    fireEvent.keyDown(screen.getByPlaceholderText('Add task…'), { key: 'Escape' })
+    expect(screen.queryByPlaceholderText('Add task…')).not.toBeInTheDocument()
+
+    // Re-open: new fields should be reset
+    fireEvent.click(screen.getByText('Add task'))
+    expect((screen.getByLabelText('Check-in date') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('Parent project') as HTMLSelectElement).value).toBe('')
+  })
+
   it('uses correct singularized placeholder for People section', () => {
     mockState = {
       things: [makeThing({ id: 'p1', title: 'Alice', type_hint: 'person' })],

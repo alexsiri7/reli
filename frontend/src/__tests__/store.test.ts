@@ -237,8 +237,6 @@ describe('store: createThing', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => [] })      // fetchThings
     vi.stubGlobal('fetch', fetchMock)
     await useStore.getState().createThing('My task', 'task', undefined, 'parent-id')
-    // Give fire-and-forget a tick
-    await new Promise(r => setTimeout(r, 0))
     const relBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body)
     expect(relBody.from_thing_id).toBe('parent-id')
     expect(relBody.to_thing_id).toBe('new-id')
@@ -251,7 +249,6 @@ describe('store: createThing', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => [] })
     vi.stubGlobal('fetch', fetchMock)
     await useStore.getState().createThing('My task', 'task')
-    await new Promise(r => setTimeout(r, 0))
     expect(fetchMock).toHaveBeenCalledTimes(2)  // only POST + fetchThings, no relationships call
   })
 })

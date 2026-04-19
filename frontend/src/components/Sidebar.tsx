@@ -1247,7 +1247,7 @@ export function Sidebar() {
                         className="flex-1 text-xs bg-surface-container-high rounded px-2 py-1.5 text-on-surface outline-none border border-on-surface-variant/20 focus:border-primary"
                       >
                         <option value="">No parent</option>
-                        {active.filter(t => t.type_hint === 'project').map(p => (
+                        {things.filter(t => t.type_hint === 'project').map(p => (
                           <option key={p.id} value={p.id}>{p.title}</option>
                         ))}
                       </select>
