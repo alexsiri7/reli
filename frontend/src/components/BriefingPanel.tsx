@@ -309,6 +309,7 @@ export function BriefingPanel() {
   const [snoozeMenuId, setSnoozeMenuId] = useState<string | null>(null)
   const firstName = currentUser?.name?.split(' ')[0] ?? null
 
+  const toggleSnooze = (id: string) => setSnoozeMenuId(snoozeMenuId === id ? null : id)
   const handleDoneThing = (id: string) => updateThing(id, { active: false })
 
   const todayISO = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD in local TZ
@@ -399,7 +400,7 @@ export function BriefingPanel() {
                 onSnooze={snoozeThing}
                 onChat={openChatWithContext}
                 snoozeMenuOpen={snoozeMenuId === item.thing.id}
-                onSnoozeToggle={() => setSnoozeMenuId(snoozeMenuId === item.thing.id ? null : item.thing.id)}
+                onSnoozeToggle={() => toggleSnooze(item.thing.id)}
               />
             ))}
           </SectionCard>
@@ -416,7 +417,7 @@ export function BriefingPanel() {
                 onSnooze={snoozeFinding}
                 onAct={actOnFinding}
                 snoozeMenuOpen={snoozeMenuId === f.id}
-                onSnoozeToggle={() => setSnoozeMenuId(snoozeMenuId === f.id ? null : f.id)}
+                onSnoozeToggle={() => toggleSnooze(f.id)}
               />
             ))}
           </SectionCard>
