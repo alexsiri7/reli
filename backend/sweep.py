@@ -516,7 +516,9 @@ def find_broad_things_without_subtasks(
     today: date | None = None,
     user_id: str = "",
 ) -> list[SweepCandidate]:
-    """Find active broad Things (project/event/goal) with no parent-of children."""
+    """Return active project/event/goal Things with no child relationships
+    and importance <= 2 (high-priority items only).
+    """
     today = today or date.today()
     # Correlated subquery for child count via parent-of
     _r = ThingRelationshipRecord.__table__.alias("r")
@@ -1862,7 +1864,11 @@ async def breakdown_broad_things(
     today: date | None = None,
     batch_size: int = 10,
 ) -> BreakdownResult:
-    """Find broad Things without subtasks, generate subtasks via LLM, and create them."""
+    """Find broad Things without subtasks, generate subtasks via LLM, and create them.
+
+    If candidates is provided, the DB query is skipped.
+    At most batch_size candidates are sent to the LLM per call.
+    """
     from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
     from . import tools as _tools
 
@@ -1902,8 +1908,8 @@ async def breakdown_broad_things(
     raw_things = parsed.get("things", [])
     valid_thing_ids = {c.thing_id for c in candidates}
 
-    # Map thing_id -> (importance, type_hint) for inheriting parent attributes
-    candidate_map = {c.thing_id: c.extra for c in candidates}
+    # Map thing_id -> {extra, title} for inheriting parent attributes and O(1) title lookup
+    candidate_map = {c.thing_id: {"extra": c.extra, "title": c.thing_title} for c in candidates}
 
     parents_broken = 0
     things_created = 0
@@ -1924,8 +1930,8 @@ async def breakdown_broad_things(
             if not subtasks:
                 continue
 
-            parent_importance = candidate_map.get(thing_id, {}).get("importance", 2)
-            parent_title = next(c.thing_title for c in candidates if c.thing_id == thing_id)
+            parent_importance = candidate_map.get(thing_id, {}).get("extra", {}).get("importance", 2)
+            parent_title = candidate_map[thing_id]["title"]
             created_titles = []
 
             for subtask_title in subtasks:
@@ -1945,7 +1951,13 @@ async def breakdown_broad_things(
                     relationship_type="parent-of",
                     user_id=user_id,
                 )
-                if "error" not in rel and rel.get("status") != "duplicate":
+                if "error" in rel:
+                    logger.warning(
+                        "Failed to link subtask '%s' to parent %s: %s",
+                        subtask_title, thing_id, rel["error"],
+                    )
+                    continue  # don't count — it's an orphan
+                if rel.get("status") != "duplicate":
                     rels_created += 1
                 things_created += 1
                 created_titles.append(subtask_title)

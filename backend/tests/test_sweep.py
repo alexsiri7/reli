@@ -2,6 +2,9 @@
 
 import json
 from datetime import date, timedelta
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 import backend.db_engine as _engine_mod
 from sqlmodel import Session
@@ -9,6 +12,7 @@ from backend.sweep import (
     _generate_template_gap_questions as generate_gap_questions,
 )
 from backend.sweep import (
+    breakdown_broad_things,
     collect_candidates,
     find_approaching_dates,
     find_broad_things_without_subtasks,
@@ -36,6 +40,7 @@ def _insert_thing(
     title: str,
     *,
     type_hint: str | None = None,
+    importance: int = 2,
     parent_id: str | None = None,
     checkin_date: str | None = None,
     active: bool = True,
@@ -46,13 +51,14 @@ def _insert_thing(
     now = updated_at or date.today().isoformat()
     conn.execute(
         """INSERT INTO things
-           (id, title, type_hint, checkin_date, active, surface,
+           (id, title, type_hint, importance, checkin_date, active, surface,
             data, open_questions, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
         (
             thing_id,
             title,
             type_hint,
+            importance,
             checkin_date,
             int(active),
             json.dumps(data) if data else None,
@@ -1189,12 +1195,7 @@ class TestBroadThingsWithoutSubtasks:
     def test_low_importance_excluded(self, patched_db, db):
         """Things with importance 3+ are not auto-broken down."""
         with db() as conn:
-            conn.execute(
-                """INSERT INTO things (id, title, type_hint, importance, active, surface, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, 1, 1, ?, ?)""",
-                ("p1", "Learn Piano Someday", "goal", 3,
-                 date.today().isoformat(), date.today().isoformat()),
-            )
+            _insert_thing(conn, "p1", "Learn Piano Someday", type_hint="goal", importance=3)
         with Session(_engine_mod.engine) as session:
             results = find_broad_things_without_subtasks(session)
         assert len(results) == 0
@@ -1228,3 +1229,95 @@ class TestBroadThingsWithoutSubtasks:
         with Session(_engine_mod.engine) as session:
             results = find_broad_things_without_subtasks(session)
         assert len(results) == 1
+
+    def test_collect_candidates_includes_broad_thing(self, patched_db, db):
+        """collect_candidates should include broad_thing findings."""
+        with db() as conn:
+            _insert_thing(conn, "p1", "Plan Europe Trip", type_hint="project")
+        results = collect_candidates()
+        types = {c.finding_type for c in results}
+        assert "broad_thing" in types
+
+
+# ---------------------------------------------------------------------------
+# breakdown_broad_things — LLM-powered subtask creation
+# ---------------------------------------------------------------------------
+
+
+class TestBreakdownBroadThings:
+    @pytest.mark.asyncio
+    async def test_happy_path_creates_subtasks_and_relationships(self, patched_db, db):
+        """Successful LLM response creates child Things and parent-of relationships."""
+        with db() as conn:
+            _insert_thing(conn, "p1", "Plan Europe Trip", type_hint="project")
+
+        llm_response = json.dumps({
+            "things": [{
+                "thing_id": "p1",
+                "subtasks": ["Book flights", "Book accommodation", "Check visa requirements"],
+            }]
+        })
+
+        with patch("backend.agents._chat", new=AsyncMock(return_value=llm_response)):
+            result = await breakdown_broad_things(user_id="")
+
+        assert result.parents_broken_down == 1
+        assert result.things_created == 3
+        assert result.relationships_created == 3
+
+    @pytest.mark.asyncio
+    async def test_invalid_json_returns_empty_result(self, patched_db, db):
+        """If LLM returns garbage JSON, function returns gracefully without crash."""
+        with db() as conn:
+            _insert_thing(conn, "p1", "Plan Europe Trip", type_hint="project")
+
+        with patch("backend.agents._chat", new=AsyncMock(return_value="not json")):
+            result = await breakdown_broad_things(user_id="")
+
+        assert result.parents_broken_down == 0
+        assert result.things_created == 0
+
+    @pytest.mark.asyncio
+    async def test_hallucinated_thing_id_ignored(self, patched_db, db):
+        """LLM response referencing unknown thing_id must be silently skipped."""
+        with db() as conn:
+            _insert_thing(conn, "p1", "Plan Europe Trip", type_hint="project")
+
+        llm_response = json.dumps({
+            "things": [{"thing_id": "FAKE-ID-NOT-IN-DB", "subtasks": ["Malicious task"]}]
+        })
+
+        with patch("backend.agents._chat", new=AsyncMock(return_value=llm_response)):
+            result = await breakdown_broad_things(user_id="")
+
+        assert result.things_created == 0
+
+    @pytest.mark.asyncio
+    async def test_empty_candidates_short_circuits(self, patched_db, db):
+        """No candidates -> no LLM call, returns empty BreakdownResult."""
+        with patch("backend.agents._chat", new=AsyncMock()) as mock_chat:
+            result = await breakdown_broad_things(candidates=[], user_id="")
+
+        mock_chat.assert_not_called()
+        assert result.things_created == 0
+
+    @pytest.mark.asyncio
+    async def test_batch_size_limits_candidates(self, patched_db, db):
+        """Only up to batch_size candidates are sent to the LLM."""
+        with db() as conn:
+            for i in range(15):
+                _insert_thing(conn, f"p{i}", f"Project {i}", type_hint="project")
+
+        captured: list = []
+
+        async def mock_chat(messages, **kwargs):
+            captured.append(messages)
+            return json.dumps({"things": []})
+
+        with patch("backend.agents._chat", new=mock_chat):
+            await breakdown_broad_things(user_id="", batch_size=5)
+
+        assert len(captured) == 1
+        # The user message should reference exactly 5 items
+        user_content = captured[0][1]["content"]
+        assert "5 broad Things" in user_content
