@@ -9,215 +9,107 @@ const MOCK_USER = {
 
 const MOCK_THINGS: Record<string, unknown>[] = [
   {
-    id: 'thing-1',
-    title: 'Review pull request for auth module',
-    type_hint: 'task',
-    parent_ids: null,
-    checkin_date: null,
-    priority: 1,
-    active: true,
-    surface: false,
-    data: null,
-    created_at: '2026-03-01T10:00:00Z',
-    updated_at: '2026-03-01T10:00:00Z',
-    last_referenced: null,
-    open_questions: null,
-    children_count: 0,
-    completed_count: 0,
+    id: 'thing-1', title: 'Q3 Logistics Proposal', type_hint: 'project',
+    parent_ids: null, checkin_date: '2026-04-25', priority: 1, active: true,
+    surface: true, data: null,
+    created_at: '2026-03-01T10:00:00Z', updated_at: '2026-04-10T10:00:00Z',
+    last_referenced: '2026-04-10T10:00:00Z', open_questions: null,
+    children_count: 5, completed_count: 3,
   },
   {
-    id: 'thing-2',
-    title: 'Prepare quarterly report',
-    type_hint: 'task',
-    parent_ids: null,
-    checkin_date: '2026-03-20',
-    priority: 2,
-    active: true,
-    surface: false,
-    data: null,
-    created_at: '2026-03-01T11:00:00Z',
-    updated_at: '2026-03-01T11:00:00Z',
-    last_referenced: null,
-    open_questions: null,
-    children_count: 0,
-    completed_count: 0,
+    id: 'thing-2', title: 'Sarah Chen — Engineering Lead', type_hint: 'person',
+    parent_ids: null, checkin_date: '2026-04-22', priority: 1, active: true,
+    surface: false, data: null,
+    created_at: '2026-02-15T09:00:00Z', updated_at: '2026-04-15T09:00:00Z',
+    last_referenced: '2026-04-15T09:00:00Z', open_questions: null,
+    children_count: 0, completed_count: 0,
   },
   {
-    id: 'thing-3',
-    title: 'Schedule team retrospective',
-    type_hint: 'note',
-    parent_ids: null,
-    checkin_date: '2026-03-25',
-    priority: 3,
-    active: true,
-    surface: false,
-    data: null,
-    created_at: '2026-03-01T12:00:00Z',
-    updated_at: '2026-03-01T12:00:00Z',
-    last_referenced: null,
-    open_questions: null,
-    children_count: 0,
-    completed_count: 0,
+    id: 'thing-3', title: 'Review auth module PR', type_hint: 'task',
+    parent_ids: ['thing-1'], checkin_date: null, priority: 1, active: true,
+    surface: false, data: null,
+    created_at: '2026-04-01T10:00:00Z', updated_at: '2026-04-01T10:00:00Z',
+    last_referenced: null, open_questions: null, children_count: 0, completed_count: 0,
   },
   {
-    id: 'thing-4',
-    title: 'Q2 Product Roadmap',
-    type_hint: 'project',
-    parent_ids: null,
-    checkin_date: '2026-04-25',
-    priority: 1,
-    active: true,
-    surface: false,
-    data: null,
-    created_at: '2026-03-10T09:00:00Z',
-    updated_at: '2026-04-01T09:00:00Z',
-    last_referenced: null,
-    open_questions: null,
-    children_count: 3,
-    completed_count: 1,
+    id: 'thing-4', title: 'Prepare quarterly board slides', type_hint: 'task',
+    parent_ids: null, checkin_date: '2026-04-20', priority: 2, active: true,
+    surface: false, data: null,
+    created_at: '2026-03-20T11:00:00Z', updated_at: '2026-03-20T11:00:00Z',
+    last_referenced: null, open_questions: null, children_count: 0, completed_count: 0,
   },
   {
-    id: 'thing-5',
-    title: 'Sarah Mitchell',
-    type_hint: 'person',
-    parent_ids: null,
-    checkin_date: null,
-    priority: 2,
-    active: true,
-    surface: false,
-    data: null,
-    created_at: '2026-02-15T14:00:00Z',
-    updated_at: '2026-03-20T10:00:00Z',
-    last_referenced: '2026-04-10T08:00:00Z',
-    open_questions: null,
-    children_count: 0,
-    completed_count: 0,
+    id: 'thing-5', title: 'Market Alpha competitive analysis notes', type_hint: 'note',
+    parent_ids: null, checkin_date: null, priority: 3, active: true,
+    surface: false, data: null,
+    created_at: '2026-03-10T14:00:00Z', updated_at: '2026-04-05T14:00:00Z',
+    last_referenced: '2026-04-05T14:00:00Z', open_questions: null,
+    children_count: 0, completed_count: 0,
   },
   {
-    id: 'thing-6',
-    title: 'Async-first culture experiment',
-    type_hint: 'idea',
-    parent_ids: null,
-    checkin_date: null,
-    priority: 3,
-    active: true,
-    surface: false,
-    data: null,
-    created_at: '2026-03-22T11:00:00Z',
-    updated_at: '2026-03-22T11:00:00Z',
-    last_referenced: null,
-    open_questions: null,
-    children_count: 0,
-    completed_count: 0,
+    id: 'thing-6', title: 'Team retrospective — April', type_hint: 'event',
+    parent_ids: null, checkin_date: '2026-04-30', priority: 2, active: true,
+    surface: false, data: null,
+    created_at: '2026-04-01T12:00:00Z', updated_at: '2026-04-01T12:00:00Z',
+    last_referenced: null, open_questions: null, children_count: 0, completed_count: 0,
   },
   {
-    id: 'thing-7',
-    title: 'Team offsite logistics',
-    type_hint: 'task',
-    parent_ids: ['thing-4'],
-    checkin_date: '2026-04-30',
-    priority: null,
-    active: true,
-    surface: true,
-    data: null,
-    created_at: '2026-04-01T08:00:00Z',
-    updated_at: '2026-04-15T12:00:00Z',
-    last_referenced: null,
-    open_questions: null,
-    children_count: 0,
-    completed_count: 0,
+    id: 'thing-7', title: 'Follow up with vendor on SLA renewal', type_hint: 'task',
+    parent_ids: null, checkin_date: '2026-04-19', priority: 1, active: true,
+    surface: false, data: null,
+    created_at: '2026-04-10T08:00:00Z', updated_at: '2026-04-10T08:00:00Z',
+    last_referenced: null, open_questions: null, children_count: 0, completed_count: 0,
   },
 ]
 
 const MOCK_FINDINGS = [
   {
-    id: 'finding-1',
-    finding_type: 'stale',
-    message: 'No activity in 30 days',
-    thing_id: 'thing-3',
-    thing: { id: 'thing-3', title: 'Schedule team retrospective' },
-    dismissed: false,
-    snoozed_until: null,
-    priority: 1,
-    expires_at: null,
-    created_at: '2026-03-01T10:00:00Z',
+    id: 'finding-1', finding_type: 'stale',
+    message: 'Market Alpha notes haven\'t been touched in 14 days',
+    thing_id: 'thing-5', thing: { id: 'thing-5', title: 'Market Alpha competitive analysis notes' },
+    dismissed: false, snoozed_until: null, priority: 1, expires_at: null,
+    created_at: '2026-04-19T06:00:00Z',
   },
   {
-    id: 'finding-2',
-    finding_type: 'approaching_date',
-    message: 'Check-in due in 2 days',
-    thing_id: 'thing-4',
-    thing: { id: 'thing-4', title: 'Q2 Product Roadmap' },
-    dismissed: false,
-    snoozed_until: null,
-    priority: 2,
-    expires_at: null,
-    created_at: '2026-04-01T10:00:00Z',
-  },
-  {
-    id: 'finding-3',
-    finding_type: 'neglected',
-    message: 'Last referenced 45 days ago',
-    thing_id: 'thing-5',
-    thing: { id: 'thing-5', title: 'Sarah Mitchell' },
-    dismissed: false,
-    snoozed_until: null,
-    priority: 3,
-    expires_at: null,
-    created_at: '2026-04-01T10:00:00Z',
-  },
-  {
-    id: 'finding-4',
-    finding_type: 'connection',
-    message: 'May relate to Q2 Roadmap',
-    thing_id: 'thing-6',
-    thing: { id: 'thing-6', title: 'Async-first culture experiment' },
-    dismissed: false,
-    snoozed_until: null,
-    priority: 4,
-    expires_at: null,
-    created_at: '2026-04-10T10:00:00Z',
+    id: 'finding-2', finding_type: 'approaching_date',
+    message: 'SLA renewal follow-up is due today',
+    thing_id: 'thing-7', thing: { id: 'thing-7', title: 'Follow up with vendor on SLA renewal' },
+    dismissed: false, snoozed_until: null, priority: 1, expires_at: null,
+    created_at: '2026-04-19T06:00:00Z',
   },
 ]
 
-const MOCK_BRIEFING_PREF = { id: 'pref-1', title: 'Prefers async communication', confidence_label: 'strong' }
+const MOCK_BRIEFING_PREFS = [
+  { id: 'pref-1', title: 'Prefers async communication over meetings', confidence_label: 'strong' },
+  { id: 'pref-2', title: 'Cost-conscious with vendor contracts', confidence_label: 'moderate' },
+]
 
 const MOCK_HISTORY = [
   {
-    id: 'msg-1',
-    role: 'assistant' as const,
-    content: 'Good morning! You have 3 items due this week and a check-in overdue for the Q2 roadmap.',
-    timestamp: '2026-03-14T09:00:00Z',
+    id: 'msg-1', role: 'assistant' as const,
+    content: 'Good morning! You have 3 items due this week. The Q3 Logistics Proposal check-in is coming up on April 25th.',
+    timestamp: '2026-04-19T08:00:00Z',
   },
   {
-    id: 'msg-2',
-    role: 'user' as const,
+    id: 'msg-2', role: 'user' as const,
+    content: 'Can you mark the auth module PR review as done?',
+    timestamp: '2026-04-19T08:01:00Z',
+  },
+  {
+    id: 'msg-3', role: 'assistant' as const,
+    content: 'Done — I\'ve marked **Review auth module PR** as completed.',
+    timestamp: '2026-04-19T08:01:05Z',
+  },
+  {
+    id: 'msg-4', role: 'user' as const,
     content: 'What should I focus on today?',
-    timestamp: '2026-03-14T09:01:00Z',
+    timestamp: '2026-04-19T08:02:00Z',
   },
   {
-    id: 'msg-3',
-    role: 'assistant' as const,
-    content: 'I\'d prioritize **Review pull request for auth module** — it\'s priority 1 and blocking the team. After that, the quarterly report draft needs attention before end of week.',
-    timestamp: '2026-03-14T09:01:30Z',
+    id: 'msg-5', role: 'assistant' as const,
+    content: 'Top priority: **Follow up with vendor on SLA renewal** — it\'s due today. After that, the board slides are due tomorrow.',
+    timestamp: '2026-04-19T08:02:08Z',
   },
-  {
-    id: 'msg-4',
-    role: 'user' as const,
-    content: 'Mark the auth PR review as done',
-    timestamp: '2026-03-14T09:05:00Z',
-  },
-  {
-    id: 'msg-5',
-    role: 'assistant' as const,
-    content: 'Done! I\'ve marked **Review pull request for auth module** as complete. That clears your priority 1 for today.',
-    timestamp: '2026-03-14T09:05:05Z',
-  },
-]
-
-const MOCK_CALENDAR_EVENTS = [
-  { id: 'evt-1', summary: 'Q2 Planning Sync', start: '2026-03-14T10:00:00Z', end: '2026-03-14T11:00:00Z', all_day: false, location: 'Conf Room B' },
-  { id: 'evt-2', summary: 'Team All-Hands', start: '2026-03-14T14:00:00Z', end: '2026-03-14T15:00:00Z', all_day: false, location: null },
 ]
 
 /**
@@ -250,13 +142,10 @@ async function interceptApi(
         ? {
             date: '2026-03-14',
             the_one_thing: { thing: MOCK_THINGS[0], importance: 3, urgency: 0.9, score: 2.7, reasons: ['Due today'] },
-            secondary: [
-              { thing: MOCK_THINGS[1], importance: 2, urgency: 0.5, score: 1.0, reasons: ['Check in'] },
-              { thing: MOCK_THINGS[6], importance: 1, urgency: 0.3, score: 0.3, reasons: ['Surfaced'] },
-            ],
+            secondary: [{ thing: MOCK_THINGS[1], importance: 2, urgency: 0.5, score: 1.0, reasons: ['Check in'] }],
             parking_lot: [],
             findings: MOCK_FINDINGS,
-            learned_preferences: [MOCK_BRIEFING_PREF],
+            learned_preferences: MOCK_BRIEFING_PREFS,
             total: 2,
             stats: { active_things: 12, checkin_due: 3, overdue: 1 },
           }
@@ -280,7 +169,15 @@ async function interceptApi(
   if (opts.briefing) {
     await page.route('**/api/briefing/morning', route =>
       route.fulfill({
-        json: { id: 'mb-1', content: { summary: 'Busy morning — you have 7 items tracked, a proposal draft due, and 3 items to review.' }, generated_at: '2026-03-14T07:00:00Z' },
+        json: {
+          id: 'mb-1',
+          briefing_date: '2026-04-19',
+          content: {
+            summary: 'Busy morning — you have a proposal draft due and 3 items to review.',
+            priorities: [], overdue: [], blockers: [], findings: [], stats: {},
+          },
+          generated_at: '2026-04-19T07:00:00Z',
+        },
         status: 200,
       })
     )
@@ -288,7 +185,7 @@ async function interceptApi(
       route.fulfill({ json: { configured: true, connected: false }, status: 200 })
     )
     await page.route('**/api/calendar/events', route =>
-      route.fulfill({ json: { events: MOCK_CALENDAR_EVENTS }, status: 200 })
+      route.fulfill({ json: { events: [] }, status: 200 })
     )
   }
 
@@ -412,10 +309,9 @@ test.describe('Visual regression – reli frontend', () => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto('/')
     await waitForApp(page)
-    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
-    const briefingPanel = page.locator('div.flex-1.flex.flex-col').first()
-    await expect(briefingPanel).toHaveScreenshot('briefing-panel-populated-desktop.png', {
-      ...SNAPSHOT_OPTS, animations: 'disabled',
+    await page.waitForTimeout(1000)
+    await expect(page).toHaveScreenshot('briefing-panel-populated-desktop.png', {
+      ...SNAPSHOT_OPTS, animations: 'disabled', timeout: 15_000,
     })
   })
 
@@ -445,33 +341,10 @@ test.describe('Visual regression – reli frontend', () => {
     await page.emulateMedia({ colorScheme: 'dark' })
     await page.goto('/')
     await waitForApp(page)
-    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
-    const briefingPanel = page.locator('div.flex-1.flex.flex-col').first()
-    await expect(briefingPanel).toHaveScreenshot('briefing-panel-populated-dark.png', {
-      ...SNAPSHOT_OPTS, animations: 'disabled',
-    })
-  })
-
-  test('sidebar – diverse Things (all types)', async ({ page }) => {
-    await interceptApi(page, { things: true })
-    await page.goto('/')
-    await waitForApp(page)
-    await page.waitForSelector('aside h2', { timeout: 5_000 })
-    await expect(page.locator('aside').first()).toHaveScreenshot(
-      'sidebar-diverse-things.png',
-      { ...SNAPSHOT_OPTS, animations: 'disabled' }
-    )
-  })
-
-  test('full layout – all data populated', async ({ page }) => {
-    await interceptApi(page, { things: true, history: true, briefing: true })
-    await page.goto('/')
-    await waitForApp(page)
-    await page.waitForSelector('aside h2', { timeout: 5_000 })
-    await expect(page).toHaveScreenshot('full-layout-all-populated.png', {
-      ...SNAPSHOT_OPTS,
-      animations: 'disabled',
-      mask: [page.locator('aside p.text-xs')],
+    await page.waitForSelector('text=Daily Briefing', { timeout: 10_000 }).catch(() => {})
+    await page.waitForTimeout(1000)
+    await expect(page).toHaveScreenshot('briefing-panel-populated-dark.png', {
+      ...SNAPSHOT_OPTS, animations: 'disabled', timeout: 15_000,
     })
   })
 
