@@ -311,13 +311,9 @@ export function BriefingPanel() {
   const [snoozeMenuId, setSnoozeMenuId] = useState<string | null>(null)
   const firstName = currentUser?.name?.split(' ')[0] ?? null
 
-  const handleSnooze = (id: string, date: string) => snoozeFinding(id, date)
-
   const handleDoneThing = (id: string) => {
     updateThing(id, { active: false })
   }
-
-  const handleSnoozeThing = (id: string, date: string) => snoozeThing(id, date)
 
   const todayISO = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD in local TZ
   const todayEvents = calendarEvents.filter(e => e.start.slice(0, 10) === todayISO)
@@ -404,7 +400,7 @@ export function BriefingPanel() {
                 key={item.thing.id}
                 item={item}
                 onDone={handleDoneThing}
-                onSnooze={handleSnoozeThing}
+                onSnooze={snoozeThing}
                 onChat={openChatWithContext}
                 snoozeMenuOpen={snoozeMenuId === item.thing.id}
                 onSnoozeToggle={() => setSnoozeMenuId(snoozeMenuId === item.thing.id ? null : item.thing.id)}
@@ -421,7 +417,7 @@ export function BriefingPanel() {
                 key={f.id}
                 finding={f}
                 onDismiss={dismissFinding}
-                onSnooze={handleSnooze}
+                onSnooze={snoozeFinding}
                 onAct={actOnFinding}
                 snoozeMenuOpen={snoozeMenuId === f.id}
                 onSnoozeToggle={() => setSnoozeMenuId(snoozeMenuId === f.id ? null : f.id)}

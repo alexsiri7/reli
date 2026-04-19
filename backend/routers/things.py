@@ -892,13 +892,12 @@ def delete_relationship(
     record = session.get(ThingRelationshipRecord, rel_id)
     if not record:
         raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
-    if user_id:
-        from_thing = session.get(ThingRecord, record.from_thing_id)
-        to_thing = session.get(ThingRecord, record.to_thing_id)
-        if not (
-            (from_thing and from_thing.user_id == user_id)
-            or (to_thing and to_thing.user_id == user_id)
-        ):
-            raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
+    from_thing = session.get(ThingRecord, record.from_thing_id)
+    to_thing = session.get(ThingRecord, record.to_thing_id)
+    if not (
+        (from_thing and from_thing.user_id == user_id)
+        or (to_thing and to_thing.user_id == user_id)
+    ):
+        raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
     session.delete(record)
     session.commit()
