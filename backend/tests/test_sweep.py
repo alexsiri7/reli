@@ -25,6 +25,7 @@ from backend.sweep import (
     find_information_gaps,
     find_open_questions,
     find_orphan_things,
+    prune_stale_open_questions,
     find_overdue_checkins,
     find_stale_things,
 )
@@ -430,6 +431,58 @@ class TestOpenQuestions:
         with Session(_engine_mod.engine) as session:
             results = find_open_questions(session)
         assert "1 unanswered question:" in results[0].message  # no 's'
+
+
+# ---------------------------------------------------------------------------
+# Prune stale open questions
+# ---------------------------------------------------------------------------
+
+
+class TestPruneStaleOpenQuestions:
+    def test_prunes_old_questions(self, patched_db, db):
+        today = date.today()
+        old = (today - timedelta(days=15)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Old Task", open_questions=["What's the budget?"], updated_at=old)
+            conn.execute("UPDATE things SET updated_at = ? WHERE id = 't1'", (old,))
+        with Session(_engine_mod.engine) as session:
+            pruned = prune_stale_open_questions(session, today, stale_days=14)
+            session.commit()
+        assert pruned == 1
+        with db() as conn:
+            row = conn.execute("SELECT open_questions FROM things WHERE id = 't1'").fetchone()
+            questions = json.loads(row["open_questions"])
+            assert questions == []
+
+    def test_keeps_recent_questions(self, patched_db, db):
+        today = date.today()
+        recent = (today - timedelta(days=3)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Recent Task", open_questions=["What's the deadline?"], updated_at=recent)
+            conn.execute("UPDATE things SET updated_at = ? WHERE id = 't1'", (recent,))
+        with Session(_engine_mod.engine) as session:
+            pruned = prune_stale_open_questions(session, today, stale_days=14)
+        assert pruned == 0
+
+    def test_skips_inactive_things(self, patched_db, db):
+        today = date.today()
+        old = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "Done", open_questions=["Why?"], active=False, updated_at=old)
+            conn.execute("UPDATE things SET updated_at = ? WHERE id = 't1'", (old,))
+        with Session(_engine_mod.engine) as session:
+            pruned = prune_stale_open_questions(session, today, stale_days=14)
+        assert pruned == 0
+
+    def test_skips_empty_questions(self, patched_db, db):
+        today = date.today()
+        old = (today - timedelta(days=20)).isoformat()
+        with db() as conn:
+            _insert_thing(conn, "t1", "No Q", open_questions=[], updated_at=old)
+            conn.execute("UPDATE things SET updated_at = ? WHERE id = 't1'", (old,))
+        with Session(_engine_mod.engine) as session:
+            pruned = prune_stale_open_questions(session, today, stale_days=14)
+        assert pruned == 0
 
 
 # ---------------------------------------------------------------------------
