@@ -64,6 +64,10 @@ vi.mock('../store', () => ({
   useStore: (selector: (s: typeof mockState) => unknown) => selector(mockState),
 }))
 
+vi.mock('../api', () => ({
+  apiFetch: vi.fn().mockResolvedValue({ ok: true }),
+}))
+
 const makeThing = (overrides: Partial<Thing> = {}): Thing => ({
   id: 't1',
   title: 'Test Thing',
@@ -368,7 +372,7 @@ describe('Sidebar', () => {
     const input = screen.getByPlaceholderText('Add task…')
     fireEvent.change(input, { target: { value: 'New task title' } })
     fireEvent.submit(input.closest('form')!)
-    await waitFor(() => expect(createThing).toHaveBeenCalledWith('New task title', 'task'))
+    await waitFor(() => expect(createThing).toHaveBeenCalledWith('New task title', 'task', undefined))
   })
 
   it('dismisses quick-add input on Escape', () => {
@@ -396,6 +400,150 @@ describe('Sidebar', () => {
     render(<Sidebar />)
     fireEvent.click(screen.getByText('Add person'))
     expect(screen.getByPlaceholderText('Add person…')).toBeInTheDocument()
+  })
+
+  it('calls createThing with checkinDate when date input is filled', async () => {
+    const createThing = vi.fn().mockResolvedValue({ id: 'new-1' })
+    mockState = {
+      things: [makeThing({ type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      createThing,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    fireEvent.change(screen.getByPlaceholderText('Add task…'), { target: { value: 'New task' } })
+    const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement
+    fireEvent.change(dateInput, { target: { value: '2026-04-25' } })
+    fireEvent.submit(screen.getByPlaceholderText('Add task…').closest('form')!)
+    await waitFor(() => expect(createThing).toHaveBeenCalledWith('New task', 'task', '2026-04-25'))
+  })
+
+  it('calls createThing without checkinDate when date is empty', async () => {
+    const createThing = vi.fn().mockResolvedValue({ id: 'new-2' })
+    mockState = {
+      things: [makeThing({ type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      createThing,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    fireEvent.change(screen.getByPlaceholderText('Add task…'), { target: { value: 'New task' } })
+    fireEvent.submit(screen.getByPlaceholderText('Add task…').closest('form')!)
+    await waitFor(() => expect(createThing).toHaveBeenCalledWith('New task', 'task', undefined))
+  })
+
+  it('shows parent project selector for task type when projects exist', () => {
+    mockState = {
+      things: [
+        makeThing({ id: 't1', type_hint: 'task' }),
+        makeThing({ id: 'p1', title: 'My Project', type_hint: 'project', active: true }),
+      ],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    const select = document.querySelector('select') as HTMLSelectElement
+    expect(select).toBeInTheDocument()
+    const options = Array.from(select.options).map(o => o.textContent)
+    expect(options).toContain('No parent project')
+    expect(options).toContain('My Project')
+  })
+
+  it('calls apiFetch to create relationship when parent is selected', async () => {
+    const { apiFetch } = await import('../api')
+    const mockedApiFetch = vi.mocked(apiFetch)
+    mockedApiFetch.mockResolvedValue({ ok: true } as Response)
+
+    const createThing = vi.fn().mockResolvedValue({ id: 'new-3' })
+    mockState = {
+      things: [
+        makeThing({ id: 't1', type_hint: 'task' }),
+        makeThing({ id: 'p1', title: 'My Project', type_hint: 'project', active: true }),
+      ],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      createThing,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    fireEvent.change(screen.getByPlaceholderText('Add task…'), { target: { value: 'Child task' } })
+    const select = document.querySelector('select') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: 'p1' } })
+    fireEvent.submit(screen.getByPlaceholderText('Add task…').closest('form')!)
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith(
+        '/api/things/relationships',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            from_thing_id: 'p1',
+            to_thing_id: 'new-3',
+            relationship_type: 'parent-of',
+          }),
+        })
+      )
+    )
+  })
+
+  it('does not call apiFetch for relationships when no parent selected', async () => {
+    const { apiFetch } = await import('../api')
+    const mockedApiFetch = vi.mocked(apiFetch)
+    mockedApiFetch.mockClear()
+
+    const createThing = vi.fn().mockResolvedValue({ id: 'new-4' })
+    mockState = {
+      things: [makeThing({ type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      createThing,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    fireEvent.change(screen.getByPlaceholderText('Add task…'), { target: { value: 'Solo task' } })
+    fireEvent.submit(screen.getByPlaceholderText('Add task…').closest('form')!)
+
+    await waitFor(() => expect(createThing).toHaveBeenCalled())
+    expect(mockedApiFetch).not.toHaveBeenCalledWith('/api/things/relationships', expect.anything())
+  })
+
+  it('resets checkinDate and parentId on Escape', () => {
+    mockState = {
+      things: [
+        makeThing({ id: 't1', type_hint: 'task' }),
+        makeThing({ id: 'p1', title: 'My Project', type_hint: 'project', active: true }),
+      ],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement
+    fireEvent.change(dateInput, { target: { value: '2026-05-01' } })
+    const select = document.querySelector('select') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: 'p1' } })
+    fireEvent.keyDown(screen.getByPlaceholderText('Add task…'), { key: 'Escape' })
+    // Re-open
+    fireEvent.click(screen.getByText('Add task'))
+    const dateInputAfter = document.querySelector('input[type="date"]') as HTMLInputElement
+    expect(dateInputAfter.value).toBe('')
+    const selectAfter = document.querySelector('select') as HTMLSelectElement
+    expect(selectAfter.value).toBe('')
   })
 
   it('renders mobile hero card when theOneThing is set', () => {
