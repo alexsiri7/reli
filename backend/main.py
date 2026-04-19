@@ -60,7 +60,7 @@ from .routers import (  # noqa: E402
 )
 from .sentry import set_sentry_user  # noqa: E402
 from .sweep_scheduler import start_scheduler, stop_scheduler  # noqa: E402
-from .tracing import init_tracing, shutdown_tracing  # noqa: E402
+from .tracing import shutdown_tracing  # noqa: E402
 
 _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
 
@@ -70,12 +70,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_tracing()
 
     # Run Alembic migrations to ensure schema is up-to-date.
-    import pathlib as _pathlib
-
     from alembic import command as alembic_command
     from alembic.config import Config as AlembicConfig
 
-    _alembic_ini = _pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
+    _alembic_ini = pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
     _migration_ok = False
     if _alembic_ini.exists():
         try:

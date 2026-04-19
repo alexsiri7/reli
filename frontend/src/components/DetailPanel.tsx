@@ -5,6 +5,19 @@ import type { Relationship, ThingType } from '../store'
 import { typeIcon, formatTimestamp, formatDate, isOverdue, importanceLabel } from '../utils'
 import { PreferencePatterns } from './PreferencePatterns'
 
+const RELATIONSHIP_OPPOSITES: Record<string, string> = {
+  'child-of': 'parent-of',
+  'parent-of': 'child-of',
+  'depends-on': 'blocks',
+  'blocks': 'depends-on',
+  'part-of': 'contains',
+  'contains': 'part-of',
+  'followed-by': 'preceded-by',
+  'preceded-by': 'followed-by',
+  'spawned-from': 'spawned',
+  'spawned': 'spawned-from',
+}
+
 /** Map type_hint to design-system accent color classes */
 function typeColorClasses(typeHint: string | null): { bg: string; text: string } {
   switch (typeHint?.toLowerCase()) {
@@ -51,18 +64,6 @@ export function DetailPanel() {
 
   // Group relationships by type (must be before early return for hooks rule)
   const groupedRels = useMemo(() => {
-    const opposites: Record<string, string> = {
-      'child-of': 'parent-of',
-      'parent-of': 'child-of',
-      'depends-on': 'blocks',
-      'blocks': 'depends-on',
-      'part-of': 'contains',
-      'contains': 'part-of',
-      'followed-by': 'preceded-by',
-      'preceded-by': 'followed-by',
-      'spawned-from': 'spawned',
-      'spawned': 'spawned-from',
-    }
     const thingIds = new Set(things.map(t => t.id))
     const groups = new Map<string, { rel: Relationship; otherId: string; direction: string }[]>()
     for (const rel of detailRelationships) {
@@ -73,7 +74,7 @@ export function DetailPanel() {
       // Filter out relationships pointing to non-existent Things (orphans)
       if (!thingIds.has(otherId)) continue
       const rawType = rel.relationship_type
-      const displayType = isFrom ? rawType : (opposites[rawType] ?? rawType)
+      const displayType = isFrom ? rawType : (RELATIONSHIP_OPPOSITES[rawType] ?? rawType)
       const direction = '\u2192'
       if (!groups.has(displayType)) groups.set(displayType, [])
       groups.get(displayType)!.push({ rel, otherId, direction })

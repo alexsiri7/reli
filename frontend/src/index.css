@@ -53,6 +53,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── Light mode canvas override ─────────────────────────────────── */
+:root:not(.dark) {
+  --color-canvas: #ffffff;
+}
+
 /* ── Dark mode base styles ───────────────────────────────────────── */
 .dark body,
 :where(.dark) body {
