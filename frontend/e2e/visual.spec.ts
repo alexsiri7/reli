@@ -59,20 +59,126 @@ const MOCK_THINGS: Record<string, unknown>[] = [
     children_count: 0,
     completed_count: 0,
   },
+  {
+    id: 'thing-4',
+    title: 'Q2 Product Roadmap',
+    type_hint: 'project',
+    parent_ids: null,
+    checkin_date: '2026-04-25',
+    priority: 1,
+    active: true,
+    surface: false,
+    data: null,
+    created_at: '2026-03-10T09:00:00Z',
+    updated_at: '2026-04-01T09:00:00Z',
+    last_referenced: null,
+    open_questions: null,
+    children_count: 3,
+    completed_count: 1,
+  },
+  {
+    id: 'thing-5',
+    title: 'Sarah Mitchell',
+    type_hint: 'person',
+    parent_ids: null,
+    checkin_date: null,
+    priority: 2,
+    active: true,
+    surface: false,
+    data: null,
+    created_at: '2026-02-15T14:00:00Z',
+    updated_at: '2026-03-20T10:00:00Z',
+    last_referenced: '2026-04-10T08:00:00Z',
+    open_questions: null,
+    children_count: 0,
+    completed_count: 0,
+  },
+  {
+    id: 'thing-6',
+    title: 'Async-first culture experiment',
+    type_hint: 'idea',
+    parent_ids: null,
+    checkin_date: null,
+    priority: 3,
+    active: true,
+    surface: false,
+    data: null,
+    created_at: '2026-03-22T11:00:00Z',
+    updated_at: '2026-03-22T11:00:00Z',
+    last_referenced: null,
+    open_questions: null,
+    children_count: 0,
+    completed_count: 0,
+  },
+  {
+    id: 'thing-7',
+    title: 'Team offsite logistics',
+    type_hint: 'task',
+    parent_ids: ['thing-4'],
+    checkin_date: '2026-04-30',
+    priority: null,
+    active: true,
+    surface: true,
+    data: null,
+    created_at: '2026-04-01T08:00:00Z',
+    updated_at: '2026-04-15T12:00:00Z',
+    last_referenced: null,
+    open_questions: null,
+    children_count: 0,
+    completed_count: 0,
+  },
 ]
 
-const MOCK_FINDING = {
-  id: 'finding-1',
-  finding_type: 'stale',
-  message: 'No activity in 30 days',
-  thing_id: 'thing-3',
-  thing: { id: 'thing-3', title: 'Schedule team retrospective' },
-  dismissed: false,
-  snoozed_until: null,
-  priority: 1,
-  expires_at: null,
-  created_at: '2026-03-01T10:00:00Z',
-}
+const MOCK_FINDINGS = [
+  {
+    id: 'finding-1',
+    finding_type: 'stale',
+    message: 'No activity in 30 days',
+    thing_id: 'thing-3',
+    thing: { id: 'thing-3', title: 'Schedule team retrospective' },
+    dismissed: false,
+    snoozed_until: null,
+    priority: 1,
+    expires_at: null,
+    created_at: '2026-03-01T10:00:00Z',
+  },
+  {
+    id: 'finding-2',
+    finding_type: 'approaching_date',
+    message: 'Check-in due in 2 days',
+    thing_id: 'thing-4',
+    thing: { id: 'thing-4', title: 'Q2 Product Roadmap' },
+    dismissed: false,
+    snoozed_until: null,
+    priority: 2,
+    expires_at: null,
+    created_at: '2026-04-01T10:00:00Z',
+  },
+  {
+    id: 'finding-3',
+    finding_type: 'neglected',
+    message: 'Last referenced 45 days ago',
+    thing_id: 'thing-5',
+    thing: { id: 'thing-5', title: 'Sarah Mitchell' },
+    dismissed: false,
+    snoozed_until: null,
+    priority: 3,
+    expires_at: null,
+    created_at: '2026-04-01T10:00:00Z',
+  },
+  {
+    id: 'finding-4',
+    finding_type: 'connection',
+    message: 'May relate to Q2 Roadmap',
+    thing_id: 'thing-6',
+    thing: { id: 'thing-6', title: 'Async-first culture experiment' },
+    dismissed: false,
+    snoozed_until: null,
+    priority: 4,
+    expires_at: null,
+    created_at: '2026-04-10T10:00:00Z',
+  },
+]
 
 const MOCK_BRIEFING_PREF = { id: 'pref-1', title: 'Prefers async communication', confidence_label: 'strong' }
 
@@ -80,9 +186,38 @@ const MOCK_HISTORY = [
   {
     id: 'msg-1',
     role: 'assistant' as const,
-    content: 'Hello! How can I help you track your Things today?',
+    content: 'Good morning! You have 3 items due this week and a check-in overdue for the Q2 roadmap.',
     timestamp: '2026-03-14T09:00:00Z',
   },
+  {
+    id: 'msg-2',
+    role: 'user' as const,
+    content: 'What should I focus on today?',
+    timestamp: '2026-03-14T09:01:00Z',
+  },
+  {
+    id: 'msg-3',
+    role: 'assistant' as const,
+    content: 'I\'d prioritize **Review pull request for auth module** — it\'s priority 1 and blocking the team. After that, the quarterly report draft needs attention before end of week.',
+    timestamp: '2026-03-14T09:01:30Z',
+  },
+  {
+    id: 'msg-4',
+    role: 'user' as const,
+    content: 'Mark the auth PR review as done',
+    timestamp: '2026-03-14T09:05:00Z',
+  },
+  {
+    id: 'msg-5',
+    role: 'assistant' as const,
+    content: 'Done! I\'ve marked **Review pull request for auth module** as complete. That clears your priority 1 for today.',
+    timestamp: '2026-03-14T09:05:05Z',
+  },
+]
+
+const MOCK_CALENDAR_EVENTS = [
+  { id: 'evt-1', summary: 'Q2 Planning Sync', start: '2026-03-14T10:00:00Z', end: '2026-03-14T11:00:00Z', all_day: false, location: 'Conf Room B' },
+  { id: 'evt-2', summary: 'Team All-Hands', start: '2026-03-14T14:00:00Z', end: '2026-03-14T15:00:00Z', all_day: false, location: null },
 ]
 
 /**
@@ -115,9 +250,12 @@ async function interceptApi(
         ? {
             date: '2026-03-14',
             the_one_thing: { thing: MOCK_THINGS[0], importance: 3, urgency: 0.9, score: 2.7, reasons: ['Due today'] },
-            secondary: [{ thing: MOCK_THINGS[1], importance: 2, urgency: 0.5, score: 1.0, reasons: ['Check in'] }],
+            secondary: [
+              { thing: MOCK_THINGS[1], importance: 2, urgency: 0.5, score: 1.0, reasons: ['Check in'] },
+              { thing: MOCK_THINGS[6], importance: 1, urgency: 0.3, score: 0.3, reasons: ['Surfaced'] },
+            ],
             parking_lot: [],
-            findings: [MOCK_FINDING],
+            findings: MOCK_FINDINGS,
             learned_preferences: [MOCK_BRIEFING_PREF],
             total: 2,
             stats: { active_things: 12, checkin_due: 3, overdue: 1 },
@@ -142,7 +280,7 @@ async function interceptApi(
   if (opts.briefing) {
     await page.route('**/api/briefing/morning', route =>
       route.fulfill({
-        json: { id: 'mb-1', content: { summary: 'Busy morning — you have a proposal draft due and 3 items to review.' }, generated_at: '2026-03-14T07:00:00Z' },
+        json: { id: 'mb-1', content: { summary: 'Busy morning — you have 7 items tracked, a proposal draft due, and 3 items to review.' }, generated_at: '2026-03-14T07:00:00Z' },
         status: 200,
       })
     )
@@ -150,7 +288,7 @@ async function interceptApi(
       route.fulfill({ json: { configured: true, connected: false }, status: 200 })
     )
     await page.route('**/api/calendar/events', route =>
-      route.fulfill({ json: { events: [] }, status: 200 })
+      route.fulfill({ json: { events: MOCK_CALENDAR_EVENTS }, status: 200 })
     )
   }
 
@@ -311,6 +449,29 @@ test.describe('Visual regression – reli frontend', () => {
     const briefingPanel = page.locator('div.flex-1.flex.flex-col').first()
     await expect(briefingPanel).toHaveScreenshot('briefing-panel-populated-dark.png', {
       ...SNAPSHOT_OPTS, animations: 'disabled',
+    })
+  })
+
+  test('sidebar – diverse Things (all types)', async ({ page }) => {
+    await interceptApi(page, { things: true })
+    await page.goto('/')
+    await waitForApp(page)
+    await page.waitForSelector('aside h2', { timeout: 5_000 })
+    await expect(page.locator('aside').first()).toHaveScreenshot(
+      'sidebar-diverse-things.png',
+      { ...SNAPSHOT_OPTS, animations: 'disabled' }
+    )
+  })
+
+  test('full layout – all data populated', async ({ page }) => {
+    await interceptApi(page, { things: true, history: true, briefing: true })
+    await page.goto('/')
+    await waitForApp(page)
+    await page.waitForSelector('aside h2', { timeout: 5_000 })
+    await expect(page).toHaveScreenshot('full-layout-all-populated.png', {
+      ...SNAPSHOT_OPTS,
+      animations: 'disabled',
+      mask: [page.locator('aside p.text-xs')],
     })
   })
 

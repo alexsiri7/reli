@@ -100,7 +100,7 @@ function App() {
   // Show nothing while checking auth
   if (!authChecked) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="flex items-center justify-center min-h-screen bg-canvas">
         <div className="h-8 w-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
@@ -112,7 +112,7 @@ function App() {
   }
 
   return (
-    <div className="flex w-full h-full overflow-hidden bg-white dark:bg-gray-900">
+    <div className="flex w-full h-full overflow-hidden bg-canvas">
       {newVersionAvailable && (
         <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-3 bg-blue-600 text-white text-sm px-4 py-2 shadow-md">
           <span>A new version is available.</span>
