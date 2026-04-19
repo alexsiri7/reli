@@ -539,7 +539,7 @@ export function Sidebar() {
     try {
       const newThing = await createThing(trimmed, type, quickAddCheckinDate || undefined)
       if (quickAddParentId && newThing?.id) {
-        await apiFetch('/api/things/relationships', {
+        const relRes = await apiFetch('/api/things/relationships', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -548,6 +548,9 @@ export function Sidebar() {
             relationship_type: 'parent-of',
           }),
         })
+        if (!relRes.ok) {
+          throw new Error(`Task created but parent link failed (${relRes.status}) — try again`)
+        }
       }
       setQuickAddSection(null)
       setQuickAddTitle('')
