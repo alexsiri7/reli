@@ -507,6 +507,64 @@ def find_open_questions(session: Session, user_id: str = "") -> list[SweepCandid
 
 
 # ---------------------------------------------------------------------------
+# Broad-thing detection — projects/events/goals with no subtasks
+# ---------------------------------------------------------------------------
+
+
+def find_broad_things_without_subtasks(
+    session: Session,
+    today: date | None = None,
+    user_id: str = "",
+) -> list[SweepCandidate]:
+    """Find active broad Things (project/event/goal) with no parent-of children."""
+    today = today or date.today()
+    # Correlated subquery for child count via parent-of
+    _r = ThingRelationshipRecord.__table__.alias("r")
+    child_count_sq = (
+        select(func.count(_r.c.id))
+        .where(
+            _r.c.from_thing_id == ThingRecord.id,
+            _r.c.relationship_type == "parent-of",
+        )
+        .correlate(ThingRecord.__table__)
+        .scalar_subquery()
+        .label("child_count")
+    )
+    stmt = (
+        select(
+            ThingRecord.id,
+            ThingRecord.title,
+            ThingRecord.type_hint,
+            ThingRecord.importance,
+            ThingRecord.data,
+            child_count_sq,
+        )
+        .where(
+            ThingRecord.active == True,  # noqa: E712
+            ThingRecord.type_hint.in_(["project", "event", "goal"]),
+            ThingRecord.importance <= 2,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+    )
+    rows = session.execute(stmt).all()
+    candidates: list[SweepCandidate] = []
+    for row in rows:
+        if (row.child_count or 0) > 0:
+            continue
+        candidates.append(
+            SweepCandidate(
+                thing_id=row.id,
+                thing_title=row.title,
+                finding_type="broad_thing",
+                message=f"Broad {row.type_hint or 'Thing'} with no subtasks: {row.title}",
+                priority=2,
+                extra={"type_hint": row.type_hint, "importance": row.importance},
+            )
+        )
+    return candidates
+
+
+# ---------------------------------------------------------------------------
 # Gap detection — incomplete Things
 # ---------------------------------------------------------------------------
 
@@ -1319,6 +1377,7 @@ def collect_candidates(
             + find_cross_project_resource_conflicts(session, today, stale_days)
             + find_cross_project_thematic_connections(session)
             + find_cross_project_duplicate_effort(session)
+            + find_broad_things_without_subtasks(session, today, user_id=user_id)
         )
 
     # Deduplicate: keep the highest-priority (lowest number) candidate per (thing_id, finding_type)
@@ -1749,6 +1808,171 @@ async def generate_gap_questions(
     return GapQuestionResult(
         things_updated=things_updated,
         questions_generated=questions_generated,
+        usage=usage_stats.to_dict(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3c: Task breakdown for broad Things
+# ---------------------------------------------------------------------------
+
+TASK_BREAKDOWN_SYSTEM = """\
+You are a task breakdown assistant for Reli, an AI personal information manager.
+You receive a list of broad Things (projects, events, goals) that have no subtasks yet.
+
+Your job: for each Thing, decide if it needs obvious logistical subtasks, and if so,
+generate 3-5 concrete subtask titles.
+
+Quality bar: only create a subtask if a competent PA would do it without asking.
+YES: "Book flights to {destination}", "Book accommodation", "Request time off work"
+NO: "Decide what to wear", personal preferences, overly specific purchases
+
+Respond with ONLY valid JSON (no markdown, no explanation):
+{
+  "things": [
+    {
+      "thing_id": "uuid",
+      "subtasks": ["Subtask title 1", "Subtask title 2", "Subtask title 3"]
+    }
+  ]
+}
+
+Rules:
+- Return 3-5 subtask titles per Thing, or an empty list if breakdown isn't appropriate.
+- Each subtask must be a single, concrete, actionable step.
+- Make subtask titles specific to the Thing (include destination, event name, etc).
+- If a Thing is already specific enough (e.g. "Book flights to Paris"), return [].
+- Only include Things in your response where you have at least one subtask to create.
+"""
+
+
+@dataclass
+class BreakdownResult:
+    """Result of the broad-thing breakdown phase."""
+
+    parents_broken_down: int = 0
+    things_created: int = 0
+    relationships_created: int = 0
+    usage: dict = field(default_factory=dict)
+
+
+async def breakdown_broad_things(
+    candidates: list[SweepCandidate] | None = None,
+    user_id: str = "",
+    today: date | None = None,
+    batch_size: int = 10,
+) -> BreakdownResult:
+    """Find broad Things without subtasks, generate subtasks via LLM, and create them."""
+    from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
+    from . import tools as _tools
+
+    if candidates is None:
+        with Session(_engine_mod.engine) as session:
+            candidates = find_broad_things_without_subtasks(session, today, user_id=user_id)
+
+    if not candidates:
+        return BreakdownResult()
+
+    candidates = candidates[:batch_size]
+    usage_stats = UsageStats()
+
+    # Format prompt
+    today_str = (today or date.today()).isoformat()
+    lines = [f"Today: {today_str}", "", f"{len(candidates)} broad Things to consider:"]
+    for i, c in enumerate(candidates, 1):
+        lines.append(f'{i}. [{c.extra.get("type_hint", "unknown")}] "{c.thing_title}" [id={c.thing_id}]')
+    prompt = "\n".join(lines)
+
+    raw = await _chat(
+        messages=[
+            {"role": "system", "content": TASK_BREAKDOWN_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        model=REQUESTY_REASONING_MODEL,
+        response_format={"type": "json_object"},
+        usage_stats=usage_stats,
+    )
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("Task breakdown returned invalid JSON: %s", raw[:200])
+        return BreakdownResult(usage=usage_stats.to_dict())
+
+    raw_things = parsed.get("things", [])
+    valid_thing_ids = {c.thing_id for c in candidates}
+
+    # Map thing_id -> (importance, type_hint) for inheriting parent attributes
+    candidate_map = {c.thing_id: c.extra for c in candidates}
+
+    parents_broken = 0
+    things_created = 0
+    rels_created = 0
+    now = datetime.now(timezone.utc)
+
+    with Session(_engine_mod.engine) as session:
+        for item in raw_things:
+            if not isinstance(item, dict):
+                continue
+            thing_id = item.get("thing_id")
+            if not thing_id or thing_id not in valid_thing_ids:
+                continue
+            subtasks = item.get("subtasks", [])
+            if not isinstance(subtasks, list) or not subtasks:
+                continue
+            subtasks = [s for s in subtasks if isinstance(s, str) and s.strip()][:5]
+            if not subtasks:
+                continue
+
+            parent_importance = candidate_map.get(thing_id, {}).get("importance", 2)
+            parent_title = next(c.thing_title for c in candidates if c.thing_id == thing_id)
+            created_titles = []
+
+            for subtask_title in subtasks:
+                result = _tools.create_thing(
+                    title=subtask_title,
+                    type_hint="task",
+                    importance=parent_importance,
+                    user_id=user_id,
+                )
+                if "error" in result:
+                    logger.warning("Failed to create subtask '%s': %s", subtask_title, result["error"])
+                    continue
+                subtask_id = result["id"]
+                rel = _tools.create_relationship(
+                    from_thing_id=thing_id,
+                    to_thing_id=subtask_id,
+                    relationship_type="parent-of",
+                    user_id=user_id,
+                )
+                if "error" not in rel and rel.get("status") != "duplicate":
+                    rels_created += 1
+                things_created += 1
+                created_titles.append(subtask_title)
+
+            if created_titles:
+                parents_broken += 1
+                titles_str = ", ".join(created_titles[:3])
+                if len(created_titles) > 3:
+                    titles_str += f" (+{len(created_titles) - 3} more)"
+                finding_id = f"sf-{uuid.uuid4().hex[:8]}"
+                session.add(SweepFindingRecord(
+                    id=finding_id,
+                    thing_id=thing_id,
+                    finding_type="task_breakdown",
+                    message=f"Created subtasks for {parent_title}: {titles_str}",
+                    priority=2,
+                    dismissed=False,
+                    created_at=now,
+                    expires_at=now + timedelta(days=7),
+                    user_id=user_id or None,
+                ))
+        session.commit()
+
+    return BreakdownResult(
+        parents_broken_down=parents_broken,
+        things_created=things_created,
+        relationships_created=rels_created,
         usage=usage_stats.to_dict(),
     )
 

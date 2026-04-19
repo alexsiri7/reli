@@ -290,6 +290,24 @@ async def _run_sweep_for_user(user_id: str) -> None:
             result.usage,
         )
 
+        # Breakdown sweep: auto-create subtasks for broad Things without children
+        try:
+            from .sweep import breakdown_broad_things
+
+            async with asyncio.timeout(300):
+                bd_result = await breakdown_broad_things(user_id=user_id)
+            if bd_result.things_created:
+                logger.info(
+                    "Breakdown sweep [%s]: %d subtasks created under %d parents",
+                    user_label,
+                    bd_result.things_created,
+                    bd_result.parents_broken_down,
+                )
+        except TimeoutError:
+            logger.error("Breakdown sweep timed out for user %s (300s limit)", user_label)
+        except Exception:
+            logger.exception("Breakdown sweep failed for user %s", user_label)
+
         # Dependency sweep: LLM-powered implicit dependency detection
         await _run_dependency_sweep_for_user(user_id, user_label)
 

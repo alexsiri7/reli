@@ -11,6 +11,7 @@ from backend.sweep import (
 from backend.sweep import (
     collect_candidates,
     find_approaching_dates,
+    find_broad_things_without_subtasks,
     find_completed_projects,
     find_cross_project_duplicate_effort,
     find_cross_project_resource_conflicts,
@@ -1160,3 +1161,70 @@ class TestIncompleteThings:
         results = collect_candidates()
         types = {c.finding_type for c in results}
         assert "incomplete" in types
+
+
+# ---------------------------------------------------------------------------
+# Broad things without subtasks
+# ---------------------------------------------------------------------------
+
+
+class TestBroadThingsWithoutSubtasks:
+    def test_broad_project_no_children_detected(self, patched_db, db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Plan Europe Trip", type_hint="project")
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 1
+        assert results[0].thing_id == "p1"
+        assert results[0].finding_type == "broad_thing"
+
+    def test_project_with_children_excluded(self, patched_db, db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Plan Europe Trip", type_hint="project")
+            _insert_thing(conn, "c1", "Book flights", type_hint="task", parent_id="p1")
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 0
+
+    def test_low_importance_excluded(self, patched_db, db):
+        """Things with importance 3+ are not auto-broken down."""
+        with db() as conn:
+            conn.execute(
+                """INSERT INTO things (id, title, type_hint, importance, active, surface, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, 1, 1, ?, ?)""",
+                ("p1", "Learn Piano Someday", "goal", 3,
+                 date.today().isoformat(), date.today().isoformat()),
+            )
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 0
+
+    def test_task_type_excluded(self, patched_db, db):
+        """type_hint='task' Things are not included."""
+        with db() as conn:
+            _insert_thing(conn, "t1", "Plan Europe Trip", type_hint="task")
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 0
+
+    def test_inactive_excluded(self, patched_db, db):
+        with db() as conn:
+            _insert_thing(conn, "p1", "Plan Europe Trip", type_hint="project", active=False)
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 0
+
+    def test_event_detected(self, patched_db, db):
+        with db() as conn:
+            _insert_thing(conn, "e1", "Tomorrowland July Festival", type_hint="event")
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 1
+        assert results[0].extra["type_hint"] == "event"
+
+    def test_goal_detected(self, patched_db, db):
+        with db() as conn:
+            _insert_thing(conn, "g1", "Run a Marathon", type_hint="goal")
+        with Session(_engine_mod.engine) as session:
+            results = find_broad_things_without_subtasks(session)
+        assert len(results) == 1
