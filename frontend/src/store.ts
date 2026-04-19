@@ -1019,6 +1019,22 @@ export const useStore = create<ReliState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: get().sessionId, message: text, mode: get().chatMode }),
       })
+      if (res.status === 429) {
+        const { retry_after: rawRetryAfter = 60 } = await res.json().catch((err) => {
+          console.warn('[chat] Failed to parse 429 body, defaulting retry_after to 60', err)
+          return {}
+        })
+        const retry_after = Number(rawRetryAfter) || 60
+        const unit = retry_after === 1 ? 'second' : 'seconds'
+        set(state => ({
+          messages: state.messages.map(m =>
+            m.streaming
+              ? { ...m, content: `Too many requests — please wait ${retry_after} ${unit} before sending another message.`, streaming: false, streamingStage: null }
+              : m,
+          ),
+        }))
+        return
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
       const reader = res.body?.getReader()
