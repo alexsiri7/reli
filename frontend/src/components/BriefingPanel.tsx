@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { SweepFinding, BriefingItem, LearnedPreference, CalendarEvent } from '../store'
@@ -59,8 +59,18 @@ function SnoozeMenu({ onSelect, onClose }: {
   onSelect: (date: string) => void
   onClose: () => void
 }) {
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
   return (
-    <div className="absolute z-10 top-full left-0 mt-1 bg-surface-container-high border border-surface-container-highest rounded-xl shadow-lg overflow-hidden text-xs">
+    <div ref={menuRef} className="absolute z-10 top-full left-0 mt-1 bg-surface-container-high border border-surface-container-highest rounded-xl shadow-lg overflow-hidden text-xs">
       <button className="block w-full text-left px-4 py-2 hover:bg-surface-container-highest"
         onClick={() => { onSelect(getTomorrowISO()); onClose() }}>Tomorrow</button>
       <button className="block w-full text-left px-4 py-2 hover:bg-surface-container-highest"

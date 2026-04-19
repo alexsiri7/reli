@@ -50,6 +50,23 @@ describe('DueTodayRow', () => {
     expect(onChat).toHaveBeenCalledWith('thing-1', 'Write proposal')
   })
 
+  it('calls onSnoozeToggle when clicking outside the open snooze menu', () => {
+    const onSnoozeToggle = vi.fn()
+    render(
+      <DueTodayRow
+        item={mockItem}
+        onDone={vi.fn()}
+        onSnooze={vi.fn()}
+        onChat={vi.fn()}
+        snoozeMenuOpen={true}
+        onSnoozeToggle={onSnoozeToggle}
+      />
+    )
+    // Simulate mousedown on document body (outside the snooze menu)
+    fireEvent.mouseDown(document.body)
+    expect(onSnoozeToggle).toHaveBeenCalled()
+  })
+
   it('renders without reason when reasons array is empty', () => {
     const itemNoReasons: BriefingItem = { ...mockItem, reasons: [] }
     render(<DueTodayRow item={itemNoReasons} onDone={vi.fn()} onSnooze={vi.fn()} onChat={vi.fn()} snoozeMenuOpen={false} onSnoozeToggle={vi.fn()} />)
