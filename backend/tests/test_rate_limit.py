@@ -226,3 +226,23 @@ class TestRateLimitMiddleware:
         for _ in range(10):
             res = client.post("/api/chat")
             assert res.status_code == 200
+
+    def test_warning_logged_on_rate_limit_exceeded(self):
+        """log.warning is emitted with key, path, and retry_after when rate limited."""
+        from unittest.mock import patch
+
+        app = _make_app(api_rpm=1)
+        client = TestClient(app)
+
+        # Exhaust the bucket
+        res = client.get("/api/things")
+        assert res.status_code == 200
+
+        with patch("backend.rate_limit.log") as mock_log:
+            res = client.get("/api/things")
+
+        assert res.status_code == 429
+        mock_log.warning.assert_called_once()
+        call_args = mock_log.warning.call_args[0]
+        assert "Rate limit exceeded" in call_args[0]
+        assert "retry_after" in call_args[0]

@@ -127,6 +127,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if not bucket.consume():
             retry_after = int(bucket.retry_after) + 1
+            log.warning("Rate limit exceeded: key=%s path=%s retry_after=%ds", key, path, retry_after)
             return JSONResponse(
                 status_code=429,
                 content={
