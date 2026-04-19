@@ -25,6 +25,7 @@ def _validate_open_questions(v: "list[str] | None") -> "list[str] | None":
                 raise ValueError("each open_question must be at most 2000 characters")
     return v
 
+
 # ── Thing Types ───────────────────────────────────────────────────────────────
 
 

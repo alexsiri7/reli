@@ -611,11 +611,11 @@ export const NudgeSchema = z.object({
   id: z.string(),
   nudge_type: z.string(),
   message: z.string(),
-  thing_id: z.string().nullable().nullable().default(null),
-  thing_title: z.string().nullable().nullable().default(null),
-  thing_type_hint: z.string().nullable().nullable().default(null),
-  days_away: z.number().nullable().nullable().default(null),
-  primary_action_label: z.string().nullable().nullable().default(null),
+  thing_id: z.string().nullable().default(null),
+  thing_title: z.string().nullable().default(null),
+  thing_type_hint: z.string().nullable().default(null),
+  days_away: z.number().nullable().default(null),
+  primary_action_label: z.string().nullable().default(null),
 })
 
 export const WeeklyBriefingItemSchema = z.object({
