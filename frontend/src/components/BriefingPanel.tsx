@@ -159,9 +159,7 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct, snoozeMenuOpen, onSn
     <div className="group rounded-xl bg-surface-container-low hover:bg-surface-container-high/60 transition-colors overflow-hidden">
       <div className="flex items-start gap-3 py-3 px-4">
         <div className={`w-1 self-stretch rounded-full shrink-0 ${dotColor}`} />
-        <div className="flex items-center gap-2 mt-0.5 shrink-0">
-          <span className="text-sm">{icon}</span>
-        </div>
+        <span className="text-sm mt-0.5 shrink-0">{icon}</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm text-on-surface leading-snug">{finding.message}</p>
           {finding.thing && (
@@ -307,11 +305,7 @@ export function BriefingPanel() {
   const [snoozeMenuId, setSnoozeMenuId] = useState<string | null>(null)
   const firstName = currentUser?.name?.split(' ')[0] ?? null
 
-  const handleSnooze = (id: string, date: string) => snoozeFinding(id, date)
-
   const handleDoneThing = (id: string) => updateThing(id, { active: false })
-
-  const handleSnoozeThing = (id: string, date: string) => snoozeThing(id, date)
 
   const todayISO = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD in local TZ
   const todayEvents = calendarEvents.filter(e => e.start.slice(0, 10) === todayISO)
@@ -398,7 +392,7 @@ export function BriefingPanel() {
                 key={item.thing.id}
                 item={item}
                 onDone={handleDoneThing}
-                onSnooze={handleSnoozeThing}
+                onSnooze={snoozeThing}
                 onChat={openChatWithContext}
                 snoozeMenuOpen={snoozeMenuId === item.thing.id}
                 onSnoozeToggle={() => setSnoozeMenuId(snoozeMenuId === item.thing.id ? null : item.thing.id)}
@@ -415,7 +409,7 @@ export function BriefingPanel() {
                 key={f.id}
                 finding={f}
                 onDismiss={dismissFinding}
-                onSnooze={handleSnooze}
+                onSnooze={snoozeFinding}
                 onAct={actOnFinding}
                 snoozeMenuOpen={snoozeMenuId === f.id}
                 onSnoozeToggle={() => setSnoozeMenuId(snoozeMenuId === f.id ? null : f.id)}
