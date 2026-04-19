@@ -463,6 +463,12 @@ export function Sidebar() {
   const [quickAddError, setQuickAddError] = useState<string | null>(null)
   const [quickAddCheckinDate, setQuickAddCheckinDate] = useState('')
   const [quickAddParentId, setQuickAddParentId] = useState('')
+  const closeQuickAdd = useCallback(() => {
+    setQuickAddSection(null)
+    setQuickAddTitle('')
+    setQuickAddCheckinDate('')
+    setQuickAddParentId('')
+  }, [])
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -552,16 +558,13 @@ export function Sidebar() {
           throw new Error(`Task created but parent link failed (${relRes.status}) — try again`)
         }
       }
-      setQuickAddSection(null)
-      setQuickAddTitle('')
-      setQuickAddCheckinDate('')
-      setQuickAddParentId('')
+      closeQuickAdd()
     } catch (err) {
       setQuickAddError(err instanceof Error ? err.message : 'Failed to create')
     } finally {
       setQuickAddSaving(false)
     }
-  }, [quickAddTitle, quickAddCheckinDate, quickAddParentId, createThing])
+  }, [quickAddTitle, quickAddCheckinDate, quickAddParentId, createThing, closeQuickAdd])
 
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false)
   const filterDropdownRef = useRef<HTMLDivElement>(null)
@@ -1240,7 +1243,7 @@ export function Sidebar() {
                       placeholder={`Add ${singularize(group.label)}…`}
                       value={quickAddTitle}
                       onChange={e => setQuickAddTitle(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Escape') { setQuickAddSection(null); setQuickAddTitle(''); setQuickAddCheckinDate(''); setQuickAddParentId('') } }}
+                      onKeyDown={e => { if (e.key === 'Escape') closeQuickAdd() }}
                       disabled={quickAddSaving}
                       className="w-full text-xs bg-surface-container-high rounded px-2 py-1.5 text-on-surface placeholder-on-surface-variant/60 outline-none border border-on-surface-variant/20 focus:border-primary"
                     />
@@ -1267,10 +1270,19 @@ export function Sidebar() {
                       </>
                     )}
                     {quickAddError && <p className="text-[10px] text-ideas mt-1">{quickAddError}</p>}
+                    <div className="flex justify-end mt-1">
+                      <button
+                        type="submit"
+                        disabled={!quickAddTitle.trim() || quickAddSaving}
+                        className="text-xs font-medium px-3 py-1 rounded-lg bg-primary text-on-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {quickAddSaving ? 'Saving…' : 'Add'}
+                      </button>
+                    </div>
                   </form>
                 ) : (
                   <button
-                    onClick={() => { setQuickAddSection(group.type); setQuickAddTitle(''); setQuickAddCheckinDate(''); setQuickAddParentId(''); setQuickAddError(null) }}
+                    onClick={() => { closeQuickAdd(); setQuickAddSection(group.type); setQuickAddError(null) }}
                     className="mx-4 mb-1 text-[11px] text-on-surface-variant/60 hover:text-primary transition-colors flex items-center gap-0.5"
                   >
                     <span>+</span>

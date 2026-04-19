@@ -375,6 +375,52 @@ describe('Sidebar', () => {
     await waitFor(() => expect(createThing).toHaveBeenCalledWith('New task title', 'task', undefined))
   })
 
+  it('calls createThing when Add button is clicked', async () => {
+    const createThing = vi.fn().mockResolvedValue(undefined)
+    mockState = {
+      things: [makeThing({ title: 'My Task', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      createThing,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+
+    // Button should be disabled before any input
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled()
+
+    const input = screen.getByPlaceholderText('Add task…')
+    fireEvent.change(input, { target: { value: 'Clicked task' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(createThing).toHaveBeenCalledWith('Clicked task', 'task', undefined))
+  })
+
+  it('Add button shows Saving… and is disabled while submitting', async () => {
+    let resolveCreate!: () => void
+    const createThing = vi.fn().mockReturnValue(
+      new Promise<void>(res => { resolveCreate = res })
+    )
+    mockState = {
+      things: [makeThing({ title: 'My Task', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      createThing,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    fireEvent.change(screen.getByPlaceholderText('Add task…'), { target: { value: 'In-flight task' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled())
+
+    resolveCreate()
+    await waitFor(() => expect(createThing).toHaveBeenCalled())
+  })
+
   it('dismisses quick-add input on Escape', () => {
     mockState = {
       things: [makeThing({ title: 'My Task', type_hint: 'task' })],
