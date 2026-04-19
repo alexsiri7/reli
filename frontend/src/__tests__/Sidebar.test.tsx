@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Sidebar } from '../components/Sidebar'
+import type { Thing as RealThing } from '../generated/api-types'
 
 type Thing = {
   id: string
@@ -559,7 +560,7 @@ describe('ThingCard onComplete', () => {
 
     const { ThingCard } = await import('../components/ThingCard')
     // The real Thing type has `importance` instead of `priority`
-    const realThing = { ...thing, importance: thing.priority } as any
+    const realThing = { ...thing, importance: thing.priority } as unknown as RealThing
     render(<ThingCard thing={realThing} onComplete={onComplete} />)
 
     const checkbox = screen.getByLabelText('Mark task done')
