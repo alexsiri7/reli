@@ -1020,7 +1020,11 @@ export const useStore = create<ReliState>((set, get) => ({
         body: JSON.stringify({ session_id: get().sessionId, message: text, mode: get().chatMode }),
       })
       if (res.status === 429) {
-        const { retry_after = 60 } = await res.json().catch(() => ({}))
+        const { retry_after: rawRetryAfter = 60 } = await res.json().catch((err) => {
+          console.warn('[chat] Failed to parse 429 body, defaulting retry_after to 60', err)
+          return {}
+        })
+        const retry_after = Number(rawRetryAfter) || 60
         const unit = retry_after === 1 ? 'second' : 'seconds'
         set(state => ({
           messages: state.messages.map(m =>
