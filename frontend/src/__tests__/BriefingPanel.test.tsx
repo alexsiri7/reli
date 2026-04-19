@@ -67,6 +67,23 @@ describe('DueTodayRow', () => {
     expect(onSnoozeToggle).toHaveBeenCalled()
   })
 
+  it('does NOT call onSnoozeToggle when clicking inside the open snooze menu', () => {
+    const onSnoozeToggle = vi.fn()
+    render(
+      <DueTodayRow
+        item={mockItem}
+        onDone={vi.fn()}
+        onSnooze={vi.fn()}
+        onChat={vi.fn()}
+        snoozeMenuOpen={true}
+        onSnoozeToggle={onSnoozeToggle}
+      />
+    )
+    // Simulate mousedown on a button inside the snooze menu — the contains() guard should prevent onClose
+    fireEvent.mouseDown(screen.getByText('Tomorrow'))
+    expect(onSnoozeToggle).not.toHaveBeenCalled()
+  })
+
   it('renders without reason when reasons array is empty', () => {
     const itemNoReasons: BriefingItem = { ...mockItem, reasons: [] }
     render(<DueTodayRow item={itemNoReasons} onDone={vi.fn()} onSnooze={vi.fn()} onChat={vi.fn()} snoozeMenuOpen={false} onSnoozeToggle={vi.fn()} />)
