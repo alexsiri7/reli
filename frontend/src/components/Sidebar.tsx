@@ -1267,6 +1267,15 @@ export function Sidebar() {
                       </>
                     )}
                     {quickAddError && <p className="text-[10px] text-ideas mt-1">{quickAddError}</p>}
+                    <div className="flex justify-end mt-1">
+                      <button
+                        type="submit"
+                        disabled={!quickAddTitle.trim() || quickAddSaving}
+                        className="text-xs font-medium px-3 py-1 rounded-lg bg-primary text-on-primary disabled:opacity-50"
+                      >
+                        {quickAddSaving ? 'Saving…' : 'Add'}
+                      </button>
+                    </div>
                   </form>
                 ) : (
                   <button

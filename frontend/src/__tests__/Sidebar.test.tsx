@@ -375,6 +375,24 @@ describe('Sidebar', () => {
     await waitFor(() => expect(createThing).toHaveBeenCalledWith('New task title', 'task', undefined))
   })
 
+  it('calls createThing when Add button is clicked', async () => {
+    const createThing = vi.fn().mockResolvedValue(undefined)
+    mockState = {
+      things: [makeThing({ title: 'My Task', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      createThing,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    const input = screen.getByPlaceholderText('Add task…')
+    fireEvent.change(input, { target: { value: 'Clicked task' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(createThing).toHaveBeenCalledWith('Clicked task', 'task', undefined))
+  })
+
   it('dismisses quick-add input on Escape', () => {
     mockState = {
       things: [makeThing({ title: 'My Task', type_hint: 'task' })],
