@@ -857,10 +857,13 @@ export const useStore = create<ReliState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ until }),
       })
-      if (!res.ok) return
+      if (!res.ok) {
+        set({ error: 'Failed to snooze finding. Please try again.' })
+        return
+      }
       set(state => ({ findings: state.findings.filter(f => f.id !== findingId) }))
-    } catch {
-      // ignore
+    } catch (e) {
+      set({ error: String(e) })
     }
   },
 

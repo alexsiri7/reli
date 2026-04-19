@@ -274,7 +274,7 @@ test.describe('Visual regression – reli frontend', () => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto('/')
     await waitForApp(page)
-    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
+    await page.waitForSelector('text=Due Today', { timeout: 10_000 })
     const briefingPanel = page.locator('div.flex-1.flex.flex-col').first()
     await expect(briefingPanel).toHaveScreenshot('briefing-panel-populated-desktop.png', {
       ...SNAPSHOT_OPTS, animations: 'disabled',
@@ -294,8 +294,7 @@ test.describe('Visual regression – reli frontend', () => {
       transition-duration: 0s !important;
     }`,
     })
-    await page.waitForTimeout(500)
-    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
+    await page.waitForSelector('text=Due Today', { timeout: 10_000 })
     await expect(page).toHaveScreenshot('briefing-panel-populated-mobile.png', {
       ...SNAPSHOT_OPTS, animations: 'disabled',
     })
@@ -307,7 +306,7 @@ test.describe('Visual regression – reli frontend', () => {
     await page.emulateMedia({ colorScheme: 'dark' })
     await page.goto('/')
     await waitForApp(page)
-    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
+    await page.waitForSelector('text=Due Today', { timeout: 10_000 })
     const briefingPanel = page.locator('div.flex-1.flex.flex-col').first()
     await expect(briefingPanel).toHaveScreenshot('briefing-panel-populated-dark.png', {
       ...SNAPSHOT_OPTS, animations: 'disabled',

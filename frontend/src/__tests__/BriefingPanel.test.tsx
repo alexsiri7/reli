@@ -57,6 +57,52 @@ describe('DueTodayRow', () => {
   })
 })
 
+describe('DueTodayRow – snooze menu', () => {
+  it('renders snooze options when snoozeMenuOpen is true', () => {
+    render(
+      <DueTodayRow item={mockItem} onDone={vi.fn()} onSnooze={vi.fn()} onChat={vi.fn()}
+        snoozeMenuOpen={true} onSnoozeToggle={vi.fn()} />
+    )
+    expect(screen.getByText('Tomorrow')).toBeInTheDocument()
+    expect(screen.getByText('Next week')).toBeInTheDocument()
+    expect(screen.getByText('Pick date…')).toBeInTheDocument()
+  })
+
+  it('does not render snooze menu when snoozeMenuOpen is false', () => {
+    render(
+      <DueTodayRow item={mockItem} onDone={vi.fn()} onSnooze={vi.fn()} onChat={vi.fn()}
+        snoozeMenuOpen={false} onSnoozeToggle={vi.fn()} />
+    )
+    expect(screen.queryByText('Tomorrow')).not.toBeInTheDocument()
+  })
+
+  it('calls onSnooze with thing id and tomorrow ISO date when Tomorrow clicked', () => {
+    const onSnooze = vi.fn()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-19T12:00:00Z'))
+    render(
+      <DueTodayRow item={mockItem} onDone={vi.fn()} onSnooze={onSnooze} onChat={vi.fn()}
+        snoozeMenuOpen={true} onSnoozeToggle={vi.fn()} />
+    )
+    fireEvent.click(screen.getByText('Tomorrow'))
+    expect(onSnooze).toHaveBeenCalledWith('thing-1', '2026-04-20')
+    vi.useRealTimers()
+  })
+
+  it('calls onSnooze with thing id and next-week ISO date when Next week clicked', () => {
+    const onSnooze = vi.fn()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-19T12:00:00Z'))
+    render(
+      <DueTodayRow item={mockItem} onDone={vi.fn()} onSnooze={onSnooze} onChat={vi.fn()}
+        snoozeMenuOpen={true} onSnoozeToggle={vi.fn()} />
+    )
+    fireEvent.click(screen.getByText('Next week'))
+    expect(onSnooze).toHaveBeenCalledWith('thing-1', '2026-04-26')
+    vi.useRealTimers()
+  })
+})
+
 describe('TodayEventRow', () => {
   it('renders event summary', () => {
     render(<TodayEventRow event={makeEvent()} />)

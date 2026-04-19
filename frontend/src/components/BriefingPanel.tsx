@@ -60,17 +60,21 @@ function SnoozeMenu({ onSelect, onClose }: {
   onClose: () => void
 }) {
   return (
-    <div className="absolute z-10 top-full left-0 mt-1 bg-surface-container-high border border-surface-container-highest rounded-xl shadow-lg overflow-hidden text-xs">
-      <button className="block w-full text-left px-4 py-2 hover:bg-surface-container-highest"
-        onClick={() => { onSelect(getTomorrowISO()); onClose() }}>Tomorrow</button>
-      <button className="block w-full text-left px-4 py-2 hover:bg-surface-container-highest"
-        onClick={() => { onSelect(getNextWeekISO()); onClose() }}>Next week</button>
-      <label className="block px-4 py-2 hover:bg-surface-container-highest cursor-pointer">
-        Pick date…
-        <input type="date" className="sr-only" min={getTomorrowISO()}
-          onChange={e => { if (e.target.value) { onSelect(e.target.value); onClose() } }} />
-      </label>
-    </div>
+    <>
+      {/* Backdrop to capture outside clicks */}
+      <div className="fixed inset-0 z-[9]" onClick={onClose} />
+      <div className="absolute z-10 top-full left-0 mt-1 bg-surface-container-high border border-surface-container-highest rounded-xl shadow-lg overflow-hidden text-xs">
+        <button className="block w-full text-left px-4 py-2 hover:bg-surface-container-highest"
+          onClick={() => { onSelect(getTomorrowISO()); onClose() }}>Tomorrow</button>
+        <button className="block w-full text-left px-4 py-2 hover:bg-surface-container-highest"
+          onClick={() => { onSelect(getNextWeekISO()); onClose() }}>Next week</button>
+        <label className="block px-4 py-2 hover:bg-surface-container-highest cursor-pointer">
+          Pick date…
+          <input type="date" className="sr-only" min={getTomorrowISO()}
+            onChange={e => { if (e.target.value) { onSelect(e.target.value); onClose() } }} />
+        </label>
+      </div>
+    </>
   )
 }
 
