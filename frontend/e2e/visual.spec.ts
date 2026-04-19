@@ -280,7 +280,17 @@ async function interceptApi(
   if (opts.briefing) {
     await page.route('**/api/briefing/morning', route =>
       route.fulfill({
-        json: { id: 'mb-1', content: { summary: 'Busy morning — you have 7 items tracked, a proposal draft due, and 3 items to review.' }, generated_at: '2026-03-14T07:00:00Z' },
+        json: {
+          id: 'mb-1',
+          content: {
+            summary: 'Busy morning — you have 7 items tracked, a proposal draft due, and 3 items to review.',
+            priorities: [],
+            overdue: [],
+            blockers: [],
+            findings: [],
+          },
+          generated_at: '2026-03-14T07:00:00Z',
+        },
         status: 200,
       })
     )
@@ -467,6 +477,7 @@ test.describe('Visual regression – reli frontend', () => {
     await interceptApi(page, { things: true, history: true, briefing: true })
     await page.goto('/')
     await waitForApp(page)
+    // Wait for briefing panel to render (DUE TODAY section from briefing data)
     await page.waitForSelector('aside h2', { timeout: 5_000 })
     await expect(page).toHaveScreenshot('full-layout-all-populated.png', {
       ...SNAPSHOT_OPTS,
@@ -485,6 +496,56 @@ test.describe('Visual regression – reli frontend', () => {
       ...SNAPSHOT_OPTS,
       animations: 'disabled',
       mask: [page.locator('aside p.text-xs')],
+    })
+  })
+
+  test('sidebar – diverse Things (mobile)', async ({ page }) => {
+    await interceptApi(page, { things: true })
+    // Stub Gmail so the sidebar doesn't show a flaky "Checking Gmail…" state
+    await page.route('**/api/gmail/status', route =>
+      route.fulfill({ json: { configured: false }, status: 200 })
+    )
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+    await page.waitForSelector('nav.fixed.bottom-0', { timeout: 20_000 })
+    await page.addStyleTag({
+      content: `*, *::before, *::after {
+      animation-duration: 0s !important;
+      animation-delay: 0s !important;
+      transition-duration: 0s !important;
+    }`,
+    })
+    await page.waitForTimeout(500)
+    // Navigate to Things tab (mobile default is briefing)
+    await page.click('nav button:has-text("Things")')
+    // Wait for Things content to render (mobile default is Briefing; click switches view)
+    await page.waitForTimeout(1_000)
+    await expect(page).toHaveScreenshot(
+      'sidebar-diverse-things-mobile.png',
+      { ...SNAPSHOT_OPTS, animations: 'disabled', mask: [page.locator('p.text-xs')] }
+    )
+  })
+
+  test('full layout – all data populated (mobile)', async ({ page }) => {
+    await interceptApi(page, { things: true, history: true, briefing: true })
+    // Stub Gmail so the sidebar doesn't show a flaky "Checking Gmail…" state
+    await page.route('**/api/gmail/status', route =>
+      route.fulfill({ json: { configured: false }, status: 200 })
+    )
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+    await page.waitForSelector('nav.fixed.bottom-0', { timeout: 20_000 })
+    await page.addStyleTag({
+      content: `*, *::before, *::after {
+      animation-duration: 0s !important;
+      animation-delay: 0s !important;
+      transition-duration: 0s !important;
+    }`,
+    })
+    await page.waitForTimeout(500)
+    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
+    await expect(page).toHaveScreenshot('full-layout-all-populated-mobile.png', {
+      ...SNAPSHOT_OPTS, animations: 'disabled',
     })
   })
 })
