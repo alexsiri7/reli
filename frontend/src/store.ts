@@ -400,7 +400,7 @@ interface ReliState {
   toggleRightView: () => void
 
   // Create a Thing directly (quick add)
-  createThing: (title: string, typeHint?: string) => Promise<Thing>
+  createThing: (title: string, typeHint?: string, checkinDate?: string) => Promise<Thing>
 
   // Chat input focus (registered by ChatPanel)
   _chatInputFocusFn: (() => void) | null
@@ -1534,11 +1534,11 @@ export const useStore = create<ReliState>((set, get) => ({
   closeFeedback: () => set({ feedbackOpen: false }),
 
   // Create a Thing
-  createThing: async (title: string, typeHint?: string) => {
+  createThing: async (title: string, typeHint?: string, checkinDate?: string) => {
     const res = await apiFetch(`${BASE}/things`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, type_hint: typeHint ?? null }),
+      body: JSON.stringify({ title, type_hint: typeHint ?? null, ...(checkinDate ? { checkin_date: checkinDate } : {}) }),
     })
     if (!res.ok) throw new Error(`Failed to create thing: ${res.status}`)
     const data = validateResponse(ThingSchema, await res.json(), '/things POST')

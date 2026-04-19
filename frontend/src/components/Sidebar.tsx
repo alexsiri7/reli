@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
+import { apiFetch } from '../api'
 import type { Thing, SweepFinding, FocusRecommendation, MorningBriefing, WeeklyBriefing } from '../store'
 import { NudgeBanner } from './NudgeBanner'
 import { typeIcon } from '../utils'
@@ -460,6 +461,8 @@ export function Sidebar() {
   const [quickAddTitle, setQuickAddTitle] = useState('')
   const [quickAddSaving, setQuickAddSaving] = useState(false)
   const [quickAddError, setQuickAddError] = useState<string | null>(null)
+  const [quickAddCheckinDate, setQuickAddCheckinDate] = useState('')
+  const [quickAddParentId, setQuickAddParentId] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -534,15 +537,28 @@ export function Sidebar() {
     setQuickAddSaving(true)
     setQuickAddError(null)
     try {
-      await createThing(trimmed, type)
+      const newThing = await createThing(trimmed, type, quickAddCheckinDate || undefined)
+      if (quickAddParentId && newThing?.id) {
+        await apiFetch('/api/things/relationships', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from_thing_id: quickAddParentId,
+            to_thing_id: newThing.id,
+            relationship_type: 'parent-of',
+          }),
+        })
+      }
       setQuickAddSection(null)
       setQuickAddTitle('')
+      setQuickAddCheckinDate('')
+      setQuickAddParentId('')
     } catch (err) {
       setQuickAddError(err instanceof Error ? err.message : 'Failed to create')
     } finally {
       setQuickAddSaving(false)
     }
-  }, [quickAddTitle, createThing])
+  }, [quickAddTitle, quickAddCheckinDate, quickAddParentId, createThing])
 
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false)
   const filterDropdownRef = useRef<HTMLDivElement>(null)
@@ -1221,15 +1237,37 @@ export function Sidebar() {
                       placeholder={`Add ${singularize(group.label)}…`}
                       value={quickAddTitle}
                       onChange={e => setQuickAddTitle(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Escape') { setQuickAddSection(null); setQuickAddTitle('') } }}
+                      onKeyDown={e => { if (e.key === 'Escape') { setQuickAddSection(null); setQuickAddTitle(''); setQuickAddCheckinDate(''); setQuickAddParentId('') } }}
                       disabled={quickAddSaving}
                       className="w-full text-xs bg-surface-container-high rounded px-2 py-1.5 text-on-surface placeholder-on-surface-variant/60 outline-none border border-on-surface-variant/20 focus:border-primary"
                     />
+                    {group.type === 'task' && (
+                      <>
+                        <input
+                          type="date"
+                          value={quickAddCheckinDate}
+                          onChange={e => setQuickAddCheckinDate(e.target.value)}
+                          disabled={quickAddSaving}
+                          className="w-full text-xs bg-surface-container-high rounded px-2 py-1.5 text-on-surface placeholder-on-surface-variant/60 outline-none border border-on-surface-variant/20 focus:border-primary mt-1"
+                        />
+                        <select
+                          value={quickAddParentId}
+                          onChange={e => setQuickAddParentId(e.target.value)}
+                          disabled={quickAddSaving}
+                          className="w-full text-xs bg-surface-container-high rounded px-2 py-1.5 text-on-surface outline-none border border-on-surface-variant/20 focus:border-primary mt-1"
+                        >
+                          <option value="">No parent project</option>
+                          {things.filter(t => t.type_hint === 'project' && t.active).map(p => (
+                            <option key={p.id} value={p.id}>{p.title}</option>
+                          ))}
+                        </select>
+                      </>
+                    )}
                     {quickAddError && <p className="text-[10px] text-ideas mt-1">{quickAddError}</p>}
                   </form>
                 ) : (
                   <button
-                    onClick={() => { setQuickAddSection(group.type); setQuickAddTitle(''); setQuickAddError(null) }}
+                    onClick={() => { setQuickAddSection(group.type); setQuickAddTitle(''); setQuickAddCheckinDate(''); setQuickAddParentId(''); setQuickAddError(null) }}
                     className="mx-4 mb-1 text-[11px] text-on-surface-variant/60 hover:text-primary transition-colors flex items-center gap-0.5"
                   >
                     <span>+</span>
