@@ -22,6 +22,7 @@ export function ThingCard({ thing, onComplete }: Props) {
   const openThingDetail = useStore(s => s.openThingDetail)
   const [showSnooze, setShowSnooze] = useState(false)
   const [completing, setCompleting] = useState(false)
+  const completingRef = useRef(false)
   const isMounted = useRef(true)
   useEffect(() => () => { isMounted.current = false }, [])
 
@@ -36,7 +37,8 @@ export function ThingCard({ thing, onComplete }: Props) {
 
   const handleCheckbox = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (completing) return
+    if (completingRef.current) return
+    completingRef.current = true
     setCompleting(true)
     // Give animation time to play before the item disappears from the list
     await new Promise(r => setTimeout(r, 600))
