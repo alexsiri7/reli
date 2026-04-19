@@ -40,10 +40,12 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           for i in 1 2 3 4 5; do
-            ssh-keyscan -T 30 -H 100.120.193.82 >> ~/.ssh/known_hosts 2>/dev/null
+            ssh-keyscan -T 30 -H 100.120.193.82 >> ~/.ssh/known_hosts
             ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1 && break
-            echo "ssh-keyscan attempt $i/5 failed, retrying in 5s..."
-            sleep 5
+            if [ "$i" -lt 5 ]; then
+              echo "ssh-keyscan attempt $i/5 failed, retrying in 5s..."
+              sleep 5
+            fi
           done
           if ! ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1; then
             echo "ERROR: host key not found after 5 attempts — host unreachable"
@@ -145,10 +147,12 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           for i in 1 2 3 4 5; do
-            ssh-keyscan -T 30 -H 100.120.193.82 >> ~/.ssh/known_hosts 2>/dev/null
+            ssh-keyscan -T 30 -H 100.120.193.82 >> ~/.ssh/known_hosts
             ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1 && break
-            echo "ssh-keyscan attempt $i/5 failed, retrying in 5s..."
-            sleep 5
+            if [ "$i" -lt 5 ]; then
+              echo "ssh-keyscan attempt $i/5 failed, retrying in 5s..."
+              sleep 5
+            fi
           done
           if ! ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1; then
             echo "ERROR: host key not found after 5 attempts — host unreachable"
