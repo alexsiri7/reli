@@ -36,6 +36,12 @@ function getTomorrowISO(): string {
   return d.toISOString().slice(0, 10)
 }
 
+function getNextWeekISO(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 7)
+  return d.toISOString().slice(0, 10)
+}
+
 function SectionCard({ title, accent, children }: {
   title: string
   accent: string
@@ -46,6 +52,25 @@ function SectionCard({ title, accent, children }: {
       <p className={`text-label font-semibold mb-2 ${accent}`}>{title}</p>
       <div className="space-y-2">{children}</div>
     </section>
+  )
+}
+
+function SnoozeMenu({ onSelect, onClose }: {
+  onSelect: (date: string) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="absolute z-10 top-full left-0 mt-1 bg-surface-container-high border border-surface-container-highest rounded-xl shadow-lg overflow-hidden text-xs">
+      <button className="block w-full text-left px-4 py-2 hover:bg-surface-container-highest"
+        onClick={() => { onSelect(getTomorrowISO()); onClose() }}>Tomorrow</button>
+      <button className="block w-full text-left px-4 py-2 hover:bg-surface-container-highest"
+        onClick={() => { onSelect(getNextWeekISO()); onClose() }}>Next week</button>
+      <label className="block px-4 py-2 hover:bg-surface-container-highest cursor-pointer">
+        Pick date…
+        <input type="date" className="sr-only" min={getTomorrowISO()}
+          onChange={e => { if (e.target.value) { onSelect(e.target.value); onClose() } }} />
+      </label>
+    </div>
   )
 }
 
@@ -69,11 +94,13 @@ export function TodayEventRow({ event }: { event: CalendarEvent }) {
   )
 }
 
-export function DueTodayRow({ item, onDone, onSnooze, onChat }: {
+export function DueTodayRow({ item, onDone, onSnooze, onChat, snoozeMenuOpen, onSnoozeToggle }: {
   item: BriefingItem
   onDone: (id: string) => void
-  onSnooze: (id: string) => void
+  onSnooze: (id: string, date: string) => void
   onChat: (id: string, title: string) => void
+  snoozeMenuOpen: boolean
+  onSnoozeToggle: () => void
 }) {
   return (
     <div className="group rounded-xl bg-surface-container-low hover:bg-surface-container-high/60 transition-colors overflow-hidden">
@@ -90,12 +117,20 @@ export function DueTodayRow({ item, onDone, onSnooze, onChat }: {
             >
               Done
             </button>
-            <button
-              onClick={() => onSnooze(item.thing.id)}
-              className="text-xs text-on-surface-variant hover:text-on-surface"
-            >
-              Snooze
-            </button>
+            <div className="relative">
+              <button
+                onClick={onSnoozeToggle}
+                className="text-xs text-on-surface-variant hover:text-on-surface"
+              >
+                Snooze
+              </button>
+              {snoozeMenuOpen && (
+                <SnoozeMenu
+                  onSelect={(date) => onSnooze(item.thing.id, date)}
+                  onClose={onSnoozeToggle}
+                />
+              )}
+            </div>
             <button
               onClick={() => onChat(item.thing.id, item.thing.title)}
               className="text-xs text-on-surface-variant hover:text-on-surface"
@@ -109,11 +144,13 @@ export function DueTodayRow({ item, onDone, onSnooze, onChat }: {
   )
 }
 
-function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
+function FindingCard({ finding, onDismiss, onSnooze, onAct, snoozeMenuOpen, onSnoozeToggle }: {
   finding: SweepFinding
   onDismiss: (id: string) => void
-  onSnooze: (id: string) => void
+  onSnooze: (id: string, date: string) => void
   onAct: (finding: SweepFinding) => void
+  snoozeMenuOpen: boolean
+  onSnoozeToggle: () => void
 }) {
   const typeConfig = FINDING_TYPE_CONFIG[finding.finding_type]
   const icon = typeConfig?.icon ?? '\u{1F4CB}'
@@ -141,12 +178,20 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct }: {
                 Open
               </button>
             )}
-            <button
-              onClick={() => onSnooze(finding.id)}
-              className="text-xs text-on-surface-variant hover:text-on-surface"
-            >
-              Snooze
-            </button>
+            <div className="relative">
+              <button
+                onClick={onSnoozeToggle}
+                className="text-xs text-on-surface-variant hover:text-on-surface"
+              >
+                Snooze
+              </button>
+              {snoozeMenuOpen && (
+                <SnoozeMenu
+                  onSelect={(date) => onSnooze(finding.id, date)}
+                  onClose={onSnoozeToggle}
+                />
+              )}
+            </div>
             <button
               onClick={() => onDismiss(finding.id)}
               className="text-xs text-on-surface-variant hover:text-ideas"
@@ -233,7 +278,7 @@ function StatCard({ label, value, suffix, accent }: { label: string; value: numb
 export function BriefingPanel() {
   const {
     theOneThing, secondaryItems, briefingStats, findings, learnedPreferences, nudges,
-    morningBriefing, calendarEvents, error,
+    morningBriefing, calendarEvents, error, currentUser,
     setRightView, dismissFinding, snoozeFinding, actOnFinding,
     submitPreferenceFeedback, updateThing, snoozeThing, openChatWithContext,
   } = useStore(
@@ -247,6 +292,7 @@ export function BriefingPanel() {
       morningBriefing: s.morningBriefing,
       calendarEvents: s.calendarEvents,
       error: s.error,
+      currentUser: s.currentUser,
       setRightView: s.setRightView,
       dismissFinding: s.dismissFinding,
       snoozeFinding: s.snoozeFinding,
@@ -258,11 +304,14 @@ export function BriefingPanel() {
     }))
   )
 
-  const handleSnooze = (id: string) => snoozeFinding(id, getTomorrowISO())
+  const [snoozeMenuId, setSnoozeMenuId] = useState<string | null>(null)
+  const firstName = currentUser?.name?.split(' ')[0] ?? null
+
+  const handleSnooze = (id: string, date: string) => snoozeFinding(id, date)
 
   const handleDoneThing = (id: string) => updateThing(id, { active: false })
 
-  const handleSnoozeThing = (id: string) => snoozeThing(id, getTomorrowISO())
+  const handleSnoozeThing = (id: string, date: string) => snoozeThing(id, date)
 
   const todayISO = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD in local TZ
   const todayEvents = calendarEvents.filter(e => e.start.slice(0, 10) === todayISO)
@@ -314,7 +363,9 @@ export function BriefingPanel() {
         )}
         {/* Greeting */}
         <section className="px-6 pt-8 pb-4">
-          <h1 className="text-display text-on-surface font-bold">{getGreeting()}</h1>
+          <h1 className="text-display text-on-surface font-bold">
+            {getGreeting()}{firstName ? `, ${firstName}` : ''}
+          </h1>
           <p className="md:hidden text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mt-1">
             {formatGreetingDate()}
           </p>
@@ -349,6 +400,8 @@ export function BriefingPanel() {
                 onDone={handleDoneThing}
                 onSnooze={handleSnoozeThing}
                 onChat={openChatWithContext}
+                snoozeMenuOpen={snoozeMenuId === item.thing.id}
+                onSnoozeToggle={() => setSnoozeMenuId(snoozeMenuId === item.thing.id ? null : item.thing.id)}
               />
             ))}
           </SectionCard>
@@ -364,6 +417,8 @@ export function BriefingPanel() {
                 onDismiss={dismissFinding}
                 onSnooze={handleSnooze}
                 onAct={actOnFinding}
+                snoozeMenuOpen={snoozeMenuId === f.id}
+                onSnoozeToggle={() => setSnoozeMenuId(snoozeMenuId === f.id ? null : f.id)}
               />
             ))}
           </SectionCard>
