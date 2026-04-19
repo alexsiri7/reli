@@ -320,8 +320,42 @@ describe('Sidebar', () => {
     }
     render(<Sidebar />)
     expect(screen.getByText('My Task')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('Tasks').closest('button')!)
-    expect(screen.queryByText('My Task')).not.toBeInTheDocument()
+
+    // Before clicking, the grid wrapper should be expanded
+    const headerButton = screen.getByText('Tasks').closest('button')!
+    const section = headerButton.closest('section')!
+    const gridWrapper = section.querySelector('.grid')!
+    expect(gridWrapper.className).toContain('grid-rows-[1fr]')
+
+    fireEvent.click(headerButton)
+    expect(gridWrapper.className).toContain('grid-rows-[0fr]')
+  })
+
+  it('applies grid-rows-[0fr] class when section header is clicked', () => {
+    mockState = {
+      things: [makeThing({ title: 'Collapse Test', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    const headerButton = screen.getByText('Tasks').closest('button')!
+    const section = headerButton.closest('section')!
+    const gridWrapper = section.querySelector('.grid')!
+
+    // Initially expanded
+    expect(gridWrapper.className).toContain('grid-rows-[1fr]')
+    expect(gridWrapper.className).not.toContain('grid-rows-[0fr]')
+
+    // Click to collapse
+    fireEvent.click(headerButton)
+    expect(gridWrapper.className).toContain('grid-rows-[0fr]')
+    expect(gridWrapper.className).not.toContain('grid-rows-[1fr]')
+
+    // Click again to expand
+    fireEvent.click(headerButton)
+    expect(gridWrapper.className).toContain('grid-rows-[1fr]')
   })
 
   it('shows quick-add input when + button is clicked', () => {
@@ -506,5 +540,33 @@ describe('Sidebar: progressive disclosure thresholds', () => {
     }
     render(<Sidebar />)
     expect(screen.queryByText('Focus')).not.toBeInTheDocument()
+  })
+})
+
+describe('ThingCard onComplete', () => {
+  it('calls onComplete after task completion', async () => {
+    const onComplete = vi.fn()
+    const updateThing = vi.fn().mockResolvedValue(undefined)
+    const thing = makeThing({ title: 'Complete me', type_hint: 'task' })
+    mockState = {
+      things: [thing],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      updateThing,
+      ...calendarDefaults,
+    }
+
+    const { ThingCard } = await import('../components/ThingCard')
+    // The real Thing type has `importance` instead of `priority`
+    const realThing = { ...thing, importance: thing.priority } as any
+    render(<ThingCard thing={realThing} onComplete={onComplete} />)
+
+    const checkbox = screen.getByLabelText('Mark task done')
+    fireEvent.click(checkbox)
+
+    await waitFor(() => {
+      expect(onComplete).toHaveBeenCalledWith(realThing)
+    }, { timeout: 2000 })
   })
 })

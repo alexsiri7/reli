@@ -5,6 +5,7 @@ import { formatDate, isOverdue, typeIcon } from '../utils'
 
 interface Props {
   thing: Thing
+  onComplete?: (thing: Thing) => void
 }
 
 function snoozeDate(days: number): string {
@@ -14,7 +15,7 @@ function snoozeDate(days: number): string {
   return d.toISOString()
 }
 
-export function ThingCard({ thing }: Props) {
+export function ThingCard({ thing, onComplete }: Props) {
   const snoozeThing = useStore(s => s.snoozeThing)
   const updateThing = useStore(s => s.updateThing)
   const thingTypes = useStore(s => s.thingTypes)
@@ -38,6 +39,7 @@ export function ThingCard({ thing }: Props) {
     // Give animation time to play before the item disappears from the list
     await new Promise(r => setTimeout(r, 600))
     await updateThing(thing.id, { active: false })
+    onComplete?.(thing)
   }
 
   return (
