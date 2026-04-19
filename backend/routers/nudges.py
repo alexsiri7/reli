@@ -275,7 +275,8 @@ def stop_nudge_type(nudge_id: str, user_id: str = Depends(require_user)) -> dict
                             data = {}
                     if not isinstance(data, dict):
                         data = {}
-                    evidence = data.get("evidence") if isinstance(data.get("evidence"), list) else []
+                    raw_evidence = data.get("evidence")
+                    evidence = raw_evidence if isinstance(raw_evidence, list) else []
                     evidence.append(f"User stopped '{nudge_type}' nudge type ({today_str})")
                     evidence = evidence[-10:]  # cap at 10
                     new_conf = min(data.get("confidence", 0.5) + 0.1, 0.95)
