@@ -178,6 +178,18 @@ describe('ThingCard', () => {
     vi.useRealTimers()
   })
 
+  it('does not call updateThing twice when checkbox clicked twice during animation', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    render(<ThingCard thing={baseThing} />)
+    const checkbox = screen.getByRole('button', { name: 'Mark task done' })
+    fireEvent.click(checkbox)
+    // second click during animation — completing guard should block this
+    fireEvent.click(checkbox)
+    await vi.advanceTimersByTimeAsync(700)
+    expect(updateThing).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
   it('does not call onComplete when updateThing never resolves', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     // Simulate a hung request (never resolves nor rejects) — onComplete must not fire

@@ -50,7 +50,7 @@ export function ThingCard({ thing, onComplete }: Props) {
   return (
     <div
       className="px-3 py-1 transition-all duration-500"
-      style={completing ? { opacity: 0.3, transform: 'translateY(4px)' } : undefined}
+      style={completing ? { opacity: 0, transform: 'translateY(32px)', pointerEvents: 'none' } : undefined}
     >
       <div
         className="relative flex items-start gap-2 py-1.5 rounded-lg hover:bg-surface-container-high group transition-colors cursor-pointer px-2"
