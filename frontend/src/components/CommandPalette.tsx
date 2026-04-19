@@ -229,9 +229,9 @@ export function CommandPalette() {
       <div className="absolute inset-0 bg-black/40 dark:bg-black/60" aria-hidden="true" />
 
       {/* Panel */}
-      <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="relative w-full max-w-lg bg-surface-container-low rounded-xl shadow-2xl border border-white/10 overflow-hidden">
         {/* Search input */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
           <svg className="h-4 w-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
           </svg>

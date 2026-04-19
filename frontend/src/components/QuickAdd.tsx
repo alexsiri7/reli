@@ -47,9 +47,9 @@ export function QuickAdd() {
       <div className="absolute inset-0 bg-black/40 dark:bg-black/60" aria-hidden="true" />
 
       {/* Panel */}
-      <div className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="relative w-full max-w-md bg-surface-container-low rounded-xl shadow-2xl border border-white/10 overflow-hidden">
         <form onSubmit={handleSubmit}>
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <div className="px-4 py-3 border-b border-white/10">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">New Thing</p>
             <input
               ref={inputRef}
