@@ -867,17 +867,10 @@ def _make_reasoning_tools(
         return result
 
     # Wrap each tool with OTEL span instrumentation
-    traced_tools = [
-        _traced_tool(fetch_context),
-        _traced_tool(chat_history),
-        _traced_tool(create_thing),
-        _traced_tool(update_thing),
-        _traced_tool(delete_thing),
-        _traced_tool(merge_things),
-        _traced_tool(create_relationship),
-        _traced_tool(calendar_create_event),
-        _traced_tool(calendar_update_event),
-    ]
+    traced_tools = [_traced_tool(t) for t in [
+        fetch_context, chat_history, create_thing, update_thing, delete_thing,
+        merge_things, create_relationship, calendar_create_event, calendar_update_event,
+    ]]
     return traced_tools, applied, fetched_context
 
 

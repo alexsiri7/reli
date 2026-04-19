@@ -71,8 +71,8 @@ def _confidence_label(data: dict) -> str:
 
     Returns one of: "emerging" (<0.5), "moderate" (0.5–0.69), or "strong" (>=0.7).
     """
-    if "patterns" in data and isinstance(data["patterns"], list) and data["patterns"]:
-        raw = data["patterns"][0].get("confidence", 0.0)
+    if (patterns := data.get("patterns")) and isinstance(patterns, list) and patterns:
+        raw = patterns[0].get("confidence", 0.0)
         if isinstance(raw, str):
             return raw if raw in _VALID_CONFIDENCE_LABELS else "emerging"
         conf = raw if isinstance(raw, (int, float)) else 0.0
