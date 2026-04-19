@@ -1032,6 +1032,7 @@ export const useStore = create<ReliState>((set, get) => ({
               ? { ...m, content: `Too many requests — please wait ${retry_after} ${unit} before sending another message.`, streaming: false, streamingStage: null }
               : m,
           ),
+          error: null,
         }))
         return
       }

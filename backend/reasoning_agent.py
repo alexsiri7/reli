@@ -1071,7 +1071,7 @@ async def run_reasoning_agent(
     system_prompt = get_system_prompt_for_mode(mode, interaction_style)
     if is_new_user:
         from .pipeline import ONBOARDING_SYSTEM_ADDENDUM
-        system_prompt += "\n\n" + ONBOARDING_SYSTEM_ADDENDUM
+        system_prompt = system_prompt + "\n\n" + ONBOARDING_SYSTEM_ADDENDUM
     reasoning_agent = LlmAgent(
         name="reasoning_agent",
         description="Reasons about user requests and executes storage changes via tools.",
