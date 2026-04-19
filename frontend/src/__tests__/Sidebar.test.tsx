@@ -368,7 +368,27 @@ describe('Sidebar', () => {
     const input = screen.getByPlaceholderText('Add task…')
     fireEvent.change(input, { target: { value: 'New task title' } })
     fireEvent.submit(input.closest('form')!)
-    await waitFor(() => expect(createThing).toHaveBeenCalledWith('New task title', 'task'))
+    await waitFor(() => expect(createThing).toHaveBeenCalledWith('New task title', 'task', undefined, undefined))
+  })
+
+  it('passes checkin date and parent id to createThing', async () => {
+    const createThing = vi.fn().mockResolvedValue(undefined)
+    const projectThing = makeThing({ id: 'proj1', title: 'My Project', type_hint: 'project' })
+    mockState = {
+      things: [makeThing({ title: 'My Task', type_hint: 'task' }), projectThing],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+      createThing,
+    }
+    render(<Sidebar />)
+    fireEvent.click(screen.getByText('Add task'))
+    fireEvent.change(screen.getByPlaceholderText('Add task…'), { target: { value: 'New task' } })
+    fireEvent.change(screen.getByLabelText('Check-in date'), { target: { value: '2026-05-01' } })
+    fireEvent.change(screen.getByLabelText('Parent project'), { target: { value: 'proj1' } })
+    fireEvent.submit(screen.getByPlaceholderText('Add task…').closest('form')!)
+    await waitFor(() => expect(createThing).toHaveBeenCalledWith('New task', 'task', '2026-05-01', 'proj1'))
   })
 
   it('dismisses quick-add input on Escape', () => {

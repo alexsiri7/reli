@@ -207,3 +207,51 @@ describe('store: stopNudgeType', () => {
     expect(useStore.getState().nudges.find(n => n.id === 'proactive_abc123_birthday')).toBeUndefined()
   })
 })
+
+describe('store: createThing', () => {
+  it('sends title and type_hint without optional args', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => mockThing })  // POST /things
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })          // fetchThings
+    vi.stubGlobal('fetch', fetchMock)
+    await useStore.getState().createThing('My task', 'task')
+    const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body)
+    expect(body.checkin_date).toBeUndefined()
+    expect(body.type_hint).toBe('task')
+  })
+
+  it('sends checkin_date when provided', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => mockThing })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    vi.stubGlobal('fetch', fetchMock)
+    await useStore.getState().createThing('My task', 'task', '2026-05-01')
+    const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body)
+    expect(body.checkin_date).toBe('2026-05-01')
+  })
+
+  it('posts parent-of relationship when parentId provided', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...mockThing, id: 'new-id' }) })  // POST /things
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })   // POST /relationships
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })      // fetchThings
+    vi.stubGlobal('fetch', fetchMock)
+    await useStore.getState().createThing('My task', 'task', undefined, 'parent-id')
+    // Give fire-and-forget a tick
+    await new Promise(r => setTimeout(r, 0))
+    const relBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body)
+    expect(relBody.from_thing_id).toBe('parent-id')
+    expect(relBody.to_thing_id).toBe('new-id')
+    expect(relBody.relationship_type).toBe('parent-of')
+  })
+
+  it('does not post relationship when no parentId', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => mockThing })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    vi.stubGlobal('fetch', fetchMock)
+    await useStore.getState().createThing('My task', 'task')
+    await new Promise(r => setTimeout(r, 0))
+    expect(fetchMock).toHaveBeenCalledTimes(2)  // only POST + fetchThings, no relationships call
+  })
+})

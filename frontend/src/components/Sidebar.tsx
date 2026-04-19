@@ -460,6 +460,8 @@ export function Sidebar() {
   const [quickAddTitle, setQuickAddTitle] = useState('')
   const [quickAddSaving, setQuickAddSaving] = useState(false)
   const [quickAddError, setQuickAddError] = useState<string | null>(null)
+  const [quickAddCheckinDate, setQuickAddCheckinDate] = useState('')
+  const [quickAddParentId, setQuickAddParentId] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -534,15 +536,17 @@ export function Sidebar() {
     setQuickAddSaving(true)
     setQuickAddError(null)
     try {
-      await createThing(trimmed, type)
+      await createThing(trimmed, type, quickAddCheckinDate || undefined, quickAddParentId || undefined)
       setQuickAddSection(null)
       setQuickAddTitle('')
+      setQuickAddCheckinDate('')
+      setQuickAddParentId('')
     } catch (err) {
       setQuickAddError(err instanceof Error ? err.message : 'Failed to create')
     } finally {
       setQuickAddSaving(false)
     }
-  }, [quickAddTitle, createThing])
+  }, [quickAddTitle, quickAddCheckinDate, quickAddParentId, createThing])
 
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false)
   const filterDropdownRef = useRef<HTMLDivElement>(null)
@@ -1221,15 +1225,45 @@ export function Sidebar() {
                       placeholder={`Add ${singularize(group.label)}…`}
                       value={quickAddTitle}
                       onChange={e => setQuickAddTitle(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Escape') { setQuickAddSection(null); setQuickAddTitle('') } }}
+                      onKeyDown={e => { if (e.key === 'Escape') { setQuickAddSection(null); setQuickAddTitle(''); setQuickAddCheckinDate(''); setQuickAddParentId('') } }}
                       disabled={quickAddSaving}
                       className="w-full text-xs bg-surface-container-high rounded px-2 py-1.5 text-on-surface placeholder-on-surface-variant/60 outline-none border border-on-surface-variant/20 focus:border-primary"
                     />
                     {quickAddError && <p className="text-[10px] text-ideas mt-1">{quickAddError}</p>}
+                    <div className="flex gap-1 mt-1">
+                      <input
+                        type="date"
+                        aria-label="Check-in date"
+                        value={quickAddCheckinDate}
+                        onChange={e => setQuickAddCheckinDate(e.target.value)}
+                        disabled={quickAddSaving}
+                        className="flex-1 text-xs bg-surface-container-high rounded px-2 py-1.5 text-on-surface outline-none border border-on-surface-variant/20 focus:border-primary"
+                      />
+                      <select
+                        aria-label="Parent project"
+                        value={quickAddParentId}
+                        onChange={e => setQuickAddParentId(e.target.value)}
+                        disabled={quickAddSaving}
+                        className="flex-1 text-xs bg-surface-container-high rounded px-2 py-1.5 text-on-surface outline-none border border-on-surface-variant/20 focus:border-primary"
+                      >
+                        <option value="">No parent</option>
+                        {active.filter(t => t.type_hint === 'project').map(p => (
+                          <option key={p.id} value={p.id}>{p.title}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="submit"
+                        disabled={quickAddSaving}
+                        className="text-xs px-2 py-1.5 rounded bg-primary text-on-primary hover:bg-primary/80 transition-colors disabled:opacity-50"
+                        aria-label="Add"
+                      >
+                        Add
+                      </button>
+                    </div>
                   </form>
                 ) : (
                   <button
-                    onClick={() => { setQuickAddSection(group.type); setQuickAddTitle(''); setQuickAddError(null) }}
+                    onClick={() => { setQuickAddSection(group.type); setQuickAddTitle(''); setQuickAddCheckinDate(''); setQuickAddParentId(''); setQuickAddError(null) }}
                     className="mx-4 mb-1 text-[11px] text-on-surface-variant/60 hover:text-primary transition-colors flex items-center gap-0.5"
                   >
                     <span>+</span>
