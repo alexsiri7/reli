@@ -260,9 +260,7 @@ export function BriefingPanel() {
 
   const handleSnooze = (id: string) => snoozeFinding(id, getTomorrowISO())
 
-  const handleDoneThing = (id: string) => {
-    updateThing(id, { active: false })
-  }
+  const handleDoneThing = (id: string) => updateThing(id, { active: false })
 
   const handleSnoozeThing = (id: string) => snoozeThing(id, getTomorrowISO())
 

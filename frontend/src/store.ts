@@ -1538,7 +1538,7 @@ export const useStore = create<ReliState>((set, get) => ({
     const res = await apiFetch(`${BASE}/things`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, type_hint: typeHint ?? null, ...(checkinDate ? { checkin_date: checkinDate } : {}) }),
+      body: JSON.stringify({ title, type_hint: typeHint ?? null, checkin_date: checkinDate ?? null }),
     })
     if (!res.ok) throw new Error(`Failed to create thing: ${res.status}`)
     const data = validateResponse(ThingSchema, await res.json(), '/things POST')
