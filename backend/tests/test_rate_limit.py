@@ -226,3 +226,23 @@ class TestRateLimitMiddleware:
         for _ in range(10):
             res = client.post("/api/chat")
             assert res.status_code == 200
+
+    def test_warning_logged_on_rate_limit_exceeded(self, caplog):
+        """log.warning is emitted with key, path, and retry_after when rate limited."""
+        import logging
+
+        app = _make_app(api_rpm=1)
+        client = TestClient(app)
+
+        # Exhaust the bucket
+        res = client.get("/api/things")
+        assert res.status_code == 200
+
+        with caplog.at_level(logging.WARNING, logger="backend.rate_limit"):
+            res = client.get("/api/things")
+
+        assert res.status_code == 429
+        assert any(
+            "Rate limit exceeded" in r.message and "retry_after" in r.message
+            for r in caplog.records
+        )
