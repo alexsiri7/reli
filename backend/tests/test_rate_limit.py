@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -229,8 +230,6 @@ class TestRateLimitMiddleware:
 
     def test_warning_logged_on_rate_limit_exceeded(self, caplog):
         """log.warning is emitted with key, path, and retry_after when rate limited."""
-        import logging
-
         app = _make_app(api_rpm=1)
         client = TestClient(app)
 
