@@ -113,6 +113,61 @@ describe('store: sendMessage', () => {
   })
 })
 
+describe('store: sendMessage — 429 handling', () => {
+  it('replaces streaming placeholder with rate-limit message using retry_after from response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 429,
+      ok: false,
+      json: async () => ({ retry_after: 30 }),
+    }))
+
+    await useStore.getState().sendMessage('hello')
+
+    const messages = useStore.getState().messages
+    const assistantMsg = messages.find(m => m.role === 'assistant')
+    expect(assistantMsg?.content).toBe(
+      'Too many requests — please wait 30 seconds before sending another message.'
+    )
+    expect(assistantMsg?.streaming).toBe(false)
+    expect(assistantMsg?.streamingStage).toBeNull()
+    expect(useStore.getState().chatLoading).toBe(false)
+  })
+
+  it('defaults to 60 seconds when response body is not valid JSON', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 429,
+      ok: false,
+      json: async () => { throw new SyntaxError('bad json') },
+    }))
+
+    await useStore.getState().sendMessage('hello')
+
+    const assistantMsg = useStore.getState().messages.find(m => m.role === 'assistant')
+    expect(assistantMsg?.content).toBe(
+      'Too many requests — please wait 60 seconds before sending another message.'
+    )
+    expect(assistantMsg?.streaming).toBe(false)
+    expect(useStore.getState().chatLoading).toBe(false)
+  })
+
+  it('uses singular "second" when retry_after is 1', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 429,
+      ok: false,
+      json: async () => ({ retry_after: 1 }),
+    }))
+
+    await useStore.getState().sendMessage('hello')
+
+    const assistantMsg = useStore.getState().messages.find(m => m.role === 'assistant')
+    expect(assistantMsg?.content).toBe(
+      'Too many requests — please wait 1 second before sending another message.'
+    )
+    expect(assistantMsg?.streaming).toBe(false)
+    expect(useStore.getState().chatLoading).toBe(false)
+  })
+})
+
 describe('store: clearError', () => {
   it('clears error state', () => {
     useStore.setState({ error: 'some error' })
