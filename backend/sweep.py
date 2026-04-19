@@ -506,6 +506,39 @@ def find_open_questions(session: Session, user_id: str = "") -> list[SweepCandid
     return candidates
 
 
+def prune_stale_open_questions(
+    session: Session,
+    today: date | None = None,
+    stale_days: int = 14,
+    user_id: str = "",
+) -> int:
+    """Clear open_questions from Things that haven't been updated in *stale_days*.
+
+    A question unanswered for 14+ days was likely never actionable enough to
+    address. Clearing it keeps the question list fresh and high-signal.
+    Returns the count of Things pruned.
+    """
+    today = today or date.today()
+    cutoff = (today - timedelta(days=stale_days)).isoformat()
+
+    stmt = (
+        select(ThingRecord)
+        .where(
+            ThingRecord.active == True,  # noqa: E712
+            ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
+            cast(ThingRecord.open_questions, String).notin_(["[]", "null"]),
+            ThingRecord.updated_at < cutoff,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+    )
+    things = session.exec(stmt).all()
+    pruned = 0
+    for thing in things:
+        thing.open_questions = []  # type: ignore[assignment]
+        pruned += 1
+    return pruned
+
+
 # ---------------------------------------------------------------------------
 # Broad-thing detection — projects/events/goals with no subtasks
 # ---------------------------------------------------------------------------
@@ -1365,6 +1398,11 @@ def collect_candidates(
         if gap_candidates:
             _generate_template_gap_questions(session, gap_candidates)
             session.commit()
+
+        pruned = prune_stale_open_questions(session, today, user_id=user_id)
+        if pruned:
+            session.commit()
+            logger.info("prune_stale_open_questions: cleared questions on %d Things", pruned)
 
         candidates = (
             find_approaching_dates(session, today, window_days, user_id=user_id)

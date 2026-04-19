@@ -44,12 +44,17 @@ Rules:
 - "delete" items: list of UUIDs to hard-delete
 - "merge" items: unify duplicate Things (see Merging below)
 - "relationships": create typed links between Things (see below)
-- "open_questions": when creating or updating a Thing, proactively generate 1-3
-  open questions that would help deepen understanding of that Thing. These are
-  knowledge gaps — things the user hasn't told us yet that would make the Thing
-  more actionable or complete. Examples: "What's the deadline for this?",
-  "Who else is involved?", "What does success look like?", "What's the budget?",
-  "Are there any blockers?". Tailor questions to the Thing's type and context.
+- "open_questions": generate 0-2 open questions **only if** answering them would
+  unblock a specific next action Reli could take. Each question must be tied to a
+  concrete step that cannot proceed without the answer.
+  Do NOT generate curiosity questions, broad exploratory questions, or questions
+  about history, motivation, or naming.
+  If the Thing is already actionable as-is, generate zero questions.
+  Bad: "How did you settle on the name?" (no action unlocked)
+  Bad: "Do you have goals for this?" (too vague)
+  Good: "What's the deadline?" (unlocks scheduling)
+  Good: "Hotel or Airbnb?" (unlocks booking search)
+  Good: "What instrument does Euge play?" (needed for tech rider)
   Don't ask questions whose answers are already in the Thing's data or title.
   For completed/deleted items, omit open_questions.
 - NEVER create a Thing that already exists in the "Relevant Things" list. If a

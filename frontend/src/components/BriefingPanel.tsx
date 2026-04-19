@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import type { SweepFinding, BriefingItem, LearnedPreference, CalendarEvent } from '../store'
@@ -223,11 +223,11 @@ export function LearnedPreferenceCard({
   const [feedbackSent, setFeedbackSent] = useState<boolean | null>(null)
   const dotColor = CONFIDENCE_COLORS[pref.confidence_label] ?? 'bg-primary'
 
-  const handleFeedback = useCallback((accurate: boolean) => {
+  const handleFeedback = (accurate: boolean) => {
     if (feedbackSent !== null) return
     setFeedbackSent(accurate)
     onFeedback(pref.id, accurate)
-  }, [feedbackSent, onFeedback, pref.id])
+  }
 
   return (
     <div className="group rounded-xl bg-surface-container-low hover:bg-surface-container-high/60 transition-colors overflow-hidden">
