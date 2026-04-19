@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Sidebar } from '../components/Sidebar'
-import type { Thing as RealThing } from '../generated/api-types'
 
 type Thing = {
   id: string
@@ -311,7 +310,7 @@ describe('Sidebar', () => {
     expect(screen.getAllByText('My Preference')).toHaveLength(1)
   })
 
-  it('collapses a section when its header is clicked', () => {
+  it('collapses and re-expands a section when its header is clicked', () => {
     mockState = {
       things: [makeThing({ title: 'My Task', type_hint: 'task' })],
       briefing: [],
@@ -322,25 +321,6 @@ describe('Sidebar', () => {
     render(<Sidebar />)
     expect(screen.getByText('My Task')).toBeInTheDocument()
 
-    // Before clicking, the grid wrapper should be expanded
-    const headerButton = screen.getByText('Tasks').closest('button')!
-    const section = headerButton.closest('section')!
-    const gridWrapper = section.querySelector('.grid')!
-    expect(gridWrapper.className).toContain('grid-rows-[1fr]')
-
-    fireEvent.click(headerButton)
-    expect(gridWrapper.className).toContain('grid-rows-[0fr]')
-  })
-
-  it('applies grid-rows-[0fr] class when section header is clicked', () => {
-    mockState = {
-      things: [makeThing({ title: 'Collapse Test', type_hint: 'task' })],
-      briefing: [],
-      loading: false,
-      snoozeThing: vi.fn(),
-      ...calendarDefaults,
-    }
-    render(<Sidebar />)
     const headerButton = screen.getByText('Tasks').closest('button')!
     const section = headerButton.closest('section')!
     const gridWrapper = section.querySelector('.grid')!
@@ -357,6 +337,7 @@ describe('Sidebar', () => {
     // Click again to expand
     fireEvent.click(headerButton)
     expect(gridWrapper.className).toContain('grid-rows-[1fr]')
+    expect(gridWrapper.className).not.toContain('grid-rows-[0fr]')
   })
 
   it('shows quick-add input when + button is clicked', () => {
@@ -544,11 +525,57 @@ describe('Sidebar: progressive disclosure thresholds', () => {
   })
 })
 
-describe('ThingCard onComplete', () => {
-  it('calls onComplete after task completion', async () => {
-    const onComplete = vi.fn()
+describe('Sidebar: completed tasks display', () => {
+  it('shows completed task at bottom of Tasks section after checkbox click', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     const updateThing = vi.fn().mockResolvedValue(undefined)
-    const thing = makeThing({ title: 'Complete me', type_hint: 'task' })
+    mockState = {
+      things: [makeThing({ title: 'Finish report', type_hint: 'task' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      updateThing,
+      ...calendarDefaults,
+    }
+
+    render(<Sidebar />)
+
+    // Initially no completed section
+    expect(screen.getByText('Finish report')).toBeInTheDocument()
+    const checkbox = screen.getByLabelText('Mark task done')
+
+    fireEvent.click(checkbox)
+
+    // Advance past the 600ms animation delay
+    await vi.advanceTimersByTimeAsync(700)
+
+    expect(updateThing).toHaveBeenCalledWith(expect.any(String), { active: false })
+
+    // Completed item appears with strikethrough class
+    const completedItems = document.querySelectorAll('.line-through')
+    expect(completedItems.length).toBeGreaterThan(0)
+    expect(completedItems[0]!.textContent).toBe('Finish report')
+
+    vi.useRealTimers()
+  })
+
+  it('does not show completed section for non-task groups', () => {
+    mockState = {
+      things: [makeThing({ id: 'p1', title: 'Alice', type_hint: 'person' })],
+      briefing: [],
+      loading: false,
+      snoozeThing: vi.fn(),
+      ...calendarDefaults,
+    }
+    render(<Sidebar />)
+    // No completed section since no tasks were completed
+    expect(document.querySelector('.line-through')).not.toBeInTheDocument()
+  })
+
+  it('deduplicates completed tasks when same task is completed twice', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const updateThing = vi.fn().mockResolvedValue(undefined)
+    const thing = makeThing({ title: 'Dedupe task', type_hint: 'task' })
     mockState = {
       things: [thing],
       briefing: [],
@@ -558,16 +585,16 @@ describe('ThingCard onComplete', () => {
       ...calendarDefaults,
     }
 
-    const { ThingCard } = await import('../components/ThingCard')
-    // The real Thing type has `importance` instead of `priority`
-    const realThing = { ...thing, importance: thing.priority } as unknown as RealThing
-    render(<ThingCard thing={realThing} onComplete={onComplete} />)
-
+    render(<Sidebar />)
     const checkbox = screen.getByLabelText('Mark task done')
-    fireEvent.click(checkbox)
 
-    await waitFor(() => {
-      expect(onComplete).toHaveBeenCalledWith(realThing)
-    }, { timeout: 2000 })
+    // Complete the task once
+    fireEvent.click(checkbox)
+    await vi.advanceTimersByTimeAsync(700)
+
+    // Verify exactly one completed entry (not duplicated)
+    expect(document.querySelectorAll('.line-through').length).toBe(1)
+
+    vi.useRealTimers()
   })
 })

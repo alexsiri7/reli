@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { Thing } from '../store'
 import { useStore } from '../store'
 import { formatDate, isOverdue, typeIcon } from '../utils'
@@ -22,6 +22,8 @@ export function ThingCard({ thing, onComplete }: Props) {
   const openThingDetail = useStore(s => s.openThingDetail)
   const [showSnooze, setShowSnooze] = useState(false)
   const [completing, setCompleting] = useState(false)
+  const isMounted = useRef(true)
+  useEffect(() => () => { isMounted.current = false }, [])
 
   const overdue = isOverdue(thing.checkin_date)
   const dateLabel = formatDate(thing.checkin_date)
@@ -39,7 +41,10 @@ export function ThingCard({ thing, onComplete }: Props) {
     // Give animation time to play before the item disappears from the list
     await new Promise(r => setTimeout(r, 600))
     await updateThing(thing.id, { active: false })
-    onComplete?.(thing)
+    // onComplete reflects optimistic UI state — mirrors how updateThing handles
+    // offline/error cases (swallows errors, sets global error state). The
+    // in-memory completedTasks list auto-corrects on reload.
+    if (isMounted.current) onComplete?.(thing)
   }
 
   return (

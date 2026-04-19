@@ -150,4 +150,47 @@ describe('ThingCard', () => {
     fireEvent.click(checkbox)
     expect(openThingDetail).not.toHaveBeenCalled()
   })
+
+  it('calls onComplete after task completion', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const onComplete = vi.fn()
+    render(<ThingCard thing={baseThing} onComplete={onComplete} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark task done' }))
+    await vi.advanceTimersByTimeAsync(700)
+
+    expect(updateThing).toHaveBeenCalledWith('t1', { active: false })
+    expect(onComplete).toHaveBeenCalledWith(baseThing)
+    vi.useRealTimers()
+  })
+
+  it('calls updateThing before onComplete', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const callOrder: string[] = []
+    updateThing.mockImplementation(async () => { callOrder.push('updateThing') })
+    const onComplete = vi.fn().mockImplementation(() => { callOrder.push('onComplete') })
+
+    render(<ThingCard thing={baseThing} onComplete={onComplete} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mark task done' }))
+    await vi.advanceTimersByTimeAsync(700)
+
+    expect(callOrder).toEqual(['updateThing', 'onComplete'])
+    vi.useRealTimers()
+  })
+
+  it('does not call onComplete when updateThing never resolves', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    // Simulate a hung request (never resolves nor rejects) — onComplete must not fire
+    updateThing.mockReturnValue(new Promise(() => { /* never resolves */ }))
+    const onComplete = vi.fn()
+
+    render(<ThingCard thing={baseThing} onComplete={onComplete} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Mark task done' }))
+    await vi.advanceTimersByTimeAsync(700)
+
+    // updateThing was called but is still pending — onComplete must not have fired yet
+    expect(updateThing).toHaveBeenCalled()
+    expect(onComplete).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
 })
