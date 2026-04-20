@@ -758,7 +758,7 @@ def get_user_profile(
     """
     with Session(_engine_mod.engine) as session:
         stmt = select(ThingRecord).where(
-            ThingRecord.surface == False,
+            ThingRecord.surface == False,  # noqa: E712
             ThingRecord.type_hint == "person",
             user_filter_clause(ThingRecord.user_id, user_id),
         )
