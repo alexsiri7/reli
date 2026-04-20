@@ -339,6 +339,21 @@ def get_open_questions(limit: int = 50) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+def get_user_profile() -> dict[str, Any]:
+    """Get the current user's profile Thing with all resolved relationships.
+
+    Returns the user's anchor Thing (type_hint=person, surface=false) with its
+    full field set plus a 'relationships' list. Each relationship includes:
+    - id, relationship_type, direction ('incoming' or 'outgoing')
+    - related_thing_id, related_thing_title
+
+    Call this once at session start to load who the user is. Returns an error
+    dict if no profile Thing exists.
+    """
+    return shared_tools.get_user_profile(user_id=_user_id())
+
+
+@mcp.tool()
 def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
     """Detect blockers, schedule overlaps, and deadline conflicts among Things.
 
