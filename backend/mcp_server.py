@@ -144,7 +144,9 @@ def create_thing(
 
     Args:
         title: Short descriptive title (required).
-        type_hint: System type ('task', 'note', 'project', 'person', 'idea', 'goal', 'journal', 'event', 'place', 'concept', 'reference', 'preference') or a custom lowercase singular noun (e.g. 'trip', 'recipe', 'rehearsal'). Custom types default to surface=true.
+        type_hint: System type ('task', 'note', 'project', 'person', 'idea', 'goal', 'journal', 'event',
+            'place', 'concept', 'reference', 'preference') or a custom lowercase singular noun
+            (e.g. 'trip', 'recipe', 'rehearsal'). Custom types default to surface=true.
         data: Arbitrary JSON data (e.g. {"email": "...", "birthday": "..."}).
         importance: How bad if undone: 0 (critical) to 4 (backlog), default 2.
         checkin_date: ISO 8601 date when this Thing should surface in the briefing.
@@ -336,6 +338,21 @@ def get_open_questions(limit: int = 50) -> list[dict[str, Any]]:
         limit: Maximum number of Things to return (1-200, default 50).
     """
     return shared_tools.get_open_questions(limit=min(max(limit, 1), 200), user_id=_user_id())
+
+
+@mcp.tool()
+def get_user_profile() -> dict[str, Any]:
+    """Get the current user's profile Thing with all resolved relationships.
+
+    Returns the user's anchor Thing (type_hint=person, surface=false) with its
+    full field set plus a 'relationships' list. Each relationship includes:
+    - id, relationship_type, direction ('incoming' or 'outgoing')
+    - related_thing_id, related_thing_title
+
+    Call this once at session start to load who the user is. Returns an error
+    dict if no profile Thing exists.
+    """
+    return shared_tools.get_user_profile(user_id=_user_id())
 
 
 @mcp.tool()

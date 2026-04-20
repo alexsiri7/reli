@@ -22,6 +22,7 @@ from backend.mcp_server import (
     get_conflicts,
     get_open_questions,
     get_thing,
+    get_user_profile,
     list_relationships,
     mcp,
     merge_things,
@@ -353,6 +354,7 @@ class TestMcpMetadata:
             "get_briefing",
             "get_open_questions",
             "get_conflicts",
+            "get_user_profile",
             "chat_history",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
@@ -603,6 +605,41 @@ class TestGetConflicts:
         assert len(result) == 2
         assert result[0]["severity"] == "critical"
         assert result[1]["alert_type"] == "schedule_overlap"
+
+
+# ---------------------------------------------------------------------------
+# get_user_profile
+# ---------------------------------------------------------------------------
+
+
+class TestGetUserProfile:
+    @patch("backend.mcp_server.shared_tools.get_user_profile")
+    def test_returns_profile(self, mock_get: MagicMock) -> None:
+        profile = {
+            "thing": {"id": "u1", "title": "Alice", "type_hint": "person"},
+            "relationships": [
+                {
+                    "id": "r1",
+                    "relationship_type": "works_with",
+                    "direction": "outgoing",
+                    "related_thing_id": "t2",
+                    "related_thing_title": "Bob",
+                }
+            ],
+        }
+        mock_get.return_value = profile
+        result = get_user_profile()
+        mock_get.assert_called_once_with(user_id="")
+        assert result["thing"]["id"] == "u1"
+        assert result["relationships"][0]["direction"] == "outgoing"
+
+    @patch("backend.mcp_server.shared_tools.get_user_profile")
+    def test_no_profile_returns_error(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = {"error": "User profile Thing not found"}
+        result = get_user_profile()
+        mock_get.assert_called_once_with(user_id="")
+        assert "error" in result
+        assert result["error"] == "User profile Thing not found"
 
 
 # MCP Prompt Resources (Phase 2)

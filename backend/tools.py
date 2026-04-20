@@ -744,6 +744,63 @@ def list_relationships(
 
 
 # ---------------------------------------------------------------------------
+# get_user_profile
+# ---------------------------------------------------------------------------
+
+
+def get_user_profile(
+    user_id: str = "",
+) -> dict[str, Any]:
+    """Get the user's anchor Thing (type_hint=person, surface=false) with resolved relationships.
+
+    Returns dict with 'thing' and 'relationships'. Each relationship includes:
+    - id, relationship_type, direction ('incoming' or 'outgoing')
+    - related_thing_id, related_thing_title
+
+    Returns an error dict if no profile Thing exists.
+    """
+    with Session(_engine_mod.engine) as session:
+        stmt = select(ThingRecord).where(
+            ThingRecord.surface == False,  # noqa: E712
+            ThingRecord.type_hint == "person",
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+        record = session.exec(stmt).first()
+        if not record:
+            return {"error": "User profile Thing not found"}
+
+        thing = _thing_to_dict(record)
+        thing_id = record.id
+
+        rel_rows = session.execute(
+            text(
+                "SELECT r.id, r.relationship_type, "
+                "  CASE WHEN r.from_thing_id = :tid THEN t_to.title ELSE t_from.title END AS related_title, "
+                "  CASE WHEN r.from_thing_id = :tid THEN t_to.id ELSE t_from.id END AS related_id, "
+                "  CASE WHEN r.from_thing_id = :tid THEN 'outgoing' ELSE 'incoming' END AS direction "
+                " FROM thing_relationships r "
+                " LEFT JOIN things t_from ON r.from_thing_id = t_from.id "
+                " LEFT JOIN things t_to ON r.to_thing_id = t_to.id "
+                " WHERE r.from_thing_id = :tid OR r.to_thing_id = :tid"
+            ),
+            {"tid": thing_id},
+        ).fetchall()
+
+        relationships = [
+            {
+                "id": r.id,
+                "relationship_type": r.relationship_type,
+                "direction": r.direction,
+                "related_thing_id": r.related_id or "",
+                "related_thing_title": r.related_title or "Unknown",
+            }
+            for r in rel_rows
+        ]
+
+    return {"thing": thing, "relationships": relationships}
+
+
+# ---------------------------------------------------------------------------
 # delete_relationship
 # ---------------------------------------------------------------------------
 
