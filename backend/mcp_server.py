@@ -143,7 +143,7 @@ def create_thing(
 
     Args:
         title: Short descriptive title (required).
-        type_hint: Category like 'task', 'note', 'project', 'person', 'idea', 'goal', 'event', 'place', 'concept'.
+        type_hint: System type ('task', 'note', 'project', 'person', 'idea', 'goal', 'journal', 'event', 'place', 'concept', 'reference', 'preference') or a custom lowercase singular noun (e.g. 'trip', 'recipe', 'rehearsal'). Custom types default to surface=true.
         data: Arbitrary JSON data (e.g. {"email": "...", "birthday": "..."}).
         importance: How bad if undone: 0 (critical) to 4 (backlog), default 2.
         checkin_date: ISO 8601 date when this Thing should surface in the briefing.
@@ -455,7 +455,11 @@ def thing_schema_reference() -> str:
 | created_at     | ISO 8601        | auto    | Creation timestamp                             |
 | updated_at     | ISO 8601        | auto    | Last-modified timestamp                        |
 
-## Type Hints
+## type_hint
+
+`type_hint` is open-ended — use any lowercase singular noun that fits.
+
+### System types (preferred when they fit)
 
 | type_hint   | Meaning                                            | surface default |
 |-------------|---------------------------------------------------|-----------------|
@@ -465,15 +469,16 @@ def thing_schema_reference() -> str:
 | project     | Container for related tasks and notes              | true            |
 | goal        | High-level objective (parent of tasks)             | true            |
 | journal     | Reflective or diary-style entry                    | true            |
-| preference  | Learned user preference pattern (see below)        | false           |
+| preference  | Learned user preference pattern                    | false           |
 | person      | A person the user interacts with                   | false           |
 | place       | A physical or virtual location                     | false           |
 | event       | A specific occurrence or meeting                   | false           |
 | concept     | An abstract idea or recurring topic                | false           |
 | reference   | An external resource (URL, book, document, etc.)   | false           |
 
-Entity types (person, place, event, concept, reference, preference) default to \
-`surface=false` — they exist in the knowledge graph but don't clutter default views.
+### Custom types
+Use a custom type when no system type fits: "trip", "recipe", "rehearsal", "habit", "gig", etc.
+Custom types default to `surface=true`.
 
 ## Relationship Types
 

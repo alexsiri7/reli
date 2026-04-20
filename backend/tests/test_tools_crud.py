@@ -9,10 +9,21 @@ class TestCreateThing:
         assert "id" in result
         assert result["title"] == "My Task"
         assert result["active"] is True
+        assert result["surface"] is True  # no type_hint → defaults to surface=true
 
-    def test_entity_type_defaults_surface_false(self, patched_db):
+    def test_nonsurface_type_defaults_surface_false(self, patched_db):
         result = create_thing(title="John Doe", type_hint="person")
         assert result["surface"] is False
+
+    def test_custom_type_defaults_surface_true(self, patched_db):
+        result = create_thing(title="Trip to Japan", type_hint="trip")
+        assert result["surface"] is True
+        assert result["type_hint"] == "trip"
+
+    def test_custom_type_surface_false_when_explicit(self, patched_db):
+        result = create_thing(title="My Recipe", type_hint="recipe", surface=False)
+        assert result["surface"] is False
+        assert result["type_hint"] == "recipe"
 
     def test_with_open_questions(self, patched_db):
         result = create_thing(

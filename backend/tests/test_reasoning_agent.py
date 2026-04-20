@@ -232,8 +232,8 @@ class TestPreferencePromptInstructions:
         assert "Preference Detection:" in REASONING_AGENT_TOOL_SYSTEM
 
     def test_preference_in_entity_types_set(self):
-        from backend.tools import _ENTITY_TYPES
-        assert "preference" in _ENTITY_TYPES
+        from backend.tools import _NONSURFACE_TYPES
+        assert "preference" in _NONSURFACE_TYPES
 
     def test_preference_confidence_levels_documented(self):
         from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM

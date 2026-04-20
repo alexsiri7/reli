@@ -25,8 +25,8 @@ from .vector_store import upsert_thing
 
 logger = logging.getLogger(__name__)
 
-# Entity type_hints that default to surface=false
-_ENTITY_TYPES = {"person", "place", "event", "concept", "reference", "preference"}
+# type_hints that default to surface=false. Advisory only — any type_hint string is valid.
+_NONSURFACE_TYPES = {"person", "place", "event", "concept", "reference", "preference"}
 
 
 def _thing_to_dict(record: ThingRecord) -> dict[str, Any]:
@@ -277,7 +277,8 @@ def create_thing(
         # Create new Thing
         thing_id = str(uuid.uuid4())
         effective_surface = surface
-        if type_hint in _ENTITY_TYPES:
+        # Custom types (not in _NONSURFACE_TYPES) default to surface=true
+        if type_hint in _NONSURFACE_TYPES:
             effective_surface = False
         oq = open_questions if open_questions else None
 

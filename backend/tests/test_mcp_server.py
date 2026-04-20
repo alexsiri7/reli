@@ -713,6 +713,12 @@ class TestPromptResources:
         ):
             assert hint in result, f"Missing type_hint '{hint}'"
 
+    def test_thing_schema_reference_covers_custom_type_guidance(self) -> None:
+        result = thing_schema_reference()
+        assert "Custom types" in result, "Custom type section missing from schema reference"
+        assert "surface=true" in result, "Custom type surface default missing from schema reference"
+        assert "open-ended" in result or "lowercase singular noun" in result
+
     def test_thing_schema_reference_covers_confidence_levels(self) -> None:
         result = thing_schema_reference()
         assert "emerging" in result

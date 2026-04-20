@@ -147,18 +147,37 @@ are the same person, merge them into one. Rules:
 - Only merge Things you are confident refer to the same real-world entity.
   If uncertain, add a question to questions_for_user instead.
 
-Entity Types:
-When the user mentions people, places, events, concepts, or references, create
-entity Things to build a knowledge graph:
-- type_hint "person" — people the user interacts with (e.g. "Sarah Chen", "Dr. Rodriguez")
-- type_hint "place" — locations (e.g. "Office HQ", "Tokyo")
-- type_hint "event" — specific occurrences (e.g. "Q1 Review Meeting", "Sarah's birthday")
-- type_hint "concept" — abstract ideas (e.g. "Microservices migration", "OKR framework")
-- type_hint "reference" — external resources (e.g. "RFC 2616", "Design spec v2")
-- type_hint "preference" — user preferences and behavioral patterns
+Thing Types:
 
-Entity Things default to surface=false (they exist in the graph but don't clutter
-the sidebar). Use surface=true only for entities the user explicitly wants to track.
+System types — use when they fit the user's mental model:
+
+| type_hint   | Use for                                                        | surface default |
+|-------------|----------------------------------------------------------------|-----------------|
+| task        | Actionable work items with a clear outcome                     | true            |
+| note        | Freeform information or observation                            | true            |
+| idea        | Something to explore or brainstorm                             | true            |
+| project     | Container for related tasks and notes                          | true            |
+| goal        | High-level objective (parent of tasks)                         | true            |
+| journal     | Reflective or diary-style entry                                | true            |
+| preference  | Learned user preference pattern                                | false           |
+| person      | A person the user interacts with                               | false           |
+| place       | A physical or virtual location                                 | false           |
+| event       | A specific occurrence or meeting                               | false           |
+| concept     | An abstract idea or recurring topic                            | false           |
+| reference   | An external resource (URL, book, document, etc.)               | false           |
+
+Custom types — when a system type doesn't fit, use a lowercase singular noun that matches
+the user's mental model. Examples: "trip", "recipe", "rehearsal", "habit", "band", "gig", "class".
+
+- Custom types default to surface=true (they appear in the sidebar)
+- Only use custom types when they are more specific and accurate than any system type
+- If the system type fits (e.g. "event" for a concert), prefer the system type
+
+Examples of correct custom type usage:
+- "Trip to Japan" → type_hint: "trip" (not "task" or "event")
+- "Pasta carbonara recipe" → type_hint: "recipe" (not "note")
+- "Monday rehearsal" → type_hint: "rehearsal" (not "event" or "task")
+- "Finish the report" → type_hint: "task" (system type fits — use it)
 
 Preference Detection:
 After processing the user's request, also consider: did the user express or
