@@ -12,6 +12,7 @@ from backend.tools import (
     merge_things,
     create_relationship,
     delete_relationship,
+    get_user_profile,
 )
 
 
@@ -103,3 +104,22 @@ class TestCreateRelationshipIsolation:
         t2 = _make_thing(title="Thing 2")
         result = create_relationship(t1["id"], t2["id"], "related", user_id=USER_B)
         assert result == {"error": "Unauthorized"}
+
+
+class TestGetUserProfileIsolation:
+    def test_user_sees_own_profile(self, patched_db):
+        create_thing(title="Alice", type_hint="person", user_id=USER_A)
+        result = get_user_profile(user_id=USER_A)
+        assert "error" not in result
+        assert result["thing"]["title"] == "Alice"
+
+    def test_user_cannot_see_other_profile(self, patched_db):
+        create_thing(title="Alice", type_hint="person", user_id=USER_A)
+        result = get_user_profile(user_id=USER_B)
+        assert result == {"error": "User profile Thing not found"}
+
+    def test_no_user_id_returns_first_person(self, patched_db):
+        """Empty user_id bypasses filter (system/admin access)."""
+        create_thing(title="Alice", type_hint="person", user_id=USER_A)
+        result = get_user_profile(user_id="")
+        assert "error" not in result

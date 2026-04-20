@@ -637,6 +637,7 @@ class TestGetUserProfile:
     def test_no_profile_returns_error(self, mock_get: MagicMock) -> None:
         mock_get.return_value = {"error": "User profile Thing not found"}
         result = get_user_profile()
+        mock_get.assert_called_once_with(user_id="")
         assert "error" in result
         assert result["error"] == "User profile Thing not found"
 

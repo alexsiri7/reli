@@ -753,8 +753,11 @@ def get_user_profile(
 ) -> dict[str, Any]:
     """Get the user's anchor Thing (type_hint=person, surface=false) with resolved relationships.
 
-    Returns dict with 'thing' and 'relationships' (each with direction, related_thing_id,
-    related_thing_title), or an error dict if no profile Thing exists.
+    Returns dict with 'thing' and 'relationships'. Each relationship includes:
+    - id, relationship_type, direction ('incoming' or 'outgoing')
+    - related_thing_id, related_thing_title
+
+    Returns an error dict if no profile Thing exists.
     """
     with Session(_engine_mod.engine) as session:
         stmt = select(ThingRecord).where(
@@ -771,7 +774,7 @@ def get_user_profile(
 
         rel_rows = session.execute(
             text(
-                "SELECT r.id, r.relationship_type, r.from_thing_id, r.to_thing_id, "
+                "SELECT r.id, r.relationship_type, "
                 "  CASE WHEN r.from_thing_id = :tid THEN t_to.title ELSE t_from.title END AS related_title, "
                 "  CASE WHEN r.from_thing_id = :tid THEN t_to.id ELSE t_from.id END AS related_id, "
                 "  CASE WHEN r.from_thing_id = :tid THEN 'outgoing' ELSE 'incoming' END AS direction "

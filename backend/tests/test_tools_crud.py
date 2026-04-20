@@ -1,6 +1,6 @@
 """Tests for tools.create_thing(), update_thing(), delete_thing() basic coverage."""
 
-from backend.tools import create_thing, update_thing, delete_thing, get_thing
+from backend.tools import create_thing, update_thing, delete_thing, get_thing, create_relationship, get_user_profile
 
 
 class TestCreateThing:
@@ -56,3 +56,47 @@ class TestDeleteThing:
         # Verify it's gone
         fetched = get_thing(thing["id"])
         assert "error" in fetched
+
+
+class TestGetUserProfile:
+    def test_no_profile_returns_error(self, patched_db):
+        result = get_user_profile()
+        assert result == {"error": "User profile Thing not found"}
+
+    def test_empty_relationships(self, patched_db):
+        create_thing(title="Alice", type_hint="person")
+        result = get_user_profile()
+        assert "error" not in result
+        assert result["relationships"] == []
+
+    def test_returns_profile_with_outgoing_relationship(self, patched_db):
+        profile = create_thing(title="Alice", type_hint="person")
+        other = create_thing(title="Bob")
+        create_relationship(
+            from_thing_id=profile["id"],
+            to_thing_id=other["id"],
+            relationship_type="works_with",
+        )
+        result = get_user_profile()
+        assert "error" not in result
+        assert result["thing"]["id"] == profile["id"]
+        assert result["thing"]["title"] == "Alice"
+        rels = result["relationships"]
+        assert len(rels) == 1
+        assert rels[0]["direction"] == "outgoing"
+        assert rels[0]["related_thing_title"] == "Bob"
+        assert rels[0]["relationship_type"] == "works_with"
+
+    def test_incoming_direction(self, patched_db):
+        profile = create_thing(title="Alice", type_hint="person")
+        sender = create_thing(title="Carol")
+        create_relationship(
+            from_thing_id=sender["id"],
+            to_thing_id=profile["id"],
+            relationship_type="reports_to",
+        )
+        result = get_user_profile()
+        rels = result["relationships"]
+        assert len(rels) == 1
+        assert rels[0]["direction"] == "incoming"
+        assert rels[0]["related_thing_title"] == "Carol"
