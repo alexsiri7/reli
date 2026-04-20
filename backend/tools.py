@@ -1064,7 +1064,18 @@ def create_scheduled_task(
 ) -> dict[str, Any]:
     """Create a scheduled task for autonomous future execution.
 
-    Returns the created task dict including its generated 'id'.
+    Args:
+        scheduled_at: ISO-8601 datetime string (required, must be non-empty).
+            Timezone-aware strings are converted to UTC; naive strings are
+            treated as UTC.
+        task_type: One of "remind", "check", "sweep_concern", "custom".
+        thing_id: UUID of a related Thing, or empty string / omit for none.
+        payload_json: JSON-encoded dict with task data (e.g. '{"message": "..."}').
+        user_id: Owner user ID, or empty string for legacy/no-user context.
+
+    Returns:
+        The created task dict (includes generated 'id') on success, or
+        {"error": "<message>"} if validation fails.
     """
     if not scheduled_at or not scheduled_at.strip():
         return {"error": "scheduled_at is required"}
@@ -1073,6 +1084,12 @@ def create_scheduled_task(
         parsed_at = datetime.fromisoformat(scheduled_at.strip())
     except (ValueError, TypeError) as exc:
         return {"error": f"scheduled_at is not valid ISO-8601: {exc}"}
+
+    # Normalize: if tz-aware, convert to UTC naive; if naive, treat as UTC.
+    # SQLite stores datetimes as strings — always keep them UTC-naive so that
+    # comparisons against datetime.now(timezone.utc) are correct.
+    if parsed_at.tzinfo is not None:
+        parsed_at = parsed_at.astimezone(timezone.utc).replace(tzinfo=None)
 
     try:
         payload = json.loads(payload_json) if payload_json else {}

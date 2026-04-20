@@ -1079,15 +1079,20 @@ async def run_reasoning_agent(
                     applied = apply_storage_changes(storage_changes, raw_conn, user_id=user_id)  # type: ignore[arg-type]
                     sa_conn.commit()
 
-                # Process scheduled_tasks from Ollama JSON output
+                # Process scheduled_tasks from Ollama JSON output and collect
+                # results so callers can see what was created (mirrors ADK path).
+                scheduled_results = []
                 for st in result.get("scheduled_tasks", []):
-                    shared_tools.create_scheduled_task(
+                    st_result = shared_tools.create_scheduled_task(
                         scheduled_at=st.get("scheduled_at", ""),
                         task_type=st.get("task_type", "remind"),
                         thing_id=st.get("thing_id") or "",
                         payload_json=json.dumps(st.get("payload") or {}),
                         user_id=user_id,
                     )
+                    if "error" not in st_result:
+                        scheduled_results.append(st_result)
+                applied.setdefault("scheduled_tasks", scheduled_results)
 
                 return _build_result(result, applied)
         except Exception as exc:

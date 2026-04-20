@@ -395,6 +395,7 @@ async def _process_scheduled_tasks() -> None:
         if not due_tasks:
             continue
 
+        # "legacy" = pre-multi-tenant rows where user_id IS NULL
         user_label = user_id[:8] if user_id else "legacy"
         logger.info("Processing %d due scheduled task(s) for user %s", len(due_tasks), user_label)
 
@@ -418,7 +419,10 @@ async def _process_scheduled_tasks() -> None:
                     )
                     session.add(finding)
                 else:
-                    # For other types, create a generic finding
+                    # MVP stub: "check", "sweep_concern", and "custom" types are not yet
+                    # fully executed here — they produce a generic finding so the user
+                    # sees something in their briefing.  Full execution for "check"
+                    # (web search) and "sweep_concern" is deferred to a follow-up.
                     finding = SweepFindingRecord(
                         id=str(uuid.uuid4()),
                         thing_id=task_record.thing_id,

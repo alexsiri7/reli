@@ -1,7 +1,7 @@
 """add scheduled_tasks table
 
 Revision ID: f0a1b2c3d4e5
-Revises: e5348d5dff40
+Revises: d4e5f6a7b8c9
 Create Date: 2026-04-20 12:00:00.000000
 
 """
@@ -14,7 +14,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision: str = 'f0a1b2c3d4e5'
-down_revision: Union[str, Sequence[str], None] = 'e5348d5dff40'
+down_revision: Union[str, Sequence[str], None] = 'd4e5f6a7b8c9'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
