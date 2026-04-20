@@ -408,30 +408,23 @@ async def _process_scheduled_tasks() -> None:
                 task_type = task_record.task_type
                 payload = task_record.payload or {}
 
+                # MVP stub: "check", "sweep_concern", and "custom" types are not yet
+                # fully executed — they produce a generic finding so the user
+                # sees something in their briefing.  Full execution is deferred.
                 if task_type == "remind":
-                    finding = SweepFindingRecord(
-                        id=str(uuid.uuid4()),
-                        thing_id=task_record.thing_id,
-                        finding_type="reminder",
-                        message=payload.get("message", "Scheduled reminder"),
-                        priority=2,
-                        user_id=user_id or None,
-                    )
-                    session.add(finding)
+                    finding_type = "reminder"
+                    default_message = "Scheduled reminder"
                 else:
-                    # MVP stub: "check", "sweep_concern", and "custom" types are not yet
-                    # fully executed here — they produce a generic finding so the user
-                    # sees something in their briefing.  Full execution for "check"
-                    # (web search) and "sweep_concern" is deferred to a follow-up.
-                    finding = SweepFindingRecord(
-                        id=str(uuid.uuid4()),
-                        thing_id=task_record.thing_id,
-                        finding_type=f"scheduled_{task_type}",
-                        message=payload.get("message", f"Scheduled {task_type} task due"),
-                        priority=2,
-                        user_id=user_id or None,
-                    )
-                    session.add(finding)
+                    finding_type = f"scheduled_{task_type}"
+                    default_message = f"Scheduled {task_type} task due"
+                session.add(SweepFindingRecord(
+                    id=str(uuid.uuid4()),
+                    thing_id=task_record.thing_id,
+                    finding_type=finding_type,
+                    message=payload.get("message", default_message),
+                    priority=2,
+                    user_id=user_id or None,
+                ))
 
                 task_record.executed_at = datetime.now(timezone.utc)
                 task_record.result = {"status": "executed", "task_type": task_type}
