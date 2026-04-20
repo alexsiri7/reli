@@ -417,14 +417,16 @@ async def _process_scheduled_tasks() -> None:
                 else:
                     finding_type = f"scheduled_{task_type}"
                     default_message = f"Scheduled {task_type} task due"
-                session.add(SweepFindingRecord(
-                    id=str(uuid.uuid4()),
-                    thing_id=task_record.thing_id,
-                    finding_type=finding_type,
-                    message=payload.get("message", default_message),
-                    priority=2,
-                    user_id=user_id or None,
-                ))
+                session.add(
+                    SweepFindingRecord(
+                        id=str(uuid.uuid4()),
+                        thing_id=task_record.thing_id,
+                        finding_type=finding_type,
+                        message=payload.get("message", default_message),
+                        priority=2,
+                        user_id=user_id or None,
+                    )
+                )
 
                 task_record.executed_at = datetime.now(timezone.utc)
                 task_record.result = {"status": "executed", "task_type": task_type}

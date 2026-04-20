@@ -144,7 +144,9 @@ def create_thing(
 
     Args:
         title: Short descriptive title (required).
-        type_hint: System type ('task', 'note', 'project', 'person', 'idea', 'goal', 'journal', 'event', 'place', 'concept', 'reference', 'preference') or a custom lowercase singular noun (e.g. 'trip', 'recipe', 'rehearsal'). Custom types default to surface=true.
+        type_hint: System type ('task', 'note', 'project', 'person', 'idea', 'goal', 'journal', 'event',
+            'place', 'concept', 'reference', 'preference') or a custom lowercase singular noun
+            (e.g. 'trip', 'recipe', 'rehearsal'). Custom types default to surface=true.
         data: Arbitrary JSON data (e.g. {"email": "...", "birthday": "..."}).
         importance: How bad if undone: 0 (critical) to 4 (backlog), default 2.
         checkin_date: ISO 8601 date when this Thing should surface in the briefing.
