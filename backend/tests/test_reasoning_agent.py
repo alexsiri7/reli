@@ -84,6 +84,7 @@ class TestMakeReasoningTools:
             "deleted": [],
             "merged": [],
             "relationships_created": [],
+            "scheduled_tasks": [],
         }
 
 
