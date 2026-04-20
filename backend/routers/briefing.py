@@ -77,9 +77,8 @@ def _confidence_label(data: dict) -> str:
             return raw if raw in _VALID_CONFIDENCE_LABELS else "emerging"
         conf = raw if isinstance(raw, (int, float)) else 0.0
     else:
-        conf = data.get("confidence", 0.0)
-        if not isinstance(conf, (int, float)):
-            return "emerging"
+        raw = data.get("confidence", 0.0)
+        conf = raw if isinstance(raw, (int, float)) else 0.0
     if conf >= 0.7:
         return "strong"
     if conf >= 0.5:

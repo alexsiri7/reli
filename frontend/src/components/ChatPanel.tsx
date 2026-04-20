@@ -9,6 +9,12 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus'
 import { useProgressiveDisclosure } from '../hooks/useProgressiveDisclosure'
 import { NudgeBanner } from './NudgeBanner'
 
+const ONBOARDING_SUGGESTIONS = [
+  "I'm preparing a project proposal due next week",
+  "I have a job interview coming up I need to prep for",
+  "I'm launching a side project and have a lot to track",
+]
+
 function formatTimestamp(iso: string): string {
   const date = new Date(iso)
   if (isNaN(date.getTime())) return ''
@@ -944,11 +950,7 @@ export function ChatPanel() {
 
                   {/* Suggestion pills */}
                   <div className="ml-10 space-y-2">
-                    {[
-                      "I'm preparing a project proposal due next week",
-                      "I have a job interview coming up I need to prep for",
-                      "I'm launching a side project and have a lot to track",
-                    ].map((suggestion) => (
+                    {ONBOARDING_SUGGESTIONS.map((suggestion) => (
                       <button
                         key={suggestion}
                         onClick={() => setInput(suggestion)}

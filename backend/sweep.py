@@ -532,11 +532,9 @@ def prune_stale_open_questions(
         )
     )
     things = session.exec(stmt).all()
-    pruned = 0
     for thing in things:
         thing.open_questions = []  # type: ignore[assignment]
-        pruned += 1
-    return pruned
+    return len(things)
 
 
 # ---------------------------------------------------------------------------
