@@ -83,6 +83,36 @@ class TestGetThing:
 
 
 # ---------------------------------------------------------------------------
+# get_user_profile
+# ---------------------------------------------------------------------------
+
+
+class TestGetUserProfile:
+    @patch("backend.mcp_server.shared_tools.get_user_profile")
+    def test_returns_profile(self, mock_get: MagicMock) -> None:
+        profile = {
+            "thing": {"id": "p1", "title": "Alice", "type_hint": "person"},
+            "relationships": [
+                {"id": "r1", "relationship_type": "works_at", "direction": "outgoing",
+                 "related_thing_id": "t2", "related_thing_title": "Acme Corp"},
+            ],
+        }
+        mock_get.return_value = profile
+        result = get_user_profile()
+        mock_get.assert_called_once_with(user_id="")
+        assert result["thing"]["id"] == "p1"
+        assert len(result["relationships"]) == 1
+        assert result["relationships"][0]["direction"] == "outgoing"
+
+    @patch("backend.mcp_server.shared_tools.get_user_profile")
+    def test_not_found(self, mock_get: MagicMock) -> None:
+        mock_get.return_value = {"error": "User profile Thing not found"}
+        result = get_user_profile()
+        assert "error" in result
+        assert result["error"] == "User profile Thing not found"
+
+
+# ---------------------------------------------------------------------------
 # create_thing
 # ---------------------------------------------------------------------------
 
