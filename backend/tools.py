@@ -674,13 +674,13 @@ def get_user_profile(
         # Resolve both outgoing (anchor=from) and incoming (anchor=to) relationships.
         rel_rows = session.execute(
             text(
-                "SELECT r.id, r.relationship_type, r.from_thing_id, r.to_thing_id, "
-                "  CASE WHEN r.from_thing_id = :tid THEN t_to.title ELSE t_from.title END AS related_title, "
-                "  CASE WHEN r.from_thing_id = :tid THEN t_to.id ELSE t_from.id END AS related_id, "
-                "  CASE WHEN r.from_thing_id = :tid THEN 'outgoing' ELSE 'incoming' END AS direction "
-                " FROM thing_relationships r "
-                " JOIN things t_from ON r.from_thing_id = t_from.id "
-                " JOIN things t_to ON r.to_thing_id = t_to.id "
+                "SELECT r.id, r.relationship_type,"
+                "  CASE WHEN r.from_thing_id = :tid THEN t_to.title ELSE t_from.title END AS related_title,"
+                "  CASE WHEN r.from_thing_id = :tid THEN t_to.id ELSE t_from.id END AS related_id,"
+                "  CASE WHEN r.from_thing_id = :tid THEN 'outgoing' ELSE 'incoming' END AS direction"
+                " FROM thing_relationships r"
+                " JOIN things t_from ON r.from_thing_id = t_from.id"
+                " JOIN things t_to ON r.to_thing_id = t_to.id"
                 " WHERE r.from_thing_id = :tid OR r.to_thing_id = :tid"
                 " ORDER BY r.created_at ASC"
             ),
