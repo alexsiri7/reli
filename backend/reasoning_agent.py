@@ -883,6 +883,7 @@ def _make_reasoning_tools(
             scheduled_at: ISO-8601 datetime when the task should execute (required).
                 Example: "2026-05-01T09:00:00".
             task_type: Type of task — "remind", "check", "sweep_concern", or "custom".
+                MVP: all types create a finding; only "remind" has distinct handling.
             thing_id: Optional UUID of a Thing this task relates to, or empty.
             payload_json: JSON string with task data,
                 e.g. '{"message": "Check flight prices"}'.

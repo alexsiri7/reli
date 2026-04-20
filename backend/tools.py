@@ -1104,9 +1104,13 @@ def create_scheduled_task(
             payload=payload if payload else None,
             scheduled_at=parsed_at,
         )
-        session.add(record)
-        session.commit()
-        session.refresh(record)
+        try:
+            session.add(record)
+            session.commit()
+            session.refresh(record)
+        except Exception as exc:
+            logger.exception("Failed to persist scheduled task")
+            return {"error": f"Database error: {exc}"}
         return record.model_dump()
 
 
@@ -1117,7 +1121,7 @@ def create_scheduled_task(
 
 def get_due_scheduled_tasks(user_id: str = "") -> list[dict[str, Any]]:
     """Return scheduled tasks that are due (scheduled_at <= now) and not yet executed."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     with Session(_engine_mod.engine) as session:
         stmt = select(ScheduledTaskRecord).where(

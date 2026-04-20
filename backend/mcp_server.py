@@ -370,9 +370,9 @@ def schedule_task(
             Example: "2026-05-01T09:00:00".
         task_type: Type of task. Valid values:
             - "remind" (default): Create a reminder finding at the scheduled time.
-            - "check": Check on something and report findings.
-            - "sweep_concern": Flag a concern for the next sweep.
-            - "custom": Custom task with instructions in payload.
+            - "check": Check on something and report findings (MVP: creates finding only).
+            - "sweep_concern": Flag a concern for the next sweep (MVP: creates finding only).
+            - "custom": Custom task with instructions in payload (MVP: creates finding only).
         thing_id: Optional UUID of a Thing this task relates to.
         payload: Optional JSON data for the task (e.g. {"message": "Check flight prices"}).
 

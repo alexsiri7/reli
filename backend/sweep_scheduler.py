@@ -401,36 +401,42 @@ async def _process_scheduled_tasks() -> None:
 
         with Session(_engine_mod.engine) as session:
             for task_dict in due_tasks:
-                task_record = session.get(ScheduledTaskRecord, task_dict["id"])
-                if not task_record or task_record.executed_at is not None:
-                    continue
+                try:
+                    task_record = session.get(ScheduledTaskRecord, task_dict["id"])
+                    if not task_record or task_record.executed_at is not None:
+                        continue
 
-                task_type = task_record.task_type
-                payload = task_record.payload or {}
+                    task_type = task_record.task_type
+                    payload = task_record.payload or {}
 
-                # MVP stub: "check", "sweep_concern", and "custom" types are not yet
-                # fully executed — they produce a generic finding so the user
-                # sees something in their briefing.  Full execution is deferred.
-                if task_type == "remind":
-                    finding_type = "reminder"
-                    default_message = "Scheduled reminder"
-                else:
-                    finding_type = f"scheduled_{task_type}"
-                    default_message = f"Scheduled {task_type} task due"
-                session.add(SweepFindingRecord(
-                    id=str(uuid.uuid4()),
-                    thing_id=task_record.thing_id,
-                    finding_type=finding_type,
-                    message=payload.get("message", default_message),
-                    priority=2,
-                    user_id=user_id or None,
-                ))
+                    # MVP stub: "check", "sweep_concern", and "custom" types are not yet
+                    # fully executed — they produce a generic finding so the user
+                    # sees something in their briefing.  Full execution is deferred.
+                    if task_type == "remind":
+                        finding_type = "reminder"
+                        default_message = "Scheduled reminder"
+                    else:
+                        finding_type = f"scheduled_{task_type}"
+                        default_message = f"Scheduled {task_type} task due"
+                    session.add(SweepFindingRecord(
+                        id=str(uuid.uuid4()),
+                        thing_id=task_record.thing_id,
+                        finding_type=finding_type,
+                        message=payload.get("message", default_message),
+                        priority=2,
+                        user_id=user_id or None,
+                    ))
 
-                task_record.executed_at = datetime.now(timezone.utc)
-                task_record.result = {"status": "executed", "task_type": task_type}
-                session.add(task_record)
-
-            session.commit()
+                    task_record.executed_at = datetime.now(timezone.utc)
+                    task_record.result = {"status": "executed", "task_type": task_type}
+                    session.add(task_record)
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    logger.exception(
+                        "Failed to process scheduled task %s for user %s",
+                        task_dict.get("id", "?"), user_label,
+                    )
 
 
 async def _scheduled_task_loop() -> None:

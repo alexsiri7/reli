@@ -112,6 +112,39 @@ class TestProcessScheduledTasks:
             assert findings[0].message == "Test reminder"
 
 
+class TestProcessScheduledTaskTypes:
+    @pytest.mark.parametrize(
+        "task_type,expected_finding_type",
+        [
+            ("remind", "reminder"),
+            ("check", "scheduled_check"),
+            ("sweep_concern", "scheduled_sweep_concern"),
+            ("custom", "scheduled_custom"),
+        ],
+    )
+    def test_processes_task_type(self, patched_db, task_type, expected_finding_type):
+        import backend.db_engine as _engine_mod
+        from backend.sweep_scheduler import _process_scheduled_tasks
+
+        past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        result = create_scheduled_task(
+            scheduled_at=past,
+            task_type=task_type,
+            payload_json='{"message": "Test"}',
+        )
+
+        asyncio.run(_process_scheduled_tasks())
+
+        with Session(_engine_mod.engine) as session:
+            findings = session.exec(
+                select(SweepFindingRecord).where(
+                    SweepFindingRecord.finding_type == expected_finding_type
+                )
+            ).all()
+            assert len(findings) == 1
+            assert findings[0].message == "Test"
+
+
 class TestScheduledTasksNotReExecuted:
     def test_already_executed_task_skipped(self, patched_db):
         import backend.db_engine as _engine_mod
