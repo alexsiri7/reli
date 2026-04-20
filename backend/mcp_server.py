@@ -44,7 +44,8 @@ _RELI_HOST = os.environ.get("RELI_BASE_URL", "").replace("https://", "").replace
 if not _RELI_HOST:
     _redirect_uri = os.environ.get("GOOGLE_AUTH_REDIRECT_URI", "")
     if _redirect_uri:
-        _RELI_HOST = _redirect_uri.split("/")[2] if len(_redirect_uri.split("/")) > 2 else ""
+        _redirect_parts = _redirect_uri.split("/")
+        _RELI_HOST = _redirect_parts[2] if len(_redirect_parts) > 2 else ""
 _allowed_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
 if _RELI_HOST:
     _allowed_hosts.append(_RELI_HOST)

@@ -86,7 +86,7 @@ jobs:
 
             // Extract score from failure messages (avg_score line in assertion)
             const scoreMap = {};
-            const scoreRe = /Tool name trajectory score ([\d.]+) below threshold/g;
+            const scoreRe = /(?:Tool name trajectory|Response agent eval) score ([\d.]+) below threshold/g;
             const nameRe = /FAILED backend\/tests\/test_evals\.py::(\w+)/g;
             let sm, nm;
             const failedNames = [];

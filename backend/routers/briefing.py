@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -338,7 +338,6 @@ def get_weekly_briefing(user_id: str = Depends(require_user)) -> WeeklyBriefing:
 
     # Generate if missing or stale (not from this week)
     today = date.today()
-    from datetime import timedelta
     current_week_start = today - timedelta(days=today.weekday())
 
     if not result or result["week_start"] != current_week_start.isoformat():
