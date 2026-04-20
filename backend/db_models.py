@@ -399,3 +399,24 @@ class ThingEmbeddingRecord(SQLModel, table=True):
     embedding: Any = Field(sa_column=Column(Vector(1536), nullable=False))
     content: str = Field(default="", sa_column_kwargs={"server_default": "''"})
     updated_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+
+
+# ---------------------------------------------------------------------------
+# Scheduled Tasks
+# ---------------------------------------------------------------------------
+
+
+class ScheduledTaskRecord(SQLModel, table=True):
+    """A task scheduled for autonomous future execution."""
+
+    __tablename__ = "scheduled_tasks"
+
+    id: str = Field(default_factory=_new_id, primary_key=True)
+    user_id: str | None = Field(default=None, foreign_key="users.id")
+    thing_id: str | None = Field(default=None, foreign_key="things.id", index=True)
+    task_type: str = Field(default="remind", sa_column_kwargs={"server_default": "'remind'"})
+    payload: dict[str, Any] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
+    scheduled_at: datetime = Field(index=True)
+    executed_at: datetime | None = None
+    result: dict[str, Any] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})

@@ -557,6 +557,7 @@ def _make_reasoning_tools(
         "deleted": [],
         "merged": [],
         "relationships_created": [],
+        "scheduled_tasks": [],
     }
     fetched_context: dict[str, list[Any]] = {
         "things": [],
@@ -866,10 +867,45 @@ def _make_reasoning_tools(
         )
         return result
 
+    # ------------------------------------------------------------------
+    def schedule_task(
+        scheduled_at: str,
+        task_type: str = "remind",
+        thing_id: str = "",
+        payload_json: str = "{}",
+    ) -> dict[str, Any]:
+        """Schedule autonomous future work for Reli.
+
+        Creates a task that will be executed automatically at the specified time.
+        Results surface in the next briefing as sweep findings.
+
+        Args:
+            scheduled_at: ISO-8601 datetime when the task should execute (required).
+                Example: "2026-05-01T09:00:00".
+            task_type: Type of task — "remind", "check", "sweep_concern", or "custom".
+            thing_id: Optional UUID of a Thing this task relates to, or empty.
+            payload_json: JSON string with task data,
+                e.g. '{"message": "Check flight prices"}'.
+
+        Returns:
+            The created scheduled task dict including its generated 'id'.
+        """
+        result = shared_tools.create_scheduled_task(
+            scheduled_at=scheduled_at,
+            task_type=task_type,
+            thing_id=thing_id,
+            payload_json=payload_json,
+            user_id=user_id,
+        )
+        if "error" not in result:
+            applied["scheduled_tasks"].append(result)
+        return result
+
     # Wrap each tool with OTEL span instrumentation
     traced_tools = [_traced_tool(t) for t in [
         fetch_context, chat_history, create_thing, update_thing, delete_thing,
         merge_things, create_relationship, calendar_create_event, calendar_update_event,
+        schedule_task,
     ]]
     return traced_tools, applied, fetched_context
 
@@ -1042,6 +1078,17 @@ async def run_reasoning_agent(
                     raw_conn.row_factory = __import__('sqlite3').Row  # type: ignore[attr-defined]
                     applied = apply_storage_changes(storage_changes, raw_conn, user_id=user_id)  # type: ignore[arg-type]
                     sa_conn.commit()
+
+                # Process scheduled_tasks from Ollama JSON output
+                for st in result.get("scheduled_tasks", []):
+                    shared_tools.create_scheduled_task(
+                        scheduled_at=st.get("scheduled_at", ""),
+                        task_type=st.get("task_type", "remind"),
+                        thing_id=st.get("thing_id") or "",
+                        payload_json=json.dumps(st.get("payload") or {}),
+                        user_id=user_id,
+                    )
+
                 return _build_result(result, applied)
         except Exception as exc:
             logger.warning("Ollama reasoning agent failed, falling back to ADK: %s", exc)
