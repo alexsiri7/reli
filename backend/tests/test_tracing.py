@@ -232,4 +232,5 @@ class TestTracedToolDecorator:
             "create_relationship",
             "calendar_create_event",
             "calendar_update_event",
+            "schedule_task",
         ]

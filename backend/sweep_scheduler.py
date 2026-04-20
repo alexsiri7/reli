@@ -380,6 +380,71 @@ async def _run_sweep() -> None:
     logger.info("Sweep cycle complete")
 
 
+async def _process_scheduled_tasks() -> None:
+    """Process all due scheduled tasks across all users."""
+    from sqlmodel import Session
+
+    import backend.db_engine as _engine_mod
+
+    from .db_models import ScheduledTaskRecord, SweepFindingRecord
+    from .tools import get_due_scheduled_tasks
+
+    user_ids = _get_all_user_ids()
+    for user_id in user_ids:
+        due_tasks = get_due_scheduled_tasks(user_id=user_id)
+        if not due_tasks:
+            continue
+
+        # "legacy" = pre-multi-tenant rows where user_id IS NULL
+        user_label = user_id[:8] if user_id else "legacy"
+        logger.info("Processing %d due scheduled task(s) for user %s", len(due_tasks), user_label)
+
+        with Session(_engine_mod.engine) as session:
+            for task_dict in due_tasks:
+                task_record = session.get(ScheduledTaskRecord, task_dict["id"])
+                if not task_record or task_record.executed_at is not None:
+                    continue
+
+                task_type = task_record.task_type
+                payload = task_record.payload or {}
+
+                # MVP stub: "check", "sweep_concern", and "custom" types are not yet
+                # fully executed — they produce a generic finding so the user
+                # sees something in their briefing.  Full execution is deferred.
+                if task_type == "remind":
+                    finding_type = "reminder"
+                    default_message = "Scheduled reminder"
+                else:
+                    finding_type = f"scheduled_{task_type}"
+                    default_message = f"Scheduled {task_type} task due"
+                session.add(SweepFindingRecord(
+                    id=str(uuid.uuid4()),
+                    thing_id=task_record.thing_id,
+                    finding_type=finding_type,
+                    message=payload.get("message", default_message),
+                    priority=2,
+                    user_id=user_id or None,
+                ))
+
+                task_record.executed_at = datetime.now(timezone.utc)
+                task_record.result = {"status": "executed", "task_type": task_type}
+                session.add(task_record)
+
+            session.commit()
+
+
+async def _scheduled_task_loop() -> None:
+    """Background loop that processes due scheduled tasks every 15 minutes."""
+    logger.info("Scheduled task processor started — running every 15 minutes")
+
+    while True:
+        await asyncio.sleep(900)  # Sleep first to avoid running before DB init
+        try:
+            await _process_scheduled_tasks()
+        except Exception:
+            logger.exception("Unexpected error in scheduled task processor")
+
+
 async def sweep_loop() -> None:
     """Background loop that runs the sweep at the configured time each day."""
     enabled, hour, minute = _get_config()
@@ -405,22 +470,25 @@ async def sweep_loop() -> None:
 
 
 _task: asyncio.Task[None] | None = None
+_task_scheduled: asyncio.Task[None] | None = None
 _scheduler_lock = asyncio.Lock()
 
 
 async def start_scheduler() -> None:
-    """Start the sweep background task.  Safe to call multiple times."""
-    global _task
+    """Start the sweep and scheduled task background tasks.  Safe to call multiple times."""
+    global _task, _task_scheduled
     async with _scheduler_lock:
-        if _task is not None and not _task.done():
-            return
-        _task = asyncio.create_task(sweep_loop())
-        logger.info("Sweep scheduler task created")
+        if _task is None or _task.done():
+            _task = asyncio.create_task(sweep_loop())
+            logger.info("Sweep scheduler task created")
+        if _task_scheduled is None or _task_scheduled.done():
+            _task_scheduled = asyncio.create_task(_scheduled_task_loop())
+            logger.info("Scheduled task processor task created")
 
 
 async def stop_scheduler() -> None:
-    """Cancel the sweep background task if running and await cleanup."""
-    global _task
+    """Cancel the sweep and scheduled task background tasks if running."""
+    global _task, _task_scheduled
     async with _scheduler_lock:
         if _task is not None and not _task.done():
             _task.cancel()
@@ -430,3 +498,12 @@ async def stop_scheduler() -> None:
                 pass
             logger.info("Sweep scheduler task cancelled")
         _task = None
+
+        if _task_scheduled is not None and not _task_scheduled.done():
+            _task_scheduled.cancel()
+            try:
+                await _task_scheduled
+            except asyncio.CancelledError:
+                pass
+            logger.info("Scheduled task processor task cancelled")
+        _task_scheduled = None

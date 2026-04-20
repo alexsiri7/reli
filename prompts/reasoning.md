@@ -32,11 +32,30 @@ Output schema:
       "relationship_type": "..."
     }]
   },
+  "scheduled_tasks": [
+    {
+      "scheduled_at": "2026-05-01T09:00:00",
+      "task_type": "remind",
+      "thing_id": null,
+      "payload": {"message": "Check flight prices and report findings"}
+    }
+  ],
   "questions_for_user": [],
   "priority_question": "The single most important question to ask this turn (or empty string).",
   "reasoning_summary": "Brief internal note explaining intent.",
   "briefing_mode": false
 }
+
+Scheduled Tasks (Ollama/JSON path only — ADK path uses the schedule_task tool directly):
+- "scheduled_tasks": list of tasks to execute autonomously at a future time.
+- Use when the user asks for something to happen later: "remind me in 2 weeks",
+  "check flight prices next Monday", "follow up on this next Tuesday".
+- Each entry requires "scheduled_at" (ISO-8601 UTC datetime) and "task_type".
+- Valid task_type values: "remind" (create a reminder finding), "check" (check on
+  something), "sweep_concern" (flag for sweep), "custom" (freeform).
+- "thing_id" is optional — link to a Thing if relevant.
+- "payload" is optional — include a "message" key with human-readable instructions.
+- Results surface as sweep findings in the user's next briefing.
 
 Rules:
 - "create" items: title required; type_hint optional; checkin_date ISO-8601 or null

@@ -354,6 +354,41 @@ def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+def schedule_task(
+    scheduled_at: str,
+    task_type: str = "remind",
+    thing_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Schedule autonomous future work for Reli.
+
+    Creates a task that will be executed automatically at the specified time.
+    Results surface in the next briefing as sweep findings.
+
+    Args:
+        scheduled_at: ISO-8601 datetime when the task should execute (required).
+            Example: "2026-05-01T09:00:00".
+        task_type: Type of task. Valid values:
+            - "remind" (default): Create a reminder finding at the scheduled time.
+            - "check": Check on something and report findings.
+            - "sweep_concern": Flag a concern for the next sweep.
+            - "custom": Custom task with instructions in payload.
+        thing_id: Optional UUID of a Thing this task relates to.
+        payload: Optional JSON data for the task (e.g. {"message": "Check flight prices"}).
+
+    Returns:
+        The created scheduled task dict including its generated 'id'.
+    """
+    return shared_tools.create_scheduled_task(
+        scheduled_at=scheduled_at,
+        task_type=task_type,
+        thing_id=thing_id or "",
+        payload_json=json.dumps(payload or {}),
+        user_id=_user_id(),
+    )
+
+
+@mcp.tool()
 def chat_history(
     n: int = 10,
     search_query: str = "",

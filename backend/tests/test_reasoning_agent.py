@@ -61,9 +61,9 @@ class TestMakeReasoningTools:
             tools, applied, _fetched = _make_reasoning_tools(user_id)
             return tools, applied, None
 
-    def test_returns_nine_tools(self):
+    def test_returns_ten_tools(self):
         tools, applied, _ = self._get_tools()
-        assert len(tools) == 9
+        assert len(tools) == 10
         names = [t.__name__ for t in tools]
         assert "fetch_context" in names
         assert "chat_history" in names
@@ -74,6 +74,7 @@ class TestMakeReasoningTools:
         assert "create_relationship" in names
         assert "calendar_create_event" in names
         assert "calendar_update_event" in names
+        assert "schedule_task" in names
 
     def test_applied_starts_empty(self):
         _, applied, _ = self._get_tools()
@@ -83,6 +84,7 @@ class TestMakeReasoningTools:
             "deleted": [],
             "merged": [],
             "relationships_created": [],
+            "scheduled_tasks": [],
         }
 
 

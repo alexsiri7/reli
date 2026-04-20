@@ -18,7 +18,7 @@ from sqlmodel import Session, or_, select
 import backend.db_engine as _engine_mod
 
 from .db_engine import user_filter_clause
-from .db_models import ChatHistoryRecord, ThingRecord, ThingRelationshipRecord
+from .db_models import ChatHistoryRecord, ScheduledTaskRecord, ThingRecord, ThingRelationshipRecord
 from .db_models import MergeHistoryRecord as MergeHistoryDBRecord
 from .vector_store import delete_thing as vs_delete
 from .vector_store import upsert_thing
@@ -1048,3 +1048,82 @@ def calendar_update_event(
         return {"error": "Failed to update calendar event"}
 
     return event
+
+
+# ---------------------------------------------------------------------------
+# create_scheduled_task
+# ---------------------------------------------------------------------------
+
+
+def create_scheduled_task(
+    scheduled_at: str,
+    task_type: str = "remind",
+    thing_id: str = "",
+    payload_json: str = "{}",
+    user_id: str = "",
+) -> dict[str, Any]:
+    """Create a scheduled task for autonomous future execution.
+
+    Args:
+        scheduled_at: ISO-8601 datetime string (required, must be non-empty).
+            Timezone-aware strings are converted to UTC; naive strings are
+            treated as UTC.
+        task_type: One of "remind", "check", "sweep_concern", "custom".
+        thing_id: UUID of a related Thing, or empty string / omit for none.
+        payload_json: JSON-encoded dict with task data (e.g. '{"message": "..."}').
+        user_id: Owner user ID, or empty string for legacy/no-user context.
+
+    Returns:
+        The created task dict (includes generated 'id') on success, or
+        {"error": "<message>"} if validation fails.
+    """
+    if not scheduled_at or not scheduled_at.strip():
+        return {"error": "scheduled_at is required"}
+
+    try:
+        parsed_at = datetime.fromisoformat(scheduled_at.strip())
+    except (ValueError, TypeError) as exc:
+        return {"error": f"scheduled_at is not valid ISO-8601: {exc}"}
+
+    # Normalize: if tz-aware, convert to UTC naive; if naive, treat as UTC.
+    # SQLite stores datetimes as strings — always keep them UTC-naive so that
+    # comparisons against datetime.now(timezone.utc) are correct.
+    if parsed_at.tzinfo is not None:
+        parsed_at = parsed_at.astimezone(timezone.utc).replace(tzinfo=None)
+
+    try:
+        payload = json.loads(payload_json) if payload_json else {}
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {"error": f"payload_json is not valid JSON: {exc}"}
+
+    with Session(_engine_mod.engine) as session:
+        record = ScheduledTaskRecord(
+            user_id=user_id or None,
+            thing_id=thing_id or None,
+            task_type=task_type.strip() or "remind",
+            payload=payload if payload else None,
+            scheduled_at=parsed_at,
+        )
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+        return record.model_dump()
+
+
+# ---------------------------------------------------------------------------
+# get_due_scheduled_tasks
+# ---------------------------------------------------------------------------
+
+
+def get_due_scheduled_tasks(user_id: str = "") -> list[dict[str, Any]]:
+    """Return scheduled tasks that are due (scheduled_at <= now) and not yet executed."""
+    now = datetime.now(timezone.utc)
+
+    with Session(_engine_mod.engine) as session:
+        stmt = select(ScheduledTaskRecord).where(
+            ScheduledTaskRecord.scheduled_at <= now,
+            ScheduledTaskRecord.executed_at.is_(None),  # type: ignore[union-attr]
+            user_filter_clause(ScheduledTaskRecord.user_id, user_id),
+        )
+        records = session.exec(stmt).all()
+    return [r.model_dump() for r in records]
