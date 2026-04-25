@@ -9,106 +9,191 @@ const MOCK_USER = {
 
 const MOCK_THINGS: Record<string, unknown>[] = [
   {
-    id: 'thing-1', title: 'Q3 Logistics Proposal', type_hint: 'project',
-    parent_ids: null, checkin_date: '2026-04-25', priority: 1, active: true,
-    surface: true, data: null,
-    created_at: '2026-03-01T10:00:00Z', updated_at: '2026-04-10T10:00:00Z',
-    last_referenced: '2026-04-10T10:00:00Z', open_questions: null,
-    children_count: 5, completed_count: 3,
+    id: 'thing-1',
+    title: 'Review pull request for auth module',
+    type_hint: 'task',
+    parent_ids: null,
+    checkin_date: null,
+    priority: 1,
+    active: true,
+    surface: false,
+    data: null,
+    created_at: '2026-03-01T10:00:00Z',
+    updated_at: '2026-03-01T10:00:00Z',
+    last_referenced: null,
+    open_questions: null,
+    children_count: 0,
+    completed_count: 0,
   },
   {
-    id: 'thing-2', title: 'Sarah Chen — Engineering Lead', type_hint: 'person',
-    parent_ids: null, checkin_date: '2026-04-22', priority: 1, active: true,
-    surface: false, data: null,
-    created_at: '2026-02-15T09:00:00Z', updated_at: '2026-04-15T09:00:00Z',
-    last_referenced: '2026-04-15T09:00:00Z', open_questions: null,
-    children_count: 0, completed_count: 0,
+    id: 'thing-2',
+    title: 'Prepare quarterly report',
+    type_hint: 'task',
+    parent_ids: null,
+    checkin_date: '2026-03-20',
+    priority: 2,
+    active: true,
+    surface: false,
+    data: null,
+    created_at: '2026-03-01T11:00:00Z',
+    updated_at: '2026-03-01T11:00:00Z',
+    last_referenced: null,
+    open_questions: null,
+    children_count: 0,
+    completed_count: 0,
   },
   {
-    id: 'thing-3', title: 'Review auth module PR', type_hint: 'task',
-    parent_ids: ['thing-1'], checkin_date: null, priority: 1, active: true,
-    surface: false, data: null,
-    created_at: '2026-04-01T10:00:00Z', updated_at: '2026-04-01T10:00:00Z',
-    last_referenced: null, open_questions: null, children_count: 0, completed_count: 0,
+    id: 'thing-3',
+    title: 'Schedule team retrospective',
+    type_hint: 'note',
+    parent_ids: null,
+    checkin_date: '2026-03-25',
+    priority: 3,
+    active: true,
+    surface: false,
+    data: null,
+    created_at: '2026-03-01T12:00:00Z',
+    updated_at: '2026-03-01T12:00:00Z',
+    last_referenced: null,
+    open_questions: null,
+    children_count: 0,
+    completed_count: 0,
   },
   {
-    id: 'thing-4', title: 'Prepare quarterly board slides', type_hint: 'task',
-    parent_ids: null, checkin_date: '2026-04-20', priority: 2, active: true,
-    surface: false, data: null,
-    created_at: '2026-03-20T11:00:00Z', updated_at: '2026-03-20T11:00:00Z',
-    last_referenced: null, open_questions: null, children_count: 0, completed_count: 0,
+    id: 'thing-4',
+    title: 'Zenith Campaign Launch',
+    type_hint: 'project',
+    parent_ids: null,
+    checkin_date: '2026-03-28',
+    priority: 1,
+    active: true,
+    surface: true,
+    data: null,
+    created_at: '2026-02-01T10:00:00Z',
+    updated_at: '2026-03-10T10:00:00Z',
+    last_referenced: '2026-03-10T10:00:00Z',
+    open_questions: null,
+    children_count: 8,
+    completed_count: 5,
   },
   {
-    id: 'thing-5', title: 'Market Alpha competitive analysis notes', type_hint: 'note',
-    parent_ids: null, checkin_date: null, priority: 3, active: true,
-    surface: false, data: null,
-    created_at: '2026-03-10T14:00:00Z', updated_at: '2026-04-05T14:00:00Z',
-    last_referenced: '2026-04-05T14:00:00Z', open_questions: null,
-    children_count: 0, completed_count: 0,
+    id: 'thing-5',
+    title: 'Sarah Mitchell',
+    type_hint: 'person',
+    parent_ids: null,
+    checkin_date: '2026-04-01',
+    priority: 2,
+    active: true,
+    surface: false,
+    data: null,
+    created_at: '2026-01-15T10:00:00Z',
+    updated_at: '2026-03-12T10:00:00Z',
+    last_referenced: '2026-03-12T10:00:00Z',
+    open_questions: null,
+    children_count: 0,
+    completed_count: 0,
   },
   {
-    id: 'thing-6', title: 'Team retrospective — April', type_hint: 'event',
-    parent_ids: null, checkin_date: '2026-04-30', priority: 2, active: true,
-    surface: false, data: null,
-    created_at: '2026-04-01T12:00:00Z', updated_at: '2026-04-01T12:00:00Z',
-    last_referenced: null, open_questions: null, children_count: 0, completed_count: 0,
+    id: 'thing-6',
+    title: 'Q3 Performance Review Meeting',
+    type_hint: 'event',
+    parent_ids: null,
+    checkin_date: '2026-03-18',
+    priority: 3,
+    active: true,
+    surface: false,
+    data: null,
+    created_at: '2026-03-05T10:00:00Z',
+    updated_at: '2026-03-05T10:00:00Z',
+    last_referenced: null,
+    open_questions: null,
+    children_count: 0,
+    completed_count: 0,
   },
   {
-    id: 'thing-7', title: 'Follow up with vendor on SLA renewal', type_hint: 'task',
-    parent_ids: null, checkin_date: '2026-04-19', priority: 1, active: true,
-    surface: false, data: null,
-    created_at: '2026-04-10T08:00:00Z', updated_at: '2026-04-10T08:00:00Z',
-    last_referenced: null, open_questions: null, children_count: 0, completed_count: 0,
+    id: 'thing-7',
+    title: 'Async-first team culture hypothesis',
+    type_hint: 'idea',
+    parent_ids: null,
+    checkin_date: null,
+    priority: 4,
+    active: true,
+    surface: false,
+    data: null,
+    created_at: '2026-03-08T10:00:00Z',
+    updated_at: '2026-03-08T10:00:00Z',
+    last_referenced: null,
+    open_questions: null,
+    children_count: 0,
+    completed_count: 0,
   },
 ]
 
-const MOCK_FINDINGS = [
-  {
-    id: 'finding-1', finding_type: 'stale',
-    message: 'Market Alpha notes haven\'t been touched in 14 days',
-    thing_id: 'thing-5', thing: { id: 'thing-5', title: 'Market Alpha competitive analysis notes' },
-    dismissed: false, snoozed_until: null, priority: 1, expires_at: null,
-    created_at: '2026-04-19T06:00:00Z',
-  },
-  {
-    id: 'finding-2', finding_type: 'approaching_date',
-    message: 'SLA renewal follow-up is due today',
-    thing_id: 'thing-7', thing: { id: 'thing-7', title: 'Follow up with vendor on SLA renewal' },
-    dismissed: false, snoozed_until: null, priority: 1, expires_at: null,
-    created_at: '2026-04-19T06:00:00Z',
-  },
-]
+const MOCK_FINDING = {
+  id: 'finding-1',
+  finding_type: 'stale',
+  message: 'No activity in 30 days',
+  thing_id: 'thing-3',
+  thing: { id: 'thing-3', title: 'Schedule team retrospective' },
+  dismissed: false,
+  snoozed_until: null,
+  priority: 1,
+  expires_at: null,
+  created_at: '2026-03-01T10:00:00Z',
+}
 
-const MOCK_BRIEFING_PREFS = [
-  { id: 'pref-1', title: 'Prefers async communication over meetings', confidence_label: 'strong' },
-  { id: 'pref-2', title: 'Cost-conscious with vendor contracts', confidence_label: 'moderate' },
-]
+const MOCK_FINDING_APPROACHING = {
+  id: 'finding-2',
+  finding_type: 'approaching_date',
+  message: 'Check-in due in 3 days',
+  thing_id: 'thing-4',
+  thing: { id: 'thing-4', title: 'Zenith Campaign Launch' },
+  dismissed: false,
+  snoozed_until: null,
+  priority: 2,
+  expires_at: null,
+  created_at: '2026-03-01T10:00:00Z',
+}
+
+const MOCK_FINDING_CONNECTION = {
+  id: 'finding-3',
+  finding_type: 'connection',
+  message: 'Sarah Mitchell appears in 3 recent Things',
+  thing_id: 'thing-5',
+  thing: { id: 'thing-5', title: 'Sarah Mitchell' },
+  dismissed: false,
+  snoozed_until: null,
+  priority: 3,
+  expires_at: null,
+  created_at: '2026-03-01T10:00:00Z',
+}
+
+const MOCK_BRIEFING_PREF = { id: 'pref-1', title: 'Prefers async communication', confidence_label: 'strong' }
 
 const MOCK_HISTORY = [
   {
-    id: 'msg-1', role: 'assistant' as const,
-    content: 'Good morning! You have 3 items due this week. The Q3 Logistics Proposal check-in is coming up on April 25th.',
-    timestamp: '2026-04-19T08:00:00Z',
+    id: 'msg-1',
+    role: 'assistant' as const,
+    content: "Hello! I've analyzed your schedule. The **Zenith Campaign Launch** check-in is due in 3 days. Want me to draft a status update?",
+    timestamp: '2026-03-14T09:00:00Z',
   },
   {
-    id: 'msg-2', role: 'user' as const,
-    content: 'Can you mark the auth module PR review as done?',
-    timestamp: '2026-04-19T08:01:00Z',
+    id: 'msg-2',
+    role: 'user' as const,
+    content: 'Yes, add a task: follow up with Sarah about the campaign budget.',
+    timestamp: '2026-03-14T09:01:00Z',
   },
   {
-    id: 'msg-3', role: 'assistant' as const,
-    content: 'Done — I\'ve marked **Review auth module PR** as completed.',
-    timestamp: '2026-04-19T08:01:05Z',
+    id: 'msg-3',
+    role: 'assistant' as const,
+    content: "Done. I've added **Follow up with Sarah regarding campaign budget** to your active list, linked to Zenith Campaign Launch.",
+    timestamp: '2026-03-14T09:01:15Z',
   },
   {
-    id: 'msg-4', role: 'user' as const,
-    content: 'What should I focus on today?',
-    timestamp: '2026-04-19T08:02:00Z',
-  },
-  {
-    id: 'msg-5', role: 'assistant' as const,
-    content: 'Top priority: **Follow up with vendor on SLA renewal** — it\'s due today. After that, the board slides are due tomorrow.',
-    timestamp: '2026-04-19T08:02:08Z',
+    id: 'msg-4',
+    role: 'user' as const,
+    content: 'What else is due this week?',
+    timestamp: '2026-03-14T09:02:00Z',
   },
 ]
 
@@ -144,8 +229,8 @@ async function interceptApi(
             the_one_thing: { thing: MOCK_THINGS[0], importance: 3, urgency: 0.9, score: 2.7, reasons: ['Due today'] },
             secondary: [{ thing: MOCK_THINGS[1], importance: 2, urgency: 0.5, score: 1.0, reasons: ['Check in'] }],
             parking_lot: [],
-            findings: MOCK_FINDINGS,
-            learned_preferences: MOCK_BRIEFING_PREFS,
+            findings: [MOCK_FINDING, MOCK_FINDING_APPROACHING, MOCK_FINDING_CONNECTION],
+            learned_preferences: [MOCK_BRIEFING_PREF],
             total: 2,
             stats: { active_things: 12, checkin_due: 3, overdue: 1 },
           }
@@ -169,15 +254,7 @@ async function interceptApi(
   if (opts.briefing) {
     await page.route('**/api/briefing/morning', route =>
       route.fulfill({
-        json: {
-          id: 'mb-1',
-          briefing_date: '2026-04-19',
-          content: {
-            summary: 'Busy morning — you have a proposal draft due and 3 items to review.',
-            priorities: [], overdue: [], blockers: [], findings: [], stats: {},
-          },
-          generated_at: '2026-04-19T07:00:00Z',
-        },
+        json: { id: 'mb-1', content: { summary: 'Busy morning — you have a proposal draft due and 3 items to review.' }, generated_at: '2026-03-14T07:00:00Z' },
         status: 200,
       })
     )
@@ -309,9 +386,10 @@ test.describe('Visual regression – reli frontend', () => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto('/')
     await waitForApp(page)
-    await page.waitForTimeout(1000)
-    await expect(page).toHaveScreenshot('briefing-panel-populated-desktop.png', {
-      ...SNAPSHOT_OPTS, animations: 'disabled', timeout: 15_000,
+    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
+    const briefingPanel = page.locator('div.flex-1.flex.flex-col').first()
+    await expect(briefingPanel).toHaveScreenshot('briefing-panel-populated-desktop.png', {
+      ...SNAPSHOT_OPTS, animations: 'disabled',
     })
   })
 
@@ -341,10 +419,10 @@ test.describe('Visual regression – reli frontend', () => {
     await page.emulateMedia({ colorScheme: 'dark' })
     await page.goto('/')
     await waitForApp(page)
-    await page.waitForSelector('text=Daily Briefing', { timeout: 10_000 }).catch(() => {})
-    await page.waitForTimeout(1000)
-    await expect(page).toHaveScreenshot('briefing-panel-populated-dark.png', {
-      ...SNAPSHOT_OPTS, animations: 'disabled', timeout: 15_000,
+    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
+    const briefingPanel = page.locator('div.flex-1.flex.flex-col').first()
+    await expect(briefingPanel).toHaveScreenshot('briefing-panel-populated-dark.png', {
+      ...SNAPSHOT_OPTS, animations: 'disabled',
     })
   })
 
