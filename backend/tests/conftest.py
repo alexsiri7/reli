@@ -45,11 +45,13 @@ def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
     from sqlmodel import Session, SQLModel, create_engine
 
     import backend.db_engine as engine_module
+    from backend.db_engine import json_serializer
 
     # Create a SQLModel engine for the temp DB
     test_engine = create_engine(
         f"sqlite:///{tmp_db_path}",
         connect_args={"check_same_thread": False},
+        json_serializer=json_serializer,
     )
     SQLModel.metadata.create_all(test_engine)
 

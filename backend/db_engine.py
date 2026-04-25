@@ -10,13 +10,32 @@ The connection string comes from ``settings.database_url``:
 
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import event
 from sqlmodel import Session, create_engine, or_
 
 from .config import settings
+
+
+def _json_default(obj: Any) -> Any:
+    """Custom JSON serializer for SQLAlchemy JSON/JSONB columns.
+
+    Converts types that the stdlib ``json`` module cannot handle:
+    - ``datetime`` → ISO-8601 string (e.g. "2026-04-25T12:00:00+00:00")
+    """
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
+def json_serializer(value: Any) -> str:
+    """Drop-in replacement for ``json.dumps`` used by SQLAlchemy engines."""
+    return json.dumps(value, default=_json_default)
+
 
 # ---------------------------------------------------------------------------
 # Pure helpers (no engine dependency) — defined early so they're available even
@@ -67,7 +86,7 @@ if not _url.startswith("sqlite"):
     # Limit pool size to stay within Supabase free-tier connection limits.
     _pool_args = {"pool_size": 3, "max_overflow": 2, "pool_pre_ping": True}
 
-engine = create_engine(_url, connect_args=_connect_args, echo=False, **_pool_args)
+engine = create_engine(_url, connect_args=_connect_args, echo=False, json_serializer=json_serializer, **_pool_args)
 
 # SQLite-specific PRAGMAs (WAL mode, foreign keys, busy timeout).
 if _url.startswith("sqlite"):
