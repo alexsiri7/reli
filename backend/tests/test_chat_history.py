@@ -1,5 +1,7 @@
 """Tests for chat history endpoints."""
 
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 
 
@@ -27,6 +29,24 @@ class TestAppendMessage:
         changes = {"created": [{"id": "abc", "title": "New Thing"}]}
         msg = _append(client, "sess-2", "assistant", "Done.", applied_changes=changes)
         assert msg["applied_changes"] == changes
+
+    def test_append_with_datetime_in_applied_changes(self, client):
+        """Regression test for #547: datetime objects in applied_changes must not
+        raise 'TypeError: Object of type datetime is not JSON serializable'."""
+        now = datetime.now(timezone.utc)
+        changes = {
+            "created": [
+                {
+                    "id": "dt-thing",
+                    "title": "Datetime Thing",
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                }
+            ],
+        }
+        # Should not raise a 500 — datetime values serialized to ISO strings
+        msg = _append(client, "sess-dt", "assistant", "Done.", applied_changes=changes)
+        assert msg["applied_changes"]["created"][0]["id"] == "dt-thing"
 
     def test_invalid_role_returns_422(self, client):
         resp = client.post(
