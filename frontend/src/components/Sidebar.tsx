@@ -830,7 +830,7 @@ export function Sidebar() {
                   </div>
                 )}
                 <div className={`absolute right-0 top-full mt-1 w-48 bg-surface-container-high border border-on-surface-variant/10 rounded-lg shadow-lg transition-all z-50 ${userMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
-                  <div className="px-3 py-2 border-b border-on-surface-variant/10">
+                  <div className="px-3 py-3 bg-surface rounded-t-lg">
                     <p className="text-sm font-medium text-on-surface truncate">{currentUser.name}</p>
                     <p className="text-xs text-on-surface-variant truncate">{currentUser.email}</p>
                   </div>
@@ -1290,7 +1290,7 @@ export function Sidebar() {
                   </button>
                 )}
                 {group.type === 'task' && completedTasks.length > 0 && (
-                  <div className="mt-1 border-t border-on-surface-variant/10 pt-1 opacity-40">
+                  <div className="mt-3 opacity-40">
                     {completedTasks.map(t => (
                       <div key={t.id} className="px-5 py-1.5 flex items-center gap-2">
                         <div className="shrink-0 w-4 h-4 rounded border border-on-surface-variant/30 bg-primary/60 flex items-center justify-center">

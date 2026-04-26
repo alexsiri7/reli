@@ -166,7 +166,7 @@ function App() {
         <DetailPanel />
       </div>
       {/* Mobile bottom tab bar — frosted glass with dot indicator */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex justify-around items-center h-20 px-8 safe-area-pb bg-canvas/80 backdrop-blur-xl border-t border-white/5 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex justify-around items-center h-20 px-8 safe-area-pb bg-canvas/80 backdrop-blur-xl shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
         <button
           onClick={() => setMobileView('things')}
           className={`relative flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold uppercase tracking-widest transition-all active:scale-90 duration-300 ease-out ${
