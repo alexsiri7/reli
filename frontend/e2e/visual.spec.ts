@@ -170,6 +170,29 @@ const MOCK_FINDING_CONNECTION = {
 
 const MOCK_BRIEFING_PREF = { id: 'pref-1', title: 'Prefers async communication', confidence_label: 'strong' }
 
+const MOCK_PROACTIVE_SURFACE = {
+  thing: {
+    id: 'thing-1',
+    title: 'Review pull request for auth module',
+    type_hint: 'task',
+    parent_ids: null,
+    checkin_date: null,
+    importance: 1,
+    active: true,
+    surface: false,
+    data: null,
+    created_at: '2026-03-01T10:00:00Z',
+    updated_at: '2026-03-01T10:00:00Z',
+    last_referenced: null,
+    open_questions: null,
+    children_count: 0,
+    completed_count: 0,
+  },
+  reason: 'Based on recent activity, you should prepare a review checklist before diving in.',
+  date_key: '2026-03-14',
+  days_away: 0,
+}
+
 const MOCK_HISTORY = [
   {
     id: 'msg-1',
@@ -203,7 +226,7 @@ const MOCK_HISTORY = [
  */
 async function interceptApi(
   page: Page,
-  opts: { things?: boolean; history?: boolean; briefing?: boolean } = {}
+  opts: { things?: boolean; history?: boolean; briefing?: boolean; proactive?: boolean } = {}
 ) {
   // Auth — always return a valid user so the app renders the main UI
   await page.route('**/api/auth/me', route =>
@@ -281,7 +304,7 @@ async function interceptApi(
 
   // Proactive surfaces
   await page.route('**/api/proactive?*', route =>
-    route.fulfill({ json: [], status: 200 })
+    route.fulfill({ json: opts.proactive ? [MOCK_PROACTIVE_SURFACE] : [], status: 200 })
   )
 
   // Version check (prevent network requests)
@@ -350,6 +373,29 @@ test.describe('Visual regression – reli frontend', () => {
         mask: [page.locator('aside').first().locator('p.text-xs')],
       }
     )
+  })
+
+  test.describe('detail panel', () => {
+    test.use({ serviceWorkers: 'block' })
+
+    test('with Reli suggestion card', async ({ page }) => {
+      await interceptApi(page, { things: true, proactive: true })
+      await page.route('**/api/things/thing-1/relationships', route =>
+        route.fulfill({ json: [], status: 200 })
+      )
+      await page.route('**/api/things/thing-1', route =>
+        route.fulfill({ json: { ...MOCK_THINGS[0], importance: 1 }, status: 200 })
+      )
+      await page.goto('/')
+      await waitForApp(page)
+      await page.locator('text=Review pull request for auth module').first().click()
+      await page.waitForSelector('text=Reli Suggestion', { timeout: 5_000 })
+
+      await expect(page).toHaveScreenshot('detail-panel-with-suggestion.png', {
+        ...SNAPSHOT_OPTS,
+        animations: 'disabled',
+      })
+    })
   })
 
   test('chat panel – empty messages state', async ({ page }) => {

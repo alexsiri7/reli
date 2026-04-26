@@ -38,7 +38,7 @@ export function DetailPanel() {
   const {
     detailThingId, detailThing, detailRelationships, detailHistory,
     detailLoading, closeThingDetail, navigateThingDetail, goBackThingDetail,
-    things, thingTypes,
+    things, thingTypes, proactiveSurfaces, openChatWithContext,
   } = useStore(useShallow(s => ({
     detailThingId: s.detailThingId,
     detailThing: s.detailThing,
@@ -50,6 +50,8 @@ export function DetailPanel() {
     goBackThingDetail: s.goBackThingDetail,
     things: s.things,
     thingTypes: s.thingTypes,
+    proactiveSurfaces: s.proactiveSurfaces,
+    openChatWithContext: s.openChatWithContext,
   })))
 
   // Close on Escape key
@@ -132,6 +134,7 @@ export function DetailPanel() {
 
   const colors = typeColorClasses(thing?.type_hint ?? null)
   const checkinOverdue = thing?.checkin_date ? isOverdue(thing.checkin_date) : false
+  const suggestion = proactiveSurfaces.find(s => s.thing.id === detailThingId) ?? null
 
   return (
     <>
@@ -254,6 +257,25 @@ export function DetailPanel() {
                     ))}
                   </div>
                 </section>
+              )}
+
+              {/* ── RELI SUGGESTION ── */}
+              {suggestion && (
+                <div className="rounded-xl bg-surface-container-highest/30 p-4 border-l-4 border-secondary space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="shrink-0 text-secondary text-lg">✨</span>
+                    <div className="min-w-0">
+                      <p className="text-label font-semibold text-secondary tracking-widest uppercase mb-1">Reli Suggestion</p>
+                      <p className="text-body text-on-surface-variant">{suggestion.reason}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => openChatWithContext(thing.id, thing.title)}
+                    className="w-full px-4 py-2 text-xs font-bold uppercase tracking-widest text-secondary border border-secondary/30 rounded-lg hover:bg-secondary/10 transition-colors"
+                  >
+                    Prepare Now
+                  </button>
+                </div>
               )}
 
               {/* ── PARENT ── */}
