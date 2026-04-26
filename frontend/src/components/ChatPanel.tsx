@@ -1058,6 +1058,19 @@ export function ChatPanel() {
                 )}
               </button>
             </div>
+            {activeContextThings.length > 0 && (
+              <div className="hidden md:flex flex-wrap gap-2 mt-2">
+                {activeContextThings.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => openThingDetailStore(t.id)}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-surface-container-high border border-white/5 text-on-surface-variant hover:bg-surface-bright transition-colors whitespace-nowrap"
+                  >
+                    {typeIcon(t.type_hint, thingTypes)} {t.title}
+                  </button>
+                ))}
+              </div>
+            )}
             <p className="text-[10px] text-on-surface-variant/40 text-center mt-1.5 tracking-wide">
               Enter to send · Shift+Enter for new line{speechRecognitionSupported ? ' · mic for voice' : ''}
             </p>
