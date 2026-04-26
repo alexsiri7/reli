@@ -321,7 +321,7 @@ export function BriefingPanel() {
   return (
     <div className="flex-1 flex flex-col bg-canvas min-w-0 min-h-0">
       {/* Header bar — hidden on mobile (bottom tab bar handles navigation) */}
-      <div className="hidden md:flex px-5 py-3 border-b border-surface-container-high bg-surface shrink-0 items-center justify-between">
+      <div className="hidden md:flex px-5 py-3 bg-surface-container-low shrink-0 items-center justify-between">
         <p className="text-label text-on-surface-variant">Daily Briefing</p>
         <button
           onClick={() => setRightView('chat')}
@@ -436,7 +436,7 @@ export function BriefingPanel() {
         {briefingStats && (
           <section className="px-6 pb-20 md:pb-8">
             {/* Mobile stats — border-top, 3-col grid, gradient text */}
-            <div className="md:hidden grid grid-cols-3 gap-4 py-6 border-t border-white/5">
+            <div className="md:hidden grid grid-cols-3 gap-4 py-8">
               <div className="text-center">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Active</p>
                 <p className="text-2xl font-black bg-gradient-to-br from-primary-container to-primary bg-clip-text text-transparent">{briefingStats.active_things}</p>

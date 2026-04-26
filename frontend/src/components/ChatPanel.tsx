@@ -56,7 +56,7 @@ function WebSources({ results }: { results: WebSearchResult[] }) {
   if (results.length === 0) return null
 
   return (
-    <div className="mt-2 pt-2 border-t border-on-surface-variant/10">
+    <div className="mt-3">
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
@@ -90,7 +90,7 @@ function GmailSources({ messages }: { messages: GmailMessage[] }) {
   if (messages.length === 0) return null
 
   return (
-    <div className="mt-2 pt-2 border-t border-on-surface-variant/10">
+    <div className="mt-3">
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-1 text-xs font-medium text-ideas hover:text-ideas/80 transition-colors"
@@ -122,7 +122,7 @@ function CalendarSources({ events }: { events: CalendarEvent[] }) {
   if (events.length === 0) return null
 
   return (
-    <div className="mt-2 pt-2 border-t border-on-surface-variant/10">
+    <div className="mt-3">
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-1 text-xs font-medium text-events hover:text-events/80 transition-colors"
@@ -296,7 +296,7 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
                   </div>
                 ))}
               </div>
-              <div className="border-t border-on-surface-variant/10 pt-1.5 mt-1.5 font-medium text-on-surface">
+              <div className="mt-3 font-medium text-on-surface">
                 <div className="flex justify-between">
                   <span>Total</span>
                   <span className="tabular-nums">{formatTokens(totalTokens)}</span>
@@ -325,7 +325,7 @@ function UsagePill({ msg }: { msg: ChatMessage }) {
                   <span>Completion</span>
                   <span className="tabular-nums">{formatTokens(msg.completion_tokens ?? 0)}</span>
                 </div>
-                <div className="flex justify-between border-t border-on-surface-variant/10 pt-0.5 mt-0.5 font-medium text-on-surface">
+                <div className="flex justify-between mt-2 font-medium text-on-surface">
                   <span>Total</span>
                   <span className="tabular-nums">{formatTokens(totalTokens)}</span>
                 </div>
@@ -506,7 +506,7 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
             <CalendarSources events={msg.applied_changes.calendar_events} />
           )}
           {!isUser && msg.questions_for_user && msg.questions_for_user.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-on-surface-variant/10">
+            <div className="mt-4">
               {msg.questions_for_user.map((q, i) => (
                 <p key={i} className="text-sm font-medium text-primary">
                   {q}
@@ -558,14 +558,14 @@ function formatCost(usd: number): string {
 
 function ModelRow({ m }: { m: ModelUsage }) {
   return (
-    <tr className="border-t border-on-surface-variant/10">
-      <td className="py-1.5 pr-3 text-on-surface font-medium whitespace-nowrap">
+    <tr>
+      <td className="py-2 pr-3 text-on-surface font-medium whitespace-nowrap">
         {m.model.split('/').pop()}
       </td>
-      <td className="py-1.5 px-3 text-right tabular-nums">{formatTokens(m.prompt_tokens)}</td>
-      <td className="py-1.5 px-3 text-right tabular-nums">{formatTokens(m.completion_tokens)}</td>
-      <td className="py-1.5 px-3 text-right tabular-nums">{m.api_calls}</td>
-      <td className="py-1.5 pl-3 text-right tabular-nums">{formatCost(m.cost_usd)}</td>
+      <td className="py-2 px-3 text-right tabular-nums">{formatTokens(m.prompt_tokens)}</td>
+      <td className="py-2 px-3 text-right tabular-nums">{formatTokens(m.completion_tokens)}</td>
+      <td className="py-2 px-3 text-right tabular-nums">{m.api_calls}</td>
+      <td className="py-2 pl-3 text-right tabular-nums">{formatCost(m.cost_usd)}</td>
     </tr>
   )
 }
@@ -856,7 +856,7 @@ export function ChatPanel() {
       </div>
 
       {/* Desktop header — "Reli Assistant" with expand/collapse */}
-      <div className="hidden md:flex px-5 py-3 border-b border-on-surface-variant/10 bg-surface-container-low shrink-0 items-center justify-between">
+      <div className="hidden md:flex px-5 py-3 bg-surface-container-low shrink-0 items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full gradient-cta flex items-center justify-center">
             <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -887,7 +887,7 @@ export function ChatPanel() {
 
       {/* Mobile context pills — horizontal scrollable bar */}
       {!collapsed && activeContextThings.length > 0 && (
-        <div className="md:hidden shrink-0 px-4 pt-3 pb-2 border-b border-white/5 bg-surface-container-low">
+        <div className="md:hidden shrink-0 px-4 pt-3 pb-2 bg-surface-container-low">
           {/* Label + horizontal divider */}
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant shrink-0">Context Active</span>
@@ -963,7 +963,7 @@ export function ChatPanel() {
 
                   {/* Google import button — show if calendar or Gmail is connected */}
                   {(calendarStatus?.connected || gmailStatus?.connected) && (
-                    <div className="ml-10 mt-2 border-t border-on-surface-variant/10 pt-4">
+                    <div className="ml-10 mt-6">
                       <p className="text-label text-on-surface-variant tracking-widest mb-2">OR IMPORT YOUR DATA</p>
                       <button
                         onClick={() => { seedFromGoogle().catch(() => {}) }}
@@ -1003,7 +1003,7 @@ export function ChatPanel() {
           </div>
 
           {/* Input area */}
-          <div className="px-4 pb-4 pt-2 bg-surface-container-low border-t border-on-surface-variant/10 shrink-0">
+          <div className="px-4 pb-4 pt-2 bg-surface-container-low shrink-0">
             {!isOnline && (
               <div className="mb-2 px-3 py-2 text-sm text-events bg-events/10 border border-events/20 rounded-xl text-center">
                 Chat requires an internet connection
