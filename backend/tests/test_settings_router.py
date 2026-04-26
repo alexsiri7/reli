@@ -67,3 +67,18 @@ class TestSettingsUserEndpoint:
         assert resp.status_code == 200
         body = resp.json()
         assert body["context_model"] == "gpt-4o-mini"
+
+    def test_get_user_settings_with_empty_chat_context_window(self, auth_client, patched_db):
+        """GET /settings/user must not crash when chat_context_window is stored as ''."""
+        from sqlmodel import Session
+        from backend.routers.settings import _set_user_setting
+        import backend.db_engine as _engine_mod
+
+        with Session(_engine_mod.engine) as session:
+            _set_user_setting(session, "test-user-settings", "chat_context_window", "")
+            session.commit()
+
+        resp = auth_client.get("/api/settings/user")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["chat_context_window"] is None

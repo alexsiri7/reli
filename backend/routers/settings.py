@@ -335,7 +335,7 @@ def get_settings(user_id: str = Depends(require_user)) -> ModelSettings:
         reasoning=user_settings.get("reasoning_model") or global_models["reasoning"],
         response=user_settings.get("response_model") or global_models["response"],
         chat_context_window=int(user_settings["chat_context_window"])
-        if "chat_context_window" in user_settings
+        if user_settings.get("chat_context_window")
         else global_context_window,
     )
 
@@ -421,7 +421,7 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         reasoning_model=user_settings.get("reasoning_model", ""),
         response_model=user_settings.get("response_model", ""),
         chat_context_window=int(user_settings["chat_context_window"])
-        if "chat_context_window" in user_settings
+        if user_settings.get("chat_context_window")
         else None,
         theme=user_settings.get("theme", ""),
         chat_mode=user_settings.get("chat_mode", "normal"),
