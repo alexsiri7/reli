@@ -234,32 +234,8 @@ export default function GraphView() {
     ctx.fillRect(x - size, y - size, size * 2, size * 2)
   }, [])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full text-on-surface-variant">
-        Loading graph…
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full text-ideas">
-        {error}
-      </div>
-    )
-  }
-
-  if (!graphData || graphData.nodes.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full text-on-surface-variant">
-        No things to display in graph view.
-      </div>
-    )
-  }
-
   // Transform for react-force-graph: links use source/target
-  const fgData = {
+  const fgData = graphData ? {
     nodes: graphData.nodes,
     links: graphData.edges.map(e => ({
       source: e.source,
@@ -267,21 +243,21 @@ export default function GraphView() {
       relationship_type: e.relationship_type,
       id: e.id,
     })),
-  }
+  } : null
 
   const popoverColors = selectedNode ? typeColorClass(selectedNode.type_hint) : null
 
   return (
     <div className="w-full h-full flex flex-col">
       <div className="bg-surface-container-low flex items-center justify-between px-6 h-12 shrink-0">
-        <nav className="flex gap-6 text-sm font-medium">
+        <nav className="flex gap-6 text-label" aria-label="View switcher">
           <button
             onClick={() => setMainView('list')}
             className="text-on-surface-variant hover:text-on-surface transition-colors"
           >
             List
           </button>
-          <button className="text-on-surface font-semibold border-b-2 border-primary pb-1">
+          <button aria-current="page" className="text-on-surface font-semibold border-b-2 border-primary pb-1">
             Graph
           </button>
         </nav>
@@ -300,6 +276,23 @@ export default function GraphView() {
       </div>
 
       <div ref={containerRef} className="flex-1 bg-canvas relative">
+        {loading && (
+          <div className="flex items-center justify-center h-full text-on-surface-variant">
+            Loading graph…
+          </div>
+        )}
+        {!loading && error && (
+          <div className="flex items-center justify-center h-full text-ideas">
+            {error}
+          </div>
+        )}
+        {!loading && !error && (!graphData || graphData.nodes.length === 0) && (
+          <div className="flex items-center justify-center h-full text-on-surface-variant">
+            No things to display in graph view.
+          </div>
+        )}
+        {!loading && !error && fgData && graphData && graphData.nodes.length > 0 && (
+          <>
         <ForceGraph2D
           graphData={fgData}
           width={dimensions.width}
@@ -375,6 +368,8 @@ export default function GraphView() {
             ))}
           </div>
         </div>
+          </>
+        )}
       </div>
     </div>
   )
