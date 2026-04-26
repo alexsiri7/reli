@@ -252,14 +252,15 @@ export default function GraphView() {
       <div className="bg-surface-container-low flex items-center justify-between px-6 h-12 shrink-0">
         <nav className="flex gap-6 text-label" aria-label="View switcher">
           <button
+            type="button"
             onClick={() => setMainView('list')}
             className="text-on-surface-variant hover:text-on-surface transition-colors"
           >
             List
           </button>
-          <button aria-current="page" className="text-on-surface font-semibold border-b-2 border-primary pb-1">
+          <span aria-current="page" className="text-on-surface font-semibold border-b-2 border-primary pb-1">
             Graph
-          </button>
+          </span>
         </nav>
         <div className="glass rounded-xl px-4 py-2 flex items-center gap-2 w-64">
           <svg className="w-4 h-4 text-on-surface-variant shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

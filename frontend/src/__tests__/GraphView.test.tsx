@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import GraphView from '../components/GraphView'
+import { apiFetch } from '../api'
 
 vi.mock('react-force-graph-2d', () => ({
   default: () => <canvas data-testid="force-graph" />,
@@ -26,7 +27,7 @@ vi.mock('../store', () => ({
 vi.mock('../api', () => ({
   apiFetch: vi.fn().mockResolvedValue({
     ok: true,
-    json: () => Promise.resolve({ things: [], relationships: [] }),
+    json: () => Promise.resolve({ nodes: [], edges: [] }),
   }),
 }))
 
@@ -38,7 +39,7 @@ describe('GraphView', () => {
   it('renders List and Graph tabs', () => {
     render(<GraphView />)
     expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Graph' })).toBeInTheDocument()
+    expect(screen.getByText('Graph')).toBeInTheDocument()
   })
 
   it('calls setMainView("list") when List tab is clicked', () => {
@@ -47,22 +48,10 @@ describe('GraphView', () => {
     expect(setMainView).toHaveBeenCalledWith('list')
   })
 
-  it('Graph tab is styled as active (has border-b-2 class)', () => {
+  it('marks Graph as the current view via aria-current and List as not current', () => {
     render(<GraphView />)
-    const graphTab = screen.getByRole('button', { name: 'Graph' })
-    expect(graphTab).toHaveClass('border-b-2')
-  })
-
-  it('List tab is styled as inactive (has text-on-surface-variant class)', () => {
-    render(<GraphView />)
-    const listTab = screen.getByRole('button', { name: 'List' })
-    expect(listTab).toHaveClass('text-on-surface-variant')
-  })
-
-  it('Graph tab has aria-current="page"', () => {
-    render(<GraphView />)
-    const graphTab = screen.getByRole('button', { name: 'Graph' })
-    expect(graphTab).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByText('Graph')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'List' })).not.toHaveAttribute('aria-current')
   })
 
   it('nav has accessible label "View switcher"', () => {
@@ -70,9 +59,33 @@ describe('GraphView', () => {
     expect(screen.getByRole('navigation', { name: 'View switcher' })).toBeInTheDocument()
   })
 
-  it('shows loading state without hiding the tab header', () => {
+  it('shows loading copy with tabs visible during loading', () => {
     render(<GraphView />)
+    expect(screen.getByText('Loading graph…')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Graph' })).toBeInTheDocument()
+    expect(screen.getByText('Graph')).toBeInTheDocument()
+  })
+
+  it('shows error copy with tabs visible when fetch fails', async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({}),
+    } as Response)
+    render(<GraphView />)
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to fetch graph/)).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument()
+    expect(screen.getByText('Graph')).toBeInTheDocument()
+  })
+
+  it('shows empty-state copy with tabs visible when graph has no nodes', async () => {
+    render(<GraphView />)
+    await waitFor(() => {
+      expect(screen.getByText('No things to display in graph view.')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument()
+    expect(screen.getByText('Graph')).toBeInTheDocument()
   })
 })
