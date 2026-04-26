@@ -35,6 +35,8 @@ const mockStore = {
   nudges: [] as Nudge[],
   chatPrefill: null as string | null,
   clearChatPrefill: mockClearChatPrefill,
+  sessions: [] as unknown[],
+  sessionId: null as string | null,
 }
 
 const mockDismissNudge = vi.fn()
