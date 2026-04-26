@@ -18,6 +18,7 @@ type Msg = {
 }
 
 const mockClearChatPrefill = vi.fn()
+const mockOpenThingDetail = vi.fn()
 
 const mockStore = {
   messages: [] as Msg[],
@@ -35,11 +36,12 @@ const mockStore = {
   nudges: [] as Nudge[],
   chatPrefill: null as string | null,
   clearChatPrefill: mockClearChatPrefill,
+  openThingDetail: mockOpenThingDetail,
+  thingTypes: [] as unknown[],
 }
 
 const mockDismissNudge = vi.fn()
 const mockStopNudgeType = vi.fn()
-const mockOpenThingDetail = vi.fn()
 
 vi.mock('../store', () => ({
   useStore: Object.assign(
@@ -188,6 +190,34 @@ describe('ChatPanel', () => {
     expect(screen.queryByText('Auth Refactor')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('▾ details'))
     expect(screen.getByText('Auth Refactor')).toBeInTheDocument()
+    mockStore.messages = []
+  })
+
+  it('renders desktop context pills and clicking calls openThingDetail', () => {
+    mockStore.messages = [
+      {
+        id: '1',
+        session_id: 's',
+        role: 'assistant',
+        content: 'Here are your things.',
+        applied_changes: {
+          context_things: [{ id: 'ctx-99', title: 'Sprint Planning', type_hint: 'task' }],
+          referenced_things: [],
+        } as never,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:00:00Z',
+      },
+    ]
+
+    render(<ChatPanel />)
+
+    // Both mobile and desktop pill buttons render in JSDOM (CSS hiding not enforced)
+    const pillButtons = screen.getAllByRole('button', { name: /Sprint Planning/ })
+    expect(pillButtons.length).toBeGreaterThan(0)
+
+    fireEvent.click(pillButtons[0]!)
+    expect(mockOpenThingDetail).toHaveBeenCalledWith('ctx-99')
+
     mockStore.messages = []
   })
 

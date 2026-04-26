@@ -758,7 +758,6 @@ export function ChatPanel() {
   const openThingDetailStore = useStore(s => s.openThingDetail)
   const thingTypes = useStore(s => s.thingTypes)
 
-  // Collect unique context things from recent messages for mobile pills
   const activeContextThings = useMemo(() => {
     const seen = new Map<string, { id: string; title: string; type_hint?: string | null }>()
     for (let i = messages.length - 1; i >= 0 && seen.size < 8; i--) {

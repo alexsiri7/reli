@@ -197,13 +197,35 @@ const MOCK_HISTORY = [
   },
 ]
 
+const MOCK_HISTORY_WITH_CONTEXT = [
+  {
+    id: 'msg-ctx-1',
+    role: 'assistant' as const,
+    content: "I found some relevant things for you. The **Zenith Campaign Launch** is due soon and **Sarah Mitchell** is a key contact.",
+    applied_changes: {
+      context_things: [
+        { id: 'ctx-1', title: 'Zenith Campaign Launch', type_hint: 'project' },
+        { id: 'ctx-2', title: 'Sarah Mitchell', type_hint: 'person' },
+      ],
+      referenced_things: [],
+    },
+    timestamp: '2026-03-14T09:00:00Z',
+  },
+  {
+    id: 'msg-ctx-2',
+    role: 'user' as const,
+    content: 'Can you add a follow-up task?',
+    timestamp: '2026-03-14T09:01:00Z',
+  },
+]
+
 /**
  * Intercept all API routes that the app calls on mount.
  * Options control which data is populated vs empty.
  */
 async function interceptApi(
   page: Page,
-  opts: { things?: boolean; history?: boolean; briefing?: boolean } = {}
+  opts: { things?: boolean; history?: boolean; historyWithContext?: boolean; briefing?: boolean } = {}
 ) {
   // Auth — always return a valid user so the app renders the main UI
   await page.route('**/api/auth/me', route =>
@@ -268,7 +290,14 @@ async function interceptApi(
 
   // Chat history (session ID is dynamic, match any)
   await page.route('**/api/chat/history/**', route =>
-    route.fulfill({ json: opts.history ? MOCK_HISTORY : [], status: 200 })
+    route.fulfill({
+      json: opts.historyWithContext
+        ? MOCK_HISTORY_WITH_CONTEXT
+        : opts.history
+          ? MOCK_HISTORY
+          : [],
+      status: 200,
+    })
   )
 
   // Daily stats
@@ -356,8 +385,10 @@ test.describe('Visual regression – reli frontend', () => {
     await interceptApi(page)
     await page.goto('/')
     await waitForApp(page)
+    // Default view is briefing — switch to chat panel
+    await page.click('[aria-label="Switch to Chat"]')
+    await page.waitForTimeout(300)
 
-    // Chat panel is the main flex column next to sidebar
     const chatPanel = page.locator('div.flex-1.flex.flex-col').first()
     await expect(chatPanel).toHaveScreenshot('chat-panel-empty.png', {
       ...SNAPSHOT_OPTS,
@@ -369,6 +400,8 @@ test.describe('Visual regression – reli frontend', () => {
     await interceptApi(page, { history: true })
     await page.goto('/')
     await waitForApp(page)
+    // Default view is briefing — switch to chat panel
+    await page.click('[aria-label="Switch to Chat"]')
     // Wait for history to render
     await page
       .waitForSelector('[class*="rounded-2xl"]', { timeout: 5_000 })
@@ -376,6 +409,26 @@ test.describe('Visual regression – reli frontend', () => {
 
     const chatPanel = page.locator('div.flex-1.flex.flex-col').first()
     await expect(chatPanel).toHaveScreenshot('chat-panel-with-messages.png', {
+      ...SNAPSHOT_OPTS,
+      animations: 'disabled',
+    })
+  })
+
+  test('chat panel – with context pills (desktop)', async ({ page }) => {
+    await interceptApi(page, { historyWithContext: true })
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.goto('/')
+    await waitForApp(page)
+    // Default view is briefing — switch to chat panel
+    await page.click('[aria-label="Switch to Chat"]')
+    // Wait for messages and pills to render
+    await page
+      .waitForSelector('[class*="rounded-2xl"]', { timeout: 5_000 })
+      .catch(() => {})
+    await page.waitForTimeout(300)
+
+    const chatPanel = page.locator('div.flex-1.flex.flex-col').first()
+    await expect(chatPanel).toHaveScreenshot('chat-panel-with-context-pills-desktop.png', {
       ...SNAPSHOT_OPTS,
       animations: 'disabled',
     })
