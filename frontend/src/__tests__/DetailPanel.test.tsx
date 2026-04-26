@@ -6,6 +6,7 @@ import type { Thing, ThingType, Relationship } from '../store'
 const closeThingDetail = vi.fn()
 const navigateThingDetail = vi.fn()
 const goBackThingDetail = vi.fn()
+const openChatWithContext = vi.fn()
 
 let storeState: Record<string, unknown> = {}
 
@@ -39,6 +40,7 @@ beforeEach(() => {
   closeThingDetail.mockReset()
   navigateThingDetail.mockReset()
   goBackThingDetail.mockReset()
+  openChatWithContext.mockReset()
 
   storeState = {
     detailThingId: 't1',
@@ -51,6 +53,8 @@ beforeEach(() => {
     goBackThingDetail,
     things: [baseThing],
     thingTypes: [] as ThingType[],
+    proactiveSurfaces: [],
+    openChatWithContext,
   }
 })
 
