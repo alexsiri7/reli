@@ -1124,6 +1124,7 @@ export function ChatPanel() {
                 </div>
               )
             )}
+            {/* system messages seed briefing context for the LLM but must not render as bubbles */}
             {messages.filter(msg => msg.role !== 'system').map(msg => (
               <MessageBubble key={msg.id} msg={msg} speakingId={speakingId} speak={speak} />
             ))}

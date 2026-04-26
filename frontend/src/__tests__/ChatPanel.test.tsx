@@ -5,7 +5,7 @@ import type { Nudge } from '../generated/api-types'
 type Msg = {
   id: string | number
   session_id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
   applied_changes: null
   questions_for_user: string[]
@@ -228,5 +228,42 @@ describe('ChatPanel', () => {
     mockStore.sessionId = ''
     render(<ChatPanel />)
     expect(screen.getByText('Your personal knowledge companion')).toBeInTheDocument()
+  })
+
+  it('does not render system messages in the visible message stream', () => {
+    mockStore.messages = [
+      {
+        id: '1',
+        session_id: 's',
+        role: 'system',
+        content: 'SECRET BRIEFING SEED CONTENT',
+        applied_changes: null,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:00:00Z',
+      },
+      {
+        id: '2',
+        session_id: 's',
+        role: 'user',
+        content: 'visible user message',
+        applied_changes: null,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:01:00Z',
+      },
+      {
+        id: '3',
+        session_id: 's',
+        role: 'assistant',
+        content: 'visible assistant reply',
+        applied_changes: null,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:02:00Z',
+      },
+    ]
+    render(<ChatPanel />)
+    expect(screen.queryByText('SECRET BRIEFING SEED CONTENT')).not.toBeInTheDocument()
+    expect(screen.getByText('visible user message')).toBeInTheDocument()
+    expect(screen.getByText('visible assistant reply')).toBeInTheDocument()
+    mockStore.messages = []
   })
 })

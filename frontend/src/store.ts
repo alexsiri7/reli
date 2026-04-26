@@ -505,6 +505,8 @@ function _parsePreferenceToasts(
   return toasts
 }
 
+/** Render a morning briefing as plain text suitable for seeding an LLM `system` message.
+ *  Drops empty sections; uses only the first entry of `reasons[]` to keep the seed compact. */
 export function serialiseMorningBriefing(b: MorningBriefing): string {
   const c = b.content
   const lines: string[] = [`Daily briefing — ${b.briefing_date}`]
@@ -528,6 +530,8 @@ export function serialiseMorningBriefing(b: MorningBriefing): string {
   return lines.join('\n')
 }
 
+/** Render a weekly briefing as plain text suitable for seeding an LLM `system` message.
+ *  Drops empty sections. Mirrors the field set rendered in the WeeklyBriefingSection UI. */
 export function serialiseWeeklyBriefing(b: WeeklyBriefing): string {
   const c = b.content
   const lines: string[] = [`Weekly review — week of ${b.week_start}`]
@@ -539,6 +543,14 @@ export function serialiseWeeklyBriefing(b: WeeklyBriefing): string {
   if (c.upcoming.length) {
     lines.push('\nUpcoming:')
     c.upcoming.forEach(i => lines.push(`  • ${i.title}${i.detail ? ` — ${i.detail}` : ''}`))
+  }
+  if (c.new_connections.length) {
+    lines.push('\nNew connections this week:')
+    c.new_connections.forEach(conn => lines.push(`  • ${conn.from_title} → ${conn.to_title}${conn.relationship_type ? ` (${conn.relationship_type})` : ''}`))
+  }
+  if (c.preferences_learned.length) {
+    lines.push('\nPreferences learned:')
+    c.preferences_learned.forEach(p => lines.push(`  • ${p}`))
   }
   if (c.open_questions.length) {
     lines.push('\nOpen questions:')
@@ -955,9 +967,14 @@ export const useStore = create<ReliState>((set, get) => ({
   fetchSessions: async () => {
     try {
       const res = await apiFetch(`${BASE}/chat/sessions`)
-      if (res.ok) set({ sessions: await res.json() })
-    } catch {
-      // best-effort — sessions is display-only; failure doesn't block the user
+      if (!res.ok) {
+        console.warn('[fetchSessions] HTTP', res.status)
+        return
+      }
+      set({ sessions: await res.json() })
+    } catch (e) {
+      // best-effort — sessions drives display only (origin badges, sidebar list)
+      console.warn('[fetchSessions] failed', e)
     }
   },
   switchSession: async (sessionId: string) => {
@@ -975,9 +992,24 @@ export const useStore = create<ReliState>((set, get) => ({
         set({ historyLoading: false, error: `Failed to load chat history (HTTP ${res.status})` })
       }
     } catch (e) {
-      set({ historyLoading: false, error: String(e) })
+      console.error('[switchSession] failed', e)
+      set({ historyLoading: false, error: 'Could not load chat history.' })
     }
   },
+  /**
+   * Create a new chat session pre-seeded with briefing context, then switch to it.
+   *
+   * Performs 3 sequential POSTs (session create, system seed, assistant seed).
+   * On step 2 or 3 failure, the session row is created but partially seeded — the
+   * caller sees an `error` and the orphan is left for #712-style cleanup. Only on
+   * full success does the view switch to chat.
+   *
+   * @param briefingText    Serialised briefing content; seeded as a `system` message
+   *                        that the LLM sees but the user does not (filtered in ChatPanel).
+   * @param sessionTitle    Display title for the session list (e.g. "Morning briefing — 2026-04-26").
+   * @param origin          Tag used for the badge in the chat header.
+   * @param openingMessage  Visible assistant greeting that opens the chat.
+   */
   continueInChat: async (briefingText, sessionTitle, origin, openingMessage) => {
     try {
       const sessionRes = await apiFetch(`${BASE}/chat/sessions`, {
@@ -1007,7 +1039,8 @@ export const useStore = create<ReliState>((set, get) => ({
       await get().fetchSessions()
       set({ rightView: 'chat', mobileView: 'chat' })
     } catch (e) {
-      set({ error: String(e) })
+      console.error('[continueInChat] failed', e)
+      set({ error: 'Could not start the chat session. Please try again.' })
     }
   },
   openChatWithContext: (_thingId: string, title: string) => {

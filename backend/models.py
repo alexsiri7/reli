@@ -192,6 +192,8 @@ class Relationship(BaseModel):
 
 class ChatMessageCreate(BaseModel):
     session_id: str = Field(..., min_length=1, max_length=200)
+    # 'system' permitted so the briefing → chat flow can seed LLM context;
+    # do not treat as user-supplied — it bypasses display filters in ChatPanel.
     role: str = Field(..., pattern="^(user|assistant|system)$")
     content: str = Field(..., min_length=1, max_length=100_000)
     applied_changes: dict[str, Any] | None = None

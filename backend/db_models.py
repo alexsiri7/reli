@@ -103,6 +103,8 @@ class ChatSessionRecord(SQLModel, table=True):
     id: str = Field(default_factory=_new_id, primary_key=True)
     user_id: str
     title: str = Field(default="New chat")
+    # Tag for sessions created by a specific surface.
+    # Known values: 'morning_briefing', 'weekly_review'. None for manual sessions.
     origin: str | None = None
     created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
     last_active_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})

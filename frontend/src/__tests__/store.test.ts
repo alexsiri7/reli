@@ -290,7 +290,10 @@ describe('store: continueInChat', () => {
 
     await useStore.getState().continueInChat('text', 'title', 'morning_briefing', 'opening')
 
-    expect(useStore.getState().error).toMatch(/Failed to create session/)
+    const state = useStore.getState()
+    expect(state.error).toMatch(/Could not start the chat session/)
+    expect(state.rightView).toBe('briefing')
+    expect(state.mobileView).toBe('briefing')
   })
 
   it('sets error when system message seed fails', async () => {
@@ -301,7 +304,25 @@ describe('store: continueInChat', () => {
 
     await useStore.getState().continueInChat('text', 'title', 'morning_briefing', 'opening')
 
-    expect(useStore.getState().error).toMatch(/Failed to seed system message/)
+    const state = useStore.getState()
+    expect(state.error).toMatch(/Could not start the chat session/)
+    expect(state.rightView).toBe('briefing')
+    expect(state.mobileView).toBe('briefing')
+  })
+
+  it('sets error when assistant message seed fails', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'sess-1', title: 't', origin: null, created_at: '', last_active_at: '' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: false, status: 500 }),
+    )
+
+    await useStore.getState().continueInChat('text', 'title', 'morning_briefing', 'opening')
+
+    const state = useStore.getState()
+    expect(state.error).toMatch(/Could not start the chat session/)
+    expect(state.rightView).toBe('briefing')
+    expect(state.mobileView).toBe('briefing')
   })
 })
 
@@ -354,6 +375,8 @@ describe('serialiseWeeklyBriefing', () => {
         summary: 'Good progress',
         completed: [],
         upcoming: [],
+        new_connections: [],
+        preferences_learned: [],
         open_questions: [],
       },
     } as never)
@@ -364,9 +387,41 @@ describe('serialiseWeeklyBriefing', () => {
   it('handles empty sections gracefully', () => {
     const result = serialiseWeeklyBriefing({
       week_start: '2026-04-21',
-      content: { summary: '', completed: [], upcoming: [], open_questions: [] },
+      content: {
+        summary: '',
+        completed: [],
+        upcoming: [],
+        new_connections: [],
+        preferences_learned: [],
+        open_questions: [],
+      },
     } as never)
     expect(result).not.toContain('Completed this week:')
     expect(result).not.toContain('Upcoming:')
+    expect(result).not.toContain('New connections this week:')
+    expect(result).not.toContain('Preferences learned:')
+  })
+
+  it('includes new_connections and preferences_learned when present', () => {
+    const result = serialiseWeeklyBriefing({
+      week_start: '2026-04-21',
+      content: {
+        summary: '',
+        completed: [],
+        upcoming: [],
+        new_connections: [
+          { from_title: 'Alice', to_title: 'Project X', relationship_type: 'works_on' },
+          { from_title: 'Bob', to_title: 'Charlie' },
+        ],
+        preferences_learned: ['Prefers async standups', 'Quiet hours after 6pm'],
+        open_questions: [],
+      },
+    } as never)
+    expect(result).toContain('New connections this week:')
+    expect(result).toContain('Alice → Project X (works_on)')
+    expect(result).toContain('Bob → Charlie')
+    expect(result).toContain('Preferences learned:')
+    expect(result).toContain('Prefers async standups')
+    expect(result).toContain('Quiet hours after 6pm')
   })
 })
