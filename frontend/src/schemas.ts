@@ -73,7 +73,7 @@ const CallUsageSchema = z.object({
 export const ChatMessageSchema = z.object({
   id: z.union([z.number(), z.string()]),
   session_id: z.string(),
-  role: z.enum(['user', 'assistant']),
+  role: z.enum(['user', 'assistant', 'system']),
   content: z.string(),
   applied_changes: AppliedChangesSchema.nullable(),
   questions_for_user: z.array(z.string()),

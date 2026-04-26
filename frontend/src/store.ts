@@ -957,7 +957,7 @@ export const useStore = create<ReliState>((set, get) => ({
       const res = await apiFetch(`${BASE}/chat/sessions`)
       if (res.ok) set({ sessions: await res.json() })
     } catch {
-      // ignore
+      // best-effort — sessions is display-only; failure doesn't block the user
     }
   },
   switchSession: async (sessionId: string) => {
@@ -972,10 +972,10 @@ export const useStore = create<ReliState>((set, get) => ({
           hasMoreHistory: msgs.length >= HISTORY_PAGE_SIZE,
         })
       } else {
-        set({ historyLoading: false })
+        set({ historyLoading: false, error: `Failed to load chat history (HTTP ${res.status})` })
       }
-    } catch {
-      set({ historyLoading: false })
+    } catch (e) {
+      set({ historyLoading: false, error: String(e) })
     }
   },
   continueInChat: async (briefingText, sessionTitle, origin, openingMessage) => {
@@ -989,17 +989,19 @@ export const useStore = create<ReliState>((set, get) => ({
       const newSession = await sessionRes.json()
       const newSessionId: string = newSession.id
 
-      await apiFetch(`${BASE}/chat/history`, {
+      const sysRes = await apiFetch(`${BASE}/chat/history`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: newSessionId, role: 'system', content: briefingText }),
       })
+      if (!sysRes.ok) throw new Error(`Failed to seed system message: ${sysRes.status}`)
 
-      await apiFetch(`${BASE}/chat/history`, {
+      const asstRes = await apiFetch(`${BASE}/chat/history`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: newSessionId, role: 'assistant', content: openingMessage }),
       })
+      if (!asstRes.ok) throw new Error(`Failed to seed assistant message: ${asstRes.status}`)
 
       await get().switchSession(newSessionId)
       await get().fetchSessions()

@@ -1124,7 +1124,7 @@ export function ChatPanel() {
                 </div>
               )
             )}
-            {messages.map(msg => (
+            {messages.filter(msg => msg.role !== 'system').map(msg => (
               <MessageBubble key={msg.id} msg={msg} speakingId={speakingId} speak={speak} />
             ))}
             <div ref={bottomRef} />
