@@ -202,7 +202,7 @@ export interface SessionStats {
 export interface ChatMessage {
   id: number | string
   session_id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
   applied_changes: AppliedChanges | null
   questions_for_user: string[]
