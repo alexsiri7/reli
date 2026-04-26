@@ -49,6 +49,7 @@ let mockState: Record<string, unknown> = {
   nudgesLoading: false,
   dismissNudge: vi.fn(),
   stopNudgeType: vi.fn(),
+  openQuickAdd: vi.fn(),
   weeklyBriefing: null,
   weeklyBriefingLoading: false,
   fetchWeeklyBriefing: vi.fn(),
@@ -628,6 +629,16 @@ describe('Sidebar', () => {
     const avatars = screen.getAllByAltText('Alex')
     expect(avatars.length).toBeGreaterThan(0)
     expect(avatars[0]).toHaveAttribute('src', 'https://example.com/avatar.jpg')
+  })
+
+  it('renders the New Thought button and calls openQuickAdd on click', () => {
+    const openQuickAdd = vi.fn()
+    mockState = { ...mockState, things: [], briefing: [], loading: false, snoozeThing: vi.fn(), ...calendarDefaults, openQuickAdd }
+    render(<Sidebar />)
+    const btn = screen.getByLabelText('New Thought')
+    expect(btn).toBeInTheDocument()
+    fireEvent.click(btn)
+    expect(openQuickAdd).toHaveBeenCalledTimes(1)
   })
 })
 

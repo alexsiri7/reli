@@ -441,7 +441,7 @@ function singularize(label: string): string {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, theOneThing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView, sidebarOpen, setSidebarOpen, createThing } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, theOneThing: s.theOneThing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView, sidebarOpen: s.sidebarOpen, setSidebarOpen: s.setSidebarOpen, createThing: s.createThing })))
+  const { currentUser, logout, things, thingTypes, briefing, theOneThing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView, sidebarOpen, setSidebarOpen, createThing, openQuickAdd } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, theOneThing: s.theOneThing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView, sidebarOpen: s.sidebarOpen, setSidebarOpen: s.setSidebarOpen, createThing: s.createThing, openQuickAdd: s.openQuickAdd })))
   const disclosure = useProgressiveDisclosure()
   const [searchQuery, setSearchQuery] = useState('')
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
@@ -727,17 +727,14 @@ export function Sidebar() {
       <div
         style={{ width: window.innerWidth >= 768 ? sidebarWidth : undefined }}
         className={`
-          relative md:shrink-0
+          relative md:shrink-0 h-full
           ${isOpen ? '' : 'md:hidden'}
         `}
       >
       <aside
-        className={`
-          flex flex-col bg-surface-container-low overflow-y-auto
-          w-full h-full pb-14
-          md:pb-0
-        `}
+        className="flex flex-col bg-surface-container-low w-full h-full"
       >
+        <div className="flex-1 overflow-y-auto min-h-0 pb-14 md:pb-0">
         {/* Header */}
         <div className="px-4 py-4 flex items-center justify-between">
           <div>
@@ -1350,6 +1347,20 @@ export function Sidebar() {
             )}
           </>
         )}
+        </div>
+
+        <div className="hidden md:block shrink-0 p-3">
+          <button
+            onClick={() => openQuickAdd()}
+            className="w-full bg-primary-container text-on-primary-container py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+            aria-label="New Thought"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            New Thought
+          </button>
+        </div>
       </aside>
         {/* Drag handle — desktop only, outside aside to avoid overflow clipping */}
         <div
