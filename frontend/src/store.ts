@@ -802,8 +802,8 @@ export const useStore = create<ReliState>((set, get) => ({
       if (!res.ok) return
       const data: ProactiveSurface[] = validateResponse(z.array(ProactiveSurfaceSchema), await res.json(), '/proactive')
       set({ proactiveSurfaces: data })
-    } catch {
-      // best-effort
+    } catch (err) {
+      console.debug('[proactive] fetch skipped:', err)
     }
   },
 

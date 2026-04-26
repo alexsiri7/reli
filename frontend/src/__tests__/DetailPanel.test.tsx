@@ -213,4 +213,31 @@ describe('DetailPanel', () => {
     expect(screen.queryByText(/Children/)).not.toBeInTheDocument()
     expect(screen.queryByText('Parent')).not.toBeInTheDocument()
   })
+
+  it('shows suggestion card when proactiveSurfaces contains a matching thing id', () => {
+    storeState.proactiveSurfaces = [
+      { thing: { ...baseThing }, reason: 'You should prepare before diving in.', date_key: '2026-04-26', days_away: 0 },
+    ]
+    render(<DetailPanel />)
+    expect(screen.getByText('Reli Suggestion')).toBeInTheDocument()
+    expect(screen.getByText('You should prepare before diving in.')).toBeInTheDocument()
+    expect(screen.getByText('Prepare Now')).toBeInTheDocument()
+  })
+
+  it('hides suggestion card when proactiveSurfaces has no matching thing id', () => {
+    storeState.proactiveSurfaces = [
+      { thing: { ...baseThing, id: 'other-id' }, reason: 'Some other reason.', date_key: '2026-04-26', days_away: 0 },
+    ]
+    render(<DetailPanel />)
+    expect(screen.queryByText('Reli Suggestion')).not.toBeInTheDocument()
+  })
+
+  it('calls openChatWithContext with thing id and title when Prepare Now clicked', () => {
+    storeState.proactiveSurfaces = [
+      { thing: { ...baseThing }, reason: 'You should prepare before diving in.', date_key: '2026-04-26', days_away: 0 },
+    ]
+    render(<DetailPanel />)
+    fireEvent.click(screen.getByText('Prepare Now'))
+    expect(openChatWithContext).toHaveBeenCalledWith('t1', 'Test Thing')
+  })
 })

@@ -376,6 +376,7 @@ test.describe('Visual regression – reli frontend', () => {
   })
 
   test.describe('detail panel', () => {
+    // Block SW: Workbox StaleWhileRevalidate intercepts /relationships before page.route() fires
     test.use({ serviceWorkers: 'block' })
 
     test('with Reli suggestion card', async ({ page }) => {
@@ -383,6 +384,7 @@ test.describe('Visual regression – reli frontend', () => {
       await page.route('**/api/things/thing-1/relationships', route =>
         route.fulfill({ json: [], status: 200 })
       )
+      // MOCK_THINGS[0] has legacy `priority` field; importance required by ThingSchema
       await page.route('**/api/things/thing-1', route =>
         route.fulfill({ json: { ...MOCK_THINGS[0], importance: 1 }, status: 200 })
       )
@@ -392,6 +394,27 @@ test.describe('Visual regression – reli frontend', () => {
       await page.waitForSelector('text=Reli Suggestion', { timeout: 5_000 })
 
       await expect(page).toHaveScreenshot('detail-panel-with-suggestion.png', {
+        ...SNAPSHOT_OPTS,
+        animations: 'disabled',
+      })
+    })
+
+    test('with Reli suggestion card (dark)', async ({ page }) => {
+      await interceptApi(page, { things: true, proactive: true })
+      await page.route('**/api/things/thing-1/relationships', route =>
+        route.fulfill({ json: [], status: 200 })
+      )
+      // MOCK_THINGS[0] has legacy `priority` field; importance required by ThingSchema
+      await page.route('**/api/things/thing-1', route =>
+        route.fulfill({ json: { ...MOCK_THINGS[0], importance: 1 }, status: 200 })
+      )
+      await page.emulateMedia({ colorScheme: 'dark' })
+      await page.goto('/')
+      await waitForApp(page)
+      await page.locator('text=Review pull request for auth module').first().click()
+      await page.waitForSelector('text=Reli Suggestion', { timeout: 5_000 })
+
+      await expect(page).toHaveScreenshot('detail-panel-with-suggestion-dark.png', {
         ...SNAPSHOT_OPTS,
         animations: 'disabled',
       })
