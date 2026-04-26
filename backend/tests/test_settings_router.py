@@ -10,8 +10,8 @@ _TEST_FERNET_KEY = Fernet.generate_key().decode()
 @pytest.fixture()
 def auth_client(patched_db, monkeypatch):
     """TestClient with require_user patched and a valid Fernet key."""
-    from backend.main import app
     from backend.auth import require_user
+    from backend.main import app
     from backend.token_encryption import reset_for_testing
 
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", _TEST_FERNET_KEY)
@@ -71,8 +71,9 @@ class TestSettingsUserEndpoint:
     def test_get_user_settings_with_empty_chat_context_window(self, auth_client, patched_db):
         """GET /settings/user must not crash when chat_context_window is stored as ''."""
         from sqlmodel import Session
-        from backend.routers.settings import _set_user_setting
+
         import backend.db_engine as _engine_mod
+        from backend.routers.settings import _set_user_setting
 
         with Session(_engine_mod.engine) as session:
             _set_user_setting(session, "test-user-settings", "chat_context_window", "")
