@@ -248,4 +248,60 @@ describe('DetailPanel', () => {
     fireEvent.click(screen.getByText('Prepare Now'))
     expect(openChatWithContext).toHaveBeenCalledWith('t1', 'Test Thing')
   })
+
+  it('renders contact card for person type', () => {
+    storeState.detailThing = {
+      ...baseThing,
+      type_hint: 'person',
+      data: { email: 'sarah@example.com', phone: '555-0123', role: 'Lead Designer' },
+    }
+    render(<DetailPanel />)
+    expect(screen.getByText('Lead Designer')).toBeInTheDocument()
+    expect(screen.getByLabelText('Send Email')).toBeInTheDocument()
+    expect(screen.getByLabelText('Schedule Call')).toBeInTheDocument()
+  })
+
+  it('renders contact card with initials', () => {
+    storeState.detailThing = {
+      ...baseThing,
+      title: 'Sarah Mitchell',
+      type_hint: 'person',
+      data: null,
+    }
+    render(<DetailPanel />)
+    expect(screen.getByText('SM')).toBeInTheDocument()
+  })
+
+  it('hides email/phone buttons when data is null for person type', () => {
+    storeState.detailThing = {
+      ...baseThing,
+      type_hint: 'person',
+      data: null,
+    }
+    render(<DetailPanel />)
+    expect(screen.queryByLabelText('Send Email')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Schedule Call')).not.toBeInTheDocument()
+  })
+
+  it('does not render contact card for non-person types', () => {
+    storeState.detailThing = {
+      ...baseThing,
+      type_hint: 'task',
+      data: { email: 'task@example.com' },
+    }
+    render(<DetailPanel />)
+    expect(screen.queryByLabelText('Send Email')).not.toBeInTheDocument()
+  })
+
+  it('suppresses contact fields from Details section for person type', () => {
+    storeState.detailThing = {
+      ...baseThing,
+      type_hint: 'person',
+      data: { email: 'sarah@example.com', role: 'Designer', other: 'value' },
+    }
+    render(<DetailPanel />)
+    expect(screen.getByText('other:')).toBeInTheDocument()
+    const emailLabels = screen.queryAllByText('email:')
+    expect(emailLabels).toHaveLength(0)
+  })
 })

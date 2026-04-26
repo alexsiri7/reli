@@ -127,8 +127,13 @@ export function DetailPanel() {
 
   // Separate notes from other data entries
   const notes = thing?.data?.notes != null ? String(thing.data.notes) : null
+  const CONTACT_DATA_KEYS = new Set(['email', 'phone', 'role', 'title', 'position'])
   const dataEntries = thing?.data
-    ? Object.entries(thing.data).filter(([key]) => key !== 'notes')
+    ? Object.entries(thing.data).filter(([key]) => {
+        if (key === 'notes') return false
+        if (thing.type_hint === 'person' && CONTACT_DATA_KEYS.has(key)) return false
+        return true
+      })
     : []
 
   const formatRelType = (type: string) =>
@@ -215,6 +220,63 @@ export function DetailPanel() {
                   </span>
                 )}
               </div>
+
+              {/* ── CONTACT CARD (person type) ── */}
+              {thing.type_hint === 'person' && (() => {
+                const email = thing.data?.email != null ? String(thing.data.email) : null
+                const phone = thing.data?.phone != null ? String(thing.data.phone) : null
+                const role = thing.data?.role != null
+                  ? String(thing.data.role)
+                  : thing.data?.title != null
+                  ? String(thing.data.title)
+                  : thing.data?.position != null
+                  ? String(thing.data.position)
+                  : null
+                const initials = thing.title
+                  .split(/\s+/)
+                  .filter(Boolean)
+                  .map(w => w[0]!.toUpperCase())
+                  .slice(0, 2)
+                  .join('')
+                return (
+                  <div className="rounded-xl bg-surface-container-highest/30 p-6 border border-people/20 flex flex-col items-center text-center gap-3">
+                    <div className="w-16 h-16 rounded-full bg-people/20 flex items-center justify-center text-people font-bold text-xl ring-2 ring-people/20">
+                      {initials}
+                    </div>
+                    <div>
+                      <p className="text-body font-bold text-on-surface">{thing.title}</p>
+                      {role && <p className="text-label text-on-surface-variant mt-0.5">{role}</p>}
+                    </div>
+                    {(email || phone) && (
+                      <div className="flex gap-2">
+                        {email && (
+                          <button
+                            aria-label="Send Email"
+                            onClick={() => window.open(`mailto:${email}`)}
+                            className="p-2 rounded-lg bg-surface-container-highest text-people hover:bg-people hover:text-on-primary transition-colors"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <rect x="2" y="4" width="20" height="16" rx="2"/>
+                              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                            </svg>
+                          </button>
+                        )}
+                        {phone && (
+                          <button
+                            aria-label="Schedule Call"
+                            onClick={() => window.open(`tel:${phone}`)}
+                            className="p-2 rounded-lg bg-surface-container-highest text-people hover:bg-people hover:text-on-primary transition-colors"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.92a16 16 0 0 0 6.17 6.17l.92-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.92 16.92z"/>
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* ── NOTES ── */}
               {thing.type_hint === 'preference' ? (
