@@ -122,7 +122,6 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
 
     # Group children by project
     project_children: dict[str, list[dict]] = {}
-    project_titles: dict[str, str] = {}
 
     for rel in parent_rels:
         project = thing_map.get(rel.from_thing_id)
@@ -133,10 +132,7 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
             continue
 
         pid = rel.from_thing_id
-        if pid not in project_children:
-            project_children[pid] = []
-            project_titles[pid] = project["title"]
-        project_children[pid].append(child)
+        project_children.setdefault(pid, []).append(child)
 
     clusters: list[DependencyCluster] = []
 
@@ -156,7 +152,7 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
 
         clusters.append(DependencyCluster(
             cluster_id=f"project-{pid}",
-            label=project_titles[pid],
+            label=thing_map[pid]["title"],
             things=capped,
             user_id=cluster_user_id,
         ))
@@ -325,9 +321,9 @@ async def detect_cluster_dependencies(
                         continue
 
                     # Check for existing suggestion in either direction
-                    C = ConnectionSuggestionRecord
-                    fwd = (C.from_thing_id == from_id) & (C.to_thing_id == to_id)
-                    rev = (C.from_thing_id == to_id) & (C.to_thing_id == from_id)
+                    CS = ConnectionSuggestionRecord
+                    fwd = (CS.from_thing_id == from_id) & (CS.to_thing_id == to_id)
+                    rev = (CS.from_thing_id == to_id) & (CS.to_thing_id == from_id)
                     existing = session.exec(
                         select(ConnectionSuggestionRecord).where(
                             ConnectionSuggestionRecord.status.in_(["pending", "deferred"]),  # type: ignore[union-attr]
