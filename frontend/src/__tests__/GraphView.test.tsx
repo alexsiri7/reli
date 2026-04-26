@@ -6,7 +6,7 @@ vi.mock('react-force-graph-2d', () => ({
   default: () => <canvas data-testid="force-graph" />,
 }))
 
-global.ResizeObserver = class {
+window.ResizeObserver = class {
   observe() {}
   unobserve() {}
   disconnect() {}
