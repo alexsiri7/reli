@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ChatMode, type ContextThing, type GmailMessage, type InteractionStyle, type ModelUsage, type ReferencedThing, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
+import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ChatMode, type ChatSession, type ContextThing, type GmailMessage, type InteractionStyle, type ModelUsage, type ReferencedThing, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
 import { typeIcon } from '../utils'
 import { useVoiceInput, speechRecognitionSupported } from '../hooks/useVoiceInput'
 import { useTTS, ttsSupported } from '../hooks/useTTS'
@@ -718,8 +718,90 @@ function InteractionStyleSelector({ style, onChange }: { style: InteractionStyle
   )
 }
 
+function SessionsSidebar({ sessions, activeSessionId, onCreate, onSwitch, onRename, onDelete }: {
+  sessions: ChatSession[]
+  activeSessionId: string
+  onCreate: () => void
+  onSwitch: (id: string) => void
+  onRename: (id: string, title: string) => void
+  onDelete: (id: string) => void
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+
+  const startEdit = (s: ChatSession) => {
+    setEditingId(s.id)
+    setEditTitle(s.title)
+  }
+
+  const commitEdit = () => {
+    if (editingId && editTitle.trim()) {
+      onRename(editingId, editTitle.trim())
+    }
+    setEditingId(null)
+  }
+
+  return (
+    <div className="w-56 shrink-0 border-r border-white/5 bg-surface-container flex flex-col h-full overflow-hidden">
+      <div className="px-3 py-3 flex items-center justify-between border-b border-white/5">
+        <span className="text-label font-medium text-on-surface">Chats</span>
+        <button
+          onClick={onCreate}
+          className="p-1 rounded hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors"
+          title="New chat"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto py-1">
+        {sessions.map(s => (
+          <div
+            key={s.id}
+            onClick={() => onSwitch(s.id)}
+            className={`group flex items-center gap-1 px-3 py-2 mx-1 rounded cursor-pointer text-sm truncate ${
+              s.id === activeSessionId
+                ? 'bg-primary/10 text-on-surface ring-1 ring-primary/30'
+                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+            }`}
+          >
+            {editingId === s.id ? (
+              <input
+                autoFocus
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingId(null) }}
+                className="flex-1 bg-transparent border-b border-primary/50 text-sm text-on-surface outline-none px-0 py-0"
+                onClick={e => e.stopPropagation()}
+              />
+            ) : (
+              <span
+                className="flex-1 truncate"
+                onDoubleClick={e => { e.stopPropagation(); startEdit(s) }}
+              >
+                {s.title}
+              </span>
+            )}
+            <button
+              onClick={e => { e.stopPropagation(); if (window.confirm('Delete this session?')) onDelete(s.id) }}
+              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-error/10 text-on-surface-variant hover:text-error transition-all shrink-0"
+              title="Delete session"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+              </svg>
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus, gmailStatus, nudges, chatPrefill, clearChatPrefill } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus, gmailStatus, nudges, chatPrefill, clearChatPrefill, chatSessions, sessionId, createChatSession, switchChatSession, renameChatSession, deleteChatSession } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -739,12 +821,19 @@ export function ChatPanel() {
       nudges: s.nudges,
       chatPrefill: s.chatPrefill,
       clearChatPrefill: s.clearChatPrefill,
+      chatSessions: s.chatSessions,
+      sessionId: s.sessionId,
+      createChatSession: s.createChatSession,
+      switchChatSession: s.switchChatSession,
+      renameChatSession: s.renameChatSession,
+      deleteChatSession: s.deleteChatSession,
     }))
   )
   const { isOnline } = useNetworkStatus()
   const disclosure = useProgressiveDisclosure()
   const [input, setInput] = useState('')
   const [collapsed, setCollapsed] = useState(false)
+  const [sessionsSidebarOpen, setSessionsSidebarOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -846,7 +935,21 @@ export function ChatPanel() {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-surface min-w-0 min-h-0 mobile-chat-pb md:pb-0">
+    <div className="flex-1 flex min-w-0 min-h-0">
+      {/* Sessions sidebar — desktop only */}
+      {sessionsSidebarOpen && (
+        <div className="hidden md:block">
+          <SessionsSidebar
+            sessions={chatSessions}
+            activeSessionId={sessionId}
+            onCreate={() => { createChatSession() }}
+            onSwitch={switchChatSession}
+            onRename={renameChatSession}
+            onDelete={deleteChatSession}
+          />
+        </div>
+      )}
+      <div className="flex-1 flex flex-col bg-surface min-w-0 min-h-0 mobile-chat-pb md:pb-0">
       {/* Mobile header — compact with Reli branding */}
       <div className="md:hidden px-5 pt-4 pb-2 bg-surface shrink-0 flex items-center gap-2">
         <div className="w-7 h-7 rounded bg-primary-container flex items-center justify-center">
@@ -869,6 +972,16 @@ export function ChatPanel() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSessionsSidebarOpen(o => !o)}
+            className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+            title={sessionsSidebarOpen ? 'Hide sessions' : 'Show sessions'}
+            aria-label={sessionsSidebarOpen ? 'Hide sessions' : 'Show sessions'}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+          </button>
           <InteractionStyleSelector style={interactionStyle} onChange={setInteractionStyle} />
           <ModeToggle mode={chatMode} onChange={setChatMode} />
           <NerdStatsIcon stats={sessionStats} />
@@ -1077,6 +1190,7 @@ export function ChatPanel() {
           </div>
         </>
       )}
+      </div>
     </div>
   )
 }

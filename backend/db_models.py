@@ -116,6 +116,18 @@ class ChatHistoryRecord(SQLModel, table=True):
     user_id: str | None = None
 
 
+class ChatSessionRecord(SQLModel, table=True):
+    """A named chat session belonging to a user."""
+
+    __tablename__ = "chat_sessions"
+
+    id: str = Field(primary_key=True)
+    user_id: str
+    title: str = Field(default="New chat")
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+    last_active_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+
+
 class ChatMessageUsageRecord(SQLModel, table=True):
     """Per-call usage breakdown for a chat message."""
 
