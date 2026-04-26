@@ -85,7 +85,7 @@ const MOCK_THINGS: Record<string, unknown>[] = [
     priority: 2,
     active: true,
     surface: false,
-    data: null,
+    data: { email: 'sarah@designapex.com', phone: '+1-555-0123', role: 'Lead Designer, Studio Apex' },
     created_at: '2026-01-15T10:00:00Z',
     updated_at: '2026-03-12T10:00:00Z',
     last_referenced: '2026-03-12T10:00:00Z',
@@ -392,6 +392,32 @@ test.describe('Visual regression – reli frontend', () => {
       await page.waitForSelector('text=Reli Suggestion', { timeout: 5_000 })
 
       await expect(page).toHaveScreenshot('detail-panel-with-suggestion.png', {
+        ...SNAPSHOT_OPTS,
+        animations: 'disabled',
+      })
+    })
+
+    test('with Contact card for person type', async ({ page }) => {
+      await interceptApi(page, { things: true })
+      await page.route('**/api/things/thing-5/relationships', route =>
+        route.fulfill({ json: [], status: 200 })
+      )
+      await page.route('**/api/things/thing-5', route =>
+        route.fulfill({
+          json: {
+            ...MOCK_THINGS[4],
+            data: { email: 'sarah@designapex.com', phone: '+1-555-0123', role: 'Lead Designer, Studio Apex' },
+            importance: 2,
+          },
+          status: 200,
+        })
+      )
+      await page.goto('/')
+      await waitForApp(page)
+      await page.locator('text=Sarah Mitchell').first().click()
+      await page.waitForSelector('[aria-label="Send Email"]', { timeout: 5_000 })
+
+      await expect(page).toHaveScreenshot('detail-panel-contact-card.png', {
         ...SNAPSHOT_OPTS,
         animations: 'disabled',
       })
