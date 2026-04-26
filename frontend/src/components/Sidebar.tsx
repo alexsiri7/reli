@@ -1351,9 +1351,8 @@ export function Sidebar() {
 
         <div className="hidden md:block shrink-0 p-3">
           <button
-            onClick={() => openQuickAdd()}
+            onClick={openQuickAdd}
             className="w-full bg-primary-container text-on-primary-container py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
-            aria-label="New Thought"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

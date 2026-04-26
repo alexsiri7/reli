@@ -180,6 +180,7 @@ const calendarDefaults = {
   sidebarOpen: true,
   setSidebarOpen: vi.fn(),
   createThing: vi.fn(),
+  openQuickAdd: vi.fn(),
   ...searchDefaults,
   ...filterDefaults,
   ...mergeDefaults,
@@ -635,7 +636,7 @@ describe('Sidebar', () => {
     const openQuickAdd = vi.fn()
     mockState = { ...mockState, things: [], briefing: [], loading: false, snoozeThing: vi.fn(), ...calendarDefaults, openQuickAdd }
     render(<Sidebar />)
-    const btn = screen.getByLabelText('New Thought')
+    const btn = screen.getByRole('button', { name: 'New Thought' })
     expect(btn).toBeInTheDocument()
     fireEvent.click(btn)
     expect(openQuickAdd).toHaveBeenCalledTimes(1)

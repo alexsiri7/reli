@@ -393,6 +393,8 @@ test.describe('Visual regression – reli frontend', () => {
     })
   })
 
+  // TODO: mobile snapshot renders blank (390×844 dark canvas, no UI elements) — root cause unknown,
+  // likely a timing or route-intercept gap in mobile layout. Tracked for a follow-up bead.
   test('briefing panel – populated (mobile)', async ({ page }) => {
     await interceptApi(page, { things: true, briefing: true })
     await page.setViewportSize({ width: 390, height: 844 })
