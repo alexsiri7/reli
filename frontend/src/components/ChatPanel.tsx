@@ -772,20 +772,29 @@ function SessionsSidebar({ sessions, activeSessionId, onCreate, onSwitch, onRena
                 value={editTitle}
                 onChange={e => setEditTitle(e.target.value)}
                 onBlur={commitEdit}
-                onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingId(null) }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') commitEdit()
+                  if (e.key === 'Escape') setEditingId(null)
+                }}
                 className="flex-1 bg-transparent border-b border-primary/50 text-sm text-on-surface outline-none px-0 py-0"
                 onClick={e => e.stopPropagation()}
               />
             ) : (
               <span
                 className="flex-1 truncate"
-                onDoubleClick={e => { e.stopPropagation(); startEdit(s) }}
+                onDoubleClick={e => {
+                  e.stopPropagation()
+                  startEdit(s)
+                }}
               >
                 {s.title}
               </span>
             )}
             <button
-              onClick={e => { e.stopPropagation(); if (window.confirm('Delete this session?')) onDelete(s.id) }}
+              onClick={e => {
+                e.stopPropagation()
+                if (window.confirm('Delete this session?')) onDelete(s.id)
+              }}
               className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-error/10 text-on-surface-variant hover:text-error transition-all shrink-0"
               title="Delete session"
             >
