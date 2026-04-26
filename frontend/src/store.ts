@@ -1222,8 +1222,9 @@ export const useStore = create<ReliState>((set, get) => ({
       const remaining = get().chatSessions.filter(s => s.id !== sessionId)
       set({ chatSessions: remaining })
       if (get().sessionId === sessionId) {
-        if (remaining.length > 0) {
-          await get().switchChatSession(remaining[0].id)
+        const first = remaining[0]
+        if (first) {
+          await get().switchChatSession(first.id)
         } else {
           await get().createChatSession()
         }
