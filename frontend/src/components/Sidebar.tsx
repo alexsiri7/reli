@@ -1350,6 +1350,17 @@ export function Sidebar() {
             )}
           </>
         )}
+        <div className="hidden md:block sticky bottom-0 bg-surface-container-low px-4 py-4">
+          <button
+            onClick={() => useStore.getState().openQuickAdd()}
+            className="w-full bg-primary-container text-on-primary-container py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-primary-container/90 active:scale-95 transition-all duration-100"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            <span>New Thought</span>
+          </button>
+        </div>
       </aside>
         {/* Drag handle — desktop only, outside aside to avoid overflow clipping */}
         <div
