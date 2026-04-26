@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore } from '../store'
+import { useStore, serialiseWeeklyBriefing } from '../store'
 import { apiFetch } from '../api'
 import type { Thing, SweepFinding, FocusRecommendation, MorningBriefing, WeeklyBriefing } from '../store'
 import { NudgeBanner } from './NudgeBanner'
@@ -223,9 +223,21 @@ function MorningBriefingSection({ briefing }: { briefing: MorningBriefing }) {
   )
 }
 
-function WeeklyBriefingSection({ briefing }: { briefing: WeeklyBriefing }) {
+function WeeklyBriefingSection({ briefing, onContinueInChat }: {
+  briefing: WeeklyBriefing
+  onContinueInChat: (text: string, title: string, origin: 'morning_briefing' | 'weekly_review', opening: string) => Promise<void>
+}) {
   const [expanded, setExpanded] = useState(false)
   const c = briefing.content
+
+  const handleContinueInChat = () => {
+    onContinueInChat(
+      serialiseWeeklyBriefing(briefing),
+      `Weekly review — week of ${briefing.week_start}`,
+      'weekly_review',
+      "Here's your week in review. Want to reflect on progress or plan for what's next?",
+    )
+  }
 
   const hasContent = c.completed.length > 0 || c.upcoming.length > 0 || c.new_connections.length > 0 || c.preferences_learned.length > 0 || c.open_questions.length > 0
   if (!hasContent && !c.summary) return null
@@ -316,6 +328,17 @@ function WeeklyBriefingSection({ briefing }: { briefing: WeeklyBriefing }) {
           )}
         </div>
       )}
+      <div className="px-4 pt-2 pb-1">
+        <button
+          onClick={handleContinueInChat}
+          className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+          </svg>
+          Continue in chat
+        </button>
+      </div>
     </section>
   )
 }
@@ -441,7 +464,7 @@ function singularize(label: string): string {
 }
 
 export function Sidebar() {
-  const { currentUser, logout, things, thingTypes, briefing, theOneThing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView, sidebarOpen, setSidebarOpen, createThing, openQuickAdd } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, theOneThing: s.theOneThing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView, sidebarOpen: s.sidebarOpen, setSidebarOpen: s.setSidebarOpen, createThing: s.createThing, openQuickAdd: s.openQuickAdd })))
+  const { currentUser, logout, things, thingTypes, briefing, theOneThing, findings, proactiveSurfaces, focusRecommendations, conflictAlerts, morningBriefing, nudges, weeklyBriefing, loading, searchResults, searchLoading, searchThings, clearSearch, dismissFinding, snoozeFinding, actOnFinding, thingFilterQuery, thingFilterTypes, setThingFilterQuery, toggleThingFilterType, clearThingFilters, mainView, setMainView, rightView, setRightView, sidebarOpen, setSidebarOpen, createThing, openQuickAdd, continueInChat } = useStore(useShallow(s => ({ currentUser: s.currentUser, logout: s.logout, things: s.things, thingTypes: s.thingTypes, briefing: s.briefing, theOneThing: s.theOneThing, findings: s.findings, proactiveSurfaces: s.proactiveSurfaces, focusRecommendations: s.focusRecommendations, conflictAlerts: s.conflictAlerts, morningBriefing: s.morningBriefing, nudges: s.nudges, weeklyBriefing: s.weeklyBriefing, loading: s.loading, searchResults: s.searchResults, searchLoading: s.searchLoading, searchThings: s.searchThings, clearSearch: s.clearSearch, dismissFinding: s.dismissFinding, snoozeFinding: s.snoozeFinding, actOnFinding: s.actOnFinding, thingFilterQuery: s.thingFilterQuery, thingFilterTypes: s.thingFilterTypes, setThingFilterQuery: s.setThingFilterQuery, toggleThingFilterType: s.toggleThingFilterType, clearThingFilters: s.clearThingFilters, mainView: s.mainView, setMainView: s.setMainView, rightView: s.rightView, setRightView: s.setRightView, sidebarOpen: s.sidebarOpen, setSidebarOpen: s.setSidebarOpen, createThing: s.createThing, openQuickAdd: s.openQuickAdd, continueInChat: s.continueInChat })))
   const disclosure = useProgressiveDisclosure()
   const [searchQuery, setSearchQuery] = useState('')
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
@@ -987,7 +1010,7 @@ export function Sidebar() {
             {disclosure.showBriefing && morningBriefing && <MorningBriefingSection briefing={morningBriefing} />}
 
             {/* Weekly Digest */}
-            {disclosure.showGraphView && weeklyBriefing && <WeeklyBriefingSection briefing={weeklyBriefing} />}
+            {disclosure.showGraphView && weeklyBriefing && <WeeklyBriefingSection briefing={weeklyBriefing} onContinueInChat={continueInChat} />}
 
             {/* Briefing empty state */}
             {!loading && !morningBriefing && !(disclosure.showGraphView && weeklyBriefing) && findings.length === 0 && briefing.length === 0 && (

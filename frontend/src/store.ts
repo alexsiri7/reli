@@ -125,6 +125,14 @@ export interface GmailMessage {
   snippet: string
 }
 
+export interface ChatSessionListItem {
+  id: string
+  title: string
+  origin: string | null
+  created_at: string
+  last_active_at: string
+}
+
 export interface ReferencedThing {
   mention: string
   thing_id: string
@@ -291,6 +299,10 @@ interface ReliState {
   actOnFinding: (finding: SweepFinding) => void
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
   updateThing: (id: string, updates: Record<string, unknown>) => Promise<void>
+  sessions: ChatSessionListItem[]
+  fetchSessions: () => Promise<void>
+  switchSession: (sessionId: string) => Promise<void>
+  continueInChat: (briefingText: string, sessionTitle: string, origin: 'morning_briefing' | 'weekly_review', openingMessage: string) => Promise<void>
   chatPrefill: string | null
   openChatWithContext: (thingId: string, title: string) => void
   clearChatPrefill: () => void
@@ -491,6 +503,48 @@ function _parsePreferenceToasts(
   for (const c of changes.created ?? []) checkItem(c as Record<string, unknown>, 'created')
   for (const u of changes.updated ?? []) checkItem(u as Record<string, unknown>, 'updated')
   return toasts
+}
+
+export function serialiseMorningBriefing(b: MorningBriefing): string {
+  const c = b.content
+  const lines: string[] = [`Daily briefing — ${b.briefing_date}`]
+  if (c.summary) lines.push(`\nSummary: ${c.summary}`)
+  if (c.priorities.length) {
+    lines.push('\nPriorities:')
+    c.priorities.forEach(i => lines.push(`  • ${i.title}${i.reasons.length ? ` — ${i.reasons[0]}` : ''}`))
+  }
+  if (c.overdue.length) {
+    lines.push('\nOverdue:')
+    c.overdue.forEach(i => lines.push(`  • ${i.title}${i.days_overdue != null ? ` — ${i.days_overdue}d overdue` : ''}`))
+  }
+  if (c.blockers.length) {
+    lines.push('\nBlockers:')
+    c.blockers.forEach(i => lines.push(`  • ${i.title}`))
+  }
+  if (c.findings.length) {
+    lines.push('\nNeeds attention:')
+    c.findings.forEach(f => lines.push(`  • ${f.message}`))
+  }
+  return lines.join('\n')
+}
+
+export function serialiseWeeklyBriefing(b: WeeklyBriefing): string {
+  const c = b.content
+  const lines: string[] = [`Weekly review — week of ${b.week_start}`]
+  if (c.summary) lines.push(`\nSummary: ${c.summary}`)
+  if (c.completed.length) {
+    lines.push('\nCompleted this week:')
+    c.completed.forEach(i => lines.push(`  • ${i.title}`))
+  }
+  if (c.upcoming.length) {
+    lines.push('\nUpcoming:')
+    c.upcoming.forEach(i => lines.push(`  • ${i.title}${i.detail ? ` — ${i.detail}` : ''}`))
+  }
+  if (c.open_questions.length) {
+    lines.push('\nOpen questions:')
+    c.open_questions.forEach(i => lines.push(`  • ${i.title}`))
+  }
+  return lines.join('\n')
 }
 
 export const useStore = create<ReliState>((set, get) => ({
@@ -897,6 +951,63 @@ export const useStore = create<ReliState>((set, get) => ({
     }
   },
 
+  sessions: [],
+  fetchSessions: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/chat/sessions`)
+      if (res.ok) set({ sessions: await res.json() })
+    } catch {
+      // ignore
+    }
+  },
+  switchSession: async (sessionId: string) => {
+    set({ sessionId, messages: [], historyLoading: true, hasMoreHistory: true })
+    try {
+      const res = await apiFetch(`${BASE}/chat/history/${sessionId}?limit=${HISTORY_PAGE_SIZE}`)
+      if (res.ok) {
+        const msgs: ChatMessage[] = validateResponse(z.array(ChatMessageSchema), await res.json(), '/chat/history')
+        set({
+          messages: msgs.map(m => ({ ...m, questions_for_user: m.questions_for_user ?? [] })),
+          historyLoading: false,
+          hasMoreHistory: msgs.length >= HISTORY_PAGE_SIZE,
+        })
+      } else {
+        set({ historyLoading: false })
+      }
+    } catch {
+      set({ historyLoading: false })
+    }
+  },
+  continueInChat: async (briefingText, sessionTitle, origin, openingMessage) => {
+    try {
+      const sessionRes = await apiFetch(`${BASE}/chat/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: sessionTitle, origin }),
+      })
+      if (!sessionRes.ok) throw new Error(`Failed to create session: ${sessionRes.status}`)
+      const newSession = await sessionRes.json()
+      const newSessionId: string = newSession.id
+
+      await apiFetch(`${BASE}/chat/history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: newSessionId, role: 'system', content: briefingText }),
+      })
+
+      await apiFetch(`${BASE}/chat/history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: newSessionId, role: 'assistant', content: openingMessage }),
+      })
+
+      await get().switchSession(newSessionId)
+      await get().fetchSessions()
+      set({ rightView: 'chat', mobileView: 'chat' })
+    } catch (e) {
+      set({ error: String(e) })
+    }
+  },
   openChatWithContext: (_thingId: string, title: string) => {
     set({
       chatPrefill: `Let's talk about "${title}"`,

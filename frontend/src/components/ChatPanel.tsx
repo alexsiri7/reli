@@ -801,7 +801,7 @@ function SessionsSidebar({ sessions, activeSessionId, onCreate, onSwitch, onRena
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus, gmailStatus, nudges, chatPrefill, clearChatPrefill, chatSessions, sessionId, createChatSession, switchChatSession, renameChatSession, deleteChatSession } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus, gmailStatus, nudges, chatPrefill, clearChatPrefill, chatSessions, sessions, sessionId, createChatSession, switchChatSession, renameChatSession, deleteChatSession } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -822,6 +822,7 @@ export function ChatPanel() {
       chatPrefill: s.chatPrefill,
       clearChatPrefill: s.clearChatPrefill,
       chatSessions: s.chatSessions,
+      sessions: s.sessions,
       sessionId: s.sessionId,
       createChatSession: s.createChatSession,
       switchChatSession: s.switchChatSession,
@@ -846,6 +847,8 @@ export function ChatPanel() {
   const { listening, toggleListening } = useVoiceInput(handleTranscript)
   const openThingDetailStore = useStore(s => s.openThingDetail)
   const thingTypes = useStore(s => s.thingTypes)
+
+  const currentSession = useMemo(() => sessions.find(s => s.id === sessionId), [sessions, sessionId])
 
   // Collect unique context things from recent messages for mobile pills
   const activeContextThings = useMemo(() => {
@@ -967,8 +970,20 @@ export function ChatPanel() {
             </svg>
           </div>
           <div>
-            <h2 className="text-title text-on-surface">Reli Assistant</h2>
-            <p className="text-label text-on-surface-variant">Your personal knowledge companion</p>
+            <div className="flex items-center gap-2">
+              <h2 className="text-title text-on-surface">Reli Assistant</h2>
+              {currentSession?.origin === 'morning_briefing' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-container-high text-on-surface-variant">
+                  📋 Briefing
+                </span>
+              )}
+              {currentSession?.origin === 'weekly_review' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-container-high text-on-surface-variant">
+                  📅 Weekly
+                </span>
+              )}
+            </div>
+            <p className="text-label text-on-surface-variant">{currentSession?.title ?? 'Your personal knowledge companion'}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

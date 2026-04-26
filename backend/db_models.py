@@ -95,6 +95,19 @@ class ThingRelationshipRecord(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 
+class ChatSessionRecord(SQLModel, table=True):
+    """A named chat session."""
+
+    __tablename__ = "chat_sessions"
+
+    id: str = Field(default_factory=_new_id, primary_key=True)
+    user_id: str
+    title: str = Field(default="New chat")
+    origin: str | None = None
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+    last_active_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+
+
 class ChatHistoryRecord(SQLModel, table=True):
     """A single chat message in a session."""
 
@@ -114,18 +127,6 @@ class ChatHistoryRecord(SQLModel, table=True):
     model: str | None = None
     timestamp: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
     user_id: str | None = None
-
-
-class ChatSessionRecord(SQLModel, table=True):
-    """A named chat session belonging to a user."""
-
-    __tablename__ = "chat_sessions"
-
-    id: str = Field(primary_key=True)
-    user_id: str
-    title: str = Field(default="New chat")
-    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
-    last_active_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
 
 
 class ChatMessageUsageRecord(SQLModel, table=True):

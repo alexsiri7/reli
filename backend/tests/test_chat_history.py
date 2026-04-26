@@ -51,9 +51,17 @@ class TestAppendMessage:
     def test_invalid_role_returns_422(self, client):
         resp = client.post(
             "/api/chat/history",
-            json={"session_id": "s1", "role": "system", "content": "oops"},
+            json={"session_id": "s1", "role": "admin", "content": "oops"},
         )
         assert resp.status_code == 422
+
+    def test_system_role_accepted(self, client):
+        resp = client.post(
+            "/api/chat/history",
+            json={"session_id": "s1", "role": "system", "content": "briefing context"},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["role"] == "system"
 
     def test_empty_session_id_returns_422(self, client):
         resp = client.post(

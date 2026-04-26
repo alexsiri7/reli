@@ -111,6 +111,11 @@ def _row_to_msg(row: Any, usage_rows: Any = None) -> ChatMessage:
     )
 
 
+# ---------------------------------------------------------------------------
+# Session management
+# ---------------------------------------------------------------------------
+
+
 @router.get("/history/{session_id}", response_model=list[ChatMessage], summary="Get chat history for a session")
 def get_history(
     session_id: str,
@@ -219,6 +224,7 @@ def list_sessions(user_id: str = Depends(require_user)) -> list[ChatSessionSumma
         ChatSessionSummary(
             id=row[0].id,
             title=row[0].title,
+            origin=row[0].origin,
             created_at=row[0].created_at,
             last_active_at=row[0].last_active_at,
             message_count=row[1],
@@ -236,13 +242,14 @@ def create_session(body: CreateSessionRequest, user_id: str = Depends(require_us
         ).first()
         if existing:
             raise HTTPException(status_code=409, detail=f"Session '{body.session_id}' already exists")
-        record = ChatSessionRecord(id=body.session_id, user_id=user_id, title=body.title)
+        record = ChatSessionRecord(id=body.session_id, user_id=user_id, title=body.title, origin=body.origin)
         session.add(record)
         session.commit()
         session.refresh(record)
     return ChatSessionSummary(
         id=record.id,
         title=record.title,
+        origin=record.origin,
         created_at=record.created_at,
         last_active_at=record.last_active_at,
         message_count=0,
