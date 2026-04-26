@@ -887,12 +887,10 @@ export function ChatPanel() {
       {/* Mobile context pills — horizontal scrollable bar */}
       {!collapsed && activeContextThings.length > 0 && (
         <div className="md:hidden shrink-0 px-4 pt-3 pb-2 bg-surface-container-low">
-          {/* Label + horizontal divider */}
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant shrink-0">Context Active</span>
             <div className="h-px flex-1 bg-white/5" />
           </div>
-          {/* Pills — horizontal scroll */}
           <div className="flex gap-2 overflow-x-auto no-scrollbar">
             {activeContextThings.map(t => (
               <button
@@ -949,7 +947,7 @@ export function ChatPanel() {
 
                   {/* Suggestion pills */}
                   <div className="ml-10 space-y-2">
-                    {ONBOARDING_SUGGESTIONS.map((suggestion) => (
+                    {ONBOARDING_SUGGESTIONS.map(suggestion => (
                       <button
                         key={suggestion}
                         onClick={() => setInput(suggestion)}
