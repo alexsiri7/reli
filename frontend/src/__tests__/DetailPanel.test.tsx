@@ -53,7 +53,7 @@ beforeEach(() => {
     goBackThingDetail,
     things: [baseThing],
     thingTypes: [] as ThingType[],
-    proactiveSurfaces: [],
+    nudges: [],
     openChatWithContext,
   }
 })
@@ -212,5 +212,40 @@ describe('DetailPanel', () => {
     render(<DetailPanel />)
     expect(screen.queryByText(/Children/)).not.toBeInTheDocument()
     expect(screen.queryByText('Parent')).not.toBeInTheDocument()
+  })
+
+  it('renders suggestion card when nudge matches thing', () => {
+    storeState.nudges = [
+      { id: 'n1', thing_id: 't1', message: 'You should prepare for the meeting', primary_action_label: null },
+    ]
+    render(<DetailPanel />)
+    expect(screen.getByText('Reli Suggestion')).toBeInTheDocument()
+    expect(screen.getByText('You should prepare for the meeting')).toBeInTheDocument()
+    expect(screen.getByText('Prepare Now')).toBeInTheDocument()
+  })
+
+  it('does not render suggestion card when no matching nudge', () => {
+    storeState.nudges = [
+      { id: 'n1', thing_id: 'other-id', message: 'Unrelated nudge', primary_action_label: null },
+    ]
+    render(<DetailPanel />)
+    expect(screen.queryByText('Reli Suggestion')).not.toBeInTheDocument()
+  })
+
+  it('uses custom primary_action_label on suggestion button', () => {
+    storeState.nudges = [
+      { id: 'n1', thing_id: 't1', message: 'Review this', primary_action_label: 'Review Now' },
+    ]
+    render(<DetailPanel />)
+    expect(screen.getByText('Review Now')).toBeInTheDocument()
+  })
+
+  it('calls openChatWithContext when suggestion button is clicked', () => {
+    storeState.nudges = [
+      { id: 'n1', thing_id: 't1', message: 'Prepare for meeting', primary_action_label: null },
+    ]
+    render(<DetailPanel />)
+    fireEvent.click(screen.getByText('Prepare Now'))
+    expect(openChatWithContext).toHaveBeenCalledWith('t1', 'Test Thing')
   })
 })

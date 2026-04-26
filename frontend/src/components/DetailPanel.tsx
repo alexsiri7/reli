@@ -38,7 +38,7 @@ export function DetailPanel() {
   const {
     detailThingId, detailThing, detailRelationships, detailHistory,
     detailLoading, closeThingDetail, navigateThingDetail, goBackThingDetail,
-    things, thingTypes, proactiveSurfaces, openChatWithContext,
+    things, thingTypes, nudges, openChatWithContext,
   } = useStore(useShallow(s => ({
     detailThingId: s.detailThingId,
     detailThing: s.detailThing,
@@ -50,7 +50,7 @@ export function DetailPanel() {
     goBackThingDetail: s.goBackThingDetail,
     things: s.things,
     thingTypes: s.thingTypes,
-    proactiveSurfaces: s.proactiveSurfaces,
+    nudges: s.nudges,
     openChatWithContext: s.openChatWithContext,
   })))
 
@@ -100,6 +100,8 @@ export function DetailPanel() {
     return parentRel ? things.find(t => t.id === parentRel.from_thing_id) ?? null : null
   }, [detailThing, detailRelationships, things])
 
+  const suggestion = nudges.find(n => n.thing_id === detailThingId) ?? null
+
   if (!detailThingId) {
     return (
       <div className="hidden md:flex w-80 shrink-0 flex-col items-center justify-center gap-3 bg-surface dark:bg-surface text-center px-6">
@@ -134,7 +136,6 @@ export function DetailPanel() {
 
   const colors = typeColorClasses(thing?.type_hint ?? null)
   const checkinOverdue = thing?.checkin_date ? isOverdue(thing.checkin_date) : false
-  const suggestion = proactiveSurfaces.find(s => s.thing.id === detailThingId) ?? null
 
   return (
     <>
@@ -266,14 +267,14 @@ export function DetailPanel() {
                     <span className="shrink-0 text-secondary text-lg">✨</span>
                     <div className="min-w-0">
                       <p className="text-label font-semibold text-secondary tracking-widest uppercase mb-1">Reli Suggestion</p>
-                      <p className="text-body text-on-surface-variant">{suggestion.reason}</p>
+                      <p className="text-body text-on-surface-variant">{suggestion.message}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => openChatWithContext(thing.id, thing.title)}
                     className="w-full px-4 py-2 text-xs font-bold uppercase tracking-widest text-secondary border border-secondary/30 rounded-lg hover:bg-secondary/10 transition-colors"
                   >
-                    Prepare Now
+                    {suggestion.primary_action_label ?? 'Prepare Now'}
                   </button>
                 </div>
               )}
