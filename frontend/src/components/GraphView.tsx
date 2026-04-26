@@ -90,6 +90,7 @@ export default function GraphView() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
   const thingTypes = useStore(s => s.thingTypes)
+  const setMainView = useStore(s => s.setMainView)
 
   // Fetch graph data
   useEffect(() => {
@@ -271,10 +272,20 @@ export default function GraphView() {
   const popoverColors = selectedNode ? typeColorClass(selectedNode.type_hint) : null
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-canvas relative">
-      {/* Search bar */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-72">
-        <div className="glass rounded-xl px-4 py-2 flex items-center gap-2">
+    <div className="w-full h-full flex flex-col">
+      <div className="bg-surface-container-low flex items-center justify-between px-6 h-12 shrink-0">
+        <nav className="flex gap-6 text-sm font-medium">
+          <button
+            onClick={() => setMainView('list')}
+            className="text-on-surface-variant hover:text-on-surface transition-colors"
+          >
+            List
+          </button>
+          <button className="text-on-surface font-semibold border-b-2 border-primary pb-1">
+            Graph
+          </button>
+        </nav>
+        <div className="glass rounded-xl px-4 py-2 flex items-center gap-2 w-64">
           <svg className="w-4 h-4 text-on-surface-variant shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
@@ -288,82 +299,81 @@ export default function GraphView() {
         </div>
       </div>
 
-      {/* Force graph */}
-      <ForceGraph2D
-        graphData={fgData}
-        width={dimensions.width}
-        height={dimensions.height}
-        nodeId="id"
-        linkSource="source"
-        linkTarget="target"
-        nodeCanvasObject={paintNode}
-        nodeCanvasObjectMode={() => 'replace'}
-        nodePointerAreaPaint={paintNodeArea}
-        linkColor={() => 'rgba(148, 163, 184, 0.3)'}
-        linkWidth={1}
-        linkLabel="relationship_type"
-        onNodeClick={handleNodeClick}
-        onBackgroundClick={() => setSelectedNode(null)}
-        cooldownTicks={100}
-        backgroundColor="#0b1326"
-      />
+      <div ref={containerRef} className="flex-1 bg-canvas relative">
+        <ForceGraph2D
+          graphData={fgData}
+          width={dimensions.width}
+          height={dimensions.height}
+          nodeId="id"
+          linkSource="source"
+          linkTarget="target"
+          nodeCanvasObject={paintNode}
+          nodeCanvasObjectMode={() => 'replace'}
+          nodePointerAreaPaint={paintNodeArea}
+          linkColor={() => 'rgba(148, 163, 184, 0.3)'}
+          linkWidth={1}
+          linkLabel="relationship_type"
+          onNodeClick={handleNodeClick}
+          onBackgroundClick={() => setSelectedNode(null)}
+          cooldownTicks={100}
+          backgroundColor="#0b1326"
+        />
 
-      {/* Selected node popover */}
-      {selectedNode && popoverColors && (
-        <div className="absolute top-16 right-4 z-10 w-72 glass rounded-2xl p-5 space-y-3">
-          <span className={`inline-block text-label px-2 py-0.5 rounded-full ${popoverColors.bg} ${popoverColors.text}`}>
-            {typeLabel(selectedNode.type_hint)}
-          </span>
-          <h3 className="text-title text-on-surface">{selectedNode.title}</h3>
+        {selectedNode && popoverColors && (
+          <div className="absolute top-4 right-4 z-10 w-72 glass rounded-2xl p-5 space-y-3">
+            <span className={`inline-block text-label px-2 py-0.5 rounded-full ${popoverColors.bg} ${popoverColors.text}`}>
+              {typeLabel(selectedNode.type_hint)}
+            </span>
+            <h3 className="text-title text-on-surface">{selectedNode.title}</h3>
 
-          {connectedEntities.length > 0 && (
-            <div className="space-y-1.5">
-              <span className="text-label text-on-surface-variant">Connected Entities</span>
-              <ul className="space-y-1">
-                {connectedEntities.slice(0, 5).map(e => (
-                  <li key={e.id} className="text-body text-on-surface-variant flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: nodeColor(e.type_hint) }} />
-                    {truncate(e.title, 30)}
-                  </li>
-                ))}
-                {connectedEntities.length > 5 && (
-                  <li className="text-body text-on-surface-variant/50">
-                    +{connectedEntities.length - 5} more
-                  </li>
-                )}
-              </ul>
+            {connectedEntities.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="text-label text-on-surface-variant">Connected Entities</span>
+                <ul className="space-y-1">
+                  {connectedEntities.slice(0, 5).map(e => (
+                    <li key={e.id} className="text-body text-on-surface-variant flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: nodeColor(e.type_hint) }} />
+                      {truncate(e.title, 30)}
+                    </li>
+                  ))}
+                  {connectedEntities.length > 5 && (
+                    <li className="text-body text-on-surface-variant/50">
+                      +{connectedEntities.length - 5} more
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleExplore}
+                className="gradient-cta text-label px-4 py-1.5 rounded-lg"
+              >
+                Explore
+              </button>
+              <button
+                onClick={() => {
+                  useStore.getState().openThingDetail(selectedNode.id)
+                  setSelectedNode(null)
+                }}
+                className="glass text-label text-on-surface px-4 py-1.5 rounded-lg hover:bg-surface-container-high/80"
+              >
+                Edit Note
+              </button>
             </div>
-          )}
-
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={handleExplore}
-              className="gradient-cta text-label px-4 py-1.5 rounded-lg"
-            >
-              Explore
-            </button>
-            <button
-              onClick={() => {
-                useStore.getState().openThingDetail(selectedNode.id)
-                setSelectedNode(null)
-              }}
-              className="glass text-label text-on-surface px-4 py-1.5 rounded-lg hover:bg-surface-container-high/80"
-            >
-              Edit Note
-            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Legend bar */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
-        <div className="glass rounded-xl px-5 py-2 flex items-center gap-5">
-          {LEGEND_ITEMS.map(item => (
-            <div key={item.label} className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-              <span className="text-label text-on-surface-variant">{item.label}</span>
-            </div>
-          ))}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+          <div className="glass rounded-xl px-5 py-2 flex items-center gap-5">
+            {LEGEND_ITEMS.map(item => (
+              <div key={item.label} className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                <span className="text-label text-on-surface-variant">{item.label}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
