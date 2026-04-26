@@ -95,6 +95,14 @@ import type {
 
 // ── Frontend-only types (not derived from Pydantic models) ────────────────────
 
+export interface ChatSession {
+  id: string
+  title: string
+  created_at: string
+  last_active_at: string
+  message_count: number
+}
+
 export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | 'preference' | string
 
 export interface WebSearchResult {
@@ -222,6 +230,8 @@ interface ReliState {
   learnedPreferences: LearnedPreference[]
   messages: ChatMessage[]
   sessionId: string
+  chatSessions: ChatSession[]
+  chatSessionsLoading: boolean
   sessionStats: SessionStats
   loading: boolean
   chatLoading: boolean
@@ -287,6 +297,11 @@ interface ReliState {
   fetchHistory: () => Promise<void>
   fetchOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
+  fetchChatSessions: () => Promise<void>
+  createChatSession: (title?: string) => Promise<string>
+  switchChatSession: (sessionId: string) => Promise<void>
+  renameChatSession: (sessionId: string, title: string) => Promise<void>
+  deleteChatSession: (sessionId: string) => Promise<void>
   clearError: () => void
   fetchCalendarStatus: () => Promise<void>
   fetchGmailStatus: () => Promise<void>
@@ -502,6 +517,16 @@ export const useStore = create<ReliState>((set, get) => ({
             // Migration is best-effort; old history may be orphaned
           })
         }
+
+        // Load chat sessions and restore last active session
+        await get().fetchChatSessions()
+        const savedSessionId = localStorage.getItem('reli-active-session')
+        if (savedSessionId) {
+          const sessions = get().chatSessions
+          if (sessions.some(s => s.id === savedSessionId)) {
+            set({ sessionId: savedSessionId })
+          }
+        }
       } else {
         set({ currentUser: null, authChecked: true })
       }
@@ -530,6 +555,8 @@ export const useStore = create<ReliState>((set, get) => ({
   learnedPreferences: [],
   messages: [],
   sessionId: '',
+  chatSessions: [],
+  chatSessionsLoading: false,
   sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, cost_usd: 0, per_model: [] },
   loading: false,
   chatLoading: false,
@@ -1117,6 +1144,7 @@ export const useStore = create<ReliState>((set, get) => ({
       get().fetchProactiveSurfaces()
       get().fetchFocusRecommendations()
       get().fetchConflictAlerts()
+      get().fetchChatSessions()
     } catch (e) {
       set(state => ({
         messages: state.messages.map(m =>
@@ -1128,6 +1156,81 @@ export const useStore = create<ReliState>((set, get) => ({
       }))
     } finally {
       set({ chatLoading: false })
+    }
+  },
+
+  fetchChatSessions: async () => {
+    set({ chatSessionsLoading: true })
+    try {
+      const res = await apiFetch(`${BASE}/chat/sessions`)
+      if (!res.ok) return
+      const data = await res.json()
+      set({ chatSessions: data })
+    } catch {
+      // ignore
+    } finally {
+      set({ chatSessionsLoading: false })
+    }
+  },
+
+  createChatSession: async (title?: string) => {
+    const sessionId = crypto.randomUUID()
+    try {
+      const res = await apiFetch(`${BASE}/chat/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, title: title ?? 'New chat' }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      set({ sessionId, messages: [], hasMoreHistory: true })
+      localStorage.setItem('reli-active-session', sessionId)
+      await get().fetchChatSessions()
+    } catch {
+      // ignore
+    }
+    return sessionId
+  },
+
+  switchChatSession: async (sessionId: string) => {
+    set({ sessionId, messages: [], hasMoreHistory: true })
+    localStorage.setItem('reli-active-session', sessionId)
+    await get().fetchHistory()
+  },
+
+  renameChatSession: async (sessionId: string, title: string) => {
+    try {
+      const res = await apiFetch(`${BASE}/chat/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      })
+      if (!res.ok) return
+      set(state => ({
+        chatSessions: state.chatSessions.map(s =>
+          s.id === sessionId ? { ...s, title } : s
+        ),
+      }))
+    } catch {
+      // ignore
+    }
+  },
+
+  deleteChatSession: async (sessionId: string) => {
+    try {
+      const res = await apiFetch(`${BASE}/chat/sessions/${sessionId}`, { method: 'DELETE' })
+      if (!res.ok) return
+      const remaining = get().chatSessions.filter(s => s.id !== sessionId)
+      set({ chatSessions: remaining })
+      if (get().sessionId === sessionId) {
+        const first = remaining[0]
+        if (first) {
+          await get().switchChatSession(first.id)
+        } else {
+          await get().createChatSession()
+        }
+      }
+    } catch {
+      // ignore
     }
   },
 

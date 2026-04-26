@@ -300,6 +300,28 @@ class ChatResponse(BaseModel):
     session_usage: SessionUsage | None = None
 
 
+# ── Chat Sessions ────────────────────────────────────────────────────────────
+
+
+class ChatSessionSummary(BaseModel):
+    id: str
+    title: str
+    created_at: datetime
+    last_active_at: datetime
+    message_count: int
+
+    model_config = {"from_attributes": True}
+
+
+class CreateSessionRequest(BaseModel):
+    session_id: str
+    title: str = "New chat"
+
+
+class PatchSessionRequest(BaseModel):
+    title: str
+
+
 # ── Briefing ──────────────────────────────────────────────────────────────────
 
 

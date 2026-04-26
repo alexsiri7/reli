@@ -15,15 +15,18 @@ from sqlmodel import Session, select
 from ..auth import require_user
 import backend.db_engine as _engine_mod
 from ..db_engine import user_filter_clause, user_filter_text
-from ..db_models import ChatHistoryRecord, ChatMessageUsageRecord, ConversationSummaryRecord, UsageLogRecord
+from ..db_models import ChatHistoryRecord, ChatMessageUsageRecord, ChatSessionRecord, ConversationSummaryRecord, UsageLogRecord
 from ..models import (
     CallUsage,
     ChatMessage,
     ChatMessageCreate,
     ChatRequest,
     ChatResponse,
+    ChatSessionSummary,
+    CreateSessionRequest,
     MigrateSessionRequest,
     ModelUsage,
+    PatchSessionRequest,
     SessionUsage,
     UsageInfo,
 )
@@ -150,7 +153,16 @@ def get_history(
 def append_message(body: ChatMessageCreate, user_id: str = Depends(require_user)) -> ChatMessage:
     """Append a single chat message to a session's history."""
     changes_json = body.applied_changes  # SQLModel handles JSON serialization
+    now = datetime.now(timezone.utc)
     with Session(_engine_mod.engine) as session:
+        # Upsert session last_active_at
+        existing_session = session.exec(
+            select(ChatSessionRecord).where(ChatSessionRecord.id == body.session_id)
+        ).first()
+        if existing_session:
+            existing_session.last_active_at = now
+            session.add(existing_session)
+
         record = ChatHistoryRecord(
             session_id=body.session_id,
             role=body.role,
@@ -180,6 +192,111 @@ def delete_history(session_id: str, user_id: str = Depends(require_user)) -> Non
             raise HTTPException(status_code=404, detail=f"No chat history found for session '{session_id}'")
         for rec in records:
             session.delete(rec)
+        session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Chat Sessions CRUD
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sessions", response_model=list[ChatSessionSummary], summary="List chat sessions")
+def list_sessions(user_id: str = Depends(require_user)) -> list[ChatSessionSummary]:
+    """List all chat sessions for the current user, ordered by last_active_at desc."""
+    with Session(_engine_mod.engine) as session:
+        stmt = (
+            select(
+                ChatSessionRecord,
+                func.count(ChatHistoryRecord.id).label("message_count"),
+            )
+            .outerjoin(ChatHistoryRecord, ChatHistoryRecord.session_id == ChatSessionRecord.id)
+            .where(user_filter_clause(ChatSessionRecord.user_id, user_id))
+            .group_by(ChatSessionRecord.id)
+            .order_by(ChatSessionRecord.last_active_at.desc())
+        )
+        rows = session.exec(stmt).all()
+    return [
+        ChatSessionSummary(
+            id=row[0].id,
+            title=row[0].title,
+            created_at=row[0].created_at,
+            last_active_at=row[0].last_active_at,
+            message_count=row[1],
+        )
+        for row in rows
+    ]
+
+
+@router.post("/sessions", response_model=ChatSessionSummary, status_code=status.HTTP_201_CREATED, summary="Create a chat session")
+def create_session(body: CreateSessionRequest, user_id: str = Depends(require_user)) -> ChatSessionSummary:
+    """Create a new named chat session."""
+    with Session(_engine_mod.engine) as session:
+        existing = session.exec(
+            select(ChatSessionRecord).where(ChatSessionRecord.id == body.session_id)
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Session '{body.session_id}' already exists")
+        record = ChatSessionRecord(id=body.session_id, user_id=user_id, title=body.title)
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+    return ChatSessionSummary(
+        id=record.id,
+        title=record.title,
+        created_at=record.created_at,
+        last_active_at=record.last_active_at,
+        message_count=0,
+    )
+
+
+@router.patch("/sessions/{session_id}", response_model=ChatSessionSummary, summary="Rename a chat session")
+def rename_session(session_id: str, body: PatchSessionRequest, user_id: str = Depends(require_user)) -> ChatSessionSummary:
+    """Rename an existing chat session."""
+    with Session(_engine_mod.engine) as session:
+        record = session.exec(
+            select(ChatSessionRecord).where(
+                ChatSessionRecord.id == session_id,
+                user_filter_clause(ChatSessionRecord.user_id, user_id),
+            )
+        ).first()
+        if not record:
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+        record.title = body.title
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+        msg_count = session.execute(
+            text("SELECT COUNT(*) FROM chat_history WHERE session_id = :sid"),
+            {"sid": session_id},
+        ).scalar() or 0
+    return ChatSessionSummary(
+        id=record.id,
+        title=record.title,
+        created_at=record.created_at,
+        last_active_at=record.last_active_at,
+        message_count=msg_count,
+    )
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a chat session")
+def delete_session(session_id: str, user_id: str = Depends(require_user)) -> None:
+    """Delete a chat session and all its history."""
+    with Session(_engine_mod.engine) as session:
+        record = session.exec(
+            select(ChatSessionRecord).where(
+                ChatSessionRecord.id == session_id,
+                user_filter_clause(ChatSessionRecord.user_id, user_id),
+            )
+        ).first()
+        if not record:
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+        # Delete chat history for this session
+        history_records = session.exec(
+            select(ChatHistoryRecord).where(ChatHistoryRecord.session_id == session_id)
+        ).all()
+        for rec in history_records:
+            session.delete(rec)
+        session.delete(record)
         session.commit()
 
 
@@ -271,6 +388,57 @@ def _maybe_trigger_summarization(user_id: str) -> None:
     except RuntimeError:
         # No running event loop — skip (shouldn't happen in normal FastAPI flow)
         logger.warning("No event loop available for background summarization")
+
+
+def _maybe_auto_title_session(session_id: str, user_message: str) -> None:
+    """Generate a short auto-title for a new session after the first exchange."""
+
+    async def _run() -> None:
+        try:
+            with Session(_engine_mod.engine) as sess:
+                record = sess.exec(
+                    select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)
+                ).first()
+                if not record or record.title != "New chat":
+                    return
+                msg_count = sess.execute(
+                    text("SELECT COUNT(*) FROM chat_history WHERE session_id = :sid"),
+                    {"sid": session_id},
+                ).scalar() or 0
+                if msg_count > 2:
+                    return
+
+            import anthropic
+
+            client = anthropic.Anthropic()
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=20,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Generate a 4-6 word title for a conversation that starts with: {user_message}. Reply with only the title, no quotes.",
+                    }
+                ],
+            )
+            title = resp.content[0].text.strip().strip('"\'')
+
+            with Session(_engine_mod.engine) as sess:
+                record = sess.exec(
+                    select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)
+                ).first()
+                if record and record.title == "New chat":
+                    record.title = title
+                    sess.add(record)
+                    sess.commit()
+        except Exception:
+            logger.exception("Auto-title generation failed for session %s", session_id)
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_run())
+    except RuntimeError:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +571,22 @@ def _persist_exchange(
     if result.calendar_events:
         applied_with_sources["calendar_events"] = result.calendar_events
 
+    now = datetime.now(timezone.utc)
+
     with Session(_engine_mod.engine) as session:
+        # Upsert ChatSessionRecord.last_active_at
+        existing_session = session.exec(
+            select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)
+        ).first()
+        if existing_session:
+            existing_session.last_active_at = now
+            session.add(existing_session)
+        else:
+            new_session_record = ChatSessionRecord(
+                id=session_id, user_id=user_id or "", title="New chat", last_active_at=now
+            )
+            session.add(new_session_record)
+
         # Insert user message
         user_record = ChatHistoryRecord(
             session_id=session_id,
@@ -490,6 +673,7 @@ async def chat(body: ChatRequest, user_id: str = Depends(require_user)) -> ChatR
 
     # Trigger async summarization if message count threshold reached
     _maybe_trigger_summarization(user_id)
+    _maybe_auto_title_session(session_id, message)
 
     daily_usage = _compute_daily_usage(user_id)
 
@@ -554,6 +738,7 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
 
             # Trigger async summarization if message count threshold reached
             _maybe_trigger_summarization(user_id)
+            _maybe_auto_title_session(session_id, message)
 
             daily_usage = _compute_daily_usage(user_id)
 
