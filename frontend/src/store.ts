@@ -93,7 +93,7 @@ import type {
   ConnectionSuggestion,
 } from './generated/api-types'
 
-// ── Frontend-only types (not derived from Pydantic models) ────────────────────
+// ── Frontend types ────────────────────────────────────────────────────────────
 
 export interface ChatSession {
   id: string
@@ -298,7 +298,7 @@ interface ReliState {
   fetchOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
   fetchChatSessions: () => Promise<void>
-  createChatSession: (title?: string) => Promise<string>
+  createChatSession: (title?: string) => Promise<string | null>
   switchChatSession: (sessionId: string) => Promise<void>
   renameChatSession: (sessionId: string, title: string) => Promise<void>
   deleteChatSession: (sessionId: string) => Promise<void>
@@ -1185,10 +1185,11 @@ export const useStore = create<ReliState>((set, get) => ({
       set({ sessionId, messages: [], hasMoreHistory: true })
       localStorage.setItem('reli-active-session', sessionId)
       await get().fetchChatSessions()
-    } catch {
-      // ignore
+      return sessionId
+    } catch (e) {
+      set({ error: `Could not create session: ${String(e)}` })
+      return null
     }
-    return sessionId
   },
 
   switchChatSession: async (sessionId: string) => {
@@ -1204,21 +1205,22 @@ export const useStore = create<ReliState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title }),
       })
-      if (!res.ok) return
+      if (!res.ok) throw new Error(`Rename failed: ${res.status}`)
       set(state => ({
         chatSessions: state.chatSessions.map(s =>
           s.id === sessionId ? { ...s, title } : s
         ),
       }))
-    } catch {
-      // ignore
+    } catch (e) {
+      set({ error: `Could not rename session: ${String(e)}` })
+      await get().fetchChatSessions()
     }
   },
 
   deleteChatSession: async (sessionId: string) => {
     try {
       const res = await apiFetch(`${BASE}/chat/sessions/${sessionId}`, { method: 'DELETE' })
-      if (!res.ok) return
+      if (!res.ok) throw new Error(`Delete failed: ${res.status}`)
       const remaining = get().chatSessions.filter(s => s.id !== sessionId)
       set({ chatSessions: remaining })
       if (get().sessionId === sessionId) {
@@ -1229,8 +1231,8 @@ export const useStore = create<ReliState>((set, get) => ({
           await get().createChatSession()
         }
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      set({ error: `Could not delete session: ${String(e)}` })
     }
   },
 

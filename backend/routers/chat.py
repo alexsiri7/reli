@@ -157,7 +157,10 @@ def append_message(body: ChatMessageCreate, user_id: str = Depends(require_user)
     with Session(_engine_mod.engine) as session:
         # Upsert session last_active_at
         existing_session = session.exec(
-            select(ChatSessionRecord).where(ChatSessionRecord.id == body.session_id)
+            select(ChatSessionRecord).where(
+                ChatSessionRecord.id == body.session_id,
+                user_filter_clause(ChatSessionRecord.user_id, user_id),
+            )
         ).first()
         if existing_session:
             existing_session.last_active_at = now
@@ -265,10 +268,10 @@ def rename_session(session_id: str, body: PatchSessionRequest, user_id: str = De
         session.add(record)
         session.commit()
         session.refresh(record)
-        msg_count = session.execute(
-            text("SELECT COUNT(*) FROM chat_history WHERE session_id = :sid"),
-            {"sid": session_id},
-        ).scalar() or 0
+        msg_count = session.exec(
+            select(func.count()).select_from(ChatHistoryRecord)
+            .where(ChatHistoryRecord.session_id == session_id)
+        ).one()
     return ChatSessionSummary(
         id=record.id,
         title=record.title,
@@ -290,7 +293,6 @@ def delete_session(session_id: str, user_id: str = Depends(require_user)) -> Non
         ).first()
         if not record:
             raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
-        # Delete chat history for this session
         history_records = session.exec(
             select(ChatHistoryRecord).where(ChatHistoryRecord.session_id == session_id)
         ).all()
@@ -405,6 +407,7 @@ def _maybe_auto_title_session(session_id: str, user_message: str) -> None:
                     text("SELECT COUNT(*) FROM chat_history WHERE session_id = :sid"),
                     {"sid": session_id},
                 ).scalar() or 0
+                # 2 = one user + one assistant message (first exchange only)
                 if msg_count > 2:
                     return
 
@@ -438,7 +441,7 @@ def _maybe_auto_title_session(session_id: str, user_message: str) -> None:
         loop = asyncio.get_running_loop()
         loop.create_task(_run())
     except RuntimeError:
-        pass
+        logger.warning("No event loop available for auto-title generation of session %s", session_id)
 
 
 # ---------------------------------------------------------------------------
@@ -582,8 +585,11 @@ def _persist_exchange(
             existing_session.last_active_at = now
             session.add(existing_session)
         else:
+            if not user_id:
+                logger.error("_persist_exchange called without user_id for session %s", session_id)
+                return applied_with_sources
             new_session_record = ChatSessionRecord(
-                id=session_id, user_id=user_id or "", title="New chat", last_active_at=now
+                id=session_id, user_id=user_id, title="New chat", last_active_at=now
             )
             session.add(new_session_record)
 

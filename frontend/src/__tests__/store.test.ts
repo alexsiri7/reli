@@ -29,6 +29,9 @@ beforeEach(() => {
     loading: false,
     chatLoading: false,
     error: null,
+    chatSessions: [],
+    chatSessionsLoading: false,
+    sessionId: '',
   })
   vi.restoreAllMocks()
 })
@@ -260,5 +263,121 @@ describe('store: stopNudgeType', () => {
     await useStore.getState().stopNudgeType('proactive_abc123_birthday')
 
     expect(useStore.getState().nudges.find(n => n.id === 'proactive_abc123_birthday')).toBeUndefined()
+  })
+})
+
+const mockSession = (id: string, title = 'Test'): import('../store').ChatSession => ({
+  id,
+  title,
+  created_at: '2026-01-01T00:00:00Z',
+  last_active_at: '2026-01-01T00:00:00Z',
+  message_count: 0,
+})
+
+describe('store: fetchChatSessions', () => {
+  it('populates chatSessions on success', async () => {
+    const sessions = [mockSession('s1', 'First')]
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => sessions }))
+
+    await useStore.getState().fetchChatSessions()
+
+    expect(useStore.getState().chatSessions).toEqual(sessions)
+    expect(useStore.getState().chatSessionsLoading).toBe(false)
+  })
+
+  it('leaves chatSessions unchanged on HTTP error', async () => {
+    useStore.setState({ chatSessions: [mockSession('existing')] })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
+
+    await useStore.getState().fetchChatSessions()
+
+    expect(useStore.getState().chatSessions).toHaveLength(1)
+    expect(useStore.getState().chatSessionsLoading).toBe(false)
+  })
+})
+
+describe('store: createChatSession', () => {
+  it('sets sessionId, clears messages, writes localStorage on success', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => mockSession('new-id') })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    )
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
+
+    const sessionId = await useStore.getState().createChatSession()
+
+    expect(sessionId).toBeTruthy()
+    expect(useStore.getState().sessionId).toBe(sessionId)
+    expect(useStore.getState().messages).toEqual([])
+    expect(setItem).toHaveBeenCalledWith('reli-active-session', sessionId)
+  })
+
+  it('returns null and sets error on API failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, text: async () => 'Server error' }))
+
+    const sessionId = await useStore.getState().createChatSession()
+
+    expect(sessionId).toBeNull()
+    expect(useStore.getState().error).toContain('Could not create session')
+  })
+})
+
+describe('store: renameChatSession', () => {
+  it('updates title in chatSessions on success', async () => {
+    useStore.setState({ chatSessions: [mockSession('s1', 'Old Name')] })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }))
+
+    await useStore.getState().renameChatSession('s1', 'New Name')
+
+    expect(useStore.getState().chatSessions[0]?.title).toBe('New Name')
+    expect(useStore.getState().error).toBeNull()
+  })
+
+  it('sets error and re-syncs sessions on failure', async () => {
+    useStore.setState({ chatSessions: [mockSession('s1', 'Old Name')] })
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({ ok: true, json: async () => [mockSession('s1', 'Old Name')] })
+    )
+
+    await useStore.getState().renameChatSession('s1', 'New Name')
+
+    expect(useStore.getState().error).toContain('Could not rename session')
+  })
+})
+
+describe('store: deleteChatSession', () => {
+  it('switches to first remaining session when active session is deleted', async () => {
+    const sessions = [mockSession('active', 'Active'), mockSession('other', 'Other')]
+    useStore.setState({ sessionId: 'active', chatSessions: sessions })
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    )
+
+    await useStore.getState().deleteChatSession('active')
+
+    expect(useStore.getState().sessionId).toBe('other')
+  })
+
+  it('creates a new session when last session is deleted', async () => {
+    useStore.setState({ sessionId: 'only', chatSessions: [mockSession('only', 'Only')] })
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValue({ ok: true, json: async () => [] })
+    )
+
+    await useStore.getState().deleteChatSession('only')
+
+    expect(useStore.getState().sessionId).not.toBe('only')
+  })
+
+  it('sets error on delete failure', async () => {
+    useStore.setState({ chatSessions: [mockSession('s1')] })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
+
+    await useStore.getState().deleteChatSession('s1')
+
+    expect(useStore.getState().error).toContain('Could not delete session')
   })
 })

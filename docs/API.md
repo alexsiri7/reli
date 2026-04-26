@@ -141,6 +141,10 @@ The primary interface to Reli's multi-agent pipeline.
 | POST | `/api/chat/migrate-session` | Move history to a new session ID |
 | POST | `/api/chat/append-message` | Manually append a message to history |
 | GET | `/api/chat/stats/today` | Today's usage stats (tokens, cost) |
+| GET | `/api/chat/sessions` | List all sessions for the current user (ordered by recency) |
+| POST | `/api/chat/sessions` | Create a named chat session |
+| PATCH | `/api/chat/sessions/{session_id}` | Rename a chat session |
+| DELETE | `/api/chat/sessions/{session_id}` | Delete a session and its history |
 
 **`POST /api/chat` request:**
 ```json
@@ -172,6 +176,32 @@ The primary interface to Reli's multi-agent pipeline.
 **`GET /api/chat/history/{session_id}` query params:**
 - `limit` (int, default 50) — messages per page
 - `before_id` (int) — cursor for pagination
+
+**`POST /api/chat/sessions` request:**
+```json
+{
+  "session_id": "string (UUID, caller-generated)",
+  "title": "string (default: \"New chat\")"
+}
+```
+
+**`POST /api/chat/sessions` response (201):**
+```json
+{
+  "id": "string",
+  "title": "string",
+  "created_at": "ISO timestamp",
+  "last_active_at": "ISO timestamp",
+  "message_count": 0
+}
+```
+
+**`PATCH /api/chat/sessions/{session_id}` request:**
+```json
+{ "title": "string" }
+```
+
+**Auto-title**: After the first assistant reply in a session titled "New chat", the backend asynchronously generates a 4–6-word title via `claude-haiku-4-5-20251001` and updates the session record. This fires only once (on the first exchange) and never overwrites a user-set title.
 
 ---
 

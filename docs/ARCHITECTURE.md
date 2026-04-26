@@ -175,6 +175,15 @@ CREATE TABLE relationships (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE chat_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT 'New chat',
+    created_at TIMESTAMP NOT NULL,
+    last_active_at TIMESTAMP NOT NULL  -- updated on each message turn
+);
+-- Indexes: ix_chat_sessions_user_id, ix_chat_sessions_last_active_at
+
 CREATE TABLE chat_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT,
@@ -186,6 +195,8 @@ CREATE TABLE chat_history (
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+`chat_sessions` is a named container for a conversation thread. `chat_history.session_id` references a session by its `id`. Sessions are created explicitly via `POST /api/chat/sessions`; a fallback auto-creates a session record on the first message exchange if none exists.
 
 ## 5. Vector Search (RAG)
 
