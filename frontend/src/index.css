@@ -17,8 +17,8 @@
   --color-surface-container-high: #222a3d;
 
   /* ── Semantic accent colors ───────────────────────────────────── */
-  --color-primary: #4F46E5;
-  --color-primary-container: #3730A3;
+  --color-primary: #c3c0ff;
+  --color-primary-container: #4F46E5;
   --color-on-primary-container: #E0E7FF;
   --color-projects: #10B981;
   --color-events: #F59E0B;
@@ -49,7 +49,7 @@
 
 body {
   margin: 0;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
