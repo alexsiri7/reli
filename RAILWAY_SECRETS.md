@@ -8,7 +8,7 @@ Fixed #728: Production deploy failed due to missing Railway API secrets in GitHu
 
 Configured all 7 required Railway secrets in GitHub Actions repository secrets:
 
-- `RAILWAY_TOKEN` — API authentication token (permanent token, no expiry)
+- `RAILWAY_TOKEN` — API authentication token (permanent token; see Token Rotation in DEPLOYMENT_SECRETS.md if CI reports "Not Authorized")
 - `RAILWAY_STAGING_SERVICE_ID` — Service identifier for staging environment
 - `RAILWAY_STAGING_ENVIRONMENT_ID` — Environment identifier for staging
 - `RAILWAY_STAGING_URL` — Staging deployment URL
