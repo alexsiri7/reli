@@ -59,6 +59,7 @@ OpenAI-compatible gateway that handles model routing and cost tracking.
 | State | Zustand 5.0 | Lightweight observable store |
 | Styling | Tailwind CSS 4.2 | Via Vite plugin |
 | Date Utils | date-fns 4.1 | Date formatting |
+| Screenshot Capture | html-to-image 1.11 | DOM-to-canvas for feedback screenshot annotation |
 
 ### Testing
 

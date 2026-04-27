@@ -395,11 +395,33 @@ Reasoning-as-a-service: analyze arbitrary text and return structured JSON.
 
 ## Feedback (`/api/feedback`)
 
-Submit user feedback (creates a GitHub issue).
+Submit user feedback (creates a GitHub issue in the configured repo).
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/feedback` | Submit feedback |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/feedback` | Yes | Submit feedback; optionally attaches a screenshot |
+
+**Request body:**
+```json
+{
+  "category": "bug | feature | other",
+  "message": "string (1–5000 chars)",
+  "user_agent": "string (optional)",
+  "url": "string (optional)",
+  "screenshot_base64": "string | null — base64 JPEG, max ~2MB (2,800,000 chars)"
+}
+```
+
+**Response:**
+```json
+{ "success": true, "issue_url": "https://github.com/..." }
+{ "success": false, "error": "string" }
+```
+
+**Notes:**
+- `screenshot_base64` is uploaded to GitHub CDN (`uploads.github.com`) by the backend and embedded in the issue body as a Markdown image.
+- If the CDN upload fails, feedback is still submitted without the screenshot (silent degradation).
+- Requires `GITHUB_FEEDBACK_TOKEN` and `GITHUB_FEEDBACK_REPO` env vars; returns 501 if either is absent.
 
 ---
 

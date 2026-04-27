@@ -12,7 +12,6 @@ vi.mock('zustand/react/shallow', () => ({
 
 vi.mock('../lib/screenshot', () => ({
   capturePageToCanvas: vi.fn().mockResolvedValue(document.createElement('canvas')),
-  canvasToJpegBase64: vi.fn().mockReturnValue('fakebase64=='),
   isWithinSizeLimit: vi.fn().mockReturnValue(true),
 }))
 
@@ -139,5 +138,48 @@ describe('FeedbackDialog', () => {
 
     expect(screen.queryByAltText('Screenshot preview')).not.toBeInTheDocument()
     expect(screen.getByText('Add Screenshot')).toBeInTheDocument()
+  })
+
+  it('shows size error when screenshot exceeds limit', async () => {
+    const { isWithinSizeLimit } = await import('../lib/screenshot')
+    vi.mocked(isWithinSizeLimit).mockReturnValueOnce(false)
+
+    render(<FeedbackDialog />)
+    fireEvent.click(screen.getByText('Add Screenshot'))
+    await waitFor(() => expect(screen.getByTestId('screenshot-editor')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Use Screenshot'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Screenshot is too large (max 2MB). Try again.')).toBeInTheDocument()
+    })
+    expect(screen.queryByAltText('Screenshot preview')).not.toBeInTheDocument()
+    expect(screen.getByText('Add Screenshot')).toBeInTheDocument()
+  })
+
+  it('returns to form with error when capture fails', async () => {
+    const { capturePageToCanvas } = await import('../lib/screenshot')
+    vi.mocked(capturePageToCanvas).mockRejectedValueOnce(new Error('CORS error'))
+
+    render(<FeedbackDialog />)
+    fireEvent.click(screen.getByText('Add Screenshot'))
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('screenshot-editor')).not.toBeInTheDocument()
+      expect(screen.getByText('Add Screenshot')).toBeInTheDocument()
+      expect(screen.getByText('Could not capture screenshot. Try again.')).toBeInTheDocument()
+    })
+  })
+
+  it('returns to form without screenshot when editor is cancelled', async () => {
+    render(<FeedbackDialog />)
+    fireEvent.click(screen.getByText('Add Screenshot'))
+
+    await waitFor(() => expect(screen.getByTestId('screenshot-editor')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('Cancel'))
+
+    expect(screen.queryByTestId('screenshot-editor')).not.toBeInTheDocument()
+    expect(screen.getByText('Add Screenshot')).toBeInTheDocument()
+    expect(screen.queryByAltText('Screenshot preview')).not.toBeInTheDocument()
   })
 })

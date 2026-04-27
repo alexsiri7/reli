@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import { capturePageToCanvas, isWithinSizeLimit } from '../lib/screenshot'
@@ -25,7 +25,6 @@ export function FeedbackDialog() {
   const [captureStep, setCaptureStep] = useState<'form' | 'capturing' | 'editing'>('form')
   const [capturedCanvas, setCapturedCanvas] = useState<HTMLCanvasElement | null>(null)
   const [screenshotBase64, setScreenshotBase64] = useState<string | null>(null)
-  const dialogRef = useRef<HTMLDivElement>(null)
 
   const handleCapture = async () => {
     setCaptureStep('capturing')
@@ -34,8 +33,10 @@ export function FeedbackDialog() {
       const canvas = await capturePageToCanvas()
       setCapturedCanvas(canvas)
       setCaptureStep('editing')
-    } catch {
+    } catch (e) {
+      console.error('[handleCapture] screenshot capture failed', e)
       setCaptureStep('form')
+      setResult({ success: false, error: 'Could not capture screenshot. Try again.' })
     }
   }
 
@@ -90,7 +91,7 @@ export function FeedbackDialog() {
   }
 
   return (
-    <div ref={dialogRef} data-screenshot-exclude className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div data-screenshot-exclude className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-surface-container-low rounded-xl shadow-2xl w-full max-w-md mx-4">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">

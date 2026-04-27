@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+
 type Tool = 'redact' | 'highlight' | 'arrow' | 'text'
 
 type Op =
@@ -77,6 +78,7 @@ export function ScreenshotEditor({ canvas: bgCanvas, onDone, onCancel }: Screens
   const [tool, setTool] = useState<Tool>('redact')
   const [ops, setOps] = useState<Op[]>([])
   const [drawing, setDrawing] = useState<{ startX: number; startY: number } | null>(null)
+  const [textInput, setTextInput] = useState<{ x: number; y: number; clientX: number; clientY: number } | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -97,6 +99,7 @@ export function ScreenshotEditor({ canvas: bgCanvas, onDone, onCancel }: Screens
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const el = canvasRef.current
     if (!el) return
+    e.currentTarget.setPointerCapture(e.pointerId)
     const { x, y } = toCanvasCoords(e, el)
     setDrawing({ startX: x, startY: y })
   }, [])
@@ -131,10 +134,9 @@ export function ScreenshotEditor({ canvas: bgCanvas, onDone, onCancel }: Screens
     const { x, y } = toCanvasCoords(e, el)
 
     if (tool === 'text') {
-      const text = window.prompt('Enter text:', '')
-      if (text) {
-        setOps(prev => [...prev, { kind: 'text', x: drawing.startX, y: drawing.startY, text }])
-      }
+      setTextInput({ x: drawing.startX, y: drawing.startY, clientX: e.clientX, clientY: e.clientY })
+      setDrawing(null)
+      return
     } else if (tool === 'arrow') {
       setOps(prev => [...prev, { kind: 'arrow', x1: drawing.startX, y1: drawing.startY, x2: x, y2: y }])
     } else {
@@ -155,11 +157,22 @@ export function ScreenshotEditor({ canvas: bgCanvas, onDone, onCancel }: Screens
     const doneCanvas = document.createElement('canvas')
     doneCanvas.width = el.width
     doneCanvas.height = el.height
-    const doneCtx = doneCanvas.getContext('2d')!
+    const doneCtx = doneCanvas.getContext('2d')
+    if (!doneCtx) {
+      console.error('[ScreenshotEditor] Failed to get 2d context for output canvas')
+      onCancel()
+      return
+    }
     doneCtx.drawImage(el, 0, 0)
-    const base64 = doneCanvas.toDataURL('image/jpeg', 0.85).split(',')[1]!
+    const dataUrl = doneCanvas.toDataURL('image/jpeg', 0.85)
+    const base64 = dataUrl.split(',')[1]
+    if (!base64) {
+      console.error('[ScreenshotEditor] toDataURL returned unexpected format:', dataUrl.slice(0, 50))
+      onCancel()
+      return
+    }
     onDone(base64)
-  }, [onDone])
+  }, [onDone, onCancel])
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-black">
@@ -197,6 +210,27 @@ export function ScreenshotEditor({ canvas: bgCanvas, onDone, onCancel }: Screens
           onPointerUp={handlePointerUp}
         />
       </div>
+      {textInput && (
+        <input
+          autoFocus
+          className="fixed bg-transparent text-red-500 font-bold text-2xl border-b border-red-500 outline-none z-[70]"
+          style={{ left: textInput.clientX, top: textInput.clientY }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && e.currentTarget.value) {
+              setOps(prev => [...prev, { kind: 'text', x: textInput.x, y: textInput.y, text: e.currentTarget.value }])
+              setTextInput(null)
+            } else if (e.key === 'Escape') {
+              setTextInput(null)
+            }
+          }}
+          onBlur={e => {
+            if (e.currentTarget.value) {
+              setOps(prev => [...prev, { kind: 'text', x: textInput.x, y: textInput.y, text: e.currentTarget.value }])
+            }
+            setTextInput(null)
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -571,6 +571,43 @@ test.describe('Visual regression – reli frontend', () => {
     })
   })
 
+  test.describe('feedback dialog', () => {
+    async function openFeedbackDialog(page: Page) {
+      // Click user avatar initial (div with exactly the user's first initial)
+      await page.locator('aside').getByText('T', { exact: true }).first().click()
+      // Wait for menu to render after React state update
+      await page.getByRole('button', { name: 'Send Feedback' }).waitFor({ state: 'visible', timeout: 3_000 })
+      await page.getByRole('button', { name: 'Send Feedback' }).click()
+      // Wait for the dialog header (not the chat textarea — there are 2 textareas on the page)
+      await page.waitForSelector('h2:has-text("Send Feedback")', { timeout: 5_000 })
+    }
+
+    test('feedback dialog – open (desktop)', async ({ page }) => {
+      await interceptApi(page)
+      await page.goto('/')
+      await waitForApp(page)
+      await openFeedbackDialog(page)
+
+      await expect(page).toHaveScreenshot('feedback-dialog-open.png', {
+        ...SNAPSHOT_OPTS,
+        animations: 'disabled',
+      })
+    })
+
+    test('feedback dialog – open (dark desktop)', async ({ page }) => {
+      await interceptApi(page)
+      await page.emulateMedia({ colorScheme: 'dark' })
+      await page.goto('/')
+      await waitForApp(page)
+      await openFeedbackDialog(page)
+
+      await expect(page).toHaveScreenshot('feedback-dialog-open-dark.png', {
+        ...SNAPSHOT_OPTS,
+        animations: 'disabled',
+      })
+    })
+  })
+
   test('full layout – with Things and messages', async ({ page }) => {
     await interceptApi(page, { things: true, history: true })
     await page.goto('/')
