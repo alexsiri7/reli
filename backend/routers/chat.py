@@ -39,7 +39,7 @@ from ..models import (
     UsageInfo,
 )
 from ..pipeline import ChatPipeline
-from .settings import get_user_api_key, get_user_chat_context_window, get_user_interaction_style, get_user_models
+from .settings import get_user_api_key, get_user_chat_context_window, get_user_interaction_style, get_user_messages_until_compression, get_user_models
 
 logger = logging.getLogger(__name__)
 
@@ -398,7 +398,7 @@ def _maybe_trigger_summarization(user_id: str) -> None:
     """
     from ..summarization_agent import should_summarize, summarize_conversation
 
-    if not user_id or not should_summarize(user_id):
+    if not user_id or not should_summarize(user_id, trigger_n=get_user_messages_until_compression(user_id)):
         return
 
     async def _run() -> None:

@@ -127,6 +127,7 @@ function SettingsForm({
   const [reqApiKey, setReqApiKey] = useState('')
   const [reqApiKeyDisplay, setReqApiKeyDisplay] = useState(initialUserSettings?.requesty_api_key || '')
   const [staleThresholdDays, setStaleThresholdDays] = useState(initialUserSettings?.stale_threshold_days ?? 14)
+  const [messagesUntilCompression, setMessagesUntilCompression] = useState(initialUserSettings?.messages_until_compression ?? 20)
   const [saving, setSaving] = useState(false)
 
   const hasModelChanges =
@@ -137,8 +138,9 @@ function SettingsForm({
 
   const hasApiKeyChange = reqApiKey.length > 0
   const hasStaleThresholdChange = staleThresholdDays !== (initialUserSettings?.stale_threshold_days ?? 14)
+  const hasCompressionThresholdChange = messagesUntilCompression !== (initialUserSettings?.messages_until_compression ?? 20)
 
-  const hasChanges = hasModelChanges || hasApiKeyChange || hasStaleThresholdChange
+  const hasChanges = hasModelChanges || hasApiKeyChange || hasStaleThresholdChange || hasCompressionThresholdChange
 
   const handleSave = async () => {
     setSaving(true)
@@ -158,6 +160,11 @@ function SettingsForm({
     // Save stale threshold if changed
     if (hasStaleThresholdChange) {
       await updateUserSettings({ stale_threshold_days: staleThresholdDays })
+    }
+
+    // Save compression threshold if changed
+    if (hasCompressionThresholdChange) {
+      await updateUserSettings({ messages_until_compression: messagesUntilCompression })
     }
 
     setSaving(false)
@@ -313,6 +320,29 @@ function SettingsForm({
             onChange={e => {
               const v = parseInt(e.target.value, 10)
               if (!isNaN(v)) setStaleThresholdDays(Math.max(1, Math.min(365, v)))
+            }}
+            className="w-24 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
+          />
+        </div>
+      </div>
+      {/* Conversation Compression */}
+      <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Conversation Compression</h3>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Messages before compression
+          </label>
+          <p className="text-xs text-gray-400 dark:text-gray-400 mb-1.5">
+            How many messages accumulate before older ones are summarised into a single block. Lower = cheaper. Higher = more context retained verbatim. (5-100)
+          </p>
+          <input
+            type="number"
+            min={5}
+            max={100}
+            value={messagesUntilCompression}
+            onChange={e => {
+              const v = parseInt(e.target.value, 10)
+              if (!isNaN(v)) setMessagesUntilCompression(Math.max(5, Math.min(100, v)))
             }}
             className="w-24 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500"
           />

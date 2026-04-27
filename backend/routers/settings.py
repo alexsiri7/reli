@@ -38,6 +38,7 @@ _VALID_KEYS = {
     "proactivity_level",
     "interaction_style",
     "briefing_preferences",
+    "messages_until_compression",
 }
 
 # Keys whose values are encrypted at rest
@@ -79,6 +80,7 @@ class UserSettings(BaseModel):
     stale_threshold_days: int = 14
     proactivity_level: str = "medium"
     interaction_style: str = "auto"
+    messages_until_compression: int = 20
 
 
 class UserSettingsUpdate(BaseModel):
@@ -96,6 +98,7 @@ class UserSettingsUpdate(BaseModel):
     stale_threshold_days: int | None = None
     proactivity_level: str | None = None
     interaction_style: str | None = None
+    messages_until_compression: int | None = None
 
 
 class RequestyModel(BaseModel):
@@ -206,6 +209,17 @@ def get_user_stale_threshold(user_id: str) -> int:
         except (ValueError, TypeError):
             pass
     return 14
+
+
+def get_user_messages_until_compression(user_id: str) -> int:
+    """Return per-user compression threshold (messages), defaulting to 20."""
+    val = get_user_setting(user_id, "messages_until_compression")
+    if val is not None:
+        try:
+            return max(5, min(int(val), 100))
+        except (ValueError, TypeError):
+            pass
+    return 20
 
 
 def get_user_proactivity_level(user_id: str) -> str:
@@ -412,6 +426,9 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
     stale_val = user_settings.get("stale_threshold_days")
     stale_threshold = int(stale_val) if stale_val else 14
 
+    compression_val = user_settings.get("messages_until_compression")
+    messages_until_compression = int(compression_val) if compression_val else 20
+
     return UserSettings(
         requesty_api_key=_mask(_decrypt_setting(user_settings.get("requesty_api_key", ""))),
         openai_api_key=_mask(_decrypt_setting(user_settings.get("openai_api_key", ""))),
@@ -427,6 +444,7 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         stale_threshold_days=stale_threshold,
         proactivity_level=user_settings.get("proactivity_level", "medium"),
         interaction_style=user_settings.get("interaction_style", "auto"),
+        messages_until_compression=messages_until_compression,
     )
 
 
@@ -451,6 +469,8 @@ def update_user_settings(
                         continue
                 elif field_name == "stale_threshold_days":
                     val = str(max(1, min(int(val), 365)))
+                elif field_name == "messages_until_compression":
+                    val = str(max(5, min(int(val), 100)))
                 elif field_name == "proactivity_level":
                     if str(val) not in _VALID_PROACTIVITY:
                         continue
