@@ -144,7 +144,7 @@ describe('FindingCard', () => {
   })
 
   it('does not render Open button when thing_id is null', () => {
-    const noThingFinding = { ...mockFinding, thing_id: null }
+    const noThingFinding = { ...mockFinding, thing_id: null, thing: null }
     render(
       <FindingCard finding={noThingFinding} isFirst={false} onDismiss={vi.fn()} onSnooze={vi.fn()} onAct={vi.fn()} snoozeMenuOpen={false} onSnoozeToggle={vi.fn()} />
     )
@@ -158,5 +158,23 @@ describe('FindingCard', () => {
     )
     fireEvent.click(screen.getByText('Dismiss'))
     expect(onDismiss).toHaveBeenCalledWith('finding-1')
+  })
+
+  it('calls onAct with finding when Open clicked', () => {
+    const onAct = vi.fn()
+    render(
+      <FindingCard finding={mockFinding} isFirst={false} onDismiss={vi.fn()} onSnooze={vi.fn()} onAct={onAct} snoozeMenuOpen={false} onSnoozeToggle={vi.fn()} />
+    )
+    fireEvent.click(screen.getByText('Open'))
+    expect(onAct).toHaveBeenCalledWith(mockFinding)
+  })
+
+  it('calls onSnoozeToggle when Snooze clicked', () => {
+    const onSnoozeToggle = vi.fn()
+    render(
+      <FindingCard finding={mockFinding} isFirst={false} onDismiss={vi.fn()} onSnooze={vi.fn()} onAct={vi.fn()} snoozeMenuOpen={false} onSnoozeToggle={onSnoozeToggle} />
+    )
+    fireEvent.click(screen.getByText('Snooze'))
+    expect(onSnoozeToggle).toHaveBeenCalled()
   })
 })

@@ -4,15 +4,15 @@ import { useStore, serialiseMorningBriefing } from '../store'
 import type { SweepFinding, BriefingItem, LearnedPreference, CalendarEvent } from '../store'
 import { NudgeBanner } from './NudgeBanner'
 
-const FINDING_TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
-  approaching_date: { icon: '\u23F0', color: 'border-events' },
-  stale: { icon: '\u{1F4A4}', color: 'border-on-surface-variant' },
-  neglected: { icon: '\u{1F6A8}', color: 'border-ideas' },
-  overdue_checkin: { icon: '\u{1F4C5}', color: 'border-ideas' },
-  orphan: { icon: '\u{1F50D}', color: 'border-primary' },
-  inconsistency: { icon: '\u26A0\uFE0F', color: 'border-events' },
-  open_question: { icon: '\u2753', color: 'border-people' },
-  connection: { icon: '\u{1F517}', color: 'border-projects' },
+const FINDING_TYPE_CONFIG: Record<string, { icon: string; borderClass: string }> = {
+  approaching_date: { icon: '\u23F0', borderClass: 'border-events' },
+  stale: { icon: '\u{1F4A4}', borderClass: 'border-on-surface-variant' },
+  neglected: { icon: '\u{1F6A8}', borderClass: 'border-ideas' },
+  overdue_checkin: { icon: '\u{1F4C5}', borderClass: 'border-ideas' },
+  orphan: { icon: '\u{1F50D}', borderClass: 'border-primary' },
+  inconsistency: { icon: '\u26A0\uFE0F', borderClass: 'border-events' },
+  open_question: { icon: '\u2753', borderClass: 'border-people' },
+  connection: { icon: '\u{1F517}', borderClass: 'border-projects' },
 }
 
 function formatGreetingDate(): string {
@@ -160,7 +160,7 @@ export function FindingCard({ finding, isFirst, onDismiss, onSnooze, onAct, snoo
 }) {
   const typeConfig = FINDING_TYPE_CONFIG[finding.finding_type]
   const icon = typeConfig?.icon ?? '\u{1F4CB}'
-  const borderColor = typeConfig?.color ?? 'border-primary'
+  const borderColor = typeConfig?.borderClass ?? 'border-primary'
   return (
     <div className={`group bg-surface-container-high rounded-2xl border-l-4 ${borderColor} transition-colors ${isFirst ? 'col-span-2' : ''}`}>
       <div className={`flex items-start gap-3 ${isFirst ? 'p-6' : 'p-4'}`}>
@@ -459,7 +459,7 @@ export function BriefingPanel() {
         {/* Stats footer */}
         {briefingStats && (
           <section className="px-6 pb-20 md:pb-8">
-            {/* Mobile stats — border-top, 3-col grid, gradient text */}
+            {/* Mobile stats — 3-col grid, gradient text */}
             <div className="md:hidden grid grid-cols-3 gap-4 py-8">
               <div className="text-center">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Active</p>
