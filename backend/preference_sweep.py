@@ -125,7 +125,7 @@ def _fetch_existing_preferences(session: Session, user_id: str = "") -> list[dic
     """
     stmt = select(ThingRecord).where(
         ThingRecord.type_hint == "preference",
-        ThingRecord.active == True,
+        ThingRecord.active,
         user_filter_clause(ThingRecord.user_id, user_id),
     )
     rows = session.exec(stmt).all()
@@ -152,7 +152,7 @@ def _fetch_communication_style_things(session: Session, user_id: str = "") -> li
     """Fetch existing reli_communication preference Things for this user."""
     stmt = select(ThingRecord).where(
         ThingRecord.type_hint == "preference",
-        ThingRecord.active == True,
+        ThingRecord.active,
         user_filter_clause(ThingRecord.user_id, user_id),
     )
     rows = session.exec(stmt).all()

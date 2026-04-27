@@ -13,9 +13,6 @@ from google.oauth2.credentials import Credentials
 from google_auth_httplib2 import AuthorizedHttp
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
-
-logger = logging.getLogger(__name__)
-
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
@@ -23,6 +20,8 @@ import backend.db_engine as _engine_mod
 from .config import settings
 from .db_models import GoogleTokenRecord
 from .token_encryption import decrypt_or_plaintext, encrypt
+
+logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
@@ -96,7 +95,7 @@ def _save_credentials(creds: Credentials, user_id: str = "") -> None:
     """Store credentials in SQLite with sensitive fields encrypted."""
     expiry_str = creds.expiry.isoformat() if creds.expiry else None
     scopes_str = json.dumps(list(creds.scopes)) if creds.scopes else None
-    now = datetime.now(timezone.utc).isoformat()
+    datetime.now(timezone.utc).isoformat()
     uid = user_id or None  # Store NULL when auth is disabled (empty string)
 
     # Encrypt sensitive token fields

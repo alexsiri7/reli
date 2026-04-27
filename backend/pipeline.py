@@ -40,7 +40,7 @@ Your goals for this session:
 1. Open with a warm welcome and ask what they're working on this week.
 2. As they share details, proactively call create_thing for each task, project, or person they mention.
 3. Ask 2-3 follow-up questions to learn more (e.g., "Who else is involved?", "When does this need to be done?").
-4. After 3 or more Things are created, close with a mini-briefing: "Here's what I know so far: [list]. Tomorrow I'll check in on these."
+4. After 3+ Things are created, close with: "Here's what I know so far: [list]. Tomorrow I'll check in on these."
 5. Keep the tone warm and conversational — not a form or questionnaire.
 Be proactive: don't wait for the user to say "create a thing". Just do it naturally.
 """
@@ -352,7 +352,7 @@ def _fetch_relevant_things(
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             if active_only:
-                stmt = stmt.where(ThingRecord.active == True)
+                stmt = stmt.where(ThingRecord.active)
             if type_hint:
                 stmt = stmt.where(ThingRecord.type_hint == type_hint)
             stmt = stmt.order_by(ThingRecord.updated_at.desc()).limit(20)  # type: ignore[union-attr]
@@ -389,7 +389,7 @@ def _fetch_relevant_things(
                     user_filter_clause(ThingRecord.user_id, user_id),
                 )
                 if active_only:
-                    pref_stmt = pref_stmt.where(ThingRecord.active == True)
+                    pref_stmt = pref_stmt.where(ThingRecord.active)
                 pref_stmt = pref_stmt.order_by(ThingRecord.updated_at.desc()).limit(10)  # type: ignore[union-attr]
                 for row in session.execute(pref_stmt).fetchall():
                     if row.id not in pref_seen:
@@ -414,7 +414,7 @@ def _fetch_relevant_things(
         recent_stmt = (
             select(ThingRecord)
             .where(
-                ThingRecord.active == True,
+                ThingRecord.active,
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             .order_by(ThingRecord.updated_at.desc())  # type: ignore[union-attr]
@@ -458,7 +458,7 @@ def _fetch_relevant_things(
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             if active_only:
-                pref_stmt2 = pref_stmt2.where(ThingRecord.active == True)
+                pref_stmt2 = pref_stmt2.where(ThingRecord.active)
             pref_stmt2 = pref_stmt2.order_by(ThingRecord.updated_at.desc()).limit(10)  # type: ignore[union-attr]
             for row in session.execute(pref_stmt2).fetchall():
                 if row.id not in set(pref_ids):
@@ -531,8 +531,8 @@ class ChatPipeline:
             surfaced_count = session.exec(
                 select(func.count(ThingRecord.id)).where(
                     user_filter_clause(ThingRecord.user_id, self.user_id),
-                    ThingRecord.surface == True,
-                    ThingRecord.active == True,
+                    ThingRecord.surface,
+                    ThingRecord.active,
                 )
             ).one()
         return surfaced_count == 0

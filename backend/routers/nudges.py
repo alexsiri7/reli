@@ -117,7 +117,7 @@ def get_nudges(user_id: str = Depends(require_user)) -> list[Nudge]:
             ThingRecord.data.is_not(None),  # type: ignore[union-attr]
             cast(ThingRecord.data, String) != "{}",
             cast(ThingRecord.data, String) != "null",
-            ThingRecord.active == True,
+            ThingRecord.active,
             user_filter_clause(ThingRecord.user_id, user_id),
         )
         thing_records = session.exec(thing_stmt).all()

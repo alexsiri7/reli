@@ -52,7 +52,7 @@ def get_staleness_report(
             .join(_child, _child.c.id == ThingRelationshipRecord.to_thing_id)
             .where(
                 ThingRelationshipRecord.relationship_type == "parent-of",
-                _child.c.active == True,
+                _child.c.active,
             )
             .group_by(ThingRelationshipRecord.from_thing_id)
             .subquery()
@@ -63,7 +63,7 @@ def get_staleness_report(
             select(ThingRecord, child_count_sq.c.active_children)
             .outerjoin(child_count_sq, ThingRecord.id == child_count_sq.c.parent_id)
             .where(
-                ThingRecord.active == True,
+                ThingRecord.active,
                 ThingRecord.updated_at < stale_cutoff,
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
@@ -75,7 +75,7 @@ def get_staleness_report(
         overdue_stmt = (
             select(ThingRecord)
             .where(
-                ThingRecord.active == True,
+                ThingRecord.active,
                 ThingRecord.checkin_date.is_not(None),  # type: ignore[union-attr]
                 ThingRecord.checkin_date < cutoff,  # type: ignore[operator]
                 user_filter_clause(ThingRecord.user_id, user_id),

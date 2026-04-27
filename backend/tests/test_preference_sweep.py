@@ -645,7 +645,7 @@ class TestAggregateCommunicationStylePatterns:
         llm_response = json.dumps({"detected": [], "reinforced": [], "contradicted": []})
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
-            result = await aggregate_communication_style_patterns()
+            await aggregate_communication_style_patterns()
 
         # Primary Thing updated with both patterns
         with db() as conn:

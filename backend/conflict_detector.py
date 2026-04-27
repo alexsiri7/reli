@@ -147,8 +147,8 @@ def detect_blocking_chains(
         .join(ToThing, ToThing.id == ThingRelationshipRecord.to_thing_id)  # type: ignore[union-attr]
         .where(
             ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"]),  # type: ignore[union-attr]
-            FromThing.active == True,  # type: ignore[union-attr]
-            ToThing.active == True,  # type: ignore[union-attr]
+            FromThing.active,  # type: ignore[union-attr]
+            ToThing.active,  # type: ignore[union-attr]
         )
     )
 
@@ -236,7 +236,7 @@ def detect_schedule_overlaps(
 
     # Get all active Things with date data
     stmt = select(ThingRecord).where(
-        ThingRecord.active == True,
+        ThingRecord.active,
         ThingRecord.data.is_not(None),  # type: ignore[union-attr]
         cast(ThingRecord.data, String) != "{}",
     )
@@ -342,8 +342,8 @@ def detect_deadline_conflicts(
         .join(ToThing, ToThing.id == ThingRelationshipRecord.to_thing_id)  # type: ignore[union-attr]
         .where(
             ThingRelationshipRecord.relationship_type.in_(["depends-on", "blocks"]),  # type: ignore[union-attr]
-            FromThing.active == True,  # type: ignore[union-attr]
-            ToThing.active == True,  # type: ignore[union-attr]
+            FromThing.active,  # type: ignore[union-attr]
+            ToThing.active,  # type: ignore[union-attr]
         )
     )
 

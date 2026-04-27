@@ -168,7 +168,7 @@ def get_user_thing(
 ) -> UserProfileDetail:
     """Return the user's anchor Thing (created at sign-up) with resolved relationships."""
     stmt = select(ThingRecord).where(
-        ThingRecord.surface == False,
+        ~ThingRecord.surface,
         ThingRecord.type_hint == "person",
         user_filter_clause(ThingRecord.user_id, user_id),
     )
@@ -218,7 +218,7 @@ def get_open_questions(
     stmt = (
         select(ThingRecord)
         .where(
-            ThingRecord.active == True,
+            ThingRecord.active,
             ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
             user_filter_clause(ThingRecord.user_id, user_id),
         )
@@ -328,7 +328,7 @@ def list_things(
         user_filter_clause(ThingRecord.user_id, user_id),
     )
     if active_only:
-        stmt = stmt.where(ThingRecord.active == True)
+        stmt = stmt.where(ThingRecord.active)
     stmt = (
         stmt.order_by(
             ThingRecord.checkin_date.asc(),  # type: ignore[union-attr, attr-defined]
@@ -377,7 +377,7 @@ def list_things(
                 select(
                     ThingRelationshipRecord.from_thing_id.label("project_id"),
                     func.count().label("children_count"),
-                    func.sum(sa_case((ThingRecord.active == False, 1), else_=0)).label("completed_count"),
+                    func.sum(sa_case((~ThingRecord.active, 1), else_=0)).label("completed_count"),
                 )
                 .join(ThingRecord, ThingRecord.id == ThingRelationshipRecord.to_thing_id)
                 .where(
@@ -626,7 +626,7 @@ def get_merge_suggestions(
     stmt = (
         select(ThingRecord)
         .where(
-            ThingRecord.active == True,
+            ThingRecord.active,
             user_filter_clause(ThingRecord.user_id, user_id),
         )
         .order_by(ThingRecord.title)

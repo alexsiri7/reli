@@ -83,7 +83,7 @@ def find_connection_candidates(
 
     # Get all active Things
     with Session(_engine_mod.engine) as session:
-        thing_stmt = select(ThingRecord).where(ThingRecord.active == True)
+        thing_stmt = select(ThingRecord).where(ThingRecord.active)
         if user_id:
             thing_stmt = thing_stmt.where(user_filter_clause(ThingRecord.user_id, user_id))
         things = session.exec(thing_stmt).all()

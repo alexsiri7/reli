@@ -34,7 +34,8 @@ class TestParseResponse:
         raw = (
             "Text.\n\n"
             "```json\n"
-            '{"referenced_things": [{"mention": "only mention"}, {"thing_id": "only id"}, {"mention": "ok", "thing_id": "t-2"}]}\n'
+            '{"referenced_things": [{"mention": "only mention"}, {"thing_id": "only id"},'
+            ' {"mention": "ok", "thing_id": "t-2"}]}\n'
             "```"
         )
         result = parse_response(raw)

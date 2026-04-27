@@ -92,7 +92,7 @@ def generate_weekly_briefing(
     lookback_end = (today + timedelta(days=1)).isoformat()  # inclusive of today
 
     # Forward window: upcoming dates in the next 7 days
-    upcoming_cutoff = today + timedelta(days=7)
+    today + timedelta(days=7)
 
     completed: list[WeeklyBriefingItem] = []
     upcoming: list[WeeklyBriefingItem] = []
@@ -105,7 +105,7 @@ def generate_weekly_briefing(
         completed_stmt = (
             select(ThingRecord)
             .where(
-                ThingRecord.active == False,
+                ~ThingRecord.active,
                 ThingRecord.updated_at >= lookback_start,
                 ThingRecord.updated_at < lookback_end,
                 user_filter_clause(ThingRecord.user_id, user_id),
@@ -117,7 +117,7 @@ def generate_weekly_briefing(
 
         # All active things (for upcoming deadlines and open questions)
         active_stmt = select(ThingRecord).where(
-            ThingRecord.active == True,
+            ThingRecord.active,
             user_filter_clause(ThingRecord.user_id, user_id),
         )
         active_rows = session.exec(active_stmt).all()

@@ -809,7 +809,7 @@ def find_information_gaps(
         )
         .select_from(
             _p.join(_r2, (_r2.c.from_thing_id == _p.c.id) & (_r2.c.relationship_type == "parent-of")).join(
-                _ch2, (_ch2.c.id == _r2.c.to_thing_id) & (_ch2.c.active == True)
+                _ch2, (_ch2.c.id == _r2.c.to_thing_id) & (_ch2.c.active)
             )  # noqa: E712
         )
         .where(
@@ -1070,9 +1070,7 @@ def find_cross_project_shared_blockers(session: Session) -> list[SweepCandidate]
             _blocker.join(_r, or_(_blocker.c.id == _r.c.from_thing_id, _blocker.c.id == _r.c.to_thing_id))
             .join(_task, _task.c.id == _task_id_expr)
             .join(_rp, (_rp.c.to_thing_id == _task.c.id) & (_rp.c.relationship_type == "parent-of"))
-            .join(
-                _proj, (_proj.c.id == _rp.c.from_thing_id) & (_proj.c.type_hint == "project") & (_proj.c.active == True)
-            )  # noqa: E712
+            .join(_proj, (_proj.c.id == _rp.c.from_thing_id) & (_proj.c.type_hint == "project") & (_proj.c.active))  # noqa: E712
         )
         .where(
             _blocker.c.active == True,  # noqa: E712
@@ -1152,9 +1150,7 @@ def find_cross_project_resource_conflicts(
             _person.join(_r, or_(_person.c.id == _r.c.from_thing_id, _person.c.id == _r.c.to_thing_id))
             .join(_task, _task.c.id == _task_id_expr)
             .join(_rp, (_rp.c.to_thing_id == _task.c.id) & (_rp.c.relationship_type == "parent-of"))
-            .join(
-                _proj, (_proj.c.id == _rp.c.from_thing_id) & (_proj.c.type_hint == "project") & (_proj.c.active == True)
-            )  # noqa: E712
+            .join(_proj, (_proj.c.id == _rp.c.from_thing_id) & (_proj.c.type_hint == "project") & (_proj.c.active))  # noqa: E712
         )
         .where(
             _person.c.active == True,  # noqa: E712
@@ -1229,7 +1225,7 @@ def find_cross_project_thematic_connections(
         select(_t.c.id, _t.c.title, _rp.c.from_thing_id.label("parent_id"), _p.c.title.label("project_title"))
         .select_from(
             _t.join(_rp, (_rp.c.to_thing_id == _t.c.id) & (_rp.c.relationship_type == "parent-of")).join(
-                _p, (_p.c.id == _rp.c.from_thing_id) & (_p.c.type_hint == "project") & (_p.c.active == True)
+                _p, (_p.c.id == _rp.c.from_thing_id) & (_p.c.type_hint == "project") & (_p.c.active)
             )  # noqa: E712
         )
         .where(_t.c.active == True)  # noqa: E712

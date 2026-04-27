@@ -54,7 +54,7 @@ def preference_feedback(
             select(ThingRecord).where(
                 ThingRecord.id == thing_id,
                 ThingRecord.type_hint == "preference",
-                ThingRecord.active == True,
+                ThingRecord.active,
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
         ).first()

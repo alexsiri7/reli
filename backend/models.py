@@ -208,7 +208,6 @@ class ChatMessageCreate(BaseModel):
         return v
 
 
-
 class CallUsage(BaseModel):
     """Usage for a single API call."""
 
