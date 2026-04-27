@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import { capturePageToCanvas, isWithinSizeLimit } from '../lib/screenshot'
@@ -10,7 +10,7 @@ const CATEGORIES = [
   { value: 'other', label: 'Other Feedback' },
 ]
 
-const PLACEHOLDER_TEXT: Record<string, string> = {
+const CATEGORY_PLACEHOLDERS: Record<string, string> = {
   bug: 'Describe the bug: what happened and what you expected...',
   feature: "Describe the feature you'd like to see...",
   other: 'Share your feedback...',
@@ -31,7 +31,6 @@ export function FeedbackDialog() {
   const [captureStep, setCaptureStep] = useState<'form' | 'capturing' | 'editing'>('form')
   const [capturedCanvas, setCapturedCanvas] = useState<HTMLCanvasElement | null>(null)
   const [screenshotBase64, setScreenshotBase64] = useState<string | null>(null)
-  const dialogRef = useRef<HTMLDivElement>(null)
 
   const handleCapture = async () => {
     setCaptureStep('capturing')
@@ -96,7 +95,7 @@ export function FeedbackDialog() {
   }
 
   return (
-    <div ref={dialogRef} data-screenshot-exclude className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div data-screenshot-exclude className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-surface-container-low rounded-xl shadow-2xl w-full max-w-md mx-4">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
@@ -179,7 +178,7 @@ export function FeedbackDialog() {
                 <textarea
                   value={message}
                   onChange={e => setMessage(e.target.value)}
-                  placeholder={PLACEHOLDER_TEXT[category] ?? 'Share your feedback...'}
+                  placeholder={CATEGORY_PLACEHOLDERS[category] ?? 'Share your feedback...'}
                   rows={5}
                   maxLength={5000}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500 resize-none"

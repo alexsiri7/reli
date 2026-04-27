@@ -207,6 +207,15 @@ async def test_reasoning_agent_preference_detection() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reasoning_agent_priority_question_gaps() -> None:
+    """Eval: reasoning agent — priority question gap detection."""
+    await _run_tool_name_eval(
+        agent_module="eval.reasoning_agent.agent",
+        test_file=str(EVAL_ROOT / "reasoning_agent" / "priority_question_gaps.test.json"),
+    )
+
+
+@pytest.mark.asyncio
 async def test_reasoning_agent_personality_adaptation() -> None:
     """Eval: reasoning agent — personality adaptation."""
     await _run_tool_name_eval(

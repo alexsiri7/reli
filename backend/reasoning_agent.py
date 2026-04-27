@@ -817,7 +817,7 @@ def _make_reasoning_tools(
         Returns:
             Dict with 'id', 'summary', 'html_link', or an error dict.
         """
-        result = shared_tools.calendar_create_event(
+        return shared_tools.calendar_create_event(
             thing_id=thing_id,
             summary=summary,
             start=start,
@@ -826,7 +826,6 @@ def _make_reasoning_tools(
             description=description,
             user_id=user_id,
         )
-        return result
 
     # ------------------------------------------------------------------
     def calendar_update_event(
@@ -853,7 +852,7 @@ def _make_reasoning_tools(
         Returns:
             Dict with 'id', 'summary', 'html_link', or an error dict.
         """
-        result = shared_tools.calendar_update_event(
+        return shared_tools.calendar_update_event(
             thing_id=thing_id,
             summary=summary,
             start=start,
@@ -862,7 +861,6 @@ def _make_reasoning_tools(
             description=description,
             user_id=user_id,
         )
-        return result
 
     # ------------------------------------------------------------------
     def schedule_task(

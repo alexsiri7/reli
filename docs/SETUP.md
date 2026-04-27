@@ -192,6 +192,6 @@ GitHub Actions runs on every push:
 1. **Backend tests** — pytest on Python 3.11, coverage ≥ 70%
 2. **Frontend tests** — vitest + build on Node 20
 3. **Type checking** — mypy (backend) + tsc (frontend)
-4. **Deploy** — SSH to server via Tailscale VPN, `git pull + rebuild`
+4. **Deploy** — Railway API deployment via `staging-pipeline.yml`. Requires 7 repository secrets — see [`DEPLOYMENT_SECRETS.md`](../DEPLOYMENT_SECRETS.md) for setup.
 
 Branch protection on `main` requires all checks to pass.

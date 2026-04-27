@@ -4,10 +4,7 @@ const MAX_BYTES = 2 * 1024 * 1024
 
 export async function capturePageToCanvas(): Promise<HTMLCanvasElement> {
   return toCanvas(document.body, {
-    filter: (node) => {
-      if (node instanceof HTMLElement && node.dataset.screenshotExclude) return false
-      return true
-    },
+    filter: (node) => !(node instanceof HTMLElement && node.dataset.screenshotExclude !== undefined),
     cacheBust: true,
   })
 }
