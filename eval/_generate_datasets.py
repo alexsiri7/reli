@@ -1451,6 +1451,252 @@ _REASONING_PREFERENCES = EvalSet(
 )
 
 # -------------------------------------------------------------------
+# Reasoning Agent — Priority Question Gap Detection
+# -------------------------------------------------------------------
+
+_REASONING_PRIORITY_QUESTION_GAPS = EvalSet(
+    eval_set_id="reasoning-priority-question-gaps",
+    name="Reasoning Agent — Priority Question Gaps",
+    description=(
+        "Golden dataset: detecting information gaps on "
+        "Things and setting priority_question accordingly"
+    ),
+    eval_cases=[
+        # Task with no deadline — agent should ask about it
+        EvalCase(
+            eval_id="pq-no-deadline",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "I need to finish the Q3 report",
+                            things_json=json.dumps([{
+                                "id": "t-001",
+                                "title": "Q3 Report",
+                                "type_hint": "task",
+                                "active": 1,
+                                "open_questions": [
+                                    "When is this due?",
+                                ],
+                            }]),
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            questions_for_user=[
+                                "What's the deadline for the "
+                                "Q3 report?",
+                            ],
+                            priority_question=(
+                                "What's the deadline for the "
+                                "Q3 report?"
+                            ),
+                            reasoning_summary=(
+                                "Updated Q3 Report. Missing "
+                                "deadline is the critical gap."
+                            ),
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("update_thing", {
+                                "thing_id": "t-001",
+                                "open_questions_json": json.dumps([
+                                    "What's the deadline for the "
+                                    "Q3 report?",
+                                ]),
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("update_thing", {
+                                "id": "t-001",
+                                "title": "Q3 Report",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Quick completion command — no priority question
+        EvalCase(
+            eval_id="pq-no-deadline-skipped",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Done with the report",
+                            things_json=json.dumps([{
+                                "id": "t-001",
+                                "title": "Q3 Report",
+                                "type_hint": "task",
+                                "active": 1,
+                                "open_questions": [
+                                    "When is this due?",
+                                ],
+                            }]),
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            reasoning_summary=(
+                                "Marked Q3 Report as complete."
+                            ),
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("update_thing", {
+                                "thing_id": "t-001",
+                                "active": False,
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("update_thing", {
+                                "id": "t-001",
+                                "title": "Q3 Report",
+                                "active": False,
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Person with no context — agent asks how user knows them
+        EvalCase(
+            eval_id="pq-person-no-context",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "Remind me to call Sarah tomorrow",
+                            things_json=json.dumps([{
+                                "id": "p-010",
+                                "title": "Sarah",
+                                "type_hint": "person",
+                                "active": 1,
+                                "data": "{}",
+                                "open_questions": [],
+                            }]),
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            questions_for_user=[
+                                "How do you know Sarah?",
+                            ],
+                            priority_question=(
+                                "How do you know Sarah?"
+                            ),
+                            reasoning_summary=(
+                                "Created reminder to call Sarah. "
+                                "No context on file for Sarah."
+                            ),
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("create_thing", {
+                                "title": "Call Sarah",
+                                "type_hint": "task",
+                                "data_json": json.dumps({
+                                    "date": "2026-03-19",
+                                }),
+                            }),
+                            _fc("update_thing", {
+                                "thing_id": "p-010",
+                                "open_questions_json": json.dumps([
+                                    "How do you know Sarah?",
+                                ]),
+                            }),
+                            _fc("create_relationship", {
+                                "from_thing_id": "eval-thing-0001",
+                                "to_thing_id": "p-010",
+                                "relationship_type": "involves",
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("create_thing", {
+                                "id": "eval-thing-0001",
+                                "title": "Call Sarah",
+                                "type_hint": "task",
+                            }),
+                            _fr("update_thing", {
+                                "id": "p-010",
+                                "title": "Sarah",
+                            }),
+                            _fr("create_relationship", {
+                                "from_thing_id": "eval-thing-0001",
+                                "to_thing_id": "p-010",
+                                "relationship_type": "involves",
+                            }),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+        # Existing open_questions surfaced as priority_question
+        EvalCase(
+            eval_id="pq-existing-question-surfaced",
+            conversation=[
+                Invocation(
+                    invocation_id="inv-1",
+                    user_content=_user(
+                        _reasoning_prompt(
+                            "What's happening with the conference?",
+                            things_json=json.dumps([{
+                                "id": "e-020",
+                                "title": "Tech Conference",
+                                "type_hint": "event",
+                                "active": 1,
+                                "open_questions": [
+                                    "When is the conference?",
+                                    "Where is the venue?",
+                                ],
+                            }]),
+                        )
+                    ),
+                    final_response=_model(
+                        _final_json(
+                            questions_for_user=[
+                                "When is the conference?",
+                            ],
+                            priority_question=(
+                                "When is the conference?"
+                            ),
+                            reasoning_summary=(
+                                "Reviewed Tech Conference. Key "
+                                "open questions remain about "
+                                "date and venue."
+                            ),
+                        )
+                    ),
+                    intermediate_data=IntermediateData(
+                        tool_uses=[
+                            _fc("fetch_context", {
+                                "search_queries_json": json.dumps([
+                                    "tech conference",
+                                    "conference details",
+                                ]),
+                            }),
+                        ],
+                        tool_responses=[
+                            _fr("fetch_context", _things_ctx({
+                                "id": "e-020",
+                                "title": "Tech Conference",
+                                "type_hint": "event",
+                            })),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+    ],
+)
+
+# -------------------------------------------------------------------
 # Reasoning Agent — Thought Signature regression (Gemini 3 Flash)
 # -------------------------------------------------------------------
 # Gemini 3 Flash thinking models require a thought_signature in
@@ -1742,6 +1988,10 @@ def main() -> None:
     _write(
         _REASONING_PREFERENCES,
         reasoning_dir / "preference_detection.test.json",
+    )
+    _write(
+        _REASONING_PRIORITY_QUESTION_GAPS,
+        reasoning_dir / "priority_question_gaps.test.json",
     )
     _write(
         _REASONING_THOUGHT_SIGNATURE,

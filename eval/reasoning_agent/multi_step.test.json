@@ -1,6 +1,6 @@
 {
   "eval_set_id": "reasoning-multi-step",
-  "name": "Reasoning Agent \u2014 Multi-Step",
+  "name": "Reasoning Agent — Multi-Step",
   "description": "Golden dataset: multi-step scenarios (create then update, etc.)",
   "eval_cases": [
     {
@@ -49,10 +49,41 @@
               {
                 "id": null,
                 "args": {
+                  "search_queries_json": "[\"Japan\", \"trip\", \"travel\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
                   "title": "Japan trip",
                   "type_hint": "project",
                   "priority": 2,
                   "open_questions_json": "[\"When are you planning to travel?\", \"What is your budget?\"]"
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Book flights to Japan",
+                  "type_hint": "task",
+                  "priority": 2
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Find hotels in Japan",
+                  "type_hint": "task",
+                  "priority": 2
                 },
                 "name": "create_thing",
                 "partial_args": null,
@@ -65,11 +96,47 @@
                 "scheduling": null,
                 "parts": null,
                 "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
                 "name": "create_thing",
                 "response": {
                   "id": "eval-thing-0010",
                   "title": "Japan trip",
                   "type_hint": "project"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-thing-0011",
+                  "title": "Book flights to Japan",
+                  "type_hint": "task"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-thing-0012",
+                  "title": "Find hotels in Japan",
+                  "type_hint": "task"
                 }
               }
             ],
@@ -132,6 +199,15 @@
               {
                 "id": null,
                 "args": {
+                  "search_queries_json": "[\"Japan trip\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
                   "thing_id": "thing-600",
                   "data_json": "{\"travel_month\": \"October 2026\", \"budget\": \"$5000\"}",
                   "open_questions_json": "[]"
@@ -142,6 +218,22 @@
               }
             ],
             "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "thing-600",
+                      "title": "Japan trip"
+                    }
+                  ],
+                  "count": 1
+                }
+              },
               {
                 "will_continue": null,
                 "scheduling": null,
