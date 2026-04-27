@@ -162,7 +162,6 @@ function SettingsForm({
       await updateUserSettings({ stale_threshold_days: staleThresholdDays })
     }
 
-    // Save compression threshold if changed
     if (hasCompressionThresholdChange) {
       await updateUserSettings({ messages_until_compression: messagesUntilCompression })
     }
