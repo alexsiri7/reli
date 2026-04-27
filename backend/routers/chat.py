@@ -236,13 +236,15 @@ def list_sessions(user_id: str = Depends(require_user)) -> list[ChatSessionSumma
 @router.post("/sessions", response_model=ChatSessionSummary, status_code=status.HTTP_201_CREATED, summary="Create a chat session")
 def create_session(body: CreateSessionRequest, user_id: str = Depends(require_user)) -> ChatSessionSummary:
     """Create a new named chat session."""
+    import uuid as _uuid
+    session_id = body.session_id or str(_uuid.uuid4())
     with Session(_engine_mod.engine) as session:
         existing = session.exec(
-            select(ChatSessionRecord).where(ChatSessionRecord.id == body.session_id)
+            select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)
         ).first()
         if existing:
-            raise HTTPException(status_code=409, detail=f"Session '{body.session_id}' already exists")
-        record = ChatSessionRecord(id=body.session_id, user_id=user_id, title=body.title, origin=body.origin)
+            raise HTTPException(status_code=409, detail=f"Session '{session_id}' already exists")
+        record = ChatSessionRecord(id=session_id, user_id=user_id, title=body.title, origin=body.origin)
         session.add(record)
         session.commit()
         session.refresh(record)

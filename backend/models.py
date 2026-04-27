@@ -336,7 +336,7 @@ class ChatSessionSummary(BaseModel):
 
 
 class CreateSessionRequest(BaseModel):
-    session_id: str
+    session_id: str | None = None
     title: str = "New chat"
     origin: str | None = None
 
