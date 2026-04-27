@@ -5,14 +5,14 @@ import type { SweepFinding, BriefingItem, LearnedPreference, CalendarEvent } fro
 import { NudgeBanner } from './NudgeBanner'
 
 const FINDING_TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
-  approaching_date: { icon: '\u23F0', color: 'bg-events' },
-  stale: { icon: '\u{1F4A4}', color: 'bg-on-surface-variant' },
-  neglected: { icon: '\u{1F6A8}', color: 'bg-ideas' },
-  overdue_checkin: { icon: '\u{1F4C5}', color: 'bg-ideas' },
-  orphan: { icon: '\u{1F50D}', color: 'bg-primary' },
-  inconsistency: { icon: '\u26A0\uFE0F', color: 'bg-events' },
-  open_question: { icon: '\u2753', color: 'bg-people' },
-  connection: { icon: '\u{1F517}', color: 'bg-projects' },
+  approaching_date: { icon: '\u23F0', color: 'border-events' },
+  stale: { icon: '\u{1F4A4}', color: 'border-on-surface-variant' },
+  neglected: { icon: '\u{1F6A8}', color: 'border-ideas' },
+  overdue_checkin: { icon: '\u{1F4C5}', color: 'border-ideas' },
+  orphan: { icon: '\u{1F50D}', color: 'border-primary' },
+  inconsistency: { icon: '\u26A0\uFE0F', color: 'border-events' },
+  open_question: { icon: '\u2753', color: 'border-people' },
+  connection: { icon: '\u{1F517}', color: 'border-projects' },
 }
 
 function formatGreetingDate(): string {
@@ -36,15 +36,16 @@ function dateOffsetISO(days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-function SectionCard({ title, accent, children }: {
+function SectionCard({ title, accent, children, childrenClassName }: {
   title: string
   accent: string
   children: React.ReactNode
+  childrenClassName?: string
 }) {
   return (
     <section className="px-6 pb-6">
       <p className={`text-label font-semibold mb-2 ${accent}`}>{title}</p>
-      <div className="space-y-2">{children}</div>
+      <div className={childrenClassName ?? 'space-y-2'}>{children}</div>
     </section>
   )
 }
@@ -148,8 +149,9 @@ export function DueTodayRow({ item, onDone, onSnooze, onChat, snoozeMenuOpen, on
   )
 }
 
-function FindingCard({ finding, onDismiss, onSnooze, onAct, snoozeMenuOpen, onSnoozeToggle }: {
+export function FindingCard({ finding, isFirst, onDismiss, onSnooze, onAct, snoozeMenuOpen, onSnoozeToggle }: {
   finding: SweepFinding
+  isFirst: boolean
   onDismiss: (id: string) => void
   onSnooze: (id: string, date: string) => void
   onAct: (finding: SweepFinding) => void
@@ -158,14 +160,13 @@ function FindingCard({ finding, onDismiss, onSnooze, onAct, snoozeMenuOpen, onSn
 }) {
   const typeConfig = FINDING_TYPE_CONFIG[finding.finding_type]
   const icon = typeConfig?.icon ?? '\u{1F4CB}'
-  const dotColor = typeConfig?.color ?? 'bg-primary'
+  const borderColor = typeConfig?.color ?? 'border-primary'
   return (
-    <div className="group rounded-xl bg-surface-container-low hover:bg-surface-container-high/60 transition-colors overflow-hidden">
-      <div className="flex items-start gap-3 py-3 px-4">
-        <div className={`w-1 self-stretch rounded-full shrink-0 ${dotColor}`} />
-        <span className="text-sm mt-0.5 shrink-0">{icon}</span>
+    <div className={`group bg-surface-container-high rounded-2xl border-l-4 ${borderColor} transition-colors ${isFirst ? 'col-span-2' : ''}`}>
+      <div className={`flex items-start gap-3 ${isFirst ? 'p-6' : 'p-4'}`}>
+        <span className={`${isFirst ? 'text-base' : 'text-sm'} mt-0.5 shrink-0`}>{icon}</span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-on-surface leading-snug">{finding.message}</p>
+          <p className={`text-on-surface ${isFirst ? 'text-sm font-medium' : 'text-xs font-medium leading-snug'}`}>{finding.message}</p>
           {finding.thing && (
             <p className="text-xs text-on-surface-variant mt-0.5 truncate">
               {finding.thing.title}
@@ -426,11 +427,12 @@ export function BriefingPanel() {
 
         {/* Needs Attention */}
         {findings.length > 0 && (
-          <SectionCard title="Needs Attention" accent="text-amber-500">
-            {findings.slice(0, 6).map(f => (
+          <SectionCard title="Needs Attention" accent="text-amber-500" childrenClassName="grid grid-cols-2 gap-4">
+            {findings.slice(0, 6).map((f, index) => (
               <FindingCard
                 key={f.id}
                 finding={f}
+                isFirst={index === 0}
                 onDismiss={dismissFinding}
                 onSnooze={snoozeFinding}
                 onAct={actOnFinding}
