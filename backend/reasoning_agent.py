@@ -17,6 +17,9 @@ from typing import Any
 from google.adk.agents import LlmAgent
 from opentelemetry import trace
 
+import backend.db_engine as _engine_mod
+
+from . import tools as shared_tools
 from .agents import (
     OLLAMA_MODEL,
     REASONING_AGENT_SYSTEM,
@@ -27,13 +30,7 @@ from .agents import (
     apply_storage_changes,
 )
 from .context_agent import _make_litellm_model, _run_agent_for_text
-from . import tools as shared_tools
-from sqlmodel import Session
-
-import backend.db_engine as _engine_mod
 from .tracing import get_tracer
-from .vector_store import delete_thing as vs_delete
-from .vector_store import upsert_thing
 
 logger = logging.getLogger(__name__)
 
@@ -540,6 +537,7 @@ def get_system_prompt_for_mode(mode: str, interaction_style: str = "auto") -> st
 # Tool factory — creates tool functions bound to db/user context
 # ---------------------------------------------------------------------------
 
+
 def _make_reasoning_tools(
     user_id: str,
     session_id: str = "",
@@ -901,11 +899,21 @@ def _make_reasoning_tools(
         return result
 
     # Wrap each tool with OTEL span instrumentation
-    traced_tools = [_traced_tool(t) for t in [
-        fetch_context, chat_history, create_thing, update_thing, delete_thing,
-        merge_things, create_relationship, calendar_create_event, calendar_update_event,
-        schedule_task,
-    ]]
+    traced_tools = [
+        _traced_tool(t)
+        for t in [
+            fetch_context,
+            chat_history,
+            create_thing,
+            update_thing,
+            delete_thing,
+            merge_things,
+            create_relationship,
+            calendar_create_event,
+            calendar_update_event,
+            schedule_task,
+        ]
+    ]
     return traced_tools, applied, fetched_context
 
 
@@ -1074,7 +1082,7 @@ async def run_reasoning_agent(
                 # Get a raw DBAPI connection from the SQLModel engine
                 with _engine_mod.engine.connect() as sa_conn:
                     raw_conn = sa_conn.connection
-                    raw_conn.row_factory = __import__('sqlite3').Row  # type: ignore[attr-defined]
+                    raw_conn.row_factory = __import__("sqlite3").Row  # type: ignore[attr-defined]
                     applied = apply_storage_changes(storage_changes, raw_conn, user_id=user_id)  # type: ignore[arg-type]
                     sa_conn.commit()
 
@@ -1122,6 +1130,7 @@ async def run_reasoning_agent(
     system_prompt = get_system_prompt_for_mode(mode, interaction_style)
     if is_new_user:
         from .pipeline import ONBOARDING_SYSTEM_ADDENDUM
+
         system_prompt += "\n\n" + ONBOARDING_SYSTEM_ADDENDUM
     reasoning_agent = LlmAgent(
         name="reasoning_agent",

@@ -43,6 +43,7 @@ def json_serializer(value: Any) -> str:
 # sys.modules.  This prevents the ImportError reported in GH #505 / #506.
 # ---------------------------------------------------------------------------
 
+
 def user_filter_clause(user_id_column: Any, user_id: str) -> Any:
     """Return a SQLAlchemy filter clause for user-scoped queries.
 
@@ -105,4 +106,3 @@ def get_session() -> Generator[Session, None, None]:
     """Yield a SQLModel session. Use as a FastAPI ``Depends()`` or context manager."""
     with Session(engine) as session:
         yield session
-

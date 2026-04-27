@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-MAX_LOOKUPS_PER_RUN = 10        # Hard cap on external API calls per sweep
-RESEARCH_COOLDOWN_DAYS = 7      # Skip if researched < 7 days ago (unless Thing changed)
-MIN_IMPORTANCE = 2              # 0=critical, 1=high, 2=medium, 3=low, 4=backlog; skip 3+
+MAX_LOOKUPS_PER_RUN = 10  # Hard cap on external API calls per sweep
+RESEARCH_COOLDOWN_DAYS = 7  # Skip if researched < 7 days ago (unless Thing changed)
+MIN_IMPORTANCE = 2  # 0=critical, 1=high, 2=medium, 3=low, 4=backlog; skip 3+
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -172,27 +172,19 @@ async def _execute_lookup(action: str, query: str | None, user_id: str) -> list[
             from .routers.gmail import _get_service, _parse_message
 
             service = _get_service(user_id=user_id)
-            result = (
-                service.users()
-                .messages()
-                .list(userId="me", maxResults=5, q=query)
-                .execute()
-            )
+            result = service.users().messages().list(userId="me", maxResults=5, q=query).execute()
             msgs = []
             for m in result.get("messages", []):
-                full = (
-                    service.users()
-                    .messages()
-                    .get(userId="me", id=m["id"], format="full")
-                    .execute()
-                )
+                full = service.users().messages().get(userId="me", id=m["id"], format="full").execute()
                 parsed = _parse_message(full)
-                msgs.append({
-                    "subject": parsed.subject,
-                    "sender": parsed.sender,
-                    "date": parsed.date,
-                    "snippet": parsed.snippet[:500] if parsed.snippet else "",
-                })
+                msgs.append(
+                    {
+                        "subject": parsed.subject,
+                        "sender": parsed.sender,
+                        "date": parsed.date,
+                        "snippet": parsed.snippet[:500] if parsed.snippet else "",
+                    }
+                )
             return msgs
         except Exception as exc:
             logger.warning(
@@ -207,10 +199,7 @@ async def _execute_lookup(action: str, query: str | None, user_id: str) -> list[
             events = fetch_upcoming_events(max_results=10, days_ahead=14, user_id=user_id)
             # Filter events whose summary matches the query (case-insensitive)
             query_lower = query.lower()
-            matched = [
-                e for e in events
-                if query_lower in e.get("summary", "").lower()
-            ]
+            matched = [e for e in events if query_lower in e.get("summary", "").lower()]
             return matched if matched else events[:5]
         except Exception as exc:
             logger.warning("Calendar lookup failed (%s): %s", type(exc).__name__, exc)
@@ -242,18 +231,13 @@ async def run_research_sweep(
     if candidates is None:
         try:
             with Session(_engine_mod.engine) as session:
-                stmt = (
-                    select(ThingRecord)
-                    .where(
-                        ThingRecord.active == True,  # noqa: E712
-                        ThingRecord.open_questions.isnot(None),  # type: ignore[union-attr]
-                        ThingRecord.importance <= MIN_IMPORTANCE,
-                    )
+                stmt = select(ThingRecord).where(
+                    ThingRecord.active == True,  # noqa: E712
+                    ThingRecord.open_questions.isnot(None),  # type: ignore[union-attr]
+                    ThingRecord.importance <= MIN_IMPORTANCE,
                 )
                 if user_id:
-                    stmt = stmt.where(
-                        user_filter_clause(ThingRecord.user_id, user_id)
-                    )
+                    stmt = stmt.where(user_filter_clause(ThingRecord.user_id, user_id))
                 candidates = list(session.exec(stmt).all())
                 # Detach from session so we can use them outside
                 for c in candidates:
@@ -328,38 +312,41 @@ async def run_research_sweep(
                     top_result_title = first.get("title") or first.get("summary") or first.get("subject") or ""
 
                 finding_msg = (
-                    f"Research for '{thing.title}': {reason}. "
-                    f"Found {len(lookup_results)} result(s) via {action}."
+                    f"Research for '{thing.title}': {reason}. Found {len(lookup_results)} result(s) via {action}."
                 )
                 if top_result_title:
                     finding_msg += f" Top result: {top_result_title}"
 
                 finding_id = f"sf-{uuid.uuid4().hex[:8]}"
-                session.add(SweepFindingRecord(
-                    id=finding_id,
-                    thing_id=thing.id,
-                    finding_type="research",
-                    message=finding_msg,
-                    priority=2,
-                    dismissed=False,
-                    created_at=now,
-                    expires_at=None,
-                    user_id=user_id or None,
-                ))
+                session.add(
+                    SweepFindingRecord(
+                        id=finding_id,
+                        thing_id=thing.id,
+                        finding_type="research",
+                        message=finding_msg,
+                        priority=2,
+                        dismissed=False,
+                        created_at=now,
+                        expires_at=None,
+                        user_id=user_id or None,
+                    )
+                )
 
                 session.commit()
 
                 result.things_researched += 1
                 result.findings_created += 1
-                result.findings.append({
-                    "id": finding_id,
-                    "thing_id": thing.id,
-                    "thing_title": thing.title,
-                    "action": action,
-                    "query": query,
-                    "results_count": len(lookup_results),
-                    "message": finding_msg,
-                })
+                result.findings.append(
+                    {
+                        "id": finding_id,
+                        "thing_id": thing.id,
+                        "thing_title": thing.title,
+                        "action": action,
+                        "query": query,
+                        "results_count": len(lookup_results),
+                        "message": finding_msg,
+                    }
+                )
 
         except Exception as exc:
             logger.warning("Research sweep: DB update failed for %s: %s", thing.id, exc)

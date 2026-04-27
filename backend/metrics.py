@@ -131,6 +131,7 @@ def _refresh_gauges() -> None:
         from sqlmodel import Session, select
 
         import backend.db_engine as _engine_mod
+
         from .db_models import ThingRecord, UserRecord
 
         with Session(_engine_mod.engine) as session:

@@ -15,11 +15,11 @@ from dataclasses import dataclass
 from datetime import date
 
 from sqlalchemy import String, cast
-
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
+
 from .db_models import ThingRecord, ThingRelationshipRecord
 
 logger = logging.getLogger(__name__)
@@ -238,7 +238,7 @@ def detect_schedule_overlaps(
     stmt = select(ThingRecord).where(
         ThingRecord.active == True,
         ThingRecord.data.is_not(None),  # type: ignore[union-attr]
-        cast(ThingRecord.data, String) != '{}',
+        cast(ThingRecord.data, String) != "{}",
     )
     rows = session.exec(stmt).all()
 

@@ -69,9 +69,7 @@ class TestRelationshipCreateLimits:
     def test_metadata_too_large(self) -> None:
         big = {"k": "v" * 200_000}
         with pytest.raises(ValidationError, match="metadata must be under"):
-            RelationshipCreate(
-                from_thing_id="a", to_thing_id="b", relationship_type="rel", metadata=big
-            )
+            RelationshipCreate(from_thing_id="a", to_thing_id="b", relationship_type="rel", metadata=big)
 
 
 class TestChatMessageCreateLimits:

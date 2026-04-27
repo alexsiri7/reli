@@ -12,10 +12,10 @@ import re
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import text
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
+
 from .db_engine import user_filter_clause
 from .db_models import (
     MorningBriefingRecord,
@@ -143,10 +143,14 @@ def generate_morning_briefing(
 
     with Session(_engine_mod.engine) as session:
         # Fetch active things
-        thing_stmt = select(ThingRecord).where(
-            ThingRecord.active == True,
-            user_filter_clause(ThingRecord.user_id, user_id),
-        ).order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())  # type: ignore[union-attr]
+        thing_stmt = (
+            select(ThingRecord)
+            .where(
+                ThingRecord.active == True,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+            .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
+        )  # type: ignore[union-attr]
         thing_rows = session.exec(thing_stmt).all()
 
         # Fetch relationships for blocking analysis

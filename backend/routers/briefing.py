@@ -143,11 +143,13 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
             data = raw if isinstance(raw, dict) else {}
         except (json.JSONDecodeError, TypeError):
             data = {}
-        learned_preferences.append(LearnedPreference(
-            id=r.id,
-            title=r.title,
-            confidence_label=_confidence_label(data),
-        ))
+        learned_preferences.append(
+            LearnedPreference(
+                id=r.id,
+                title=r.title,
+                confidence_label=_confidence_label(data),
+            )
+        )
 
     # Filter checkin-due things from all_active (avoids a separate query)
     thing_records = sorted(
@@ -162,18 +164,17 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
         linked_thing = _record_to_thing(thing_rec) if thing_rec else None
         findings.append(_record_to_finding(finding_rec, linked_thing))
 
-    all_things_map = {
-        r.id: {"id": r.id, "importance": r.importance, "active": r.active}
-        for r in all_active
-    }
-    blocker_graph = build_blocker_graph([
-        {
-            "from_thing_id": r.from_thing_id,
-            "to_thing_id": r.to_thing_id,
-            "relationship_type": r.relationship_type,
-        }
-        for r in rel_rows
-    ])
+    all_things_map = {r.id: {"id": r.id, "importance": r.importance, "active": r.active} for r in all_active}
+    blocker_graph = build_blocker_graph(
+        [
+            {
+                "from_thing_id": r.from_thing_id,
+                "to_thing_id": r.to_thing_id,
+                "relationship_type": r.relationship_type,
+            }
+            for r in rel_rows
+        ]
+    )
 
     # Score each thing
     scored: list[BriefingItem] = []
@@ -182,21 +183,22 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
         imp: int = thing.importance if thing.importance is not None else 2
         urgency, reasons = compute_urgency(thing_dict, target, blocker_graph, all_things_map)
         composite = compute_composite_score(imp, urgency)
-        scored.append(BriefingItem(
-            thing=thing_dict,
-            importance=imp,
-            urgency=round(urgency, 2),
-            score=round(composite, 2),
-            reasons=reasons,
-        ))
+        scored.append(
+            BriefingItem(
+                thing=thing_dict,
+                importance=imp,
+                urgency=round(urgency, 2),
+                score=round(composite, 2),
+                reasons=reasons,
+            )
+        )
 
     scored.sort(key=lambda x: x.score, reverse=True)
 
     the_one_thing = scored[0] if scored else None
     secondary = scored[1:6] if len(scored) > 1 else []
     parking_lot: list[dict[str, Any]] = [
-        {"thing_id": s.thing["id"], "title": s.thing["title"],
-         "importance": s.importance, "urgency": s.urgency}
+        {"thing_id": s.thing["id"], "title": s.thing["title"], "importance": s.importance, "urgency": s.urgency}
         for s in scored[6:]
     ]
 

@@ -5,9 +5,9 @@ from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlmodel import Session
 
 import backend.db_engine as _engine_mod
-from sqlmodel import Session
 from backend.sweep import (
     _generate_template_gap_questions as generate_gap_questions,
 )
@@ -25,9 +25,9 @@ from backend.sweep import (
     find_information_gaps,
     find_open_questions,
     find_orphan_things,
-    prune_stale_open_questions,
     find_overdue_checkins,
     find_stale_things,
+    prune_stale_open_questions,
 )
 
 # ---------------------------------------------------------------------------
@@ -71,6 +71,7 @@ def _insert_thing(
     # Create parent-of relationship if parent_id provided
     if parent_id:
         import uuid
+
         _insert_relationship(conn, str(uuid.uuid4()), parent_id, thing_id, "parent-of")
 
 
@@ -1331,12 +1332,16 @@ class TestBreakdownBroadThings:
         with db() as conn:
             _insert_thing(conn, "p1", "Plan Europe Trip", type_hint="project")
 
-        llm_response = json.dumps({
-            "things": [{
-                "thing_id": "p1",
-                "subtasks": ["Book flights", "Book accommodation", "Check visa requirements"],
-            }]
-        })
+        llm_response = json.dumps(
+            {
+                "things": [
+                    {
+                        "thing_id": "p1",
+                        "subtasks": ["Book flights", "Book accommodation", "Check visa requirements"],
+                    }
+                ]
+            }
+        )
 
         with patch("backend.agents._chat", new=AsyncMock(return_value=llm_response)):
             result = await breakdown_broad_things(user_id="")
@@ -1363,9 +1368,7 @@ class TestBreakdownBroadThings:
         with db() as conn:
             _insert_thing(conn, "p1", "Plan Europe Trip", type_hint="project")
 
-        llm_response = json.dumps({
-            "things": [{"thing_id": "FAKE-ID-NOT-IN-DB", "subtasks": ["Malicious task"]}]
-        })
+        llm_response = json.dumps({"things": [{"thing_id": "FAKE-ID-NOT-IN-DB", "subtasks": ["Malicious task"]}]})
 
         with patch("backend.agents._chat", new=AsyncMock(return_value=llm_response)):
             result = await breakdown_broad_things(user_id="")

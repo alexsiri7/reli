@@ -55,11 +55,7 @@ def _cleanup_expired(store: dict[str, dict]) -> None:
     """
     now_ts = time.time()
     now_dt = datetime.now(timezone.utc)
-    expired_keys = [
-        k
-        for k, v in store.items()
-        if _is_expired(v, now_ts, now_dt)
-    ]
+    expired_keys = [k for k, v in store.items() if _is_expired(v, now_ts, now_dt)]
     for k in expired_keys:
         del store[k]
     if expired_keys:
@@ -89,9 +85,7 @@ def cleanup_and_store(store: dict[str, dict], key: str, value: dict) -> None:
     with _state_lock:
         _cleanup_expired(store)
         if len(store) >= MAX_ENTRIES_PER_DICT:
-            raise StoreFullError(
-                f"OAuth state store is full ({MAX_ENTRIES_PER_DICT} entries)"
-            )
+            raise StoreFullError(f"OAuth state store is full ({MAX_ENTRIES_PER_DICT} entries)")
         store[key] = value
 
 

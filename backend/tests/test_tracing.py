@@ -212,13 +212,9 @@ class TestTracedToolDecorator:
 
     def test_tools_from_factory_are_traced(self):
         """Tools returned by _make_reasoning_tools should be wrapped with tracing."""
-        with (
-            patch("backend.reasoning_agent.upsert_thing"),
-            patch("backend.reasoning_agent.vs_delete"),
-        ):
-            from backend.reasoning_agent import _make_reasoning_tools
+        from backend.reasoning_agent import _make_reasoning_tools
 
-            tools, _, _fetched = _make_reasoning_tools("test-user")
+        tools, _, _fetched = _make_reasoning_tools("test-user")
 
         # All tools should still have their original names (via functools.wraps)
         names = [t.__name__ for t in tools]

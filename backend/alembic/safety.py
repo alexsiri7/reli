@@ -59,9 +59,7 @@ def _find_destructive_ops_in_source(source: str) -> list[str]:
                     args_repr = ""
                     if child.args:
                         first = child.args[0]
-                        if isinstance(first, ast.Constant) and isinstance(
-                            first.value, str
-                        ):
+                        if isinstance(first, ast.Constant) and isinstance(first.value, str):
                             args_repr = f"('{first.value}'...)"
                     findings.append(f"op.{child.func.attr}{args_repr}")
 
@@ -73,14 +71,10 @@ def _find_destructive_ops_in_source(source: str) -> list[str]:
                     and child.args
                 ):
                     first = child.args[0]
-                    if isinstance(first, ast.Constant) and isinstance(
-                        first.value, str
-                    ):
+                    if isinstance(first, ast.Constant) and isinstance(first.value, str):
                         for pattern in _DESTRUCTIVE_SQL_PATTERNS:
                             if pattern.search(first.value):
-                                findings.append(
-                                    f"op.execute() with: {first.value[:80]}"
-                                )
+                                findings.append(f"op.execute() with: {first.value[:80]}")
                                 break
 
     return findings

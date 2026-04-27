@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from backend.summarization_agent import create_summary
 from backend.routers.chat import _fetch_history, _maybe_trigger_summarization
+from backend.summarization_agent import create_summary
 
 # ---------------------------------------------------------------------------
 # Helpers

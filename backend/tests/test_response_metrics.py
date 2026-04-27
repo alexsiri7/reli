@@ -68,6 +68,7 @@ class TestHealthDetailed:
 
     def test_health_db_failure_shows_degraded(self, client):
         import backend.db_engine as _engine_mod
+
         with patch.object(_engine_mod.engine, "connect", side_effect=Exception("db down")):
             resp = client.get("/api/health")
         body = resp.json()

@@ -6,8 +6,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
-from ..auth import require_user
 import backend.db_engine as _engine_mod
+
+from ..auth import require_user
 from ..db_engine import user_filter_clause
 from ..db_models import ConnectionSuggestionRecord, ThingRecord, ThingRelationshipRecord
 from ..models import ConnectionSuggestion, ConnectionSuggestionAccept, ConnectionSuggestionThing

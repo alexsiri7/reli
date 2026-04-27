@@ -40,6 +40,7 @@ def _insert_thing(conn, thing_id: str, title: str, **kwargs) -> None:
     )
     if parent_id:
         import uuid
+
         conn.execute(
             "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) VALUES (?, ?, ?, ?)",
             (str(uuid.uuid4()), parent_id, thing_id, "parent-of"),
@@ -370,8 +371,7 @@ class TestDismissStaleFindings:
 
         with db() as conn:
             rows = {
-                r["id"]: r["dismissed"]
-                for r in conn.execute("SELECT id, dismissed FROM sweep_findings").fetchall()
+                r["id"]: r["dismissed"] for r in conn.execute("SELECT id, dismissed FROM sweep_findings").fetchall()
             }
         assert count == 1
         assert rows["f-expired"] == 1
@@ -390,9 +390,7 @@ class TestDismissStaleFindings:
         assert count == 0
 
         with db() as conn:
-            rows = conn.execute(
-                "SELECT id, dismissed FROM sweep_findings ORDER BY id"
-            ).fetchall()
+            rows = conn.execute("SELECT id, dismissed FROM sweep_findings ORDER BY id").fetchall()
         assert all(r["dismissed"] == 0 for r in rows)
 
     def test_returns_correct_count(self, patched_db, db):

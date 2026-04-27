@@ -189,18 +189,24 @@ class TestRunResearchSweep:
             questions=["What is the visa requirement for Spain?"],
         )
 
-        mock_llm = json.dumps({
-            "action": "web_search",
-            "query": "Spain visa requirements 2026",
-            "reason": "Factual lookup for visa info",
-        })
-        mock_result_obj = type("R", (), {
-            "to_dict": lambda self: {
-                "title": "Spain Visa Guide",
-                "url": "http://example.com",
-                "snippet": "No visa needed for EU citizens.",
+        mock_llm = json.dumps(
+            {
+                "action": "web_search",
+                "query": "Spain visa requirements 2026",
+                "reason": "Factual lookup for visa info",
             }
-        })()
+        )
+        mock_result_obj = type(
+            "R",
+            (),
+            {
+                "to_dict": lambda self: {
+                    "title": "Spain Visa Guide",
+                    "url": "http://example.com",
+                    "snippet": "No visa needed for EU citizens.",
+                }
+            },
+        )()
 
         with (
             patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_llm),
@@ -225,9 +231,7 @@ class TestRunResearchSweep:
             assert thing.data["research"]["query"] == "Spain visa requirements 2026"
 
             findings = session.exec(
-                select(SweepFindingRecord).where(
-                    SweepFindingRecord.finding_type == "research"
-                )
+                select(SweepFindingRecord).where(SweepFindingRecord.finding_type == "research")
             ).all()
             assert len(findings) == 1
             assert "Spain Trip" in findings[0].message
@@ -244,9 +248,7 @@ class TestRunResearchSweep:
         )
 
         mock_llm = json.dumps({"action": "web_search", "query": "best hotels", "reason": "x"})
-        mock_result_obj = type("R", (), {
-            "to_dict": lambda self: {"title": "Hotels", "url": "u", "snippet": "s"}
-        })()
+        mock_result_obj = type("R", (), {"to_dict": lambda self: {"title": "Hotels", "url": "u", "snippet": "s"}})()
 
         with (
             patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_llm),
@@ -280,9 +282,7 @@ class TestRunResearchSweep:
             original_updated_at = thing_before.updated_at  # type: ignore[union-attr]
 
         mock_llm = json.dumps({"action": "web_search", "query": "query", "reason": "r"})
-        mock_result_obj = type("R", (), {
-            "to_dict": lambda self: {"title": "T", "url": "u", "snippet": "s"}
-        })()
+        mock_result_obj = type("R", (), {"to_dict": lambda self: {"title": "T", "url": "u", "snippet": "s"}})()
 
         with (
             patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_llm),
@@ -320,9 +320,7 @@ class TestRunResearchSweep:
             _insert_thing_with_questions(db, f"Thing {i}", questions=["question?"])
 
         mock_llm = json.dumps({"action": "web_search", "query": "query", "reason": "r"})
-        mock_result_obj = type("R", (), {
-            "to_dict": lambda self: {"title": "T", "url": "u", "snippet": "s"}
-        })()
+        mock_result_obj = type("R", (), {"to_dict": lambda self: {"title": "T", "url": "u", "snippet": "s"}})()
 
         with (
             patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_llm),
@@ -411,11 +409,13 @@ class TestResearchEndpointResponseShape:
     @pytest.mark.asyncio
     async def test_sweep_run_includes_research_fields(self, async_client):
         """/sweep/run response includes research_lookups and research_findings keys."""
-        mock_llm_response = json.dumps({
-            "action": "none",
-            "query": None,
-            "reason": "no data needed",
-        })
+        mock_llm_response = json.dumps(
+            {
+                "action": "none",
+                "query": None,
+                "reason": "no data needed",
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_llm_response):
             response = await async_client.post("/api/sweep/run")

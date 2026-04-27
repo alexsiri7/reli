@@ -1,6 +1,5 @@
 """Tests for the destructive DDL safety guard in Alembic migrations."""
 
-import os
 import textwrap
 
 import pytest
@@ -173,7 +172,8 @@ class TestCheckPendingMigrations:
         versions_dir = tmp_path / "versions"
         versions_dir.mkdir()
         migration_file = versions_dir / "abc123_drop_users.py"
-        migration_file.write_text(textwrap.dedent("""\
+        migration_file.write_text(
+            textwrap.dedent("""\
             revision = 'abc123'
             down_revision = None
 
@@ -184,7 +184,8 @@ class TestCheckPendingMigrations:
 
             def downgrade():
                 op.create_table('users')
-        """))
+        """)
+        )
 
         from unittest.mock import MagicMock
 
@@ -214,7 +215,8 @@ class TestCheckPendingMigrations:
         versions_dir = tmp_path / "versions"
         versions_dir.mkdir()
         migration_file = versions_dir / "def456_add_column.py"
-        migration_file.write_text(textwrap.dedent("""\
+        migration_file.write_text(
+            textwrap.dedent("""\
             revision = 'def456'
             down_revision = None
 
@@ -226,7 +228,8 @@ class TestCheckPendingMigrations:
 
             def downgrade():
                 op.drop_column('users', 'bio')
-        """))
+        """)
+        )
 
         from unittest.mock import MagicMock
 
@@ -251,7 +254,8 @@ class TestCheckPendingMigrations:
         versions_dir = tmp_path / "versions"
         versions_dir.mkdir()
         migration_file = versions_dir / "abc123_drop_users.py"
-        migration_file.write_text(textwrap.dedent("""\
+        migration_file.write_text(
+            textwrap.dedent("""\
             revision = 'abc123'
             down_revision = None
 
@@ -262,7 +266,8 @@ class TestCheckPendingMigrations:
 
             def downgrade():
                 pass
-        """))
+        """)
+        )
 
         from unittest.mock import MagicMock
 
@@ -277,6 +282,4 @@ class TestCheckPendingMigrations:
         mock_script_dir.walk_revisions.return_value = [mock_rev]
 
         # abc123 is already applied — should not raise
-        check_pending_migrations(
-            mock_script_dir, current_heads={"abc123"}
-        )
+        check_pending_migrations(mock_script_dir, current_heads={"abc123"})

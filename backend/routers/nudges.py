@@ -31,20 +31,20 @@ DAILY_NUDGE_LIMIT = 3
 # Keys in the data JSON that hold date values (mirrors proactive.py).
 # recurring=True means the date repeats yearly (e.g. birthday).
 _DATE_KEY_CONFIG: dict[str, tuple[bool, str]] = {
-    "birthday":     (True,  "Birthday"),
-    "anniversary":  (True,  "Anniversary"),
-    "born":         (True,  "Birthday"),
-    "date_of_birth":(True,  "Birthday"),
-    "dob":          (True,  "Birthday"),
-    "deadline":     (False, "Deadline"),
-    "due_date":     (False, "Due"),
-    "due":          (False, "Due"),
-    "event_date":   (False, "Event"),
-    "starts_at":    (False, "Starts"),
-    "start_date":   (False, "Starts"),
-    "ends_at":      (False, "Ends"),
-    "end_date":     (False, "Ends"),
-    "date":         (False, "Date"),
+    "birthday": (True, "Birthday"),
+    "anniversary": (True, "Anniversary"),
+    "born": (True, "Birthday"),
+    "date_of_birth": (True, "Birthday"),
+    "dob": (True, "Birthday"),
+    "deadline": (False, "Deadline"),
+    "due_date": (False, "Due"),
+    "due": (False, "Due"),
+    "event_date": (False, "Event"),
+    "starts_at": (False, "Starts"),
+    "start_date": (False, "Starts"),
+    "ends_at": (False, "Ends"),
+    "end_date": (False, "Ends"),
+    "date": (False, "Date"),
 }
 
 _DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
@@ -113,15 +113,12 @@ def get_nudges(user_id: str = Depends(require_user)) -> list[Nudge]:
         suppressed_types = {r.nudge_type for r in suppressed_records}
 
         # Fetch things with non-empty data
-        thing_stmt = (
-            select(ThingRecord)
-            .where(
-                ThingRecord.data.is_not(None),  # type: ignore[union-attr]
-                cast(ThingRecord.data, String) != '{}',
-                cast(ThingRecord.data, String) != 'null',
-                ThingRecord.active == True,
-                user_filter_clause(ThingRecord.user_id, user_id),
-            )
+        thing_stmt = select(ThingRecord).where(
+            ThingRecord.data.is_not(None),  # type: ignore[union-attr]
+            cast(ThingRecord.data, String) != "{}",
+            cast(ThingRecord.data, String) != "null",
+            ThingRecord.active == True,
+            user_filter_clause(ThingRecord.user_id, user_id),
         )
         thing_records = session.exec(thing_stmt).all()
 
@@ -184,11 +181,13 @@ def dismiss_nudge(nudge_id: str, user_id: str = Depends(require_user)) -> dict:
             )
         ).first()
         if not existing:
-            session.add(NudgeDismissalRecord(
-                user_id=user_id,
-                nudge_id=nudge_id,
-                dismissed_date=today_str,
-            ))
+            session.add(
+                NudgeDismissalRecord(
+                    user_id=user_id,
+                    nudge_id=nudge_id,
+                    dismissed_date=today_str,
+                )
+            )
             session.commit()
     return {"ok": True}
 
@@ -227,10 +226,12 @@ def stop_nudge_type(nudge_id: str, user_id: str = Depends(require_user)) -> dict
             )
         ).first()
         if not existing_suppression:
-            session.add(NudgeSuppressionRecord(
-                user_id=user_id,
-                nudge_type=nudge_type,
-            ))
+            session.add(
+                NudgeSuppressionRecord(
+                    user_id=user_id,
+                    nudge_type=nudge_type,
+                )
+            )
 
         # Also dismiss for today
         existing_dismissal = session.exec(
@@ -241,11 +242,13 @@ def stop_nudge_type(nudge_id: str, user_id: str = Depends(require_user)) -> dict
             )
         ).first()
         if not existing_dismissal:
-            session.add(NudgeDismissalRecord(
-                user_id=user_id,
-                nudge_id=nudge_id,
-                dismissed_date=today_str,
-            ))
+            session.add(
+                NudgeDismissalRecord(
+                    user_id=user_id,
+                    nudge_id=nudge_id,
+                    dismissed_date=today_str,
+                )
+            )
 
         session.commit()
 
@@ -327,7 +330,8 @@ def stop_nudge_type(nudge_id: str, user_id: str = Depends(require_user)) -> dict
             except Exception:
                 logger.exception(
                     "Failed to upsert preference Thing for nudge_type=%s user=%s",
-                    nudge_type, user_id,
+                    nudge_type,
+                    user_id,
                 )
 
     result: dict = {"ok": True, "suppressed_type": nudge_type}

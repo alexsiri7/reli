@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import String, cast
 from sqlmodel import Session, select
 
-from ..auth import require_user
 import backend.db_engine as _engine_mod
+
+from ..auth import require_user
 from ..db_engine import user_filter_clause
 from ..db_models import ThingRecord
 from ..models import ProactiveSurface
@@ -122,7 +123,7 @@ def get_proactive_surfaces(
         # Fetch all Things that have a non-null data field (entities live here).
         stmt = select(ThingRecord).where(
             ThingRecord.data.is_not(None),  # type: ignore[union-attr]
-            cast(ThingRecord.data, String) != '{}',
+            cast(ThingRecord.data, String) != "{}",
             user_filter_clause(ThingRecord.user_id, user_id),
         )
         rows = session.exec(stmt).all()

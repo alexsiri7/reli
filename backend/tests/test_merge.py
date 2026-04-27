@@ -4,7 +4,6 @@ import json
 import uuid
 
 
-
 def _insert_thing(conn, title, type_hint="task", data=None, open_questions=None):
     """Insert a Thing directly and return its id."""
     thing_id = str(uuid.uuid4())

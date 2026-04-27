@@ -159,9 +159,7 @@ def get_user_settings_dict(user_id: str) -> dict[str, str]:
     if not user_id:
         return {}
     with Session(_engine_mod.engine) as session:
-        records = session.exec(
-            select(UserSettingRecord).where(UserSettingRecord.user_id == user_id)
-        ).all()
+        records = session.exec(select(UserSettingRecord).where(UserSettingRecord.user_id == user_id)).all()
     return {r.key: r.value for r in records}
 
 

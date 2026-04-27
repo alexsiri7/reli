@@ -80,9 +80,7 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
         # Get all active Things
         thing_stmt = select(ThingRecord).where(ThingRecord.active == True)  # noqa: E712 — SQLAlchemy requires == for column comparisons; `is True` evaluates in Python, not SQL
         if user_id:
-            thing_stmt = thing_stmt.where(
-                user_filter_clause(ThingRecord.user_id, user_id)
-            )
+            thing_stmt = thing_stmt.where(user_filter_clause(ThingRecord.user_id, user_id))
         things = session.exec(thing_stmt).all()
         thing_map = {
             t.id: {
@@ -90,9 +88,7 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
                 "title": t.title,
                 "type_hint": t.type_hint,
                 "checkin_date": (
-                    t.checkin_date.isoformat()
-                    if isinstance(t.checkin_date, (date, datetime))
-                    else t.checkin_date
+                    t.checkin_date.isoformat() if isinstance(t.checkin_date, (date, datetime)) else t.checkin_date
                 ),
                 "data": t.data,
                 "user_id": t.user_id,
@@ -112,7 +108,7 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
         # Get existing depends-on/blocks relationships for dedup (scoped to user's things)
         dep_stmt = select(ThingRelationshipRecord).where(
             ThingRelationshipRecord.relationship_type.in_(["depends-on", "blocks"]),  # type: ignore[union-attr]
-            ThingRelationshipRecord.from_thing_id.in_(user_thing_ids),               # type: ignore[union-attr]
+            ThingRelationshipRecord.from_thing_id.in_(user_thing_ids),  # type: ignore[union-attr]
         )
         dep_rels = session.exec(dep_stmt).all()
         existing_deps: set[tuple[str, str]] = set()
@@ -146,7 +142,7 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
 
         # Skip if ALL pairs already have depends-on/blocks
         child_ids = [c["id"] for c in children]
-        if all((a, b) in existing_deps for i, a in enumerate(child_ids) for b in child_ids[i + 1:]):
+        if all((a, b) in existing_deps for i, a in enumerate(child_ids) for b in child_ids[i + 1 :]):
             continue
 
         # Cap cluster size
@@ -154,12 +150,14 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
 
         cluster_user_id = capped[0].get("user_id", "") or ""
 
-        clusters.append(DependencyCluster(
-            cluster_id=f"project-{pid}",
-            label=project_titles[pid],
-            things=capped,
-            user_id=cluster_user_id,
-        ))
+        clusters.append(
+            DependencyCluster(
+                cluster_id=f"project-{pid}",
+                label=project_titles[pid],
+                things=capped,
+                user_id=cluster_user_id,
+            )
+        )
 
     # Cap total clusters
     return clusters[:MAX_CLUSTERS_PER_SWEEP]
@@ -366,14 +364,16 @@ async def detect_cluster_dependencies(
                         user_id=sugg_user_id,
                     )
                     session.add(suggestion)
-                    all_suggestions.append({
-                        "id": sugg_id,
-                        "from_thing_id": from_id,
-                        "to_thing_id": to_id,
-                        "suggested_relationship_type": rel_type,
-                        "reason": reason,
-                        "confidence": confidence,
-                    })
+                    all_suggestions.append(
+                        {
+                            "id": sugg_id,
+                            "from_thing_id": from_id,
+                            "to_thing_id": to_id,
+                            "suggested_relationship_type": rel_type,
+                            "reason": reason,
+                            "confidence": confidence,
+                        }
+                    )
 
                 # Process conflicts → SweepFindingRecord
                 for conflict in raw_conflicts:
@@ -399,24 +399,28 @@ async def detect_cluster_dependencies(
                     finding_user_id = thing_rec.user_id if thing_rec else (user_id or None)
 
                     finding_id = f"sf-{uuid.uuid4().hex[:8]}"
-                    session.add(SweepFindingRecord(
-                        id=finding_id,
-                        thing_id=thing_id,
-                        finding_type="llm_conflict",
-                        message=message,
-                        priority=priority,
-                        dismissed=False,
-                        created_at=now,
-                        expires_at=expires_at,
-                        user_id=finding_user_id,
-                    ))
-                    all_findings.append({
-                        "id": finding_id,
-                        "thing_id": thing_id,
-                        "finding_type": "llm_conflict",
-                        "message": message,
-                        "priority": priority,
-                    })
+                    session.add(
+                        SweepFindingRecord(
+                            id=finding_id,
+                            thing_id=thing_id,
+                            finding_type="llm_conflict",
+                            message=message,
+                            priority=priority,
+                            dismissed=False,
+                            created_at=now,
+                            expires_at=expires_at,
+                            user_id=finding_user_id,
+                        )
+                    )
+                    all_findings.append(
+                        {
+                            "id": finding_id,
+                            "thing_id": thing_id,
+                            "finding_type": "llm_conflict",
+                            "message": message,
+                            "priority": priority,
+                        }
+                    )
 
                 session.commit()
         except Exception as exc:

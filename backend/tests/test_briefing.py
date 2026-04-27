@@ -104,11 +104,14 @@ class TestBriefing:
 
     def test_preference_things_appear_in_briefing(self, client):
         """Learned preferences (type_hint='preference') must appear in learned_preferences."""
-        resp = client.post("/api/things", json={
-            "title": "Prefers afternoon meetings",
-            "type_hint": "preference",
-            "data": {"confidence": 0.6, "category": "scheduling"},
-        })
+        resp = client.post(
+            "/api/things",
+            json={
+                "title": "Prefers afternoon meetings",
+                "type_hint": "preference",
+                "data": {"confidence": 0.6, "category": "scheduling"},
+            },
+        )
         assert resp.status_code == 201
         pref_id = resp.json()["id"]
 
@@ -121,11 +124,14 @@ class TestBriefing:
 
     def test_preference_confidence_label_in_briefing(self, client):
         """confidence_label is correctly derived from float confidence."""
-        client.post("/api/things", json={
-            "title": "Cost conscious",
-            "type_hint": "preference",
-            "data": {"confidence": 0.8, "category": "spending"},
-        })
+        client.post(
+            "/api/things",
+            json={
+                "title": "Cost conscious",
+                "type_hint": "preference",
+                "data": {"confidence": 0.8, "category": "spending"},
+            },
+        )
         resp = client.get("/api/briefing")
         prefs = resp.json()["learned_preferences"]
         cost_pref = next((p for p in prefs if p["title"] == "Cost conscious"), None)
@@ -135,11 +141,14 @@ class TestBriefing:
     def test_preference_cap_at_five(self, client):
         """learned_preferences is capped at 5 even when more preferences exist."""
         for i in range(6):
-            client.post("/api/things", json={
-                "title": f"Preference {i}",
-                "type_hint": "preference",
-                "data": {"confidence": 0.6},
-            })
+            client.post(
+                "/api/things",
+                json={
+                    "title": f"Preference {i}",
+                    "type_hint": "preference",
+                    "data": {"confidence": 0.6},
+                },
+            )
         resp = client.get("/api/briefing")
         prefs = resp.json()["learned_preferences"]
         assert len(prefs) <= 5

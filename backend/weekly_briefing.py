@@ -20,10 +20,10 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
+
 from .db_engine import user_filter_clause
 from .db_models import ThingRecord, ThingRelationshipRecord, WeeklyBriefingRecord
 from .models import (
-    WeeklyBriefing,
     WeeklyBriefingConnection,
     WeeklyBriefingContent,
     WeeklyBriefingItem,
@@ -33,9 +33,20 @@ logger = logging.getLogger(__name__)
 
 _DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 _ALL_DATE_KEYS = {
-    "birthday", "anniversary", "born", "date_of_birth", "dob",
-    "deadline", "due_date", "due", "event_date",
-    "starts_at", "start_date", "ends_at", "end_date", "date",
+    "birthday",
+    "anniversary",
+    "born",
+    "date_of_birth",
+    "dob",
+    "deadline",
+    "due_date",
+    "due",
+    "event_date",
+    "starts_at",
+    "start_date",
+    "ends_at",
+    "end_date",
+    "date",
 }
 _RECURRING_KEYS = {"birthday", "anniversary", "born", "date_of_birth", "dob"}
 
@@ -155,12 +166,14 @@ def generate_weekly_briefing(
         d = _parse_date(str(updated))
         if d:
             detail = f"Completed {d.strftime('%a')}"
-        completed.append(WeeklyBriefingItem(
-            thing_id=rec.id,
-            title=rec.title,
-            type_hint=rec.type_hint,
-            detail=detail,
-        ))
+        completed.append(
+            WeeklyBriefingItem(
+                thing_id=rec.id,
+                title=rec.title,
+                type_hint=rec.type_hint,
+                detail=detail,
+            )
+        )
 
     # Build upcoming deadlines
     for rec in active_rows:
@@ -194,12 +207,14 @@ def generate_weekly_briefing(
                     detail = f"{label} tomorrow"
                 else:
                     detail = f"{label} in {days}d"
-                upcoming.append(WeeklyBriefingItem(
-                    thing_id=rec.id,
-                    title=rec.title,
-                    type_hint=rec.type_hint,
-                    detail=detail,
-                ))
+                upcoming.append(
+                    WeeklyBriefingItem(
+                        thing_id=rec.id,
+                        title=rec.title,
+                        type_hint=rec.type_hint,
+                        detail=detail,
+                    )
+                )
                 break  # one deadline per thing
 
         # Also check checkin_date as upcoming
@@ -216,12 +231,14 @@ def generate_weekly_briefing(
                         detail = "Check-in tomorrow"
                     else:
                         detail = f"Check-in in {days}d"
-                    upcoming.append(WeeklyBriefingItem(
-                        thing_id=rec.id,
-                        title=rec.title,
-                        type_hint=rec.type_hint,
-                        detail=detail,
-                    ))
+                    upcoming.append(
+                        WeeklyBriefingItem(
+                            thing_id=rec.id,
+                            title=rec.title,
+                            type_hint=rec.type_hint,
+                            detail=detail,
+                        )
+                    )
 
         # Open questions
         oq_raw = rec.open_questions
@@ -229,12 +246,14 @@ def generate_weekly_briefing(
             try:
                 oq = json.loads(oq_raw) if isinstance(oq_raw, str) else oq_raw
                 if isinstance(oq, list) and len(oq) > 0:
-                    open_questions.append(WeeklyBriefingItem(
-                        thing_id=rec.id,
-                        title=rec.title,
-                        type_hint=rec.type_hint,
-                        detail=oq[0] if oq else None,
-                    ))
+                    open_questions.append(
+                        WeeklyBriefingItem(
+                            thing_id=rec.id,
+                            title=rec.title,
+                            type_hint=rec.type_hint,
+                            detail=oq[0] if oq else None,
+                        )
+                    )
             except (json.JSONDecodeError, TypeError):
                 pass
 
@@ -245,18 +264,26 @@ def generate_weekly_briefing(
         if pair in seen_pairs:
             continue
         seen_pairs.add(pair)
-        new_connections.append(WeeklyBriefingConnection(
-            from_title=row.from_title,
-            to_title=row.to_title,
-            relationship_type=row.relationship_type,
-        ))
+        new_connections.append(
+            WeeklyBriefingConnection(
+                from_title=row.from_title,
+                to_title=row.to_title,
+                relationship_type=row.relationship_type,
+            )
+        )
 
     # Build preferences learned
     for rec in pref_rows:
         preferences_learned.append(rec.title)
 
     # Sort upcoming by urgency
-    upcoming.sort(key=lambda x: int(x.detail.split("in ")[1].rstrip("d")) if x.detail and "in " in x.detail else (0 if x.detail and "today" in x.detail else 1))
+    upcoming.sort(
+        key=lambda x: (
+            int(x.detail.split("in ")[1].rstrip("d"))
+            if x.detail and "in " in x.detail
+            else (0 if x.detail and "today" in x.detail else 1)
+        )
+    )
 
     # Limit open questions
     open_questions = open_questions[:5]
@@ -335,7 +362,12 @@ def store_weekly_briefing(user_id: str, content: WeeklyBriefingContent) -> str:
             session.add(record)
         session.commit()
 
-    logger.info("Weekly briefing stored: %s for user %s week %s", briefing_id, user_id[:8] if user_id else "legacy", content.week_start)
+    logger.info(
+        "Weekly briefing stored: %s for user %s week %s",
+        briefing_id,
+        user_id[:8] if user_id else "legacy",
+        content.week_start,
+    )
     return briefing_id
 
 
@@ -343,12 +375,9 @@ def get_latest_weekly_briefing(user_id: str, week_start: date | None = None) -> 
     """Retrieve the most recent weekly briefing for a user."""
     with Session(_engine_mod.engine) as session:
         if week_start:
-            stmt = (
-                select(WeeklyBriefingRecord)
-                .where(
-                    WeeklyBriefingRecord.week_start == week_start.isoformat(),
-                    user_filter_clause(WeeklyBriefingRecord.user_id, user_id),
-                )
+            stmt = select(WeeklyBriefingRecord).where(
+                WeeklyBriefingRecord.week_start == week_start.isoformat(),
+                user_filter_clause(WeeklyBriefingRecord.user_id, user_id),
             )
         else:
             stmt = (

@@ -1,17 +1,12 @@
 """Tests for response_agent.parse_response() and _build_user_prompt()."""
 
-from unittest.mock import patch
-
-from backend.response_agent import ResponseResult, parse_response, _build_user_prompt
+from backend.response_agent import _build_user_prompt, parse_response
 
 
 class TestParseResponse:
     def test_valid_json_fence_with_referenced_things(self):
         raw = (
-            "Here is your answer.\n\n"
-            "```json\n"
-            '{"referenced_things": [{"mention": "PR review", "thing_id": "t-1"}]}\n'
-            "```"
+            'Here is your answer.\n\n```json\n{"referenced_things": [{"mention": "PR review", "thing_id": "t-1"}]}\n```'
         )
         result = parse_response(raw)
         assert result.text == "Here is your answer."
@@ -24,23 +19,13 @@ class TestParseResponse:
         assert result.referenced_things == []
 
     def test_malformed_json_inside_fence(self):
-        raw = (
-            "Some text before.\n\n"
-            "```json\n"
-            "{not valid json}\n"
-            "```"
-        )
+        raw = "Some text before.\n\n```json\n{not valid json}\n```"
         result = parse_response(raw)
         assert result.text == "Some text before."
         assert result.referenced_things == []
 
     def test_referenced_things_not_a_list(self):
-        raw = (
-            "Text.\n\n"
-            "```json\n"
-            '{"referenced_things": "not a list"}\n'
-            "```"
-        )
+        raw = 'Text.\n\n```json\n{"referenced_things": "not a list"}\n```'
         result = parse_response(raw)
         assert result.text == "Text."
         assert result.referenced_things == []

@@ -199,7 +199,9 @@ def update_thing(
     oq_json = json.dumps(open_questions) if open_questions is not None else ""
 
     # Check if any field was actually provided
-    has_fields = any(v is not None for v in [title, type_hint, data, importance, checkin_date, active, surface, open_questions])
+    has_fields = any(
+        v is not None for v in [title, type_hint, data, importance, checkin_date, active, surface, open_questions]
+    )
     if not has_fields:
         return {"error": "No fields provided to update"}
 
@@ -786,10 +788,7 @@ class _TokenAuthMiddleware:
                 media_type="application/json",
                 headers={
                     "WWW-Authenticate": (
-                        'Bearer realm="reli"'
-                        ', resource_metadata="'
-                        + _resource_metadata_url(_settings)
-                        + '"'
+                        'Bearer realm="reli", resource_metadata="' + _resource_metadata_url(_settings) + '"'
                     ),
                 },
             )

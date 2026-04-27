@@ -9,10 +9,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, text as sa_text
+from sqlalchemy import func
+from sqlalchemy import text as sa_text
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
+
 from .config import settings
 from .db_models import ThingEmbeddingRecord, ThingRecord
 
@@ -183,9 +185,7 @@ def vector_count() -> int:
         with Session(_engine_mod.engine) as session:
             from sqlalchemy import func
 
-            count = session.exec(
-                select(func.count()).select_from(ThingEmbeddingRecord)
-            ).one()
+            count = session.exec(select(func.count()).select_from(ThingEmbeddingRecord)).one()
             return count
     except Exception as exc:
         logger.error("pgvector count failed: %s", exc)
@@ -262,9 +262,7 @@ def vector_search(
     """
     try:
         with Session(_engine_mod.engine) as session:
-            total = session.exec(
-                select(func.count()).select_from(ThingEmbeddingRecord)
-            ).one()
+            total = session.exec(select(func.count()).select_from(ThingEmbeddingRecord)).one()
             if total == 0:
                 return []
 

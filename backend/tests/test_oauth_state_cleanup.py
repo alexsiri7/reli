@@ -16,7 +16,6 @@ from backend.oauth_state import (
     cleanup_and_store,
 )
 
-
 # ---------------------------------------------------------------------------
 # _cleanup_expired
 # ---------------------------------------------------------------------------
@@ -80,8 +79,7 @@ def test_cleanup_and_store_purges_expired_before_insert():
 
 def test_cleanup_and_store_rejects_when_full():
     store: dict[str, dict] = {
-        str(i): {"expires_at": datetime.now(timezone.utc) + timedelta(hours=1)}
-        for i in range(MAX_ENTRIES_PER_DICT)
+        str(i): {"expires_at": datetime.now(timezone.utc) + timedelta(hours=1)} for i in range(MAX_ENTRIES_PER_DICT)
     }
     with pytest.raises(StoreFullError):
         cleanup_and_store(store, "overflow", {"value": "x"})
@@ -90,8 +88,7 @@ def test_cleanup_and_store_rejects_when_full():
 def test_cleanup_and_store_allows_insert_after_evicting_expired():
     """Fill to capacity with expired entries; insert should succeed after purge."""
     store: dict[str, dict] = {
-        str(i): {"expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)}
-        for i in range(MAX_ENTRIES_PER_DICT)
+        str(i): {"expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)} for i in range(MAX_ENTRIES_PER_DICT)
     }
     cleanup_and_store(store, "fresh", {"value": "ok"})
     assert len(store) == 1

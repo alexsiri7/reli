@@ -28,9 +28,12 @@ class TestSettingsUserEndpoint:
     def test_put_api_key_then_get_returns_masked(self, auth_client):
         """Store an API key, retrieve it, verify it comes back masked."""
 
-        resp = auth_client.put("/api/settings/user", json={
-            "requesty_api_key": "sk-test-key-12345678",
-        })
+        resp = auth_client.put(
+            "/api/settings/user",
+            json={
+                "requesty_api_key": "sk-test-key-12345678",
+            },
+        )
         assert resp.status_code == 200
 
         resp = auth_client.get("/api/settings/user")
@@ -58,9 +61,12 @@ class TestSettingsUserEndpoint:
 
     def test_update_model_override(self, auth_client):
         """PUT model override, GET reflects new value."""
-        resp = auth_client.put("/api/settings/user", json={
-            "context_model": "gpt-4o-mini",
-        })
+        resp = auth_client.put(
+            "/api/settings/user",
+            json={
+                "context_model": "gpt-4o-mini",
+            },
+        )
         assert resp.status_code == 200
 
         resp = auth_client.get("/api/settings/user")

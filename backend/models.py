@@ -89,7 +89,9 @@ class ThingUpdate(BaseModel):
     checkin_date: datetime | None = Field(
         default=None, description="Date when this Thing should surface in the briefing"
     )
-    importance: int | None = Field(default=None, ge=0, le=4, description="How bad if undone: 0 (critical) to 4 (backlog)")
+    importance: int | None = Field(
+        default=None, ge=0, le=4, description="How bad if undone: 0 (critical) to 4 (backlog)"
+    )
     active: bool | None = Field(default=None, description="Inactive = completed/archived")
     surface: bool | None = Field(default=None, description="Whether to show in default views")
     data: dict[str, Any] | None = Field(default=None, description="Arbitrary JSON data")
@@ -256,7 +258,9 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """Send a message through the multi-agent chat pipeline."""
 
-    session_id: str = Field(..., min_length=1, max_length=200, description="Chat session identifier", examples=["session-abc123"])
+    session_id: str = Field(
+        ..., min_length=1, max_length=200, description="Chat session identifier", examples=["session-abc123"]
+    )
     message: str = Field(
         ...,
         min_length=1,
@@ -571,7 +575,9 @@ class PersonalityPattern(BaseModel):
     """A single learned personality/behavior pattern."""
 
     pattern: str = Field(..., min_length=1, max_length=2000, description="The learned preference pattern text")
-    confidence: str = Field(default="emerging", max_length=50, description="Confidence level: emerging, established, or strong")
+    confidence: str = Field(
+        default="emerging", max_length=50, description="Confidence level: emerging, established, or strong"
+    )
     observations: int = Field(default=1, ge=1, description="Number of times this pattern has been observed")
 
 
@@ -696,4 +702,6 @@ class ConnectionSuggestion(BaseModel):
 class ConnectionSuggestionAccept(BaseModel):
     """Accept a connection suggestion, optionally overriding the relationship type."""
 
-    relationship_type: str | None = Field(default=None, max_length=100, description="Override the suggested relationship type")
+    relationship_type: str | None = Field(
+        default=None, max_length=100, description="Override the suggested relationship type"
+    )
