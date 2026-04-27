@@ -157,7 +157,7 @@ export function ScreenshotEditor({ canvas: bgCanvas, onDone, onCancel }: Screens
     doneCanvas.height = el.height
     const doneCtx = doneCanvas.getContext('2d')!
     doneCtx.drawImage(el, 0, 0)
-    const base64 = doneCanvas.toDataURL('image/jpeg', 0.85).split(',')[1]
+    const base64 = doneCanvas.toDataURL('image/jpeg', 0.85).split(',')[1]!
     onDone(base64)
   }, [onDone])
 

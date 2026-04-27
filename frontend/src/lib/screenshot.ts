@@ -14,7 +14,7 @@ export async function capturePageToCanvas(): Promise<HTMLCanvasElement> {
 
 export function canvasToJpegBase64(canvas: HTMLCanvasElement, quality = 0.85): string {
   const dataUrl = canvas.toDataURL('image/jpeg', quality)
-  return dataUrl.split(',')[1]
+  return dataUrl.split(',')[1]!
 }
 
 export function isWithinSizeLimit(base64: string): boolean {
