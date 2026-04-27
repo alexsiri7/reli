@@ -71,6 +71,21 @@ class TestRenameSession:
         assert resp.status_code == 200
         assert resp.json()["title"] == "New Title"
 
+    def test_rename_preserves_origin(self, client):
+        # continueInChat creates briefing-origin sessions; rename must not drop the field
+        resp = client.post(
+            "/api/chat/sessions",
+            json={"session_id": "s-orig", "title": "Briefing chat", "origin": "morning_briefing"},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["origin"] == "morning_briefing"
+
+        resp = client.patch("/api/chat/sessions/s-orig", json={"title": "Renamed"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["title"] == "Renamed"
+        assert body["origin"] == "morning_briefing"
+
     def test_rename_404_on_missing(self, client):
         resp = client.patch("/api/chat/sessions/nonexistent", json={"title": "X"})
         assert resp.status_code == 404
