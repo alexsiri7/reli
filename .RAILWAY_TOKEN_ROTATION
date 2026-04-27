@@ -1,0 +1,18 @@
+# Railway API Token Rotation - Issue #739
+
+## Context
+The RAILWAY_TOKEN GitHub secret used for Deploy to staging pipeline has expired or been revoked.
+This blocks all deployments until the token is rotated.
+
+## Manual Steps Required
+1. Create new permanent Railway API token: https://railway.com/account/tokens
+2. Update GitHub secret: gh secret set RAILWAY_TOKEN --repo alexsiri7/reli
+3. Re-run failed CI: gh run rerun 25007185051 --repo alexsiri7/reli
+
+## Validation
+✅ All tests pass (373 passed, 0 failed)
+✅ Build succeeds
+✅ Type check: No errors
+✅ Lint: 0 errors
+
+See artifacts for full investigation and validation results.
