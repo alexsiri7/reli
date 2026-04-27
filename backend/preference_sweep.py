@@ -595,9 +595,8 @@ async def aggregate_communication_style_patterns(
         if key in existing_pattern_map:
             ep = existing_pattern_map[key]
             ep["observations"] += 1
-            ep["confidence"] = _comm_confidence_from_observations(
-                ep["observations"], ep["confidence"] == "established" or ep["confidence"] == "strong"
-            )
+            is_explicit = ep["confidence"] in ("established", "strong")
+            ep["confidence"] = _comm_confidence_from_observations(ep["observations"], is_explicit)
             patterns_reinforced += 1
 
     # Add newly detected patterns

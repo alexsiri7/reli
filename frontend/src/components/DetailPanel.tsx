@@ -131,11 +131,11 @@ export function DetailPanel() {
   // Separate notes from other data entries
   const notes = thing?.data?.notes != null ? String(thing.data.notes) : null
   const dataEntries = thing?.data
-    ? Object.entries(thing.data).filter(([key]) => {
-        if (key === 'notes' || key === 'agenda_items') return false
-        if (thing.type_hint === 'person' && CONTACT_DATA_KEYS.has(key)) return false
-        return true
-      })
+    ? Object.entries(thing.data).filter(([key]) =>
+        key !== 'notes' &&
+        key !== 'agenda_items' &&
+        !(thing.type_hint === 'person' && CONTACT_DATA_KEYS.has(key))
+      )
     : []
 
   const formatRelType = (type: string) =>
