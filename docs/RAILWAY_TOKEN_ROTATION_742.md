@@ -33,7 +33,11 @@ When creating tokens on Railway, the default TTL may be short (e.g., 1 day or 7 
 
 3. **Re-run the failed CI**:
    ```bash
+   # Re-run the specific failed run (may be stale — use the fallback below if not found):
    gh run rerun 25015146868 --repo alexsiri7/reli --failed
+
+   # Fallback: find the latest failed run and rerun it
+   gh run list --repo alexsiri7/reli --status failure --limit 1 --json databaseId --jq '.[0].databaseId' | xargs -I{} gh run rerun {} --repo alexsiri7/reli --failed
    ```
 
 ## Impact
@@ -44,6 +48,5 @@ When creating tokens on Railway, the default TTL may be short (e.g., 1 day or 7 
 
 ## References
 
-- Investigation: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/a09df3e83fce8f061c4653b63ae12a2e/investigation.md`
-- GitHub issue: #742
+- GitHub issue (full investigation): #742
 - Previous incidents: #733, #739
