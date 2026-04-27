@@ -34,14 +34,14 @@ Add these 7 secrets to GitHub repository settings (Settings → Secrets and vari
 
 ## Token Rotation
 
-⚠️ If using a temporary OAuth token, replace it with a permanent token before it expires:
+If `RAILWAY_TOKEN` is expired or revoked, CI will fail at the "Validate Railway secrets" pre-flight step with `RAILWAY_TOKEN is invalid or expired: Not Authorized`.
 
 1. Go to https://railway.com/account/tokens
 2. Create a new permanent token named "github-actions"
-3. Run: `gh secret set RAILWAY_TOKEN --repo alexsiri7/reli`
+3. Set the GitHub secret: `gh secret set RAILWAY_TOKEN --repo alexsiri7/reli`
    (gh will prompt you to paste the token — it will not appear in shell history)
-
-Permanent service tokens (Railway → Settings → Tokens) do not expire.
+4. Re-run the failed CI job: `gh run rerun <run-id> --repo alexsiri7/reli`
+   Or trigger a fresh run: `gh workflow run staging-pipeline.yml --repo alexsiri7/reli`
 
 ## Workflow References
 
