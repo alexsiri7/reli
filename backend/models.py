@@ -10,13 +10,13 @@ from pydantic import BaseModel, Field, field_validator
 _MAX_DATA_JSON_BYTES = 100_000
 
 
-def _validate_data_size(v: "dict[str, Any] | None") -> "dict[str, Any] | None":
+def _validate_data_size(v: dict[str, Any] | None) -> dict[str, Any] | None:
     if v is not None and len(json.dumps(v)) > _MAX_DATA_JSON_BYTES:
         raise ValueError(f"data payload must be under {_MAX_DATA_JSON_BYTES} bytes when JSON-serialized")
     return v
 
 
-def _validate_open_questions(v: "list[str] | None") -> "list[str] | None":
+def _validate_open_questions(v: list[str] | None) -> list[str] | None:
     if v is not None:
         if len(v) > 100:
             raise ValueError("open_questions may contain at most 100 items")
