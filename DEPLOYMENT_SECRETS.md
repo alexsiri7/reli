@@ -32,6 +32,17 @@ Add these 7 secrets to GitHub repository settings (Settings → Secrets and vari
    gh workflow run staging-pipeline.yml
    ```
 
+## Token Rotation
+
+⚠️ If using a temporary OAuth token, replace it with a permanent token before it expires:
+
+1. Go to https://railway.com/account/tokens
+2. Create a new permanent token named "github-actions"
+3. Run: `gh secret set RAILWAY_TOKEN --repo alexsiri7/reli`
+   (gh will prompt you to paste the token — it will not appear in shell history)
+
+Permanent service tokens (Railway → Settings → Tokens) do not expire.
+
 ## Workflow References
 
 The staging-pipeline.yml workflow uses these secrets in:
