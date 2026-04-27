@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { canvasToJpegBase64 } from '../lib/screenshot'
 
 type Tool = 'redact' | 'highlight' | 'arrow' | 'text'
 
@@ -111,15 +112,13 @@ export function ScreenshotEditor({ canvas: bgCanvas, onDone, onCancel }: Screens
 
     renderOps(ctx, bgCanvas, ops)
 
+    const fillStyles: Partial<Record<Tool, string>> = { redact: '#000', highlight: 'rgba(255,255,0,0.4)' }
     ctx.save()
-    if (tool === 'redact') {
-      ctx.fillStyle = '#000'
-      ctx.fillRect(drawing.startX, drawing.startY, x - drawing.startX, y - drawing.startY)
-    } else if (tool === 'highlight') {
-      ctx.fillStyle = 'rgba(255,255,0,0.4)'
-      ctx.fillRect(drawing.startX, drawing.startY, x - drawing.startX, y - drawing.startY)
-    } else if (tool === 'arrow') {
+    if (tool === 'arrow') {
       drawArrow(ctx, drawing.startX, drawing.startY, x, y)
+    } else if (fillStyles[tool]) {
+      ctx.fillStyle = fillStyles[tool]!
+      ctx.fillRect(drawing.startX, drawing.startY, x - drawing.startX, y - drawing.startY)
     }
     ctx.restore()
   }, [drawing, bgCanvas, ops, tool])
@@ -155,10 +154,8 @@ export function ScreenshotEditor({ canvas: bgCanvas, onDone, onCancel }: Screens
     const doneCanvas = document.createElement('canvas')
     doneCanvas.width = el.width
     doneCanvas.height = el.height
-    const doneCtx = doneCanvas.getContext('2d')!
-    doneCtx.drawImage(el, 0, 0)
-    const base64 = doneCanvas.toDataURL('image/jpeg', 0.85).split(',')[1]!
-    onDone(base64)
+    doneCanvas.getContext('2d')!.drawImage(el, 0, 0)
+    onDone(canvasToJpegBase64(doneCanvas))
   }, [onDone])
 
   return (
