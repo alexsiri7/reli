@@ -979,11 +979,14 @@ export function Sidebar() {
                 </div>
                 {/* Desktop hero card — existing glass card */}
                 <div
-                  className="hidden md:block glass p-5 rounded-2xl cursor-pointer hover:bg-surface-container-high/80 transition-colors"
+                  className="hidden md:block glass p-5 rounded-2xl border-l-4 border-primary cursor-pointer hover:bg-surface-container-high/80 transition-colors"
                   onClick={() => useStore.getState().openThingDetail(theOneThing.thing.id)}
                   role="button"
                 >
-                  <p className="text-label font-bold text-on-surface-variant mb-2">The One Thing</p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-2 h-2 rounded-full bg-ideas animate-pulse shrink-0" />
+                    <p className="text-label font-bold text-on-surface-variant">The One Thing</p>
+                  </div>
                   <h3 className="text-on-surface font-bold text-lg leading-tight">{theOneThing.thing.title}</h3>
                   {theOneThing.reasons.length > 0 && (
                     <p className="text-xs text-on-surface-variant mt-2 leading-snug">

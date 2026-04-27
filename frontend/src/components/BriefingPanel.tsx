@@ -327,9 +327,9 @@ export function BriefingPanel() {
   const todayISO = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD in local TZ
   const todayEvents = calendarEvents.filter(e => e.start.slice(0, 10) === todayISO)
 
-  const dueTodayItems = theOneThing ? [theOneThing, ...secondaryItems] : secondaryItems
+  const dueTodayItems = secondaryItems
 
-  const hasContent = dueTodayItems.length > 0 || findings.length > 0 || learnedPreferences.length > 0 || todayEvents.length > 0
+  const hasContent = theOneThing != null || dueTodayItems.length > 0 || findings.length > 0 || learnedPreferences.length > 0 || todayEvents.length > 0
 
   return (
     <div className="flex-1 flex flex-col bg-canvas min-w-0 min-h-0">
@@ -405,6 +405,45 @@ export function BriefingPanel() {
               {todayEvents.map(e => <TodayEventRow key={e.id} event={e} />)}
             </div>
           </SectionCard>
+        )}
+
+        {/* The One Thing — hero card */}
+        {theOneThing && (
+          <section className="px-6 pb-4">
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary to-primary/20 blur-xl opacity-20 group-hover:opacity-30 transition-opacity rounded-[2rem]" />
+              <div className="relative bg-surface-container-high p-8 rounded-[2rem] border-l-4 border-primary overflow-hidden">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-ideas animate-pulse shrink-0" />
+                    <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-on-surface-variant">Most Important</span>
+                  </div>
+                  <h3 className="text-3xl font-black tracking-tighter text-on-surface leading-tight">
+                    {theOneThing.thing.title}
+                  </h3>
+                  {theOneThing.thing.checkin_date && (
+                    <p className="text-sm font-medium text-primary">
+                      Due {new Date(theOneThing.thing.checkin_date).toLocaleDateString(undefined, { weekday: 'long' })}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleDoneThing(theOneThing.thing.id)}
+                      className="text-xs text-primary hover:text-primary/80 font-medium"
+                    >
+                      Done
+                    </button>
+                    <button
+                      onClick={() => openChatWithContext(theOneThing.thing.id, theOneThing.thing.title)}
+                      className="text-xs text-on-surface-variant hover:text-on-surface"
+                    >
+                      Chat
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
         )}
 
         {/* Due Today */}
