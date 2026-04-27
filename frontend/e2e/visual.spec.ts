@@ -220,13 +220,40 @@ const MOCK_HISTORY = [
   },
 ]
 
+const MOCK_MODEL_SETTINGS = {
+  context: 'claude-sonnet-4-6',
+  reasoning: 'claude-sonnet-4-6',
+  response: 'claude-sonnet-4-6',
+  chat_context_window: 3,
+}
+
+const MOCK_USER_SETTINGS = {
+  requesty_api_key: '',
+  openai_api_key: '',
+  embedding_model: '',
+  context_model: '',
+  reasoning_model: '',
+  response_model: '',
+  chat_context_window: null,
+  theme: '',
+  chat_mode: 'normal',
+  stale_threshold_days: 14,
+  proactivity_level: 'medium',
+  interaction_style: 'auto',
+  messages_until_compression: 20,
+}
+
+const MOCK_MODELS = [
+  { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', input_cost_per_million: 3, output_cost_per_million: 15 },
+]
+
 /**
  * Intercept all API routes that the app calls on mount.
  * Options control which data is populated vs empty.
  */
 async function interceptApi(
   page: Page,
-  opts: { things?: boolean; history?: boolean; briefing?: boolean; proactive?: boolean } = {}
+  opts: { things?: boolean; history?: boolean; briefing?: boolean; proactive?: boolean; settings?: boolean } = {}
 ) {
   // Auth — always return a valid user so the app renders the main UI
   await page.route('**/api/auth/me', route =>
@@ -348,6 +375,22 @@ async function interceptApi(
   await page.route('**/version.json*', route =>
     route.fulfill({ json: { version: '0.0.0' }, status: 200 })
   )
+
+  // Settings APIs (used by SettingsPanel — only intercept when panel will be opened)
+  if (opts.settings) {
+    await page.route('**/api/settings/models', route =>
+      route.fulfill({ json: MOCK_MODELS, status: 200 })
+    )
+    await page.route('**/api/settings/user', route =>
+      route.fulfill({ json: MOCK_USER_SETTINGS, status: 200 })
+    )
+    await page.route('**/api/settings', route =>
+      route.fulfill({ json: MOCK_MODEL_SETTINGS, status: 200 })
+    )
+    await page.route('**/api/things/me', route =>
+      route.fulfill({ status: 404, json: { detail: 'Not found' } })
+    )
+  }
 }
 
 /** Shared snapshot options — tolerate minor sub-pixel rendering differences */
@@ -581,6 +624,50 @@ test.describe('Visual regression – reli frontend', () => {
       ...SNAPSHOT_OPTS,
       animations: 'disabled',
       mask: [page.locator('aside p.text-xs')],
+    })
+  })
+
+  test.describe('settings panel', () => {
+    async function openSettingsPanel(page: Page) {
+      // Click the user avatar in the sidebar to open the user menu
+      await page.locator('aside').first().locator('.rounded-full.cursor-pointer').first().click()
+      // Click Settings in the user dropdown
+      await page.locator('button').filter({ hasText: /^Settings$/ }).first().click()
+      // Wait for the settings panel modal header
+      await page.waitForSelector('h2:has-text("Settings")', { timeout: 5_000 })
+      // Wait for loading skeleton to go away (settingsLoading + modelsLoading both false)
+      await page.waitForFunction(
+        () => !document.querySelector('.animate-pulse'),
+        { timeout: 5_000 }
+      )
+      await page.waitForTimeout(300)
+    }
+
+    test('settings panel – open (desktop)', async ({ page }) => {
+      await interceptApi(page, { settings: true })
+      await page.setViewportSize({ width: 1280, height: 720 })
+      await page.goto('/')
+      await waitForApp(page)
+      await openSettingsPanel(page)
+
+      await expect(page).toHaveScreenshot('settings-panel-open-desktop.png', {
+        ...SNAPSHOT_OPTS,
+        animations: 'disabled',
+      })
+    })
+
+    test('settings panel – open (dark desktop)', async ({ page }) => {
+      await interceptApi(page, { settings: true })
+      await page.setViewportSize({ width: 1280, height: 720 })
+      await page.emulateMedia({ colorScheme: 'dark' })
+      await page.goto('/')
+      await waitForApp(page)
+      await openSettingsPanel(page)
+
+      await expect(page).toHaveScreenshot('settings-panel-open-dark.png', {
+        ...SNAPSHOT_OPTS,
+        animations: 'disabled',
+      })
     })
   })
 })

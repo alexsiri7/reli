@@ -109,3 +109,18 @@ class TestSettingsUserEndpoint:
         resp = auth_client.put("/api/settings/user", json={"messages_until_compression": 1})
         assert resp.status_code == 200
         assert resp.json()["messages_until_compression"] == 5
+
+    def test_get_user_settings_with_invalid_compression_value(self, auth_client, patched_db):
+        """GET must not crash when messages_until_compression is stored as a non-numeric string."""
+        from sqlmodel import Session
+
+        import backend.db_engine as _engine_mod
+        from backend.routers.settings import _set_user_setting
+
+        with Session(_engine_mod.engine) as session:
+            _set_user_setting(session, "test-user-settings", "messages_until_compression", "abc")
+            session.commit()
+
+        resp = auth_client.get("/api/settings/user")
+        assert resp.status_code == 200
+        assert resp.json()["messages_until_compression"] == 20

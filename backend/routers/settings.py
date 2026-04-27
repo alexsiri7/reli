@@ -424,10 +424,16 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         return "*" * (len(val) - 4) + val[-4:]
 
     stale_val = user_settings.get("stale_threshold_days")
-    stale_threshold = int(stale_val) if stale_val else 14
+    try:
+        stale_threshold = max(1, min(int(stale_val), 365)) if stale_val else 14
+    except (ValueError, TypeError):
+        stale_threshold = 14
 
     compression_val = user_settings.get("messages_until_compression")
-    messages_until_compression = int(compression_val) if compression_val else 20
+    try:
+        messages_until_compression = max(5, min(int(compression_val), 100)) if compression_val else 20
+    except (ValueError, TypeError):
+        messages_until_compression = 20
 
     return UserSettings(
         requesty_api_key=_mask(_decrypt_setting(user_settings.get("requesty_api_key", ""))),

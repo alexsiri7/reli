@@ -215,6 +215,50 @@ class TestMaybeTriggerSummarization:
             await asyncio.sleep(0.1)
             mock_summarize.assert_called_once_with(user_id)
 
+    @pytest.mark.asyncio
+    async def test_triggers_at_custom_threshold_below_default(self, patched_db, db):
+        """Custom threshold below the default causes summarization at fewer messages."""
+        from sqlmodel import Session
+
+        import backend.db_engine as _engine_mod
+        from backend.routers.settings import _set_user_setting
+
+        user_id = "test-user-low-threshold"
+        with db() as conn:
+            _create_test_user(conn, user_id)
+            # 15 messages would NOT trigger default threshold (20), but should trigger threshold=15
+            _insert_messages(conn, user_id, [("user", f"msg{i}") for i in range(15)])
+
+        with Session(_engine_mod.engine) as session:
+            _set_user_setting(session, user_id, "messages_until_compression", "15")
+            session.commit()
+
+        with patch("backend.summarization_agent.summarize_conversation", new_callable=AsyncMock) as mock_summarize:
+            _maybe_trigger_summarization(user_id)
+            await asyncio.sleep(0.1)
+            mock_summarize.assert_called_once_with(user_id)
+
+    def test_does_not_trigger_below_custom_threshold(self, patched_db, db):
+        """Custom threshold above the default suppresses summarization that would otherwise fire."""
+        from sqlmodel import Session
+
+        import backend.db_engine as _engine_mod
+        from backend.routers.settings import _set_user_setting
+
+        user_id = "test-user-high-threshold"
+        with db() as conn:
+            _create_test_user(conn, user_id)
+            # 20 messages would trigger default threshold (20), but NOT threshold=30
+            _insert_messages(conn, user_id, [("user", f"msg{i}") for i in range(20)])
+
+        with Session(_engine_mod.engine) as session:
+            _set_user_setting(session, user_id, "messages_until_compression", "30")
+            session.commit()
+
+        with patch("backend.summarization_agent.summarize_conversation") as mock_summarize:
+            _maybe_trigger_summarization(user_id)
+            mock_summarize.assert_not_called()
+
     def test_does_not_trigger_without_user_id(self, patched_db):
         """No summarization when user_id is empty."""
         with patch("backend.summarization_agent.should_summarize") as mock_should:
