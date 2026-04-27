@@ -46,7 +46,7 @@ jobs:
             echo "See DEPLOYMENT_SECRETS.md for setup instructions."
             exit 1
           fi
-          RESP=$(curl -s -X POST "https://backboard.railway.app/graphql/v2" \
+          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
             -H "Authorization: Bearer $RAILWAY_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"query":"{me{id}}"}')
@@ -163,7 +163,7 @@ jobs:
             echo "See DEPLOYMENT_SECRETS.md for setup instructions."
             exit 1
           fi
-          RESP=$(curl -s -X POST "https://backboard.railway.app/graphql/v2" \
+          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
             -H "Authorization: Bearer $RAILWAY_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"query":"{me{id}}"}')
