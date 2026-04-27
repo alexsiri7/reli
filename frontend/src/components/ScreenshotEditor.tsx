@@ -112,11 +112,8 @@ export function ScreenshotEditor({ canvas: bgCanvas, onDone, onCancel }: Screens
     renderOps(ctx, bgCanvas, ops)
 
     ctx.save()
-    if (tool === 'redact') {
-      ctx.fillStyle = '#000'
-      ctx.fillRect(drawing.startX, drawing.startY, x - drawing.startX, y - drawing.startY)
-    } else if (tool === 'highlight') {
-      ctx.fillStyle = 'rgba(255,255,0,0.4)'
+    if (tool === 'redact' || tool === 'highlight') {
+      ctx.fillStyle = tool === 'redact' ? '#000' : 'rgba(255,255,0,0.4)'
       ctx.fillRect(drawing.startX, drawing.startY, x - drawing.startX, y - drawing.startY)
     } else if (tool === 'arrow') {
       drawArrow(ctx, drawing.startX, drawing.startY, x, y)

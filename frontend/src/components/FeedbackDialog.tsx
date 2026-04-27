@@ -10,6 +10,12 @@ const CATEGORIES = [
   { value: 'other', label: 'Other Feedback' },
 ]
 
+const PLACEHOLDER_TEXT: Record<string, string> = {
+  bug: 'Describe the bug: what happened and what you expected...',
+  feature: "Describe the feature you'd like to see...",
+  other: 'Share your feedback...',
+}
+
 export function FeedbackDialog() {
   const { closeFeedback, submitFeedback } = useStore(
     useShallow(s => ({
@@ -173,13 +179,7 @@ export function FeedbackDialog() {
                 <textarea
                   value={message}
                   onChange={e => setMessage(e.target.value)}
-                  placeholder={
-                    category === 'bug'
-                      ? 'Describe the bug: what happened and what you expected...'
-                      : category === 'feature'
-                        ? 'Describe the feature you\'d like to see...'
-                        : 'Share your feedback...'
-                  }
+                  placeholder={PLACEHOLDER_TEXT[category] ?? 'Share your feedback...'}
                   rows={5}
                   maxLength={5000}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-500 resize-none"
