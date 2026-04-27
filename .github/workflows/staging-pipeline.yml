@@ -46,6 +46,15 @@ jobs:
             echo "See DEPLOYMENT_SECRETS.md for setup instructions."
             exit 1
           fi
+          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"query":"{me{id}}"}')
+          if echo "$RESP" | jq -e '.errors' > /dev/null 2>&1; then
+            echo "::error::RAILWAY_TOKEN is invalid or expired: $(echo "$RESP" | jq -r '.errors[0].message')"
+            echo "Rotate the token — see DEPLOYMENT_SECRETS.md Token Rotation section."
+            exit 1
+          fi
 
       - name: Deploy staging image to Railway
         env:
@@ -151,6 +160,15 @@ jobs:
           if [ -n "$missing" ]; then
             echo "::error::Missing required secrets:$missing"
             echo "See DEPLOYMENT_SECRETS.md for setup instructions."
+            exit 1
+          fi
+          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"query":"{me{id}}"}')
+          if echo "$RESP" | jq -e '.errors' > /dev/null 2>&1; then
+            echo "::error::RAILWAY_TOKEN is invalid or expired: $(echo "$RESP" | jq -r '.errors[0].message')"
+            echo "Rotate the token — see DEPLOYMENT_SECRETS.md Token Rotation section."
             exit 1
           fi
 
