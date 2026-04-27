@@ -13,10 +13,17 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, text
 from sqlmodel import Session, select
 
-from ..auth import require_user
 import backend.db_engine as _engine_mod
+
+from ..auth import require_user
 from ..db_engine import user_filter_clause, user_filter_text
-from ..db_models import ChatHistoryRecord, ChatMessageUsageRecord, ChatSessionRecord, ConversationSummaryRecord, UsageLogRecord
+from ..db_models import (
+    ChatHistoryRecord,
+    ChatMessageUsageRecord,
+    ChatSessionRecord,
+    ConversationSummaryRecord,
+    UsageLogRecord,
+)
 from ..models import (
     CallUsage,
     ChatMessage,
@@ -234,7 +241,12 @@ def list_sessions(user_id: str = Depends(require_user)) -> list[ChatSessionSumma
     ]
 
 
-@router.post("/sessions", response_model=ChatSessionSummary, status_code=status.HTTP_201_CREATED, summary="Create a chat session")
+@router.post(
+    "/sessions",
+    response_model=ChatSessionSummary,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a chat session",
+)
 def create_session(body: CreateSessionRequest, user_id: str = Depends(require_user)) -> ChatSessionSummary:
     """Create a new named chat session."""
     session_id = body.session_id or str(uuid.uuid4())
@@ -259,7 +271,9 @@ def create_session(body: CreateSessionRequest, user_id: str = Depends(require_us
 
 
 @router.patch("/sessions/{session_id}", response_model=ChatSessionSummary, summary="Rename a chat session")
-def rename_session(session_id: str, body: PatchSessionRequest, user_id: str = Depends(require_user)) -> ChatSessionSummary:
+def rename_session(
+    session_id: str, body: PatchSessionRequest, user_id: str = Depends(require_user)
+) -> ChatSessionSummary:
     """Rename an existing chat session."""
     with Session(_engine_mod.engine) as session:
         record = session.exec(
@@ -281,6 +295,7 @@ def rename_session(session_id: str, body: PatchSessionRequest, user_id: str = De
     return ChatSessionSummary(
         id=record.id,
         title=record.title,
+        origin=record.origin,
         created_at=record.created_at,
         last_active_at=record.last_active_at,
         message_count=msg_count,
@@ -426,7 +441,10 @@ def _maybe_auto_title_session(session_id: str, user_message: str) -> None:
                 messages=[
                     {
                         "role": "user",
-                        "content": f"Generate a 4-6 word title for a conversation that starts with: {user_message}. Reply with only the title, no quotes.",
+                        "content": (
+                            f"Generate a 4-6 word title for a conversation that starts with: "
+                            f"{user_message}. Reply with only the title, no quotes."
+                        ),
                     }
                 ],
             )

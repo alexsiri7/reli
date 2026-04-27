@@ -11,19 +11,14 @@ jobs:
   deploy-staging:
     name: Deploy to staging
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
-    permissions:
-      packages: read
     steps:
       - uses: actions/checkout@v4
-
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
       - name: Resolve commit SHA
         id: sha
@@ -34,51 +29,43 @@ jobs:
             echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          for i in 1 2 3 4 5; do
-            ssh-keyscan -T 30 -H 100.120.193.82 >> ~/.ssh/known_hosts 2>/dev/null
-            ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1 && break
-            echo "ssh-keyscan attempt $i/5 failed, retrying in 5s..."
-            sleep 5
-          done
-          if ! ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1; then
-            echo "ERROR: host key not found after 5 attempts — host unreachable"
-            exit 1
-          fi
-
-      - name: Deploy staging via SSH
+      - name: Deploy staging image to Railway
         env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USER: ${{ github.actor }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           DEPLOY_SHA: ${{ steps.sha.outputs.sha }}
+          SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
+          ENV_ID: ${{ secrets.RAILWAY_STAGING_ENVIRONMENT_ID }}
         run: |
-          ssh -o BatchMode=yes -o ConnectTimeout=30 -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@100.120.193.82 << EOF
-          export GHCR_TOKEN="${GHCR_TOKEN}"
-          export GHCR_USER="${GHCR_USER}"
-          export DEPLOY_SHA="${DEPLOY_SHA}"
-          IMAGE="ghcr.io/alexsiri7/reli"
+          IMAGE="ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
+          echo "Deploying $IMAGE to Railway staging..."
 
-          echo "\$GHCR_TOKEN" | docker login ghcr.io -u "\$GHCR_USER" --password-stdin
-          docker pull "\$IMAGE:\$DEPLOY_SHA"
+          # Update the service to use the new image
+          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" --arg img "$IMAGE" \
+              '{query: "mutation($svc:String!,$env:String!,$img:String!){serviceInstanceUpdate(input:{source:{image:$img}},serviceId:$svc,environmentId:$env)}",
+                variables:{svc:$svc,env:$env,img:$img}}')")
+          echo "serviceInstanceUpdate response: $RESP"
+          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
 
-          cd /mnt/ext-fast/gc/rigs/reli
-          # fetch+reset instead of pull --rebase: handles server-side unstaged changes cleanly
-          # Note: resets tracked files only; untracked files (.env, etc.) are preserved
-          git fetch origin main
-          git reset --hard origin/main
-          docker rm -f reli-staging 2>/dev/null || true
-          RELI_IMAGE_TAG="\$DEPLOY_SHA" docker compose -f docker-compose.staging.yml up -d --remove-orphans
-          EOF
+          # Trigger the deployment
+          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" \
+              '{query: "mutation($svc:String!,$env:String!){serviceInstanceDeploy(serviceId:$svc,environmentId:$env)}",
+                variables:{svc:$svc,env:$env}}')")
+          echo "serviceInstanceDeploy response: $RESP"
+          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
 
       - name: Wait for staging health
+        env:
+          RAILWAY_STAGING_URL: ${{ secrets.RAILWAY_STAGING_URL }}
         run: |
-          echo "Polling http://100.120.193.82:8001/healthz ..."
+          echo "Polling ${RAILWAY_STAGING_URL}/healthz ..."
           for i in $(seq 1 20); do
-            if curl -sf --max-time 5 http://100.120.193.82:8001/healthz | grep -q '"status":"ok"'; then
+            if curl -sf --max-time 5 "${RAILWAY_STAGING_URL}/healthz" | grep -q '"status":"ok"'; then
               echo "Staging healthy after attempt $i"
               exit 0
             fi
@@ -97,11 +84,6 @@ jobs:
     needs: deploy-staging
     steps:
       - uses: actions/checkout@v4
-
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
@@ -124,7 +106,7 @@ jobs:
 
       - name: Run smoke tests against staging
         env:
-          BASE_URL: http://100.120.193.82:8001
+          BASE_URL: ${{ secrets.RAILWAY_STAGING_URL }}
         run: npm --prefix frontend run test:smoke
 
   deploy-production:
@@ -132,84 +114,55 @@ jobs:
     runs-on: ubuntu-latest
     needs: [deploy-staging, staging-e2e]
     permissions:
-      packages: read
+      contents: read
     steps:
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+      - uses: actions/checkout@v4
 
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          for i in 1 2 3 4 5; do
-            ssh-keyscan -T 30 -H 100.120.193.82 >> ~/.ssh/known_hosts 2>/dev/null
-            ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1 && break
-            echo "ssh-keyscan attempt $i/5 failed, retrying in 5s..."
-            sleep 5
-          done
-          if ! ssh-keygen -F 100.120.193.82 -f ~/.ssh/known_hosts > /dev/null 2>&1; then
-            echo "ERROR: host key not found after 5 attempts — host unreachable"
-            exit 1
-          fi
-
-      - name: Deploy via SSH
+      - name: Deploy production image to Railway
         env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USER: ${{ github.actor }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           DEPLOY_SHA: ${{ needs.deploy-staging.outputs.deploy_sha }}
+          SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
+          ENV_ID: ${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT_ID }}
         run: |
-          ssh -o BatchMode=yes -o ConnectTimeout=30 -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@100.120.193.82 << EOF
-          export GHCR_TOKEN="${GHCR_TOKEN}"
-          export GHCR_USER="${GHCR_USER}"
-          export DEPLOY_SHA="${DEPLOY_SHA}"
-          IMAGE="ghcr.io/alexsiri7/reli"
+          IMAGE="ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
+          echo "Deploying $IMAGE to Railway production..."
 
-          echo "\$GHCR_TOKEN" | docker login ghcr.io -u "\$GHCR_USER" --password-stdin
+          # Update the service to use the new image
+          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" --arg img "$IMAGE" \
+              '{query: "mutation($svc:String!,$env:String!,$img:String!){serviceInstanceUpdate(input:{source:{image:$img}},serviceId:$svc,environmentId:$env)}",
+                variables:{svc:$svc,env:$env,img:$img}}')")
+          echo "serviceInstanceUpdate response: $RESP"
+          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
 
-          # Tag current running image as :rollback before deploying
-          CURRENT_ID=\$(docker inspect --format='{{.Image}}' reli-reli-1 2>/dev/null || true)
-          if [ -n "\$CURRENT_ID" ]; then
-            docker tag "\$CURRENT_ID" "\$IMAGE:rollback"
-          fi
+          # Trigger the deployment
+          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" \
+              '{query: "mutation($svc:String!,$env:String!){serviceInstanceDeploy(serviceId:$svc,environmentId:$env)}",
+                variables:{svc:$svc,env:$env}}')")
+          echo "serviceInstanceDeploy response: $RESP"
+          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
 
-          # Pull the new image (should already be cached from staging)
-          docker pull "\$IMAGE:\$DEPLOY_SHA"
-
-          # Update and restart production
-          cd /mnt/ext-fast/gc/rigs/reli
-          git pull --rebase
-          RELI_IMAGE_TAG="\$DEPLOY_SHA" docker compose up -d
-
-          # Verify the container is healthy
-          echo "Waiting for health check..."
-          HEALTHY=false
-          for i in \$(seq 1 20); do
-            sleep 3
-            if curl -sf --max-time 5 http://localhost:8000/healthz | grep -q '"status":"ok"'; then
-              HEALTHY=true
-              break
+      - name: Wait for production health
+        env:
+          RAILWAY_PRODUCTION_URL: ${{ secrets.RAILWAY_PRODUCTION_URL }}
+        run: |
+          echo "Polling ${RAILWAY_PRODUCTION_URL}/healthz ..."
+          for i in $(seq 1 20); do
+            if curl -sf --max-time 5 "${RAILWAY_PRODUCTION_URL}/healthz" | grep -q '"status":"ok"'; then
+              echo "Production healthy after attempt $i"
+              exit 0
             fi
-            echo "Health check attempt \$i/20 failed, retrying..."
+            echo "Attempt $i/20 failed, waiting 30s..."
+            sleep 30
           done
-
-          if [ "\$HEALTHY" = true ]; then
-            echo "Deploy successful: \$DEPLOY_SHA (health check passed)"
-          else
-            echo "Deploy FAILED — health check did not pass after 20 attempts"
-            echo "Rolling back to previous image..."
-            RELI_IMAGE_TAG=rollback docker compose up -d
-            sleep 5
-            if curl -sf --max-time 5 http://localhost:8000/healthz | grep -q '"status":"ok"'; then
-              echo "Rollback successful — previous version is healthy"
-            else
-              echo "WARNING: Rollback version also failed health check"
-            fi
-            exit 1
-          fi
-          EOF
+          echo "Production failed to become healthy after 20 attempts"
+          exit 1
 
       - name: Notify prod landing
         if: success()
@@ -229,7 +182,8 @@ jobs:
             title=$(gh pr view "$pr" --repo "${{ github.repository }}" --json title --jq '.title')
             body="PR #$pr: $title"
           fi
+          # Notification failure is intentionally non-fatal
           curl -s -o /dev/null \
             -H "Title: ${{ github.event.repository.name }} landed in prod" \
             -H "Tags: tada" \
-            -d "$body" "ntfy.sh/$NTFY_TOPIC"
+            -d "$body" "ntfy.sh/$NTFY_TOPIC" || true

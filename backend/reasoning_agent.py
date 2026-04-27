@@ -10,7 +10,6 @@ chat.py need only update their import path.
 import functools
 import json
 import logging
-import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
