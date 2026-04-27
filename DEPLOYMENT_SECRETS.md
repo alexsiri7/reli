@@ -35,9 +35,9 @@ Add these 7 secrets to GitHub repository settings (Settings → Secrets and vari
 ## Workflow References
 
 The staging-pipeline.yml workflow uses these secrets in:
-- `deploy-staging` job (lines 33-37, 123-126)
-- `deploy-production` job (lines 123-126, 156)
-- Health check polling (line 64)
+- `deploy-staging` job (lines 33-37)
+- `deploy-production` job (lines 123-126)
+- Health check polling — staging: line 64, production: line 153
 - E2E smoke tests (line 109)
 
 See `.github/workflows/staging-pipeline.yml` for full workflow details.
