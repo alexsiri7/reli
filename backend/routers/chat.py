@@ -235,14 +235,14 @@ def list_sessions(user_id: str = Depends(require_user)) -> list[ChatSessionSumma
         rows = session.exec(stmt).all()
     return [
         ChatSessionSummary(
-            id=row[0].id,
-            title=row[0].title,
-            origin=row[0].origin,
-            created_at=row[0].created_at,
-            last_active_at=row[0].last_active_at,
-            message_count=row[1],
+            id=record.id,
+            title=record.title,
+            origin=record.origin,
+            created_at=record.created_at,
+            last_active_at=record.last_active_at,
+            message_count=count,
         )
-        for row in rows
+        for record, count in rows
     ]
 
 

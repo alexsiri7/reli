@@ -464,7 +464,9 @@ function _preferenceConfidenceLabel(data: unknown): string {
   const d = data as Record<string, unknown>
   if (typeof d.confidence === 'number') {
     const c = d.confidence as number
-    return c >= 0.7 ? 'strong' : c >= 0.5 ? 'moderate' : 'emerging'
+    if (c >= 0.7) return 'strong'
+    if (c >= 0.5) return 'moderate'
+    return 'emerging'
   }
   if (Array.isArray(d.patterns) && d.patterns.length > 0) {
     const first = d.patterns[0] as Record<string, unknown>
