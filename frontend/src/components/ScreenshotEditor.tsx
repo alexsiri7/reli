@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-
 type Tool = 'redact' | 'highlight' | 'arrow' | 'text'
 
 type Op =
@@ -154,17 +153,7 @@ export function ScreenshotEditor({ canvas: bgCanvas, onDone, onCancel }: Screens
   const handleDone = useCallback(() => {
     const el = canvasRef.current
     if (!el) return
-    const doneCanvas = document.createElement('canvas')
-    doneCanvas.width = el.width
-    doneCanvas.height = el.height
-    const doneCtx = doneCanvas.getContext('2d')
-    if (!doneCtx) {
-      console.error('[ScreenshotEditor] Failed to get 2d context for output canvas')
-      onCancel()
-      return
-    }
-    doneCtx.drawImage(el, 0, 0)
-    const dataUrl = doneCanvas.toDataURL('image/jpeg', 0.85)
+    const dataUrl = el.toDataURL('image/jpeg', 0.85)
     const base64 = dataUrl.split(',')[1]
     if (!base64) {
       console.error('[ScreenshotEditor] toDataURL returned unexpected format:', dataUrl.slice(0, 50))
