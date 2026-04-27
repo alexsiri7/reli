@@ -133,6 +133,7 @@ export function DetailPanel() {
   const dataEntries = thing?.data
     ? Object.entries(thing.data).filter(([key]) => {
         if (key === 'notes') return false
+        if (key === 'agenda_items') return false
         if (thing.type_hint === 'person' && CONTACT_DATA_KEYS.has(key)) return false
         if ((thing.type_hint === 'event' || thing.type_hint === 'meeting') && key === 'agenda_items') return false
         return true
