@@ -73,6 +73,17 @@ Screenshot tests ensure agents can assess UI quality. They live in `frontend/e2e
 
 **If you skip step 3, you are shipping blind.** The screenshots are the visual contract — updating them without inspection defeats the purpose.
 
+## Railway Token Rotation
+
+**Agents cannot rotate the Railway API token.** The token lives in GitHub Actions secrets (`RAILWAY_TOKEN`) and requires human access to railway.com.
+
+When CI fails with `RAILWAY_TOKEN is invalid or expired`:
+1. Do NOT create a `.github/RAILWAY_TOKEN_ROTATION_*.md` file claiming rotation is done.
+2. File a GitHub issue or send mail to mayor with the error details.
+3. Direct the human to `docs/RAILWAY_TOKEN_ROTATION_742.md` for the rotation runbook.
+
+Creating documentation that claims success on an action you cannot perform is a Category 1 error.
+
 ## Key paths
 
 - Backend: `backend/` (FastAPI, Python)
