@@ -102,7 +102,7 @@ const MOCK_THINGS: Record<string, unknown>[] = [
     priority: 3,
     active: true,
     surface: false,
-    data: null,
+    data: { agenda_items: ['Q3 Performance Review and Strategic Pivot', 'Review creative direction for Zenith campaign', 'Resource allocation for product launch'] },
     created_at: '2026-03-05T10:00:00Z',
     updated_at: '2026-03-05T10:00:00Z',
     last_referenced: null,
@@ -418,6 +418,31 @@ test.describe('Visual regression – reli frontend', () => {
       await page.waitForSelector('[aria-label="Send Email"]', { timeout: 5_000 })
 
       await expect(page).toHaveScreenshot('detail-panel-contact-card.png', {
+        ...SNAPSHOT_OPTS,
+        animations: 'disabled',
+      })
+    })
+
+    test('with Agenda section for event type', async ({ page }) => {
+      await interceptApi(page, { things: true })
+      await page.route('**/api/things/thing-6/relationships', route =>
+        route.fulfill({ json: [], status: 200 })
+      )
+      await page.route('**/api/things/thing-6', route =>
+        route.fulfill({
+          json: {
+            ...MOCK_THINGS[5],
+            importance: 2,
+          },
+          status: 200,
+        })
+      )
+      await page.goto('/')
+      await waitForApp(page)
+      await page.locator('text=Q3 Performance Review Meeting').first().click()
+      await page.waitForSelector('text=Agenda', { timeout: 5_000 })
+
+      await expect(page).toHaveScreenshot('detail-panel-agenda.png', {
         ...SNAPSHOT_OPTS,
         animations: 'disabled',
       })

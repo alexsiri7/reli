@@ -132,6 +132,7 @@ export function DetailPanel() {
     ? Object.entries(thing.data).filter(([key]) => {
         if (key === 'notes') return false
         if (thing.type_hint === 'person' && CONTACT_DATA_KEYS.has(key)) return false
+        if ((thing.type_hint === 'event' || thing.type_hint === 'meeting') && key === 'agenda_items') return false
         return true
       })
     : []
@@ -277,6 +278,25 @@ export function DetailPanel() {
                   </div>
                 )
               })()}
+
+              {/* ── AGENDA (event / meeting type) ── */}
+              {(thing.type_hint === 'event' || thing.type_hint === 'meeting') &&
+               Array.isArray(thing.data?.agenda_items) &&
+               (thing.data!.agenda_items as string[]).length > 0 && (
+                <section className="space-y-3">
+                  <h3 className="text-label font-semibold text-on-surface-variant tracking-widest">Agenda</h3>
+                  <div className="rounded-xl bg-surface-container-high p-4">
+                    <ul className="space-y-3">
+                      {(thing.data!.agenda_items as string[]).map((item, i) => (
+                        <li key={i} className="flex items-start gap-3">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+                          <span className="text-body text-on-surface">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </section>
+              )}
 
               {/* ── NOTES ── */}
               {thing.type_hint === 'preference' ? (
