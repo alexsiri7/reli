@@ -91,9 +91,6 @@ def generate_weekly_briefing(
     lookback_start = ws.isoformat()
     lookback_end = (today + timedelta(days=1)).isoformat()  # inclusive of today
 
-    # Forward window: upcoming dates in the next 7 days
-    today + timedelta(days=7)
-
     completed: list[WeeklyBriefingItem] = []
     upcoming: list[WeeklyBriefingItem] = []
     new_connections: list[WeeklyBriefingConnection] = []

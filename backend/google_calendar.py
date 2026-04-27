@@ -95,7 +95,6 @@ def _save_credentials(creds: Credentials, user_id: str = "") -> None:
     """Store credentials in SQLite with sensitive fields encrypted."""
     expiry_str = creds.expiry.isoformat() if creds.expiry else None
     scopes_str = json.dumps(list(creds.scopes)) if creds.scopes else None
-    datetime.now(timezone.utc).isoformat()
     uid = user_id or None  # Store NULL when auth is disabled (empty string)
 
     # Encrypt sensitive token fields

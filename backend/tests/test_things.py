@@ -340,3 +340,49 @@ class TestOrphanRelationships:
         assert resp.status_code == 200
         assert resp.json()["deleted_count"] == 0
         assert resp.json()["deleted_ids"] == []
+
+
+class TestProjectCompletedCount:
+    def test_completed_count_with_mixed_children(self, client):
+        project = create_thing(client, title="My Project", type_hint="project")
+        task1 = create_thing(client, title="Task 1")
+        task2 = create_thing(client, title="Task 2")
+
+        client.post(
+            "/api/things/relationships",
+            json={"from_thing_id": project["id"], "to_thing_id": task1["id"], "relationship_type": "parent-of"},
+        )
+        client.post(
+            "/api/things/relationships",
+            json={"from_thing_id": project["id"], "to_thing_id": task2["id"], "relationship_type": "parent-of"},
+        )
+
+        client.patch(f"/api/things/{task2['id']}", json={"active": False})
+
+        resp = client.get("/api/things", params={"active_only": "false"})
+        assert resp.status_code == 200
+        proj = next(t for t in resp.json() if t["id"] == project["id"])
+        assert proj["children_count"] == 2
+        assert proj["completed_count"] == 1
+
+    def test_completed_count_all_active(self, client):
+        project = create_thing(client, title="Active Project", type_hint="project")
+        task = create_thing(client, title="Active Task")
+
+        client.post(
+            "/api/things/relationships",
+            json={"from_thing_id": project["id"], "to_thing_id": task["id"], "relationship_type": "parent-of"},
+        )
+
+        resp = client.get("/api/things", params={"active_only": "false"})
+        proj = next(t for t in resp.json() if t["id"] == project["id"])
+        assert proj["children_count"] == 1
+        assert proj["completed_count"] == 0
+
+    def test_completed_count_no_children(self, client):
+        project = create_thing(client, title="Empty Project", type_hint="project")
+
+        resp = client.get("/api/things")
+        proj = next(t for t in resp.json() if t["id"] == project["id"])
+        assert proj["children_count"] == 0
+        assert proj["completed_count"] == 0
