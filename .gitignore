@@ -30,3 +30,6 @@ backend/chroma_db/
 
 # Beads / Dolt files (added by bd init)
 .beads-credential-key
+
+# Python virtualenv
+.venv/
