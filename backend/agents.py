@@ -754,6 +754,11 @@ the user's message tone — short and direct gets consultant energy, exploratory
 and reflective gets coaching warmth.
 """
 
+_STYLE_OVERLAYS: dict[str, str] = {
+    "coach": _RESPONSE_COACH_OVERLAY,
+    "consultant": _RESPONSE_CONSULTANT_OVERLAY,
+}
+
 
 def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
     """Load personality preference patterns from Things with type_hint='preference'.
@@ -826,12 +831,7 @@ def get_response_system_prompt(
     personality_patterns: list[dict[str, Any]] | None = None,
 ) -> str:
     """Return the response agent system prompt with the appropriate style overlay."""
-    if interaction_style == "coach":
-        prompt = RESPONSE_AGENT_SYSTEM + _RESPONSE_COACH_OVERLAY
-    elif interaction_style == "consultant":
-        prompt = RESPONSE_AGENT_SYSTEM + _RESPONSE_CONSULTANT_OVERLAY
-    else:
-        prompt = RESPONSE_AGENT_SYSTEM + _RESPONSE_AUTO_OVERLAY
+    prompt = RESPONSE_AGENT_SYSTEM + _STYLE_OVERLAYS.get(interaction_style, _RESPONSE_AUTO_OVERLAY)
 
     if personality_patterns:
         prompt += _build_personality_overlay(personality_patterns)
