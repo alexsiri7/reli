@@ -168,7 +168,6 @@ def append_message(body: ChatMessageCreate, user_id: str = Depends(require_user)
     changes_json = body.applied_changes  # SQLModel handles JSON serialization
     now = datetime.now(timezone.utc)
     with Session(_engine_mod.engine) as session:
-        # Upsert session last_active_at
         existing_session = session.exec(
             select(ChatSessionRecord).where(ChatSessionRecord.id == body.session_id)
         ).first()
@@ -315,7 +314,6 @@ def delete_session(session_id: str, user_id: str = Depends(require_user)) -> Non
         ).first()
         if not record:
             raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
-        # Delete chat history for this session
         history_records = session.exec(
             select(ChatHistoryRecord).where(ChatHistoryRecord.session_id == session_id)
         ).all()
@@ -601,7 +599,6 @@ def _persist_exchange(
     now = datetime.now(timezone.utc)
 
     with Session(_engine_mod.engine) as session:
-        # Upsert ChatSessionRecord.last_active_at
         existing_session = session.exec(select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)).first()
         if existing_session:
             existing_session.last_active_at = now
