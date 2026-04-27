@@ -76,7 +76,8 @@ def _get_fernet() -> Fernet:
             _FALLBACK_KEY_FILE.chmod(0o600)
             logger.warning(
                 "Could not write key to %s, using fallback %s",
-                key_file, _FALLBACK_KEY_FILE,
+                key_file,
+                _FALLBACK_KEY_FILE,
             )
 
     _fernet = Fernet(key.encode())

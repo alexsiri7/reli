@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import uuid
 from datetime import datetime, timedelta, timezone
 
-import pytest
 from sqlmodel import Session, select
 
 from backend.db_models import ScheduledTaskRecord, SweepFindingRecord
@@ -104,9 +102,7 @@ class TestProcessScheduledTasks:
 
             # Verify a SweepFindingRecord was created
             findings = session.exec(
-                select(SweepFindingRecord).where(
-                    SweepFindingRecord.finding_type == "reminder"
-                )
+                select(SweepFindingRecord).where(SweepFindingRecord.finding_type == "reminder")
             ).all()
             assert len(findings) == 1
             assert findings[0].message == "Test reminder"
@@ -137,8 +133,6 @@ class TestScheduledTasksNotReExecuted:
 
         with Session(_engine_mod.engine) as session:
             findings = session.exec(
-                select(SweepFindingRecord).where(
-                    SweepFindingRecord.finding_type == "reminder"
-                )
+                select(SweepFindingRecord).where(SweepFindingRecord.finding_type == "reminder")
             ).all()
             assert len(findings) == 0

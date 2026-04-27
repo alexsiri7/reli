@@ -229,10 +229,14 @@ def _fetch_user_thing(session: Session, user_id: str) -> dict[str, Any] | None:
     """Fetch the user's own Thing (type_hint='person', matching user_id)."""
     if not user_id:
         return None
-    stmt = select(ThingRecord).where(
-        ThingRecord.user_id == user_id,
-        ThingRecord.type_hint == "person",
-    ).limit(1)
+    stmt = (
+        select(ThingRecord)
+        .where(
+            ThingRecord.user_id == user_id,
+            ThingRecord.type_hint == "person",
+        )
+        .limit(1)
+    )
     rec = session.exec(stmt).first()
     return _parse_thing_open_questions(rec.model_dump()) if rec else None
 

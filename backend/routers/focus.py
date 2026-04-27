@@ -10,10 +10,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
-from ..db_engine import user_filter_clause
-from ..db_models import ThingRecord, ThingRelationshipRecord
 
 from ..auth import require_user
+from ..db_engine import user_filter_clause
+from ..db_models import ThingRecord, ThingRelationshipRecord
 from ..google_calendar import fetch_upcoming_events
 from ..google_calendar import is_connected as calendar_connected
 from ..models import FocusRecommendation, FocusResponse, Thing
@@ -24,8 +24,15 @@ router = APIRouter(prefix="/focus", tags=["focus"])
 # Date parsing
 _RECURRING_KEYS = {"birthday", "anniversary", "born", "date_of_birth", "dob"}
 _ONESHOT_KEYS = {
-    "deadline", "due_date", "due", "event_date", "starts_at",
-    "start_date", "ends_at", "end_date", "date",
+    "deadline",
+    "due_date",
+    "due",
+    "event_date",
+    "starts_at",
+    "start_date",
+    "ends_at",
+    "end_date",
+    "date",
 }
 _ALL_DATE_KEYS = _RECURRING_KEYS | _ONESHOT_KEYS
 _DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
@@ -74,15 +81,17 @@ def _compute_recommendations(
     today = today or date.today()
 
     with Session(_engine_mod.engine) as session:
-        thing_stmt = select(ThingRecord).where(
-            ThingRecord.active == True,
-            user_filter_clause(ThingRecord.user_id, user_id),
-        ).order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())  # type: ignore[union-attr, attr-defined]
+        thing_stmt = (
+            select(ThingRecord)
+            .where(
+                ThingRecord.active == True,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+            .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
+        )  # type: ignore[union-attr, attr-defined]
         thing_records = session.exec(thing_stmt).all()
 
-        rel_records = session.exec(
-            select(ThingRelationshipRecord)
-        ).all()
+        rel_records = session.exec(select(ThingRelationshipRecord)).all()
 
     things = [_record_to_thing(r) for r in thing_records]
     thing_map: dict[str, Thing] = {t.id: t for t in things}

@@ -1,6 +1,6 @@
 """Tests for tools.create_thing(), update_thing(), delete_thing() basic coverage."""
 
-from backend.tools import create_thing, update_thing, delete_thing, get_thing, create_relationship, get_user_profile
+from backend.tools import create_relationship, create_thing, delete_thing, get_thing, get_user_profile, update_thing
 
 
 class TestCreateThing:

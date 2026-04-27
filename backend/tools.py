@@ -246,10 +246,15 @@ def create_thing(
     with Session(_engine_mod.engine) as session:
         # Deduplicate: if a Thing with the same title exists, convert to update
         from sqlalchemy import func
-        stmt = select(ThingRecord).where(
-            func.lower(ThingRecord.title) == func.lower(title),
-            ThingRecord.active == True,
-        ).limit(1)
+
+        stmt = (
+            select(ThingRecord)
+            .where(
+                func.lower(ThingRecord.title) == func.lower(title),
+                ThingRecord.active == True,
+            )
+            .limit(1)
+        )
         existing = session.exec(stmt).first()
 
         if existing:
@@ -264,7 +269,9 @@ def create_thing(
             if open_questions:
                 existing.open_questions = open_questions
             if checkin_date and not existing.checkin_date:
-                existing.checkin_date = datetime.fromisoformat(checkin_date) if isinstance(checkin_date, str) else checkin_date
+                existing.checkin_date = (
+                    datetime.fromisoformat(checkin_date) if isinstance(checkin_date, str) else checkin_date
+                )
             existing.updated_at = now
             session.add(existing)
             session.commit()
@@ -347,7 +354,9 @@ def update_thing(
             record.active = bool(active)
             changed = True
         if checkin_date:
-            record.checkin_date = datetime.fromisoformat(checkin_date) if isinstance(checkin_date, str) else checkin_date
+            record.checkin_date = (
+                datetime.fromisoformat(checkin_date) if isinstance(checkin_date, str) else checkin_date
+            )
             changed = True
         if importance is not None:
             record.importance = importance
@@ -565,11 +574,13 @@ def create_relationship(
     with Session(_engine_mod.engine) as session:
         # Skip duplicate
         dup = session.exec(
-            select(ThingRelationshipRecord).where(
+            select(ThingRelationshipRecord)
+            .where(
                 ThingRelationshipRecord.from_thing_id == from_id,
                 ThingRelationshipRecord.to_thing_id == to_id,
                 ThingRelationshipRecord.relationship_type == rel_type,
-            ).limit(1)
+            )
+            .limit(1)
         ).first()
         if dup:
             return {"status": "duplicate", "relationship_type": rel_type}
@@ -673,9 +684,7 @@ def search_things(
         direct_sql = text(
             "SELECT t.* FROM things t"
             " WHERE (t.title LIKE :pattern OR t.type_hint LIKE :pattern"
-            "        OR CAST(t.data AS TEXT) LIKE :pattern)"
-            + filters +
-            " ORDER BY t.updated_at DESC"
+            "        OR CAST(t.data AS TEXT) LIKE :pattern)" + filters + " ORDER BY t.updated_at DESC"
             " LIMIT :lim"
         )
         direct_rows = session.execute(direct_sql, params).fetchall()
@@ -705,9 +714,7 @@ def search_things(
                 "            OR m.title LIKE :pattern"
                 "            OR CAST(m.data AS TEXT) LIKE :pattern)"
                 "   )"
-                " )"
-                + filters +
-                " ORDER BY t.updated_at DESC"
+                " )" + filters + " ORDER BY t.updated_at DESC"
                 " LIMIT :lim"
             )
             rel_rows = session.execute(rel_sql, rel_params).fetchall()
@@ -865,6 +872,7 @@ def get_briefing(
 
         # Active sweep findings (exclude findings linked to inactive Things)
         from .db_models import SweepFindingRecord
+
         finding_stmt = (
             select(SweepFindingRecord)
             .outerjoin(ThingRecord, SweepFindingRecord.thing_id == ThingRecord.id)
@@ -889,14 +897,16 @@ def get_briefing(
 
     # Build blocker graph
     all_things_map = {r.id: {"id": r.id, "importance": r.importance, "active": r.active} for r in all_active}
-    blocker_graph = build_blocker_graph([
-        {
-            "from_thing_id": r.from_thing_id,
-            "to_thing_id": r.to_thing_id,
-            "relationship_type": r.relationship_type,
-        }
-        for r in rel_rows
-    ])
+    blocker_graph = build_blocker_graph(
+        [
+            {
+                "from_thing_id": r.from_thing_id,
+                "to_thing_id": r.to_thing_id,
+                "relationship_type": r.relationship_type,
+            }
+            for r in rel_rows
+        ]
+    )
 
     # Score each checkin-due thing
     scored: list[dict[str, Any]] = []
@@ -905,23 +915,33 @@ def get_briefing(
         imp = rec.importance if rec.importance is not None else 2
         urgency, reasons = compute_urgency(thing, target, blocker_graph, all_things_map)
         composite = compute_composite_score(int(imp), urgency)
-        scored.append({
-            "thing": thing,
-            "importance": imp,
-            "urgency": round(urgency, 2),
-            "score": round(composite, 2),
-            "reasons": reasons,
-        })
+        scored.append(
+            {
+                "thing": thing,
+                "importance": imp,
+                "urgency": round(urgency, 2),
+                "score": round(composite, 2),
+                "reasons": reasons,
+            }
+        )
 
     scored.sort(key=lambda x: x["score"], reverse=True)
 
     the_one_thing = scored[0] if scored else None
     secondary = scored[1:6] if len(scored) > 1 else []
-    parking_lot = [
-        {"thing_id": s["thing"]["id"], "title": s["thing"]["title"],
-         "importance": s["importance"], "urgency": s["urgency"]}
-        for s in scored[6:]
-    ] if len(scored) > 6 else []
+    parking_lot = (
+        [
+            {
+                "thing_id": s["thing"]["id"],
+                "title": s["thing"]["title"],
+                "importance": s["importance"],
+                "urgency": s["urgency"],
+            }
+            for s in scored[6:]
+        ]
+        if len(scored) > 6
+        else []
+    )
 
     findings = [f.model_dump() for f in finding_rows]
     checkin_due = sum(1 for s in scored if s["urgency"] >= 0.25)
@@ -955,14 +975,19 @@ def get_open_questions(
     Returns a list of Thing dicts ordered by priority then recency.
     """
     with Session(_engine_mod.engine) as session:
-        stmt = select(ThingRecord).where(
-            ThingRecord.active == True,
-            ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
-            user_filter_clause(ThingRecord.user_id, user_id),
-        ).order_by(
-            ThingRecord.importance.asc(),  # type: ignore[union-attr, attr-defined]
-            ThingRecord.updated_at.desc(),  # type: ignore[union-attr, attr-defined]
-        ).limit(limit)
+        stmt = (
+            select(ThingRecord)
+            .where(
+                ThingRecord.active == True,
+                ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+            .order_by(
+                ThingRecord.importance.asc(),  # type: ignore[union-attr, attr-defined]
+                ThingRecord.updated_at.desc(),  # type: ignore[union-attr, attr-defined]
+            )
+            .limit(limit)
+        )
         records = session.exec(stmt).all()
 
     # Filter out empty arrays (can't easily do in SQL with JSON)

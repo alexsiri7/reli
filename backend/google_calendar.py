@@ -357,9 +357,7 @@ def update_event(
         existing["description"] = description
 
     try:
-        event = service.events().update(
-            calendarId="primary", eventId=event_id, body=existing
-        ).execute()
+        event = service.events().update(calendarId="primary", eventId=event_id, body=existing).execute()
         return {
             "id": event.get("id", ""),
             "summary": event.get("summary", ""),

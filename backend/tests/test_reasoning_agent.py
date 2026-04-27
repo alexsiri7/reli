@@ -179,10 +179,12 @@ class TestCreateThingTool:
 
     def test_create_thing_dedup_existing(self, patched_db):
         from backend.tools import create_thing as raw_create
+
         # Create the first thing
         raw_create(title="Test Thing", data_json='{"notes": "old"}')
 
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         create_fn = tools[2]
 
@@ -193,6 +195,7 @@ class TestCreateThingTool:
 
     def test_create_thing_new(self, patched_db):
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         create_fn = tools[2]
 
@@ -202,6 +205,7 @@ class TestCreateThingTool:
 
     def test_create_entity_defaults_surface_false(self, patched_db):
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         create_fn = tools[2]
 
@@ -213,6 +217,7 @@ class TestCreateThingTool:
     def test_create_preference_defaults_surface_false(self, patched_db):
         """Preference type_hint should default to surface=false like other entity types."""
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         create_fn = tools[2]
 
@@ -227,18 +232,22 @@ class TestPreferencePromptInstructions:
 
     def test_preference_in_entity_types(self):
         from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+
         assert 'type_hint "preference"' in REASONING_AGENT_TOOL_SYSTEM
 
     def test_preference_detection_section(self):
         from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+
         assert "Preference Detection:" in REASONING_AGENT_TOOL_SYSTEM
 
     def test_preference_in_entity_types_set(self):
         from backend.tools import _NONSURFACE_TYPES
+
         assert "preference" in _NONSURFACE_TYPES
 
     def test_preference_confidence_levels_documented(self):
         from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
+
         assert "emerging" in REASONING_AGENT_TOOL_SYSTEM
         assert "moderate" in REASONING_AGENT_TOOL_SYSTEM
         assert "strong" in REASONING_AGENT_TOOL_SYSTEM
@@ -262,10 +271,12 @@ class TestDeleteThingTool:
 
     def test_delete_success(self, patched_db):
         from backend.tools import create_thing as raw_create
+
         created = raw_create(title="Delete Me")
         thing_id = created["id"]
 
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         delete_fn = tools[4]
 
@@ -306,12 +317,15 @@ class TestCreateRelationshipTool:
         assert "error" in result
 
     def test_duplicate_skipped(self, patched_db):
-        from backend.tools import create_thing as raw_create, create_relationship as raw_rel
+        from backend.tools import create_relationship as raw_rel
+        from backend.tools import create_thing as raw_create
+
         t1 = raw_create(title="Thing A")
         t2 = raw_create(title="Thing B")
         raw_rel(from_thing_id=t1["id"], to_thing_id=t2["id"], relationship_type="sister")
 
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         rel_fn = tools[6]
 
@@ -325,10 +339,12 @@ class TestCreateRelationshipTool:
 
     def test_create_success(self, patched_db):
         from backend.tools import create_thing as raw_create
+
         t1 = raw_create(title="Thing From")
         t2 = raw_create(title="Thing To")
 
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         rel_fn = tools[6]
 
@@ -685,9 +701,11 @@ class TestDataJsonStringRegression:
     def test_update_thing_with_string_data_json_returns_error(self, patched_db):
         """update_thing returns error when data_json is a JSON string."""
         from backend.tools import create_thing as raw_create
+
         created = raw_create(title="Existing")
 
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         update_fn = tools[3]
 
@@ -698,9 +716,11 @@ class TestDataJsonStringRegression:
     def test_update_thing_with_list_data_json_returns_error(self, patched_db):
         """update_thing returns error when data_json is a JSON array."""
         from backend.tools import create_thing as raw_create
+
         created = raw_create(title="Existing")
 
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         update_fn = tools[3]
 
@@ -987,9 +1007,7 @@ class TestCommStyleSignalSystemPrompt:
         for mode in ("normal", "planning"):
             for style in ("auto", "coach", "consultant"):
                 prompt = get_system_prompt_for_mode(mode, style)
-                assert "reli_communication" in prompt, (
-                    f"reli_communication missing from mode={mode}, style={style}"
-                )
+                assert "reli_communication" in prompt, f"reli_communication missing from mode={mode}, style={style}"
 
 
 # ---------------------------------------------------------------------------
@@ -1002,18 +1020,21 @@ class TestCommStylePreferenceStructure:
 
     def test_create_reli_comm_preference_thing(self, patched_db):
         """create_thing stores a reli_communication preference with correct structure."""
-        pref_data_str = json.dumps({
-            "category": "reli_communication",
-            "patterns": [
-                {
-                    "pattern": "Avoid using emoji in responses",
-                    "confidence": "established",
-                    "observations": 1,
-                }
-            ],
-        })
+        pref_data_str = json.dumps(
+            {
+                "category": "reli_communication",
+                "patterns": [
+                    {
+                        "pattern": "Avoid using emoji in responses",
+                        "confidence": "established",
+                        "observations": 1,
+                    }
+                ],
+            }
+        )
 
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         create_fn = tools[2]
 
@@ -1039,16 +1060,18 @@ class TestCommStylePreferenceStructure:
         """update_thing can reinforce an existing reli_communication preference."""
         from backend.tools import create_thing as raw_create
 
-        existing_data = json.dumps({
-            "category": "reli_communication",
-            "patterns": [
-                {
-                    "pattern": "Be concise",
-                    "confidence": "emerging",
-                    "observations": 1,
-                }
-            ],
-        })
+        existing_data = json.dumps(
+            {
+                "category": "reli_communication",
+                "patterns": [
+                    {
+                        "pattern": "Be concise",
+                        "confidence": "emerging",
+                        "observations": 1,
+                    }
+                ],
+            }
+        )
         created = raw_create(
             title="How the user wants Reli to communicate",
             type_hint="preference",
@@ -1056,19 +1079,22 @@ class TestCommStylePreferenceStructure:
         )
 
         from backend.reasoning_agent import _make_reasoning_tools
+
         tools, applied, _fetched = _make_reasoning_tools("test-user")
         update_fn = tools[3]
 
-        new_data = json.dumps({
-            "category": "reli_communication",
-            "patterns": [
-                {
-                    "pattern": "Be concise",
-                    "confidence": "established",
-                    "observations": 2,
-                }
-            ],
-        })
+        new_data = json.dumps(
+            {
+                "category": "reli_communication",
+                "patterns": [
+                    {
+                        "pattern": "Be concise",
+                        "confidence": "established",
+                        "observations": 2,
+                    }
+                ],
+            }
+        )
 
         result = update_fn(thing_id=created["id"], data_json=new_data)
 

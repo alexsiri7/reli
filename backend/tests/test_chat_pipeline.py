@@ -3,10 +3,9 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-import backend.db_engine as _engine_mod
 from sqlmodel import Session
 
+import backend.db_engine as _engine_mod
 from backend.response_agent import ResponseResult
 
 # ---------------------------------------------------------------------------
@@ -471,8 +470,11 @@ class TestPreferenceBoost:
             return ["entity-1"]
 
         import unittest.mock as mock
-        with mock.patch("backend.pipeline.vector_count", return_value=5), \
-             mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search):
+
+        with (
+            mock.patch("backend.pipeline.vector_count", return_value=5),
+            mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search),
+        ):
             with Session(_engine_mod.engine) as session:
                 results = _fetch_relevant_things(
                     session,
@@ -495,14 +497,17 @@ class TestPreferenceBoost:
             self._insert_thing(conn, "entity-1", "communication note", "note")
 
         import unittest.mock as mock
+
         boost_called_with_preference = []
 
         def _mock_vector_search(queries, n_results=20, active_only=True, type_hint=None, user_id=""):
             boost_called_with_preference.append(type_hint)
             return ["pref-1"] if type_hint == "preference" else []
 
-        with mock.patch("backend.pipeline.vector_count", return_value=5), \
-             mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search):
+        with (
+            mock.patch("backend.pipeline.vector_count", return_value=5),
+            mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search),
+        ):
             with Session(_engine_mod.engine) as session:
                 _fetch_relevant_things(
                     session,
@@ -532,8 +537,10 @@ class TestPreferenceBoost:
                 return ["pref-1"]
             return ["entity-1", "entity-2", "pref-1"]
 
-        with mock.patch("backend.pipeline.vector_count", return_value=5), \
-             mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search):
+        with (
+            mock.patch("backend.pipeline.vector_count", return_value=5),
+            mock.patch("backend.pipeline.vector_search", side_effect=_mock_vector_search),
+        ):
             with Session(_engine_mod.engine) as session:
                 results = _fetch_relevant_things(
                     session,

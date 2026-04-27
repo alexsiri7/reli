@@ -1,8 +1,8 @@
 """Tests for vector_store.py — semantic search fallback behavior."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from backend.vector_store import vector_search, upsert_thing
+from backend.vector_store import upsert_thing, vector_search
 
 
 class TestVectorSearch:

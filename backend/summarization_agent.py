@@ -8,10 +8,11 @@ be triggered after every N messages via async background task.
 import logging
 from typing import Any
 
-from .agents import UsageStats, estimate_cost
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
+
+from .agents import UsageStats, estimate_cost
 from .db_models import ChatHistoryRecord, ConversationSummaryRecord
 from .llm import acomplete
 
@@ -19,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 # Use the context (cheap) model from config for summarization
 from .agents import REQUESTY_MODEL as SUMMARIZATION_MODEL  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # DB helpers
@@ -68,9 +68,9 @@ def create_summary(
 def get_messages_since_summary(user_id: str) -> list[dict[str, Any]]:
     latest = get_latest_summary(user_id)
     with Session(_engine_mod.engine) as session:
-        stmt = select(ChatHistoryRecord).where(
-            ChatHistoryRecord.user_id == user_id
-        ).order_by(ChatHistoryRecord.id.asc())  # type: ignore[union-attr]
+        stmt = (
+            select(ChatHistoryRecord).where(ChatHistoryRecord.user_id == user_id).order_by(ChatHistoryRecord.id.asc())
+        )  # type: ignore[union-attr]
         if latest:
             stmt = stmt.where(ChatHistoryRecord.id > latest["messages_summarized_up_to"])
         records = session.exec(stmt).all()
@@ -84,13 +84,13 @@ def get_message_count_since_summary(user_id: str) -> int:
     latest = get_latest_summary(user_id)
     with Session(_engine_mod.engine) as session:
         from sqlalchemy import func
-        stmt = select(func.count()).select_from(ChatHistoryRecord).where(
-            ChatHistoryRecord.user_id == user_id
-        )
+
+        stmt = select(func.count()).select_from(ChatHistoryRecord).where(ChatHistoryRecord.user_id == user_id)
         if latest:
             stmt = stmt.where(ChatHistoryRecord.id > latest["messages_summarized_up_to"])
         result = session.exec(stmt).one()
     return result or 0
+
 
 # Default number of messages before triggering summarization
 DEFAULT_SUMMARY_TRIGGER_N = 20

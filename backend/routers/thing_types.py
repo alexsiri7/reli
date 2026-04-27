@@ -2,7 +2,6 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
@@ -58,9 +57,7 @@ def create_thing_type(
     session: Session = Depends(get_session),
 ) -> ThingType:
     """Create a new Thing Type. Names must be unique."""
-    existing = session.exec(
-        select(ThingTypeRecord).where(ThingTypeRecord.name == body.name)
-    ).first()
+    existing = session.exec(select(ThingTypeRecord).where(ThingTypeRecord.name == body.name)).first()
     if existing:
         raise HTTPException(
             status_code=409,

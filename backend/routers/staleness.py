@@ -3,14 +3,15 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select as sa_select
+from sqlalchemy import func
+from sqlalchemy import select as sa_select
 from sqlmodel import Session, select
 
-from ..db_engine import get_session, user_filter_clause
-from ..db_models import ThingRecord, ThingRelationshipRecord
+import backend.db_engine as _engine_mod
 
 from ..auth import require_user
-import backend.db_engine as _engine_mod
+from ..db_engine import user_filter_clause
+from ..db_models import ThingRecord, ThingRelationshipRecord
 from ..models import (
     OverdueCheckin,
     StaleItem,

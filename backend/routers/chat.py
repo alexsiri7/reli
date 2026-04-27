@@ -251,9 +251,7 @@ def create_session(body: CreateSessionRequest, user_id: str = Depends(require_us
     """Create a new named chat session."""
     session_id = body.session_id or str(uuid.uuid4())
     with Session(_engine_mod.engine) as session:
-        existing = session.exec(
-            select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)
-        ).first()
+        existing = session.exec(select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)).first()
         if existing:
             raise HTTPException(status_code=409, detail=f"Session '{session_id}' already exists")
         record = ChatSessionRecord(id=session_id, user_id=user_id, title=body.title, origin=body.origin)
@@ -288,10 +286,13 @@ def rename_session(
         session.add(record)
         session.commit()
         session.refresh(record)
-        msg_count = session.execute(
-            text("SELECT COUNT(*) FROM chat_history WHERE session_id = :sid"),
-            {"sid": session_id},
-        ).scalar() or 0
+        msg_count = (
+            session.execute(
+                text("SELECT COUNT(*) FROM chat_history WHERE session_id = :sid"),
+                {"sid": session_id},
+            ).scalar()
+            or 0
+        )
     return ChatSessionSummary(
         id=record.id,
         title=record.title,
@@ -420,15 +421,16 @@ def _maybe_auto_title_session(session_id: str, user_message: str) -> None:
     async def _run() -> None:
         try:
             with Session(_engine_mod.engine) as sess:
-                record = sess.exec(
-                    select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)
-                ).first()
+                record = sess.exec(select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)).first()
                 if not record or record.title != "New chat":
                     return
-                msg_count = sess.execute(
-                    text("SELECT COUNT(*) FROM chat_history WHERE session_id = :sid"),
-                    {"sid": session_id},
-                ).scalar() or 0
+                msg_count = (
+                    sess.execute(
+                        text("SELECT COUNT(*) FROM chat_history WHERE session_id = :sid"),
+                        {"sid": session_id},
+                    ).scalar()
+                    or 0
+                )
                 if msg_count > 2:
                     return
 
@@ -448,12 +450,10 @@ def _maybe_auto_title_session(session_id: str, user_message: str) -> None:
                     }
                 ],
             )
-            title = resp.content[0].text.strip().strip('"\'')
+            title = resp.content[0].text.strip().strip("\"'")
 
             with Session(_engine_mod.engine) as sess:
-                record = sess.exec(
-                    select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)
-                ).first()
+                record = sess.exec(select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)).first()
                 if record and record.title == "New chat":
                     record.title = title
                     sess.add(record)
@@ -602,9 +602,7 @@ def _persist_exchange(
 
     with Session(_engine_mod.engine) as session:
         # Upsert ChatSessionRecord.last_active_at
-        existing_session = session.exec(
-            select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)
-        ).first()
+        existing_session = session.exec(select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)).first()
         if existing_session:
             existing_session.last_active_at = now
             session.add(existing_session)

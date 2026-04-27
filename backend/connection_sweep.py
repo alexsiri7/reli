@@ -17,9 +17,10 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from sqlmodel import Session, or_, select
+from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
+
 from .db_engine import user_filter_clause
 from .db_models import (
     ConnectionSuggestionRecord,
@@ -84,9 +85,7 @@ def find_connection_candidates(
     with Session(_engine_mod.engine) as session:
         thing_stmt = select(ThingRecord).where(ThingRecord.active == True)
         if user_id:
-            thing_stmt = thing_stmt.where(
-                user_filter_clause(ThingRecord.user_id, user_id)
-            )
+            thing_stmt = thing_stmt.where(user_filter_clause(ThingRecord.user_id, user_id))
         things = session.exec(thing_stmt).all()
 
         # Build set of existing relationships (both directions)
@@ -110,9 +109,7 @@ def find_connection_candidates(
         # Also exclude parent-child relationships (via parent-of relationships)
         parent_pairs: set[tuple[str, str]] = set()
         parent_rels = session.exec(
-            select(ThingRelationshipRecord).where(
-                ThingRelationshipRecord.relationship_type == "parent-of"
-            )
+            select(ThingRelationshipRecord).where(ThingRelationshipRecord.relationship_type == "parent-of")
         ).all()
         for rel in parent_rels:
             parent_pairs.add((rel.from_thing_id, rel.to_thing_id))

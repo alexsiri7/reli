@@ -56,11 +56,13 @@ def _base_url() -> str:
 @router.get("/.well-known/oauth-protected-resource", include_in_schema=False)
 def protected_resource_metadata() -> JSONResponse:
     base = _base_url()
-    return JSONResponse({
-        "resource": f"{base}/mcp/",
-        "authorization_servers": [base],
-        "scopes_supported": ["mcp"],
-    })
+    return JSONResponse(
+        {
+            "resource": f"{base}/mcp/",
+            "authorization_servers": [base],
+            "scopes_supported": ["mcp"],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -71,16 +73,18 @@ def protected_resource_metadata() -> JSONResponse:
 @router.get("/.well-known/oauth-authorization-server", include_in_schema=False)
 def authorization_server_metadata() -> JSONResponse:
     base = _base_url()
-    return JSONResponse({
-        "issuer": base,
-        "authorization_endpoint": f"{base}/oauth/authorize",
-        "token_endpoint": f"{base}/oauth/token",
-        "registration_endpoint": f"{base}/oauth/register",
-        "response_types_supported": ["code"],
-        "grant_types_supported": ["authorization_code", "refresh_token"],
-        "code_challenge_methods_supported": ["S256"],
-        "scopes_supported": ["mcp"],
-    })
+    return JSONResponse(
+        {
+            "issuer": base,
+            "authorization_endpoint": f"{base}/oauth/authorize",
+            "token_endpoint": f"{base}/oauth/token",
+            "registration_endpoint": f"{base}/oauth/register",
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code", "refresh_token"],
+            "code_challenge_methods_supported": ["S256"],
+            "scopes_supported": ["mcp"],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -175,16 +179,20 @@ def oauth_authorize(
         state=server_state,
     )
 
-    cleanup_and_store(mcp_oauth_sessions, server_state, {
-        "client_state": state,
-        "redirect_uri": redirect_uri,
-        "code_challenge": code_challenge,
-        "code_challenge_method": code_challenge_method,
-        "client_id": client_id,
-        "scope": scope,
-        "google_code_verifier": flow.code_verifier or "",
-        "expires_at": datetime.now(timezone.utc) + timedelta(seconds=AUTH_CODE_TTL_SECONDS),
-    })
+    cleanup_and_store(
+        mcp_oauth_sessions,
+        server_state,
+        {
+            "client_state": state,
+            "redirect_uri": redirect_uri,
+            "code_challenge": code_challenge,
+            "code_challenge_method": code_challenge_method,
+            "client_id": client_id,
+            "scope": scope,
+            "google_code_verifier": flow.code_verifier or "",
+            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=AUTH_CODE_TTL_SECONDS),
+        },
+    )
 
     return RedirectResponse(url=str(auth_url), status_code=302)
 
@@ -202,21 +210,27 @@ def _issue_token_response(user_id: str, email: str, client_id: str, scope: str) 
     access_token = _create_jwt(user_id, email)
 
     refresh_token = secrets.token_urlsafe(32)
-    cleanup_and_store(mcp_refresh_tokens, refresh_token, {
-        "user_id": user_id,
-        "email": email,
-        "client_id": client_id,
-        "scope": scope,
-        "expires_at": datetime.now(timezone.utc) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
-    })
+    cleanup_and_store(
+        mcp_refresh_tokens,
+        refresh_token,
+        {
+            "user_id": user_id,
+            "email": email,
+            "client_id": client_id,
+            "scope": scope,
+            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
+        },
+    )
 
-    return JSONResponse({
-        "access_token": access_token,
-        "token_type": "bearer",
-        "expires_in": JWT_EXPIRY_SECONDS,
-        "refresh_token": refresh_token,
-        "scope": scope,
-    })
+    return JSONResponse(
+        {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": JWT_EXPIRY_SECONDS,
+            "refresh_token": refresh_token,
+            "scope": scope,
+        }
+    )
 
 
 @router.post("/oauth/token", include_in_schema=False)

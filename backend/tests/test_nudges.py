@@ -93,8 +93,8 @@ def test_conf_label_boundaries() -> None:
     """_conf_label maps float confidence values to correct display labels at all boundaries."""
     from backend.routers.nudges import _conf_label
 
-    assert _conf_label(0.95) == "strong"   # capped max
-    assert _conf_label(0.7) == "strong"    # exact strong boundary
+    assert _conf_label(0.95) == "strong"  # capped max
+    assert _conf_label(0.7) == "strong"  # exact strong boundary
     assert _conf_label(0.69) == "moderate"
     assert _conf_label(0.5) == "moderate"  # exact moderate boundary
     assert _conf_label(0.49) == "emerging"

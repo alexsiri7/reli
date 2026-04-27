@@ -13,9 +13,8 @@ High importance + high urgency = "the one thing."
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any
-
 
 # ── Weight constants ─────────────────────────────────────────────────────────
 
@@ -113,10 +112,7 @@ def compute_urgency(
     if blocker_graph and all_things:
         thing_id = thing.get("id", "")
         blocked_ids = blocker_graph.get(thing_id, set())
-        active_blocked = {
-            bid for bid in blocked_ids
-            if all_things.get(bid, {}).get("active", 0)
-        }
+        active_blocked = {bid for bid in blocked_ids if all_things.get(bid, {}).get("active", 0)}
         if active_blocked:
             n = len(active_blocked)
             s = min(_W_BLOCKERS, n * 0.1)
@@ -148,9 +144,7 @@ def compute_urgency(
         if ratio > 0.7:
             # Nearly done — momentum boost
             s = _W_CHILDREN
-            reasons.append(
-                f"{completed_count}/{children_count} subtasks done — almost there"
-            )
+            reasons.append(f"{completed_count}/{children_count} subtasks done — almost there")
             score += s
         elif ratio > 0.3:
             s = _W_CHILDREN * 0.5

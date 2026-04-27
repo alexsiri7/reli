@@ -131,6 +131,8 @@ def _save_token(creds: Any, user_id: str = "") -> None:
             session.add(record)
 
         session.commit()
+
+
 def _load_creds(user_id: str = "") -> Any:
     """Load and refresh credentials. Returns None if not connected.
 
@@ -413,12 +415,7 @@ def seed_from_gmail(user_id: str = Depends(require_user)) -> dict[str, Any]:
     """Fetch recent Gmail threads and create Person Things for unique senders."""
     service = _get_service(user_id=user_id)
 
-    threads_result = (
-        service.users()
-        .threads()
-        .list(userId="me", maxResults=20, labelIds=["INBOX"])
-        .execute()
-    )
+    threads_result = service.users().threads().list(userId="me", maxResults=20, labelIds=["INBOX"]).execute()
     threads = threads_result.get("threads", [])
 
     created: list[dict[str, str]] = []
@@ -444,10 +441,7 @@ def seed_from_gmail(user_id: str = Depends(require_user)) -> dict[str, Any]:
         if not messages:
             continue
 
-        headers = {
-            h["name"]: h["value"]
-            for h in messages[0].get("payload", {}).get("headers", [])
-        }
+        headers = {h["name"]: h["value"] for h in messages[0].get("payload", {}).get("headers", [])}
         sender_raw = headers.get("From", "")
 
         # Extract email from "Name <email>" format
@@ -456,11 +450,7 @@ def seed_from_gmail(user_id: str = Depends(require_user)) -> dict[str, Any]:
         sender_name = sender_raw.split("<")[0].strip().strip('"') or sender_email
 
         # Skip noreply/duplicate senders
-        if (
-            not sender_email
-            or "noreply" in sender_email.lower()
-            or sender_email in seen_senders
-        ):
+        if not sender_email or "noreply" in sender_email.lower() or sender_email in seen_senders:
             continue
 
         seen_senders.add(sender_email)

@@ -40,10 +40,11 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import case, cast, func, String
+from sqlalchemy import String, case, cast, func
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
+
 from .db_engine import user_filter_clause
 from .db_models import (
     ChatHistoryRecord,
@@ -157,14 +158,11 @@ def find_approaching_dates(
     cutoff = today + timedelta(days=window_days)
     candidates: list[SweepCandidate] = []
     # 1. checkin_date column (already in ISO format)
-    stmt = (
-        select(ThingRecord.id, ThingRecord.title, ThingRecord.checkin_date)
-        .where(
-            ThingRecord.active == True,  # noqa: E712
-            ThingRecord.checkin_date.is_not(None),  # type: ignore[union-attr]
-            func.date(ThingRecord.checkin_date).between(today.isoformat(), cutoff.isoformat()),
-            user_filter_clause(ThingRecord.user_id, user_id),
-        )
+    stmt = select(ThingRecord.id, ThingRecord.title, ThingRecord.checkin_date).where(
+        ThingRecord.active == True,  # noqa: E712
+        ThingRecord.checkin_date.is_not(None),  # type: ignore[union-attr]
+        func.date(ThingRecord.checkin_date).between(today.isoformat(), cutoff.isoformat()),
+        user_filter_clause(ThingRecord.user_id, user_id),
     )
     rows = session.exec(stmt).all()  # type: ignore[arg-type]
     for row in rows:
@@ -189,14 +187,11 @@ def find_approaching_dates(
             )
 
     # 2. Date fields in the data JSON
-    stmt2 = (
-        select(ThingRecord.id, ThingRecord.title, ThingRecord.data)
-        .where(
-            ThingRecord.active == True,  # noqa: E712
-            ThingRecord.data.is_not(None),  # type: ignore[union-attr]
-            cast(ThingRecord.data, String) != '{}',
-            user_filter_clause(ThingRecord.user_id, user_id),
-        )
+    stmt2 = select(ThingRecord.id, ThingRecord.title, ThingRecord.data).where(
+        ThingRecord.active == True,  # noqa: E712
+        ThingRecord.data.is_not(None),  # type: ignore[union-attr]
+        cast(ThingRecord.data, String) != "{}",
+        user_filter_clause(ThingRecord.user_id, user_id),
     )
     data_rows = session.exec(stmt2).all()  # type: ignore[arg-type]
     for row in data_rows:
@@ -345,8 +340,11 @@ def find_overdue_checkins(
     cutoff = (today - timedelta(days=grace_days)).isoformat()
     stmt = (
         select(
-            ThingRecord.id, ThingRecord.title, ThingRecord.type_hint,
-            ThingRecord.checkin_date, ThingRecord.importance,
+            ThingRecord.id,
+            ThingRecord.title,
+            ThingRecord.type_hint,
+            ThingRecord.checkin_date,
+            ThingRecord.importance,
         )
         .where(
             ThingRecord.active == True,  # noqa: E712
@@ -435,8 +433,9 @@ def find_completed_projects(session: Session, user_id: str = "") -> list[SweepCa
             func.sum(case((_ch.c.active == False, 1), else_=0)).label("inactive_children"),  # noqa: E712
         )
         .select_from(
-            _p.join(_r, (_r.c.from_thing_id == _p.c.id) & (_r.c.relationship_type == "parent-of"))
-            .join(_ch, _ch.c.id == _r.c.to_thing_id)
+            _p.join(_r, (_r.c.from_thing_id == _p.c.id) & (_r.c.relationship_type == "parent-of")).join(
+                _ch, _ch.c.id == _r.c.to_thing_id
+            )
         )
         .where(
             _p.c.active == True,  # noqa: E712
@@ -469,14 +468,11 @@ def find_completed_projects(session: Session, user_id: str = "") -> list[SweepCa
 
 def find_open_questions(session: Session, user_id: str = "") -> list[SweepCandidate]:
     """Find active Things that have unanswered open_questions."""
-    stmt = (
-        select(ThingRecord.id, ThingRecord.title, ThingRecord.open_questions)
-        .where(
-            ThingRecord.active == True,  # noqa: E712
-            ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
-            cast(ThingRecord.open_questions, String).notin_(["[]", "null"]),
-            user_filter_clause(ThingRecord.user_id, user_id),
-        )
+    stmt = select(ThingRecord.id, ThingRecord.title, ThingRecord.open_questions).where(
+        ThingRecord.active == True,  # noqa: E712
+        ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
+        cast(ThingRecord.open_questions, String).notin_(["[]", "null"]),
+        user_filter_clause(ThingRecord.user_id, user_id),
     )
     rows = session.exec(stmt).all()  # type: ignore[arg-type]
 
@@ -520,15 +516,12 @@ def prune_stale_open_questions(
     today = today or date.today()
     cutoff = (today - timedelta(days=stale_days)).isoformat()
 
-    stmt = (
-        select(ThingRecord)
-        .where(
-            ThingRecord.active == True,  # noqa: E712
-            ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
-            cast(ThingRecord.open_questions, String).notin_(["[]", "null"]),
-            ThingRecord.updated_at < cutoff,
-            user_filter_clause(ThingRecord.user_id, user_id),
-        )
+    stmt = select(ThingRecord).where(
+        ThingRecord.active == True,  # noqa: E712
+        ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
+        cast(ThingRecord.open_questions, String).notin_(["[]", "null"]),
+        ThingRecord.updated_at < cutoff,
+        user_filter_clause(ThingRecord.user_id, user_id),
     )
     things = session.exec(stmt).all()
     for thing in things:
@@ -562,21 +555,18 @@ def find_broad_things_without_subtasks(
         .scalar_subquery()
         .label("child_count")
     )
-    stmt = (
-        select(
-            ThingRecord.id,
-            ThingRecord.title,
-            ThingRecord.type_hint,
-            ThingRecord.importance,
-            ThingRecord.data,
-            child_count_sq,
-        )
-        .where(
-            ThingRecord.active == True,  # noqa: E712
-            ThingRecord.type_hint.in_(["project", "event", "goal"]),
-            ThingRecord.importance <= 2,
-            user_filter_clause(ThingRecord.user_id, user_id),
-        )
+    stmt = select(
+        ThingRecord.id,
+        ThingRecord.title,
+        ThingRecord.type_hint,
+        ThingRecord.importance,
+        ThingRecord.data,
+        child_count_sq,
+    ).where(
+        ThingRecord.active == True,  # noqa: E712
+        ThingRecord.type_hint.in_(["project", "event", "goal"]),
+        ThingRecord.importance <= 2,
+        user_filter_clause(ThingRecord.user_id, user_id),
     )
     rows = session.execute(stmt).all()
     candidates: list[SweepCandidate] = []
@@ -778,16 +768,15 @@ def find_information_gaps(
     candidates: list[SweepCandidate] = []
 
     # --- Name-only persons: person type with null/empty data ---
-    person_stmt = (
-        select(ThingRecord.id, ThingRecord.title, ThingRecord.type_hint, ThingRecord.data, ThingRecord.created_at)
-        .where(
-            ThingRecord.active == True,  # noqa: E712
-            ThingRecord.type_hint == "person",
-            _no_data_clause,
-            _no_oq_clause,
-            ThingRecord.created_at < age_cutoff,
-            user_filter_clause(ThingRecord.user_id, user_id),
-        )
+    person_stmt = select(
+        ThingRecord.id, ThingRecord.title, ThingRecord.type_hint, ThingRecord.data, ThingRecord.created_at
+    ).where(
+        ThingRecord.active == True,  # noqa: E712
+        ThingRecord.type_hint == "person",
+        _no_data_clause,
+        _no_oq_clause,
+        ThingRecord.created_at < age_cutoff,
+        user_filter_clause(ThingRecord.user_id, user_id),
     )
     person_rows = session.execute(person_stmt).all()
     for row in person_rows:
@@ -819,8 +808,9 @@ def find_information_gaps(
             func.count(_ch2.c.id).label("child_count"),
         )
         .select_from(
-            _p.join(_r2, (_r2.c.from_thing_id == _p.c.id) & (_r2.c.relationship_type == "parent-of"))
-            .join(_ch2, (_ch2.c.id == _r2.c.to_thing_id) & (_ch2.c.active == True))  # noqa: E712
+            _p.join(_r2, (_r2.c.from_thing_id == _p.c.id) & (_r2.c.relationship_type == "parent-of")).join(
+                _ch2, (_ch2.c.id == _r2.c.to_thing_id) & (_ch2.c.active == True)
+            )  # noqa: E712
         )
         .where(
             _p.c.active == True,  # noqa: E712
@@ -860,16 +850,13 @@ def find_information_gaps(
             )
 
     # --- Things with no dates at all ---
-    no_date_stmt = (
-        select(ThingRecord.id, ThingRecord.title, ThingRecord.type_hint, ThingRecord.data)
-        .where(
-            ThingRecord.active == True,  # noqa: E712
-            ThingRecord.checkin_date.is_(None),  # type: ignore[union-attr]
-            ThingRecord.type_hint.in_(["event", "task", "goal"]),  # type: ignore[union-attr]
-            _no_oq_clause,
-            ThingRecord.created_at < age_cutoff,
-            user_filter_clause(ThingRecord.user_id, user_id),
-        )
+    no_date_stmt = select(ThingRecord.id, ThingRecord.title, ThingRecord.type_hint, ThingRecord.data).where(
+        ThingRecord.active == True,  # noqa: E712
+        ThingRecord.checkin_date.is_(None),  # type: ignore[union-attr]
+        ThingRecord.type_hint.in_(["event", "task", "goal"]),  # type: ignore[union-attr]
+        _no_oq_clause,
+        ThingRecord.created_at < age_cutoff,
+        user_filter_clause(ThingRecord.user_id, user_id),
     )
     no_date_rows = session.execute(no_date_stmt).all()
     for row in no_date_rows:
@@ -895,19 +882,16 @@ def find_information_gaps(
             )
 
     # --- Minimal data: old Things with null/empty data (exclude persons, already handled) ---
-    minimal_stmt = (
-        select(ThingRecord.id, ThingRecord.title, ThingRecord.type_hint, ThingRecord.created_at)
-        .where(
-            ThingRecord.active == True,  # noqa: E712
-            _no_data_clause,
-            or_(
-                ThingRecord.type_hint.is_(None),  # type: ignore[union-attr]
-                ThingRecord.type_hint.notin_(["person", "preference"]),  # type: ignore[union-attr]
-            ),
-            _no_oq_clause,
-            ThingRecord.created_at < age_cutoff,
-            user_filter_clause(ThingRecord.user_id, user_id),
-        )
+    minimal_stmt = select(ThingRecord.id, ThingRecord.title, ThingRecord.type_hint, ThingRecord.created_at).where(
+        ThingRecord.active == True,  # noqa: E712
+        _no_data_clause,
+        or_(
+            ThingRecord.type_hint.is_(None),  # type: ignore[union-attr]
+            ThingRecord.type_hint.notin_(["person", "preference"]),  # type: ignore[union-attr]
+        ),
+        _no_oq_clause,
+        ThingRecord.created_at < age_cutoff,
+        user_filter_clause(ThingRecord.user_id, user_id),
     )
     minimal_rows = session.execute(minimal_stmt).all()
     # Only flag if old enough to suggest fleshing out (use 14 days for minimal_data)
@@ -945,13 +929,10 @@ def assign_checkin_dates(
     """
     _EVENT_KEYS = {"event_date", "starts_at", "start_date", "date"}
 
-    stmt = (
-        select(ThingRecord.id)
-        .where(
-            ThingRecord.active == True,  # noqa: E712
-            ThingRecord.checkin_date.is_(None),
-            user_filter_clause(ThingRecord.user_id, user_id),
-        )
+    stmt = select(ThingRecord.id).where(
+        ThingRecord.active == True,  # noqa: E712
+        ThingRecord.checkin_date.is_(None),
+        user_filter_clause(ThingRecord.user_id, user_id),
     )
     rows = session.execute(stmt).all()
     if not rows:
@@ -1086,11 +1067,12 @@ def find_cross_project_shared_blockers(session: Session) -> list[SweepCandidate]
             _proj.c.title.label("project_title"),
         )
         .select_from(
-            _blocker
-            .join(_r, or_(_blocker.c.id == _r.c.from_thing_id, _blocker.c.id == _r.c.to_thing_id))
+            _blocker.join(_r, or_(_blocker.c.id == _r.c.from_thing_id, _blocker.c.id == _r.c.to_thing_id))
             .join(_task, _task.c.id == _task_id_expr)
             .join(_rp, (_rp.c.to_thing_id == _task.c.id) & (_rp.c.relationship_type == "parent-of"))
-            .join(_proj, (_proj.c.id == _rp.c.from_thing_id) & (_proj.c.type_hint == "project") & (_proj.c.active == True))  # noqa: E712
+            .join(
+                _proj, (_proj.c.id == _rp.c.from_thing_id) & (_proj.c.type_hint == "project") & (_proj.c.active == True)
+            )  # noqa: E712
         )
         .where(
             _blocker.c.active == True,  # noqa: E712
@@ -1102,6 +1084,7 @@ def find_cross_project_shared_blockers(session: Session) -> list[SweepCandidate]
 
     # Aggregate: group by blocker, collect distinct project titles
     from collections import defaultdict
+
     blocker_projects: dict[str, dict] = {}
     blocker_proj_titles: dict[str, set[str]] = defaultdict(set)
     for row in raw_rows:
@@ -1166,11 +1149,12 @@ def find_cross_project_resource_conflicts(
             _task.c.updated_at.label("task_updated_at"),
         )
         .select_from(
-            _person
-            .join(_r, or_(_person.c.id == _r.c.from_thing_id, _person.c.id == _r.c.to_thing_id))
+            _person.join(_r, or_(_person.c.id == _r.c.from_thing_id, _person.c.id == _r.c.to_thing_id))
             .join(_task, _task.c.id == _task_id_expr)
             .join(_rp, (_rp.c.to_thing_id == _task.c.id) & (_rp.c.relationship_type == "parent-of"))
-            .join(_proj, (_proj.c.id == _rp.c.from_thing_id) & (_proj.c.type_hint == "project") & (_proj.c.active == True))  # noqa: E712
+            .join(
+                _proj, (_proj.c.id == _rp.c.from_thing_id) & (_proj.c.type_hint == "project") & (_proj.c.active == True)
+            )  # noqa: E712
         )
         .where(
             _person.c.active == True,  # noqa: E712
@@ -1182,6 +1166,7 @@ def find_cross_project_resource_conflicts(
 
     # Aggregate per person: distinct projects, count stale tasks
     from collections import defaultdict
+
     person_info: dict[str, str] = {}
     person_projects: dict[str, set[str]] = defaultdict(set)
     person_stale: dict[str, int] = defaultdict(int)
@@ -1189,7 +1174,13 @@ def find_cross_project_resource_conflicts(
         person_info[row.person_id] = row.person_title
         person_projects[row.person_id].add(row.project_title)
         task_updated = row.task_updated_at
-        updated_str = task_updated.isoformat() if isinstance(task_updated, datetime) else str(task_updated) if task_updated else ""
+        updated_str = (
+            task_updated.isoformat()
+            if isinstance(task_updated, datetime)
+            else str(task_updated)
+            if task_updated
+            else ""
+        )
         if updated_str and updated_str < stale_cutoff:
             person_stale[row.person_id] += 1
 
@@ -1237,8 +1228,9 @@ def find_cross_project_thematic_connections(
     stmt = (
         select(_t.c.id, _t.c.title, _rp.c.from_thing_id.label("parent_id"), _p.c.title.label("project_title"))
         .select_from(
-            _t.join(_rp, (_rp.c.to_thing_id == _t.c.id) & (_rp.c.relationship_type == "parent-of"))
-            .join(_p, (_p.c.id == _rp.c.from_thing_id) & (_p.c.type_hint == "project") & (_p.c.active == True))  # noqa: E712
+            _t.join(_rp, (_rp.c.to_thing_id == _t.c.id) & (_rp.c.relationship_type == "parent-of")).join(
+                _p, (_p.c.id == _rp.c.from_thing_id) & (_p.c.type_hint == "project") & (_p.c.active == True)
+            )  # noqa: E712
         )
         .where(_t.c.active == True)  # noqa: E712
         .order_by(_t.c.title)
@@ -1327,8 +1319,9 @@ def find_cross_project_duplicate_effort(
             _p2.c.title.label("proj_title_b"),
         )
         .select_from(
-            _t1
-            .join(_t2, (_t1.c.id < _t2.c.id) & (func.lower(func.trim(_t1.c.title)) == func.lower(func.trim(_t2.c.title))))
+            _t1.join(
+                _t2, (_t1.c.id < _t2.c.id) & (func.lower(func.trim(_t1.c.title)) == func.lower(func.trim(_t2.c.title)))
+            )
             .join(_rp1, (_rp1.c.to_thing_id == _t1.c.id) & (_rp1.c.relationship_type == "parent-of"))
             .join(_p1, (_p1.c.id == _rp1.c.from_thing_id) & (_p1.c.type_hint == "project") & (_p1.c.active == True))  # noqa: E712
             .join(_rp2, (_rp2.c.to_thing_id == _t2.c.id) & (_rp2.c.relationship_type == "parent-of"))
@@ -1350,8 +1343,7 @@ def find_cross_project_duplicate_effort(
                 thing_title=row.title_a,
                 finding_type="cross_project_duplicate_effort",
                 message=(
-                    f'Possible duplicate: "{row.title_a}" exists in both '
-                    f"{row.proj_title_a} and {row.proj_title_b}"
+                    f'Possible duplicate: "{row.title_a}" exists in both {row.proj_title_a} and {row.proj_title_b}'
                 ),
                 priority=2,
                 extra={
@@ -1448,28 +1440,22 @@ def dismiss_stale_findings(user_id: str = "") -> int:
             select(ThingRecord.id).where(ThingRecord.active == False)  # noqa: E712
         ).all()
         if inactive_thing_ids:
-            stmt_inactive = (
-                select(SweepFindingRecord)
-                .where(
-                    SweepFindingRecord.dismissed == False,  # noqa: E712
-                    SweepFindingRecord.thing_id.is_not(None),  # type: ignore[union-attr]
-                    SweepFindingRecord.thing_id.in_(inactive_thing_ids),  # type: ignore[union-attr]
-                    user_filter_clause(SweepFindingRecord.user_id, user_id),
-                )
+            stmt_inactive = select(SweepFindingRecord).where(
+                SweepFindingRecord.dismissed == False,  # noqa: E712
+                SweepFindingRecord.thing_id.is_not(None),  # type: ignore[union-attr]
+                SweepFindingRecord.thing_id.in_(inactive_thing_ids),  # type: ignore[union-attr]
+                user_filter_clause(SweepFindingRecord.user_id, user_id),
             )
             for finding in session.exec(stmt_inactive).all():
                 finding.dismissed = True
                 total += 1
 
         # Dismiss expired findings
-        stmt_expired = (
-            select(SweepFindingRecord)
-            .where(
-                SweepFindingRecord.dismissed == False,  # noqa: E712
-                SweepFindingRecord.expires_at.is_not(None),  # type: ignore[union-attr]
-                SweepFindingRecord.expires_at < now,  # type: ignore[operator]
-                user_filter_clause(SweepFindingRecord.user_id, user_id),
-            )
+        stmt_expired = select(SweepFindingRecord).where(
+            SweepFindingRecord.dismissed == False,  # noqa: E712
+            SweepFindingRecord.expires_at.is_not(None),  # type: ignore[union-attr]
+            SweepFindingRecord.expires_at < now,  # type: ignore[operator]
+            user_filter_clause(SweepFindingRecord.user_id, user_id),
         )
         for finding in session.exec(stmt_expired).all():
             finding.dismissed = True
@@ -1521,9 +1507,7 @@ def _format_active_findings_for_prompt(findings: list[dict]) -> str:
     ]
     for i, f in enumerate(findings, 1):
         thing_info = f" (thing: {f['thing_title']})" if f.get("thing_title") else ""
-        lines.append(
-            f"{i}. [priority {f['priority']}] \"{f['message']}\"{thing_info}"
-        )
+        lines.append(f'{i}. [priority {f["priority"]}] "{f["message"]}"{thing_info}')
     lines.append("")
     lines.append("Generate NEW insights only. Skip anything already covered above.")
     return "\n".join(lines)
@@ -1678,17 +1662,19 @@ async def reflect_on_candidates(
                 expires_at = (now + timedelta(days=int(expires_in))).isoformat()
 
             finding_id = f"sf-{uuid.uuid4().hex[:8]}"
-            session.add(SweepFindingRecord(
-                id=finding_id,
-                thing_id=thing_id,
-                finding_type="llm_insight",
-                message=message,
-                priority=priority,
-                dismissed=False,
-                created_at=now,
-                expires_at=datetime.fromisoformat(expires_at) if expires_at else None,
-                user_id=user_id or None,
-            ))
+            session.add(
+                SweepFindingRecord(
+                    id=finding_id,
+                    thing_id=thing_id,
+                    finding_type="llm_insight",
+                    message=message,
+                    priority=priority,
+                    dismissed=False,
+                    created_at=now,
+                    expires_at=datetime.fromisoformat(expires_at) if expires_at else None,
+                    user_id=user_id or None,
+                )
+            )
             created.append(
                 {
                     "id": finding_id,
@@ -1904,8 +1890,8 @@ async def breakdown_broad_things(
     If candidates is provided, the DB query is skipped.
     At most batch_size candidates are sent to the LLM per call.
     """
-    from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
     from . import tools as _tools
+    from .agents import REQUESTY_REASONING_MODEL, UsageStats, _chat
 
     if candidates is None:
         with Session(_engine_mod.engine) as session:
@@ -1989,7 +1975,9 @@ async def breakdown_broad_things(
                 if "error" in rel:
                     logger.warning(
                         "Failed to link subtask '%s' to parent %s: %s",
-                        subtask_title, thing_id, rel["error"],
+                        subtask_title,
+                        thing_id,
+                        rel["error"],
                     )
                     continue  # don't count — it's an orphan
                 if rel.get("status") != "duplicate":
@@ -2003,17 +1991,19 @@ async def breakdown_broad_things(
                 if len(created_titles) > 3:
                     titles_str += f" (+{len(created_titles) - 3} more)"
                 finding_id = f"sf-{uuid.uuid4().hex[:8]}"
-                session.add(SweepFindingRecord(
-                    id=finding_id,
-                    thing_id=thing_id,
-                    finding_type="task_breakdown",
-                    message=f"Created subtasks for {parent_title}: {titles_str}",
-                    priority=2,
-                    dismissed=False,
-                    created_at=now,
-                    expires_at=now + timedelta(days=7),
-                    user_id=user_id or None,
-                ))
+                session.add(
+                    SweepFindingRecord(
+                        id=finding_id,
+                        thing_id=thing_id,
+                        finding_type="task_breakdown",
+                        message=f"Created subtasks for {parent_title}: {titles_str}",
+                        priority=2,
+                        dismissed=False,
+                        created_at=now,
+                        expires_at=now + timedelta(days=7),
+                        user_id=user_id or None,
+                    )
+                )
         session.commit()
 
     return BreakdownResult(
@@ -2122,14 +2112,11 @@ def _detect_title_shortening(
     # Now check: among created Things, how many were later updated with shorter titles?
     # We query for Things that were created in the lookback period and have been
     # updated with a shorter title.
-    stmt2 = (
-        select(ChatHistoryRecord.applied_changes)
-        .where(
-            ChatHistoryRecord.role == "assistant",
-            ChatHistoryRecord.applied_changes.is_not(None),  # type: ignore[union-attr]
-            ChatHistoryRecord.timestamp >= cutoff,
-            user_filter_clause(ChatHistoryRecord.user_id, user_id),
-        )
+    stmt2 = select(ChatHistoryRecord.applied_changes).where(
+        ChatHistoryRecord.role == "assistant",
+        ChatHistoryRecord.applied_changes.is_not(None),  # type: ignore[union-attr]
+        ChatHistoryRecord.timestamp >= cutoff,
+        user_filter_clause(ChatHistoryRecord.user_id, user_id),
     )
     created_rows = session.exec(stmt2).all()  # type: ignore[arg-type]
 
@@ -2416,14 +2403,11 @@ def _upsert_sweep_preference(user_id: str, new_patterns: list[dict]) -> None:
     """
     with Session(_engine_mod.engine) as session:
         # Find existing sweep-learned preference Thing
-        stmt = (
-            select(ThingRecord)
-            .where(
-                ThingRecord.title == _SWEEP_PREF_TITLE,
-                ThingRecord.type_hint == "preference",
-                ThingRecord.active == True,  # noqa: E712
-                user_filter_clause(ThingRecord.user_id, user_id),
-            )
+        stmt = select(ThingRecord).where(
+            ThingRecord.title == _SWEEP_PREF_TITLE,
+            ThingRecord.type_hint == "preference",
+            ThingRecord.active == True,  # noqa: E712
+            user_filter_clause(ThingRecord.user_id, user_id),
         )
         existing = session.exec(stmt).first()  # type: ignore[arg-type]
 
@@ -2445,16 +2429,18 @@ def _upsert_sweep_preference(user_id: str, new_patterns: list[dict]) -> None:
         else:
             # Create new preference Thing
             now = datetime.now(timezone.utc)
-            session.add(ThingRecord(
-                id=f"t-sweep-{uuid.uuid4().hex[:8]}",
-                title=_SWEEP_PREF_TITLE,
-                type_hint="preference",
-                active=True,
-                data={"patterns": new_patterns},
-                created_at=now,
-                updated_at=now,
-                user_id=user_id or None,
-            ))
+            session.add(
+                ThingRecord(
+                    id=f"t-sweep-{uuid.uuid4().hex[:8]}",
+                    title=_SWEEP_PREF_TITLE,
+                    type_hint="preference",
+                    active=True,
+                    data={"patterns": new_patterns},
+                    created_at=now,
+                    updated_at=now,
+                    user_id=user_id or None,
+                )
+            )
         session.commit()
 
 

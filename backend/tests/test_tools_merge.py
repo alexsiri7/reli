@@ -1,8 +1,6 @@
 """Tests for tools.merge_things() edge cases."""
 
-import json
-
-from backend.tools import create_thing, create_relationship, merge_things, get_thing
+from backend.tools import create_relationship, create_thing, get_thing, merge_things
 
 
 class TestMergeThings:
@@ -46,8 +44,9 @@ class TestMergeThings:
     def test_merge_records_history(self, patched_db):
         """Merge creates a MergeHistoryRecord."""
         from sqlmodel import Session, select
-        from backend.db_models import MergeHistoryRecord
+
         import backend.db_engine as engine_mod
+        from backend.db_models import MergeHistoryRecord
 
         a = create_thing(title="Keep")
         b = create_thing(title="Remove")

@@ -138,6 +138,7 @@ def _row_to_thing(row: Any) -> Thing:
 
 class UserProfileResponse(BaseModel):
     """The user's anchor Thing with its relationships."""
+
     thing: Thing
     relationships: list[Relationship]
     model_config = {"from_attributes": True}
@@ -145,6 +146,7 @@ class UserProfileResponse(BaseModel):
 
 class UserProfileRelationship(BaseModel):
     """A relationship resolved with the related Thing's title."""
+
     id: str
     relationship_type: str
     direction: str
@@ -154,6 +156,7 @@ class UserProfileRelationship(BaseModel):
 
 class UserProfileDetail(BaseModel):
     """The user's anchor Thing with resolved relationships."""
+
     thing: Thing
     relationships: list[UserProfileRelationship]
 
@@ -212,14 +215,19 @@ def get_open_questions(
     session: Session = Depends(get_session),
 ) -> list[Thing]:
     """Return active Things that have non-empty open_questions arrays."""
-    stmt = select(ThingRecord).where(
-        ThingRecord.active == True,
-        ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
-        user_filter_clause(ThingRecord.user_id, user_id),
-    ).order_by(
-        ThingRecord.importance.asc(),  # type: ignore[attr-defined]
-        ThingRecord.updated_at.desc(),  # type: ignore[attr-defined]
-    ).limit(limit)
+    stmt = (
+        select(ThingRecord)
+        .where(
+            ThingRecord.active == True,
+            ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+        .order_by(
+            ThingRecord.importance.asc(),  # type: ignore[attr-defined]
+            ThingRecord.updated_at.desc(),  # type: ignore[attr-defined]
+        )
+        .limit(limit)
+    )
     records = session.exec(stmt).all()
     return [_record_to_thing(r) for r in records if r.open_questions]
 
@@ -257,9 +265,7 @@ def search_things(
         direct_sql = text(
             "SELECT t.* FROM things t"
             " WHERE (t.title LIKE :pattern OR t.type_hint LIKE :pattern"
-            "        OR CAST(t.data AS TEXT) LIKE :pattern)"
-            + filters +
-            " ORDER BY t.updated_at DESC"
+            "        OR CAST(t.data AS TEXT) LIKE :pattern)" + filters + " ORDER BY t.updated_at DESC"
             " LIMIT :qlimit"
         )
         direct_rows = sess.execute(direct_sql, params).fetchall()
@@ -293,9 +299,7 @@ def search_things(
                 "            OR m.title LIKE :pattern"
                 "            OR CAST(m.data AS TEXT) LIKE :pattern)"
                 "   )"
-                " )"
-                + filters +
-                " ORDER BY t.updated_at DESC"
+                " )" + filters + " ORDER BY t.updated_at DESC"
                 " LIMIT :qlimit"
             )
             rel_rows = sess.execute(rel_sql, rel_params).fetchall()
@@ -325,10 +329,14 @@ def list_things(
     )
     if active_only:
         stmt = stmt.where(ThingRecord.active == True)
-    stmt = stmt.order_by(
-        ThingRecord.checkin_date.asc(),  # type: ignore[union-attr, attr-defined]
-        ThingRecord.importance.asc(),  # type: ignore[attr-defined]
-    ).limit(limit).offset(offset)
+    stmt = (
+        stmt.order_by(
+            ThingRecord.checkin_date.asc(),  # type: ignore[union-attr, attr-defined]
+            ThingRecord.importance.asc(),  # type: ignore[attr-defined]
+        )
+        .limit(limit)
+        .offset(offset)
+    )
     records = session.exec(stmt).all()
     things = [_record_to_thing(r) for r in records]
 
@@ -420,9 +428,7 @@ def get_graph(
     nodes = [GraphNode(id=r.id, title=r.title, type_hint=r.type_hint, icon=r.icon) for r in node_rows]
     active_ids = {n.id for n in nodes}
     edges = [
-        GraphEdge(
-            id=r.id, source=r.from_thing_id, target=r.to_thing_id, relationship_type=r.relationship_type
-        )
+        GraphEdge(id=r.id, source=r.from_thing_id, target=r.to_thing_id, relationship_type=r.relationship_type)
         for r in edge_rows
         if r.to_thing_id in active_ids
     ]
@@ -460,6 +466,7 @@ def create_thing(
 
 
 # -- Merge history --
+
 
 @router.get(
     "/merge-history",
@@ -584,11 +591,12 @@ def reindex_things(user_id: str = Depends(require_user)) -> dict[str, int]:
 
 # -- Merge suggestions & execution --
 
+
 def _normalize(title: str) -> str:
     t = title.lower().strip()
     for prefix in ("my ", "the ", "a ", "an "):
         if t.startswith(prefix):
-            return t[len(prefix):]
+            return t[len(prefix) :]
     return t
 
 
@@ -615,10 +623,14 @@ def get_merge_suggestions(
     session: Session = Depends(get_session),
 ) -> list[MergeSuggestion]:
     """Find pairs of active Things with similar titles."""
-    stmt = select(ThingRecord).where(
-        ThingRecord.active == True,
-        user_filter_clause(ThingRecord.user_id, user_id),
-    ).order_by(ThingRecord.title)
+    stmt = (
+        select(ThingRecord)
+        .where(
+            ThingRecord.active == True,
+            user_filter_clause(ThingRecord.user_id, user_id),
+        )
+        .order_by(ThingRecord.title)
+    )
     records = session.exec(stmt).all()
 
     suggestions: list[MergeSuggestion] = []
@@ -703,14 +715,20 @@ def merge_things(
     keep_rec.updated_at = now
 
     # 3. Re-point relationships
-    for rel in session.exec(select(ThingRelationshipRecord).where(ThingRelationshipRecord.from_thing_id == body.remove_id)).all():
+    for rel in session.exec(
+        select(ThingRelationshipRecord).where(ThingRelationshipRecord.from_thing_id == body.remove_id)
+    ).all():
         rel.from_thing_id = body.keep_id
-    for rel in session.exec(select(ThingRelationshipRecord).where(ThingRelationshipRecord.to_thing_id == body.remove_id)).all():
+    for rel in session.exec(
+        select(ThingRelationshipRecord).where(ThingRelationshipRecord.to_thing_id == body.remove_id)
+    ).all():
         rel.to_thing_id = body.keep_id
-    for rel in session.exec(select(ThingRelationshipRecord).where(
-        ThingRelationshipRecord.from_thing_id == body.keep_id,
-        ThingRelationshipRecord.to_thing_id == body.keep_id,
-    )).all():
+    for rel in session.exec(
+        select(ThingRelationshipRecord).where(
+            ThingRelationshipRecord.from_thing_id == body.keep_id,
+            ThingRelationshipRecord.to_thing_id == body.keep_id,
+        )
+    ).all():
         session.delete(rel)
 
     # 4. Delete the duplicate
@@ -746,15 +764,14 @@ def merge_things(
 
 # -- Orphan relationship management --
 
+
 @router.get("/relationships/orphans", response_model=list[Relationship], summary="Find orphan relationships")
 def get_orphan_relationships(
     user_id: str = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> list[Relationship]:
     """Return relationships where from_thing_id or to_thing_id doesn't exist."""
-    thing_ids = select(ThingRecord.id).where(
-        user_filter_clause(ThingRecord.user_id, user_id)
-    )
+    thing_ids = select(ThingRecord.id).where(user_filter_clause(ThingRecord.user_id, user_id))
     stmt = select(ThingRelationshipRecord).where(
         or_(
             ThingRelationshipRecord.from_thing_id.not_in(thing_ids),  # type: ignore[union-attr]
@@ -771,9 +788,7 @@ def cleanup_orphan_relationships(
     user_id: str = Depends(require_user),
 ) -> OrphanCleanupResult:
     """Delete all orphan relationships where from/to thing no longer exists."""
-    thing_ids_subq = select(ThingRecord.id).where(
-        user_filter_clause(ThingRecord.user_id, user_id)
-    )
+    thing_ids_subq = select(ThingRecord.id).where(user_filter_clause(ThingRecord.user_id, user_id))
     orphans = session.exec(
         select(ThingRelationshipRecord).where(
             or_(
@@ -792,6 +807,7 @@ def cleanup_orphan_relationships(
 
 
 # -- Relationships --
+
 
 def _parse_rel_row(row: Any) -> Relationship:
     """Convert a Row or SQLModel record to a Relationship response model."""
@@ -895,10 +911,7 @@ def delete_relationship(
     if user_id:
         from_thing = session.get(ThingRecord, record.from_thing_id)
         to_thing = session.get(ThingRecord, record.to_thing_id)
-        if not (
-            (from_thing and from_thing.user_id == user_id)
-            or (to_thing and to_thing.user_id == user_id)
-        ):
+        if not ((from_thing and from_thing.user_id == user_id) or (to_thing and to_thing.user_id == user_id)):
             raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
     session.delete(record)
     session.commit()

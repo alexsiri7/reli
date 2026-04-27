@@ -30,6 +30,7 @@ from datetime import datetime, timedelta, timezone
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
+
 from .db_engine import user_filter_clause
 from .db_models import ChatHistoryRecord, ThingRecord
 
@@ -500,7 +501,7 @@ def _format_interactions_for_comm_style(
             for p in patterns:
                 conf = p.get("confidence", "emerging")
                 obs = p.get("observations", 1)
-                lines.append(f"  - \"{p['pattern']}\" (confidence={conf}, observations={obs})")
+                lines.append(f'  - "{p["pattern"]}" (confidence={conf}, observations={obs})')
 
     return "\n".join(lines)
 
@@ -584,9 +585,7 @@ async def aggregate_communication_style_patterns(
     # Remove contradicted patterns
     contradicted_lower = {c.lower() for c in contradicted_names}
     before_count = len(merged_patterns)
-    merged_patterns = [
-        p for p in merged_patterns if p["pattern"].lower() not in contradicted_lower
-    ]
+    merged_patterns = [p for p in merged_patterns if p["pattern"].lower() not in contradicted_lower]
     patterns_removed = before_count - len(merged_patterns)
 
     # Reinforce existing patterns

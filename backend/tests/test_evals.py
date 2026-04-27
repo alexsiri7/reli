@@ -32,14 +32,12 @@ import json
 import os
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import litellm
 import pytest
-
 from google.adk.agents import LlmAgent
 from google.adk.evaluation.eval_case import EvalCase
-from google.adk.evaluation.eval_metrics import EvalMetric, EvalStatus
 from google.adk.evaluation.evaluation_generator import EvaluationGenerator
 from google.adk.evaluation.simulation.user_simulator_provider import UserSimulatorProvider
 from google.adk.evaluation.trajectory_evaluator import get_all_tool_calls
@@ -147,8 +145,7 @@ async def _run_tool_name_eval(
     if failures:
         failure_details = "\n  ".join(failures)
         assert avg_score >= threshold, (
-            f"Tool name trajectory score {avg_score:.2f} below threshold {threshold}.\n"
-            f"Failures:\n  {failure_details}"
+            f"Tool name trajectory score {avg_score:.2f} below threshold {threshold}.\nFailures:\n  {failure_details}"
         )
 
 
@@ -432,8 +429,7 @@ async def _run_response_agent_eval(
     if failures:
         details = "\n  ".join(failures)
         assert avg_score >= threshold, (
-            f"Response agent eval score {avg_score:.2f} below threshold {threshold}.\n"
-            f"Failures:\n  {details}"
+            f"Response agent eval score {avg_score:.2f} below threshold {threshold}.\nFailures:\n  {details}"
         )
 
 

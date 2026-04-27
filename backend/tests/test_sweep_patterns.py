@@ -5,9 +5,9 @@ from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlmodel import Session
 
 import backend.db_engine as _engine_mod
-from sqlmodel import Session
 from backend.sweep import (
     _SWEEP_PREF_TITLE,
     BehavioralSignal,

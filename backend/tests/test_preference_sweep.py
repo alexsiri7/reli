@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlmodel import Session
 
 import backend.db_engine as _engine_mod
-from sqlmodel import Session
 from backend.preference_sweep import (
     MIN_INTERACTIONS,
     _fetch_communication_style_things,
@@ -418,9 +418,14 @@ class TestAggregatePreferencePatterns:
 
 class TestFetchCommunicationStyleThings:
     def test_fetches_reli_communication_things(self, patched_db, db):
-        comm_data = {"category": "reli_communication", "patterns": [{"pattern": "no emoji", "confidence": "emerging", "observations": 1}]}
+        comm_data = {
+            "category": "reli_communication",
+            "patterns": [{"pattern": "no emoji", "confidence": "emerging", "observations": 1}],
+        }
         with db() as conn:
-            _insert_thing(conn, "pref-comm", "How user wants Reli to communicate", type_hint="preference", data=comm_data)
+            _insert_thing(
+                conn, "pref-comm", "How user wants Reli to communicate", type_hint="preference", data=comm_data
+            )
             _insert_thing(conn, "pref-sched", "Likes mornings", type_hint="preference", data={"category": "scheduling"})
 
         with Session(_engine_mod.engine) as session:
@@ -461,7 +466,13 @@ class TestFetchExistingPreferencesExclusion:
         comm_data = {"category": "reli_communication", "patterns": []}
         with db() as conn:
             _insert_thing(conn, "pref-comm", "Comm pref", type_hint="preference", data=comm_data)
-            _insert_thing(conn, "pref-sched", "Schedule pref", type_hint="preference", data={"category": "scheduling", "confidence": 0.6})
+            _insert_thing(
+                conn,
+                "pref-sched",
+                "Schedule pref",
+                type_hint="preference",
+                data={"category": "scheduling", "confidence": 0.6},
+            )
 
         with Session(_engine_mod.engine) as session:
             results = _fetch_existing_preferences(session)
@@ -497,11 +508,13 @@ class TestAggregateCommunicationStylePatterns:
                 _insert_chat_message(conn, "user", f"just tell me {i}")
                 _insert_chat_message(conn, "assistant", f"Response {i}")
 
-        llm_response = json.dumps({
-            "detected": [{"pattern": "prefers concise responses", "explicit": False, "signal_count": 1}],
-            "reinforced": [],
-            "contradicted": [],
-        })
+        llm_response = json.dumps(
+            {
+                "detected": [{"pattern": "prefers concise responses", "explicit": False, "signal_count": 1}],
+                "reinforced": [],
+                "contradicted": [],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_communication_style_patterns()
@@ -510,9 +523,7 @@ class TestAggregateCommunicationStylePatterns:
         assert result.thing_id is not None
 
         with db() as conn:
-            row = conn.execute(
-                "SELECT * FROM things WHERE id = ?", (result.thing_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM things WHERE id = ?", (result.thing_id,)).fetchone()
         assert row is not None
         data = json.loads(row["data"])
         assert data["category"] == "reli_communication"
@@ -528,11 +539,13 @@ class TestAggregateCommunicationStylePatterns:
                 _insert_chat_message(conn, "user", f"stop using emoji {i}")
                 _insert_chat_message(conn, "assistant", f"Got it {i}")
 
-        llm_response = json.dumps({
-            "detected": [{"pattern": "avoids emoji", "explicit": True, "signal_count": 1}],
-            "reinforced": [],
-            "contradicted": [],
-        })
+        llm_response = json.dumps(
+            {
+                "detected": [{"pattern": "avoids emoji", "explicit": True, "signal_count": 1}],
+                "reinforced": [],
+                "contradicted": [],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_communication_style_patterns()
@@ -551,16 +564,20 @@ class TestAggregateCommunicationStylePatterns:
             "patterns": [{"pattern": "prefers concise responses", "confidence": "emerging", "observations": 1}],
         }
         with db() as conn:
-            _insert_thing(conn, "pref-comm", "How user wants Reli to communicate", type_hint="preference", data=comm_data)
+            _insert_thing(
+                conn, "pref-comm", "How user wants Reli to communicate", type_hint="preference", data=comm_data
+            )
             for i in range(MIN_INTERACTIONS + 2):
                 _insert_chat_message(conn, "user", f"just tell me {i}")
                 _insert_chat_message(conn, "assistant", f"Response {i}")
 
-        llm_response = json.dumps({
-            "detected": [],
-            "reinforced": ["prefers concise responses"],
-            "contradicted": [],
-        })
+        llm_response = json.dumps(
+            {
+                "detected": [],
+                "reinforced": ["prefers concise responses"],
+                "contradicted": [],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_communication_style_patterns()
@@ -590,11 +607,13 @@ class TestAggregateCommunicationStylePatterns:
                 _insert_chat_message(conn, "user", f"actually use emoji now {i}")
                 _insert_chat_message(conn, "assistant", f"OK {i}")
 
-        llm_response = json.dumps({
-            "detected": [],
-            "reinforced": [],
-            "contradicted": ["avoids emoji"],
-        })
+        llm_response = json.dumps(
+            {
+                "detected": [],
+                "reinforced": [],
+                "contradicted": ["avoids emoji"],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_communication_style_patterns()
@@ -630,12 +649,8 @@ class TestAggregateCommunicationStylePatterns:
 
         # Primary Thing updated with both patterns
         with db() as conn:
-            active = conn.execute(
-                "SELECT id, data FROM things WHERE type_hint='preference' AND active=1"
-            ).fetchall()
-            inactive = conn.execute(
-                "SELECT id FROM things WHERE type_hint='preference' AND active=0"
-            ).fetchall()
+            active = conn.execute("SELECT id, data FROM things WHERE type_hint='preference' AND active=1").fetchall()
+            inactive = conn.execute("SELECT id FROM things WHERE type_hint='preference' AND active=0").fetchall()
 
         active_comm = [r for r in active if json.loads(r["data"]).get("category") == "reli_communication"]
         assert len(active_comm) == 1  # consolidated into one

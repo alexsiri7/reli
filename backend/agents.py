@@ -36,8 +36,7 @@ def _load_config() -> dict[str, Any]:
             cfg = yaml.safe_load(f) or {}
     except FileNotFoundError:
         raise FileNotFoundError(
-            f"config.yaml not found at {_CONFIG_PATH}. "
-            "Copy config.yaml.example to config.yaml and set your models."
+            f"config.yaml not found at {_CONFIG_PATH}. Copy config.yaml.example to config.yaml and set your models."
         )
 
     # Validate required keys
@@ -769,6 +768,7 @@ def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
     from sqlmodel import Session, select
 
     import backend.db_engine as _engine_mod
+
     from .db_engine import user_filter_clause
     from .db_models import ThingRecord
 
@@ -777,13 +777,10 @@ def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
     # Select data as raw text to avoid SQLAlchemy's JSON processor failing
     # on malformed data that may exist in older records.
     with Session(_engine_mod.engine) as session:
-        stmt = (
-            select(cast(ThingRecord.data, String))
-            .where(
-                ThingRecord.type_hint == "preference",
-                ThingRecord.active == True,
-                user_filter_clause(ThingRecord.user_id, user_id),
-            )
+        stmt = select(cast(ThingRecord.data, String)).where(
+            ThingRecord.type_hint == "preference",
+            ThingRecord.active == True,
+            user_filter_clause(ThingRecord.user_id, user_id),
         )
         rows = session.exec(stmt).all()
 

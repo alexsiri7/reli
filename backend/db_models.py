@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import JSON, Column, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
-from pgvector.sqlalchemy import Vector
 from sqlmodel import Field, SQLModel
 
 # SQL-level server defaults so raw INSERT statements (used in tests and
@@ -119,9 +119,7 @@ class ChatHistoryRecord(SQLModel, table=True):
     session_id: str
     role: str
     content: str
-    applied_changes: dict[str, Any] | None = Field(
-        default=None, sa_column=Column(_JSON, nullable=True)
-    )
+    applied_changes: dict[str, Any] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
     prompt_tokens: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     completion_tokens: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     cost_usd: float = Field(default=0.0, sa_column_kwargs={"server_default": "0.0"})
@@ -293,9 +291,7 @@ class MergeHistoryRecord(SQLModel, table=True):
     remove_id: str
     keep_title: str
     remove_title: str
-    merged_data: dict[str, Any] | None = Field(
-        default=None, sa_column=Column(_JSON, nullable=True)
-    )
+    merged_data: dict[str, Any] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
     triggered_by: str = Field(default="api", sa_column_kwargs={"server_default": "'api'"})
     user_id: str | None = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})

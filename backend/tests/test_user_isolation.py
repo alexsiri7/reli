@@ -6,15 +6,14 @@ Thing's owner.
 """
 
 from backend.tools import (
-    create_thing,
-    update_thing,
-    delete_thing,
-    merge_things,
     create_relationship,
+    create_thing,
     delete_relationship,
+    delete_thing,
     get_user_profile,
+    merge_things,
+    update_thing,
 )
-
 
 USER_A = "user-a"
 USER_B = "user-b"

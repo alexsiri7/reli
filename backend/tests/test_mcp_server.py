@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import jwt
@@ -11,7 +10,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.mcp_server import (
-    chat_history,
     context_agent_prompt,
     create_relationship,
     create_thing,
@@ -43,8 +41,11 @@ class TestFetchContext:
         mock_fetch.return_value = {"things": [{"id": "t1", "title": "Buy milk"}], "relationships": [], "count": 1}
         result = fetch_context(search_queries=["milk"])
         mock_fetch.assert_called_once_with(
-            search_queries_json='["milk"]', fetch_ids_json="[]",
-            active_only=True, type_hint="", user_id="",
+            search_queries_json='["milk"]',
+            fetch_ids_json="[]",
+            active_only=True,
+            type_hint="",
+            user_id="",
         )
         assert result["count"] == 1
 
@@ -93,8 +94,13 @@ class TestGetUserProfile:
         profile = {
             "thing": {"id": "p1", "title": "Alice", "type_hint": "person"},
             "relationships": [
-                {"id": "r1", "relationship_type": "works_at", "direction": "outgoing",
-                 "related_thing_id": "t2", "related_thing_title": "Acme Corp"},
+                {
+                    "id": "r1",
+                    "relationship_type": "works_at",
+                    "direction": "outgoing",
+                    "related_thing_id": "t2",
+                    "related_thing_title": "Acme Corp",
+                },
             ],
         }
         mock_get.return_value = profile
@@ -1157,6 +1163,5 @@ class TestSessionManagerRestart:
             # The session manager is running — it handles the request (400/422/200 are all ok;
             # 500 means the task group was not restarted).
             assert resp.status_code != 500, (
-                f"MCP returned 500 — session manager task group was not restarted. "
-                f"Response: {resp.text}"
+                f"MCP returned 500 — session manager task group was not restarted. Response: {resp.text}"
             )

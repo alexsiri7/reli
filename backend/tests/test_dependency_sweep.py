@@ -175,16 +175,20 @@ class TestDetectClusterDependencies:
         _insert_relationship(db, proj, task_a_id, "parent-of")
         _insert_relationship(db, proj, task_b_id, "parent-of")
 
-        mock_response = json.dumps({
-            "dependencies": [{
-                "from_id": task_a_id,
-                "to_id": task_b_id,
-                "relationship_type": "depends-on",
-                "reason": "Flights must wait for holiday approval",
-                "confidence": 0.85,
-            }],
-            "conflicts": [],
-        })
+        mock_response = json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "from_id": task_a_id,
+                        "to_id": task_b_id,
+                        "relationship_type": "depends-on",
+                        "reason": "Flights must wait for holiday approval",
+                        "confidence": 0.85,
+                    }
+                ],
+                "conflicts": [],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_response):
             result = await run_dependency_sweep()
@@ -204,16 +208,20 @@ class TestDetectClusterDependencies:
         _insert_relationship(db, proj, task_a_id, "parent-of")
         _insert_relationship(db, proj, task_b_id, "parent-of")
 
-        mock_response = json.dumps({
-            "dependencies": [{
-                "from_id": task_a_id,
-                "to_id": task_b_id,
-                "relationship_type": "depends-on",
-                "reason": "Maybe related",
-                "confidence": 0.3,
-            }],
-            "conflicts": [],
-        })
+        mock_response = json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "from_id": task_a_id,
+                        "to_id": task_b_id,
+                        "relationship_type": "depends-on",
+                        "reason": "Maybe related",
+                        "confidence": 0.3,
+                    }
+                ],
+                "conflicts": [],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_response):
             result = await run_dependency_sweep()
@@ -229,16 +237,20 @@ class TestDetectClusterDependencies:
         _insert_relationship(db, proj, task_a_id, "parent-of")
         _insert_relationship(db, proj, task_b_id, "parent-of")
 
-        mock_response = json.dumps({
-            "dependencies": [],
-            "conflicts": [{
-                "thing_id": task_a_id,
-                "related_thing_ids": [task_b_id],
-                "message": "Can't book flights before holidays are approved!",
-                "severity": "warning",
-                "priority": 1,
-            }],
-        })
+        mock_response = json.dumps(
+            {
+                "dependencies": [],
+                "conflicts": [
+                    {
+                        "thing_id": task_a_id,
+                        "related_thing_ids": [task_b_id],
+                        "message": "Can't book flights before holidays are approved!",
+                        "severity": "warning",
+                        "priority": 1,
+                    }
+                ],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_response):
             result = await run_dependency_sweep()
@@ -275,28 +287,34 @@ class TestDetectClusterDependencies:
 
         # Pre-insert existing suggestion
         with Session(_engine_mod.engine) as session:
-            session.add(ConnectionSuggestionRecord(
-                id="cs-existing",
-                from_thing_id=task_a_id,
-                to_thing_id=task_b_id,
-                suggested_relationship_type="depends-on",
-                reason="existing",
-                confidence=0.8,
-                status="pending",
-                created_at=datetime.now(timezone.utc),
-            ))
+            session.add(
+                ConnectionSuggestionRecord(
+                    id="cs-existing",
+                    from_thing_id=task_a_id,
+                    to_thing_id=task_b_id,
+                    suggested_relationship_type="depends-on",
+                    reason="existing",
+                    confidence=0.8,
+                    status="pending",
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
             session.commit()
 
-        mock_response = json.dumps({
-            "dependencies": [{
-                "from_id": task_a_id,
-                "to_id": task_b_id,
-                "relationship_type": "depends-on",
-                "reason": "again",
-                "confidence": 0.9,
-            }],
-            "conflicts": [],
-        })
+        mock_response = json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "from_id": task_a_id,
+                        "to_id": task_b_id,
+                        "relationship_type": "depends-on",
+                        "reason": "again",
+                        "confidence": 0.9,
+                    }
+                ],
+                "conflicts": [],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_response):
             result = await run_dependency_sweep()
@@ -314,29 +332,35 @@ class TestDetectClusterDependencies:
 
         # Pre-insert suggestion in REVERSE direction (B→A)
         with Session(_engine_mod.engine) as session:
-            session.add(ConnectionSuggestionRecord(
-                id="cs-rev",
-                from_thing_id=task_b_id,
-                to_thing_id=task_a_id,
-                suggested_relationship_type="depends-on",
-                reason="existing reverse",
-                confidence=0.8,
-                status="pending",
-                created_at=datetime.now(timezone.utc),
-            ))
+            session.add(
+                ConnectionSuggestionRecord(
+                    id="cs-rev",
+                    from_thing_id=task_b_id,
+                    to_thing_id=task_a_id,
+                    suggested_relationship_type="depends-on",
+                    reason="existing reverse",
+                    confidence=0.8,
+                    status="pending",
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
             session.commit()
 
         # LLM suggests A→B
-        mock_response = json.dumps({
-            "dependencies": [{
-                "from_id": task_a_id,
-                "to_id": task_b_id,
-                "relationship_type": "depends-on",
-                "reason": "should be skipped",
-                "confidence": 0.9,
-            }],
-            "conflicts": [],
-        })
+        mock_response = json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "from_id": task_a_id,
+                        "to_id": task_b_id,
+                        "relationship_type": "depends-on",
+                        "reason": "should be skipped",
+                        "confidence": 0.9,
+                    }
+                ],
+                "conflicts": [],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_response):
             result = await run_dependency_sweep()
@@ -353,16 +377,20 @@ class TestDetectClusterDependencies:
         _insert_relationship(db, proj, task_b_id, "parent-of")
         _insert_relationship(db, task_a_id, task_b_id, "depends-on")  # actual relationship
 
-        mock_response = json.dumps({
-            "dependencies": [{
-                "from_id": task_a_id,
-                "to_id": task_b_id,
-                "relationship_type": "depends-on",
-                "reason": "already related",
-                "confidence": 0.9,
-            }],
-            "conflicts": [],
-        })
+        mock_response = json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "from_id": task_a_id,
+                        "to_id": task_b_id,
+                        "relationship_type": "depends-on",
+                        "reason": "already related",
+                        "confidence": 0.9,
+                    }
+                ],
+                "conflicts": [],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_response):
             result = await run_dependency_sweep()
@@ -378,16 +406,20 @@ class TestDetectClusterDependencies:
         _insert_relationship(db, proj, task_a_id, "parent-of")
         _insert_relationship(db, proj, task_b_id, "parent-of")
 
-        mock_response = json.dumps({
-            "dependencies": [{
-                "from_id": "00000000-0000-0000-0000-000000000000",  # Not in cluster
-                "to_id": task_b_id,
-                "relationship_type": "depends-on",
-                "reason": "Hallucinated ID",
-                "confidence": 0.9,
-            }],
-            "conflicts": [],
-        })
+        mock_response = json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "from_id": "00000000-0000-0000-0000-000000000000",  # Not in cluster
+                        "to_id": task_b_id,
+                        "relationship_type": "depends-on",
+                        "reason": "Hallucinated ID",
+                        "confidence": 0.9,
+                    }
+                ],
+                "conflicts": [],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=mock_response):
             result = await run_dependency_sweep()

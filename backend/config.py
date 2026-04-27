@@ -117,9 +117,7 @@ class Settings(BaseSettings):
             }
             missing = [k for k, v in required.items() if not v]
             if missing:
-                raise ValueError(
-                    f"Missing required production env vars: {', '.join(missing)}"
-                )
+                raise ValueError(f"Missing required production env vars: {', '.join(missing)}")
         if not self.SECRET_KEY and not self.RELI_API_TOKEN:
             auth_disabled = os.getenv("AUTH_DISABLED", "").lower() in ("true", "1", "yes")
             if not auth_disabled:
