@@ -14,7 +14,7 @@ const MOCK_THINGS: Record<string, unknown>[] = [
     type_hint: 'task',
     parent_ids: null,
     checkin_date: null,
-    priority: 1,
+    importance: 1,
     active: true,
     surface: false,
     data: null,
@@ -31,7 +31,7 @@ const MOCK_THINGS: Record<string, unknown>[] = [
     type_hint: 'task',
     parent_ids: null,
     checkin_date: '2026-03-20',
-    priority: 2,
+    importance: 2,
     active: true,
     surface: false,
     data: null,
@@ -48,7 +48,7 @@ const MOCK_THINGS: Record<string, unknown>[] = [
     type_hint: 'note',
     parent_ids: null,
     checkin_date: '2026-03-25',
-    priority: 3,
+    importance: 3,
     active: true,
     surface: false,
     data: null,
@@ -65,7 +65,7 @@ const MOCK_THINGS: Record<string, unknown>[] = [
     type_hint: 'project',
     parent_ids: null,
     checkin_date: '2026-03-28',
-    priority: 1,
+    importance: 1,
     active: true,
     surface: true,
     data: null,
@@ -82,7 +82,7 @@ const MOCK_THINGS: Record<string, unknown>[] = [
     type_hint: 'person',
     parent_ids: null,
     checkin_date: '2026-04-01',
-    priority: 2,
+    importance: 2,
     active: true,
     surface: false,
     data: { email: 'sarah@designapex.com', phone: '+1-555-0123', role: 'Lead Designer, Studio Apex' },
@@ -99,7 +99,7 @@ const MOCK_THINGS: Record<string, unknown>[] = [
     type_hint: 'event',
     parent_ids: null,
     checkin_date: '2026-03-18',
-    priority: 3,
+    importance: 3,
     active: true,
     surface: false,
     data: { agenda_items: ['Q3 Performance Review and Strategic Pivot', 'Review creative direction for Zenith campaign', 'Resource allocation for product launch'] },
@@ -116,7 +116,7 @@ const MOCK_THINGS: Record<string, unknown>[] = [
     type_hint: 'idea',
     parent_ids: null,
     checkin_date: null,
-    priority: 4,
+    importance: 4,
     active: true,
     surface: false,
     data: null,
@@ -277,7 +277,17 @@ async function interceptApi(
   if (opts.briefing) {
     await page.route('**/api/briefing/morning', route =>
       route.fulfill({
-        json: { id: 'mb-1', content: { summary: 'Busy morning — you have a proposal draft due and 3 items to review.' }, generated_at: '2026-03-14T07:00:00Z' },
+        json: {
+          id: 'mb-1',
+          content: {
+            summary: 'Busy morning — you have a proposal draft due and 3 items to review.',
+            priorities: [],
+            overdue: [],
+            blockers: [],
+            findings: [],
+          },
+          generated_at: '2026-03-14T07:00:00Z',
+        },
         status: 200,
       })
     )
@@ -305,6 +315,33 @@ async function interceptApi(
   // Proactive surfaces
   await page.route('**/api/proactive?*', route =>
     route.fulfill({ json: opts.proactive ? [MOCK_PROACTIVE_SURFACE] : [], status: 200 })
+  )
+
+  // Nudges (Reli Suggestion card reads from nudges, not proactive)
+  await page.route('**/api/nudges', route =>
+    route.fulfill({
+      json: opts.proactive
+        ? [
+            {
+              id: 'nudge-1',
+              nudge_type: 'proactive',
+              message:
+                'Based on recent activity, you should prepare a review checklist before diving in.',
+              thing_id: 'thing-1',
+              thing_title: 'Review pull request for auth module',
+              thing_type_hint: 'task',
+              days_away: 0,
+              primary_action_label: 'Prepare Now',
+            },
+          ]
+        : [],
+      status: 200,
+    })
+  )
+
+  // Chat sessions (needed to prevent auth flow delay)
+  await page.route('**/api/chat/sessions', route =>
+    route.fulfill({ json: [], status: 200 })
   )
 
   // Version check (prevent network requests)
@@ -478,48 +515,59 @@ test.describe('Visual regression – reli frontend', () => {
     })
   })
 
-  test('briefing panel – populated (desktop)', async ({ page }) => {
-    await interceptApi(page, { things: true, briefing: true })
-    await page.setViewportSize({ width: 1280, height: 720 })
-    await page.goto('/')
-    await waitForApp(page)
-    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
-    const briefingPanel = page.locator('div.flex-1.flex.flex-col').first()
-    await expect(briefingPanel).toHaveScreenshot('briefing-panel-populated-desktop.png', {
-      ...SNAPSHOT_OPTS, animations: 'disabled',
-    })
-  })
+  test.describe('briefing panel', () => {
+    // Shared: wait for theOneThing to load using bounding-box check to avoid
+    // false negatives from display:contents parents or hidden duplicate panels.
+    async function waitForBriefingData(page: Page) {
+      await page.waitForFunction(
+        () => Array.from(document.querySelectorAll('p')).some(
+          p => p.textContent === 'Due Today' && p.getBoundingClientRect().width > 0
+        ),
+        { timeout: 10_000 }
+      )
+    }
 
-  test('briefing panel – populated (mobile)', async ({ page }) => {
-    await interceptApi(page, { things: true, briefing: true })
-    await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto('/')
-    // Mobile layout uses bottom nav bar instead of aside
-    await page.waitForSelector('nav.fixed.bottom-0', { timeout: 20_000 })
-    await page.addStyleTag({
-      content: `*, *::before, *::after {
-      animation-duration: 0s !important;
-      animation-delay: 0s !important;
-      transition-duration: 0s !important;
-    }`,
+    test('briefing panel – populated (desktop)', async ({ page }) => {
+      await interceptApi(page, { things: true, briefing: true })
+      await page.setViewportSize({ width: 1280, height: 720 })
+      await page.goto('/')
+      await waitForApp(page)
+      await waitForBriefingData(page)
+      await expect(page).toHaveScreenshot('briefing-panel-populated-desktop.png', {
+        ...SNAPSHOT_OPTS, animations: 'disabled',
+      })
     })
-    await page.waitForTimeout(500)
-    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
-    await expect(page).toHaveScreenshot('briefing-panel-populated-mobile.png', {
-      ...SNAPSHOT_OPTS, animations: 'disabled',
-    })
-  })
 
-  test('briefing panel – populated (dark desktop)', async ({ page }) => {
-    await interceptApi(page, { things: true, briefing: true })
-    await page.setViewportSize({ width: 1280, height: 720 })
-    await page.emulateMedia({ colorScheme: 'dark' })
-    await page.goto('/')
-    await waitForApp(page)
-    await page.waitForSelector('text=Due Today', { timeout: 5_000 }).catch(() => {})
-    const briefingPanel = page.locator('div.flex-1.flex.flex-col').first()
-    await expect(briefingPanel).toHaveScreenshot('briefing-panel-populated-dark.png', {
-      ...SNAPSHOT_OPTS, animations: 'disabled',
+    test('briefing panel – populated (mobile)', async ({ page }) => {
+      await interceptApi(page, { things: true, briefing: true })
+      await page.setViewportSize({ width: 390, height: 844 })
+      await page.goto('/')
+      // Mobile layout uses bottom nav bar instead of aside
+      await page.waitForSelector('nav.fixed.bottom-0', { timeout: 20_000 })
+      await page.addStyleTag({
+        content: `*, *::before, *::after {
+        animation-duration: 0s !important;
+        animation-delay: 0s !important;
+        transition-duration: 0s !important;
+      }`,
+      })
+      await page.waitForTimeout(500)
+      await waitForBriefingData(page)
+      await expect(page).toHaveScreenshot('briefing-panel-populated-mobile.png', {
+        ...SNAPSHOT_OPTS, animations: 'disabled',
+      })
+    })
+
+    test('briefing panel – populated (dark desktop)', async ({ page }) => {
+      await interceptApi(page, { things: true, briefing: true })
+      await page.setViewportSize({ width: 1280, height: 720 })
+      await page.emulateMedia({ colorScheme: 'dark' })
+      await page.goto('/')
+      await waitForApp(page)
+      await waitForBriefingData(page)
+      await expect(page).toHaveScreenshot('briefing-panel-populated-dark.png', {
+        ...SNAPSHOT_OPTS, animations: 'disabled',
+      })
     })
   })
 
