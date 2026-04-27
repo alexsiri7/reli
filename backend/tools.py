@@ -768,7 +768,7 @@ def get_user_profile(
     """
     with Session(_engine_mod.engine) as session:
         stmt = select(ThingRecord).where(
-            ThingRecord.surface == False,  # noqa: E712
+            ~ThingRecord.surface,
             ThingRecord.type_hint == "person",
             user_filter_clause(ThingRecord.user_id, user_id),
         )
@@ -928,20 +928,16 @@ def get_briefing(
     scored.sort(key=lambda x: x["score"], reverse=True)
 
     the_one_thing = scored[0] if scored else None
-    secondary = scored[1:6] if len(scored) > 1 else []
-    parking_lot = (
-        [
-            {
-                "thing_id": s["thing"]["id"],
-                "title": s["thing"]["title"],
-                "importance": s["importance"],
-                "urgency": s["urgency"],
-            }
-            for s in scored[6:]
-        ]
-        if len(scored) > 6
-        else []
-    )
+    secondary = scored[1:6]
+    parking_lot = [
+        {
+            "thing_id": s["thing"]["id"],
+            "title": s["thing"]["title"],
+            "importance": s["importance"],
+            "urgency": s["urgency"],
+        }
+        for s in scored[6:]
+    ]
 
     findings = [f.model_dump() for f in finding_rows]
     checkin_due = sum(1 for s in scored if s["urgency"] >= 0.25)
