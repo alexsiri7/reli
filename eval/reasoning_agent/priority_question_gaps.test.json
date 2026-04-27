@@ -84,7 +84,7 @@
       "final_session_state": {}
     },
     {
-      "eval_id": "pq-no-deadline-skipped",
+      "eval_id": "pq-completion-suppresses-question",
       "conversation": [
         {
           "invocation_id": "inv-1",
@@ -305,7 +305,7 @@
                 "function_call": null,
                 "function_response": null,
                 "inline_data": null,
-                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nWhat's happening with the conference?\n</user_message>\n\nRelevant Things from database:\n[{\"id\": \"e-020\", \"title\": \"Tech Conference\", \"type_hint\": \"event\", \"active\": 1, \"open_questions\": [\"When is the conference?\", \"Where is the venue?\"]}]",
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nWhat's happening with the conference?\n</user_message>\n\nRelevant Things from database:\n[]",
                 "thought": null,
                 "thought_signature": null,
                 "video_metadata": null
@@ -355,9 +355,15 @@
                     {
                       "id": "e-020",
                       "title": "Tech Conference",
-                      "type_hint": "event"
+                      "type_hint": "event",
+                      "active": 1,
+                      "open_questions": [
+                        "When is the conference?",
+                        "Where is the venue?"
+                      ]
                     }
                   ],
+                  "relationships": [],
                   "count": 1
                 }
               }

@@ -64,7 +64,7 @@ def _empty_ctx() -> dict:
 
 
 def _things_ctx(*things: dict) -> dict:
-    return {"things": list(things), "count": len(things)}
+    return {"things": list(things), "relationships": [], "count": len(things)}
 
 
 # Shared date prefix for user prompts
@@ -1520,7 +1520,7 @@ _REASONING_PRIORITY_QUESTION_GAPS = EvalSet(
         ),
         # Quick completion command — no priority question
         EvalCase(
-            eval_id="pq-no-deadline-skipped",
+            eval_id="pq-completion-suppresses-question",
             conversation=[
                 Invocation(
                     invocation_id="inv-1",
@@ -1646,16 +1646,7 @@ _REASONING_PRIORITY_QUESTION_GAPS = EvalSet(
                     user_content=_user(
                         _reasoning_prompt(
                             "What's happening with the conference?",
-                            things_json=json.dumps([{
-                                "id": "e-020",
-                                "title": "Tech Conference",
-                                "type_hint": "event",
-                                "active": 1,
-                                "open_questions": [
-                                    "When is the conference?",
-                                    "Where is the venue?",
-                                ],
-                            }]),
+                            things_json=json.dumps([]),  # nothing in context — agent must fetch
                         )
                     ),
                     final_response=_model(
@@ -1687,6 +1678,11 @@ _REASONING_PRIORITY_QUESTION_GAPS = EvalSet(
                                 "id": "e-020",
                                 "title": "Tech Conference",
                                 "type_hint": "event",
+                                "active": 1,
+                                "open_questions": [
+                                    "When is the conference?",
+                                    "Where is the venue?",
+                                ],
                             })),
                         ],
                     ),

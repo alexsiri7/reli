@@ -196,6 +196,7 @@
                       "title": "Team standup"
                     }
                   ],
+                  "relationships": [],
                   "count": 1
                 }
               },
@@ -314,6 +315,7 @@
                       "type_hint": "preference"
                     }
                   ],
+                  "relationships": [],
                   "count": 1
                 }
               },
@@ -443,6 +445,7 @@
                       "title": "Flight to LA"
                     }
                   ],
+                  "relationships": [],
                   "count": 2
                 }
               },
@@ -584,6 +587,7 @@
                       "type_hint": "preference"
                     }
                   ],
+                  "relationships": [],
                   "count": 1
                 }
               },
