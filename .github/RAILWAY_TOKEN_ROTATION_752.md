@@ -1,7 +1,7 @@
 # Railway Token Rotation — Issue #752
 
 **Date**: 2026-04-27
-**Operator**: {operator}
+**Operator**: Claude (Archon)
 **Reason**: Expired RAILWAY_TOKEN in GitHub Actions secrets (recurring — 6th occurrence)
 
 ## Action Taken

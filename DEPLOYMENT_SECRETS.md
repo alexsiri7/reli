@@ -43,6 +43,10 @@ If `RAILWAY_TOKEN` is expired or revoked, CI will fail at the "Validate Railway 
 4. Re-run the failed CI job: `gh run rerun <run-id> --repo alexsiri7/reli`
    Or trigger a fresh run: `gh workflow run staging-pipeline.yml --repo alexsiri7/reli`
 
+## Token Health Check
+
+A weekly GitHub Actions workflow (`.github/workflows/railway-token-health.yml`) validates the Railway token every Monday at 09:00 UTC. If the token is missing or expired, it files a GitHub issue (deduplication prevents multiple issues for the same problem). Use `workflow_dispatch` to trigger an on-demand check after a rotation.
+
 ## Workflow References
 
 The staging-pipeline.yml workflow uses these secrets in:

@@ -18,11 +18,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -z "$RAILWAY_TOKEN" ]; then
-            gh issue create \
+            EXISTING=$(gh issue list \
               --repo alexsiri7/reli \
-              --title "Railway token missing — RAILWAY_TOKEN secret is not set" \
-              --body "The RAILWAY_TOKEN GitHub secret is missing. See DEPLOYMENT_SECRETS.md for rotation instructions." \
-              --label bug
+              --state open \
+              --search "Railway token missing" \
+              --json number \
+              --jq '.[0].number // empty')
+            if [ -z "$EXISTING" ]; then
+              gh issue create \
+                --repo alexsiri7/reli \
+                --title "Railway token missing — RAILWAY_TOKEN secret is not set" \
+                --body "The RAILWAY_TOKEN GitHub secret is missing. See DEPLOYMENT_SECRETS.md for rotation instructions." \
+                --label bug
+            fi
             exit 1
           fi
           RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
@@ -31,11 +39,19 @@ jobs:
             -d '{"query":"{me{id}}"}')
           if ! echo "$RESP" | jq -e '.data.me.id' > /dev/null 2>&1; then
             MSG=$(echo "$RESP" | jq -r '.errors[0].message // "could not reach Railway API or token rejected"')
-            gh issue create \
+            EXISTING=$(gh issue list \
               --repo alexsiri7/reli \
-              --title "Railway token expired — rotate RAILWAY_TOKEN before next deploy" \
-              --body "Weekly token health check failed: \`$MSG\`. See DEPLOYMENT_SECRETS.md Token Rotation section." \
-              --label bug
+              --state open \
+              --search "Railway token expired" \
+              --json number \
+              --jq '.[0].number // empty')
+            if [ -z "$EXISTING" ]; then
+              gh issue create \
+                --repo alexsiri7/reli \
+                --title "Railway token expired — rotate RAILWAY_TOKEN before next deploy" \
+                --body "Weekly token health check failed: \`$MSG\`. See DEPLOYMENT_SECRETS.md Token Rotation section." \
+                --label bug
+            fi
             exit 1
           fi
           echo "RAILWAY_TOKEN is valid."
