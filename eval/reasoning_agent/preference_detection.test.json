@@ -1,6 +1,6 @@
 {
   "eval_set_id": "reasoning-preference-detection",
-  "name": "Reasoning Agent \u2014 Preference Detection",
+  "name": "Reasoning Agent — Preference Detection",
   "description": "Golden dataset: detecting and creating/updating user preference Things from explicit statements and behavioral patterns",
   "eval_cases": [
     {
@@ -49,6 +49,15 @@
               {
                 "id": null,
                 "args": {
+                  "search_queries_json": "[\"morning meetings\", \"scheduling preferences\", \"preferences\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
                   "title": "Scheduling preferences",
                   "type_hint": "preference",
                   "data_json": "{\"patterns\": [{\"pattern\": \"Avoids morning meetings\", \"confidence\": \"emerging\", \"observations\": 1, \"first_observed\": \"2026-03-18\", \"last_observed\": \"2026-03-18\"}]}",
@@ -60,6 +69,18 @@
               }
             ],
             "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -132,12 +153,9 @@
               {
                 "id": null,
                 "args": {
-                  "title": "Scheduling preferences",
-                  "type_hint": "preference",
-                  "data_json": "{\"patterns\": [{\"pattern\": \"Avoids morning meetings\", \"confidence\": \"emerging\", \"observations\": 1, \"first_observed\": \"2026-03-18\", \"last_observed\": \"2026-03-18\"}]}",
-                  "surface": false
+                  "search_queries_json": "[\"team standup\", \"morning meetings\", \"scheduling preferences\"]"
                 },
-                "name": "create_thing",
+                "name": "fetch_context",
                 "partial_args": null,
                 "will_continue": null
               },
@@ -150,6 +168,18 @@
                 "name": "update_thing",
                 "partial_args": null,
                 "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Scheduling preferences",
+                  "type_hint": "preference",
+                  "data_json": "{\"patterns\": [{\"pattern\": \"Avoids morning meetings\", \"confidence\": \"emerging\", \"observations\": 1, \"first_observed\": \"2026-03-18\", \"last_observed\": \"2026-03-18\"}]}",
+                  "surface": false
+                },
+                "name": "create_thing",
+                "partial_args": null,
+                "will_continue": null
               }
             ],
             "tool_responses": [
@@ -158,11 +188,15 @@
                 "scheduling": null,
                 "parts": null,
                 "id": null,
-                "name": "create_thing",
+                "name": "fetch_context",
                 "response": {
-                  "id": "eval-pref-0002",
-                  "title": "Scheduling preferences",
-                  "type_hint": "preference"
+                  "things": [
+                    {
+                      "id": "thing-700",
+                      "title": "Team standup"
+                    }
+                  ],
+                  "count": 1
                 }
               },
               {
@@ -174,6 +208,18 @@
                 "response": {
                   "id": "thing-700",
                   "title": "Team standup"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0002",
+                  "title": "Scheduling preferences",
+                  "type_hint": "preference"
                 }
               }
             ],
@@ -236,10 +282,19 @@
               {
                 "id": null,
                 "args": {
+                  "search_queries_json": "[\"8am call\", \"morning meetings\", \"scheduling preferences\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
                   "thing_id": "pref-100",
                   "data_json": "{\"patterns\": [{\"pattern\": \"Avoids morning meetings\", \"confidence\": \"moderate\", \"observations\": 2, \"first_observed\": \"2026-03-10\", \"last_observed\": \"2026-03-18\"}]}"
                 },
-                "name": "create_thing",
+                "name": "update_thing",
                 "partial_args": null,
                 "will_continue": null
               }
@@ -250,7 +305,24 @@
                 "scheduling": null,
                 "parts": null,
                 "id": null,
-                "name": "create_thing",
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "pref-100",
+                      "title": "Scheduling preferences",
+                      "type_hint": "preference"
+                    }
+                  ],
+                  "count": 1
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "update_thing",
                 "response": {
                   "id": "pref-100",
                   "title": "Scheduling preferences"
@@ -316,9 +388,39 @@
               {
                 "id": null,
                 "args": {
-                  "thing_id": "x"
+                  "search_queries_json": "[\"Budget Air flights\", \"travel preferences\", \"airline\"]"
                 },
-                "name": "update_thing",
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "thing_id": "thing-800"
+                },
+                "name": "delete_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "thing_id": "thing-801"
+                },
+                "name": "delete_thing",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
+                  "title": "Travel preferences",
+                  "type_hint": "preference",
+                  "data_json": "{\"patterns\": [{\"pattern\": \"Avoids budget airlines (delays)\", \"confidence\": \"moderate\", \"observations\": 2, \"first_observed\": \"2026-03-18\", \"last_observed\": \"2026-03-18\"}]}",
+                  "surface": false
+                },
+                "name": "create_thing",
                 "partial_args": null,
                 "will_continue": null
               }
@@ -329,10 +431,53 @@
                 "scheduling": null,
                 "parts": null,
                 "id": null,
-                "name": "update_thing",
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "thing-800",
+                      "title": "Flight to NYC"
+                    },
+                    {
+                      "id": "thing-801",
+                      "title": "Flight to LA"
+                    }
+                  ],
+                  "count": 2
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "delete_thing",
                 "response": {
                   "deleted": "thing-800",
                   "title": "Flight to NYC"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "delete_thing",
+                "response": {
+                  "deleted": "thing-801",
+                  "title": "Flight to LA"
+                }
+              },
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "create_thing",
+                "response": {
+                  "id": "eval-pref-0003",
+                  "title": "Travel preferences",
+                  "type_hint": "preference"
                 }
               }
             ],
@@ -395,6 +540,15 @@
               {
                 "id": null,
                 "args": {
+                  "search_queries_json": "[\"client call\", \"8am\", \"scheduling preferences\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
                   "title": "Client call",
                   "type_hint": "event",
                   "data_json": "{\"time\": \"08:00\", \"day\": \"2026-03-19\"}",
@@ -416,6 +570,23 @@
               }
             ],
             "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [
+                    {
+                      "id": "pref-100",
+                      "title": "Scheduling preferences",
+                      "type_hint": "preference"
+                    }
+                  ],
+                  "count": 1
+                }
+              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -468,7 +639,7 @@
                 "function_call": null,
                 "function_response": null,
                 "inline_data": null,
-                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nI don't work on weekends \u2014 please don't schedule anything on Saturday or Sunday.\n</user_message>\n\nRelevant Things from database:\n[]",
+                "text": "Today's date: 2026-03-18 (Wednesday)\n\n<user_message>\nI don't work on weekends — please don't schedule anything on Saturday or Sunday.\n</user_message>\n\nRelevant Things from database:\n[]",
                 "thought": null,
                 "thought_signature": null,
                 "video_metadata": null
@@ -499,6 +670,15 @@
               {
                 "id": null,
                 "args": {
+                  "search_queries_json": "[\"weekend\", \"scheduling preferences\", \"work-life\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
                   "title": "Work-life preferences",
                   "type_hint": "preference",
                   "data_json": "{\"patterns\": [{\"pattern\": \"Does not work on weekends\", \"confidence\": \"strong\", \"observations\": 1, \"first_observed\": \"2026-03-18\", \"last_observed\": \"2026-03-18\"}]}",
@@ -510,6 +690,18 @@
               }
             ],
             "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
               {
                 "will_continue": null,
                 "scheduling": null,
@@ -582,6 +774,15 @@
               {
                 "id": null,
                 "args": {
+                  "search_queries_json": "[\"work travel\", \"travel preferences\", \"booking\"]"
+                },
+                "name": "fetch_context",
+                "partial_args": null,
+                "will_continue": null
+              },
+              {
+                "id": null,
+                "args": {
                   "title": "Travel preferences",
                   "type_hint": "preference",
                   "data_json": "{\"patterns\": [{\"pattern\": \"Optimizes for cost on work travel\", \"confidence\": \"strong\", \"observations\": 1, \"first_observed\": \"2026-03-18\", \"last_observed\": \"2026-03-18\"}]}",
@@ -593,6 +794,18 @@
               }
             ],
             "tool_responses": [
+              {
+                "will_continue": null,
+                "scheduling": null,
+                "parts": null,
+                "id": null,
+                "name": "fetch_context",
+                "response": {
+                  "things": [],
+                  "relationships": [],
+                  "count": 0
+                }
+              },
               {
                 "will_continue": null,
                 "scheduling": null,
