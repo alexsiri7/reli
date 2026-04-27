@@ -208,24 +208,6 @@ class ChatMessageCreate(BaseModel):
         return v
 
 
-class ChatSessionCreate(BaseModel):
-    """Create a named chat session."""
-
-    title: str = Field(default="New chat", min_length=1, max_length=500)
-    origin: str | None = Field(default=None, max_length=100)
-
-
-class ChatSessionListItem(BaseModel):
-    """Summary of a chat session for listing."""
-
-    id: str
-    title: str
-    origin: str | None = None
-    created_at: datetime
-    last_active_at: datetime
-
-    model_config = {"from_attributes": True}
-
 
 class CallUsage(BaseModel):
     """Usage for a single API call."""
