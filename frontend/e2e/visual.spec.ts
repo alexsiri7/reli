@@ -358,7 +358,7 @@ test.describe('Visual regression – reli frontend', () => {
   })
 
   test('sidebar – with Things listed', async ({ page }) => {
-    await interceptApi(page, { things: true })
+    await interceptApi(page, { things: true, briefing: true })
     await page.goto('/')
     await waitForApp(page)
     // Wait for Things to render
