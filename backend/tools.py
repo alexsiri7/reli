@@ -12,7 +12,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
@@ -245,8 +245,6 @@ def create_thing(
 
     with Session(_engine_mod.engine) as session:
         # Deduplicate: if a Thing with the same title exists, convert to update
-        from sqlalchemy import func
-
         stmt = (
             select(ThingRecord)
             .where(

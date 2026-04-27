@@ -3,11 +3,13 @@
 import json
 import logging
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import case as sa_case
 from sqlalchemy import func, text
 from sqlmodel import Session, or_, select
 
@@ -343,10 +345,6 @@ def list_things(
     # Compute child stats and parent_ids from parent-of relationships
     thing_ids = [t.id for t in things]
     if thing_ids:
-        from collections import defaultdict
-
-        from sqlalchemy import case as sa_case
-
         # Fetch all parent-of relationships involving these Things
         parent_of_rels = session.exec(
             select(
