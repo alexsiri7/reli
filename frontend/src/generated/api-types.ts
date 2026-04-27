@@ -360,6 +360,7 @@ export interface UserSettings {
   stale_threshold_days: number
   proactivity_level: string
   interaction_style: string
+  messages_until_compression: number
 }
 
 export interface RequestyModel {
@@ -734,6 +735,7 @@ export const UserSettingsSchema = z.object({
   stale_threshold_days: z.number().default(14),
   proactivity_level: z.string().default("medium"),
   interaction_style: z.string().default("auto"),
+  messages_until_compression: z.number().default(20),
 })
 
 export const RequestyModelSchema = z.object({

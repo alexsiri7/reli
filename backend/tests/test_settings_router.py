@@ -89,3 +89,23 @@ class TestSettingsUserEndpoint:
         assert resp.status_code == 200
         body = resp.json()
         assert body["chat_context_window"] is None
+
+    def test_messages_until_compression_default_and_update(self, auth_client):
+        """GET returns default 20; PUT persists within bounds."""
+        resp = auth_client.get("/api/settings/user")
+        assert resp.status_code == 200
+        assert resp.json()["messages_until_compression"] == 20
+
+        resp = auth_client.put("/api/settings/user", json={"messages_until_compression": 50})
+        assert resp.status_code == 200
+        assert resp.json()["messages_until_compression"] == 50
+
+        # Clamping: 200 → 100
+        resp = auth_client.put("/api/settings/user", json={"messages_until_compression": 200})
+        assert resp.status_code == 200
+        assert resp.json()["messages_until_compression"] == 100
+
+        # Clamping: 1 → 5
+        resp = auth_client.put("/api/settings/user", json={"messages_until_compression": 1})
+        assert resp.status_code == 200
+        assert resp.json()["messages_until_compression"] == 5
