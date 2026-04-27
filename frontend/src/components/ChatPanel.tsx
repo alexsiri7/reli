@@ -801,7 +801,7 @@ function SessionsSidebar({ sessions, activeSessionId, onCreate, onSwitch, onRena
 }
 
 export function ChatPanel() {
-  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus, gmailStatus, nudges, chatPrefill, clearChatPrefill, chatSessions, sessions, sessionId, createChatSession, switchChatSession, renameChatSession, deleteChatSession } = useStore(
+  const { messages, chatLoading, historyLoading, hasMoreHistory, sendMessage, fetchOlderMessages, sessionStats, chatMode, setChatMode, interactionStyle, setInteractionStyle, seedFromGoogle, googleSeedLoading, calendarStatus, gmailStatus, nudges, chatPrefill, clearChatPrefill, chatSessions, sessionId, createChatSession, switchChatSession, renameChatSession, deleteChatSession } = useStore(
     useShallow(s => ({
       messages: s.messages,
       chatLoading: s.chatLoading,
@@ -822,7 +822,6 @@ export function ChatPanel() {
       chatPrefill: s.chatPrefill,
       clearChatPrefill: s.clearChatPrefill,
       chatSessions: s.chatSessions,
-      sessions: s.sessions,
       sessionId: s.sessionId,
       createChatSession: s.createChatSession,
       switchChatSession: s.switchChatSession,
@@ -848,7 +847,7 @@ export function ChatPanel() {
   const openThingDetailStore = useStore(s => s.openThingDetail)
   const thingTypes = useStore(s => s.thingTypes)
 
-  const currentSession = useMemo(() => sessions.find(s => s.id === sessionId), [sessions, sessionId])
+  const currentSession = useMemo(() => chatSessions.find(s => s.id === sessionId), [chatSessions, sessionId])
 
   // Collect unique context things from recent messages for mobile pills
   const activeContextThings = useMemo(() => {

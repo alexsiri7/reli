@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import uuid
 from collections.abc import AsyncIterator
 from datetime import date, datetime, timezone
 from typing import Any
@@ -236,8 +237,7 @@ def list_sessions(user_id: str = Depends(require_user)) -> list[ChatSessionSumma
 @router.post("/sessions", response_model=ChatSessionSummary, status_code=status.HTTP_201_CREATED, summary="Create a chat session")
 def create_session(body: CreateSessionRequest, user_id: str = Depends(require_user)) -> ChatSessionSummary:
     """Create a new named chat session."""
-    import uuid as _uuid
-    session_id = body.session_id or str(_uuid.uuid4())
+    session_id = body.session_id or str(uuid.uuid4())
     with Session(_engine_mod.engine) as session:
         existing = session.exec(
             select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)

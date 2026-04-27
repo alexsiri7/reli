@@ -20,7 +20,7 @@ import { MobileFAB } from './components/MobileFAB'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
 function App() {
-  const { currentUser, authChecked, settingsOpen, feedbackOpen, commandPaletteOpen, quickAddOpen, mainView, mobileView, setMobileView, rightView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchGmailStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges, fetchWeeklyBriefing, fetchSessions, error } = useStore(
+  const { currentUser, authChecked, settingsOpen, feedbackOpen, commandPaletteOpen, quickAddOpen, mainView, mobileView, setMobileView, rightView, fetchCurrentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchGmailStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges, fetchWeeklyBriefing, fetchChatSessions, error } = useStore(
     useShallow(s => ({
       currentUser: s.currentUser,
       authChecked: s.authChecked,
@@ -49,7 +49,7 @@ function App() {
       fetchMorningBriefing: s.fetchMorningBriefing,
       fetchNudges: s.fetchNudges,
       fetchWeeklyBriefing: s.fetchWeeklyBriefing,
-      fetchSessions: s.fetchSessions,
+      fetchChatSessions: s.fetchChatSessions,
       error: s.error,
     }))
   )
@@ -81,7 +81,7 @@ function App() {
     fetchMorningBriefing()
     fetchNudges()
     fetchWeeklyBriefing()
-    fetchSessions()
+    fetchChatSessions()
     fetchCalendarStatus()
     fetchGmailStatus()
     const interval = setInterval(() => { fetchThings(); fetchBriefing(); fetchProactiveSurfaces(); fetchFocusRecommendations(); fetchConflictAlerts() }, 30_000)
@@ -97,7 +97,7 @@ function App() {
     }
 
     return () => clearInterval(interval)
-  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchGmailStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges, fetchWeeklyBriefing, fetchSessions])
+  }, [currentUser, fetchThingTypes, fetchThings, fetchBriefing, fetchHistory, fetchDailyStats, fetchCalendarStatus, fetchGmailStatus, fetchProactiveSurfaces, fetchFocusRecommendations, fetchConflictAlerts, fetchMergeSuggestions, fetchConnectionSuggestions, fetchUserSettings, fetchMorningBriefing, fetchNudges, fetchWeeklyBriefing, fetchChatSessions])
 
   // Show nothing while checking auth
   if (!authChecked) {

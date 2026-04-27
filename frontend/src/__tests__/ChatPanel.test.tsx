@@ -35,7 +35,7 @@ const mockStore = {
   nudges: [] as Nudge[],
   chatPrefill: null as string | null,
   clearChatPrefill: mockClearChatPrefill,
-  sessions: [] as unknown[],
+  chatSessions: [] as unknown[],
   sessionId: '' as string,
 }
 
@@ -205,26 +205,26 @@ describe('ChatPanel', () => {
   })
 
   it('shows Briefing badge for morning_briefing session', () => {
-    mockStore.sessions = [{ id: 'sess-1', title: 'Morning briefing', origin: 'morning_briefing', created_at: '', last_active_at: '' }]
+    mockStore.chatSessions = [{ id: 'sess-1', title: 'Morning briefing', origin: 'morning_briefing', created_at: '', last_active_at: '', message_count: 0 }]
     mockStore.sessionId = 'sess-1'
     render(<ChatPanel />)
     expect(screen.getByText('📋 Briefing')).toBeInTheDocument()
     expect(screen.getByText('Morning briefing')).toBeInTheDocument()
-    mockStore.sessions = []
+    mockStore.chatSessions = []
     mockStore.sessionId = ''
   })
 
   it('shows Weekly badge for weekly_review session', () => {
-    mockStore.sessions = [{ id: 'sess-2', title: 'Weekly review', origin: 'weekly_review', created_at: '', last_active_at: '' }]
+    mockStore.chatSessions = [{ id: 'sess-2', title: 'Weekly review', origin: 'weekly_review', created_at: '', last_active_at: '', message_count: 0 }]
     mockStore.sessionId = 'sess-2'
     render(<ChatPanel />)
     expect(screen.getByText('📅 Weekly')).toBeInTheDocument()
-    mockStore.sessions = []
+    mockStore.chatSessions = []
     mockStore.sessionId = ''
   })
 
   it('shows fallback subtitle when no active session', () => {
-    mockStore.sessions = []
+    mockStore.chatSessions = []
     mockStore.sessionId = ''
     render(<ChatPanel />)
     expect(screen.getByText('Your personal knowledge companion')).toBeInTheDocument()

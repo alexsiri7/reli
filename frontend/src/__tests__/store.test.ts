@@ -265,7 +265,7 @@ describe('store: stopNudgeType', () => {
 
 describe('store: continueInChat', () => {
   beforeEach(() => {
-    useStore.setState({ sessions: [], error: null, rightView: 'briefing', mobileView: 'briefing' })
+    useStore.setState({ chatSessions: [], error: null, rightView: 'briefing', mobileView: 'briefing' })
   })
 
   it('sets rightView and mobileView to chat on success', async () => {

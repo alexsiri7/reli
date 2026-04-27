@@ -98,6 +98,7 @@ import type {
 export interface ChatSession {
   id: string
   title: string
+  origin: string | null
   created_at: string
   last_active_at: string
   message_count: number
@@ -125,13 +126,6 @@ export interface GmailMessage {
   snippet: string
 }
 
-export interface ChatSessionListItem {
-  id: string
-  title: string
-  origin: string | null
-  created_at: string
-  last_active_at: string
-}
 
 export interface ReferencedThing {
   mention: string
@@ -299,9 +293,6 @@ interface ReliState {
   actOnFinding: (finding: SweepFinding) => void
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
   updateThing: (id: string, updates: Record<string, unknown>) => Promise<void>
-  sessions: ChatSessionListItem[]
-  fetchSessions: () => Promise<void>
-  switchSession: (sessionId: string) => Promise<void>
   continueInChat: (briefingText: string, sessionTitle: string, origin: 'morning_briefing' | 'weekly_review', openingMessage: string) => Promise<void>
   chatPrefill: string | null
   openChatWithContext: (thingId: string, title: string) => void
@@ -963,39 +954,6 @@ export const useStore = create<ReliState>((set, get) => ({
     }
   },
 
-  sessions: [],
-  fetchSessions: async () => {
-    try {
-      const res = await apiFetch(`${BASE}/chat/sessions`)
-      if (!res.ok) {
-        console.warn('[fetchSessions] HTTP', res.status)
-        return
-      }
-      set({ sessions: await res.json() })
-    } catch (e) {
-      // best-effort — sessions drives display only (origin badges, sidebar list)
-      console.warn('[fetchSessions] failed', e)
-    }
-  },
-  switchSession: async (sessionId: string) => {
-    set({ sessionId, messages: [], historyLoading: true, hasMoreHistory: true })
-    try {
-      const res = await apiFetch(`${BASE}/chat/history/${sessionId}?limit=${HISTORY_PAGE_SIZE}`)
-      if (res.ok) {
-        const msgs: ChatMessage[] = validateResponse(z.array(ChatMessageSchema), await res.json(), '/chat/history')
-        set({
-          messages: msgs.map(m => ({ ...m, questions_for_user: m.questions_for_user ?? [] })),
-          historyLoading: false,
-          hasMoreHistory: msgs.length >= HISTORY_PAGE_SIZE,
-        })
-      } else {
-        set({ historyLoading: false, error: `Failed to load chat history (HTTP ${res.status})` })
-      }
-    } catch (e) {
-      console.error('[switchSession] failed', e)
-      set({ historyLoading: false, error: 'Could not load chat history.' })
-    }
-  },
   /**
    * Create a new chat session pre-seeded with briefing context, then switch to it.
    *
@@ -1035,8 +993,8 @@ export const useStore = create<ReliState>((set, get) => ({
       })
       if (!asstRes.ok) throw new Error(`Failed to seed assistant message: ${asstRes.status}`)
 
-      await get().switchSession(newSessionId)
-      await get().fetchSessions()
+      await get().switchChatSession(newSessionId)
+      await get().fetchChatSessions()
       set({ rightView: 'chat', mobileView: 'chat' })
     } catch (e) {
       console.error('[continueInChat] failed', e)
