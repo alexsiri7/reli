@@ -304,4 +304,68 @@ describe('DetailPanel', () => {
     const emailLabels = screen.queryAllByText('email:')
     expect(emailLabels).toHaveLength(0)
   })
+
+  it('renders agenda section for event type', () => {
+    storeState.detailThing = {
+      ...baseThing,
+      type_hint: 'event',
+      data: { agenda_items: ['Item A', 'Item B'] },
+    }
+    render(<DetailPanel />)
+    expect(screen.getByText('Agenda')).toBeInTheDocument()
+    expect(screen.getByText('Item A')).toBeInTheDocument()
+    expect(screen.getByText('Item B')).toBeInTheDocument()
+  })
+
+  it('renders agenda section for meeting type', () => {
+    storeState.detailThing = {
+      ...baseThing,
+      type_hint: 'meeting',
+      data: { agenda_items: ['Discuss roadmap'] },
+    }
+    render(<DetailPanel />)
+    expect(screen.getByText('Agenda')).toBeInTheDocument()
+    expect(screen.getByText('Discuss roadmap')).toBeInTheDocument()
+  })
+
+  it('does not render agenda section when agenda_items is empty', () => {
+    storeState.detailThing = {
+      ...baseThing,
+      type_hint: 'event',
+      data: { agenda_items: [] },
+    }
+    render(<DetailPanel />)
+    expect(screen.queryByText('Agenda')).not.toBeInTheDocument()
+  })
+
+  it('does not render agenda section when data is null for event type', () => {
+    storeState.detailThing = {
+      ...baseThing,
+      type_hint: 'event',
+      data: null,
+    }
+    render(<DetailPanel />)
+    expect(screen.queryByText('Agenda')).not.toBeInTheDocument()
+  })
+
+  it('does not render agenda section for non-event types', () => {
+    storeState.detailThing = {
+      ...baseThing,
+      type_hint: 'task',
+      data: { agenda_items: ['Should not appear'] },
+    }
+    render(<DetailPanel />)
+    expect(screen.queryByText('Agenda')).not.toBeInTheDocument()
+  })
+
+  it('suppresses agenda_items from Details section for event type', () => {
+    storeState.detailThing = {
+      ...baseThing,
+      type_hint: 'event',
+      data: { agenda_items: ['Item A'], other_field: 'visible' },
+    }
+    render(<DetailPanel />)
+    expect(screen.getByText('other_field:')).toBeInTheDocument()
+    expect(screen.queryAllByText('agenda_items:')).toHaveLength(0)
+  })
 })
