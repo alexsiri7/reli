@@ -39,7 +39,13 @@ from ..models import (
     UsageInfo,
 )
 from ..pipeline import ChatPipeline
-from .settings import get_user_api_key, get_user_chat_context_window, get_user_interaction_style, get_user_messages_until_compression, get_user_models
+from .settings import (
+    get_user_api_key,
+    get_user_chat_context_window,
+    get_user_interaction_style,
+    get_user_messages_until_compression,
+    get_user_models,
+)
 
 logger = logging.getLogger(__name__)
 
