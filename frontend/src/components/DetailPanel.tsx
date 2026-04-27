@@ -132,10 +132,8 @@ export function DetailPanel() {
   const notes = thing?.data?.notes != null ? String(thing.data.notes) : null
   const dataEntries = thing?.data
     ? Object.entries(thing.data).filter(([key]) => {
-        if (key === 'notes') return false
-        if (key === 'agenda_items') return false
+        if (key === 'notes' || key === 'agenda_items') return false
         if (thing.type_hint === 'person' && CONTACT_DATA_KEYS.has(key)) return false
-        if ((thing.type_hint === 'event' || thing.type_hint === 'meeting') && key === 'agenda_items') return false
         return true
       })
     : []
@@ -418,13 +416,8 @@ export function DetailPanel() {
 function ContactCard({ title, data }: { title: string; data: Record<string, unknown> | null }) {
   const email = data?.email != null ? String(data.email) : null
   const phone = data?.phone != null ? String(data.phone) : null
-  const role = data?.role != null
-    ? String(data.role)
-    : data?.title != null
-    ? String(data.title)
-    : data?.position != null
-    ? String(data.position)
-    : null
+  const rawRole = data?.role ?? data?.title ?? data?.position ?? null
+  const role = rawRole != null ? String(rawRole) : null
   const initials = title
     .split(/\s+/)
     .filter(Boolean)

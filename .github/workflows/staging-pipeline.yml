@@ -29,6 +29,24 @@ jobs:
             echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Validate Railway secrets
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
+          ENV_ID: ${{ secrets.RAILWAY_STAGING_ENVIRONMENT_ID }}
+          STAGING_URL: ${{ secrets.RAILWAY_STAGING_URL }}
+        run: |
+          missing=""
+          [ -z "$RAILWAY_TOKEN" ] && missing="$missing RAILWAY_TOKEN"
+          [ -z "$SERVICE_ID" ] && missing="$missing RAILWAY_STAGING_SERVICE_ID"
+          [ -z "$ENV_ID" ] && missing="$missing RAILWAY_STAGING_ENVIRONMENT_ID"
+          [ -z "$STAGING_URL" ] && missing="$missing RAILWAY_STAGING_URL"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required secrets:$missing"
+            echo "See DEPLOYMENT_SECRETS.md for setup instructions."
+            exit 1
+          fi
+
       - name: Deploy staging image to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -117,6 +135,24 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate Railway secrets
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
+          ENV_ID: ${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT_ID }}
+          PROD_URL: ${{ secrets.RAILWAY_PRODUCTION_URL }}
+        run: |
+          missing=""
+          [ -z "$RAILWAY_TOKEN" ] && missing="$missing RAILWAY_TOKEN"
+          [ -z "$SERVICE_ID" ] && missing="$missing RAILWAY_PRODUCTION_SERVICE_ID"
+          [ -z "$ENV_ID" ] && missing="$missing RAILWAY_PRODUCTION_ENVIRONMENT_ID"
+          [ -z "$PROD_URL" ] && missing="$missing RAILWAY_PRODUCTION_URL"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required secrets:$missing"
+            echo "See DEPLOYMENT_SECRETS.md for setup instructions."
+            exit 1
+          fi
 
       - name: Deploy production image to Railway
         env:
