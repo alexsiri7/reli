@@ -46,12 +46,13 @@ jobs:
             echo "See DEPLOYMENT_SECRETS.md for setup instructions."
             exit 1
           fi
-          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
+          RESP=$(curl -s -X POST "https://backboard.railway.app/graphql/v2" \
             -H "Authorization: Bearer $RAILWAY_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"query":"{me{id}}"}')
-          if echo "$RESP" | jq -e '.errors' > /dev/null 2>&1; then
-            echo "::error::RAILWAY_TOKEN is invalid or expired: $(echo "$RESP" | jq -r '.errors[0].message')"
+          if ! echo "$RESP" | jq -e '.data.me.id' > /dev/null 2>&1; then
+            MSG=$(echo "$RESP" | jq -r '.errors[0].message // "could not reach Railway API or token rejected"')
+            echo "::error::RAILWAY_TOKEN is invalid or expired: $MSG"
             echo "Rotate the token — see DEPLOYMENT_SECRETS.md Token Rotation section."
             exit 1
           fi
@@ -162,12 +163,13 @@ jobs:
             echo "See DEPLOYMENT_SECRETS.md for setup instructions."
             exit 1
           fi
-          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
+          RESP=$(curl -s -X POST "https://backboard.railway.app/graphql/v2" \
             -H "Authorization: Bearer $RAILWAY_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"query":"{me{id}}"}')
-          if echo "$RESP" | jq -e '.errors' > /dev/null 2>&1; then
-            echo "::error::RAILWAY_TOKEN is invalid or expired: $(echo "$RESP" | jq -r '.errors[0].message')"
+          if ! echo "$RESP" | jq -e '.data.me.id' > /dev/null 2>&1; then
+            MSG=$(echo "$RESP" | jq -r '.errors[0].message // "could not reach Railway API or token rejected"')
+            echo "::error::RAILWAY_TOKEN is invalid or expired: $MSG"
             echo "Rotate the token — see DEPLOYMENT_SECRETS.md Token Rotation section."
             exit 1
           fi
