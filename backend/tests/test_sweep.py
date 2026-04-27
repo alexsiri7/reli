@@ -686,7 +686,7 @@ class TestGenerateGapQuestions:
             conn.execute("UPDATE things SET created_at = ? WHERE id = 'p1'", (old,))
         with Session(_engine_mod.engine) as session:
             gaps = find_information_gaps(session, today, min_age_days=3)
-            count = generate_gap_questions(session, gaps)
+            generate_gap_questions(session, gaps)
             session.commit()
         with db() as conn:
             row = conn.execute("SELECT open_questions FROM things WHERE id = 'p1'").fetchone()
@@ -701,7 +701,7 @@ class TestGenerateGapQuestions:
             _insert_thing(conn, "t1", "Book hotel", parent_id="proj")
         with Session(_engine_mod.engine) as session:
             gaps = find_information_gaps(session, today, min_age_days=0)
-            count = generate_gap_questions(session, gaps)
+            generate_gap_questions(session, gaps)
             session.commit()
         with db() as conn:
             row = conn.execute("SELECT open_questions FROM things WHERE id = 'proj'").fetchone()

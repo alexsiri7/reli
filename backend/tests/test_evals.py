@@ -344,7 +344,8 @@ async def _llm_judge(
     from backend.llm import REQUESTY_API_KEY, REQUESTY_BASE_URL
 
     criteria_text = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(rubric))
-    prompt = f"""You are a strict evaluator. For each criterion below, determine whether the response PASSES (true) or FAILS (false).
+    prompt = f"""\
+You are a strict evaluator. For each criterion below, determine whether the response PASSES (true) or FAILS (false).
 
 Response to evaluate:
 ---

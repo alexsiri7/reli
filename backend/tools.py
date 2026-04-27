@@ -251,7 +251,7 @@ def create_thing(
             select(ThingRecord)
             .where(
                 func.lower(ThingRecord.title) == func.lower(title),
-                ThingRecord.active == True,
+                ThingRecord.active,
             )
             .limit(1)
         )
@@ -859,7 +859,7 @@ def get_briefing(
     with Session(_engine_mod.engine) as session:
         # All active things (used for blocker graph AND to derive checkin-due subset)
         all_active_stmt = select(ThingRecord).where(
-            ThingRecord.active == True,
+            ThingRecord.active,
             user_filter_clause(ThingRecord.user_id, user_id),
         )
         all_active = session.exec(all_active_stmt).all()
@@ -877,11 +877,11 @@ def get_briefing(
             select(SweepFindingRecord)
             .outerjoin(ThingRecord, SweepFindingRecord.thing_id == ThingRecord.id)
             .where(
-                SweepFindingRecord.dismissed == False,
+                ~SweepFindingRecord.dismissed,
                 or_(SweepFindingRecord.expires_at.is_(None), SweepFindingRecord.expires_at > now),  # type: ignore[union-attr, operator]
                 or_(SweepFindingRecord.snoozed_until.is_(None), SweepFindingRecord.snoozed_until <= now),  # type: ignore[union-attr, operator]
                 user_filter_clause(SweepFindingRecord.user_id, user_id),
-                or_(SweepFindingRecord.thing_id.is_(None), ThingRecord.active == True),  # type: ignore[union-attr]
+                or_(SweepFindingRecord.thing_id.is_(None), ThingRecord.active),  # type: ignore[union-attr]
             )
             .order_by(SweepFindingRecord.priority.asc(), SweepFindingRecord.created_at.desc())  # type: ignore[union-attr, attr-defined]
         )
@@ -978,7 +978,7 @@ def get_open_questions(
         stmt = (
             select(ThingRecord)
             .where(
-                ThingRecord.active == True,
+                ThingRecord.active,
                 ThingRecord.open_questions.is_not(None),  # type: ignore[union-attr]
                 user_filter_clause(ThingRecord.user_id, user_id),
             )

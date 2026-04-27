@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.server import TransportSecuritySettings
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -35,8 +36,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # MCP Server
 # ---------------------------------------------------------------------------
-
-from mcp.server.fastmcp.server import TransportSecuritySettings
 
 # Allow the production host through MCP's DNS rebinding protection.
 # Derive from RELI_BASE_URL or GOOGLE_AUTH_REDIRECT_URI.

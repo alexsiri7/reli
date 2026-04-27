@@ -146,7 +146,7 @@ def generate_morning_briefing(
         thing_stmt = (
             select(ThingRecord)
             .where(
-                ThingRecord.active == True,
+                ThingRecord.active,
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
@@ -168,11 +168,11 @@ def generate_morning_briefing(
             )
             .outerjoin(ThingRecord, SweepFindingRecord.thing_id == ThingRecord.id)
             .where(
-                SweepFindingRecord.dismissed == False,
+                ~SweepFindingRecord.dismissed,
                 or_(SweepFindingRecord.expires_at.is_(None), SweepFindingRecord.expires_at > now_dt),  # type: ignore[union-attr]
                 or_(SweepFindingRecord.snoozed_until.is_(None), SweepFindingRecord.snoozed_until <= now_dt),  # type: ignore[union-attr]
                 user_filter_clause(SweepFindingRecord.user_id, user_id),
-                or_(SweepFindingRecord.thing_id.is_(None), ThingRecord.active == True),  # type: ignore[union-attr]
+                or_(SweepFindingRecord.thing_id.is_(None), ThingRecord.active),  # type: ignore[union-attr]
             )
             .order_by(SweepFindingRecord.priority.asc(), SweepFindingRecord.created_at.desc())  # type: ignore[union-attr]
         )

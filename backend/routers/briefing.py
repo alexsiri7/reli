@@ -99,7 +99,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
         # All active things (for blocker graph + checkin-due filtering)
         all_active = session.exec(
             select(ThingRecord).where(
-                ThingRecord.active == True,
+                ThingRecord.active,
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
         ).all()
@@ -116,11 +116,11 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
             select(SweepFindingRecord, ThingRecord)
             .outerjoin(ThingRecord, SweepFindingRecord.thing_id == ThingRecord.id)
             .where(
-                SweepFindingRecord.dismissed == False,
+                ~SweepFindingRecord.dismissed,
                 (SweepFindingRecord.expires_at.is_(None)) | (SweepFindingRecord.expires_at > now),  # type: ignore[union-attr]
                 (SweepFindingRecord.snoozed_until.is_(None)) | (SweepFindingRecord.snoozed_until <= now),  # type: ignore[union-attr]
                 user_filter_clause(SweepFindingRecord.user_id, user_id),
-                or_(SweepFindingRecord.thing_id.is_(None), ThingRecord.active == True),  # type: ignore[union-attr]
+                or_(SweepFindingRecord.thing_id.is_(None), ThingRecord.active),  # type: ignore[union-attr]
             )
             .order_by(
                 SweepFindingRecord.priority.asc(),  # type: ignore[union-attr]

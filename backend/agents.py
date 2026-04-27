@@ -784,7 +784,7 @@ def load_personality_preferences(user_id: str) -> list[dict[str, Any]]:
     with Session(_engine_mod.engine) as session:
         stmt = select(cast(ThingRecord.data, String)).where(
             ThingRecord.type_hint == "preference",
-            ThingRecord.active == True,
+            ThingRecord.active,
             user_filter_clause(ThingRecord.user_id, user_id),
         )
         rows = session.exec(stmt).all()

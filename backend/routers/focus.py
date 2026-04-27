@@ -84,7 +84,7 @@ def _compute_recommendations(
         thing_stmt = (
             select(ThingRecord)
             .where(
-                ThingRecord.active == True,
+                ThingRecord.active,
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
