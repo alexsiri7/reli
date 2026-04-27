@@ -9,7 +9,7 @@ const makeOneThing = (): BriefingItem => ({
   reasons: ['Overdue'],
 })
 
-let mockBriefingState = {
+const makeDefaultState = () => ({
   theOneThing: null as BriefingItem | null,
   secondaryItems: [] as BriefingItem[],
   briefingStats: null,
@@ -29,7 +29,9 @@ let mockBriefingState = {
   snoozeThing: vi.fn(),
   openChatWithContext: vi.fn(),
   continueInChat: vi.fn(),
-}
+})
+
+let mockBriefingState = makeDefaultState()
 
 vi.mock('../store', () => ({
   useStore: (selector: (s: typeof mockBriefingState) => unknown) => selector(mockBriefingState),
@@ -144,27 +146,7 @@ describe('TodayEventRow', () => {
 
 describe('BriefingPanel hero card', () => {
   beforeEach(() => {
-    mockBriefingState = {
-      theOneThing: null,
-      secondaryItems: [],
-      briefingStats: null,
-      findings: [],
-      learnedPreferences: [],
-      nudges: [],
-      morningBriefing: null,
-      calendarEvents: [],
-      error: null,
-      currentUser: null,
-      setRightView: vi.fn(),
-      dismissFinding: vi.fn(),
-      snoozeFinding: vi.fn(),
-      actOnFinding: vi.fn(),
-      submitPreferenceFeedback: vi.fn(),
-      updateThing: vi.fn(),
-      snoozeThing: vi.fn(),
-      openChatWithContext: vi.fn(),
-      continueInChat: vi.fn(),
-    }
+    mockBriefingState = makeDefaultState()
   })
 
   it('does not render hero card when theOneThing is null', () => {
@@ -198,14 +180,7 @@ describe('BriefingPanel hero card', () => {
   })
 
   it('shows hero card (not empty state) when only theOneThing is set', () => {
-    mockBriefingState = {
-      ...mockBriefingState,
-      theOneThing: makeOneThing(),
-      secondaryItems: [],
-      findings: [],
-      learnedPreferences: [],
-      calendarEvents: [],
-    }
+    mockBriefingState = { ...mockBriefingState, theOneThing: makeOneThing() }
     render(<BriefingPanel />)
     expect(screen.getByText('Most Important')).toBeInTheDocument()
     expect(screen.queryByText(/nothing due/i)).not.toBeInTheDocument()

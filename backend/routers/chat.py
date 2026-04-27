@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import uuid
 from collections.abc import AsyncIterator
 from datetime import date, datetime, timezone
 from typing import Any
@@ -12,10 +13,17 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, text
 from sqlmodel import Session, select
 
-from ..auth import require_user
 import backend.db_engine as _engine_mod
+
+from ..auth import require_user
 from ..db_engine import user_filter_clause, user_filter_text
-from ..db_models import ChatHistoryRecord, ChatMessageUsageRecord, ChatSessionRecord, ConversationSummaryRecord, UsageLogRecord
+from ..db_models import (
+    ChatHistoryRecord,
+    ChatMessageUsageRecord,
+    ChatSessionRecord,
+    ConversationSummaryRecord,
+    UsageLogRecord,
+)
 from ..models import (
     CallUsage,
     ChatMessage,
@@ -236,8 +244,7 @@ def list_sessions(user_id: str = Depends(require_user)) -> list[ChatSessionSumma
 @router.post("/sessions", response_model=ChatSessionSummary, status_code=status.HTTP_201_CREATED, summary="Create a chat session")
 def create_session(body: CreateSessionRequest, user_id: str = Depends(require_user)) -> ChatSessionSummary:
     """Create a new named chat session."""
-    import uuid as _uuid
-    session_id = body.session_id or str(_uuid.uuid4())
+    session_id = body.session_id or str(uuid.uuid4())
     with Session(_engine_mod.engine) as session:
         existing = session.exec(
             select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)
@@ -281,6 +288,7 @@ def rename_session(session_id: str, body: PatchSessionRequest, user_id: str = De
     return ChatSessionSummary(
         id=record.id,
         title=record.title,
+        origin=record.origin,
         created_at=record.created_at,
         last_active_at=record.last_active_at,
         message_count=msg_count,
