@@ -52,7 +52,7 @@ For how Reli compares to related projects, see [comparisons](docs/comparisons.md
 **Storage:** SQLite (data), ChromaDB (vector embeddings)
 **LLM Gateway:** Requesty (OpenAI-compatible, routes to multiple providers)
 **Integrations:** Google Calendar, Gmail, Google Search (all optional)
-**Infrastructure:** Docker, Cloudflare Tunnel, GitHub Actions CI
+**Infrastructure:** Docker, Cloudflare Tunnel, GitHub Actions CI, Railway (staging + production deploy)
 
 ## Setup
 
