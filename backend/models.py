@@ -337,8 +337,8 @@ class ChatSessionSummary(BaseModel):
 
 class CreateSessionRequest(BaseModel):
     session_id: str | None = None
-    title: str = "New chat"
-    origin: str | None = None
+    title: str = Field(default="New chat", min_length=1, max_length=500)
+    origin: str | None = Field(default=None, max_length=100)
 
 
 class PatchSessionRequest(BaseModel):
