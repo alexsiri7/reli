@@ -1,5 +1,6 @@
 """Feedback endpoint: creates GitHub issues with app context."""
 
+import base64
 import logging
 
 import httpx
@@ -22,6 +23,7 @@ class FeedbackRequest(BaseModel):
     message: str = Field(min_length=1, max_length=5000)
     user_agent: str = ""
     url: str = ""
+    screenshot_base64: str | None = None
 
 
 class FeedbackResponse(BaseModel):
@@ -64,6 +66,30 @@ async def submit_feedback(
 
     context_section = "\n".join(context_lines)
     issue_body = f"{body.message}\n\n---\n\n{context_section}" if context_lines else body.message
+
+    # Upload screenshot to GitHub CDN if provided
+    screenshot_url: str | None = None
+    if body.screenshot_base64 and token and repo:
+        try:
+            image_data = base64.b64decode(body.screenshot_base64)
+            upload_resp = await client.post(
+                f"https://uploads.github.com/repos/{repo}/issues/uploads",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "Content-Type": "image/jpeg",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                content=image_data,
+                timeout=30.0,
+            )
+            upload_resp.raise_for_status()
+            screenshot_url = upload_resp.json().get("url")
+        except Exception as exc:
+            logger.warning("Failed to upload screenshot to GitHub CDN: %s", exc)
+
+    if screenshot_url:
+        issue_body += f"\n\n## Screenshot\n\n![Screenshot]({screenshot_url})"
 
     # Map category to title prefix
     prefix_map = {"bug": "Bug", "feature": "Feature request", "other": "Feedback"}

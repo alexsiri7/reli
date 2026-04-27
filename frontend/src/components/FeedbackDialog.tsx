@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
+import { capturePageToCanvas, isWithinSizeLimit } from '../lib/screenshot'
+import { ScreenshotEditor } from './ScreenshotEditor'
 
 const CATEGORIES = [
   { value: 'bug', label: 'Bug Report' },
@@ -20,6 +22,37 @@ export function FeedbackDialog() {
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ success: boolean; issueUrl?: string; error?: string } | null>(null)
+  const [captureStep, setCaptureStep] = useState<'form' | 'capturing' | 'editing'>('form')
+  const [capturedCanvas, setCapturedCanvas] = useState<HTMLCanvasElement | null>(null)
+  const [screenshotBase64, setScreenshotBase64] = useState<string | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  const handleCapture = async () => {
+    setCaptureStep('capturing')
+    await new Promise(r => setTimeout(r, 350))
+    try {
+      const canvas = await capturePageToCanvas()
+      setCapturedCanvas(canvas)
+      setCaptureStep('editing')
+    } catch {
+      setCaptureStep('form')
+    }
+  }
+
+  const handleEditorDone = (base64: string) => {
+    if (!isWithinSizeLimit(base64)) {
+      setResult({ success: false, error: 'Screenshot is too large (max 2MB). Try again.' })
+    } else {
+      setScreenshotBase64(base64)
+    }
+    setCaptureStep('form')
+    setCapturedCanvas(null)
+  }
+
+  const handleEditorCancel = () => {
+    setCaptureStep('form')
+    setCapturedCanvas(null)
+  }
 
   const handleSubmit = async () => {
     if (!message.trim()) return
@@ -31,6 +64,7 @@ export function FeedbackDialog() {
         message: message.trim(),
         user_agent: navigator.userAgent,
         url: window.location.href,
+        screenshot_base64: screenshotBase64 ?? undefined,
       })
       setResult(res)
       if (res.success) {
@@ -43,8 +77,20 @@ export function FeedbackDialog() {
     }
   }
 
+  if (captureStep === 'capturing') return null
+
+  if (captureStep === 'editing' && capturedCanvas) {
+    return (
+      <ScreenshotEditor
+        canvas={capturedCanvas}
+        onDone={handleEditorDone}
+        onCancel={handleEditorCancel}
+      />
+    )
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div ref={dialogRef} data-screenshot-exclude className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-surface-container-low rounded-xl shadow-2xl w-full max-w-md mx-4">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
@@ -141,6 +187,38 @@ export function FeedbackDialog() {
                 <p className="text-[10px] text-gray-400 dark:text-gray-400 mt-1">
                   Browser and app info will be included automatically.
                 </p>
+              </div>
+
+              {/* Screenshot */}
+              <div>
+                {screenshotBase64 ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={`data:image/jpeg;base64,${screenshotBase64}`}
+                      alt="Screenshot preview"
+                      className="max-h-32 rounded-lg border border-gray-200 dark:border-gray-700 object-contain"
+                    />
+                    <button
+                      onClick={() => setScreenshotBase64(null)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-gray-700 text-white rounded-full text-xs flex items-center justify-center hover:bg-gray-600"
+                      aria-label="Remove screenshot"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleCapture}
+                    type="button"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Add Screenshot
+                  </button>
+                )}
               </div>
 
               {result?.error && (
