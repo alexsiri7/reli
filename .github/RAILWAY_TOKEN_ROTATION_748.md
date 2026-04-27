@@ -16,9 +16,11 @@ Railway API tokens have a finite lifetime. The token set during a previous rotat
 
 A human with access to railway.com and GitHub must:
 
-1. Generate a new permanent API token at https://railway.com/account/tokens
+1. Generate a new no-expiry (maximum lifetime) API token at https://railway.com/account/tokens
 2. Run: `gh secret set RAILWAY_TOKEN --repo alexsiri7/reli` and paste the new token
-3. Re-run the failed CI job: `gh run rerun 25016653713 --repo alexsiri7/reli --failed`
+3. Re-run the failed CI job (run ID at incident time: 25016653713):
+   `gh run list --workflow=staging-pipeline.yml --repo alexsiri7/reli --status=failure --limit=1`
+   then: `gh run rerun <run-id> --repo alexsiri7/reli --failed`
 4. Confirm the "Validate Railway secrets" step passes
 
 ## Long-term Mitigation
