@@ -145,24 +145,20 @@ function SettingsForm({
   const handleSave = async () => {
     setSaving(true)
 
-    // Save model settings (these go to per-user DB when auth is active)
     if (hasModelChanges) {
       await updateModelSettings({ context, reasoning, response, chat_context_window: chatContextWindow })
     }
 
-    // Save API key if changed
     if (hasApiKeyChange) {
       await updateUserSettings({ requesty_api_key: reqApiKey })
       setReqApiKeyDisplay(reqApiKey.length <= 4 ? '****' : '*'.repeat(reqApiKey.length - 4) + reqApiKey.slice(-4))
       setReqApiKey('')
     }
 
-    // Save stale threshold if changed
     if (hasStaleThresholdChange) {
       await updateUserSettings({ stale_threshold_days: staleThresholdDays })
     }
 
-    // Save compression threshold if changed
     if (hasCompressionThresholdChange) {
       await updateUserSettings({ messages_until_compression: messagesUntilCompression })
     }
