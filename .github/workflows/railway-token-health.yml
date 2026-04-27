@@ -17,20 +17,27 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -z "$RAILWAY_TOKEN" ]; then
+          create_issue_if_absent() {
+            local search_term="$1" title="$2" body="$3"
             EXISTING=$(gh issue list \
               --repo alexsiri7/reli \
               --state open \
-              --search "Railway token missing" \
+              --search "$search_term" \
               --json number \
               --jq '.[0].number // empty')
             if [ -z "$EXISTING" ]; then
               gh issue create \
                 --repo alexsiri7/reli \
-                --title "Railway token missing — RAILWAY_TOKEN secret is not set" \
-                --body "The RAILWAY_TOKEN GitHub secret is missing. See DEPLOYMENT_SECRETS.md for rotation instructions." \
+                --title "$title" \
+                --body "$body" \
                 --label bug
             fi
+          }
+
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            create_issue_if_absent "Railway token missing" \
+              "Railway token missing — RAILWAY_TOKEN secret is not set" \
+              "The RAILWAY_TOKEN GitHub secret is missing. See DEPLOYMENT_SECRETS.md for rotation instructions."
             exit 1
           fi
           RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
@@ -39,19 +46,9 @@ jobs:
             -d '{"query":"{me{id}}"}')
           if ! echo "$RESP" | jq -e '.data.me.id' > /dev/null 2>&1; then
             MSG=$(echo "$RESP" | jq -r '.errors[0].message // "could not reach Railway API or token rejected"')
-            EXISTING=$(gh issue list \
-              --repo alexsiri7/reli \
-              --state open \
-              --search "Railway token expired" \
-              --json number \
-              --jq '.[0].number // empty')
-            if [ -z "$EXISTING" ]; then
-              gh issue create \
-                --repo alexsiri7/reli \
-                --title "Railway token expired — rotate RAILWAY_TOKEN before next deploy" \
-                --body "Weekly token health check failed: \`$MSG\`. See DEPLOYMENT_SECRETS.md Token Rotation section." \
-                --label bug
-            fi
+            create_issue_if_absent "Railway token expired" \
+              "Railway token expired — rotate RAILWAY_TOKEN before next deploy" \
+              "Weekly token health check failed: \`$MSG\`. See DEPLOYMENT_SECRETS.md Token Rotation section."
             exit 1
           fi
           echo "RAILWAY_TOKEN is valid."
