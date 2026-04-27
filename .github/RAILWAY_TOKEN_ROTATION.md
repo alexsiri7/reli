@@ -39,7 +39,7 @@ Rotated `RAILWAY_TOKEN` GitHub Actions secret to a new permanent Railway API tok
 
 Prior token rotations (PRs #740, #741) also used expired tokens because they lacked explicit "No expiry" selection. This token was created with **No expiry** enabled to prevent automatic expiration.
 
-Monitor Railway dashboard quarterly for token status.
+Monitor Railway dashboard monthly to confirm token status remains active.
 
 ## Verification
 
