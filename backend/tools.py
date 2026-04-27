@@ -1183,7 +1183,7 @@ def create_scheduled_task(
             user_id=user_id or None,
             thing_id=thing_id or None,
             task_type=task_type.strip() or "remind",
-            payload=payload if payload else None,
+            payload=payload or None,
             scheduled_at=parsed_at,
         )
         session.add(record)
