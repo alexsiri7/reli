@@ -652,15 +652,18 @@ export function Sidebar() {
       .sort((a, b) => new Date(b.last_referenced!).getTime() - new Date(a.last_referenced!).getTime())
   }, [things, nowMs, RECENT_WINDOW_MS])
 
-  // Group active things by type, excluding children of projects (shown under parent)
-  const activeGroups = useMemo(() => {
-    // Build label map from DB types (pluralise by appending 's')
-    const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
+  const typeLabels = useMemo<Record<string, string>>(() => {
+    const labels: Record<string, string> = { ...FALLBACK_LABELS }
     for (const tt of thingTypes) {
-      if (!typeLabels[tt.name]) {
-        typeLabels[tt.name] = tt.name.charAt(0).toUpperCase() + tt.name.slice(1) + 's'
+      if (!labels[tt.name]) {
+        labels[tt.name] = tt.name.charAt(0).toUpperCase() + tt.name.slice(1) + 's'
       }
     }
+    return labels
+  }, [thingTypes])
+
+  // Group active things by type, excluding children of projects (shown under parent)
+  const activeGroups = useMemo(() => {
     const projectIds = new Set(active.filter(t => t.type_hint === 'project').map(t => t.id))
     // Don't show children of projects or preference Things as standalone items (preferences get their own section)
     let standalone = active.filter(t => {
@@ -699,7 +702,7 @@ export function Sidebar() {
       }
     }
     return groups
-  }, [active, thingTypes, thingFilterQuery, thingFilterTypes])
+  }, [active, thingTypes, thingFilterQuery, thingFilterTypes, typeLabels])
 
   // Preference Things — shown in their own dedicated section
   const preferenceThings = useMemo(() => {
@@ -708,12 +711,6 @@ export function Sidebar() {
 
   // Available types for the filter dropdown (derived from active things)
   const availableTypes = useMemo(() => {
-    const typeLabels: Record<string, string> = { ...FALLBACK_LABELS }
-    for (const tt of thingTypes) {
-      if (!typeLabels[tt.name]) {
-        typeLabels[tt.name] = tt.name.charAt(0).toUpperCase() + tt.name.slice(1) + 's'
-      }
-    }
     const typesInUse = new Set(active.map(t => t.type_hint ?? 'other'))
     const ordered: { type: string; label: string; icon: string }[] = []
     for (const type of TYPE_ORDER) {
@@ -726,7 +723,7 @@ export function Sidebar() {
       ordered.push({ type, label: typeLabels[type] ?? type.charAt(0).toUpperCase() + type.slice(1), icon: typeIcon(type, thingTypes) })
     }
     return ordered
-  }, [active, thingTypes])
+  }, [active, thingTypes, typeLabels])
 
   const activeFilterCount = thingFilterTypes.length + (thingFilterQuery.trim() ? 1 : 0)
   const isThingFilterActive = activeFilterCount > 0

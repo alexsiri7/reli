@@ -437,6 +437,14 @@ function getLegacySessionId(): string | null {
 
 const BASE = '/api'
 
+function persistUserSetting(key: string, value: unknown): void {
+  apiFetch(`${BASE}/settings/user`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [key]: value }),
+  }).catch(() => {})
+}
+
 async function fetchThingDetailWithFallback(
   id: string,
 ): Promise<[Thing | null, Relationship[]]> {
@@ -1446,23 +1454,14 @@ export const useStore = create<ReliState>((set, get) => ({
   chatMode: 'normal',
   setChatMode: (mode: ChatMode) => {
     set({ chatMode: mode })
-    // Persist to user settings
-    apiFetch(`${BASE}/settings/user`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_mode: mode }),
-    }).catch(() => {})
+    persistUserSetting('chat_mode', mode)
   },
 
   // Interaction style (Coach vs Consultant)
   interactionStyle: 'auto',
   setInteractionStyle: (style: InteractionStyle) => {
     set({ interactionStyle: style })
-    apiFetch(`${BASE}/settings/user`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ interaction_style: style }),
-    }).catch(() => {})
+    persistUserSetting('interaction_style', style)
   },
 
   // Mobile navigation
