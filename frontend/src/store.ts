@@ -397,6 +397,7 @@ interface ReliState {
     message: string
     user_agent: string
     url: string
+    screenshot_base64?: string
   }) => Promise<{ success: boolean; issueUrl?: string; error?: string }>
 
   // Keyboard shortcuts — command palette
