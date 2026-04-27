@@ -118,6 +118,12 @@ Conversation persistence with applied changes and cost tracking.
 id, session_id, role, content, applied_changes, cost_usd, prompt_tokens, completion_tokens, model, timestamp
 ```
 
+### chat_sessions
+Named chat sessions; each session is a container for messages in `chat_history`. The `origin` field tags sessions seeded from a briefing (`'morning_briefing'`, `'weekly_review'`, or `null` for ad-hoc).
+```
+id, user_id, title, origin, created_at, last_active_at
+```
+
 ### google_tokens
 OAuth token storage (single-row table).
 ```

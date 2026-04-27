@@ -5,7 +5,7 @@ import type { Nudge } from '../generated/api-types'
 type Msg = {
   id: string | number
   session_id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
   applied_changes: null
   questions_for_user: string[]
@@ -35,6 +35,8 @@ const mockStore = {
   nudges: [] as Nudge[],
   chatPrefill: null as string | null,
   clearChatPrefill: mockClearChatPrefill,
+  sessions: [] as unknown[],
+  sessionId: '' as string,
 }
 
 const mockDismissNudge = vi.fn()
@@ -200,5 +202,68 @@ describe('ChatPanel', () => {
     })
     expect(mockClearChatPrefill).toHaveBeenCalledTimes(1)
     mockStore.chatPrefill = null
+  })
+
+  it('shows Briefing badge for morning_briefing session', () => {
+    mockStore.sessions = [{ id: 'sess-1', title: 'Morning briefing', origin: 'morning_briefing', created_at: '', last_active_at: '' }]
+    mockStore.sessionId = 'sess-1'
+    render(<ChatPanel />)
+    expect(screen.getByText('📋 Briefing')).toBeInTheDocument()
+    expect(screen.getByText('Morning briefing')).toBeInTheDocument()
+    mockStore.sessions = []
+    mockStore.sessionId = ''
+  })
+
+  it('shows Weekly badge for weekly_review session', () => {
+    mockStore.sessions = [{ id: 'sess-2', title: 'Weekly review', origin: 'weekly_review', created_at: '', last_active_at: '' }]
+    mockStore.sessionId = 'sess-2'
+    render(<ChatPanel />)
+    expect(screen.getByText('📅 Weekly')).toBeInTheDocument()
+    mockStore.sessions = []
+    mockStore.sessionId = ''
+  })
+
+  it('shows fallback subtitle when no active session', () => {
+    mockStore.sessions = []
+    mockStore.sessionId = ''
+    render(<ChatPanel />)
+    expect(screen.getByText('Your personal knowledge companion')).toBeInTheDocument()
+  })
+
+  it('does not render system messages in the visible message stream', () => {
+    mockStore.messages = [
+      {
+        id: '1',
+        session_id: 's',
+        role: 'system',
+        content: 'SECRET BRIEFING SEED CONTENT',
+        applied_changes: null,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:00:00Z',
+      },
+      {
+        id: '2',
+        session_id: 's',
+        role: 'user',
+        content: 'visible user message',
+        applied_changes: null,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:01:00Z',
+      },
+      {
+        id: '3',
+        session_id: 's',
+        role: 'assistant',
+        content: 'visible assistant reply',
+        applied_changes: null,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:02:00Z',
+      },
+    ]
+    render(<ChatPanel />)
+    expect(screen.queryByText('SECRET BRIEFING SEED CONTENT')).not.toBeInTheDocument()
+    expect(screen.getByText('visible user message')).toBeInTheDocument()
+    expect(screen.getByText('visible assistant reply')).toBeInTheDocument()
+    mockStore.messages = []
   })
 })

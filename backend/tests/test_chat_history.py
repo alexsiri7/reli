@@ -51,9 +51,17 @@ class TestAppendMessage:
     def test_invalid_role_returns_422(self, client):
         resp = client.post(
             "/api/chat/history",
-            json={"session_id": "s1", "role": "system", "content": "oops"},
+            json={"session_id": "s1", "role": "admin", "content": "oops"},
         )
         assert resp.status_code == 422
+
+    def test_system_role_accepted(self, client):
+        resp = client.post(
+            "/api/chat/history",
+            json={"session_id": "s1", "role": "system", "content": "briefing context"},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["role"] == "system"
 
     def test_empty_session_id_returns_422(self, client):
         resp = client.post(
@@ -114,6 +122,50 @@ class TestGetHistory:
         latest_ids = {m["id"] for m in latest_msgs}
         older_ids = {m["id"] for m in older_msgs}
         assert not latest_ids & older_ids
+
+
+class TestChatSessions:
+    def test_create_session_returns_201(self, client):
+        resp = client.post("/api/chat/sessions", json={"title": "Morning briefing", "origin": "morning_briefing"})
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["title"] == "Morning briefing"
+        assert data["origin"] == "morning_briefing"
+        assert data["id"]
+        assert data["created_at"]
+        assert data["last_active_at"]
+
+    def test_create_session_default_title(self, client):
+        resp = client.post("/api/chat/sessions", json={})
+        assert resp.status_code == 201
+        assert resp.json()["title"] == "New chat"
+
+    def test_create_session_null_origin(self, client):
+        resp = client.post("/api/chat/sessions", json={"title": "Ad-hoc"})
+        assert resp.status_code == 201
+        assert resp.json()["origin"] is None
+
+    def test_create_session_title_too_long_returns_422(self, client):
+        resp = client.post("/api/chat/sessions", json={"title": "x" * 501})
+        assert resp.status_code == 422
+
+    def test_create_session_origin_too_long_returns_422(self, client):
+        resp = client.post("/api/chat/sessions", json={"title": "t", "origin": "x" * 101})
+        assert resp.status_code == 422
+
+    def test_list_sessions_empty(self, client):
+        resp = client.get("/api/chat/sessions")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_list_sessions_returns_created(self, client):
+        client.post("/api/chat/sessions", json={"title": "Session A"})
+        client.post("/api/chat/sessions", json={"title": "Session B"})
+        resp = client.get("/api/chat/sessions")
+        assert resp.status_code == 200
+        titles = [s["title"] for s in resp.json()]
+        assert "Session A" in titles
+        assert "Session B" in titles
 
 
 class TestDeleteHistory:

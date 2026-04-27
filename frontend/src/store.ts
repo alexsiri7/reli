@@ -125,6 +125,14 @@ export interface GmailMessage {
   snippet: string
 }
 
+export interface ChatSessionListItem {
+  id: string
+  title: string
+  origin: string | null
+  created_at: string
+  last_active_at: string
+}
+
 export interface ReferencedThing {
   mention: string
   thing_id: string
@@ -194,7 +202,7 @@ export interface SessionStats {
 export interface ChatMessage {
   id: number | string
   session_id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
   applied_changes: AppliedChanges | null
   questions_for_user: string[]
@@ -291,6 +299,10 @@ interface ReliState {
   actOnFinding: (finding: SweepFinding) => void
   snoozeThing: (id: string, checkinDate: string | null) => Promise<void>
   updateThing: (id: string, updates: Record<string, unknown>) => Promise<void>
+  sessions: ChatSessionListItem[]
+  fetchSessions: () => Promise<void>
+  switchSession: (sessionId: string) => Promise<void>
+  continueInChat: (briefingText: string, sessionTitle: string, origin: 'morning_briefing' | 'weekly_review', openingMessage: string) => Promise<void>
   chatPrefill: string | null
   openChatWithContext: (thingId: string, title: string) => void
   clearChatPrefill: () => void
@@ -491,6 +503,60 @@ function _parsePreferenceToasts(
   for (const c of changes.created ?? []) checkItem(c as Record<string, unknown>, 'created')
   for (const u of changes.updated ?? []) checkItem(u as Record<string, unknown>, 'updated')
   return toasts
+}
+
+/** Render a morning briefing as plain text suitable for seeding an LLM `system` message.
+ *  Drops empty sections; uses only the first entry of `reasons[]` to keep the seed compact. */
+export function serialiseMorningBriefing(b: MorningBriefing): string {
+  const c = b.content
+  const lines: string[] = [`Daily briefing — ${b.briefing_date}`]
+  if (c.summary) lines.push(`\nSummary: ${c.summary}`)
+  if (c.priorities.length) {
+    lines.push('\nPriorities:')
+    c.priorities.forEach(i => lines.push(`  • ${i.title}${i.reasons.length ? ` — ${i.reasons[0]}` : ''}`))
+  }
+  if (c.overdue.length) {
+    lines.push('\nOverdue:')
+    c.overdue.forEach(i => lines.push(`  • ${i.title}${i.days_overdue != null ? ` — ${i.days_overdue}d overdue` : ''}`))
+  }
+  if (c.blockers.length) {
+    lines.push('\nBlockers:')
+    c.blockers.forEach(i => lines.push(`  • ${i.title}`))
+  }
+  if (c.findings.length) {
+    lines.push('\nNeeds attention:')
+    c.findings.forEach(f => lines.push(`  • ${f.message}`))
+  }
+  return lines.join('\n')
+}
+
+/** Render a weekly briefing as plain text suitable for seeding an LLM `system` message.
+ *  Drops empty sections. Mirrors the field set rendered in the WeeklyBriefingSection UI. */
+export function serialiseWeeklyBriefing(b: WeeklyBriefing): string {
+  const c = b.content
+  const lines: string[] = [`Weekly review — week of ${b.week_start}`]
+  if (c.summary) lines.push(`\nSummary: ${c.summary}`)
+  if (c.completed.length) {
+    lines.push('\nCompleted this week:')
+    c.completed.forEach(i => lines.push(`  • ${i.title}`))
+  }
+  if (c.upcoming.length) {
+    lines.push('\nUpcoming:')
+    c.upcoming.forEach(i => lines.push(`  • ${i.title}${i.detail ? ` — ${i.detail}` : ''}`))
+  }
+  if (c.new_connections.length) {
+    lines.push('\nNew connections this week:')
+    c.new_connections.forEach(conn => lines.push(`  • ${conn.from_title} → ${conn.to_title}${conn.relationship_type ? ` (${conn.relationship_type})` : ''}`))
+  }
+  if (c.preferences_learned.length) {
+    lines.push('\nPreferences learned:')
+    c.preferences_learned.forEach(p => lines.push(`  • ${p}`))
+  }
+  if (c.open_questions.length) {
+    lines.push('\nOpen questions:')
+    c.open_questions.forEach(i => lines.push(`  • ${i.title}`))
+  }
+  return lines.join('\n')
 }
 
 export const useStore = create<ReliState>((set, get) => ({
@@ -897,6 +963,86 @@ export const useStore = create<ReliState>((set, get) => ({
     }
   },
 
+  sessions: [],
+  fetchSessions: async () => {
+    try {
+      const res = await apiFetch(`${BASE}/chat/sessions`)
+      if (!res.ok) {
+        console.warn('[fetchSessions] HTTP', res.status)
+        return
+      }
+      set({ sessions: await res.json() })
+    } catch (e) {
+      // best-effort — sessions drives display only (origin badges, sidebar list)
+      console.warn('[fetchSessions] failed', e)
+    }
+  },
+  switchSession: async (sessionId: string) => {
+    set({ sessionId, messages: [], historyLoading: true, hasMoreHistory: true })
+    try {
+      const res = await apiFetch(`${BASE}/chat/history/${sessionId}?limit=${HISTORY_PAGE_SIZE}`)
+      if (res.ok) {
+        const msgs: ChatMessage[] = validateResponse(z.array(ChatMessageSchema), await res.json(), '/chat/history')
+        set({
+          messages: msgs.map(m => ({ ...m, questions_for_user: m.questions_for_user ?? [] })),
+          historyLoading: false,
+          hasMoreHistory: msgs.length >= HISTORY_PAGE_SIZE,
+        })
+      } else {
+        set({ historyLoading: false, error: `Failed to load chat history (HTTP ${res.status})` })
+      }
+    } catch (e) {
+      console.error('[switchSession] failed', e)
+      set({ historyLoading: false, error: 'Could not load chat history.' })
+    }
+  },
+  /**
+   * Create a new chat session pre-seeded with briefing context, then switch to it.
+   *
+   * Performs 3 sequential POSTs (session create, system seed, assistant seed).
+   * On step 2 or 3 failure, the session row is created but partially seeded — the
+   * caller sees an `error` and the orphan is left for #712-style cleanup. Only on
+   * full success does the view switch to chat.
+   *
+   * @param briefingText    Serialised briefing content; seeded as a `system` message
+   *                        that the LLM sees but the user does not (filtered in ChatPanel).
+   * @param sessionTitle    Display title for the session list (e.g. "Morning briefing — 2026-04-26").
+   * @param origin          Tag used for the badge in the chat header.
+   * @param openingMessage  Visible assistant greeting that opens the chat.
+   */
+  continueInChat: async (briefingText, sessionTitle, origin, openingMessage) => {
+    try {
+      const sessionRes = await apiFetch(`${BASE}/chat/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: sessionTitle, origin }),
+      })
+      if (!sessionRes.ok) throw new Error(`Failed to create session: ${sessionRes.status}`)
+      const newSession = await sessionRes.json()
+      const newSessionId: string = newSession.id
+
+      const sysRes = await apiFetch(`${BASE}/chat/history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: newSessionId, role: 'system', content: briefingText }),
+      })
+      if (!sysRes.ok) throw new Error(`Failed to seed system message: ${sysRes.status}`)
+
+      const asstRes = await apiFetch(`${BASE}/chat/history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: newSessionId, role: 'assistant', content: openingMessage }),
+      })
+      if (!asstRes.ok) throw new Error(`Failed to seed assistant message: ${asstRes.status}`)
+
+      await get().switchSession(newSessionId)
+      await get().fetchSessions()
+      set({ rightView: 'chat', mobileView: 'chat' })
+    } catch (e) {
+      console.error('[continueInChat] failed', e)
+      set({ error: 'Could not start the chat session. Please try again.' })
+    }
+  },
   openChatWithContext: (_thingId: string, title: string) => {
     set({
       chatPrefill: `Let's talk about "${title}"`,

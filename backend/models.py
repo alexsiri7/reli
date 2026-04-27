@@ -192,7 +192,9 @@ class Relationship(BaseModel):
 
 class ChatMessageCreate(BaseModel):
     session_id: str = Field(..., min_length=1, max_length=200)
-    role: str = Field(..., pattern="^(user|assistant)$")
+    # 'system' permitted so the briefing → chat flow can seed LLM context;
+    # do not treat as user-supplied — it bypasses display filters in ChatPanel.
+    role: str = Field(..., pattern="^(user|assistant|system)$")
     content: str = Field(..., min_length=1, max_length=100_000)
     applied_changes: dict[str, Any] | None = None
 
@@ -202,6 +204,25 @@ class ChatMessageCreate(BaseModel):
         if v is not None and len(json.dumps(v)) > _MAX_DATA_JSON_BYTES:
             raise ValueError(f"applied_changes must be under {_MAX_DATA_JSON_BYTES} bytes when JSON-serialized")
         return v
+
+
+class ChatSessionCreate(BaseModel):
+    """Create a named chat session."""
+
+    title: str = Field(default="New chat", min_length=1, max_length=500)
+    origin: str | None = Field(default=None, max_length=100)
+
+
+class ChatSessionListItem(BaseModel):
+    """Summary of a chat session for listing."""
+
+    id: str
+    title: str
+    origin: str | None = None
+    created_at: datetime
+    last_active_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class CallUsage(BaseModel):
@@ -306,6 +327,7 @@ class ChatResponse(BaseModel):
 class ChatSessionSummary(BaseModel):
     id: str
     title: str
+    origin: str | None = None
     created_at: datetime
     last_active_at: datetime
     message_count: int
@@ -314,8 +336,9 @@ class ChatSessionSummary(BaseModel):
 
 
 class CreateSessionRequest(BaseModel):
-    session_id: str
-    title: str = "New chat"
+    session_id: str | None = None
+    title: str = Field(default="New chat", min_length=1, max_length=500)
+    origin: str | None = Field(default=None, max_length=100)
 
 
 class PatchSessionRequest(BaseModel):

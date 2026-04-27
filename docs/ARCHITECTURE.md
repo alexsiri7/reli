@@ -175,10 +175,19 @@ CREATE TABLE relationships (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE chat_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT 'New chat',
+    origin TEXT,               -- e.g. 'morning_briefing', 'weekly_review'; null for manual sessions
+    created_at TIMESTAMP NOT NULL,
+    last_active_at TIMESTAMP NOT NULL
+);
+
 CREATE TABLE chat_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT,
-    role TEXT,           -- 'user' or 'assistant'
+    role TEXT,           -- 'user', 'assistant', or 'system'
     content TEXT,
     applied_changes JSON,
     cost_usd REAL,

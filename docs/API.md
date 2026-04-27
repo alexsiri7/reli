@@ -136,11 +136,32 @@ The primary interface to Reli's multi-agent pipeline.
 |--------|------|-------------|
 | POST | `/api/chat` | Send a message through the pipeline |
 | POST | `/api/chat/stream` | Stream a response via SSE |
+| POST | `/api/chat/sessions` | Create a named chat session |
+| GET | `/api/chat/sessions` | List chat sessions (most-recent first) |
 | GET | `/api/chat/history/{session_id}` | Get paginated chat history |
 | DELETE | `/api/chat/history/{session_id}` | Clear chat history for a session |
 | POST | `/api/chat/migrate-session` | Move history to a new session ID |
 | POST | `/api/chat/append-message` | Manually append a message to history |
 | GET | `/api/chat/stats/today` | Today's usage stats (tokens, cost) |
+
+**`POST /api/chat/sessions` request:**
+```json
+{
+  "title": "string (default: 'New chat', max 500 chars)",
+  "origin": "string | null (max 100 chars, e.g. 'morning_briefing', 'weekly_review')"
+}
+```
+
+**`POST /api/chat/sessions` / `GET /api/chat/sessions` item shape:**
+```json
+{
+  "id": "string",
+  "title": "string",
+  "origin": "string | null",
+  "created_at": "ISO datetime",
+  "last_active_at": "ISO datetime"
+}
+```
 
 **`POST /api/chat` request:**
 ```json

@@ -24,7 +24,8 @@ def upgrade() -> None:
     op.create_table('chat_sessions',
         sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column('title', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column('title', sqlmodel.sql.sqltypes.AutoString(), nullable=False, server_default="'New chat'"),
+        sa.Column('origin', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('last_active_at', sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint('id')

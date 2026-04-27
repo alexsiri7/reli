@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useStore } from '../store'
+import { useStore, serialiseMorningBriefing, serialiseWeeklyBriefing } from '../store'
 
 const mockThing = {
   id: 't1',
@@ -260,5 +260,168 @@ describe('store: stopNudgeType', () => {
     await useStore.getState().stopNudgeType('proactive_abc123_birthday')
 
     expect(useStore.getState().nudges.find(n => n.id === 'proactive_abc123_birthday')).toBeUndefined()
+  })
+})
+
+describe('store: continueInChat', () => {
+  beforeEach(() => {
+    useStore.setState({ sessions: [], error: null, rightView: 'briefing', mobileView: 'briefing' })
+  })
+
+  it('sets rightView and mobileView to chat on success', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'new-sess-1', title: 'Morning briefing', origin: 'morning_briefing', created_at: '', last_active_at: '' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] }),
+    )
+
+    await useStore.getState().continueInChat('briefing text', 'Morning briefing', 'morning_briefing', 'What do you want to focus on?')
+
+    const state = useStore.getState()
+    expect(state.rightView).toBe('chat')
+    expect(state.mobileView).toBe('chat')
+    expect(state.error).toBeNull()
+  })
+
+  it('sets error when session creation fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, status: 500 }))
+
+    await useStore.getState().continueInChat('text', 'title', 'morning_briefing', 'opening')
+
+    const state = useStore.getState()
+    expect(state.error).toMatch(/Could not start the chat session/)
+    expect(state.rightView).toBe('briefing')
+    expect(state.mobileView).toBe('briefing')
+  })
+
+  it('sets error when system message seed fails', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'sess-1', title: 't', origin: null, created_at: '', last_active_at: '' }) })
+      .mockResolvedValueOnce({ ok: false, status: 413 }),
+    )
+
+    await useStore.getState().continueInChat('text', 'title', 'morning_briefing', 'opening')
+
+    const state = useStore.getState()
+    expect(state.error).toMatch(/Could not start the chat session/)
+    expect(state.rightView).toBe('briefing')
+    expect(state.mobileView).toBe('briefing')
+  })
+
+  it('sets error when assistant message seed fails', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'sess-1', title: 't', origin: null, created_at: '', last_active_at: '' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: false, status: 500 }),
+    )
+
+    await useStore.getState().continueInChat('text', 'title', 'morning_briefing', 'opening')
+
+    const state = useStore.getState()
+    expect(state.error).toMatch(/Could not start the chat session/)
+    expect(state.rightView).toBe('briefing')
+    expect(state.mobileView).toBe('briefing')
+  })
+})
+
+describe('serialiseMorningBriefing', () => {
+  it('includes date and summary', () => {
+    const result = serialiseMorningBriefing({
+      briefing_date: '2026-04-26',
+      content: {
+        summary: 'Busy day ahead',
+        priorities: [],
+        overdue: [],
+        blockers: [],
+        findings: [],
+      },
+    } as never)
+    expect(result).toContain('2026-04-26')
+    expect(result).toContain('Busy day ahead')
+  })
+
+  it('includes first reason for priority items', () => {
+    const result = serialiseMorningBriefing({
+      briefing_date: '2026-04-26',
+      content: {
+        summary: '',
+        priorities: [{ title: 'Write proposal', reasons: ['High priority', 'Due today'] }],
+        overdue: [],
+        blockers: [],
+        findings: [],
+      },
+    } as never)
+    expect(result).toContain('Write proposal')
+    expect(result).toContain('High priority')
+    expect(result).not.toContain('Due today')
+  })
+
+  it('handles empty priorities gracefully', () => {
+    const result = serialiseMorningBriefing({
+      briefing_date: '2026-04-26',
+      content: { summary: '', priorities: [], overdue: [], blockers: [], findings: [] },
+    } as never)
+    expect(result).not.toContain('Priorities:')
+  })
+})
+
+describe('serialiseWeeklyBriefing', () => {
+  it('includes week_start and summary', () => {
+    const result = serialiseWeeklyBriefing({
+      week_start: '2026-04-21',
+      content: {
+        summary: 'Good progress',
+        completed: [],
+        upcoming: [],
+        new_connections: [],
+        preferences_learned: [],
+        open_questions: [],
+      },
+    } as never)
+    expect(result).toContain('2026-04-21')
+    expect(result).toContain('Good progress')
+  })
+
+  it('handles empty sections gracefully', () => {
+    const result = serialiseWeeklyBriefing({
+      week_start: '2026-04-21',
+      content: {
+        summary: '',
+        completed: [],
+        upcoming: [],
+        new_connections: [],
+        preferences_learned: [],
+        open_questions: [],
+      },
+    } as never)
+    expect(result).not.toContain('Completed this week:')
+    expect(result).not.toContain('Upcoming:')
+    expect(result).not.toContain('New connections this week:')
+    expect(result).not.toContain('Preferences learned:')
+  })
+
+  it('includes new_connections and preferences_learned when present', () => {
+    const result = serialiseWeeklyBriefing({
+      week_start: '2026-04-21',
+      content: {
+        summary: '',
+        completed: [],
+        upcoming: [],
+        new_connections: [
+          { from_title: 'Alice', to_title: 'Project X', relationship_type: 'works_on' },
+          { from_title: 'Bob', to_title: 'Charlie' },
+        ],
+        preferences_learned: ['Prefers async standups', 'Quiet hours after 6pm'],
+        open_questions: [],
+      },
+    } as never)
+    expect(result).toContain('New connections this week:')
+    expect(result).toContain('Alice → Project X (works_on)')
+    expect(result).toContain('Bob → Charlie')
+    expect(result).toContain('Preferences learned:')
+    expect(result).toContain('Prefers async standups')
+    expect(result).toContain('Quiet hours after 6pm')
   })
 })
