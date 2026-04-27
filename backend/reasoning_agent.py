@@ -1147,14 +1147,8 @@ async def run_reasoning_agent(
         history_block += f"<{h['role']}>{h['content']}</{h['role']}>\n"
         # Append structured Thing context so the model knows which Things were
         # involved in each turn (context used, items referenced in the reply).
-        context_things = h.get("context_things", [])
-        referenced_things = h.get("referenced_things", [])
-        if context_things or referenced_things:
-            meta: dict[str, Any] = {}
-            if context_things:
-                meta["context_things"] = context_things
-            if referenced_things:
-                meta["referenced_things"] = referenced_things
+        meta = {k: h[k] for k in ("context_things", "referenced_things") if h.get(k)}
+        if meta:
             history_block += f"<enrichment>{json.dumps(meta)}</enrichment>\n"
 
     full_prompt = (f"Conversation history:\n{history_block}\n" if history_block else "") + user_content

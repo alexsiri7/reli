@@ -328,9 +328,7 @@ export function BriefingPanel() {
   const todayISO = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD in local TZ
   const todayEvents = calendarEvents.filter(e => e.start.slice(0, 10) === todayISO)
 
-  const dueTodayItems = secondaryItems
-
-  const hasContent = theOneThing != null || dueTodayItems.length > 0 || findings.length > 0 || learnedPreferences.length > 0 || todayEvents.length > 0
+  const hasContent = theOneThing != null || secondaryItems.length > 0 || findings.length > 0 || learnedPreferences.length > 0 || todayEvents.length > 0
 
   return (
     <div className="flex-1 flex flex-col bg-canvas min-w-0 min-h-0">
@@ -448,9 +446,9 @@ export function BriefingPanel() {
         )}
 
         {/* Due Today */}
-        {dueTodayItems.length > 0 && (
+        {secondaryItems.length > 0 && (
           <SectionCard title="Due Today" accent="text-indigo-400">
-            {dueTodayItems.map(item => (
+            {secondaryItems.map(item => (
               <DueTodayRow
                 key={item.thing.id}
                 item={item}
