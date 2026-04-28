@@ -91,9 +91,6 @@ def generate_weekly_briefing(
     lookback_start = ws.isoformat()
     lookback_end = (today + timedelta(days=1)).isoformat()  # inclusive of today
 
-    # Forward window: upcoming dates in the next 7 days
-    today + timedelta(days=7)
-
     completed: list[WeeklyBriefingItem] = []
     upcoming: list[WeeklyBriefingItem] = []
     new_connections: list[WeeklyBriefingConnection] = []
@@ -276,14 +273,14 @@ def generate_weekly_briefing(
     for rec in pref_rows:
         preferences_learned.append(rec.title)
 
-    # Sort upcoming by urgency
-    upcoming.sort(
-        key=lambda x: (
-            int(x.detail.split("in ")[1].rstrip("d"))
-            if x.detail and "in " in x.detail
-            else (0 if x.detail and "today" in x.detail else 1)
-        )
-    )
+    def _urgency_sort_key(item: WeeklyBriefingItem) -> int:
+        if item.detail and "today" in item.detail:
+            return 0
+        if item.detail and "in " in item.detail:
+            return int(item.detail.split("in ")[1].rstrip("d"))
+        return 1
+
+    upcoming.sort(key=_urgency_sort_key)
 
     # Limit open questions
     open_questions = open_questions[:5]
