@@ -97,7 +97,6 @@ export function FeedbackDialog() {
   return (
     <div data-screenshot-exclude className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-surface-container-low rounded-xl shadow-2xl w-full max-w-md mx-4">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Send Feedback</h2>
           <button
@@ -111,7 +110,6 @@ export function FeedbackDialog() {
           </button>
         </div>
 
-        {/* Content */}
         <div className="px-6 py-5 space-y-4">
           {result?.success ? (
             <div className="text-center py-4">
@@ -188,7 +186,6 @@ export function FeedbackDialog() {
                 </p>
               </div>
 
-              {/* Screenshot */}
               <div>
                 {screenshotBase64 ? (
                   <div className="relative inline-block">
