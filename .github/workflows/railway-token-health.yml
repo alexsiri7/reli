@@ -2,7 +2,7 @@ name: Railway Token Health Check
 
 on:
   schedule:
-    - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC
+    - cron: '0 9 * * *'  # Every day at 09:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
           if [ -z "$RAILWAY_TOKEN" ]; then
             create_issue_if_absent "Railway token missing" \
               "Railway token missing — RAILWAY_TOKEN secret is not set" \
-              "The RAILWAY_TOKEN GitHub secret is missing. See DEPLOYMENT_SECRETS.md for rotation instructions."
+              "The RAILWAY_TOKEN GitHub secret is missing. See docs/RAILWAY_TOKEN_ROTATION_742.md for rotation instructions."
             exit 1
           fi
           RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
@@ -48,7 +48,7 @@ jobs:
             MSG=$(echo "$RESP" | jq -r '.errors[0].message // "could not reach Railway API or token rejected"')
             create_issue_if_absent "Railway token expired" \
               "Railway token expired — rotate RAILWAY_TOKEN before next deploy" \
-              "Weekly token health check failed: \`$MSG\`. See DEPLOYMENT_SECRETS.md Token Rotation section."
+              "Daily token health check failed: \`$MSG\`. See docs/RAILWAY_TOKEN_ROTATION_742.md for rotation instructions."
             exit 1
           fi
           echo "RAILWAY_TOKEN is valid."

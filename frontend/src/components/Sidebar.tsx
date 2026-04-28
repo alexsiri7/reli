@@ -1070,12 +1070,14 @@ export function Sidebar() {
                 </h2>
                 {conflictAlerts.map((alert, i) => {
                   const severityColor = SEVERITY_COLORS[alert.severity] ?? 'text-primary'
-                  const severityIcon = alert.severity === 'critical' ? '\u{1F6A8}' : alert.severity === 'warning' ? '\u26A0\uFE0F' : '\u2139\uFE0F'
-                  const typeIcon = alert.alert_type === 'blocking_chain' ? '\u{1F6D1}' : alert.alert_type === 'schedule_overlap' ? '\u{1F4C5}' : '\u23F0'
+                  const SEVERITY_ICONS: Record<string, string> = { critical: '\u{1F6A8}', warning: '\u26A0\uFE0F' }
+                  const ALERT_TYPE_ICONS: Record<string, string> = { blocking_chain: '\u{1F6D1}', schedule_overlap: '\u{1F4C5}' }
+                  const severityIcon = SEVERITY_ICONS[alert.severity] ?? '\u2139\uFE0F'
+                  const alertTypeIcon = ALERT_TYPE_ICONS[alert.alert_type] ?? '\u23F0'
                   return (
                     <div key={`conflict-${i}`} className="px-4 py-1.5 hover:bg-surface-container-high transition-colors">
                       <div className="flex items-start gap-2">
-                        <span className="text-sm mt-0.5 shrink-0">{typeIcon}</span>
+                        <span className="text-sm mt-0.5 shrink-0">{alertTypeIcon}</span>
                         <div className="flex-1 min-w-0">
                           <p className={`text-sm leading-snug ${severityColor}`}>
                             {alert.message}
