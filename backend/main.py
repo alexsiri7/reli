@@ -76,9 +76,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         app.state.httpx_client = client
-        # Guard against double-start (tests create multiple app instances)
-        if _mcp_server._session_manager and not _mcp_server._session_manager._has_started:
-            async with _mcp_server.session_manager.run():
+
+        # Safely start MCP session manager if available and not started
+        # Use getattr to be defensive against different MCP library versions
+        manager = getattr(_mcp_server, "session_manager", None)
+        has_started = getattr(manager, "_has_started", True) # Default to True to avoid starting if unsure
+
+        if manager and not has_started:
+            async with manager.run():
                 yield
         else:
             yield

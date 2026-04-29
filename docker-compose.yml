@@ -22,4 +22,5 @@ services:
       - SECRET_KEY=${SECRET_KEY:-}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
+      - RELI_BASE_URL=https://reli.interstellarai.net
     restart: unless-stopped
