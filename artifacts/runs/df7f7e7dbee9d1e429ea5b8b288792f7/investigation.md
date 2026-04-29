@@ -9,9 +9,9 @@
 
 | Metric | Value | Reasoning |
 |--------|-------|-----------|
-| Severity | LOW | Production is currently UP — 5/5 sequential `/healthz` probes returned `200 OK` in 248–470 ms during this investigation; the 03:00:34 UTC alert was a transient `HTTP 000` (no-response) blip from the daily cron monitor, identical to the one filed 24h earlier as #758, and there is no current user impact. |
+| Severity | LOW | Production is currently UP — 3/3 sequential `/healthz` probes returned `200 OK` in 248–470 ms during this investigation; the 03:00:34 UTC alert was a transient `HTTP 000` (no-response) blip from the daily cron monitor, identical to the one filed 24h earlier as #758, and there is no current user impact. |
 | Complexity | LOW | This bead's correct disposition is administrative — close #759 as a duplicate of #758 and commit this investigation as the linkable docs artifact (mirroring the PR #761 → #755 pattern). No backend code is touched in this bead; the underlying lifespan-hang fix is already owned by PR #760 (`Fixes #758`). |
-| Confidence | HIGH | Direct, reproducible evidence: live `curl https://reli.interstellarai.net/healthz` returns `{"status":"ok","service":"reli"}` repeatedly; #758 has a byte-identical title and body filed exactly 24h earlier; PR #760 explicitly says `Fixes #758`; web research (`web-research.md` in this run) corroborates that `HTTP 000` is curl's "no response" sentinel and that the suspected MCP-lifespan startup-hang is a known upstream failure mode. |
+| Confidence | HIGH | Direct, reproducible evidence: live `curl https://reli.interstellarai.net/healthz` returns `{"status":"ok","service":"reli"}` repeatedly; #758 has a byte-identical title and a structurally identical body (same template, only the detected timestamp differs) filed exactly 24h earlier; PR #760 explicitly says `Fixes #758`; web research (`web-research.md` in this run) corroborates that `HTTP 000` is curl's "no response" sentinel and that the suspected MCP-lifespan startup-hang is a known upstream failure mode. |
 
 ---
 
@@ -22,7 +22,8 @@ An external daily cron monitor filed #759 at 2026-04-29 03:00:34 UTC reporting
 real HTTP status — it is curl's sentinel for "no HTTP response line was received
 at all" (DNS / TCP / TLS / read-timeout / connection-refused). Production is
 currently up and serving traffic normally, and #758 (filed 24h earlier with a
-byte-identical body) already owns this alert. PR #760 declares `Fixes #758` and
+structurally identical body — same template, only the detected timestamp
+differs) already owns this alert. PR #760 declares `Fixes #758` and
 is the canonical fix for the underlying intermittent FastAPI/MCP lifespan
 startup hang. Per CLAUDE.md Polecat Scope Discipline, this bead's job is the
 duplicate disposition only — not to also fix the lifespan hang from #758.
@@ -76,8 +77,9 @@ WHY 4: Why is #759 a separate issue from #758 if it's the same alert?
    fresh issue per failure rather than commenting on the existing
    open one. That's a monitor-side defect, not an app defect.
    Evidence: #758 (2026-04-28 03:00:33 UTC) and #759 (2026-04-29
-   03:00:34 UTC) have byte-identical titles and bodies, exactly 24h
-   apart, both filed by the daily cron.
+   03:00:34 UTC) have byte-identical titles and structurally identical
+   bodies (same template, only the detected timestamp differs), exactly
+   24h apart, both filed by the daily cron.
 
 ROOT CAUSE (for #759 disposition): #759 is a duplicate of #758.
 The underlying intermittent startup-hang is owned by #758 / PR #760
@@ -103,8 +105,8 @@ WHY: Monitor reports `HTTP 000000`
 
 ↓ ROOT CAUSE for #759: This issue is a duplicate of #758, which already has
   PR #760 (`Fixes #758`) in flight as the canonical fix.
-  Evidence: byte-identical title/body 24h apart; `gh pr view 760` confirms
-  `Fixes #758`.
+  Evidence: byte-identical title and structurally identical body 24h apart;
+  `gh pr view 760` confirms `Fixes #758`.
 
 ### Affected Files
 
@@ -124,7 +126,7 @@ WHY: Monitor reports `HTTP 000000`
 ### Git History
 
 - **#759 created**: 2026-04-29 03:00:35 UTC (external daily cron monitor, owner: `alexsiri7`)
-- **#758 created**: 2026-04-28 03:00:33 UTC (same monitor, byte-identical body)
+- **#758 created**: 2026-04-28 03:00:33 UTC (same monitor, structurally identical body — same template, only the detected timestamp differs)
 - **PR #760 created**: targeting #758, currently `mergeStateStatus: DIRTY`, `mergeable: CONFLICTING`, +117,151 / -124
 - **Last touch on `backend/main.py`**: pre-PR-#760 (PR #760 changes are not yet in `main`)
 - **Implication**: The same external monitor will continue refiling #758-style alerts daily until either (a) PR #760 lands cleanly, or (b) the monitor itself learns to comment-vs-reopen.
@@ -179,8 +181,10 @@ gh pr create --title "docs: add investigation for issue #759 (duplicate of #758)
 ## Summary
 
 #759 is a duplicate of #758 — same external 03:00 UTC daily monitor refired
-exactly 24h later with a byte-identical alert body. Production was verified UP
-during investigation (5/5 `/healthz` 200 OK, sub-500ms). The canonical fix for
+exactly 24h later with a byte-identical title and a structurally identical
+body (same template, only the detected timestamp differs). Production was
+verified UP during investigation (3/3 `/healthz` 200 OK, sub-500ms). The
+canonical fix for
 the underlying intermittent FastAPI/MCP lifespan startup hang is owned by
 PR #760 (`Fixes #758`), so per CLAUDE.md Polecat Scope Discipline this PR adds
 **no code changes** — only the investigation artifact.
@@ -222,8 +226,9 @@ HTTP 200 0.4xx s
 \`\`\`
 
 The 03:00 UTC daily monitor refired the same alert as #758 exactly 24h later
-with a byte-identical body. The underlying intermittent FastAPI/MCP lifespan
-startup hang is owned by **PR #760** (\`Fixes #758\`).
+with a byte-identical title and a structurally identical body (same template,
+only the detected timestamp differs). The underlying intermittent FastAPI/MCP
+lifespan startup hang is owned by **PR #760** (\`Fixes #758\`).
 
 Closing as `not planned` (duplicate). Track the fix on #758 / PR #760.
 EOF
@@ -298,7 +303,7 @@ for an admin-only fix, not its content.)
 | Risk / Edge Case | Mitigation |
 |------------------|------------|
 | Production goes down between investigation and close | Step 1 re-probes `/healthz` at execute time; if any probe fails, abort the close path and re-investigate as a live outage. |
-| Closing #759 hides a *different* failure mode that happens to share the alert template | The 24h-apart, byte-identical title/body and the `HTTP 000` (connection-layer) signature strongly indicate the same recurring transient; any new alert with a different signature would file a new issue. Cross-link in the close comment so future readers can re-open if needed. |
+| Closing #759 hides a *different* failure mode that happens to share the alert template | The 24h-apart, byte-identical title and structurally identical body and the `HTTP 000` (connection-layer) signature strongly indicate the same recurring transient; any new alert with a different signature would file a new issue. Cross-link in the close comment so future readers can re-open if needed. |
 | Archon re-queues again because the workflow doesn't recognize a docs-only PR as "closing the issue" | PR body declares `Fixes #759`; on merge, GitHub auto-closes the issue. If for some reason auto-close is disabled, Step 4's explicit `gh issue close` is a belt-and-braces fallback. |
 | PR #760's accidental log-file additions get cherry-picked into this PR | This worktree branch is `archon/task-archon-fix-github-issue-1777501834756` — independent from `fix/issue-758-deploy-down`. Only files explicitly added in Step 2 should be committed. `git status` before commit must show only `artifacts/runs/df7f7e7dbee9d1e429ea5b8b288792f7/*.md`. |
 | Closing as `not planned` reads as "we won't fix" | The close comment explicitly points at #758 / PR #760 as the active fix, so the message is "tracked elsewhere" not "ignored." |

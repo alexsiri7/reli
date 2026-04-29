@@ -8,7 +8,7 @@
 
 ## Summary
 
-#759 reports an `HTTP 000000` deploy-health-check failure at 2026-04-29 03:00:34 UTC. `HTTP 000` is **not** a real status code — it is curl's sentinel for "no HTTP response received at all" (DNS / TCP / TLS / timeout failure). The same monitor alert fired exactly 24h earlier as #758, which is already being addressed by PR #760 (FastAPI lifespan + MCP session-manager startup hardening). Production was verified UP at investigation time (5/5 `/healthz` returning `200 OK` in ~500 ms). The web research below confirms (a) the HTTP-000 interpretation, (b) the FastAPI-MCP nested-lifespan startup-hang failure mode that PR #760 is targeting, and (c) the canonical `AsyncExitStack` pattern for fixing it correctly.
+#759 reports an `HTTP 000000` deploy-health-check failure at 2026-04-29 03:00:34 UTC. `HTTP 000` is **not** a real status code — it is curl's sentinel for "no HTTP response received at all" (DNS / TCP / TLS / timeout failure). The same monitor alert fired exactly 24h earlier as #758 with a byte-identical title and a structurally identical body (same template, only the detected timestamp differs), which is already being addressed by PR #760 (FastAPI lifespan + MCP session-manager startup hardening). Production was verified UP at investigation time (3/3 `/healthz` returning `200 OK` in ~500 ms). The web research below confirms (a) the HTTP-000 interpretation, (b) the FastAPI-MCP nested-lifespan startup-hang failure mode that PR #760 is targeting, and (c) the canonical `AsyncExitStack` pattern for fixing it correctly.
 
 ---
 
@@ -183,7 +183,7 @@ async def lifespan(app: FastAPI):
 
 For the **current bead (#759)** — keep it administrative, don't write code:
 
-1. **Close #759 as a duplicate of #758.** The investigation already established this. Production is UP, the alert is byte-identical to #758 from 24h earlier, and PR #760 is the canonical fix. Per CLAUDE.md Polecat Scope Discipline, do not also try to fix the underlying lifespan in this bead — that work belongs to PR #760.
+1. **Close #759 as a duplicate of #758.** The investigation already established this. Production is UP, the alert title is byte-identical and the body structurally identical (same template, only the detected timestamp differs) to #758 from 24h earlier, and PR #760 is the canonical fix. Per CLAUDE.md Polecat Scope Discipline, do not also try to fix the underlying lifespan in this bead — that work belongs to PR #760.
 
 For the **PR #760 review** (out of scope for this bead, but informs follow-up):
 
