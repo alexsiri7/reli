@@ -1,0 +1,93 @@
+[archon] loaded 3 keys from ~/.archon/.env
+{"level":40,"time":1777296636007,"pid":2671780,"hostname":"interstellar","module":"workflow.loader","id":"watch-and-merge","fields":["context"],"msg":"loop_node_ai_fields_ignored"}
+{"level":30,"time":1777296636008,"pid":2671780,"hostname":"interstellar","module":"workflow.discovery","count":24,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1777296636009,"pid":2671780,"hostname":"interstellar","module":"workflow.discovery","count":24,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-triage-issue
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1777296636009,"pid":2671780,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+{"level":30,"time":1777296636018,"pid":2671780,"hostname":"interstellar","module":"db.sqlite","msg":"db.sqlite_schema_initialized"}
+{"level":30,"time":1777296636020,"pid":2671780,"hostname":"interstellar","module":"cli.workflow","cwd":"/mnt/ext-fast/reli","msg":"workflow.running_without_isolation"}
+{"level":30,"time":1777296636024,"pid":2671780,"hostname":"interstellar","module":"claude-binary","binaryPath":"/home/asiri/.local/bin/claude","source":"env","msg":"claude.binary_resolved"}
+Dispatching workflow: **archon-triage-issue**
+{"level":30,"time":1777296636026,"pid":2671780,"hostname":"interstellar","module":"provider.claude","authMode":"global","msg":"using_global_auth"}
+{"level":30,"time":1777296636040,"pid":2671780,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-triage-issue","provider":"claude","providerSource":"workflow definition","model":"haiku","msg":"workflow_provider_resolved"}
+{"level":30,"time":1777296636261,"pid":2671780,"hostname":"interstellar","module":"workflow.executor","workflowRunId":"7d703a3157e8c9d96a8604558148c96b","msg":"workflow.dag_resume_skipped_no_completed_nodes"}
+{"level":30,"time":1777296636264,"pid":2671780,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-triage-issue","workflowRunId":"b5ae37b8756ceab3b11ac6e669a49e81","hasIssueContext":false,"issueContextLength":0,"msg":"workflow_starting"}
+🚀 **Starting workflow**: `archon-triage-issue`
+
+> Lightweight workflow:
+1. Fetch the issue from GitHub
+2. Classify as bug, enhancement, or skip (haiku — fast and cheap)
+3. Apply the label and remove archon:triage-in-progress
+{"level":30,"time":1777296636273,"pid":2671780,"hostname":"interstellar","module":"workflow.dag-executor","workflowName":"archon-triage-issue","nodeCount":4,"layerCount":4,"hasIssueContext":false,"issueContextLength":0,"msg":"dag_workflow_starting"}
+{"level":30,"time":1777296636278,"pid":2671780,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"extract-issue-number","provider":"claude","msg":"dag_node_started"}
+[extract-issue-number] Started
+{"level":30,"time":1777296636280,"pid":2671780,"hostname":"interstellar","module":"claude-binary","binaryPath":"/home/asiri/.local/bin/claude","source":"env","msg":"claude.binary_resolved"}
+{"level":30,"time":1777296636280,"pid":2671780,"hostname":"interstellar","module":"provider.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1777296642954,"pid":2671780,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777734000,"rateLimitType":"seven_day","utilization":0.84,"isUsingOverage":false,"surpassedThreshold":0.75},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1777296642971,"pid":2671780,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777734000,"rateLimitType":"seven_day","utilization":0.84,"isUsingOverage":false,"surpassedThreshold":0.75},"msg":"claude.rate_limit_event"}
+{"level":30,"time":1777296644916,"pid":2671780,"hostname":"interstellar","module":"service.title-generator","conversationDbId":"52289497cc7e9fbc1695ed8ec05841d6","title":"Triage GitHub Issue 701","msg":"title.generate_completed"}
+701
+{"level":30,"time":1777296645682,"pid":2671780,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"extract-issue-number","durationMs":9405,"msg":"dag_node_completed"}
+[extract-issue-number] Completed (9.4s)
+{"level":30,"time":1777296645684,"pid":2671780,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"fetch-issue","type":"bash","msg":"dag_node_started"}
+[fetch-issue] Started
+{"level":30,"time":1777296646214,"pid":2671780,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"fetch-issue","durationMs":530,"msg":"dag_node_completed"}
+[fetch-issue] Completed (530ms)
+{"level":30,"time":1777296646219,"pid":2671780,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","provider":"claude","msg":"dag_node_started"}
+[classify] Started
+{"level":30,"time":1777296646221,"pid":2671780,"hostname":"interstellar","module":"claude-binary","binaryPath":"/home/asiri/.local/bin/claude","source":"env","msg":"claude.binary_resolved"}
+{"level":30,"time":1777296646221,"pid":2671780,"hostname":"interstellar","module":"provider.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1777296655186,"pid":2671780,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777734000,"rateLimitType":"seven_day","utilization":0.84,"isUsingOverage":false,"surpassedThreshold":0.75},"msg":"claude.rate_limit_event"}
+bug
+{"level":30,"time":1777296655192,"pid":2671780,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","durationMs":8973,"msg":"dag_node_completed"}
+[classify] Completed (9s)
+{"level":30,"time":1777296655194,"pid":2671780,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"apply-label","type":"bash","msg":"dag_node_started"}
+[apply-label] Started
+{"level":50,"time":1777296655201,"pid":2671780,"hostname":"interstellar","module":"workflow.dag-executor","err":{"type":"Error","message":"Command failed: bash -c ISSUE_NUM=$(echo \"'{\"body\":\"Sentry Issue: [FILMDUEL-P](https://alex-siri.sentry.io/issues/115042002/)\\n\\n```\\nFailed to sync rating for trakt_id=146573: HTTP 401\\n```\\nThis issue was automatically created by Sentry via [Send a notification for high priority issues](https://sentry.io/organizations/alex-siri/monitors/alerts/436071/)\",\"labels\":[{\"id\":\"LA_kwDORm0qF88AAAACgor5ug\",\"name\":\"archon:triage-in-progress\",\"description\":\"Archon pipeline state\",\"color\":\"c2e0c6\"}],\"number\":701,\"title\":\"Failed to sync rating for trakt_id=146573: HTTP 401\"}'\" | jq -r '.number')\nREPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')\nRESULT=$(echo \"'bug'\" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' \\\n  | grep -E '^(bug|enhancement|skip)$' || echo \"skip\")\n\ngh issue edit \"$ISSUE_NUM\" --repo \"$REPO\" \\\n  --remove-label \"archon:triage-in-progress\" 2>/dev/null || true\n\ncase \"$RESULT\" in\n  bug|enhancement)\n    gh issue edit \"$ISSUE_NUM\" --repo \"$REPO\" --add-label \"$RESULT\"\n    echo \"Triaged #$ISSUE_NUM as $RESULT\"\n    ;;\n  skip)\n    gh issue edit \"$ISSUE_NUM\" --repo \"$REPO\" --add-label \"archon:skipped\"\n    echo \"Triaged #$ISSUE_NUM as non-actionable (archon:skipped)\"\n    ;;\nesac\nbash: -c: line 1: syntax error near unexpected token `('\nbash: -c: line 1: `ISSUE_NUM=$(echo \"'{\"body\":\"Sentry Issue: [FILMDUEL-P](https://alex-siri.sentry.io/issues/115042002/)\\n\\n```\\nFailed to sync rating for trakt_id=146573: HTTP 401\\n```\\nThis issue was automatically created by Sentry via [Send a notification for high priority issues](https://sentry.io/organizations/alex-siri/monitors/alerts/436071/)\",\"labels\":[{\"id\":\"LA_kwDORm0qF88AAAACgor5ug\",\"name\":\"archon:triage-in-progress\",\"description\":\"Archon pipeline state\",\"color\":\"c2e0c6\"}],\"number\":701,\"title\":\"Failed to sync rating for trakt_id=146573: HTTP 401\"}'\" | jq -r '.number')'\n","stack":"Error: Command failed: bash -c ISSUE_NUM=$(echo \"'{\"body\":\"Sentry Issue: [FILMDUEL-P](https://alex-siri.sentry.io/issues/115042002/)\\n\\n```\\nFailed to sync rating for trakt_id=146573: HTTP 401\\n```\\nThis issue was automatically created by Sentry via [Send a notification for high priority issues](https://sentry.io/organizations/alex-siri/monitors/alerts/436071/)\",\"labels\":[{\"id\":\"LA_kwDORm0qF88AAAACgor5ug\",\"name\":\"archon:triage-in-progress\",\"description\":\"Archon pipeline state\",\"color\":\"c2e0c6\"}],\"number\":701,\"title\":\"Failed to sync rating for trakt_id=146573: HTTP 401\"}'\" | jq -r '.number')\nREPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')\nRESULT=$(echo \"'bug'\" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' \\\n  | grep -E '^(bug|enhancement|skip)$' || echo \"skip\")\n\ngh issue edit \"$ISSUE_NUM\" --repo \"$REPO\" \\\n  --remove-label \"archon:triage-in-progress\" 2>/dev/null || true\n\ncase \"$RESULT\" in\n  bug|enhancement)\n    gh issue edit \"$ISSUE_NUM\" --repo \"$REPO\" --add-label \"$RESULT\"\n    echo \"Triaged #$ISSUE_NUM as $RESULT\"\n    ;;\n  skip)\n    gh issue edit \"$ISSUE_NUM\" --repo \"$REPO\" --add-label \"archon:skipped\"\n    echo \"Triaged #$ISSUE_NUM as non-actionable (archon:skipped)\"\n    ;;\nesac\nbash: -c: line 1: syntax error near unexpected token `('\nbash: -c: line 1: `ISSUE_NUM=$(echo \"'{\"body\":\"Sentry Issue: [FILMDUEL-P](https://alex-siri.sentry.io/issues/115042002/)\\n\\n```\\nFailed to sync rating for trakt_id=146573: HTTP 401\\n```\\nThis issue was automatically created by Sentry via [Send a notification for high priority issues](https://sentry.io/organizations/alex-siri/monitors/alerts/436071/)\",\"labels\":[{\"id\":\"LA_kwDORm0qF88AAAACgor5ug\",\"name\":\"archon:triage-in-progress\",\"description\":\"Archon pipeline state\",\"color\":\"c2e0c6\"}],\"number\":701,\"title\":\"Failed to sync rating for trakt_id=146573: HTTP 401\"}'\" | jq -r '.number')'\n\n    at genericNodeError (node:child_process:1000:22)\n    at exitHandler (node:child_process:103:28)\n    at emit (node:events:98:22)\n    at #maybeClose (node:child_process:768:16)\n    at #handleOnExit (node:child_process:520:72)\n    at processTicksAndRejections (native:7:39)","code":127,"killed":false,"signal":null,"cmd":"bash -c ISSUE_NUM=$(echo \"'{\"body\":\"Sentry Issue: [FILMDUEL-P](https://alex-siri.sentry.io/issues/115042002/)\\n\\n```\\nFailed to sync rating for trakt_id=146573: HTTP 401\\n```\\nThis issue was automatically created by Sentry via [Send a notification for high priority issues](https://sentry.io/organizations/alex-siri/monitors/alerts/436071/)\",\"labels\":[{\"id\":\"LA_kwDORm0qF88AAAACgor5ug\",\"name\":\"archon:triage-in-progress\",\"description\":\"Archon pipeline state\",\"color\":\"c2e0c6\"}],\"number\":701,\"title\":\"Failed to sync rating for trakt_id=146573: HTTP 401\"}'\" | jq -r '.number')\nREPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')\nRESULT=$(echo \"'bug'\" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' \\\n  | grep -E '^(bug|enhancement|skip)$' || echo \"skip\")\n\ngh issue edit \"$ISSUE_NUM\" --repo \"$REPO\" \\\n  --remove-label \"archon:triage-in-progress\" 2>/dev/null || true\n\ncase \"$RESULT\" in\n  bug|enhancement)\n    gh issue edit \"$ISSUE_NUM\" --repo \"$REPO\" --add-label \"$RESULT\"\n    echo \"Triaged #$ISSUE_NUM as $RESULT\"\n    ;;\n  skip)\n    gh issue edit \"$ISSUE_NUM\" --repo \"$REPO\" --add-label \"archon:skipped\"\n    echo \"Triaged #$ISSUE_NUM as non-actionable (archon:skipped)\"\n    ;;\nesac","stdout":"","stderr":"bash: -c: line 1: syntax error near unexpected token `('\nbash: -c: line 1: `ISSUE_NUM=$(echo \"'{\"body\":\"Sentry Issue: [FILMDUEL-P](https://alex-siri.sentry.io/issues/115042002/)\\n\\n```\\nFailed to sync rating for trakt_id=146573: HTTP 401\\n```\\nThis issue was automatically created by Sentry via [Send a notification for high priority issues](https://sentry.io/organizations/alex-siri/monitors/alerts/436071/)\",\"labels\":[{\"id\":\"LA_kwDORm0qF88AAAACgor5ug\",\"name\":\"archon:triage-in-progress\",\"description\":\"Archon pipeline state\",\"color\":\"c2e0c6\"}],\"number\":701,\"title\":\"Failed to sync rating for trakt_id=146573: HTTP 401\"}'\" | jq -r '.number')'\n"},"nodeId":"apply-label","isTimeout":false,"msg":"dag_node_failed"}
+[apply-label] Failed: Bash node 'apply-label' failed: Command failed: bash -c ISSUE_NUM=$(echo "'{"body":"Sentry Issue: [FILMDUEL-P](https://alex-siri.sentry.io/issues/115042002/)\n\n```\nFailed to sync rating for trakt_id=146573: HTTP 401\n```\nThis issue was automatically created by Sentry via [Send a notification for high priority issues](https://sentry.io/organizations/alex-siri/monitors/alerts/436071/)","labels":[{"id":"LA_kwDORm0qF88AAAACgor5ug","name":"archon:triage-in-progress","description":"Archon pipeline state","color":"c2e0c6"}],"number":701,"title":"Failed to sync rating for trakt_id=146573: HTTP 401"}'" | jq -r '.number')
+REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
+RESULT=$(echo "'bug'" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' \
+  | grep -E '^(bug|enhancement|skip)$' || echo "skip")
+
+gh issue edit "$ISSUE_NUM" --repo "$REPO" \
+  --remove-label "archon:triage-in-progress" 2>/dev/null || true
+
+case "$RESULT" in
+  bug|enhancement)
+    gh issue edit "$ISSUE_NUM" --repo "$REPO" --add-label "$RESULT"
+    echo "Triaged #$ISSUE_NUM as $RESULT"
+    ;;
+  skip)
+    gh issue edit "$ISSUE_NUM" --repo "$REPO" --add-label "archon:skipped"
+    echo "Triaged #$ISSUE_NUM as non-actionable (archon:skipped)"
+    ;;
+esac
+bash: -c: line 1: syntax error near unexpected token `('
+bash: -c: line 1: `ISSUE_NUM=$(echo "'{"body":"Sentry Issue: [FILMDUEL-P](https://alex-siri.sentry.io/issues/115042002/)\n\n```\nFailed to sync rating for trakt_id=146573: HTTP 401\n```\nThis issue was automatically created by Sentry via [Send a notification for high priority issues](https://sentry.io/organizations/alex-siri/monitors/alerts/436071/)","labels":[{"id":"LA_kwDORm0qF88AAAACgor5ug","name":"archon:triage-in-progress","description":"Archon pipeline state","color":"c2e0c6"}],"number":701,"title":"Failed to sync rating for trakt_id=146573: HTTP 401"}'" | jq -r '.number')'
+
+{"level":40,"time":1777296655203,"pid":2671780,"hostname":"interstellar","module":"workflow.dag-executor","layerIdx":3,"nodeCount":1,"msg":"dag_layer_had_failures"}
+{"level":30,"time":1777296655203,"pid":2671780,"hostname":"interstellar","module":"workflow.dag-executor","nodeCount":4,"anyCompleted":true,"anyFailed":true,"msg":"dag_workflow_finished"}
+❌ DAG workflow 'archon-triage-issue' completed with failures: 'apply-label': Bash node 'apply-label' failed: Command failed: bash -c ISSUE_NUM=$(echo "'{"body":"Sentry Issue: [FILMDUEL-P](https://alex-siri.sentry.io/issues/115042002/)\n\n```\nFailed to sync rating for trakt_id=146573: HTTP 401\n```\nThis issue was automatically created by Sentry via [Send a notification for high priority issues](https://sentry.io/organizations/alex-siri/monitors/alerts/436071/)","labels":[{"id":"LA_kwDORm0qF88AAAACgor5ug","name":"archon:triage-in-progress","description":"Archon pipeline state","color":"c2e0c6"}],"number":701,"title":"Failed to sync rating for trakt_id=146573: HTTP 401"}'" | jq -r '.number')
+REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
+RESULT=$(echo "'bug'" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' \
+  | grep -E '^(bug|enhancement|skip)$' || echo "skip")
+
+gh issue edit "$ISSUE_NUM" --repo "$REPO" \
+  --remove-label "archon:triage-in-progress" 2>/dev/null || true
+
+case "$RESULT" in
+  bug|enhancement)
+    gh issue edit "$ISSUE_NUM" --repo "$REPO" --add-label "$RESULT"
+    echo "Triaged #$ISSUE_NUM as $RESULT"
+    ;;
+  skip)
+    gh issue edit "$ISSUE_NUM" --repo "$REPO" --add-label "archon:skipped"
+    echo "Triaged #$ISSUE_NUM as non-actionable (archon:skipped)"
+    ;;
+esac
+bash: -c: line 1: syntax error near unexpected token `('
+bash: -c: line 1: `ISSUE_NUM=$(echo "'{"body":"Sentry Issue: [FILMDUEL-P](https://alex-siri.sentry.io/issues/115042002/)\n\n```\nFailed to sync rating for trakt_id=146573: HTTP 401\n```\nThis issue was automatically created by Sentry via [Send a notification for high priority issues](https://sentry.io/organizations/alex-siri/monitors/alerts/436071/)","labels":[{"id":"LA_kwDORm0qF88AAAACgor5ug","name":"archon:triage-in-progress","description":"Archon pipeline state","color":"c2e0c6"}],"number":701,"title":"Failed to sync rating for trakt_id=146573: HTTP 401"}'" | jq -r '.number')'
+
+Error: Workflow failed: Workflow did not complete successfully

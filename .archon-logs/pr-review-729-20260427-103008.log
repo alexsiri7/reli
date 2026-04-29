@@ -1,0 +1,16 @@
+[archon] loaded 3 keys from ~/.archon/.env
+{"level":40,"time":1777282209086,"pid":2523282,"hostname":"interstellar","module":"workflow.loader","id":"watch-and-merge","fields":["context"],"msg":"loop_node_ai_fields_ignored"}
+{"level":30,"time":1777282209087,"pid":2523282,"hostname":"interstellar","module":"workflow.discovery","count":24,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1777282209088,"pid":2523282,"hostname":"interstellar","module":"workflow.discovery","count":24,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-smart-pr-review
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1777282209089,"pid":2523282,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+{"level":30,"time":1777282209094,"pid":2523282,"hostname":"interstellar","module":"db.sqlite","msg":"db.sqlite_schema_initialized"}
+{"level":30,"time":1777282209097,"pid":2523282,"hostname":"interstellar","module":"cli.workflow","branch":"archon-smart-pr-review-1777282209096","msg":"worktree_creating"}
+Error: Failed to fetch base branch from origin: Sync fetch from origin/main failed: Command failed: git -C /mnt/ext-fast/reli fetch origin main
+From https://github.com/alexsiri7/reli
+ * branch            main       -> FETCH_HEAD
+error: cannot lock ref 'refs/remotes/origin/main': is at 53e91cfe99899b09164b9c21443fd1a4b189ca54 but expected a4bb03ce58e7740545c775dfb8d79eb11cae7ec4
+ ! a4bb03c..53e91cf  main       -> origin/main  (unable to update local ref)
+. Check your network connection and try again.

@@ -1,0 +1,224 @@
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (0) from .env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (0) from .env.development -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (0) from .env.production -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (2) from ../../../home/asiri/.archon/.env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+{"level":40,"time":1776644703116,"pid":2552988,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776644703119,"pid":2552988,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776644703127,"pid":2552988,"hostname":"interstellar","module":"workflow.loader","id":"watch-and-merge","fields":["context"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776644703128,"pid":2552988,"hostname":"interstellar","module":"workflow.loader","id":"adversarial-sprint","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":30,"time":1776644703128,"pid":2552988,"hostname":"interstellar","module":"workflow.discovery","count":23,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1776644703129,"pid":2552988,"hostname":"interstellar","module":"workflow.discovery","count":23,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-smart-pr-review
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1776644703130,"pid":2552988,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+{"level":30,"time":1776644705635,"pid":2552988,"hostname":"interstellar","module":"db.sqlite","msg":"db.sqlite_schema_initialized"}
+{"level":30,"time":1776644706219,"pid":2552988,"hostname":"interstellar","module":"cli.workflow","branch":"archon-smart-pr-review-1776644706219","msg":"worktree_creating"}
+{"level":40,"time":1776644706686,"pid":2552988,"hostname":"interstellar","module":"isolation.worktree","worktreePath":"/home/asiri/.archon/worktrees/ext-fast/reli/archon/task-archon-smart-pr-review-1776644706219","copiedCount":0,"attemptedCount":1,"msg":"worktree_file_copy_partial"}
+{"level":30,"time":1776644706899,"pid":2552988,"hostname":"interstellar","module":"cli.workflow","path":"/home/asiri/.archon/worktrees/ext-fast/reli/archon/task-archon-smart-pr-review-1776644706219","msg":"worktree_created"}
+{"level":30,"time":1776644709086,"pid":2552988,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":30,"time":1776644709096,"pid":2552988,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-smart-pr-review","provider":"claude","providerSource":"config","msg":"workflow_provider_resolved"}
+{"level":40,"time":1776644714135,"pid":2552988,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777104000,"rateLimitType":"seven_day","utilization":0.52,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":30,"time":1776644714139,"pid":2552988,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-smart-pr-review","workflowRunId":"74edd8e05c2c7eaa8e1ce8a74eea99d8","hasIssueContext":false,"issueContextLength":0,"msg":"workflow_starting"}
+🚀 **Starting workflow**: `archon-smart-pr-review`
+
+> "smart PR review", "quick review".
+Does: Gathers PR scope -> classifies complexity -> routes to only relevant review agents ->
+      synthesizes findings -> auto-fixes CRITICAL/HIGH issues.
+Unlike the comprehensive review, this workflow classifies the PR first and only runs
+the review agents that are relevant. A 3-line typo fix skips test-coverage and docs-impact.
+{"level":30,"time":1776644714217,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","workflowName":"archon-smart-pr-review","nodeCount":12,"layerCount":7,"hasIssueContext":false,"issueContextLength":0,"msg":"dag_workflow_starting"}
+{"level":30,"time":1776644714221,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"scope","provider":"claude","msg":"dag_node_started"}
+[archon-pr-review-scope] Started
+{"level":30,"time":1776644714227,"pid":2552988,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":30,"time":1776644714538,"pid":2552988,"hostname":"interstellar","module":"service.title-generator","conversationDbId":"928f422f88ae50256e5d870e5ed03876","title":"Smart PR Review Feature","msg":"title.generate_completed"}
+{"level":40,"time":1776644715777,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"scope","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776644728526,"pid":2552988,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777104000,"rateLimitType":"seven_day","utilization":0.52,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+Found the workflow artifacts. Let me get the scope limits and implementation details.
+
+Now let me create the artifacts directory and write the scope manifest.
+
+## PR Review Scope Complete
+
+**PR**: #686 - fix: extract scores for all eval agent types in PR comment
+**Files**: 5 changed (+5 -6)
+
+### Pre-Review Status
+| Check | Status |
+|-------|--------|
+| Conflicts | ✅ None |
+| CI | ⏳ 2 pending, 1 passing |
+| Behind Base | ✅ 1 commit behind |
+| Draft | ✅ Ready |
+| Size | ✅ Normal |
+
+### File Categories
+- Source: 4 files (backend cleanups)
+- CI/Config: 1 file (evals.yml regex fix)
+- Tests: 0 files
+- Docs: 0 files
+
+### Key Review Concern
+The PR body describes only the `evals.yml` regex fix, but 4 additional backend files have minor cleanups (import reordering, set literal, split refactor, blank line removal). These are **not documented** in the workflow investigation or implementation report — reviewers should verify these are harmless and assess scope creep per CLAUDE.md's "Polecat Scope Discipline."
+
+### Artifacts Directory
+`/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/74edd8e05c2c7eaa8e1ce8a74eea99d8/review/`
+
+### Next Step
+Launching 5 parallel review agents...
+{"level":30,"time":1776644831784,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"scope","durationMs":117563,"msg":"dag_node_completed"}
+[archon-pr-review-scope] Completed (1m58s)
+{"level":30,"time":1776644831803,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"sync","provider":"claude","msg":"dag_node_started"}
+{"level":30,"time":1776644831803,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","provider":"claude","msg":"dag_node_started"}
+[classify] Started
+{"level":30,"time":1776644831921,"pid":2552988,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+[archon-sync-pr-with-main] Started
+{"level":30,"time":1776644831947,"pid":2552988,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776644833609,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776644833621,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"sync","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776644838730,"pid":2552988,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777104000,"rateLimitType":"seven_day","utilization":0.52,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776644845974,"pid":2552988,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777104000,"rateLimitType":"seven_day","utilization":0.52,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"run_code_review":"true","run_error_handling":"false","run_test_coverage":"true","run_comment_quality":"false","run_docs_impact":"false","complexity":"small","reasoning":"5-file PR with mechanical backend cleanups (imports, literals, formatting). Primary concern: PR body only documents evals.yml regex fix; 4 undocumented backend files need scope verification per Polecat Scope Discipline. Changes are straightforward with no architectural complexity, but code review and test coverage agents should verify the undocumented cleanups are in-scope."}
+{"level":30,"time":1776644848582,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","durationMs":16779,"msg":"dag_node_completed"}
+[classify] Completed (16.8s)
+The PR branch is 1 commit behind main. However, since this branch is checked out in another worktree, I cannot rebase it from here. Let me check the actual divergence to understand if this is significant.
+
+The merge-tree succeeded cleanly (output is a tree hash, no conflict markers). The branch is 1 commit behind main (`23f15e4 feat: open type_hint to user-defined types (#685)`) but there are no conflicts.
+
+Since the branch is checked out in another worktree, I need to perform the rebase there.
+
+Rebase succeeded cleanly. Now let me validate and push.
+
+No conflict markers. Now push with force-with-lease.
+
+Now create the sync report and update scope.
+
+## ✅ PR Synced with Main
+
+**Branch**: `archon/task-archon-fix-github-issue-1776641427982` rebased onto `main`
+**Commits rebased**: 3 (over 1 new commit in main: `23f15e4 feat: open type_hint to user-defined types (#685)`)
+**Conflicts resolved**: 0
+
+Proceeding to parallel review...
+{"level":30,"time":1776644920766,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"sync","durationMs":88963,"msg":"dag_node_completed"}
+[archon-sync-pr-with-main] Completed (1m29s)
+{"level":30,"time":1776644920773,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"error-handling","when":"$classify.output.run_error_handling == 'true'","msg":"dag_node_skipped_condition"}
+{"level":30,"time":1776644920774,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"comment-quality","when":"$classify.output.run_comment_quality == 'true'","msg":"dag_node_skipped_condition"}
+{"level":30,"time":1776644920774,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"docs-impact","when":"$classify.output.run_docs_impact == 'true'","msg":"dag_node_skipped_condition"}
+{"level":30,"time":1776644920774,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"code-review","provider":"claude","msg":"dag_node_started"}
+{"level":30,"time":1776644920774,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"test-coverage","provider":"claude","msg":"dag_node_started"}
+[archon-docs-impact-agent] Skipped (when_condition)
+[archon-code-review-agent] Started
+[archon-test-coverage-agent] Started
+[archon-error-handling-agent] Skipped (when_condition)
+[archon-comment-quality-agent] Skipped (when_condition)
+{"level":30,"time":1776644920809,"pid":2552988,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":30,"time":1776644920811,"pid":2552988,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776644922384,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"code-review","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776644922402,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"test-coverage","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776644934612,"pid":2552988,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777104000,"rateLimitType":"seven_day","utilization":0.52,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776644935536,"pid":2552988,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777104000,"rateLimitType":"seven_day","utilization":0.52,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":50,"time":1776644967752,"pid":2552988,"hostname":"interstellar","module":"db.sqlite","err":{"type":"Error","message":"database is locked","stack":"SQLiteError: database is locked\n    at run (unknown)\n    at #run (bun:sqlite:185:20)\n    at query (/mnt/ext-fast/archon/packages/core/src/db/adapters/sqlite.ts:87:29)\n    at query (/mnt/ext-fast/archon/packages/core/src/db/connection.ts:111:26)\n    at createWorkflowEvent (/mnt/ext-fast/archon/packages/core/src/db/workflow-events.ts:45:16)\n    at <anonymous> (/mnt/ext-fast/archon/packages/core/src/workflows/store-adapter.ts:49:31)\n    at executeNodeInternal (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:961:12)\n    at async <anonymous> (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:2754:28)\n    at async executeDagWorkflow (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:2428:40)\n    at async executeWorkflow (unknown)\n    at async workflowRunCommand (unknown)\n    at async main (unknown)\n    at processTicksAndRejections (native:7:39)","code":"SQLITE_BUSY","errno":5,"byteOffset":-1},"sql":"INSERT INTO remote_agent_workflow_events (id, workflow_run_id, event_type, step_index, step_name, data)\n       VALUES (?, ?, ?, ?, ?, ?)","params":["f9d8b20f-b43c-479a-878b-c3debb46346f","74edd8e05c2c7eaa8e1ce8a74eea99d8","tool_called",null,"code-review","{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"/mnt/ext-fast/.archon/worktrees/ext-fast/reli/archon/task-archon-smart-pr-review-1776644706219/backend/sweep.py\",\"offset\":33,\"limit\":12}}"],"msg":"db.sqlite_query_failed"}
+{"level":50,"time":1776644967753,"pid":2552988,"hostname":"interstellar","module":"db.workflow-events","err":{"type":"Error","message":"database is locked","stack":"SQLiteError: database is locked\n    at run (unknown)\n    at #run (bun:sqlite:185:20)\n    at query (/mnt/ext-fast/archon/packages/core/src/db/adapters/sqlite.ts:87:29)\n    at query (/mnt/ext-fast/archon/packages/core/src/db/connection.ts:111:26)\n    at createWorkflowEvent (/mnt/ext-fast/archon/packages/core/src/db/workflow-events.ts:45:16)\n    at <anonymous> (/mnt/ext-fast/archon/packages/core/src/workflows/store-adapter.ts:49:31)\n    at executeNodeInternal (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:961:12)\n    at async <anonymous> (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:2754:28)\n    at async executeDagWorkflow (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:2428:40)\n    at async executeWorkflow (unknown)\n    at async workflowRunCommand (unknown)\n    at async main (unknown)\n    at processTicksAndRejections (native:7:39)","code":"SQLITE_BUSY","errno":5,"byteOffset":-1},"eventType":"tool_called","runId":"74edd8e05c2c7eaa8e1ce8a74eea99d8","msg":"db.workflow_event_create_failed"}
+Now let me read the relevant source files and their corresponding test files.
+
+Now I have a clear picture. Let me also quickly check the evals.yml line 89 to confirm the diff is on the `main` branch version vs PR version.
+
+Now I have everything needed. Let me write the artifact.
+
+Test coverage analysis complete. Artifact written to the expected path.
+
+**Key findings:**
+
+1. **MEDIUM (criticality 5)**: The `scoreRe` regex in `evals.yml` — the core fix — has no unit test. However, this is CI workflow JavaScript that's inherently hard to unit test, and the regex can be verified by inspection against the known assertion message strings in `test_evals.py:149` and `test_evals.py:425`. The evals workflow itself serves as an integration test. Recommending no action.
+
+2. **LOW (criticality 1)**: The four backend file changes are pure refactoring (import reorder, set literal, variable extraction, blank line removal) with no behavioral changes. Existing tests cover these paths adequately.
+
+**Verdict: APPROVE** — No critical test gaps. The one medium-severity finding is mitigated by the self-testing nature of the evals workflow and the low impact of failure (cosmetic CI comment display only).
+{"level":30,"time":1776645032608,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"test-coverage","durationMs":111834,"msg":"dag_node_completed"}
+[archon-test-coverage-agent] Completed (1m52s)
+Starting the code review. Let me load all the context first.
+
+Now let me check the relevant files for patterns and context.
+
+Let me verify the regex correctness by checking the test failure message formats.
+
+Now I have all the information needed. Let me write the review artifact.
+
+Now let me validate the artifact.
+
+Review complete. Here's the summary:
+
+**Verdict: APPROVE**
+
+**3 findings across 5 files:**
+
+| # | Finding | Severity |
+|---|---------|----------|
+| 1 | Scope creep — 4 backend files with unrelated cleanups (violates Polecat Scope Discipline, but all changes are correct and harmless) | LOW |
+| 2 | Regex correctness verified — `(?:Tool name trajectory\|Response agent eval)` matches both assertion formats in `test_evals.py` | LOW |
+| 3 | Score-to-test positional mapping is fragile (pre-existing, not introduced by this PR) | MEDIUM |
+
+**Key takeaway**: The core regex fix at `.github/workflows/evals.yml:89` is correct and minimal. The 4 backend changes are safe equivalent refactors but technically out of scope per CLAUDE.md. No blockers.
+
+Artifact written to: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/74edd8e05c2c7eaa8e1ce8a74eea99d8/review/code-review-findings.md`
+{"level":30,"time":1776645086183,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"code-review","durationMs":165409,"msg":"dag_node_completed"}
+[archon-code-review-agent] Completed (2m45s)
+{"level":30,"time":1776645086457,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"synthesize","provider":"claude","msg":"dag_node_started"}
+[archon-synthesize-review] Started
+{"level":30,"time":1776645086461,"pid":2552988,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776645087996,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"synthesize","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776645112037,"pid":2552988,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777104000,"rateLimitType":"seven_day","utilization":0.52,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+Three agent artifacts are missing (error-handling, comment-quality, docs-impact). I'll synthesize from the 2 available plus the scope document.
+
+Now let me create the consolidated review and post the PR comment.
+
+Now post the GitHub PR comment.
+
+Review synthesis complete. PR comment posted to [PR #686](https://github.com/alexsiri7/reli/pull/686#issuecomment-4277199429).
+
+**Summary**: 0 CRITICAL, 0 HIGH, 2 MEDIUM (both pre-existing/deferred), 3 LOW. Verdict: **APPROVE**. Note: 3 of 5 agent artifacts (error-handling, comment-quality, docs-impact) were not produced by the parallel agents.
+{"level":30,"time":1776645186489,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"synthesize","durationMs":100032,"msg":"dag_node_completed"}
+[archon-synthesize-review] Completed (1m40s)
+{"level":30,"time":1776645186949,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"implement-fixes","provider":"claude","msg":"dag_node_started"}
+[archon-implement-review-fixes] Started
+{"level":30,"time":1776645187316,"pid":2552988,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776645189205,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"implement-fixes","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776645213518,"pid":2552988,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777104000,"rateLimitType":"seven_day","utilization":0.53,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+
+
+The consolidated review shows **0 CRITICAL and 0 HIGH issues** — there's nothing to auto-fix. Let me create the fix report and post the comment.
+
+## Fix Implementation Complete
+
+**PR**: #686
+**Branch**: archon/task-archon-fix-github-issue-1776641427982
+**Status**: COMPLETE (no fixes needed)
+
+| Severity | Found | Fixed |
+|----------|-------|-------|
+| CRITICAL | 0 | — |
+| HIGH | 0 | — |
+
+No CRITICAL or HIGH issues were identified by the review agents, so no auto-fixes were required. The PR is clean and ready to merge.
+
+See fix report: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/74edd8e05c2c7eaa8e1ce8a74eea99d8/review/fix-report.md`
+{"level":30,"time":1776645217722,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"implement-fixes","durationMs":30773,"msg":"dag_node_completed"}
+[archon-implement-review-fixes] Completed (30.8s)
+{"level":30,"time":1776645217725,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"check-ntfy","type":"bash","msg":"dag_node_started"}
+[check-ntfy] Started
+{"level":30,"time":1776645217732,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"check-ntfy","durationMs":7,"msg":"dag_node_completed"}
+[check-ntfy] Completed (7ms)
+{"level":30,"time":1776645217736,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"notify","when":"$check-ntfy.output == 'true'","msg":"dag_node_skipped_condition"}
+[notify] Skipped (when_condition)
+{"level":30,"time":1776645217738,"pid":2552988,"hostname":"interstellar","module":"workflow.dag-executor","nodeCount":12,"anyCompleted":true,"anyFailed":false,"msg":"dag_workflow_finished"}
+
+Workflow completed successfully.

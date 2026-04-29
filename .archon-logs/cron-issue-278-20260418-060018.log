@@ -1,0 +1,19 @@
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (0) from .env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (0) from .env.development -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env.production -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (2) from ../../../home/asiri/.archon/.env -- tip: 🛡️ auth for agents: https://vestauth.com
+{"level":40,"time":1776488418275,"pid":1227341,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776488418277,"pid":1227341,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776488418287,"pid":1227341,"hostname":"interstellar","module":"workflow.loader","id":"watch-and-merge","fields":["context"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776488418288,"pid":1227341,"hostname":"interstellar","module":"workflow.loader","id":"adversarial-sprint","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":30,"time":1776488418289,"pid":1227341,"hostname":"interstellar","module":"workflow.discovery","count":23,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1776488418289,"pid":1227341,"hostname":"interstellar","module":"workflow.discovery","count":23,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-fix-github-issue
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1776488418290,"pid":1227341,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+{"level":30,"time":1776488418291,"pid":1227341,"hostname":"interstellar","module":"db.sqlite","msg":"db.sqlite_schema_initialized"}
+{"level":50,"time":1776488418292,"pid":1227341,"hostname":"interstellar","module":"db.sqlite","err":{"type":"Error","message":"database or disk is full","stack":"SQLiteError: database or disk is full\n    at all (unknown)\n    at query (/mnt/ext-fast/archon/packages/core/src/db/adapters/sqlite.ts:72:29)\n    at query (/mnt/ext-fast/archon/packages/core/src/db/connection.ts:111:26)\n    at getOrCreateConversation (/mnt/ext-fast/archon/packages/core/src/db/conversations.ts:107:30)\n    at async workflowRunCommand (/mnt/ext-fast/archon/packages/cli/src/commands/workflow.ts:279:41)\n    at async main (/mnt/ext-fast/archon/packages/cli/src/cli.ts:351:19)\n    at processTicksAndRejections (native:7:39)","code":"SQLITE_FULL","errno":13,"byteOffset":-1},"sql":"INSERT INTO remote_agent_conversations (platform_type, platform_conversation_id, ai_assistant_type, codebase_id, cwd) VALUES (?, ?, ?, ?, ?) RETURNING *","params":["cli","cli-1776488418290-n811nv","claude",null,null],"msg":"db.sqlite_query_failed"}
+Error: Failed to access database: database or disk is full
+Hint: Check that DATABASE_URL is set and the database is running.

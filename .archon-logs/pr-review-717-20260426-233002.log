@@ -1,0 +1,19 @@
+[archon] loaded 3 keys from ~/.archon/.env
+{"level":40,"time":1777242603145,"pid":2019140,"hostname":"interstellar","module":"workflow.loader","id":"watch-and-merge","fields":["context"],"msg":"loop_node_ai_fields_ignored"}
+{"level":30,"time":1777242603151,"pid":2019140,"hostname":"interstellar","module":"workflow.discovery","count":24,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1777242603152,"pid":2019140,"hostname":"interstellar","module":"workflow.discovery","count":24,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-smart-pr-review
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1777242603153,"pid":2019140,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+{"level":30,"time":1777242603167,"pid":2019140,"hostname":"interstellar","module":"db.sqlite","msg":"db.sqlite_schema_initialized"}
+{"level":30,"time":1777242603170,"pid":2019140,"hostname":"interstellar","module":"cli.workflow","branch":"archon-smart-pr-review-1777242603170","msg":"worktree_creating"}
+Error: Command failed: git -C /mnt/ext-fast/reli worktree add /home/asiri/.archon/workspaces/ext-fast/reli/worktrees/archon/task-archon-smart-pr-review-1777242603170 -b archon/task-archon-smart-pr-review-1777242603170 origin/main
+Preparing worktree (new branch 'archon/task-archon-smart-pr-review-1777242603170')
+error: could not lock config file .git/config: File exists
+error: unable to write upstream branch configuration
+hint: 
+hint: After fixing the error cause you may try to fix up
+hint: the remote tracking information by invoking:
+hint:   git branch --set-upstream-to=origin/refs/heads/main
+

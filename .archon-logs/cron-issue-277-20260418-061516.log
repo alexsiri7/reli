@@ -1,0 +1,17 @@
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (0) from .env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (0) from .env.development -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (0) from .env.production -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (2) from ../../../home/asiri/.archon/.env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+{"level":40,"time":1776489316714,"pid":1431795,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776489316719,"pid":1431795,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776489316736,"pid":1431795,"hostname":"interstellar","module":"workflow.loader","id":"watch-and-merge","fields":["context"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776489316737,"pid":1431795,"hostname":"interstellar","module":"workflow.loader","id":"adversarial-sprint","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":30,"time":1776489316740,"pid":1431795,"hostname":"interstellar","module":"workflow.discovery","count":23,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1776489316741,"pid":1431795,"hostname":"interstellar","module":"workflow.discovery","count":23,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-fix-github-issue
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1776489316742,"pid":1431795,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+Error: Failed to access database: disk I/O error
+Hint: Check that DATABASE_URL is set and the database is running.

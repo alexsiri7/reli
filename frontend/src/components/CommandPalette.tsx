@@ -144,12 +144,8 @@ export function CommandPalette() {
     },
   ], [close, setMobileView, toggleSidebar, setMainView, openSettings, openFeedback])
 
-  type ResultItem =
-    | { kind: 'thing'; thing: Thing }
-    | { kind: 'action'; action: Action }
-
   // Parse prefix filters and build results, memoized to keep stable references
-  const results: ResultItem[] = useMemo(() => {
+  const { results, rawQuery, matchedThings, matchedActions } = useMemo(() => {
     const isActionFilter = query.startsWith('>')
     const typeFilterMatch = query.match(/^#(\w*)/)
     const typeFilter = typeFilterMatch ? (typeFilterMatch[1] ?? '').toLowerCase() : null
@@ -159,18 +155,22 @@ export function CommandPalette() {
       ? query.slice(typeFilterMatch![0].length).trim()
       : query.trim()
 
-    const matchedThings: Thing[] = !isActionFilter
-      ? (rawQuery
-          ? things
-              .filter(t => fuzzyMatch(rawQuery, t.title) || (t.type_hint && fuzzyMatch(rawQuery, t.type_hint)))
-              .filter(t => !typeFilter || (t.type_hint ?? '').toLowerCase().includes(typeFilter))
-              .sort((a, b) => fuzzyScore(rawQuery, b.title) - fuzzyScore(rawQuery, a.title))
-              .slice(0, 7)
-          : typeFilter
-          ? things.filter(t => (t.type_hint ?? '').toLowerCase().includes(typeFilter)).slice(0, 7)
-          : things.slice(0, 5)
-        )
-      : []
+    let matchedThings: Thing[] = []
+    if (!isActionFilter) {
+      if (rawQuery) {
+        matchedThings = things
+          .filter(t => fuzzyMatch(rawQuery, t.title) || (t.type_hint && fuzzyMatch(rawQuery, t.type_hint)))
+          .filter(t => !typeFilter || (t.type_hint ?? '').toLowerCase().includes(typeFilter))
+          .sort((a, b) => fuzzyScore(rawQuery, b.title) - fuzzyScore(rawQuery, a.title))
+          .slice(0, 7)
+      } else if (typeFilter) {
+        matchedThings = things
+          .filter(t => (t.type_hint ?? '').toLowerCase().includes(typeFilter))
+          .slice(0, 7)
+      } else {
+        matchedThings = things.slice(0, 5)
+      }
+    }
 
     const matchedActions: Action[] = !typeFilter
       ? (rawQuery
@@ -182,10 +182,12 @@ export function CommandPalette() {
         )
       : []
 
-    return [
+    const results = [
       ...matchedThings.map(t => ({ kind: 'thing' as const, thing: t })),
       ...matchedActions.map(a => ({ kind: 'action' as const, action: a })),
     ]
+
+    return { results, rawQuery, matchedThings, matchedActions }
   }, [query, things, actions])
 
   const clampedIndex = Math.min(selectedIndex, Math.max(0, results.length - 1))

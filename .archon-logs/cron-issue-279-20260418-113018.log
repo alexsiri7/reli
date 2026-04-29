@@ -1,0 +1,220 @@
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (0) from .env.local -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (0) from .env.development -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (0) from .env.production -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.3.1] injecting env (2) from ../../../home/asiri/.archon/.env -- tip: ⚙️  enable debug logging with { debug: true }
+{"level":40,"time":1776508218683,"pid":2055001,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776508218686,"pid":2055001,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776508218695,"pid":2055001,"hostname":"interstellar","module":"workflow.loader","id":"watch-and-merge","fields":["context"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776508218695,"pid":2055001,"hostname":"interstellar","module":"workflow.loader","id":"adversarial-sprint","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":30,"time":1776508218696,"pid":2055001,"hostname":"interstellar","module":"workflow.discovery","count":23,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1776508218696,"pid":2055001,"hostname":"interstellar","module":"workflow.discovery","count":23,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-fix-github-issue
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1776508218697,"pid":2055001,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+{"level":30,"time":1776508218739,"pid":2055001,"hostname":"interstellar","module":"db.sqlite","msg":"db.sqlite_schema_initialized"}
+{"level":30,"time":1776508218751,"pid":2055001,"hostname":"interstellar","module":"cli.workflow","branch":"archon-fix-github-issue-1776508218751","msg":"worktree_creating"}
+{"level":40,"time":1776508219423,"pid":2055001,"hostname":"interstellar","module":"isolation.worktree","worktreePath":"/home/asiri/.archon/worktrees/ext-fast/reli/archon/task-archon-fix-github-issue-1776508218751","copiedCount":0,"attemptedCount":1,"msg":"worktree_file_copy_partial"}
+{"level":30,"time":1776508219443,"pid":2055001,"hostname":"interstellar","module":"cli.workflow","path":"/home/asiri/.archon/worktrees/ext-fast/reli/archon/task-archon-fix-github-issue-1776508218751","msg":"worktree_created"}
+{"level":30,"time":1776508219451,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":30,"time":1776508219459,"pid":2055001,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-fix-github-issue","provider":"claude","providerSource":"workflow definition","model":"sonnet","msg":"workflow_provider_resolved"}
+{"level":30,"time":1776508219463,"pid":2055001,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-fix-github-issue","workflowRunId":"6538b65891ad61e01c592625314a1dc7","hasIssueContext":false,"issueContextLength":0,"msg":"workflow_starting"}
+🚀 **Starting workflow**: `archon-fix-github-issue`
+
+> "fix issue", "resolve issue", "fix #123".
+         questions about issues, CI failures, PR reviews, general exploration.
+DAG workflow that:
+1. Classifies the issue (bug/feature/enhancement/etc)
+2. Researches context (web research + codebase exploration via investigate/plan)
+3. Routes to investigate (bugs) or plan (features) based on classification
+4. Implements the fix/feature with validation
+5. Creates a draft PR using the repo's PR template
+6. Runs smart review (always code review + CLAUDE.md check, conditional additional agents)
+7. Aggressively self-fixes all findings (tests, docs, error handling)
+8. Simplifies changed code (implements fixes directly, not just reports)
+9. Reports results back to the GitHub issue with follow-up suggestions
+{"level":30,"time":1776508219471,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","workflowName":"archon-fix-github-issue","nodeCount":23,"layerCount":18,"hasIssueContext":false,"issueContextLength":0,"msg":"dag_workflow_starting"}
+{"level":30,"time":1776508219476,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"extract-issue-number","provider":"claude","msg":"dag_node_started"}
+[extract-issue-number] Started
+{"level":30,"time":1776508219481,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508221099,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"extract-issue-number","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508221554,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776508221564,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508221569,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"extract-issue-number","durationMs":2093,"msg":"dag_node_completed"}
+[extract-issue-number] Completed (2.1s)
+{"level":30,"time":1776508221573,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"fetch-issue","type":"bash","msg":"dag_node_started"}
+[fetch-issue] Started
+{"level":50,"time":1776508221935,"pid":2055001,"hostname":"interstellar","module":"client.claude","err":{"type":"Error","message":"Claude Code returned an error result: You've hit your limit · resets 2pm (Europe/London)","stack":"Error: Claude Code returned an error result: You've hit your limit · resets 2pm (Europe/London)\n    at readMessages (/mnt/ext-fast/archon/node_modules/.bun/@anthropic-ai+claude-agent-sdk@0.2.89+27912429049419a2/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs:58:14611)\n    at processTicksAndRejections (native:7:39)"},"stderrContext":"","errorClass":"unknown","attempt":0,"maxRetries":3,"msg":"query_error"}
+{"level":40,"time":1776508221938,"pid":2055001,"hostname":"interstellar","module":"service.title-generator","err":{"type":"Error","message":"Claude Code unknown: Claude Code returned an error result: You've hit your limit · resets 2pm (Europe/London): Claude Code returned an error result: You've hit your limit · resets 2pm (Europe/London)","stack":"Error: Claude Code unknown: Claude Code returned an error result: You've hit your limit · resets 2pm (Europe/London)\n    at sendQuery (/mnt/ext-fast/archon/packages/core/src/clients/claude.ts:641:35)\n    at processTicksAndRejections (native:7:39)\ncaused by: Error: Claude Code returned an error result: You've hit your limit · resets 2pm (Europe/London)\n    at readMessages (/mnt/ext-fast/archon/node_modules/.bun/@anthropic-ai+claude-agent-sdk@0.2.89+27912429049419a2/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs:58:14611)\n    at processTicksAndRejections (native:7:39)"},"conversationDbId":"a50b8e0ac6cdd6d6eb5af3e2f75551b6","msg":"title.generate_failed"}
+{"level":30,"time":1776508221940,"pid":2055001,"hostname":"interstellar","module":"service.title-generator","conversationDbId":"a50b8e0ac6cdd6d6eb5af3e2f75551b6","title":"fix #279","msg":"title.fallback_set"}
+{"level":30,"time":1776508222454,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"fetch-issue","durationMs":881,"msg":"dag_node_completed"}
+[fetch-issue] Completed (881ms)
+{"level":30,"time":1776508222456,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","provider":"claude","msg":"dag_node_started"}
+[classify] Started
+{"level":30,"time":1776508222459,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508223843,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508224072,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776508224074,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","workflowRunId":"6538b65891ad61e01c592625314a1dc7","msg":"dag.structured_output_missing"}
+Warning: Node 'classify' requested output_format but the SDK did not return structured output. Downstream conditions may not evaluate correctly.
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508224078,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","durationMs":1622,"msg":"dag_node_completed"}
+[classify] Completed (1.6s)
+{"level":30,"time":1776508224079,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"web-research","provider":"claude","msg":"dag_node_started"}
+[archon-web-research] Started
+{"level":30,"time":1776508224083,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508225348,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"web-research","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508225740,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508225749,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"web-research","durationMs":1670,"msg":"dag_node_completed"}
+[archon-web-research] Completed (1.7s)
+{"level":40,"time":1776508225751,"pid":2055001,"hostname":"interstellar","module":"workflow.condition-evaluator","nodeId":"classify","field":"issue_type","outputPreview":"You've hit your limit · resets 2pm (Europe/London)","msg":"condition_json_parse_failed"}
+{"level":30,"time":1776508225751,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"investigate","when":"$classify.output.issue_type == 'bug'","msg":"dag_node_skipped_condition"}
+{"level":40,"time":1776508225752,"pid":2055001,"hostname":"interstellar","module":"workflow.condition-evaluator","nodeId":"classify","field":"issue_type","outputPreview":"You've hit your limit · resets 2pm (Europe/London)","msg":"condition_json_parse_failed"}
+{"level":30,"time":1776508225752,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"plan","provider":"claude","msg":"dag_node_started"}
+[archon-investigate-issue] Skipped (when_condition)
+[archon-create-plan] Started
+{"level":30,"time":1776508225756,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508227136,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"plan","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508227410,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508227414,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"plan","durationMs":1662,"msg":"dag_node_completed"}
+[archon-create-plan] Completed (1.7s)
+{"level":30,"time":1776508227416,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"bridge-artifacts","type":"bash","msg":"dag_node_started"}
+[bridge-artifacts] Started
+{"level":30,"time":1776508227420,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"bridge-artifacts","durationMs":4,"msg":"dag_node_completed"}
+[bridge-artifacts] Completed (4ms)
+{"level":30,"time":1776508227422,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"implement","provider":"claude","msg":"dag_node_started"}
+[archon-fix-issue] Started
+{"level":30,"time":1776508227424,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508228676,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"implement","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508229211,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508229218,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"implement","durationMs":1796,"msg":"dag_node_completed"}
+[archon-fix-issue] Completed (1.8s)
+{"level":30,"time":1776508229220,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"validate","provider":"claude","msg":"dag_node_started"}
+[archon-validate] Started
+{"level":30,"time":1776508229222,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508230652,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"validate","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508230959,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508230963,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"validate","durationMs":1743,"msg":"dag_node_completed"}
+[archon-validate] Completed (1.7s)
+{"level":30,"time":1776508230965,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"create-pr","provider":"claude","msg":"dag_node_started"}
+[create-pr] Started
+{"level":40,"time":1776508230968,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","field":"title","outputPreview":"You've hit your limit · resets 2pm (Europe/London)","err":{"type":"SyntaxError","message":"JSON Parse error: Unexpected identifier \"You\"","stack":"SyntaxError: JSON Parse error: Unexpected identifier \"You\"\n    at <parse> (:0)\n    at parse (unknown)\n    at <anonymous> (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:212:29)\n    at replace (unknown)\n    at executeNodeInternal (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:820:23)\n    at async <anonymous> (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:2754:28)\n    at async executeDagWorkflow (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:2428:40)\n    at async executeWorkflow (/mnt/ext-fast/archon/packages/workflows/src/executor.ts:622:30)\n    at async workflowRunCommand (/mnt/ext-fast/archon/packages/cli/src/commands/workflow.ts:597:20)\n    at async main (/mnt/ext-fast/archon/packages/cli/src/cli.ts:351:19)\n    at processTicksAndRejections (native:7:39)"},"msg":"dag_node_output_ref_json_parse_failed"}
+{"level":30,"time":1776508230968,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508232403,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"create-pr","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508232676,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508232684,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"create-pr","durationMs":1719,"msg":"dag_node_completed"}
+[create-pr] Completed (1.7s)
+{"level":30,"time":1776508232686,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"review-scope","provider":"claude","msg":"dag_node_started"}
+[archon-pr-review-scope] Started
+{"level":30,"time":1776508232688,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508234073,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"review-scope","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508234392,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508234399,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"review-scope","durationMs":1713,"msg":"dag_node_completed"}
+[archon-pr-review-scope] Completed (1.7s)
+{"level":30,"time":1776508234403,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"review-classify","provider":"claude","msg":"dag_node_started"}
+[review-classify] Started
+{"level":30,"time":1776508234405,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508235615,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"review-classify","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508235899,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776508235901,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"review-classify","workflowRunId":"6538b65891ad61e01c592625314a1dc7","msg":"dag.structured_output_missing"}
+Warning: Node 'review-classify' requested output_format but the SDK did not return structured output. Downstream conditions may not evaluate correctly.
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508235907,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"review-classify","durationMs":1504,"msg":"dag_node_completed"}
+[review-classify] Completed (1.5s)
+{"level":40,"time":1776508235909,"pid":2055001,"hostname":"interstellar","module":"workflow.condition-evaluator","nodeId":"review-classify","field":"run_error_handling","outputPreview":"You've hit your limit · resets 2pm (Europe/London)","msg":"condition_json_parse_failed"}
+{"level":30,"time":1776508235909,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"error-handling","when":"$review-classify.output.run_error_handling == 'true'","msg":"dag_node_skipped_condition"}
+{"level":40,"time":1776508235909,"pid":2055001,"hostname":"interstellar","module":"workflow.condition-evaluator","nodeId":"review-classify","field":"run_test_coverage","outputPreview":"You've hit your limit · resets 2pm (Europe/London)","msg":"condition_json_parse_failed"}
+{"level":30,"time":1776508235909,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"test-coverage","when":"$review-classify.output.run_test_coverage == 'true'","msg":"dag_node_skipped_condition"}
+{"level":40,"time":1776508235909,"pid":2055001,"hostname":"interstellar","module":"workflow.condition-evaluator","nodeId":"review-classify","field":"run_comment_quality","outputPreview":"You've hit your limit · resets 2pm (Europe/London)","msg":"condition_json_parse_failed"}
+{"level":30,"time":1776508235910,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"comment-quality","when":"$review-classify.output.run_comment_quality == 'true'","msg":"dag_node_skipped_condition"}
+{"level":40,"time":1776508235910,"pid":2055001,"hostname":"interstellar","module":"workflow.condition-evaluator","nodeId":"review-classify","field":"run_docs_impact","outputPreview":"You've hit your limit · resets 2pm (Europe/London)","msg":"condition_json_parse_failed"}
+{"level":30,"time":1776508235910,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"docs-impact","when":"$review-classify.output.run_docs_impact == 'true'","msg":"dag_node_skipped_condition"}
+{"level":30,"time":1776508235910,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"code-review","provider":"claude","msg":"dag_node_started"}
+[archon-error-handling-agent] Skipped (when_condition)
+[archon-test-coverage-agent] Skipped (when_condition)
+[archon-comment-quality-agent] Skipped (when_condition)
+[archon-code-review-agent] Started
+[archon-docs-impact-agent] Skipped (when_condition)
+{"level":30,"time":1776508235928,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508237193,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"code-review","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508237664,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508237671,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"code-review","durationMs":1761,"msg":"dag_node_completed"}
+[archon-code-review-agent] Completed (1.8s)
+{"level":30,"time":1776508237673,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"synthesize","provider":"claude","msg":"dag_node_started"}
+[archon-synthesize-review] Started
+{"level":30,"time":1776508237676,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508238949,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"synthesize","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508239315,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508239322,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"synthesize","durationMs":1649,"msg":"dag_node_completed"}
+[archon-synthesize-review] Completed (1.6s)
+{"level":30,"time":1776508239324,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"self-fix","provider":"claude","msg":"dag_node_started"}
+[archon-self-fix-all] Started
+{"level":30,"time":1776508239327,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508240564,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"self-fix","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508240916,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508240924,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"self-fix","durationMs":1600,"msg":"dag_node_completed"}
+[archon-self-fix-all] Completed (1.6s)
+{"level":30,"time":1776508240926,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"simplify","provider":"claude","msg":"dag_node_started"}
+[archon-simplify-changes] Started
+{"level":30,"time":1776508240928,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508242125,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"simplify","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508242465,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508242470,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"simplify","durationMs":1544,"msg":"dag_node_completed"}
+[archon-simplify-changes] Completed (1.5s)
+{"level":30,"time":1776508242471,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"report","provider":"claude","msg":"dag_node_started"}
+[archon-issue-completion-report] Started
+{"level":30,"time":1776508242474,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508243702,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"report","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776508244090,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508244098,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"report","durationMs":1627,"msg":"dag_node_completed"}
+[archon-issue-completion-report] Completed (1.6s)
+{"level":30,"time":1776508244100,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"prepare-merge","type":"bash","msg":"dag_node_started"}
+[prepare-merge] Started
+{"level":30,"time":1776508244105,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"prepare-merge","durationMs":5,"msg":"dag_node_completed"}
+[prepare-merge] Completed (5ms)
+{"level":30,"time":1776508244111,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508245957,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508245968,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508247935,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508247943,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508250056,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":30,"time":1776508250067,"pid":2055001,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776508252030,"pid":2055001,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"rejected","resetsAt":1776517200,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+You've hit your limit · resets 2pm (Europe/London)
+{"level":40,"time":1776508252037,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"watch-and-merge","maxIterations":4,"signal":"CI_DONE","msg":"loop_node.max_iterations_reached"}
+Loop node 'watch-and-merge' exceeded max iterations (4) without completion signal 'CI_DONE'
+{"level":40,"time":1776508252039,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","layerIdx":17,"nodeCount":1,"msg":"dag_layer_had_failures"}
+{"level":30,"time":1776508252039,"pid":2055001,"hostname":"interstellar","module":"workflow.dag-executor","nodeCount":23,"anyCompleted":true,"anyFailed":true,"msg":"dag_workflow_finished"}
+⚠️ Some DAG nodes failed: 'watch-and-merge': Loop node 'watch-and-merge' exceeded max iterations (4) without completion signal 'CI_DONE'
+Successful nodes completed normally.
+
+Workflow completed successfully.

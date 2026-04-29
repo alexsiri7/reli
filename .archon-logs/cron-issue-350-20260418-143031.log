@@ -1,0 +1,283 @@
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (0) from .env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env.development -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env.production -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (2) from ../../../home/asiri/.archon/.env -- tip: ⚙️  enable debug logging with { debug: true }
+{"level":40,"time":1776519031771,"pid":664403,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776519031774,"pid":664403,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776519031783,"pid":664403,"hostname":"interstellar","module":"workflow.loader","id":"watch-and-merge","fields":["context"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776519031783,"pid":664403,"hostname":"interstellar","module":"workflow.loader","id":"adversarial-sprint","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":30,"time":1776519031784,"pid":664403,"hostname":"interstellar","module":"workflow.discovery","count":23,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1776519031785,"pid":664403,"hostname":"interstellar","module":"workflow.discovery","count":23,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-fix-github-issue
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1776519031786,"pid":664403,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+{"level":30,"time":1776519031792,"pid":664403,"hostname":"interstellar","module":"db.sqlite","msg":"db.sqlite_schema_initialized"}
+{"level":30,"time":1776519031794,"pid":664403,"hostname":"interstellar","module":"cli.workflow","branch":"archon-fix-github-issue-1776519031794","msg":"worktree_creating"}
+{"level":40,"time":1776519032508,"pid":664403,"hostname":"interstellar","module":"isolation.worktree","worktreePath":"/home/asiri/.archon/worktrees/ext-fast/reli/archon/task-archon-fix-github-issue-1776519031794","copiedCount":0,"attemptedCount":1,"msg":"worktree_file_copy_partial"}
+{"level":30,"time":1776519032513,"pid":664403,"hostname":"interstellar","module":"cli.workflow","path":"/home/asiri/.archon/worktrees/ext-fast/reli/archon/task-archon-fix-github-issue-1776519031794","msg":"worktree_created"}
+{"level":30,"time":1776519032521,"pid":664403,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":30,"time":1776519032529,"pid":664403,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-fix-github-issue","provider":"claude","providerSource":"workflow definition","model":"sonnet","msg":"workflow_provider_resolved"}
+{"level":30,"time":1776519032532,"pid":664403,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-fix-github-issue","workflowRunId":"64853d89b181f909c1ecf6335063076a","hasIssueContext":false,"issueContextLength":0,"msg":"workflow_starting"}
+🚀 **Starting workflow**: `archon-fix-github-issue`
+
+> "fix issue", "resolve issue", "fix #123".
+         questions about issues, CI failures, PR reviews, general exploration.
+DAG workflow that:
+1. Classifies the issue (bug/feature/enhancement/etc)
+2. Researches context (web research + codebase exploration via investigate/plan)
+3. Routes to investigate (bugs) or plan (features) based on classification
+4. Implements the fix/feature with validation
+5. Creates a draft PR using the repo's PR template
+6. Runs smart review (always code review + CLAUDE.md check, conditional additional agents)
+7. Aggressively self-fixes all findings (tests, docs, error handling)
+8. Simplifies changed code (implements fixes directly, not just reports)
+9. Reports results back to the GitHub issue with follow-up suggestions
+{"level":30,"time":1776519032540,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","workflowName":"archon-fix-github-issue","nodeCount":23,"layerCount":18,"hasIssueContext":false,"issueContextLength":0,"msg":"dag_workflow_starting"}
+{"level":30,"time":1776519032544,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"extract-issue-number","provider":"claude","msg":"dag_node_started"}
+[extract-issue-number] Started
+{"level":30,"time":1776519032549,"pid":664403,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776519035928,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"extract-issue-number","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776519037808,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776974400,"rateLimitType":"seven_day","utilization":0.63,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+350
+{"level":30,"time":1776519037817,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"extract-issue-number","durationMs":5273,"msg":"dag_node_completed"}
+[extract-issue-number] Completed (5.3s)
+{"level":30,"time":1776519037821,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"fetch-issue","type":"bash","msg":"dag_node_started"}
+[fetch-issue] Started
+{"level":30,"time":1776519038489,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"fetch-issue","durationMs":668,"msg":"dag_node_completed"}
+[fetch-issue] Completed (668ms)
+{"level":30,"time":1776519038494,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","provider":"claude","msg":"dag_node_started"}
+[classify] Started
+{"level":30,"time":1776519038495,"pid":664403,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776519038828,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776974400,"rateLimitType":"seven_day","utilization":0.63,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":30,"time":1776519039229,"pid":664403,"hostname":"interstellar","module":"service.title-generator","conversationDbId":"c0937d476cde55914841a287828654d5","title":"Fix GitHub issue 350","msg":"title.generate_completed"}
+{"level":40,"time":1776519042157,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776519049267,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776974400,"rateLimitType":"seven_day","utilization":0.63,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":30,"time":1776519051237,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","durationMs":12743,"msg":"dag_node_completed"}
+[classify] Completed (12.7s)
+{"level":30,"time":1776519051239,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"web-research","provider":"claude","msg":"dag_node_started"}
+[archon-web-research] Started
+{"level":30,"time":1776519051245,"pid":664403,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776519055617,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"web-research","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776519058703,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776974400,"rateLimitType":"seven_day","utilization":0.63,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+Now let me write the artifact:
+
+## Web Research Complete
+
+**Queries**: 37 searches executed across 4 research areas
+**Sources**: 12 authoritative sources found
+**Artifact**: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/64853d89b181f909c1ecf6335063076a/web-research.md`
+
+### Key Findings
+
+- **Issue #350 is superseded by #364** — the actual work is the importance × urgency redesign covering: rename `priority` → `importance`, compute urgency at runtime in `sweep.py`, rewrite `get_briefing` with matrix logic and "the one thing" output.
+
+- **Taskwarrior is the canonical production reference** for urgency computation: weighted sum of signals with coefficients — checkin proximity (12.0 max), blocker chain (+2/downstream, cap 8.0), blocked penalty (−5.0), staleness logarithmic (+2.0 max).
+
+- **Obsidian Tasks provides the due-date urgency formula**: linear interpolation over [−7, +14] days window → 12.0 (overdue) to 0.2 (far future). Use this for `checkin_date` proximity scoring.
+
+- **"The one thing" pattern** is simply `max(actionable_tasks, key=importance_score + urgency_score)`. Importance score must invert the 0=critical scale: `(4 - importance) × 3.0`.
+
+- **Rolling checkins**: 7-day default for undated Things (matches spec). Leitner bucket model (1d → 3d → 7d → 14d → 30d) is the simplest dependency-free approach for interval progression.
+
+### Gaps
+
+- Morgen decays urgency of consistently-ignored overdue tasks back to baseline — #364 spec doesn't specify this; recommend capping (simpler) for now.
+- `checkin_date` vs `data.event_date`/`data.deadline` need distinct treatment: event dates drive due-date urgency, checkin date drives "overdue for review" signal.
+{"level":30,"time":1776519489585,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"web-research","durationMs":438345,"msg":"dag_node_completed"}
+[archon-web-research] Completed (7m18s)
+{"level":30,"time":1776519489590,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"investigate","when":"$classify.output.issue_type == 'bug'","msg":"dag_node_skipped_condition"}
+{"level":30,"time":1776519489590,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"plan","provider":"claude","msg":"dag_node_started"}
+[archon-investigate-issue] Skipped (when_condition)
+[archon-create-plan] Started
+{"level":30,"time":1776519489594,"pid":664403,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776519496540,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"plan","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776519501884,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776974400,"rateLimitType":"seven_day","utilization":0.63,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776519547615,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776974400,"rateLimitType":"seven_day","utilization":0.64,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+Now let me look at how relationships (children) are queried in sweep.py:
+
+Now I have everything needed to write the plan. Let me create the artifact directory and plan file:
+
+## Plan Created
+
+**File**: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/64853d89b181f909c1ecf6335063076a/plan.md`
+**Workflow ID**: `64853d89b181f909c1ecf6335063076a`
+
+---
+
+### Summary
+
+Issue #350 ("Sweep: assign checkin dates to undated Things + time-horizon filtering for briefings") is a pointer issue for #364 (closed). The briefing already has importance×urgency scoring and a 14-day horizon filter, but the final piece of #364 was never implemented: the sweep never assigns a `checkin_date` to active Things that lack one — making them permanently invisible to the briefing. The fix adds one new function to `backend/sweep.py` and one call site.
+
+### Metadata
+
+| Field | Value |
+|-------|-------|
+| Complexity | LOW |
+| Files to CREATE | 0 |
+| Files to UPDATE | 1 (`backend/sweep.py`) |
+| Total Tasks | 2 |
+
+### Key Patterns Discovered
+
+- `_generate_template_gap_questions` (`sweep.py:846-878`) — exact write pattern to mirror: `session.get()` + field assignment, no `updated_at` touch, `session.commit()` after loop
+- Child query via `ThingRelationshipRecord.__table__.alias()` + `relationship_type == "parent-of"` (`sweep.py:259-271`)
+- `_ONESHOT_KEYS` / `_parse_date_value()` (`sweep.py:62-108`) — reuse for detecting event/deadline dates in data JSON
+
+### UX Transformation
+
+- **BEFORE**: Active Things with `checkin_date=NULL` are detected as info gaps but never surfaced in the briefing (filtered out at `tools.py:826`)
+- **AFTER**: Sweep assigns a context-derived `checkin_date` (event-14d / earliest-child / +7d default) before all other queries, making every active Thing eligible for briefing scoring
+
+### Risks
+
+- **Past-date computation**: Mitigated by clamping to `today + 1d`
+- **Accidental overwrite**: Impossible — query strictly filters `IS NULL` only
+
+### Confidence Score
+
+**9/10** — single-file change with a clear, well-precedented write pattern already in the file. The only complexity is the child lookup, which is straightforward SQLAlchemy.
+{"level":30,"time":1776519885592,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"plan","durationMs":396002,"msg":"dag_node_completed"}
+[archon-create-plan] Completed (6m36s)
+{"level":30,"time":1776519885595,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"bridge-artifacts","type":"bash","msg":"dag_node_started"}
+[bridge-artifacts] Started
+{"level":30,"time":1776519885602,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"bridge-artifacts","durationMs":7,"msg":"dag_node_completed"}
+[bridge-artifacts] Completed (7ms)
+{"level":30,"time":1776519885606,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"implement","provider":"claude","msg":"dag_node_started"}
+[archon-fix-issue] Started
+{"level":30,"time":1776519885609,"pid":664403,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776519889441,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"implement","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776519893532,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776974400,"rateLimitType":"seven_day","utilization":0.64,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776520313576,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776974400,"rateLimitType":"seven_day","utilization":0.65,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+## Phase 1: LOAD
+
+Let me load the investigation artifact.
+
+Artifact loaded. Now let me read the relevant sections of `backend/sweep.py` to validate the plan.
+
+Code matches the artifact. Let me also check the child subquery pattern and db_models.
+
+Everything matches. Let me now implement the changes.
+
+## Phase 3: GIT-CHECK
+
+We're already on branch `archon/task-archon-fix-github-issue-1776519031794` in a worktree, with a clean state. Good to proceed.
+
+## Phase 4: DEPENDENCIES
+
+Needs env config. Let me check how tests handle this.
+
+Good. Now let me implement the changes.
+
+## Phase 5: IMPLEMENT
+
+### Task 1: Add `assign_checkin_dates()` function
+
+I'll place it just before `_generate_template_gap_questions` at line 846.
+
+### Task 2: Call `assign_checkin_dates()` in `collect_candidates()`
+
+## Phase 6: VERIFY
+
+Still running. Let me wait.
+
+All 854 tests passed, 12 skipped. No regressions.
+
+## Phase 7: COMMIT
+
+## Phase 8: WRITE - Implementation Report
+
+## Implementation Complete
+
+**Issue**: #350 - Sweep assigns checkin_dates to undated Things
+**Branch**: `archon/task-archon-fix-github-issue-1776519031794`
+
+### Changes Made
+
+| File | Change |
+|------|--------|
+| `backend/sweep.py` | Added `assign_checkin_dates()` function (Phase 0 of sweep) |
+| `backend/sweep.py` | Call it in `collect_candidates()` before `find_information_gaps()` |
+
+### Validation
+
+| Check | Result |
+|-------|--------|
+| Import check | ✅ Pass |
+| Syntax check | ✅ Pass |
+| Tests | ✅ 854 passed, 12 skipped |
+| Coverage | ✅ 83.75% |
+
+### Artifacts
+
+- 📄 Investigation: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/64853d89b181f909c1ecf6335063076a/investigation.md`
+- 📄 Implementation: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/64853d89b181f909c1ecf6335063076a/implementation.md`
+
+### Next Step
+
+Proceeding to PR creation...
+{"level":30,"time":1776520339910,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"implement","durationMs":454304,"msg":"dag_node_completed"}
+[archon-fix-issue] Completed (7m34s)
+{"level":30,"time":1776520339953,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"validate","provider":"claude","msg":"dag_node_started"}
+[archon-validate] Started
+{"level":30,"time":1776520340036,"pid":664403,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776520343733,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"validate","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776520347265,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776974400,"rateLimitType":"seven_day","utilization":0.65,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776520932455,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776531600,"rateLimitType":"five_hour","utilization":0.9,"isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776521001885,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776531600,"rateLimitType":"five_hour","utilization":0.91,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776521014716,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776531600,"rateLimitType":"five_hour","utilization":0.92,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+The plan is loaded. This is a Python backend project. Let me run all validation checks.
+
+All sweep tests pass. Let me also run a broader test suite check to ensure no regressions:
+
+All tests pass (60 passed, 0 failed) — the coverage threshold failure is a subset-run artifact, not a real issue. Let me now write the validation artifact.
+
+## Validation Complete ✅
+
+**Workflow ID**: `64853d89b181f909c1ecf6335063076a`
+
+### Results
+
+| Check | Status |
+|-------|--------|
+| Import check | ✅ |
+| Syntax check | ✅ |
+| Function signature | ✅ `['session', 'today', 'user_id']` |
+| Tests (sweep: 107 tests) | ✅ |
+| Tests (briefing + things: 60 tests) | ✅ |
+
+### Artifact
+
+Results written to: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/64853d89b181f909c1ecf6335063076a/validation.md`
+
+### Next Step
+
+Proceed to `archon-finalize-pr` to update PR and mark ready for review.
+{"level":30,"time":1776521014852,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"validate","durationMs":674899,"msg":"dag_node_completed"}
+[archon-validate] Completed (11m15s)
+{"level":30,"time":1776521014919,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"create-pr","provider":"claude","msg":"dag_node_started"}
+[create-pr] Started
+{"level":30,"time":1776521014987,"pid":664403,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776521018342,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"create-pr","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776521022569,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776531600,"rateLimitType":"five_hour","utilization":0.92,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776521050289,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776531600,"rateLimitType":"five_hour","utilization":0.93,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+Draft PR created: **alexsiri7/reli#643**
+https://github.com/alexsiri7/reli/pull/643
+{"level":30,"time":1776521061989,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"create-pr","durationMs":47070,"msg":"dag_node_completed"}
+[create-pr] Completed (47.1s)
+{"level":30,"time":1776521061993,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"review-scope","provider":"claude","msg":"dag_node_started"}
+[archon-pr-review-scope] Started
+{"level":30,"time":1776521061998,"pid":664403,"hostname":"interstellar","module":"client.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1776521065925,"pid":664403,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"review-scope","mcpStatus":"MCP server connection failed: claude.ai Google Drive (needs-auth)","msg":"dag.mcp_server_connection_failed"}
+MCP server connection failed: claude.ai Google Drive (needs-auth)
+{"level":40,"time":1776521070883,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1776531600,"rateLimitType":"five_hour","utilization":0.94,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1776521095957,"pid":664403,"hostname":"interstellar","module":"client.claude","rateLimitInfo":{"status":"allowed","resetsAt":1776538800,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":30,"time":1776521137382,"pid":664403,"hostname":"interstellar","module":"cli.workflow","conversationId":"c0937d476cde55914841a287828654d5","signal":"SIGTERM","msg":"workflow.process_terminating"}

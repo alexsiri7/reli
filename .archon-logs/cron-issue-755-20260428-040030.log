@@ -1,0 +1,91 @@
+[archon] loaded 3 keys from ~/.archon/.env
+{"level":40,"time":1777345231109,"pid":3152327,"hostname":"interstellar","module":"workflow.loader","id":"watch-and-merge","fields":["context"],"msg":"loop_node_ai_fields_ignored"}
+{"level":30,"time":1777345231111,"pid":3152327,"hostname":"interstellar","module":"workflow.discovery","count":24,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1777345231112,"pid":3152327,"hostname":"interstellar","module":"workflow.discovery","count":24,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-fix-github-issue
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1777345231113,"pid":3152327,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+{"level":30,"time":1777345231124,"pid":3152327,"hostname":"interstellar","module":"db.sqlite","msg":"db.sqlite_schema_initialized"}
+{"level":30,"time":1777345231127,"pid":3152327,"hostname":"interstellar","module":"cli.workflow","branch":"archon-fix-github-issue-1777345231127","msg":"worktree_creating"}
+{"level":40,"time":1777345231670,"pid":3152327,"hostname":"interstellar","module":"isolation.worktree","worktreePath":"/home/asiri/.archon/workspaces/ext-fast/reli/worktrees/archon/task-archon-fix-github-issue-1777345231127","copiedCount":0,"attemptedCount":1,"msg":"worktree_file_copy_partial"}
+{"level":30,"time":1777345231674,"pid":3152327,"hostname":"interstellar","module":"cli.workflow","path":"/home/asiri/.archon/workspaces/ext-fast/reli/worktrees/archon/task-archon-fix-github-issue-1777345231127","msg":"worktree_created"}
+{"level":30,"time":1777345231679,"pid":3152327,"hostname":"interstellar","module":"claude-binary","binaryPath":"/home/asiri/.local/bin/claude","source":"env","msg":"claude.binary_resolved"}
+Dispatching workflow: **archon-fix-github-issue**
+{"level":30,"time":1777345231681,"pid":3152327,"hostname":"interstellar","module":"provider.claude","authMode":"global","msg":"using_global_auth"}
+{"level":30,"time":1777345231693,"pid":3152327,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-fix-github-issue","provider":"claude","providerSource":"workflow definition","model":"sonnet","msg":"workflow_provider_resolved"}
+{"level":30,"time":1777345231697,"pid":3152327,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-fix-github-issue","workflowRunId":"85abb9b46be62c4e3410f74c8f4c8ac3","hasIssueContext":false,"issueContextLength":0,"msg":"workflow_starting"}
+🚀 **Starting workflow**: `archon-fix-github-issue`
+
+> "fix issue", "resolve issue", "fix #123".
+         questions about issues, CI failures, PR reviews, general exploration.
+DAG workflow that:
+1. Classifies the issue (bug/feature/enhancement/etc)
+2. Researches context (web research + codebase exploration via investigate/plan)
+3. Routes to investigate (bugs) or plan (features) based on classification
+4. Implements the fix/feature with validation
+5. Creates a draft PR using the repo's PR template
+6. Runs smart review (always code review + CLAUDE.md check, conditional additional agents)
+7. Aggressively self-fixes all findings (tests, docs, error handling)
+8. Simplifies changed code (implements fixes directly, not just reports)
+9. Reports results back to the GitHub issue with follow-up suggestions
+{"level":30,"time":1777345231705,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","workflowName":"archon-fix-github-issue","nodeCount":23,"layerCount":18,"hasIssueContext":false,"issueContextLength":0,"msg":"dag_workflow_starting"}
+{"level":30,"time":1777345231709,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"extract-issue-number","provider":"claude","msg":"dag_node_started"}
+[extract-issue-number] Started
+{"level":30,"time":1777345231713,"pid":3152327,"hostname":"interstellar","module":"claude-binary","binaryPath":"/home/asiri/.local/bin/claude","source":"env","msg":"claude.binary_resolved"}
+{"level":30,"time":1777345231713,"pid":3152327,"hostname":"interstellar","module":"provider.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1777345237588,"pid":3152327,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"rejected","resetsAt":1777734000,"rateLimitType":"seven_day","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1777345237614,"pid":3152327,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"rejected","resetsAt":1777734000,"rateLimitType":"seven_day","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":50,"time":1777345239754,"pid":3152327,"hostname":"interstellar","module":"provider.claude","sessionId":"e7bc34ed-7f4e-411c-9498-4d53e21657c4","errorSubtype":"success","stopReason":"stop_sequence","msg":"claude.result_is_error"}
+{"level":50,"time":1777345239754,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"extract-issue-number","errorSubtype":"success","sessionId":"e7bc34ed-7f4e-411c-9498-4d53e21657c4","stopReason":"stop_sequence","durationMs":8046,"msg":"dag.node_sdk_error_result"}
+{"level":50,"time":1777345239755,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","err":{"type":"Error","message":"Node 'extract-issue-number' failed: SDK returned success","stack":"Error: Node 'extract-issue-number' failed: SDK returned success\n    at executeNodeInternal (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:908:21)\n    at async <anonymous> (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:2733:28)\n    at async executeDagWorkflow (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:2411:40)\n    at async executeWorkflow (/mnt/ext-fast/archon/packages/workflows/src/executor.ts:737:30)\n    at async workflowRunCommand (/mnt/ext-fast/archon/packages/cli/src/commands/workflow.ts:710:20)\n    at async main (/mnt/ext-fast/archon/packages/cli/src/cli.ts:363:19)\n    at processTicksAndRejections (native:7:39)"},"nodeId":"extract-issue-number","msg":"dag_node_failed"}
+[extract-issue-number] Failed: Node 'extract-issue-number' failed: SDK returned success
+{"level":40,"time":1777345239761,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","layerIdx":0,"nodeCount":1,"msg":"dag_layer_had_failures"}
+{"level":30,"time":1777345239762,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"fetch-issue","reason":"trigger_rule","msg":"dag_node_skipped"}
+[fetch-issue] Skipped (trigger_rule)
+{"level":30,"time":1777345239764,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","reason":"trigger_rule","msg":"dag_node_skipped"}
+[classify] Skipped (trigger_rule)
+{"level":30,"time":1777345239766,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"web-research","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-web-research] Skipped (trigger_rule)
+{"level":30,"time":1777345239768,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"investigate","reason":"trigger_rule","msg":"dag_node_skipped"}
+{"level":30,"time":1777345239768,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"plan","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-investigate-issue] Skipped (trigger_rule)
+[archon-create-plan] Skipped (trigger_rule)
+{"level":30,"time":1777345239771,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"bridge-artifacts","reason":"trigger_rule","msg":"dag_node_skipped"}
+[bridge-artifacts] Skipped (trigger_rule)
+{"level":30,"time":1777345239774,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"implement","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-fix-issue] Skipped (trigger_rule)
+{"level":30,"time":1777345239776,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"validate","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-validate] Skipped (trigger_rule)
+{"level":30,"time":1777345239778,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"create-pr","reason":"trigger_rule","msg":"dag_node_skipped"}
+[create-pr] Skipped (trigger_rule)
+{"level":30,"time":1777345239780,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"review-scope","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-pr-review-scope] Skipped (trigger_rule)
+{"level":30,"time":1777345239783,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"review-classify","reason":"trigger_rule","msg":"dag_node_skipped"}
+[review-classify] Skipped (trigger_rule)
+{"level":30,"time":1777345239784,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"code-review","reason":"trigger_rule","msg":"dag_node_skipped"}
+{"level":30,"time":1777345239784,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"error-handling","reason":"trigger_rule","msg":"dag_node_skipped"}
+{"level":30,"time":1777345239784,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"test-coverage","reason":"trigger_rule","msg":"dag_node_skipped"}
+{"level":30,"time":1777345239784,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"comment-quality","reason":"trigger_rule","msg":"dag_node_skipped"}
+{"level":30,"time":1777345239785,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"docs-impact","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-code-review-agent] Skipped (trigger_rule)
+[archon-test-coverage-agent] Skipped (trigger_rule)
+[archon-comment-quality-agent] Skipped (trigger_rule)
+[archon-error-handling-agent] Skipped (trigger_rule)
+[archon-docs-impact-agent] Skipped (trigger_rule)
+{"level":30,"time":1777345239793,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"synthesize","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-synthesize-review] Skipped (trigger_rule)
+{"level":30,"time":1777345239795,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"self-fix","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-self-fix-all] Skipped (trigger_rule)
+{"level":30,"time":1777345239798,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"simplify","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-simplify-changes] Skipped (trigger_rule)
+{"level":30,"time":1777345239799,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"report","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-issue-completion-report] Skipped (trigger_rule)
+{"level":30,"time":1777345239801,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"prepare-merge","reason":"trigger_rule","msg":"dag_node_skipped"}
+[prepare-merge] Skipped (trigger_rule)
+{"level":30,"time":1777345239803,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"watch-and-merge","reason":"trigger_rule","msg":"dag_node_skipped"}
+[watch-and-merge] Skipped (trigger_rule)
+{"level":30,"time":1777345239805,"pid":3152327,"hostname":"interstellar","module":"workflow.dag-executor","nodeCount":23,"anyCompleted":false,"anyFailed":true,"msg":"dag_workflow_finished"}
+❌ DAG workflow 'archon-fix-github-issue' completed with no successful nodes. Check node conditions, trigger rules, and upstream failures.
+Error: Workflow failed: Workflow did not complete successfully
+{"level":50,"time":1777345240078,"pid":3152327,"hostname":"interstellar","module":"provider.claude","sessionId":"91a46673-6b2a-4de3-ad9a-fbbff4d5f001","errorSubtype":"success","stopReason":"stop_sequence","msg":"claude.result_is_error"}

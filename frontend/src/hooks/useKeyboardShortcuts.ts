@@ -19,11 +19,11 @@ export function useKeyboardShortcuts() {
       const mod = e.metaKey || e.ctrlKey
       const tag = (e.target as HTMLElement)?.tagName ?? ''
       const isInInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable
+      const store = useStore.getState()
 
       // Cmd+K — command palette (always, even in inputs)
       if (mod && e.key === 'k') {
         e.preventDefault()
-        const store = useStore.getState()
         if (store.commandPaletteOpen) {
           store.closeCommandPalette()
         } else {
@@ -32,9 +32,8 @@ export function useKeyboardShortcuts() {
         return
       }
 
-      // Esc — close palette / settings / detail panel
+      // Esc — close open panels
       if (e.key === 'Escape') {
-        const store = useStore.getState()
         if (store.commandPaletteOpen) {
           store.closeCommandPalette()
           return
@@ -53,37 +52,28 @@ export function useKeyboardShortcuts() {
       // Shortcuts below should not fire when typing in an input
       if (isInInput) return
 
-      // Cmd+N — new thing (focus chat with starter text)
-      if (mod && e.key === 'n') {
+      // Command-based shortcuts
+      if (mod) {
+        switch (e.key) {
+          case 'n':
+            e.preventDefault()
+            store.setMobileView('chat')
+            setTimeout(() => document.getElementById('chat-input')?.focus(), 50)
+            break
+          case 'b':
+            e.preventDefault()
+            store.toggleSidebar()
+            break
+          case '.':
+            e.preventDefault()
+            store.setMobileView(store.mobileView === 'things' ? 'chat' : 'things')
+            break
+        }
+      } else if (e.key === '/') {
+        // / — focus chat input
         e.preventDefault()
-        const store = useStore.getState()
         store.setMobileView('chat')
         setTimeout(() => document.getElementById('chat-input')?.focus(), 50)
-        return
-      }
-
-      // Cmd+B — toggle sidebar
-      if (mod && e.key === 'b') {
-        e.preventDefault()
-        useStore.getState().toggleSidebar()
-        return
-      }
-
-      // Cmd+. — toggle between list and chat on mobile / toggle main view
-      if (mod && e.key === '.') {
-        e.preventDefault()
-        const store = useStore.getState()
-        store.setMobileView(store.mobileView === 'things' ? 'chat' : 'things')
-        return
-      }
-
-      // / — focus chat input
-      if (e.key === '/') {
-        e.preventDefault()
-        const store = useStore.getState()
-        store.setMobileView('chat')
-        setTimeout(() => document.getElementById('chat-input')?.focus(), 50)
-        return
       }
     }
 

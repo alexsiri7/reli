@@ -1,0 +1,44 @@
+[archon] loaded 3 keys from ~/.archon/.env
+{"level":40,"time":1777282224328,"pid":2525992,"hostname":"interstellar","module":"workflow.loader","id":"watch-and-merge","fields":["context"],"msg":"loop_node_ai_fields_ignored"}
+{"level":30,"time":1777282224330,"pid":2525992,"hostname":"interstellar","module":"workflow.discovery","count":24,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1777282224331,"pid":2525992,"hostname":"interstellar","module":"workflow.discovery","count":24,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-assist
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1777282224331,"pid":2525992,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+{"level":30,"time":1777282224340,"pid":2525992,"hostname":"interstellar","module":"db.sqlite","msg":"db.sqlite_schema_initialized"}
+{"level":30,"time":1777282224343,"pid":2525992,"hostname":"interstellar","module":"cli.workflow","branch":"archon-assist-1777282224343","msg":"worktree_creating"}
+{"level":40,"time":1777282224849,"pid":2525992,"hostname":"interstellar","module":"isolation.worktree","worktreePath":"/home/asiri/.archon/workspaces/ext-fast/reli/worktrees/archon/task-archon-assist-1777282224343","copiedCount":0,"attemptedCount":1,"msg":"worktree_file_copy_partial"}
+{"level":30,"time":1777282224852,"pid":2525992,"hostname":"interstellar","module":"cli.workflow","path":"/home/asiri/.archon/workspaces/ext-fast/reli/worktrees/archon/task-archon-assist-1777282224343","msg":"worktree_created"}
+{"level":30,"time":1777282224856,"pid":2525992,"hostname":"interstellar","module":"claude-binary","binaryPath":"/home/asiri/.local/bin/claude","source":"env","msg":"claude.binary_resolved"}
+Dispatching workflow: **archon-assist**
+{"level":30,"time":1777282224859,"pid":2525992,"hostname":"interstellar","module":"provider.claude","authMode":"global","msg":"using_global_auth"}
+{"level":30,"time":1777282224871,"pid":2525992,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-assist","provider":"claude","providerSource":"config","msg":"workflow_provider_resolved"}
+{"level":30,"time":1777282224876,"pid":2525992,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-assist","workflowRunId":"84125cb81aa1f808afbe2a0d22fb5e70","hasIssueContext":false,"issueContextLength":0,"msg":"workflow_starting"}
+🚀 **Starting workflow**: `archon-assist`
+
+> Note: Will inform user when assist mode is used for tracking.
+{"level":30,"time":1777282224884,"pid":2525992,"hostname":"interstellar","module":"workflow.dag-executor","workflowName":"archon-assist","nodeCount":1,"layerCount":1,"hasIssueContext":false,"issueContextLength":0,"msg":"dag_workflow_starting"}
+{"level":30,"time":1777282224887,"pid":2525992,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"assist","provider":"claude","msg":"dag_node_started"}
+[archon-assist] Started
+{"level":30,"time":1777282224902,"pid":2525992,"hostname":"interstellar","module":"claude-binary","binaryPath":"/home/asiri/.local/bin/claude","source":"env","msg":"claude.binary_resolved"}
+{"level":30,"time":1777282224902,"pid":2525992,"hostname":"interstellar","module":"provider.claude","authMode":"global","msg":"using_global_auth"}
+{"level":40,"time":1777282229097,"pid":2525992,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777293000,"rateLimitType":"five_hour","utilization":0.92,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1777282230270,"pid":2525992,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777293000,"rateLimitType":"five_hour","utilization":0.92,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":30,"time":1777282232155,"pid":2525992,"hostname":"interstellar","module":"service.title-generator","conversationDbId":"41b654e649b04ac45dc00ba0787e58f5","title":"Fix failing CI on PR 729","msg":"title.generate_completed"}
+{"level":40,"time":1777282249449,"pid":2525992,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777293000,"rateLimitType":"five_hour","utilization":0.93,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1777282274527,"pid":2525992,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777293000,"rateLimitType":"five_hour","utilization":0.94,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1777282302421,"pid":2525992,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777293000,"rateLimitType":"five_hour","utilization":0.95,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1777282343605,"pid":2525992,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777293000,"rateLimitType":"five_hour","utilization":0.96,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1777282395825,"pid":2525992,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777293000,"rateLimitType":"five_hour","utilization":0.97,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1777282478633,"pid":2525992,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777293000,"rateLimitType":"five_hour","utilization":0.98,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1777282504992,"pid":2525992,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"allowed_warning","resetsAt":1777293000,"rateLimitType":"five_hour","utilization":0.99,"isUsingOverage":false,"surpassedThreshold":0.9},"msg":"claude.rate_limit_event"}
+{"level":40,"time":1777282736014,"pid":2525992,"hostname":"interstellar","module":"provider.claude","rateLimitInfo":{"status":"rejected","resetsAt":1777293000,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"msg":"claude.rate_limit_event"}
+{"level":50,"time":1777282736015,"pid":2525992,"hostname":"interstellar","module":"provider.claude","sessionId":"310d55ad-4580-46bf-8ebb-d2a258554d03","errorSubtype":"success","stopReason":"stop_sequence","msg":"claude.result_is_error"}
+{"level":50,"time":1777282736020,"pid":2525992,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"assist","errorSubtype":"success","sessionId":"310d55ad-4580-46bf-8ebb-d2a258554d03","stopReason":"stop_sequence","durationMs":511133,"msg":"dag.node_sdk_error_result"}
+{"level":50,"time":1777282736022,"pid":2525992,"hostname":"interstellar","module":"workflow.dag-executor","err":{"type":"Error","message":"Node 'assist' failed: SDK returned success","stack":"Error: Node 'assist' failed: SDK returned success\n    at executeNodeInternal (/mnt/ext-fast/archon/packages/workflows/src/dag-executor.ts:908:21)\n    at unknown\n    at async executeDagWorkflow (unknown)\n    at async executeWorkflow (unknown)\n    at async workflowRunCommand (unknown)\n    at async main (unknown)\n    at processTicksAndRejections (native:7:39)"},"nodeId":"assist","msg":"dag_node_failed"}
+[archon-assist] Failed: Node 'assist' failed: SDK returned success
+{"level":40,"time":1777282736024,"pid":2525992,"hostname":"interstellar","module":"workflow.dag-executor","layerIdx":0,"nodeCount":1,"msg":"dag_layer_had_failures"}
+{"level":30,"time":1777282736024,"pid":2525992,"hostname":"interstellar","module":"workflow.dag-executor","nodeCount":1,"anyCompleted":false,"anyFailed":true,"msg":"dag_workflow_finished"}
+❌ DAG workflow 'archon-assist' completed with no successful nodes. Check node conditions, trigger rules, and upstream failures.
+Error: Workflow failed: Workflow did not complete successfully

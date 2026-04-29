@@ -1,0 +1,20 @@
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (0) from .env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (0) from .env.development -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (0) from .env.production -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (2) from ../../../home/asiri/.archon/.env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+{"level":40,"time":1776633321117,"pid":316782,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776633321122,"pid":316782,"hostname":"interstellar","module":"workflow.loader","id":"implement","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776633321136,"pid":316782,"hostname":"interstellar","module":"workflow.loader","id":"watch-and-merge","fields":["context"],"msg":"loop_node_ai_fields_ignored"}
+{"level":40,"time":1776633321137,"pid":316782,"hostname":"interstellar","module":"workflow.loader","id":"adversarial-sprint","fields":["model"],"msg":"loop_node_ai_fields_ignored"}
+{"level":30,"time":1776633321140,"pid":316782,"hostname":"interstellar","module":"workflow.discovery","count":23,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1776633321153,"pid":316782,"hostname":"interstellar","module":"workflow.discovery","count":23,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-fix-github-issue
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1776633321154,"pid":316782,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+{"level":30,"time":1776633321279,"pid":316782,"hostname":"interstellar","module":"db.sqlite","msg":"db.sqlite_schema_initialized"}
+{"level":30,"time":1776633321294,"pid":316782,"hostname":"interstellar","module":"cli.workflow","branch":"archon-fix-github-issue-1776633321293","msg":"worktree_creating"}
+{"level":40,"time":1776633321795,"pid":316782,"hostname":"interstellar","module":"isolation.worktree","worktreePath":"/home/asiri/.archon/worktrees/ext-fast/reli/archon/task-archon-fix-github-issue-1776633321293","copiedCount":0,"attemptedCount":1,"msg":"worktree_file_copy_partial"}
+{"level":50,"time":1776633326801,"pid":316782,"hostname":"interstellar","module":"db.sqlite","err":{"type":"Error","message":"database is locked","stack":"SQLiteError: database is locked\n    at all (unknown)\n    at query (/mnt/ext-fast/archon/packages/core/src/db/adapters/sqlite.ts:72:29)\n    at query (/mnt/ext-fast/archon/packages/core/src/db/connection.ts:111:26)\n    at create (/mnt/ext-fast/archon/packages/core/src/db/isolation-environments.ts:69:29)\n    at workflowRunCommand (/mnt/ext-fast/archon/packages/cli/src/commands/workflow.ts:486:43)\n    at async main (/mnt/ext-fast/archon/packages/cli/src/cli.ts:351:19)\n    at processTicksAndRejections (native:7:39)","code":"SQLITE_BUSY","errno":5,"byteOffset":-1},"sql":"INSERT INTO remote_agent_isolation_environments\n     (codebase_id, workflow_type, workflow_id, provider, working_path, branch_name, created_by_platform, metadata)\n     VALUES (?, ?, ?, ?, ?, ?, ?, ?)\n     ON CONFLICT (codebase_id, workflow_type, workflow_id) WHERE status = 'active'\n     DO UPDATE SET\n       working_path = EXCLUDED.working_path,\n       branch_name = EXCLUDED.branch_name,\n       provider = EXCLUDED.provider,\n       created_by_platform = EXCLUDED.created_by_platform,\n       metadata = EXCLUDED.metadata,\n       status = 'active',\n       created_at = datetime('now')\n     RETURNING *","params":["2746d6e518c249d76edb1fb7c7338d3e","task","archon-fix-github-issue-1776633321293","worktree","/home/asiri/.archon/worktrees/ext-fast/reli/archon/task-archon-fix-github-issue-1776633321293","archon/task-archon-fix-github-issue-1776633321293","cli","{}"],"msg":"db.sqlite_query_failed"}
+Error: database is locked
