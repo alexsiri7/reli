@@ -21,16 +21,23 @@ function formatTimestamp(iso: string): string {
   return `${monthDay}, ${time}`
 }
 
-function WebSources({ results }: { results: WebSearchResult[] }) {
-  const [expanded, setExpanded] = useState(false)
+interface SourceListProps<T> {
+  items: T[]
+  label: string
+  pluralLabel: string
+  accentColor: string
+  renderItem: (item: T, index: number) => React.ReactNode
+}
 
-  if (results.length === 0) return null
+function SourceList<T>({ items, label, pluralLabel, accentColor, renderItem }: SourceListProps<T>) {
+  const [expanded, setExpanded] = useState(false)
+  if (items.length === 0) return null
 
   return (
     <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
+        className={`flex items-center gap-1 text-xs font-medium ${accentColor} transition-colors`}
       >
         <svg
           className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -41,107 +48,78 @@ function WebSources({ results }: { results: WebSearchResult[] }) {
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
         </svg>
-        {results.length} source{results.length !== 1 ? 's' : ''}
+        {items.length} {items.length !== 1 ? pluralLabel : label}
       </button>
-      {expanded && (
-        <div className="mt-1.5 space-y-1.5">
-          {results.map((r, i) => (
-            <a
-              key={i}
-              href={r.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-xs text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-            >
-              <span className="font-medium">{r.title}</span>
-              <span className="block text-gray-400 dark:text-gray-400 truncate">{r.snippet}</span>
-            </a>
-          ))}
-        </div>
-      )}
+      {expanded && <div className="mt-1.5 space-y-1.5">{items.map(renderItem)}</div>}
     </div>
+  )
+}
+
+function WebSources({ results }: { results: WebSearchResult[] }) {
+  return (
+    <SourceList
+      items={results}
+      label="source"
+      pluralLabel="sources"
+      accentColor="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
+      renderItem={(r, i) => (
+        <a
+          key={i}
+          href={r.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-xs text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+        >
+          <span className="font-medium">{r.title}</span>
+          <span className="block text-gray-400 dark:text-gray-400 truncate">{r.snippet}</span>
+        </a>
+      )}
+    />
   )
 }
 
 function GmailSources({ messages }: { messages: GmailMessage[] }) {
-  const [expanded, setExpanded] = useState(false)
-
-  if (messages.length === 0) return null
-
   return (
-    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
-      >
-        <svg
-          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-        {messages.length} email{messages.length !== 1 ? 's' : ''}
-      </button>
-      {expanded && (
-        <div className="mt-1.5 space-y-1.5">
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className="text-xs text-gray-600 dark:text-gray-300"
-            >
-              <span className="font-medium">{m.subject}</span>
-              <span className="text-gray-400 dark:text-gray-400"> — {m.from}</span>
-              <span className="block text-gray-400 dark:text-gray-400 truncate">{m.snippet}</span>
-            </div>
-          ))}
+    <SourceList
+      items={messages}
+      label="email"
+      pluralLabel="emails"
+      accentColor="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
+      renderItem={(m, i) => (
+        <div key={i} className="text-xs text-gray-600 dark:text-gray-300">
+          <span className="font-medium">{m.subject}</span>
+          <span className="text-gray-400 dark:text-gray-400"> — {m.from}</span>
+          <span className="block text-gray-400 dark:text-gray-400 truncate">{m.snippet}</span>
         </div>
       )}
-    </div>
+    />
   )
 }
 
 function CalendarSources({ events }: { events: CalendarEvent[] }) {
-  const [expanded, setExpanded] = useState(false)
-
-  if (events.length === 0) return null
-
   return (
-    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 transition-colors"
-      >
-        <svg
-          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-        {events.length} event{events.length !== 1 ? 's' : ''}
-      </button>
-      {expanded && (
-        <div className="mt-1.5 space-y-1.5">
-          {events.map((ev, i) => (
-            <div
-              key={i}
-              className="text-xs text-gray-600 dark:text-gray-300"
-            >
-              <span className="font-medium">{ev.summary}</span>
-              <span className="text-gray-400 dark:text-gray-400"> — {new Date(ev.start).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
-              {ev.location && (
-                <span className="block text-gray-400 dark:text-gray-400 truncate">{ev.location}</span>
-              )}
-            </div>
-          ))}
+    <SourceList
+      items={events}
+      label="event"
+      pluralLabel="events"
+      accentColor="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300"
+      renderItem={(ev, i) => (
+        <div key={i} className="text-xs text-gray-600 dark:text-gray-300">
+          <span className="font-medium">{ev.summary}</span>
+          <span className="text-gray-400 dark:text-gray-400">
+            {' '}
+            —{' '}
+            {new Date(ev.start).toLocaleString(undefined, {
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            })}
+          </span>
+          {ev.location && <span className="block text-gray-400 dark:text-gray-400 truncate">{ev.location}</span>}
         </div>
       )}
-    </div>
+    />
   )
 }
 

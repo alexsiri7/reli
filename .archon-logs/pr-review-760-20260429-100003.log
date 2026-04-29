@@ -1,0 +1,81 @@
+[archon] loaded 3 keys from ~/.archon/.env
+{"level":30,"time":1777453203905,"pid":4025548,"hostname":"interstellar","module":"workflow.discovery","count":23,"msg":"app_default_workflows_loaded"}
+{"level":30,"time":1777453203907,"pid":4025548,"hostname":"interstellar","module":"workflow.discovery","count":23,"errorCount":0,"msg":"workflows_discovery_completed"}
+Running workflow: archon-smart-pr-review
+Working directory: /mnt/ext-fast/reli
+
+{"level":30,"time":1777453203907,"pid":4025548,"hostname":"interstellar","module":"db.connection","dbPath":"/home/asiri/.archon/archon.db","msg":"db.connection_sqlite_selected"}
+{"level":30,"time":1777453203917,"pid":4025548,"hostname":"interstellar","module":"db.sqlite","msg":"db.sqlite_schema_initialized"}
+{"level":30,"time":1777453203919,"pid":4025548,"hostname":"interstellar","module":"cli.workflow","branch":"archon-smart-pr-review-1777453203919","msg":"worktree_creating"}
+{"level":40,"time":1777453204498,"pid":4025548,"hostname":"interstellar","module":"isolation.worktree","worktreePath":"/home/asiri/.archon/workspaces/ext-fast/reli/worktrees/archon/task-archon-smart-pr-review-1777453203919","copiedCount":0,"attemptedCount":1,"msg":"worktree_file_copy_partial"}
+{"level":30,"time":1777453204504,"pid":4025548,"hostname":"interstellar","module":"cli.workflow","path":"/home/asiri/.archon/workspaces/ext-fast/reli/worktrees/archon/task-archon-smart-pr-review-1777453203919","msg":"worktree_created"}
+Dispatching workflow: **archon-smart-pr-review**
+{"level":30,"time":1777453204520,"pid":4025548,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-smart-pr-review","provider":"opencode","providerSource":"config","msg":"workflow_provider_resolved"}
+{"level":30,"time":1777453204524,"pid":4025548,"hostname":"interstellar","module":"workflow.executor","workflowName":"archon-smart-pr-review","workflowRunId":"db762819962f325be3d8e31c2d5b5d48","hasIssueContext":false,"issueContextLength":0,"msg":"workflow_starting"}
+🚀 **Starting workflow**: `archon-smart-pr-review`
+
+> "smart PR review", "quick review".
+Does: Gathers PR scope -> classifies complexity -> routes to only relevant review agents ->
+      synthesizes findings -> auto-fixes CRITICAL/HIGH issues.
+Unlike the comprehensive review, this workflow classifies the PR first and only runs
+the review agents that are relevant. A 3-line typo fix skips test-coverage and docs-impact.
+{"level":30,"time":1777453204535,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","workflowName":"archon-smart-pr-review","nodeCount":12,"layerCount":7,"hasIssueContext":false,"issueContextLength":0,"msg":"dag_workflow_starting"}
+{"level":30,"time":1777453204539,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"scope","provider":"opencode","msg":"dag_node_started"}
+[archon-pr-review-scope] Started
+{"level":40,"time":1777453205446,"pid":4025548,"hostname":"interstellar","module":"service.title-generator","err":{"type":"Error","message":"Server exited with code 1\nServer output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\n\u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090005.log for more details\n\nFailed to start server on port 4096\n","stack":"Error: Server exited with code 1\nServer output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\n\u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090005.log for more details\n\nFailed to start server on port 4096\n\n    at <anonymous> (/mnt/ext-fast/archon/node_modules/.bun/@opencode-ai+sdk@1.14.28/node_modules/@opencode-ai/sdk/dist/server.js:58:24)\n    at emit (node:events:98:22)\n    at #handleOnExit (node:child_process:520:14)\n    at processTicksAndRejections (native:7:39)"},"conversationDbId":"96ef99137f9d79037d853a5ccee88b62","msg":"title.generate_failed"}
+{"level":30,"time":1777453205451,"pid":4025548,"hostname":"interstellar","module":"service.title-generator","conversationDbId":"96ef99137f9d79037d853a5ccee88b62","title":"#760","msg":"title.fallback_set"}
+{"level":50,"time":1777453205453,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","err":{"type":"Error","message":"Server exited with code 1\nServer output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\n\u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090005.log for more details\n\nFailed to start server on port 4096\n","stack":"Error: Server exited with code 1\nServer output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\n\u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090005.log for more details\n\nFailed to start server on port 4096\n\n    at <anonymous> (/mnt/ext-fast/archon/node_modules/.bun/@opencode-ai+sdk@1.14.28/node_modules/@opencode-ai/sdk/dist/server.js:58:24)\n    at emit (node:events:98:22)\n    at #handleOnExit (node:child_process:520:14)\n    at processTicksAndRejections (native:7:39)"},"nodeId":"scope","msg":"dag_node_failed"}
+[archon-pr-review-scope] Failed: Server exited with code 1
+Server output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.
+[91m[1mError: [0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090005.log for more details
+
+Failed to start server on port 4096
+
+{"level":40,"time":1777453205456,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"scope","attempt":1,"maxRetries":2,"delayMs":3000,"error":"Server exited with code 1\nServer output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\n\u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090005.log for more details\n\nFailed to start server on port 4096\n","msg":"dag_node_transient_retry"}
+⚠️ Node `scope` failed with transient error (attempt 1/3). Retrying in 3s...
+{"level":30,"time":1777453208459,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"scope","provider":"opencode","msg":"dag_node_started"}
+[archon-pr-review-scope] Started
+{"level":50,"time":1777453209453,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","err":{"type":"Error","message":"Server exited with code 1\nServer output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\n\u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090009.log for more details\n\nFailed to start server on port 4096\n","stack":"Error: Server exited with code 1\nServer output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\n\u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090009.log for more details\n\nFailed to start server on port 4096\n\n    at <anonymous> (/mnt/ext-fast/archon/node_modules/.bun/@opencode-ai+sdk@1.14.28/node_modules/@opencode-ai/sdk/dist/server.js:58:24)\n    at emit (node:events:98:22)\n    at #handleOnExit (node:child_process:520:14)\n    at processTicksAndRejections (native:7:39)"},"nodeId":"scope","msg":"dag_node_failed"}
+[archon-pr-review-scope] Failed: Server exited with code 1
+Server output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.
+[91m[1mError: [0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090009.log for more details
+
+Failed to start server on port 4096
+
+{"level":40,"time":1777453209459,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"scope","attempt":2,"maxRetries":2,"delayMs":6000,"error":"Server exited with code 1\nServer output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\n\u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090009.log for more details\n\nFailed to start server on port 4096\n","msg":"dag_node_transient_retry"}
+⚠️ Node `scope` failed with transient error (attempt 2/3). Retrying in 6s...
+{"level":30,"time":1777453215461,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"scope","provider":"opencode","msg":"dag_node_started"}
+[archon-pr-review-scope] Started
+{"level":50,"time":1777453216395,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","err":{"type":"Error","message":"Server exited with code 1\nServer output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\n\u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090016.log for more details\n\nFailed to start server on port 4096\n","stack":"Error: Server exited with code 1\nServer output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\n\u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090016.log for more details\n\nFailed to start server on port 4096\n\n    at <anonymous> (/mnt/ext-fast/archon/node_modules/.bun/@opencode-ai+sdk@1.14.28/node_modules/@opencode-ai/sdk/dist/server.js:58:24)\n    at emit (node:events:98:22)\n    at #handleOnExit (node:child_process:520:14)\n    at processTicksAndRejections (native:7:39)"},"nodeId":"scope","msg":"dag_node_failed"}
+[archon-pr-review-scope] Failed: Server exited with code 1
+Server output: Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.
+[91m[1mError: [0mUnexpected error, check log file at /home/asiri/.local/share/opencode/log/2026-04-29T090016.log for more details
+
+Failed to start server on port 4096
+
+{"level":40,"time":1777453216400,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","layerIdx":0,"nodeCount":1,"msg":"dag_layer_had_failures"}
+{"level":30,"time":1777453216400,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"sync","reason":"trigger_rule","msg":"dag_node_skipped"}
+{"level":30,"time":1777453216401,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"classify","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-sync-pr-with-main] Skipped (trigger_rule)
+[classify] Skipped (trigger_rule)
+{"level":30,"time":1777453216405,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"code-review","reason":"trigger_rule","msg":"dag_node_skipped"}
+{"level":30,"time":1777453216405,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"error-handling","reason":"trigger_rule","msg":"dag_node_skipped"}
+{"level":30,"time":1777453216405,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"test-coverage","reason":"trigger_rule","msg":"dag_node_skipped"}
+{"level":30,"time":1777453216405,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"comment-quality","reason":"trigger_rule","msg":"dag_node_skipped"}
+{"level":30,"time":1777453216405,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"docs-impact","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-error-handling-agent] Skipped (trigger_rule)
+[archon-test-coverage-agent] Skipped (trigger_rule)
+[archon-code-review-agent] Skipped (trigger_rule)
+[archon-docs-impact-agent] Skipped (trigger_rule)
+[archon-comment-quality-agent] Skipped (trigger_rule)
+{"level":30,"time":1777453216414,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"synthesize","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-synthesize-review] Skipped (trigger_rule)
+{"level":30,"time":1777453216416,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"implement-fixes","reason":"trigger_rule","msg":"dag_node_skipped"}
+[archon-implement-review-fixes] Skipped (trigger_rule)
+{"level":30,"time":1777453216418,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"check-ntfy","reason":"trigger_rule","msg":"dag_node_skipped"}
+[check-ntfy] Skipped (trigger_rule)
+{"level":30,"time":1777453216421,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"notify","reason":"trigger_rule","msg":"dag_node_skipped"}
+[notify] Skipped (trigger_rule)
+{"level":30,"time":1777453216423,"pid":4025548,"hostname":"interstellar","module":"workflow.dag-executor","nodeCount":12,"anyCompleted":false,"anyFailed":true,"msg":"dag_workflow_finished"}
+❌ DAG workflow 'archon-smart-pr-review' completed with no successful nodes. Check node conditions, trigger rules, and upstream failures.
+Error: Workflow failed: Workflow did not complete successfully

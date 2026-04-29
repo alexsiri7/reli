@@ -231,3 +231,13 @@ I'll begin by gathering the necessary context for the code review, starting with
 {"level":30,"time":1777430109535,"pid":3611677,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"simplify","provider":"opencode","msg":"dag_node_started"}
 [archon-simplify-changes] Started
 {"level":30,"time":1777430109559,"pid":3611677,"hostname":"interstellar","module":"provider.opencode","sessionId":"ses_228e8e295ffe9yRss1B2BgpZ32","cwd":"/home/asiri/.archon/workspaces/ext-fast/reli/worktrees/archon/task-archon-fix-github-issue-1777415430308","model":"(opencode default)","resumed":false,"msg":"opencode.prompt_started"}
+{"level":40,"time":1777432132546,"pid":3611677,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"simplify","timeoutMs":1800000,"msg":"dag_node_idle_timeout_reached"}
+{"level":40,"time":1777432132546,"pid":3611677,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"simplify","timeoutMs":1800000,"msg":"dag_node_completed_via_idle_timeout"}
+⚠️ Node `simplify` completed via idle timeout (no output for 30 min). The AI likely finished but the subprocess didn't exit cleanly.
+{"level":30,"time":1777432132552,"pid":3611677,"hostname":"interstellar","module":"workflow.dag-executor","nodeId":"simplify","durationMs":2023017,"msg":"dag_node_completed"}
+[archon-simplify-changes] Completed (33m43s)
+{"level":30,"time":1777432132555,"pid":3611677,"hostname":"interstellar","module":"workflow.dag-executor","workflowRunId":"8a41c2ce400c8e68b6b07e9c44b988c8","layerIdx":14,"totalLayers":16,"status":"cancelled","msg":"dag.stop_detected_between_layers"}
+⚠️ **Workflow stopped** (cancelled): DAG execution stopped after layer 15/16
+{"level":30,"time":1777432132557,"pid":3611677,"hostname":"interstellar","module":"workflow.dag-executor","nodeCount":21,"anyCompleted":true,"anyFailed":false,"msg":"dag_workflow_finished"}
+{"level":30,"time":1777432132557,"pid":3611677,"hostname":"interstellar","module":"workflow.dag-executor","workflowRunId":"8a41c2ce400c8e68b6b07e9c44b988c8","status":"cancelled","msg":"dag.skip_complete_status_changed"}
+Error: Workflow failed: Workflow did not complete successfully
