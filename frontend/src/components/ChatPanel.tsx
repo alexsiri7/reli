@@ -436,37 +436,32 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
         >
           {msg.streaming && !msg.content && msg.streamingStage ? (
             <StreamingIndicator stage={msg.streamingStage} />
-          ) : isUser ? (
-            <>
-              {msg.content}
-              {msg.streaming && msg.content && (
-                <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
-              )}
-            </>
           ) : (
             <>
-              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-blockquote:my-1">
-                <ReactMarkdown
-                  urlTransform={(url) => url}
-                  components={{
-                    a: ({ href, children }) => {
-                      if (href?.startsWith('thing://')) {
-                        const thingId = href.replace('thing://', '')
-                        return (
-                          <button
-                            onClick={() => openThingDetail(thingId)}
-                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 underline decoration-indigo-300 dark:decoration-indigo-500 underline-offset-2 cursor-pointer font-medium"
-                          >
-                            {children}
-                          </button>
-                        )
-                      }
-                      return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
-                    },
-                  }}
-                >
-                  {renderedContent}
-                </ReactMarkdown>
+              <div className={isUser ? '' : "prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-blockquote:my-1"}>
+                {isUser ? renderedContent : (
+                  <ReactMarkdown
+                    urlTransform={(url) => url}
+                    components={{
+                      a: ({ href, children }) => {
+                        if (href?.startsWith('thing://')) {
+                          const thingId = href.replace('thing://', '')
+                          return (
+                            <button
+                              onClick={() => openThingDetail(thingId)}
+                              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 underline decoration-indigo-300 dark:decoration-indigo-500 underline-offset-2 cursor-pointer font-medium"
+                            >
+                              {children}
+                            </button>
+                          )
+                        }
+                        return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+                      },
+                    }}
+                  >
+                    {renderedContent}
+                  </ReactMarkdown>
+                )}
               </div>
               {msg.streaming && msg.content && (
                 <span className="inline-block w-1.5 h-4 bg-current opacity-75 ml-0.5 animate-pulse align-middle" />
