@@ -104,7 +104,7 @@ Issue #777 is the latest in a recurring series (`#733 → #739 → #742 → #762
 
 ### 6. The repo already has a daily health check; the gap is alerting lead time
 
-**Source**: Local file [.github/workflows/railway-token-health.yml](../../../../../home/asiri/.archon/workspaces/ext-fast/reli/worktrees/archon/task-archon-fix-github-issue-1777539628124/.github/workflows/railway-token-health.yml)
+**Source**: Local file [.github/workflows/railway-token-health.yml](../../../.github/workflows/railway-token-health.yml)
 **Authority**: Repo state at HEAD (1346f34)
 **Relevant to**: Whether the team is detecting expirations *before* a deploy fails
 

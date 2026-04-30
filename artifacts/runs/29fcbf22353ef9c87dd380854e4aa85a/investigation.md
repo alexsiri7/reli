@@ -211,7 +211,7 @@ gh run list --workflow staging-pipeline.yml --repo alexsiri7/reli --limit 2     
 **OUT OF SCOPE (do not touch)**:
 - `.github/workflows/staging-pipeline.yml` — the `Validate Railway secrets` step is correct (failing closed); editing it would mask the real defect.
 - `docs/RAILWAY_TOKEN_ROTATION_742.md` — canonical runbook is already correct.
-- A new `web-research.md` — the existing one in this run's directory plus the one in #762/#768's artifact still apply.
+- (Note: this PR *does* add a `web-research.md` in this run dir, scoped to the new 2026-04-30 TTL/OAuth-vs-API-token and health-check-cadence findings. The prior `web-research.md` in #762/#768's artifact remains canonical for token-type taxonomy and is not duplicated here.)
 - Any `.github/RAILWAY_TOKEN_ROTATION_*.md` file — Category 1 error per `CLAUDE.md`.
 - The actual token rotation — agent-out-of-scope per `CLAUDE.md`.
 
