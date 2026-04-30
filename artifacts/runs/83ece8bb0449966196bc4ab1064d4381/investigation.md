@@ -210,4 +210,4 @@ ls -la artifacts/runs/83ece8bb0449966196bc4ab1064d4381/investigation.md
 - **Artifact**: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/83ece8bb0449966196bc4ab1064d4381/investigation.md`
 - **Working directory**: `/home/asiri/.archon/workspaces/ext-fast/reli/worktrees/archon/task-archon-fix-github-issue-1777545021299`
 - **Branch**: `archon/task-archon-fix-github-issue-1777545021299`
-- **Lineage**: 15th `RAILWAY_TOKEN` expiration — `#733 → #739 → #742 → #755 → #762 → #751 → #766 → #762 (re-fire) → #769 → #771 → #774 → #777 → #779 → #781 → #783`
+- **Lineage**: 15th `RAILWAY_TOKEN` expiration — `#733 → #739 → #742 → #755 → #762 → #751 → #766 → #762 (re-fire) → #769 → #771 → #773 / #774 → #777 → #779 → #781 → #783`

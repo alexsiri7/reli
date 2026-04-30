@@ -23,7 +23,7 @@ This is a **docs-only investigation artifact** for the 15th `RAILWAY_TOKEN` expi
 | No `.github/RAILWAY_TOKEN_ROTATION_*.md` created (Category 1 guardrail) | PASS | `ls .github/RAILWAY_TOKEN_ROTATION_*.md` → no such file |
 | Investigation artifact exists | PASS | `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/83ece8bb0449966196bc4ab1064d4381/investigation.md` (13,139 bytes) |
 | Working tree clean | PASS | `git status` → "nothing to commit, working tree clean" |
-| Branch on expected base | PASS | `archon/task-archon-fix-github-issue-1777545021299`, up to date with `origin/main` (HEAD = `bb69f77`) |
+| Branch on expected base | PASS | `archon/task-archon-fix-github-issue-1777545021299`, up to date with `origin/main` (HEAD = `ddc7b0e`) |
 | Type check / lint / format / tests / build | N/A | No code, config, or schema changes — these checks would validate untouched files |
 
 ---
@@ -63,7 +63,7 @@ $ ls -la /home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/83ece8bb04
 -rw-rw-r-- 1 asiri asiri 13139 Apr 30 11:38 .../investigation.md
 
 $ git log --oneline -1
-bb69f77 docs: investigation for issue #779 (13th RAILWAY_TOKEN expiration) (#780)
+ddc7b0e docs: investigation for issue #783 (15th RAILWAY_TOKEN expiration)
 ```
 
 All match the investigation's own validation block (`investigation.md` § "Automated Checks").
