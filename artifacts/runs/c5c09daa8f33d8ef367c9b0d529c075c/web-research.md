@@ -35,6 +35,8 @@ Issue #801 is the **20th** occurrence of the same `RAILWAY_TOKEN is invalid or e
 **Authority**: Railway community help station thread with user-confirmed resolution
 **Relevant to**: Why the same failure keeps recurring after rotation
 
+**Confidence**: Medium — primary claim rests on a single community quote (`bytekeim`); see § "Gaps and Conflicts" below for what the official docs do and don't confirm.
+
 **Key Information**:
 
 - User `bytekeim` (post quoted in the thread): *"RAILWAY_TOKEN now only accepts project token, if u put the normal account token...it literally says 'invalid or expired' even if u just made it 2 seconds ago."*
