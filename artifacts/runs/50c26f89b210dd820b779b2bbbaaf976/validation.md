@@ -18,20 +18,6 @@
 
 ---
 
-## Scope of This Branch
-
-`git show --stat HEAD --name-only` shows the only commit (`a5fb00e`) adds two
-files under `artifacts/runs/50c26f89b210dd820b779b2bbbaaf976/`:
-
-- `investigation.md` (239 lines) — investigation artifact for issue #785
-- `web-research.md` (202 lines) — Railway token taxonomy / TTL findings (carried forward)
-
-No source files (backend, frontend, workflows, or scripts) are touched on this
-branch. There is therefore nothing for type-check / lint / format / tests /
-build to validate that is not already validated by main.
-
----
-
 ## Why Validation Does Not Apply
 
 Per the investigation artifact at `investigation.md` § "Root Cause / Change
