@@ -33,13 +33,13 @@ WHY: Production deploy run 25126991550 failed.
   Evidence: `gh run list --workflow staging-pipeline.yml` shows `conclusion: failure` for runs `25126991550, 25028112865, 25027090951, 25022304652, 25021921290` — every run since 2026-04-27.
 
 ↓ BECAUSE: A `curl` POST to `https://backboard.railway.app/graphql/v2` querying `me{id}` returned an unauthorized response.
-  Evidence: `.github/workflows/staging-pipeline.yml:53-57`:
+  Evidence: `.github/workflows/staging-pipeline.yml:53-55`:
   ```bash
   if ! echo "$RESP" | jq -e '.data.me.id' > /dev/null 2>&1; then
     MSG=$(echo "$RESP" | jq -r '.errors[0].message // "could not reach Railway API or token rejected"')
     echo "::error::RAILWAY_TOKEN is invalid or expired: $MSG"
   ```
-  This is the only code path that emits the observed `RAILWAY_TOKEN is invalid or expired: Not Authorized` string.
+  This is the staging-job emitter (an identical twin lives at line 172 in the production-deploy job and would emit the same string if it ever ran). Run 25126991550 failed on the staging-job copy.
 
 ↓ BECAUSE: Railway rejected the bearer token in `secrets.RAILWAY_TOKEN`.
   Corroborating evidence: `gh run list --workflow railway-token-health.yml` shows the daily probe is also failing — runs `25105119767` (Apr 29) and `25049349913` (Apr 28). The probe is independent of staging-pipeline triggering, so the failure is the secret value itself, not workflow plumbing.
