@@ -59,6 +59,8 @@ Implication for `.github/workflows/staging-pipeline.yml` and `.github/workflows/
 **Authority**: Railway community forum, answer from `bytekeim` (Railway moderator)
 **Relevant to**: Why rotations sometimes "fix nothing" — the new token is rejected immediately
 
+**Note**: this finding appears to contradict finding #1 (which concludes a workspace token is a drop-in replacement). The resolution is at the end of this section — the moderator's quote is **CLI-scoped**, while this repo bypasses the CLI and hits GraphQL directly. Skim readers should not stop at the moderator quote.
+
 **Key Information**:
 
 Direct quote:

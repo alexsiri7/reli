@@ -10,7 +10,7 @@
 |--------|-------|-----------|
 | Severity | HIGH | The staging→production pipeline fails on every push to `main` at the staging validate step, blocking all auto-promotions to prod; no production data is at risk and a clear (human-only) workaround exists. |
 | Complexity | LOW | Resolution is a single human action — rotate the `RAILWAY_TOKEN` GitHub secret. No code changes required; the validate steps and runbook are already correct. |
-| Confidence | HIGH | Run log explicitly emits `RAILWAY_TOKEN is invalid or expired: Not Authorized`, the validate step at `.github/workflows/staging-pipeline.yml:32-58` is designed to surface exactly this case, and the same failure has now recurred 22 times (`#742, #747, #752, #762, #769, #774, #777, #783, #793, #794, #798, #800, #801, #804, #805, ...`). |
+| Confidence | HIGH | Run log explicitly emits `RAILWAY_TOKEN is invalid or expired: Not Authorized`, the validate step at `.github/workflows/staging-pipeline.yml:32-58` is designed to surface exactly this case, and the same failure has now recurred 22 times. Run `git log --grep "RAILWAY_TOKEN expiration" --oneline` on `main` for the full chain (most recent: #804/#805 = 21st; #800/#801 = 20th; #798 = 19th). |
 
 ---
 

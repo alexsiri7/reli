@@ -2,7 +2,7 @@
 
 **Generated**: 2026-04-30 19:40
 **Workflow ID**: 9aabafb9f142e3784b7b340cd850b07d
-**Status**: ALL_PASS (vacuous — investigation-only task with no code under test)
+**Status**: N/A — DOCS_ONLY (investigation-only task with no code under test; nothing was actually run)
 
 ---
 
