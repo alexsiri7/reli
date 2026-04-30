@@ -8,7 +8,7 @@
 
 | Metric | Value | Reasoning |
 |--------|-------|-----------|
-| Severity | HIGH | The `Validate Railway secrets` pre-flight at `.github/workflows/staging-pipeline.yml:32-58` is still aborting every prod deploy on `main` — `25156988688` (09:04Z), `25158268693` (09:34Z, the run #781 cites), and `25159527419` (10:04Z, the merge of #779's investigation PR) all failed with `RAILWAY_TOKEN is invalid or expired: Not Authorized`. Nothing ships until a human rotates the GitHub Actions secret. |
+| Severity | HIGH | The `Validate Railway secrets` pre-flight at `.github/workflows/staging-pipeline.yml:32-58` is still aborting every prod deploy on `main` — `25158268693` (09:34Z, the run #781 cites) and `25159527419` (10:04Z, the merge of #779's investigation PR) both failed with `RAILWAY_TOKEN is invalid or expired: Not Authorized`. Nothing ships until a human rotates the GitHub Actions secret. |
 | Complexity | LOW | No code change is permitted (per `CLAUDE.md` § "Railway Token Rotation"); the canonical runbook already exists at `docs/RAILWAY_TOKEN_ROTATION_742.md` and the action is one Railway dashboard rotation + one `gh secret set`. |
 | Confidence | HIGH | The run cited by #781 ([`25158268693`](https://github.com/alexsiri7/reli/actions/runs/25158268693)) emits the canonical error string at `2026-04-30T09:35:06Z`; a *newer* run [`25159527419`](https://github.com/alexsiri7/reli/actions/runs/25159527419) at 10:04:41Z on SHA `bb69f77a` (the merge commit of #779's investigation PR #780) failed identically. #779 closed at 10:00:15Z; #781 was filed at 10:00:28Z — 13 seconds after — proving the secret was not rotated in that window. |
 
@@ -51,7 +51,7 @@ WHY: run `25158268693` (cited by #781) failed
 | File | Lines | Action | Description |
 |------|-------|--------|-------------|
 | `artifacts/runs/044b57b9ed7f700e576327fa9c5486cb/investigation.md` | NEW | CREATE | This investigation artifact (lineage update + human-action checklist) |
-| `artifacts/runs/044b57b9ed7f700e576327fa9c5486cb/web-research.md` | (already present) | KEEP | Pre-existing web-research artifact summarising Railway token taxonomy / TTL findings as of 2026-04-30 |
+| `artifacts/runs/044b57b9ed7f700e576327fa9c5486cb/web-research.md` | NEW (carried forward from `alexsiri7` workspace) | CREATE | Pre-existing web-research artifact summarising Railway token taxonomy / TTL findings as of 2026-04-30 |
 
 **Deliberately not changed** (per `CLAUDE.md`):
 - `.github/workflows/staging-pipeline.yml` — failing closed correctly; editing it would mask the real defect.
@@ -225,6 +225,7 @@ gh run list --workflow staging-pipeline.yml --repo alexsiri7/reli --limit 3     
 2. **Migrate away from long-lived `RAILWAY_TOKEN` PAT** (P2) — service-account token or scheduled-rotation automation. Railway has no OIDC trust feature as of April 2026 (see `web-research.md` § Finding 3).
 3. **Standardise on `backboard.railway.com` across all `curl` sites** (P3) — defensive against future `.app` retirement.
 4. **Rename secret `RAILWAY_TOKEN` → `RAILWAY_API_TOKEN`** (P3) — Railway CLI conventions now treat `RAILWAY_TOKEN` as project-only; renaming the secret avoids the ambiguity that triggered finding 1 in PR #768's `web-research.md`.
+5. **Reconcile with `web-research.md` Recommendation 2** (P2, follow-up only) — if the operator opts to migrate from account-scoped to workspace tokens, the validation query in `.github/workflows/staging-pipeline.yml:42` will need to change from `{me{id}}` (account-only per Railway moderator, `web-research.md` § Finding 2) to `{__typename}` (works for both). This is **explicitly out of scope for this bead** and any future bead — it must wait until rotation has landed and the operator decides token-type migration is desired; doing it while the current secret is expired would mask the real failure signal.
 
 ---
 
