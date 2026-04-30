@@ -17,7 +17,7 @@
 
 ## Problem Statement
 
-The `RAILWAY_TOKEN` GitHub Actions secret has expired again. The `Validate Railway secrets` pre-flight step in `.github/workflows/staging-pipeline.yml` calls Railway's `me{id}` GraphQL probe, receives `Not Authorized`, and aborts the deploy. As of 2026-04-30T05:06Z this has produced 5 consecutive failed `staging-pipeline.yml` runs (`25148434478, 25145158555, 25142788611, 25126991550, 25028112865`) and 2 consecutive failed `railway-token-health.yml` runs (`25105119767, 25049349913`). This is the 8th identical recurrence and the 6th internal re-fire of #762 itself.
+The `RAILWAY_TOKEN` GitHub Actions secret has expired again. The `Validate Railway secrets` pre-flight step in `.github/workflows/staging-pipeline.yml` calls Railway's `me{id}` GraphQL probe, receives `Not Authorized`, and aborts the deploy. As of 2026-04-30T05:06Z this has produced 5 consecutive failed `staging-pipeline.yml` runs (`25148434478, 25145158555, 25142788611, 25126991550, 25028112865`) and 2 consecutive failed `railway-token-health.yml` runs (`25105119767, 25049349913`). This is the 8th identical recurrence (decomposition: 5 sister issues `#733 → #739 → #742 → #755 → #762` + 3 internal re-fires of #762 = 8 total) and the 6th internal re-fire of #762 itself.
 
 ---
 
@@ -72,9 +72,23 @@ This is an **investigation-only, no-PR incident by design**. There is no agent-a
 ### Step 1 (Human): Mint a new Railway token
 
 - Go to https://railway.com/account/tokens.
-- Create a **Workspace token** (NOT a project token — those use a different header and will not satisfy the `me{id}` probe).
-- Set **Expiration: No expiration**. This is the recurrence-breaker; do not accept the default TTL.
+- Create a **Workspace token** (NOT a project token — `staging-pipeline.yml`
+  uses the `Authorization: Bearer` header at line 50, which is the
+  account/workspace contract; project tokens require the
+  `Project-Access-Token` header and will fail the `me{id}` probe).
+- Set **Expiration: No expiration** if available — this is the
+  recurrence-breaker; do not accept the default TTL. If the dashboard does
+  **not** offer "No expiration" (`web-research.md` Finding 4 documents this
+  gap), select the longest available TTL, record the dropdown's actual
+  options as a comment on #762, and proceed. A follow-up bead will amend
+  `docs/RAILWAY_TOKEN_ROTATION_742.md`.
 - Name suggestion: `github-actions-permanent`.
+
+> Known failure mode: a Railway community thread reports that `RAILWAY_TOKEN`
+> may have been tightened to project-only. If a fresh Workspace token still
+> returns `Not Authorized`, see `web-research.md` Finding 1 — the remediation
+> is to switch the workflow header to `Project-Access-Token` in a separate
+> bead, *not* to mint a project token against the current Bearer header.
 
 ### Step 2 (Human): Update the GitHub secret
 

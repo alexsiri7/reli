@@ -1,16 +1,17 @@
 # Web Research: fix #762
 
-**Researched**: 2026-04-30T00:00:00Z
+**Researched**: 2026-04-30T07:05:00Z
 **Workflow ID**: 0c44823de5470e5c9687e943e83f9414
 
 ---
 
 ## Summary
 
-Issue #762 is the **5th recurrence** of the same root cause: the `RAILWAY_TOKEN`
-GitHub Actions secret has expired and the staging-pipeline workflow's
-`Validate Railway secrets` step fails with `RAILWAY_TOKEN is invalid or expired:
-Not Authorized`. Authoritative Railway sources (docs + community) confirm two
+Issue #762 is the **8th recurrence** of the same root cause (lineage
+`#733 → #739 → #742 → #755 → #762`, plus 3 internal re-fires of #762
+itself = 8 total): the `RAILWAY_TOKEN` GitHub Actions secret has expired
+and the staging-pipeline workflow's `Validate Railway secrets` step fails
+with `RAILWAY_TOKEN is invalid or expired: Not Authorized`. Authoritative Railway sources (docs + community) confirm two
 distinct failure modes for this exact error string — **token expiry** and
 **token-type mismatch** (account vs project). Railway's public documentation
 does **not** describe a "no expiration" option for project tokens, so the
@@ -133,8 +134,10 @@ roadmap.
 
 **Key Information**:
 - Recommended cadence: critical secrets every 30 days, high-risk every 60 days,
-  others every 90 days. Reli already rotates 5 times in recent history, so
-  cadence is not the problem — *human availability* is.
+  others every 90 days. Reli has already rotated 8 times in recent history, so
+  cadence is not the problem — *human availability* is. The recurrence rate is
+  in fact higher than even the most aggressive industry guideline, which
+  strengthens the case that manual rotation is the wrong primitive here.
 - External secret managers (Doppler, HashiCorp Vault, Infisical) can inject
   rotated secrets into GitHub Actions at runtime, removing the need for a
   manual `gh secret set` step. Doppler integrates with Railway specifically
@@ -227,9 +230,18 @@ tokens (which use `Project-Access-Token: <TOKEN>`).
 
 2. **Have the human verify two things at the dashboard**, since both could
    explain the recurring expiry:
-   - **Token type:** confirm the new token is created from
-     **Project Settings → Tokens** (not from account/tokens page). Account
-     tokens get rejected by `RAILWAY_TOKEN` with the same error string.
+   - **Token type:** mint a **Workspace token** at
+     <https://railway.com/account/tokens>. This is the canonical answer
+     across `investigation.md` Step 1 and the PR body Human Action Checklist
+     because `staging-pipeline.yml:50` uses the `Authorization: Bearer`
+     header (Finding 2), which is the account/workspace contract — project
+     tokens require the `Project-Access-Token` header and will fail the
+     `me{id}` probe. Note the **known failure mode** in Finding 1: a Railway
+     community thread reports that `RAILWAY_TOKEN` may have been tightened
+     to project-only. If a fresh Workspace token still returns
+     `Not Authorized`, the remediation is to switch the workflow header to
+     `Project-Access-Token` in a separate bead — *not* to mint a project
+     token against the current Bearer header.
    - **TTL setting:** confirm the dashboard exposes a "No expiration" option
      and that it is selected. If only fixed TTLs are offered (e.g., 7/30/90
      days), the runbook's instruction is wrong and the issue will recur on a
@@ -247,14 +259,22 @@ tokens (which use `Project-Access-Token: <TOKEN>`).
    Railway integration. This converts the recurring incident from "human
    pages on cold expiry" to "automated rotate-and-publish."
 
-5. **If we keep manual rotation,** update
-   `docs/RAILWAY_TOKEN_ROTATION_742.md` to:
-   - Specify token-creation location (project settings, not account settings).
+5. **Follow-up issue (file after #762 closes, per `investigation.md` scope):**
+   update `docs/RAILWAY_TOKEN_ROTATION_742.md` to:
+   - Specify token-creation location (Workspace token from
+     <https://railway.com/account/tokens> for the current `Bearer` header
+     contract — see Finding 2 — pending dashboard verification by the human).
    - Note the two failure modes (TTL expiry vs type mismatch) and how to
      distinguish them from the error string alone (i.e., you can't — both say
      "Not Authorized").
    - Record whether a "No expiration" option actually exists, based on the
-     human's observation.
+     human's observation during the next rotation.
+
+   This recommendation is **out of scope for this PR** per
+   `investigation.md` § "Scope Boundaries" (the canonical runbook is not
+   touched by the investigation bead). It is enumerated here as a deferred
+   follow-up to be filed once #762 closes, parallel to the items in
+   `investigation.md` § "Suggested Follow-up Issues".
 
 ---
 
