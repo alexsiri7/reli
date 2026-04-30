@@ -11,7 +11,8 @@
 This is a **docs-only investigation PR** for issue #774 (the 11th `RAILWAY_TOKEN`
 expiration). Per `CLAUDE.md` § "Railway Token Rotation" and the investigation
 artifact's scope boundaries, **no source code, workflow, or runbook files are
-changed**. The deliverable is a single Markdown investigation document.
+changed**. The deliverable is three Markdown artifact files (investigation,
+web-research, and this validation document).
 
 | Check | Result | Details |
 |-------|--------|---------|
@@ -20,7 +21,7 @@ changed**. The deliverable is a single Markdown investigation document.
 | Format | N/A | Markdown-only change |
 | Tests | N/A | No source / no test changes |
 | Build | N/A | No source files modified |
-| Branch diff vs `origin/main` | ✅ | (will be a single new `investigation.md` once committed) |
+| Branch diff vs `origin/main` | ✅ | three new artifact files under `artifacts/runs/d3bc806d703d06a72e9e4d5a496d8f35/` |
 
 ---
 
@@ -94,7 +95,9 @@ None.
 
 | File | Status |
 |------|--------|
-| `artifacts/runs/d3bc806d703d06a72e9e4d5a496d8f35/investigation.md` | Investigation artifact (in workspace; pending copy-into-repo + commit by `archon-finalize-pr`) |
+| `artifacts/runs/d3bc806d703d06a72e9e4d5a496d8f35/investigation.md` | Investigation artifact |
+| `artifacts/runs/d3bc806d703d06a72e9e4d5a496d8f35/web-research.md`  | Root-cause research notes |
+| `artifacts/runs/d3bc806d703d06a72e9e4d5a496d8f35/validation.md`    | This file |
 
 ---
 

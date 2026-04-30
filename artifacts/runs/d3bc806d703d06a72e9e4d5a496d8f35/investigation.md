@@ -42,9 +42,9 @@ WHY: run `25153294867` failed
   Evidence: CI log line `2026-04-30T07:34:56.5710012Z ##[error]RAILWAY_TOKEN is invalid or expired: Not Authorized`
 
 ↓ BECAUSE: `secrets.RAILWAY_TOKEN` has reached its expiry and was not rotated when investigation PRs #770 and #772 landed
-  Evidence: identical failure on the next run `25153282216` (07:34:33Z) on the same SHA `0ca82844`; identical failure on the prior post-merge run `25151102981` for #771; the rotation cannot happen on a PR merge — only via railway.com.
+  Evidence: identical failure on the immediately-prior run `25153282216` (07:34:33Z) on the same SHA `0ca82844`; identical failure on the prior post-merge run `25151102981` for #771; the rotation cannot happen on a PR merge — only via railway.com.
 
-↓ ROOT CAUSE: prior rotations created Railway tokens with a finite TTL instead of selecting **No expiration**. No human has yet performed the rotation that resolves the current expiry window — the auto-pickup cron has now produced 11 occurrences across 9 unique issues (`#733 → #739 → #742 → #755 → #762 → #769 → #771 → #774`, with #751, #766 also re-firing on the same expired secret, plus 3 internal re-fires of #762).
+↓ ROOT CAUSE: prior rotations created Railway tokens with a finite TTL instead of selecting **No expiration**. The auto-pickup cron has now produced **11 occurrences across 10 unique issues** (`#733 → #739 → #742 → #755 → #762 → #751 → #766 → #762 (re-fire) → #769 → #771 → #774`). No human has yet performed the rotation that resolves the current expiry window.
 
 ### Affected Files
 
@@ -213,7 +213,7 @@ gh run list --workflow staging-pipeline.yml --repo alexsiri7/reli --limit 1     
 
 **Deferred follow-ups** (file by a human after #774 closes and rotation is verified):
 
-1. **Investigation-only loop-stopper for `archon:in-progress`** (P2) — the auto-pickup cron has produced 11 occurrences across 9 unique issues on the same expired secret because no PR ever lands on no-op investigations. The cron should suppress re-firing while a `RAILWAY_TOKEN` issue is open.
+1. **Investigation-only loop-stopper for `archon:in-progress`** (P2) — the auto-pickup cron has produced 11 occurrences across 10 unique issues on the same expired secret because no PR ever lands on no-op investigations. The cron should suppress re-firing while a `RAILWAY_TOKEN` issue is open.
 2. **Migrate away from long-lived `RAILWAY_TOKEN` PAT** (P2) — service-account token or scheduled-rotation automation. Railway has no OIDC trust feature as of April 2026.
 3. **Standardise on `backboard.railway.com` across all `curl` sites** (P3) — defensive against future `.app` retirement; ~7 call sites today.
 4. **Rename secret `RAILWAY_TOKEN` → `RAILWAY_API_TOKEN`** (P3) — Railway CLI conventions now treat `RAILWAY_TOKEN` as project-only; renaming the secret avoids the ambiguity that triggered finding 1 in PR #768's `web-research.md`.
