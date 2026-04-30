@@ -37,7 +37,7 @@ The issue has already been re-fired by Archon **13+ times** without progress; ea
 | Daily token health probe | `.github/workflows/railway-token-health.yml` | **Yes** | Already red on 2026-04-28 and 2026-04-29 — the early-warning signal fired correctly; the rotation simply has not been performed. PR #757 increased cadence from weekly to daily; further frequency increases would not help. |
 | `RAILWAY_TOKEN` secret value (the actual bit that's broken) | GitHub Actions org/repo secret — **not in repo** | **No** | Token reached its expiry date. Repeatedly created with default finite TTL instead of "No expiration"; that is the recurrence engine. |
 | Rotation runbook | `docs/RAILWAY_TOKEN_ROTATION_742.md` | **Yes** | Already documents the cause ("the default TTL may be short … The new token must be created with **No expiration**") and the procedure. |
-| Agent-side guardrail against false rotation docs | `CLAUDE.md` § "Railway Token Rotation" | **Yes** | Explicit prohibition on creating `.github/RAILWAY_TOKEN_ROTATION_*.md` files claiming completion (Category 1 error). PRs #749, #750 violated this and were removed in #756. |
+| Agent-side guardrail against false rotation docs | `CLAUDE.md` § "Railway Token Rotation" | **Yes** | Explicit prohibition on creating `.github/RAILWAY_TOKEN_ROTATION_*.md` files claiming completion (Category 1 error). PRs #749, #750 violated this and were removed in commits `459f790` (PR #756) and `9b9ef96` (PR #754). |
 
 **Minimal change for #751:** commit this investigation artifact as the linkable docs file so Archon can transition the issue out of `archon:in-progress`. Do not edit `.github/`, do not edit `backend/`, do not create any rotation-completion document.
 
