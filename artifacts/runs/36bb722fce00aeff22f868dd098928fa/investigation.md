@@ -10,7 +10,7 @@
 |--------|-------|-----------|
 | Severity | HIGH | The `Validate Railway secrets` pre-flight at `.github/workflows/staging-pipeline.yml:32-58` is still aborting every prod deploy on `main`. Run `25161929515` (11:04:46Z, the run #786 cites) and the sibling run `25161923407` (11:04:37Z, same SHA `d21b401d`) both failed with `RAILWAY_TOKEN is invalid or expired: Not Authorized`. Nothing ships until a human rotates the GitHub Actions secret. |
 | Complexity | LOW | No code change is permitted (per `CLAUDE.md` § "Railway Token Rotation"); the canonical runbook already exists at `docs/RAILWAY_TOKEN_ROTATION_742.md` and the action is one Railway dashboard rotation + one `gh secret set`. |
-| Confidence | HIGH | The CI log for run `25161929515` emits the canonical error string verbatim at `2026-04-30T11:04:52Z`: `##[error]RAILWAY_TOKEN is invalid or expired: Not Authorized`. Issue #781 (14th) closed at 11:00:15Z and #783 (15th) closed at 11:00:14Z — #786 was filed 4 minutes 40 seconds later (11:04:55Z) on the merge commit of #781's investigation PR (`d21b401d`), proving the secret was not rotated in that window. |
+| Confidence | HIGH | The CI log for run `25161929515` emits the canonical error string verbatim at `2026-04-30T11:04:52Z`: `##[error]RAILWAY_TOKEN is invalid or expired: Not Authorized`. Issue #781 (14th) closed at 11:00:15Z and #783 (15th) closed at 11:00:14Z; the failing deploy (run `25161929515`) ran 4m40s later at 11:04:55Z (per the issue body's `Deployed at:`), and the auto-pickup cron then filed #786 at 11:30:32Z (`createdAt`) on the merge commit of #781's investigation PR (`d21b401d`) — proving the secret was not rotated in the 4m40s deploy window nor in the subsequent 25m37s before the cron fired. |
 
 ---
 
@@ -18,7 +18,7 @@
 
 The `RAILWAY_TOKEN` GitHub Actions secret is still expired. The `Validate Railway secrets` pre-flight step in `.github/workflows/staging-pipeline.yml` calls Railway's `{me{id}}` GraphQL probe, receives `Not Authorized`, and aborts the deploy.
 
-This is the **16th identical recurrence** of the same failure mode. Issues #781 (14th) and #783 (15th) closed at 2026-04-30T11:00:15Z and 11:00:14Z respectively; the auto-pickup cron filed #786 at 11:04:55Z — 4 minutes 40 seconds after both closed cleanly — on the merge commit of #781's investigation PR (#782, SHA `d21b401d`). A sibling run `25161923407` at 11:04:37Z on the same SHA failed identically.
+This is the **16th identical recurrence** of the same failure mode. Issues #781 (14th) and #783 (15th) closed at 2026-04-30T11:00:15Z and 11:00:14Z respectively; the failing deploy (run `25161929515`) ran at 11:04:55Z — 4 minutes 40 seconds after both closed cleanly — on the merge commit of #781's investigation PR (#782, SHA `d21b401d`); the auto-pickup cron then filed #786 at 11:30:32Z, 25m37s after the deploy completed and 30m17s after the prior issues closed. A sibling run `25161923407` at 11:04:37Z on the same SHA failed identically.
 
 ---
 
@@ -69,7 +69,7 @@ WHY: run `25161929515` (cited by #786) failed
 
 - **Issue-cited failure**: run `25161929515` at 2026-04-30T11:04:46Z on SHA `d21b401d` (merge commit of investigation PR #782 for issue #781).
 - **Sibling failure proving secret is still bad**: run `25161923407` at 2026-04-30T11:04:37Z on the same SHA `d21b401d` — failed identically.
-- **Issue timing**: #781 (14th) closed at 11:00:15Z; #783 (15th) closed at 11:00:14Z; #786 was filed at 11:04:55Z — 4 minutes 40 seconds after both closed cleanly. The merge of #782 (the investigation PR for #781) triggered a fresh `staging-pipeline` run which immediately went red on the same expired secret, and the auto-pickup cron filed #786 against it.
+- **Issue timing**: #781 (14th) closed at 11:00:15Z; #783 (15th) closed at 11:00:14Z; the failing deploy (run `25161929515`) ran at 11:04:55Z — 4m40s after both closed cleanly; the auto-pickup cron filed #786 at 11:30:32Z, 25m37s after the deploy completed and 30m17s after the prior issues closed. The merge of #782 (the investigation PR for #781) triggered a fresh `staging-pipeline` run which immediately went red on the same expired secret, and the auto-pickup cron filed #786 against it.
 - **Prior occurrences (canonical chain)**: per the lineage table below, this is the 16th.
 
 | # | Issue | Investigation PR | Notes |
@@ -89,7 +89,7 @@ WHY: run `25161929515` (cited by #786) failed
 | 13 | #779 | #780 | |
 | 14 | #781 | #782 | Auto-pickup cron re-fired against `25158268693` *after* #779 closed cleanly. |
 | 15 | #783 | #784 | "Main CI red: Deploy to staging" — same expired secret, different cron template (sibling track). Filed against run `25159527419` (merge of #780). |
-| 16 | **#786** | **(this PR)** | "Prod deploy failed on main" — auto-pickup cron re-fired against `25161929515` (merge of #782 for #781) at 11:04:55Z, **4m40s after both #781 and #783 closed cleanly at ~11:00:15Z**. Confirms the loop-stopper deferred follow-up #1 from PR #782 is still unresolved. |
+| 16 | **#786** | **(this PR)** | "Prod deploy failed on main" — failing deploy (run `25161929515`, merge of #782 for #781) ran at 11:04:55Z, **4m40s after both #781 and #783 closed cleanly at ~11:00:15Z**; auto-pickup cron filed #786 at 11:30:32Z (25m37s after the deploy completed, 30m17s after siblings closed). Confirms the loop-stopper deferred follow-up #1 from PR #782 is still unresolved. |
 
 ---
 
@@ -180,7 +180,7 @@ Close #786 with a comment linking the green run, then remove the `archon:in-prog
 | Dashboard no longer offers "No expiration" | Pick the longest TTL, record options on issue, file a follow-up bead to amend `docs/RAILWAY_TOKEN_ROTATION_742.md`. |
 | Fresh Workspace token still returns `Not Authorized` | Per prior runs' `web-research.md` § Finding 2, the `{me{id}}` probe specifically requires an *account* (personal) token; a workspace token will be rejected by validation even if it would deploy successfully. If rotation lands and the probe still fails, switch the dashboard creation to "no workspace selected" (account token) or change the validation query in a separate bead. |
 | Sibling "Main CI red" issue filed in the next cron window | Close it alongside #786 and remove `archon:in-progress` on both. |
-| New deploys file additional sister issues before rotation lands | Expected; the auto-pickup cron will keep firing until `RAILWAY_TOKEN` is rotated. The 4m40s gap between #781/#783 closing and #786 filing is itself an instance of this — the loop-stopper is a deferred follow-up (below). |
+| New deploys file additional sister issues before rotation lands | Expected; the auto-pickup cron will keep firing until `RAILWAY_TOKEN` is rotated. The 4m40s gap between #781/#783 closing and the failing deploy (and 30m17s gap to #786 filing) is itself an instance of this — the loop-stopper is a deferred follow-up (below). |
 | Agents create a `.github/RAILWAY_TOKEN_ROTATION_*.md` claiming success | Category 1 error per `CLAUDE.md` — explicitly forbidden. This investigation does not do that. |
 
 ---
@@ -222,7 +222,7 @@ gh run list --workflow staging-pipeline.yml --repo alexsiri7/reli --limit 3     
 
 **Deferred follow-ups** (file by a human after #786 closes and rotation is verified):
 
-1. **Investigation-only loop-stopper for `archon:in-progress`** (P0, escalated again) — the auto-pickup cron has now produced 16 occurrences across 15 unique issues on the same expired secret because no PR ever lands on no-op investigations. Issue #786 was filed *4m40s after* both #781 and #783 closed cleanly, proving the cron is still firing on every red `staging-pipeline` run regardless of recent rotation-pending state. The cron should suppress re-firing while *any* `Prod deploy failed on main` issue exists for an unrotated secret (e.g. gate on a successful `railway-token-health` run rather than just on the absence of an open `archon:in-progress` sibling).
+1. **Investigation-only loop-stopper for `archon:in-progress`** (P0, escalated again) — the auto-pickup cron has now produced 16 occurrences across 15 unique issues on the same expired secret because no PR ever lands on no-op investigations. The failing deploy that issue #786 cites ran *4m40s after* both #781 and #783 closed cleanly, and the auto-pickup cron then filed #786 30m17s after they closed (25m37s after the deploy) — proving the cron is still firing on every red `staging-pipeline` run regardless of recent rotation-pending state, and that the suppression window must accommodate a ~25-minute filing latency rather than an instantaneous one. The cron should suppress re-firing while *any* `Prod deploy failed on main` issue exists for an unrotated secret (e.g. gate on a successful `railway-token-health` run rather than just on the absence of an open `archon:in-progress` sibling).
 2. **Migrate away from long-lived `RAILWAY_TOKEN` PAT** (P2) — service-account token or scheduled-rotation automation. Railway has no OIDC trust feature as of April 2026.
 3. **Standardise on `backboard.railway.com` across all `curl` sites** (P3) — defensive against future `.app` retirement.
 4. **Rename secret `RAILWAY_TOKEN` → `RAILWAY_API_TOKEN`** (P3) — Railway CLI conventions now treat `RAILWAY_TOKEN` as project-only; renaming the secret avoids the ambiguity that triggered finding 1 in PR #768's `web-research.md`.

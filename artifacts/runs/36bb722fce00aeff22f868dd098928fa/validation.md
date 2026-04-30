@@ -31,8 +31,10 @@ None. No fixes were required.
 | File | Purpose |
 |------|---------|
 | `artifacts/runs/36bb722fce00aeff22f868dd098928fa/investigation.md` | Investigation artifact for issue #786 (16th recurrence). |
+| `artifacts/runs/36bb722fce00aeff22f868dd098928fa/validation.md` | This validation artifact (negative-check evidence). |
+| `artifacts/runs/36bb722fce00aeff22f868dd098928fa/web-research.md` | Railway token-type research, retained for human follow-up after rotation. |
 
-`git status` confirms the only change is the new `artifacts/runs/36bb722fce00aeff22f868dd098928fa/` directory; the working tree is otherwise clean against `origin/main`.
+`git status` confirms the only changes are the three new files under `artifacts/runs/36bb722fce00aeff22f868dd098928fa/`; the working tree is otherwise clean against `origin/main`.
 
 ---
 
