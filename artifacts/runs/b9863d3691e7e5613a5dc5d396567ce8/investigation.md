@@ -44,13 +44,13 @@ WHY: `Deploy to staging` job exits 1.
 |------|-------|--------|-------------|
 | GitHub Actions secret `RAILWAY_TOKEN` | n/a | ROTATE (human-only) | Create new Railway API token with **"No expiration"** and update the secret. |
 
-No source files require modification. The validate step at `.github/workflows/staging-pipeline.yml:32-58` (and the prod equivalent at `:149-173`) is functioning correctly.
+No source files require modification. The validate step at `.github/workflows/staging-pipeline.yml:32-58` (and the prod equivalent at `:149-175`) is functioning correctly.
 
 ### Integration Points
 
 - `.github/workflows/staging-pipeline.yml:32-58` — staging validate step that emitted the failure.
 - `.github/workflows/staging-pipeline.yml:60-88` — staging deploy step that uses the same token.
-- `.github/workflows/staging-pipeline.yml:149-173` — prod validate step (will fail next prod deploy with the same error).
+- `.github/workflows/staging-pipeline.yml:149-175` — prod validate step (will fail next prod deploy with the same error).
 - `.github/workflows/railway-token-health.yml` — periodic health check that monitors the token.
 
 ### Git History
