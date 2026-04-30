@@ -31,13 +31,17 @@ None. No fixes were required.
 ```
 $ git diff origin/main --name-only
 artifacts/runs/e05e40431af32d76a870f3a95aa8b1a6/investigation.md
+artifacts/runs/e05e40431af32d76a870f3a95aa8b1a6/validation.md
+artifacts/runs/e05e40431af32d76a870f3a95aa8b1a6/web-research.md
 ```
 
 | File | Status | Purpose |
 |------|--------|---------|
 | `artifacts/runs/e05e40431af32d76a870f3a95aa8b1a6/investigation.md` | new | Investigation artifact for issue #798 (19th recurrence). |
+| `artifacts/runs/e05e40431af32d76a870f3a95aa8b1a6/validation.md` | new | Validation artifact for the docs-only investigation PR. |
+| `artifacts/runs/e05e40431af32d76a870f3a95aa8b1a6/web-research.md` | new | External research on Railway token types, expiration semantics, and GraphQL auth headers. |
 
-The branch is exactly **one** commit ahead of `origin/main` (`0e80762 docs: investigation for issue #798 (19th RAILWAY_TOKEN expiration)`).
+All three artifacts land together in the branch, mirroring the precedent set by prior occurrences.
 
 ---
 
@@ -67,7 +71,7 @@ The branch is exactly **one** commit ahead of `origin/main` (`0e80762 docs: inve
 
 ## Note for `archon-finalize-pr`
 
-A `web-research.md` exists alongside this artifact in the workflow run directory at `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/e05e40431af32d76a870f3a95aa8b1a6/web-research.md` but is **not** present in the worktree at `artifacts/runs/e05e40431af32d76a870f3a95aa8b1a6/web-research.md` and therefore not in the commit. The investigation references it ("see `web-research.md` Findings 1–4"). Prior runs (e.g. `dd6abcadab89d9cb7488949c7f296639`) committed `web-research.md` alongside `investigation.md` and `validation.md`. The finalize step may want to copy it into the worktree before the PR is marked ready, to keep the cross-reference intact and match precedent.
+`web-research.md` is included in this PR at `artifacts/runs/e05e40431af32d76a870f3a95aa8b1a6/web-research.md` (199 lines), so the cross-reference from `investigation.md` ("see `web-research.md` Findings 1–4") resolves within the committed artifact set, matching the precedent of prior runs (e.g. `dd6abcadab89d9cb7488949c7f296639`).
 
 This is informational only — no scope-of-validation action taken (per `CLAUDE.md` § "Polecat Scope Discipline").
 

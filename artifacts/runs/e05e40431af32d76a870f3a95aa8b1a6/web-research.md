@@ -32,7 +32,7 @@ Issue #798 is the ~19th recurrence (prior incidents include #733, #739, #742, #7
 - Workspace (team) tokens → `Authorization: Bearer <token>` (also documented elsewhere as `Team-Access-Token: <token>`)
 - Project tokens → **`Project-Access-Token: <token>`** (NOT `Authorization: Bearer`)
 
-Direct quote: *"Project tokens use the `Project-Access-Token` header, not the `Authorization: Bearer` header used by account, workspace, and OAuth tokens."*
+Per the docs (paraphrased across the API reference sections): *Project tokens use the `Project-Access-Token` header, not the `Authorization: Bearer` header used by account, workspace, and OAuth tokens.*
 
 Project tokens are created in **project settings → Tokens**, not in the account-level tokens page. Account tokens are created at `https://railway.com/account/tokens`.
 

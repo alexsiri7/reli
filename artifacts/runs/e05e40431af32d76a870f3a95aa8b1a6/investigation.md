@@ -229,7 +229,7 @@ To be filed by a human after rotation lands (carried forward from prior occurren
 1. **Cron loop-stopper for `archon:in-progress` re-fire** (P0) — 19 occurrences on the same expired secret across 19+ issues. Gate cron re-firing on a successful `railway-token-health` run, not just the absence of an open sibling.
 2. **Migrate away from long-lived `RAILWAY_TOKEN` PAT** (P2) — service-account or scheduled-rotation automation.
 3. **Reconcile `{me{id}}` validation-query token-type mismatch** (P2) — switch to `{__typename}` if migrating to workspace tokens. **Do not do this while the secret is expired** — masks the failure signal.
-4. **Standardise on `backboard.railway.com` across all `curl` sites** (P3) — defensive against `.app` retirement.
+4. **Standardise on `backboard.railway.com` across all `curl` sites** (P3) — defensive against `.app` retirement. The current code, the investigation evidence above, and the `curl` examples in `web-research.md` all use `backboard.railway.app` (which is what is deployed today); keep `.app` in the code until `.com` is verified working with `Authorization: Bearer` for the `{me{id}}` probe.
 5. **Rename `RAILWAY_TOKEN` → `RAILWAY_API_TOKEN`** (P3) — Railway CLI now treats `RAILWAY_TOKEN` as project-only; renaming avoids ambiguity (`web-research.md` Finding 4).
 
 ---
