@@ -10,25 +10,39 @@
 
 | Check | Result | Details |
 |-------|--------|---------|
-| Type check | N/A | No source-code changes in branch |
-| Lint | N/A | No source-code changes in branch |
-| Format | N/A | No source-code changes in branch |
-| Tests | N/A | No source-code changes in branch |
-| Build | N/A | No source-code changes in branch |
+| Type check | N/A | Diff is markdown-only; no `.ts`/`.tsx`/`.py` changes |
+| Lint | N/A | Diff is markdown-only; no source files changed |
+| Format | N/A | Diff is markdown-only; no source files changed |
+| Tests | N/A | Diff is markdown-only; no test or source files changed |
+| Build | N/A | Diff is markdown-only; no frontend / backend source changed |
 
-All validation checks are vacuously satisfied: the only deliverable for this task is `investigation.md` (a documentation artifact in `artifacts/runs/9a0cc8ab7f63aeb1633dd1c6c3e9b079/`), which lives outside the source tree and outside the branch's working copy.
+All validation checks are vacuously satisfied: the deliverables for this task are documentation artifacts only (`investigation.md`, `validation.md`, `web-research.md`) under `artifacts/runs/9a0cc8ab7f63aeb1633dd1c6c3e9b079/`. They are tracked in the worktree but contain no source code, tests, or workflow YAML — so type-check / lint / format / test / build have nothing to exercise.
 
 ---
 
 ## Branch State
 
+Snapshot taken **after** committing the artifact files (commit `baa4aed`).
+
 **Command**: `git diff origin/main...HEAD --stat`
-**Result**: empty diff — branch `archon/task-archon-fix-github-issue-1777541429522` has zero commits ahead of `origin/main`.
+**Result**:
+```
+.../investigation.md                               | 235 +++++++++++++++++++++
+.../9a0cc8ab7f63aeb1633dd1c6c3e9b079/validation.md | 113 ++++++++++
+.../web-research.md                                | 176 +++++++++++++++
+3 files changed, 524 insertions(+)
+```
+
+**Command**: `git log origin/main..HEAD --oneline`
+**Result**:
+```
+baa4aed docs: investigation for issue #779 (13th RAILWAY_TOKEN expiration)
+```
 
 **Command**: `git status`
 **Result**: `nothing to commit, working tree clean`.
 
-This matches the investigation's scope statement (`investigation.md` § "Affected Files" and § "Scope Boundaries"): the only artifact created is the investigation itself, written into the central archon workspace at `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/9a0cc8ab7f63aeb1633dd1c6c3e9b079/investigation.md` (with the pre-existing `web-research.md` already present in the run dir). No files in the worktree were modified, by design.
+This matches the investigation's scope statement (`investigation.md` § "Affected Files" and § "Scope Boundaries"): the only files added are the three documentation artifacts in the run directory. No source files, no workflow YAML, no edits to the canonical runbook. Note: an earlier draft of this section recorded a pre-commit snapshot (empty diff) — corrected here to reflect the post-commit reality the PR actually carries.
 
 ---
 
