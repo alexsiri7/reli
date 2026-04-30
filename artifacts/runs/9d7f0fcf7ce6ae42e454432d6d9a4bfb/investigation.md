@@ -10,7 +10,7 @@
 |--------|-------|-----------|
 | Severity | HIGH | The `Validate Railway secrets` pre-flight at `.github/workflows/staging-pipeline.yml:32-58` is still aborting every prod deploy on `main`. Run `25164454478` (12:07:21Z, the run this issue cites) and the sibling run `25164359158` (12:04:56Z, same SHA `2fbf1e60`) both failed with `RAILWAY_TOKEN is invalid or expired: Not Authorized`. No deploy can land until a human rotates the secret. |
 | Complexity | LOW | No code change is permitted (per `CLAUDE.md` § "Railway Token Rotation"); the canonical runbook already exists at `docs/RAILWAY_TOKEN_ROTATION_742.md`. The artifact-only output mirrors PRs #780/#782/#784/#787/#788. |
-| Confidence | HIGH | The CI log emits the canonical error string verbatim at `2026-04-30T12:07:21.4404355Z`: `##[error]RAILWAY_TOKEN is invalid or expired: Not Authorized`. Issues #785 (15th) and #786 (16th) closed within minutes prior; #790 was filed at 12:11:43Z on `2fbf1e60` — the merge commit of #787, the investigation PR for #786 — proving the secret was not rotated in that window. |
+| Confidence | HIGH | The CI log emits the canonical error string verbatim at `2026-04-30T12:07:21.4404355Z`: `##[error]RAILWAY_TOKEN is invalid or expired: Not Authorized`. Issues #785 (16th CI twin) and #786 (16th prod twin) were filed at 11:30:28Z / 11:30:32Z and closed at 12:00:14Z / 12:00:19Z — within minutes before this run failed. #790 was then filed at 12:30:28Z on `2fbf1e60` (the merge commit of #787, the investigation PR for #786), proving the secret was not rotated in that window. |
 
 ---
 
@@ -70,7 +70,7 @@ WHY: run `25164454478` failed
 
 | # | Issue | Investigation PR |
 |---|-------|------------------|
-| 1-13 | #733 → #739 → #742 → #755 → #762 → #751 → #766 → #762 (re-fire) → #769 → #771 → #774 → #777 → #779 | (see prior PRs) |
+| 1-13 | #733 → #739 → #742 → #755 → #762 → #751 → #766 → #762 (re-fire) → #769 → #771 → #773 / #774 → #777 → #779 | (see prior PRs) |
 | 14 | #781 | #782 |
 | 15 | #783 | #784 |
 | 16 | #785 | #788 |
@@ -81,11 +81,13 @@ WHY: run `25164454478` failed
 
 ## Implementation Plan
 
+> **If anything below differs from `docs/RAILWAY_TOKEN_ROTATION_742.md`, the runbook wins.** This Implementation Plan is a convenience summary, not the source of truth.
+
 ### Step 1: (Human-only) Mint a new Railway token with no expiration
 
-**Action**: Visit https://railway.com/account/tokens → create a **Workspace** token with **Expiration: No expiration**. Suggested name: `github-actions-permanent`.
+**Action**: Visit https://railway.com/account/tokens → create a token (account- or workspace-scoped to match the prior working token; the existing `{me{id}}` probe at `staging-pipeline.yml:49-52` requires Bearer-compatible auth) with **Expiration: No expiration**. Suggested name: `github-actions-permanent`. Defer to `docs/RAILWAY_TOKEN_ROTATION_742.md` for any conflict.
 
-**Why**: Prior rotations have used finite-TTL tokens, producing a recurring 30-day failure mode. A no-expiration workspace token breaks the cycle.
+**Why**: Prior rotations have used finite-TTL tokens, producing a recurring failure mode. A no-expiration token of the **same type that previously authenticated `{me{id}}` over Bearer** breaks the cycle without requiring a probe change while the secret is expired (see `web-research.md` Findings 3 & 7 and Edge Case "Token-type mismatch").
 
 ---
 

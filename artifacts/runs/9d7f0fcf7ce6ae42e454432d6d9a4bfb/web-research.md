@@ -122,7 +122,7 @@ Implication: the recurring framing of "the token expired" may be wrong some of t
 
 - Per official docs: workspace tokens are "ideal for team CI/CD, shared automation" — they survive a single user leaving the team, can be shared, and are scoped narrower than account tokens.
 - Account tokens are explicitly described as "personal scripts, local development" — i.e., a single-human credential, which is exactly what makes recurring rotation painful.
-- A workspace token, like an account token, authenticates `{me{id}}` over `Authorization: Bearer`, so switching to one would not require any change to the validation query.
+- Whether a workspace token authenticates the `{me{id}}` query over `Authorization: Bearer` is **not unambiguously settled** by the public docs reviewed for this artifact (see Finding 3 for the conflicting claim that `me` "cannot be used with workspace or project tokens"). Do not switch token type during a live expiry without a parallel test against the validation probe — tracked as a P2 follow-up.
 
 ---
 
