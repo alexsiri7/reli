@@ -95,7 +95,7 @@ WHY: run `25180002128` failed
 | 19 (CI) | #797 | (separate task) |
 | 19 (prod) | #798 | #799 (merged) |
 | **20 (CI)** | **#800** | **(this PR)** |
-| **20 (prod)** | **#801** | **(separate task)** |
+| **20 (prod)** | **#801** | **#802** |
 
 ---
 
