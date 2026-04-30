@@ -92,6 +92,8 @@ WHY: run `25166984244` failed
 | **18 (CI twin)** | **#793** | **(this PR)** |
 | 18 (prod twin) | #794 | (separate sibling task) |
 
+> **Counting note**: Row `1-13` is a compressed history. `#733` and `#739` are precursor issues that predate the canonical `RAILWAY_TOKEN` expiration pattern (which starts at `#742`); they are listed for historical traceability but are **not** part of the "17 prior issues" enumerated in the prose at line 58. `#762` appears twice within the row because the original issue re-fired and is counted as a separate occurrence; `#773 / #774` share a slot because they were filed for the same occurrence (CI/prod twins). The total — `13` (row 1) + `4` rows for #14–#17 + `1` for #18 = `18` — agrees with the prose; the row-1 label compresses 13 occurrences spread across 14 issue references.
+
 ---
 
 ## Implementation Plan
@@ -102,7 +104,7 @@ WHY: run `25166984244` failed
 
 **Action**: Visit https://railway.com/account/tokens → create a token (account- or workspace-scoped to match the prior working token; the existing `{me{id}}` probe at `staging-pipeline.yml:49-52` requires Bearer-compatible auth) with **Expiration: No expiration**. Suggested name: `github-actions-permanent`. Defer to `docs/RAILWAY_TOKEN_ROTATION_742.md` for any conflict.
 
-**Why**: Prior rotations have used finite-TTL tokens, producing this recurring failure mode. A no-expiration token of the **same type that previously authenticated `{me{id}}` over Bearer** breaks the cycle without requiring a probe change while the secret is expired (see `web-research.md` Findings 1, 3 & 5 and Edge Case "Token-type mismatch").
+**Why**: Prior rotations have used finite-TTL tokens, producing this recurring failure mode. A no-expiration token of the **same type that previously authenticated `{me{id}}` over Bearer** breaks the cycle without requiring a probe change while the secret is expired (see `web-research.md` Findings 1, 2, 3 & 5 and the third item under "Gaps and Conflicts" on token-type mismatch).
 
 ---
 
