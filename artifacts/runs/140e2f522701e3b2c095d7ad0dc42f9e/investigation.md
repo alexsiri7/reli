@@ -48,13 +48,13 @@ WHY: The "Staging → Production Pipeline" run #25193675022 ends `failure`, and 
 |------|-------|--------|-------------|
 | GitHub Actions secret `RAILWAY_TOKEN` | n/a | ROTATE (human-only) | Create a new Railway **workspace** token with **"No expiration"** and update the secret. |
 
-No source files require modification. The validate step at `.github/workflows/staging-pipeline.yml:32-58` (and the prod equivalent at `:149-178`) is functioning correctly.
+No source files require modification. The validate step at `.github/workflows/staging-pipeline.yml:32-58` (and the prod equivalent at `:149-175`) is functioning correctly.
 
 ### Integration Points
 
 - `.github/workflows/staging-pipeline.yml:32-58` — staging validate step that emitted the failure (this run).
 - `.github/workflows/staging-pipeline.yml:60-88` — staging deploy step, uses the same `RAILWAY_TOKEN`.
-- `.github/workflows/staging-pipeline.yml:149-178` — prod validate step; will fail the next prod deploy with the identical error if the token is not rotated.
+- `.github/workflows/staging-pipeline.yml:149-175` — prod validate step; will fail the next prod deploy with the identical error if the token is not rotated.
 - `.github/workflows/railway-token-health.yml` — periodic health check that monitors the token.
 
 ### Git History
