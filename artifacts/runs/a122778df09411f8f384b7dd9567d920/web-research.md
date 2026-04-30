@@ -130,7 +130,7 @@ curl -X POST "https://backboard.railway.com/graphql/v2" \
 
 Based on research, ordered by impact:
 
-1. **Mint an Account Token with "No expiration", not a Workspace token.** The validate step's `me{id}` query rejects workspace and project tokens by design (Finding #1). The token must be created at https://railway.com/account/tokens with "No workspace" selected and "Expiration: No expiration." This both fixes #766 and prevents recurrence #8 — provided no one accidentally accepts the default TTL again.
+1. **Mint an Account Token with "No expiration", not a Workspace token.** The validate step's `me{id}` query rejects workspace and project tokens by design (Finding #1). The token must be created at https://railway.com/account/tokens with **"No workspace"** selected and **Expiration: No expiration**. This both fixes #766 and prevents recurrence #8 — provided no one accidentally accepts the default TTL again.
 
 2. **Correct the prior investigation's token-type guidance before it becomes load-bearing.** The active runbook `docs/RAILWAY_TOKEN_ROTATION_742.md` correctly says "create at https://railway.com/account/tokens" — do not let the workspace-token suggestion in `artifacts/runs/7aff677993bdaf14206873cdd7ba86aa/investigation.md:86` propagate into the runbook. (Out-of-scope for the bead per Polecat — flag to mayor.)
 
@@ -153,7 +153,7 @@ Based on research, ordered by impact:
 | 5 | Railway Blog — Using GitHub Actions with Railway | https://blog.railway.com/p/github-actions | Recommended GH Actions setup; confirms token-as-secret pattern |
 | 6 | Railway Help Station — Token for GitHub Action | https://station.railway.com/questions/token-for-git-hub-action-53342720 | Account-vs-project token confusion in CI; CLI bug history |
 | 7 | Railway Help Station — RAILWAY_TOKEN invalid or expired | https://station.railway.com/questions/railway-token-invalid-or-expired-59011e20 | Identical error message; confirms token-type mismatch as a common cause |
-| 8 | Railway Help Station — API Token "Not Authorized" | https://station.railway.com/questions/api-token-not-authorized-error-for-pub-82b4ccf1 | "No workspace" must be selected when minting account tokens |
+| 8 | Railway Help Station — API Token "Not Authorized" | https://station.railway.com/questions/api-token-not-authorized-error-for-pub-82b4ccf1 | **"No workspace"** must be selected when minting account tokens |
 | 9 | Railway Help Station — GraphQL Not Authorized for PAT | https://station.railway.com/questions/graph-ql-requests-returning-not-authoriz-56dacb52 | GraphQL endpoint behavior with PATs |
 | 10 | Local — `docs/RAILWAY_TOKEN_ROTATION_742.md` | (in-repo) | Canonical rotation runbook; correctly specifies "No expiration" |
 | 11 | Local — `artifacts/runs/7aff677993bdaf14206873cdd7ba86aa/investigation.md` | (in-repo) | Prior #762 investigation; contains workspace-token recommendation that conflicts with Finding #1 |

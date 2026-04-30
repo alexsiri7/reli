@@ -11,7 +11,7 @@
 |--------|-------|-----------|
 | Severity | HIGH | Every push to `main` since 2026-04-27 fails at the `Validate Railway secrets` pre-flight gate; the 5 most recent `staging-pipeline.yml` runs (`25148434478`, `25145158555`, `25142788611`, `25126991550`, `25028112865`) are all `conclusion: failure`, and the daily `railway-token-health.yml` probe has been red for the last two runs (`25105119767` 2026-04-29, `25049349913` 2026-04-28). Nothing can ship to staging until the secret is rotated. |
 | Complexity | LOW | No application or workflow YAML change is needed. The fix is a single GitHub Actions secret rotation following `docs/RAILWAY_TOKEN_ROTATION_742.md`. The only wrinkle is that the action requires a human with Railway dashboard access — agents cannot perform it (CLAUDE.md § "Railway Token Rotation"). |
-| Confidence | HIGH | The pre-flight at `.github/workflows/staging-pipeline.yml:49-58` emits the exact string `RAILWAY_TOKEN is invalid or expired: Not Authorized` only when Railway's `me{id}` GraphQL probe rejects the bearer token. Run `25148434478` (the SHA cited in the issue, `7433450`) shows that exact error. The independent daily health probe reports the same failure, confirming the secret value itself — not workflow plumbing — is the cause. This is the **7th identical recurrence** (#727 → #733 → #739 → #742 → #755 → #762 → #751 → #766); pattern, mechanism, and fix are all known. |
+| Confidence | HIGH | The pre-flight at `.github/workflows/staging-pipeline.yml:49-58` emits the exact string `RAILWAY_TOKEN is invalid or expired: Not Authorized` only when Railway's `me{id}` GraphQL probe rejects the bearer token. Run `25148434478` (the SHA cited in the issue, `7433450`) shows that exact error. The independent daily health probe reports the same failure, confirming the secret value itself — not workflow plumbing — is the cause. This is the **7th identical recurrence** (chronological filing order: #727 → #733 → #739 → #742 → #747 → #751 → #755 → #762 → #766; the Apr 27 issues #727–#751 are the auto-filer re-firing on the same first expiry, and #755/#762/#766 are the next expiry refiring); pattern, mechanism, and fix are all known. |
 
 ---
 
@@ -105,7 +105,8 @@ WHY: `staging-pipeline.yml` run 25148434478 fails at `Validate Railway secrets`
 ↓ ROOT CAUSE: prior rotations accepted the dashboard's default finite TTL
   instead of selecting "No expiration"
   Evidence: `docs/RAILWAY_TOKEN_ROTATION_742.md:18-21`; recurrence cadence
-  #727 → #733 → #739 → #742 → #755 → #762 → #751 → #766.
+  (chronological filing order) #727 → #733 → #739 → #742 → #747 → #751 →
+  #755 → #762 → #766.
 
 ### Affected Files
 
@@ -149,7 +150,7 @@ WHY: `staging-pipeline.yml` run 25148434478 fails at `Validate Railway secrets`
 **Action**: Create a new token with these settings:
 - **Name**: `github-actions-permanent`
 - **Expiration**: **No expiration** ← critical, do not accept the default TTL
-- **Workspace**: **No workspace** (i.e., an **Account Token**, not a Workspace Token)
+- **Workspace**: select **No workspace** — this single selection is what makes the result an **Account Token** rather than a Workspace Token; they are not two separate settings
 
 **Why**: The validate step at `staging-pipeline.yml:49-52` queries `{me{id}}` with `Authorization: Bearer $RAILWAY_TOKEN`. Per Railway's official API docs, `me` is account-scoped and **rejects Workspace and Project tokens**; only Account Tokens succeed. The prior #762 investigation recommended a Workspace token — this would fail the validate step even with a brand-new, non-expired token. See `web-research.md` Finding #1 for the citation. "No expiration" is what prevents the next recurrence.
 
