@@ -167,7 +167,8 @@ This shape is correct and does not need to change. The fix is the secret value, 
 
 ```bash
 gh run rerun 25202388806 --repo alexsiri7/reli --failed
-gh run watch --repo alexsiri7/reli
+# After the rerun emits a new run ID, watch it explicitly (avoids the interactive picker in non-TTY contexts):
+gh run watch <RERUN_RUN_ID> --repo alexsiri7/reli
 gh secret list --repo alexsiri7/reli | grep RAILWAY_TOKEN
 ```
 
