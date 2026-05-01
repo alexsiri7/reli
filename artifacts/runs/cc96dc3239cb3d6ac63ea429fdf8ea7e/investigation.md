@@ -151,7 +151,7 @@ This investigation deliberately mirrors the structure of the prior 36 RAILWAY_TO
 5. Do **not** edit `.github/workflows/staging-pipeline.yml` — the validate step is correctly designed and the failure mode is informative, not a bug in the workflow.
 
 ```yaml
-# SOURCE: .github/workflows/staging-pipeline.yml:53-57
+# SOURCE: .github/workflows/staging-pipeline.yml:53-58
 # The validator that emitted the annotation we saw on this run:
 if ! echo "$RESP" | jq -e '.data.me.id' > /dev/null 2>&1; then
   MSG=$(echo "$RESP" | jq -r '.errors[0].message // "could not reach Railway API or token rejected"')
