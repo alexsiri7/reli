@@ -39,7 +39,7 @@ This is the **2nd pickup of #841** (pickup cron re-queue at 14:00:59Z with the s
 | Failed `Railway Token Health Check` since 1st pickup | (not separately enumerated) | **1** (`25211139148` at 10:27:15Z, same shape) | independent confirmation |
 | `RAILWAY_TOKEN` rotated | no | no | unchanged |
 | Open siblings | 3 | **1** (#841) | concentrating on #841 |
-| Web-research sources | 15 | 18 | re-validated; +3 new sources, none change recommendation |
+| Web-research sources | 15 | 19 | re-validated; +4 new sources, none change recommendation |
 
 ### First-Principles: Primitive Soundness (carried forward)
 
@@ -71,7 +71,7 @@ WHY: Run 25215295472 (latest, 13:04:42Z on SHA c42a83b — the merge of PR #842,
 ↓ BECAUSE: Railway GraphQL {me{id}} returned no data.me.id.
   Evidence: .github/workflows/staging-pipeline.yml:55 emits
             "RAILWAY_TOKEN is invalid or expired: <message>" only on this
-            branch. Same job shape as the 1st pickup's run 25209787350.
+            branch. Same job shape as the issue-filing run 25209787350.
 
 ↓ ROOT CAUSE (immediate): RAILWAY_TOKEN GitHub Actions secret remains
   expired or wrong-class. Not rotated since the original 03:35Z incident.

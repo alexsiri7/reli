@@ -15,7 +15,7 @@ type: project
 
 ## Summary
 
-This is a 2nd pickup of #841 — the same root cause as the 1st pickup is still in effect: a single human action (rotate `RAILWAY_TOKEN`) is needed; the validator at `.github/workflows/staging-pipeline.yml:32-58` has continued to reject the secret on every push since 03:35Z. Re-running the targeted searches three hours later returns the **same authoritative explanations** (Project vs Account/Workspace token; Project-Access-Token vs Authorization: Bearer; workspace-blank requirement), with **three additional credible sources** found that were not cited in the 1st pickup's web-research.md: an official Railway **Incident Report (Jan 28-29, 2026)** confirming a recent GitHub OAuth rate-limit incident on Railway's side, an official **OAuth Troubleshooting** doc, and a recent Help Station thread on `Project Token Not Found` errors in CI. None of the new sources change the recommendation; they reinforce it.
+This is a 2nd pickup of #841 — the same root cause as the 1st pickup is still in effect: a single human action (rotate `RAILWAY_TOKEN`) is needed; the validator at `.github/workflows/staging-pipeline.yml:32-58` has continued to reject the secret on every push since 03:35Z. Re-running the targeted searches three hours later returns the **same authoritative explanations** (Project vs Account/Workspace token; Project-Access-Token vs Authorization: Bearer; workspace-blank requirement), with **four additional credible sources** found that were not cited in the 1st pickup's web-research.md: an official Railway **Incident Report (Jan 28-29, 2026)** confirming a recent GitHub OAuth rate-limit incident on Railway's side, an official **OAuth Troubleshooting** doc, a recent Help Station thread on `Project Token Not Found` errors in CI, and Railway's official **GitHub Actions PR Environment** guide naming `RAILWAY_API_TOKEN` (a stronger re-validation than the 1st pickup's `Deploying with the CLI` citation). None of the new sources change the recommendation; they reinforce it.
 
 This artifact **builds on** the prior pickup's research (`artifacts/runs/8531a0fb983e22588f40e6f43484ee47/web-research.md`, 15 sources, authored 12:03Z), re-validates currency, and records the additional findings. Per polecat scope discipline, the structural fix has already been mailed-to-mayor in prior cycles — it is **not** re-mailed here.
 
@@ -29,7 +29,7 @@ This artifact **builds on** the prior pickup's research (`artifacts/runs/8531a0f
 | Sibling #836 | open | **CLOSED** at 13:00:16Z | newly closed (PR #840 merge) |
 | Failed runs on `main` | 8 (since 03:35Z) | 9 (added run `25215295472` on SHA `c42a83b` at 13:04:42Z — the merge of PR #842, the 1st pickup) | +1 |
 | `RAILWAY_TOKEN` rotated | no | no | unchanged — still expired/wrong-class |
-| Web-research findings | 15 sources | 15 prior + 3 new (18 total) | +3 |
+| Web-research findings | 15 sources | 15 prior + 4 new (19 total) | +4 |
 | Recommendation | rotate per runbook with caveats | unchanged | — |
 
 ---
@@ -150,7 +150,7 @@ gh run watch --repo alexsiri7/reli
 
 ## Sources
 
-The 15 sources from the 1st pickup remain canonical. Three new sources added below; new rows numbered 16-18.
+The 15 sources from the 1st pickup remain canonical. Four new sources added below; new rows numbered 16-19.
 
 | # | Source | URL | Relevance |
 |---|--------|-----|-----------|
