@@ -82,7 +82,8 @@ WHY: `Staging → Production Pipeline` run 25215295472 ended in `failure`.
 ### Integration Points
 
 - `.github/workflows/staging-pipeline.yml:32-58` — `Validate Railway secrets` step (the gate that just failed).
-- `.github/workflows/staging-pipeline.yml:60-95` — `Deploy staging image to Railway` (skipped on this run; will run on the next push once the token is valid).
+- `.github/workflows/staging-pipeline.yml:60-88` — `Deploy staging image to Railway` (skipped on this run; will run on the next push once the token is valid).
+- `.github/workflows/staging-pipeline.yml:90-105` — `Wait for staging health` (skipped on this run).
 - `.github/workflows/railway-token-health.yml` — periodic health probe; expected to remain failing until rotation completes.
 
 ### Git History
