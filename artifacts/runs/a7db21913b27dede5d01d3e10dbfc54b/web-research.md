@@ -173,20 +173,21 @@ Health-check shapes by token type, suitable for a CI validation step:
 
 ```bash
 # Account token (current pattern — works only with No-workspace personal tokens)
-# From https://docs.railway.com/integrations/api
-curl -sf -X POST "https://backboard.railway.com/graphql/v2" \
+# Host matches `.github/workflows/staging-pipeline.yml:49` for byte-identical CI reproduction
+# (the `.app` host still resolves; `.com` is the current docs name — see "Host" note below)
+curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
   -H "Authorization: Bearer $RAILWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query":"{ me { id } }"}'
 
 # Workspace / Team token — does NOT have `me`, so check workspace metadata instead
-curl -sf -X POST "https://backboard.railway.com/graphql/v2" \
+curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
   -H "Authorization: Bearer $RAILWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query":"{ projects { edges { node { id } } } }"}'
 
 # Project token — different header AND no `me`
-curl -sf -X POST "https://backboard.railway.com/graphql/v2" \
+curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
   -H "Project-Access-Token: $RAILWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query":"{ projectToken { projectId environmentId } }"}'

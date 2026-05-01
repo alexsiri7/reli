@@ -4,7 +4,7 @@
 **Type**: BUG
 **Investigated**: 2026-05-01T07:38:04Z
 
-### Assessment
+## Assessment
 
 | Metric | Value | Reasoning |
 |--------|-------|-----------|
