@@ -10,7 +10,7 @@
 |--------|-------|-----------|
 | Severity | HIGH | Staging→prod auto-promotion is broken on every push to `main` because the staging validate step exits 1; downstream `staging-e2e` and `deploy-production` are skipped. No prod data is at risk and a documented (human-only) rotation workaround exists, so this is HIGH rather than CRITICAL. |
 | Complexity | LOW | Resolution is a single human action — rotate the `RAILWAY_TOKEN` GitHub Actions secret per `docs/RAILWAY_TOKEN_ROTATION_742.md`. No code, workflow, or config change is required. |
-| Confidence | HIGH | The run log emits the exact error the validate step is designed to surface (`RAILWAY_TOKEN is invalid or expired: Not Authorized`) at `.github/workflows/staging-pipeline.yml:55`, and this is the **27th** recurrence of the same failure mode (`git log --grep "RAILWAY_TOKEN expiration" --oneline | wc -l` returns 26 prior, this is the 27th). |
+| Confidence | HIGH | The run log emits the exact error the validate step is designed to surface (`RAILWAY_TOKEN is invalid or expired: Not Authorized`) at `.github/workflows/staging-pipeline.yml:55`, and this commit's `27th` label increments the prior recurrence's `26th` label (#817 → `3318b51` on `main`). |
 
 ---
 
