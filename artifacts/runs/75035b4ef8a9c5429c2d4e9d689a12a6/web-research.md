@@ -8,9 +8,9 @@
 
 ## Summary
 
-The CI failure is the same recurring pattern that has produced six prior issues (#733, #739, #742, #821, #824, #825, #828, #829, #831 etc.): the `RAILWAY_TOKEN` GitHub Actions secret returns `Not Authorized` from `backboard.railway.app`. Web research confirms (a) `RAILWAY_TOKEN` only accepts a **project token** (not an account or workspace token), and (b) Railway's own docs do **not** publicly document a "no expiration" option for project tokens — contradicting an assumption baked into `docs/RAILWAY_TOKEN_ROTATION_742.md`. The repeating failures suggest the rotated tokens are still being created with a finite TTL or are being invalidated by another mechanism (account/workspace re-scoping, token rotation, revocation).
+The CI failure is the same recurring pattern as 31 prior issues (#733, #739, #742, #821, #824, #825, #828, #829 — see investigation.md for the full chain): the `RAILWAY_TOKEN` GitHub Actions secret returns `Not Authorized` from `backboard.railway.app`. Web research confirms (a) `RAILWAY_TOKEN` only accepts a **project token** (not an account or workspace token), and (b) Railway's own docs do **not** publicly document a "no expiration" option for project tokens — contradicting an assumption baked into `docs/RAILWAY_TOKEN_ROTATION_742.md`. The repeating failures suggest the rotated tokens are still being created with a finite TTL or are being invalidated by another mechanism (account/workspace re-scoping, token rotation, revocation).
 
-The fix is human-only: rotate the token at https://railway.com/account/tokens (or in the project's Settings → Tokens) and update the GitHub secret. Per `CLAUDE.md`, agents must NOT create a `.github/RAILWAY_TOKEN_ROTATION_*.md` "done" doc — only file the issue and direct the human to the runbook.
+The fix is human-only: rotate the token from the **project dashboard** (Project → Settings → Tokens), NOT from `https://railway.com/account/tokens` (account tokens are rejected by `RAILWAY_TOKEN`; see Finding #1). Then update the GitHub secret. Per `CLAUDE.md`, agents must NOT create a `.github/RAILWAY_TOKEN_ROTATION_*.md` "done" doc — only file the issue and direct the human to the runbook.
 
 ---
 
@@ -124,7 +124,7 @@ Per finding #2, `{ me { id } }` is an account-level query. If `RAILWAY_TOKEN` is
 
 - **Gap**: Railway does not publicly document the expiration policy of manually-created project/workspace/account tokens. Whether a "No expiration" option exists in the project token UI cannot be verified from public docs.
 - **Gap**: No public Railway changelog entry was found explaining why a previously-working token would start returning `Not Authorized` on a regular cadence.
-- **Conflict**: Internal runbook (`docs/RAILWAY_TOKEN_ROTATION_742.md`) asserts a "No expiration" option exists; Railway's public docs do not corroborate. The repeating failure pattern (#733 → … → #832, ≈monthly) is consistent with a finite TTL still being applied on each rotation.
+- **Conflict**: Internal runbook (`docs/RAILWAY_TOKEN_ROTATION_742.md`) asserts a "No expiration" option exists; Railway's public docs do not corroborate. The repeating failure pattern (#733 → … → #832, accelerating from ≈weekly to ≈daily — #828/#829 → #832 inside one hour) is consistent with a finite TTL still being applied on each rotation.
 - **Gap**: The validator step's choice of `me { id }` for a project token preflight is not addressed by any public Railway guidance found.
 
 ---
