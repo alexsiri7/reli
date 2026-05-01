@@ -20,7 +20,7 @@
 
 ## Context
 
-Issue #758 ("Deploy down: https://reli.interstellarai.net returning HTTP 000000") was investigated and found to be a **stale duplicate of active issue #836** (34th `RAILWAY_TOKEN` expiration).
+Issue #758 ("Deploy down: https://reli.interstellarai.net returning HTTP 000000") was investigated and found to be a **stale duplicate of active issue #836** (33rd `RAILWAY_TOKEN` expiration).
 
 Per `investigation.md` (this run):
 

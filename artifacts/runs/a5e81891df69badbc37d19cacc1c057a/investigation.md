@@ -8,7 +8,7 @@
 
 | Metric | Value | Reasoning |
 |--------|-------|-----------|
-| Severity | LOW | Original symptom (HTTP 000000) has cleared; production currently returns HTTP 200 on `/`, `/healthz`, `/api/health`. The active deploy-pipeline failure is already tracked under issue #836 (34th RAILWAY_TOKEN expiration). |
+| Severity | LOW | Original symptom (HTTP 000000) has cleared; production currently returns HTTP 200 on `/`, `/healthz`, `/api/health`. The active deploy-pipeline failure is already tracked under issue #836 (33rd RAILWAY_TOKEN expiration). |
 | Complexity | LOW | No source-code change is appropriate. The actionable step is human-only token rotation; this investigation is docs-only and the issue is a duplicate that should be closed. |
 | Confidence | HIGH | Live probes confirm the site is up; CI logs (run `25207459124`) confirm the underlying CI failure mode is `RAILWAY_TOKEN is invalid or expired: Not Authorized`, matching the established 33-cycle pattern documented in PRs #831–#838. |
 
@@ -28,7 +28,7 @@ Issue #758 reports a transient health-check failure (`HTTP 000000`) observed on 
 |-----------|-----------|--------|-------|
 | Production app process (FastAPI / uvicorn) | `backend/main.py` | Yes | Live probe `GET /healthz` returns `{"status":"ok"}` — the running container is healthy. |
 | CI deploy validator (Railway preflight) | `.github/workflows/staging-pipeline.yml:32-58` | Yes | The validator correctly fails fast on an expired token; the failure is the *signal*, not the *defect*. |
-| `RAILWAY_TOKEN` GitHub Actions secret | external (Railway dashboard) | **No — operationally fragile** | Token has expired again (34th occurrence). Structural improvement (Workspace=No workspace, Expiration=No expiration at creation) is tracked in #836's investigation; not in scope for #758. |
+| `RAILWAY_TOKEN` GitHub Actions secret | external (Railway dashboard) | **No — operationally fragile** | Token has expired again (33rd occurrence). Structural improvement (Workspace=No workspace, Expiration=No expiration at creation) is tracked in #836's investigation; not in scope for #758. |
 | Issue lifecycle (archon `in-progress` → re-queue) | issue label state | **Partial** | An open `archon:in-progress` issue with no PR is re-fired every few hours. Once the symptom resolves, the issue should be closed manually since no agent action will produce a PR. |
 
 ### Root Cause / Change Rationale
@@ -47,11 +47,11 @@ WHY: Issue #758 keeps being re-queued.
 ↓ BECAUSE: The symptom that triggered #758 (`HTTP 000000` at 2026-04-28 03:00:32 UTC) was a transient outage during a Railway deploy window. The production process recovered, but CI deploy attempts continue to fail with an expired token.
   Evidence:
   - Live probe 2026-05-01 08:30 UTC: `curl https://reli.interstellarai.net/healthz` → `HTTP 200 {"status":"ok","service":"reli"}`.
-  - Most recent `Staging → Production Pipeline` run `25207459124` (2026-05-01 08:04 UTC) failed at the *Validate Railway secrets* step: `##[error]RAILWAY_TOKEN is invalid or expired: Not Authorized` (`.github/workflows/staging-pipeline.yml:54`).
+  - Most recent `Staging → Production Pipeline` run `25207459124` (2026-05-01 08:04 UTC) failed at the *Validate Railway secrets* step: `##[error]RAILWAY_TOKEN is invalid or expired: Not Authorized` (`.github/workflows/staging-pipeline.yml:55`).
 
-↓ ROOT CAUSE: The active operational issue is the **34th `RAILWAY_TOKEN` expiration**, already tracked under issue **#836** (and adjacent #833). Issue #758 itself describes a now-resolved transient symptom and is duplicate work. Per `CLAUDE.md > Railway Token Rotation`, agents cannot rotate the token; the only fix is a human action against railway.com.
+↓ ROOT CAUSE: The active operational issue is the **33rd `RAILWAY_TOKEN` expiration**, already tracked under issue **#836** (and adjacent #833). Issue #758 itself describes a now-resolved transient symptom and is duplicate work. Per `CLAUDE.md > Railway Token Rotation`, agents cannot rotate the token; the only fix is a human action against railway.com.
   Evidence:
-  - `gh run view 25207459124 --log-failed` → `RAILWAY_TOKEN is invalid or expired: Not Authorized` at `staging-pipeline.yml:54`.
+  - `gh run view 25207459124 --log-failed` → `RAILWAY_TOKEN is invalid or expired: Not Authorized` at `staging-pipeline.yml:55`.
   - `git log --oneline -20` shows 14+ recent commits that are investigation receipts for the same expiration pattern (`8a3f93a` → `ee9d0fb`, issues #800–#836).
   - `CLAUDE.md` (project root): *"Agents cannot rotate the Railway API token. … Do NOT create a `.github/RAILWAY_TOKEN_ROTATION_*.md` file claiming rotation is done. … Direct the human to `docs/RAILWAY_TOKEN_ROTATION_742.md` for the rotation runbook."*
 
@@ -65,7 +65,7 @@ WHY: Issue #758 keeps being re-queued.
 
 - `.github/workflows/staging-pipeline.yml:32-58` — *Validate Railway secrets* step is the **detector**, not the defect.
 - `docs/RAILWAY_TOKEN_ROTATION_742.md` — runbook for the human rotation step.
-- Issue #836 — currently-open active tracking bead for the 34th expiration; carries the latest PR receipt (#838) and the surfaced "No workspace" structural recommendation.
+- Issue #836 — currently-open active tracking bead for the 33rd expiration; carries the latest PR receipt (#838) and the surfaced "No workspace" structural recommendation.
 - Issue #833 — adjacent open tracking bead ("Prod deploy failed on main") for the same root cause.
 
 ### Git History
@@ -116,7 +116,7 @@ gh run rerun 25207459124 --repo alexsiri7/reli --failed
 ```bash
 gh issue close 758 --repo alexsiri7/reli \
   --reason "not planned" \
-  --comment "Symptom (HTTP 000000) has cleared; production is HTTP 200 as of 2026-05-01 08:30 UTC. The underlying recurring driver is the RAILWAY_TOKEN expiration cycle, currently tracked under #836 (34th occurrence). Closing as duplicate to stop the archon requeue loop. See artifacts/runs/a5e81891df69badbc37d19cacc1c057a/investigation.md."
+  --comment "Symptom (HTTP 000000) has cleared; production is HTTP 200 as of 2026-05-01 08:30 UTC. The underlying recurring driver is the RAILWAY_TOKEN expiration cycle, currently tracked under #836 (33rd occurrence). Closing as duplicate to stop the archon requeue loop. See artifacts/runs/a5e81891df69badbc37d19cacc1c057a/investigation.md."
 ```
 
 **Why**: Without closing, the `archon:in-progress` label on an issue with no possible PR will keep firing the poller every ~2.5 hours, generating noise comments without progress.
@@ -216,6 +216,6 @@ git grep -n "RAILWAY_TOKEN" -- .github docs
 - **Artifact**: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/a5e81891df69badbc37d19cacc1c057a/investigation.md`
 - **Workflow run-id**: `a5e81891df69badbc37d19cacc1c057a`
 - **Production probe** (at investigation time): `GET https://reli.interstellarai.net/healthz` → `HTTP 200 {"status":"ok","service":"reli"}`
-- **Active CI failure** (at investigation time): pipeline run `25207459124` red at `staging-pipeline.yml:54` — `RAILWAY_TOKEN is invalid or expired: Not Authorized`
-- **Tracking issues**: #836 (34th `RAILWAY_TOKEN` expiration — primary), #833 (adjacent — same cause)
+- **Active CI failure** (at investigation time): pipeline run `25207459124` red at `staging-pipeline.yml:55` — `RAILWAY_TOKEN is invalid or expired: Not Authorized`
+- **Tracking issues**: #836 (33rd `RAILWAY_TOKEN` expiration — primary), #833 (adjacent — same cause)
 - **Supersedes**: 2026-04-29 investigation comment on #758 (incorrectly attributed cause to MCP `lifespan` hang)
