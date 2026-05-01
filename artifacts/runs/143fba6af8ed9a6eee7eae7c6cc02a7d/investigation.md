@@ -74,7 +74,7 @@ Per `docs/RAILWAY_TOKEN_ROTATION_742.md`:
 1. Log into railway.com.
 2. Generate a new **account/team-scoped** API token at `https://railway.com/account/tokens` (workspace and project tokens cannot answer `{me{id}}` — see `web-research.md` in this artifact dir).
 3. Update GitHub Actions secret `RAILWAY_TOKEN` at https://github.com/alexsiri7/reli/settings/secrets/actions.
-4. Re-run the failed pipeline: `gh run rerun 25237747540 --failed` (or `25227458546`, the original).
+4. Re-run the failed pipeline: `gh run rerun 25237747540 --failed` (or `25227442673`, the original).
 5. Confirm `Validate Railway secrets` passes and the deploy proceeds through `Deploy staging image to Railway` → `Wait for staging health` → `Staging E2E smoke tests` → `Deploy to production`.
 6. Comment on issue #850 with the green run URL, remove `archon:in-progress`, close the issue.
 7. Verify the next scheduled `railway-token-health.yml` run also goes green.
@@ -159,4 +159,4 @@ Both should show `success` after rotation.
 - **Artifact**: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/143fba6af8ed9a6eee7eae7c6cc02a7d/investigation.md`
 - **Companion**: `web-research.md` in the same directory (from prior pickup)
 - **Prior PRs for #850**: #851 (merged 2026-05-01T19:30:09Z)
-- **Latest failing runs**: `25237747540` (2026-05-01T23:34:49Z), `25229747557`, `25227458546` (original)
+- **Latest failing runs**: `25237747540` (2026-05-01T23:34:49Z), `25229747557`, `25227442673` (original)
