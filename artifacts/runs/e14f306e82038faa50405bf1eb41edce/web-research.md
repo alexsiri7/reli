@@ -88,7 +88,7 @@ The current validation block from the failed run (reconstructed from the log in 
 ```bash
 # From .github/workflows/staging-pipeline.yml — "Validate Railway secrets" step
 RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-  -H "Authorization: $RAILWAY_TOKEN" \
+  -H "Authorization: Bearer $RAILWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query":"{me{id}}"}')
 if ! echo "$RESP" | jq -e '.data.me.id' > /dev/null 2>&1; then
@@ -98,7 +98,7 @@ if ! echo "$RESP" | jq -e '.data.me.id' > /dev/null 2>&1; then
 fi
 ```
 
-Note the `Authorization: $RAILWAY_TOKEN` header (no `Bearer` prefix) — this is the workspace/account-token style. Switching to a project token here would require changing both the header (`Project-Access-Token: ...`) and the probe query (`{me{id}}` would not work; use a project-scoped query instead).
+Note the `Bearer` prefix — this is the workspace/account-token style. Switching to a project token here would require changing both the header (`Project-Access-Token: ...`) and the probe query (`{me{id}}` would not work; use a project-scoped query instead).
 
 ---
 
