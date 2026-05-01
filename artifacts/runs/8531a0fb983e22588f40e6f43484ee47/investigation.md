@@ -19,10 +19,10 @@
 
 The `RAILWAY_TOKEN` GitHub Actions secret is still expired/wrong-class. The `Validate Railway secrets` pre-flight in `.github/workflows/staging-pipeline.yml:32-58` issues `Authorization: Bearer $RAILWAY_TOKEN` against Railway's `{me{id}}` GraphQL probe, receives `Not Authorized`, exits 1, and `Deploy to production` is skipped.
 
-This is a **fresh prod-deploy framing** of a defect already tracked by **two open issues**:
+This is a **fresh prod-deploy framing** of a defect previously tracked by sibling issues:
 
-- **#833** — original CI-red framing (32nd recurrence, original SHA `d01d31c`). Three pickups merged: PR #834 (1st), `09146632082d189318409846f65d7fd6` (2nd, no PR), PR #840 (3rd).
-- **#836** — CI-red framing for next-day SHA `392291c` (33rd recurrence). Two pickups merged: PR #837 (1st), PR #838 (2nd).
+- **#833** — original CI-red framing (32nd recurrence, original SHA `d01d31c`). **Closed at 2026-05-01T09:30:10Z** alongside PR #840's merge. Three pickups merged: PR #834 (1st), `09146632082d189318409846f65d7fd6` (2nd, no PR), PR #840 (3rd, closing pickup).
+- **#836** — CI-red framing for next-day SHA `392291c` (33rd recurrence). **Open.** Two pickups merged: PR #837 (1st), PR #838 (2nd).
 - **#832** (closed) — staging-side framing on the same original run.
 
 Issue #841 was filed by `pipeline-health-cron.sh` at 10:00:29Z when the prod-deploy pipeline observed run `25209787350` red on the merge commit of PR #840. The archon pickup cron then re-queued it at 12:00:40Z with the comment *"archon was labeled in-progress 7207s ago but no live run and no linked PR were found"* — making this the **1st pickup of #841** specifically (worktree `task-archon-fix-github-issue-1777636849757`, workflow `8531a0fb983e22588f40e6f43484ee47`).
@@ -75,7 +75,7 @@ WHY: Run 25209787350 (latest, 09:34:51Z on SHA da29247 — the merge of PR #840)
   expired or is the wrong class/scope. It has not been rotated since
   the original 03:35Z incident on SHA d01d31c (run 25200994188 /
   25201008471).
-  Evidence: 8 consecutive failed main runs since 03:35Z on 4 distinct
+  Evidence: 8 consecutive failed main runs since 03:35Z on 6 distinct
             merge SHAs (d01d31c, 3db8f1b, 392291c, ee9d0fb, 76b58f5,
             da29247), all matching the validator's "Not Authorized"
             shape.
@@ -120,10 +120,10 @@ WHY: Run 25209787350 (latest, 09:34:51Z on SHA da29247 — the merge of PR #840)
 - **All intervening main runs failed identically** (8 consecutive reds): `25202385518` & `25202388806` on `3db8f1b` (PR #834 merge); `25203795132` on `392291c` (PR #837 merge); `25207459124` on `ee9d0fb` (PR #838 merge); `25208240731` on `76b58f5` (PR #839 merge); `25209787350` on `da29247` (PR #840 merge).
 - **Sibling-issue lineage**:
   - **#832** — 32nd recurrence, staging-side framing on the same original run. **Closed.**
-  - **#833** — 32nd recurrence, deploy-down framing. **Open.** 3 pickups (PR #834, no-PR pickup, PR #840).
+  - **#833** — 32nd recurrence, deploy-down framing. **Closed at 2026-05-01T09:30:10Z** (alongside PR #840's merge). 3 pickups (PR #834, no-PR pickup, PR #840).
   - **#836** — 33rd recurrence, CI-red on next-day SHA. **Open.** 2 pickups (PR #837, PR #838).
   - **#841** (this) — 34th recurrence, prod-deploy framing on PR #840's merge SHA. **Open, in-progress.** 1st pickup.
-- One rotation closes #833, #836, and #841 simultaneously.
+- One rotation closes **#836** and **#841** simultaneously. (#833 is already closed.)
 
 ---
 
@@ -135,7 +135,7 @@ WHY: Run 25209787350 (latest, 09:34:51Z on SHA da29247 — the merge of PR #840)
 | 2 | Pre-save verification — local terminal | Before storing the token, verify it against the *exact* probe the validator uses: `curl -sf -X POST https://backboard.railway.app/graphql/v2 -H "Authorization: Bearer <NEW_TOKEN>" -H "Content-Type: application/json" -d '{"query":"{me{id}}"}' \| jq '.data.me.id'`. Output **must** be a non-null string. If null/error, the token is the wrong class/scope for this validator — discard and retry. |
 | 3 | Local terminal | `gh secret set RAILWAY_TOKEN --repo alexsiri7/reli` and paste the verified token. |
 | 4 | Local terminal | `gh run rerun 25209787350 --repo alexsiri7/reli --failed` (use the *latest* failing run; older runs may be locked). If rejected, push a no-op commit to `main` to trigger a fresh `staging-pipeline.yml` run. |
-| 5 | GitHub | Once `Validate Railway secrets` passes, `Deploy staging image to Railway` reaches Railway, `Wait for staging health` returns ok, `Deploy to production` proceeds, and `/healthz` on `RAILWAY_PRODUCTION_URL` returns ok — close **#833**, **#836**, and **#841** together. Re-confirm **#832** stays closed. |
+| 5 | GitHub | Once `Validate Railway secrets` passes, `Deploy staging image to Railway` reaches Railway, `Wait for staging health` returns ok, `Deploy to production` proceeds, and `/healthz` on `RAILWAY_PRODUCTION_URL` returns ok — close **#836** and **#841** together. Re-confirm **#832** and **#833** stay closed. |
 
 > ⚠️ **Do NOT create `.github/RAILWAY_TOKEN_ROTATION_841.md`** — that is a Category 1 error per `CLAUDE.md`.
 >
