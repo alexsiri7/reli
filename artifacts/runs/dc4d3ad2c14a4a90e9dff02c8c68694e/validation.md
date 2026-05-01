@@ -4,6 +4,13 @@
 **Workflow ID**: dc4d3ad2c14a4a90e9dff02c8c68694e
 **Status**: ALL_PASS (docs-only — standard checks not applicable)
 
+> **Note**: This report was generated immediately after the investigation commit (`c0dd536`)
+> and before `implementation.md` and `validation.md` themselves were committed (`5a1f3b0`).
+> The diff stats below describe that pre-commit state; the merged PR contains 3 files
+> (+339 / -0), all under `artifacts/runs/dc4d3ad2c14a4a90e9dff02c8c68694e/`. The
+> forbidden-change audit conclusions are unchanged: the two extra files are sibling
+> artifacts under the same in-scope directory, and no forbidden path is touched.
+
 ---
 
 ## Summary

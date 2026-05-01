@@ -23,8 +23,10 @@ The PR follows the established convention from prior 36 RAILWAY_TOKEN investigat
 | File | Action | Lines |
 |------|--------|-------|
 | `artifacts/runs/dc4d3ad2c14a4a90e9dff02c8c68694e/investigation.md` | CREATE | +179 |
+| `artifacts/runs/dc4d3ad2c14a4a90e9dff02c8c68694e/implementation.md` | CREATE | +65 |
+| `artifacts/runs/dc4d3ad2c14a4a90e9dff02c8c68694e/validation.md` | CREATE | +95 |
 
-No application code, no workflow files, no docs/runbooks were modified.
+No application code, no workflow files, and no docs/runbooks under `docs/` or `.github/` were modified.
 
 ---
 
