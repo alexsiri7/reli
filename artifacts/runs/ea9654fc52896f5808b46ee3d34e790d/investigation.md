@@ -10,7 +10,7 @@
 |--------|-------|-----------|
 | Severity | HIGH | Staging→prod auto-promotion on every push to `main` is broken because `Validate Railway secrets` exits 1 on the failing SHA `89e361a`; downstream `staging-e2e` and `deploy-production` are skipped. No prod data is at risk and a documented (human-only) rotation workaround exists, so HIGH rather than CRITICAL. |
 | Complexity | LOW | The immediate fix is a single human action — rotate the `RAILWAY_TOKEN` GitHub Actions secret per `docs/RAILWAY_TOKEN_ROTATION_742.md`. No code, workflow, or config edit. (The durable structural fix is deferred to a separate bead — see "Out of Scope".) |
-| Confidence | HIGH | Run `25198048549` emits the exact branch the validate step is designed to surface (`RAILWAY_TOKEN is invalid or expired: Not Authorized`) at `.github/workflows/staging-pipeline.yml:55`, and this is the 29th occurrence of an identical failure shape — the prior 28 investigations (`#821` → 28th, `#820` → 28th, `#818` → 27th, …) all share this root cause. |
+| Confidence | HIGH | Run `25198048549` emits the exact branch the validate step is designed to surface (`RAILWAY_TOKEN is invalid or expired: Not Authorized`) at `.github/workflows/staging-pipeline.yml:55`, and this is the 29th occurrence of an identical failure shape — the prior 28 investigations (`#821` → 28th [prod companion], `#820` → 28th [staging], `#818` → 27th, …) all share this root cause. |
 
 ---
 
@@ -26,7 +26,7 @@ The `Deploy to staging` job in `.github/workflows/staging-pipeline.yml` fails at
 
 ### Root Cause / Change Rationale
 
-The `RAILWAY_TOKEN` secret is again expired/revoked. This is the same failure mode as #821 (28th), #820 (28th), #818 (27th), #816 (26th), #814 (25th), #811 (24th), #810 (23rd), and 22 prior recurrences before that.
+The `RAILWAY_TOKEN` secret is again expired/revoked. This is the same failure mode as #821 (28th [prod companion]), #820 (28th [staging]), #818 (27th), #816 (26th), #814 (25th), #811 (24th), #810 (23rd), and 22 prior recurrences before that.
 
 Web research conducted in parallel (artifact: `artifacts/runs/ea9654fc52896f5808b46ee3d34e790d/web-research.md`) flags a structural cause beneath the immediate one: Railway has three token types with different headers, and the env-var name `RAILWAY_TOKEN` is — per a Railway community help-station thread — reserved for **project tokens** (header `Project-Access-Token:`), while the workflow's `{me{id}}` validator only works with **account/workspace tokens** (header `Authorization: Bearer`). The mismatch pushes rotators toward account tokens, which are subject to silent revocation via OAuth refresh-token rotation. That is why "rotate again with No expiration" has now failed 29 times in a row.
 
@@ -65,7 +65,8 @@ WHY: Run `25198048549` conclusion is `failure`; `deploy-production` is `skipped`
 - `.github/workflows/staging-pipeline.yml:149-175` — production-side `Validate Railway secrets` (would fail identically once `deploy-staging` is fixed).
 - `.github/workflows/railway-token-health.yml` — periodic token health probe; rotating the secret will turn this green.
 - `docs/RAILWAY_TOKEN_ROTATION_742.md` — the canonical human runbook.
-- `RAILWAY_SECRETS.md` — secret naming reference.
+- `DEPLOYMENT_SECRETS.md` — secret setup + rotation reference (the doc the workflow's own error messages point to at `staging-pipeline.yml:46, :56, :163, :173`).
+- `RAILWAY_SECRETS.md` — supplementary secret naming reference.
 
 ### Git History
 
