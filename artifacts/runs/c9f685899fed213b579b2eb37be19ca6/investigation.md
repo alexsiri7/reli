@@ -32,7 +32,7 @@ Railway API tokens have a finite lifetime. When the active `RAILWAY_TOKEN` GitHu
 
 WHY: Daily Railway token health-check failed on run 25249487264 at 2026-05-02T10:04:02Z.
 ↓ BECAUSE: The `Check RAILWAY_TOKEN validity` step in `railway-token-health.yml` POSTed `{"query":"{me{id}}"}` to `backboard.railway.app/graphql/v2` and the response did not contain `.data.me.id`.
-  Evidence: workflow source `railway-token-health.yml:42-52` — the `if ! echo "$RESP" | jq -e '.data.me.id'` branch fires `create_issue_if_absent "Railway token expired" …` with the body `Daily token health check failed: \`Not Authorized\`. See docs/RAILWAY_TOKEN_ROTATION_742.md for rotation instructions.` — verbatim match with issue #889's body.
+  Evidence: workflow source `railway-token-health.yml:43-53` — the `if ! echo "$RESP" | jq -e '.data.me.id'` branch fires `create_issue_if_absent "Railway token expired" …` with the body `Daily token health check failed: \`Not Authorized\`. See docs/RAILWAY_TOKEN_ROTATION_742.md for rotation instructions.` — verbatim match with issue #889's body.
 
 ↓ BECAUSE: Railway's GraphQL endpoint rejected the bearer token.
   Evidence: identical failure signature to issues #888, #886, #884, #882, #880, #878, #876, …, #742 — all resolved by rotating the secret value via railway.com.
