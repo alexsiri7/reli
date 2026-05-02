@@ -53,7 +53,7 @@ WHY: Prod deploy failed on commit `6b231e3`.
 
 ### Git History
 
-- **First occurrence on file**: tracked back to issue #752 (the runbook is named for it).
+- **First occurrence on file**: tracked back to issue #742 (the runbook is named for it).
 - **Today's volume**: 12 expirations as of 2026-05-02 (#884 is the 12th today, the 52nd overall).
 - **Implication**: The token is being rotated to a short-lived credential, or a different upstream policy is shortening lifetimes. **Out of scope for this fix** — but worth a follow-up issue to investigate why the rotation cadence has accelerated.
 
