@@ -28,6 +28,8 @@ artifacts/runs/77b1f5b8afaaa30e0fb5a4d0402d70b7/investigation.md
 Single file added: the investigation artifact for issue #864 (43rd
 `RAILWAY_TOKEN` expiration, 3rd same-day rotation). No code, workflow,
 config, schema, dependency, or test changes.
+(Note: `validation.md` itself is also added by this PR; the diff
+above was captured before this artifact was written.)
 
 `git diff --stat origin/main...HEAD -- ':!artifacts'` returns empty —
 confirming nothing outside `artifacts/` was touched.
