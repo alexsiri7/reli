@@ -83,7 +83,7 @@ WHY: Why did the prod deploy run fail?
 
 - **Failing SHA**: `b5ad0e6f6bacfcff80fc117beefab1d324b523ac` ("docs: investigation for issue #864 (43rd RAILWAY_TOKEN expiration) (#865)") — docs-only, cannot have caused this.
 - **Validator step provenance**: `git log --oneline .github/workflows/staging-pipeline.yml` shows the most recent edit was `0040535` ("fix: use curl -sf consistently in Railway token validate steps (#744)"); the auth-check pattern itself was added in `3dfb995` (#738). Neither is recent — the validator has been stable for many cycles.
-- **Implication**: Not a regression. This is recurring secret-rotation toil — the token in `RAILWAY_TOKEN` was already rejected at the time of the b5ad0e6 merge-triggered deploy (which itself was the merge of the prior #866 investigation). Either no rotation has happened since #866, or the just-rotated token was again misconfigured.
+- **Implication**: Not a regression. This is recurring secret-rotation toil — the token in `RAILWAY_TOKEN` was already rejected at the time of the b5ad0e6 merge-triggered deploy (which itself was the merge of the prior #864 investigation). Either no rotation has happened since #866, or the just-rotated token was again misconfigured.
 
 ---
 
