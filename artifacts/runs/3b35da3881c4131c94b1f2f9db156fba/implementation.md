@@ -44,7 +44,7 @@ Implementation matched the investigation exactly. Only the in-scope agent steps 
 | Lint | ⏭️ N/A | Docs-only diff. |
 | Investigation artifact present and committed | ✅ | `git show --stat 67c315f` shows +212 lines on the artifact path. |
 | Comment posted on #871 | ✅ | https://github.com/alexsiri7/reli/issues/871#issuecomment-4363118607 |
-| No `.github/RAILWAY_TOKEN_ROTATION_*.md` marker created | ✅ | Verified — agent did not produce a "rotation done" file. |
+| No `.github/RAILWAY_TOKEN_ROTATION_*.md` marker created | ✅ | `git show --name-only 67c315f \| grep -c '^\.github/RAILWAY_TOKEN_ROTATION_'` returns `0` — agent did not produce a "rotation done" file. |
 
 The actual deploy-pipeline signal (which is what the failing run cares about) cannot go green until a human rotates the Railway token, per the runbook. Post-rotation the `railway-token-health.yml` cron and a re-run of run `25244882447` will verify the fix.
 
