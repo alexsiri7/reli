@@ -89,7 +89,7 @@ Per `CLAUDE.md` § "Railway Token Rotation":
 The issue is already open (#850); this artifact is the agent's contribution. The human steps are:
 
 1. Log into railway.com.
-2. Generate a new **account/team-scoped** API token at https://railway.com/account/tokens (project tokens **cannot** answer the `{me{id}}` probe — see web-research.md §2).
+2. Generate a new **account/team-scoped** API token at https://railway.com/account/tokens. The validator at `staging-pipeline.yml:49-58` issues `Authorization: Bearer` + `{me{id}}`, which a project token cannot satisfy (see web-research.md §3). If the rotated token still fails, capture `errors[0].message` from the failure log and consult web-research.md §2 for the contradicting community report on token-type acceptance.
 3. Update GitHub Actions secret `RAILWAY_TOKEN` at https://github.com/alexsiri7/reli/settings/secrets/actions.
 4. Re-run failed pipeline: `gh run rerun 25239867327 --failed`.
 5. Confirm `Validate Railway secrets` passes and the deploy proceeds through `Deploy staging image to Railway` → `Wait for staging health` → `Staging E2E smoke tests` → `Deploy to production`.
@@ -97,6 +97,8 @@ The issue is already open (#850); this artifact is the agent's contribution. The
 7. Confirm the next scheduled `railway-token-health.yml` run goes green.
 
 **Why**: The validator at `staging-pipeline.yml:53-57` correctly identifies that `{me{id}}` returns no `data.me.id` — the only way to make this pass is to supply a token Railway accepts.
+
+> **Runbook drift note (out of scope for this PR; flag to mayor):** The canonical runbook `docs/RAILWAY_TOKEN_ROTATION_742.md:24-26` is silent on token type (account vs. workspace vs. project). This investigation tightens that to "account/team-scoped, NOT a project token" based on the validator's `{me{id}}` probe. Per CLAUDE.md § "Polecat Scope Discipline", the runbook itself is owned by a separate change — flagging here so a follow-up bead can fold the token-type constraint into the runbook (may explain part of the 38-occurrence cadence if prior rotations used the wrong type).
 
 ### Step 2: No code changes
 
