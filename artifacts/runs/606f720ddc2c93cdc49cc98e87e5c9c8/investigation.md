@@ -33,7 +33,7 @@ WHY: Prod deploy failed on commit `07a8f3fde237c1cff5d4df38dfe6f80159d61efb` at 
   Evidence: run log `2026-05-02T10:05:27.0580615Z ##[error]RAILWAY_TOKEN is invalid or expired: Not Authorized`
 
 ↓ BECAUSE: The validator's GraphQL probe to `backboard.railway.app/graphql/v2` returned `Not Authorized` — the token is rejected by Railway.
-  Evidence: validator step in `.github/workflows/staging-pipeline.yml:32-58` posts `{"query":"{me{id}}"}` and exits 1 if `.data.me.id` is missing.
+  Evidence: validator step in `.github/workflows/staging-pipeline.yml:32-57` posts `{"query":"{me{id}}"}` and exits 1 if `.data.me.id` is missing. Note: a second copy of this validator exists at `.github/workflows/staging-pipeline.yml:149` (production-deploy job) and shares the same `RAILWAY_TOKEN` secret — rotating the token greens both validators.
 
 ↓ ROOT CAUSE: The `RAILWAY_TOKEN` GitHub Actions secret holds an expired/revoked Railway API token.
   Evidence: identical failure signature to issues #888, #886, #884, #882, #880, #878, #876, …, #742 — all resolved by rotating the secret value via railway.com. Tracker issue #889 is already OPEN for this rotation.
