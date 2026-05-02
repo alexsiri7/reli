@@ -16,7 +16,7 @@
 
 ## Problem Statement
 
-The `Deploy to staging` job on workflow run [25245399740](https://github.com/alexsiri7/reli/actions/runs/25245399740) failed at the `Validate Railway secrets` step because the `RAILWAY_TOKEN` GitHub Actions secret is expired/invalid. Railway's GraphQL `{me{id}}` probe returns `Not Authorized`, so no deploy can proceed. This is the **47th** occurrence of this exact failure mode (6th today) and the established remediation is a human-only Railway token rotation.
+The `Deploy to staging` job on workflow run [25245399740](https://github.com/alexsiri7/reli/actions/runs/25245399740) failed at the `Validate Railway secrets` step because the `RAILWAY_TOKEN` GitHub Actions secret is expired/invalid. Railway's GraphQL `{me{id}}` probe returns `Not Authorized`, so no deploy can proceed. This is the **47th** occurrence of this exact failure mode (7th today) and the established remediation is a human-only Railway token rotation.
 
 ---
 
