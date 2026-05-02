@@ -31,7 +31,7 @@ type: implementation
 
 | File | Action | Lines |
 |------|--------|-------|
-| `artifacts/runs/20f0bd115fe4c3a0d2dd10f737e6f8e5/investigation.md` | CREATE | +256 |
+| `artifacts/runs/20f0bd115fe4c3a0d2dd10f737e6f8e5/investigation.md` | CREATE | +255 |
 | `artifacts/runs/20f0bd115fe4c3a0d2dd10f737e6f8e5/web-research.md` | CREATE | (companion artifact) |
 | `artifacts/runs/20f0bd115fe4c3a0d2dd10f737e6f8e5/implementation.md` | CREATE | +this file |
 
