@@ -1,9 +1,3 @@
----
-name: Validation Results — Issue #911 (63rd RAILWAY_TOKEN expiration)
-description: Validation pass for the docs-only investigation bead. No source-tree changes exist; type-check / lint / format / test / build are N/A.
-type: validation-artifact
----
-
 # Validation Results
 
 **Generated**: 2026-05-02 20:10
