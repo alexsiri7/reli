@@ -36,7 +36,7 @@ WHY: Prod deploy run 25245920463 failed (`conclusion: failure`).
   Evidence: deploy log line `2026-05-02T06:34:55.3858733Z ##[error]RAILWAY_TOKEN is invalid or expired: Not Authorized`
 
 ↓ ROOT CAUSE: The `RAILWAY_TOKEN` GitHub Actions secret has expired (or was revoked) and must be rotated by a human with Railway dashboard access.
-  Evidence: `docs/RAILWAY_TOKEN_ROTATION_742.md:5-12` documents this exact failure signature and notes that prior rotations (#733, #739, plus 40+ subsequent recurrences) all resolved via token rotation; recent commits (`715992e`, `bb5dfa7`, `0de37f2`, `79cd02a`, `7a22aaa`, `b5ad0e6`) record the 43rd–47th occurrences.
+  Evidence: `docs/RAILWAY_TOKEN_ROTATION_742.md:5-12` documents this exact failure signature; recent commits (`715992e`, `bb5dfa7`, `0de37f2`, `79cd02a`, `7a22aaa`, `b5ad0e6`) record the 43rd–47th occurrences (40+ recurrences since the runbook was authored for #742).
 
 ### Affected Files
 
@@ -54,11 +54,11 @@ WHY: Prod deploy run 25245920463 failed (`conclusion: failure`).
 
 - **Pattern recognized in repo**: `docs/RAILWAY_TOKEN_ROTATION_742.md` (canonical runbook, originally for issue #742).
 - **Recent recurrences** (`git log --oneline -5`):
-  - `715992e` docs: investigation for issue #874 (47th expiration, 7th today)
-  - `bb5dfa7` docs: investigation for issue #870 (46th expiration, 6th today)
-  - `0de37f2` docs: investigation for issue #871 (46th expiration, 6th today)
-  - `79cd02a` docs: investigation for issue #868 (45th, 5th today)
-  - `7a22aaa` docs: investigation for issue #866 (44th, 4th today)
+  - `715992e` docs: investigation for issue #874 (47th RAILWAY_TOKEN expiration) (#875)
+  - `bb5dfa7` docs: investigation for issue #870 (46th RAILWAY_TOKEN expiration, 6th today) (#872)
+  - `0de37f2` docs: investigation for issue #871 (46th RAILWAY_TOKEN expiration, 6th today) (#873)
+  - `79cd02a` docs: investigation for issue #868 (45th RAILWAY_TOKEN expiration, 5th today) (#869)
+  - `7a22aaa` docs: investigation for issue #866 (44th RAILWAY_TOKEN expiration, 4th today) (#867)
 - **Implication**: This is a recurring operational problem — eight failures in a single calendar day strongly suggests the rotated token still has a finite TTL (likely the 7-day default). The runbook explicitly instructs the human to select **"No expiration"** when creating the replacement token. With this many same-day recurrences, the rotator should hard-confirm that step on this rotation, and a longer-term remediation (service-account migration, monitoring on token age, alerting before expiry) should be filed as a separate issue.
 
 ---
