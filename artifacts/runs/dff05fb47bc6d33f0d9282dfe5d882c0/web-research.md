@@ -59,7 +59,7 @@ Issue #912 is yet another `RAILWAY_TOKEN is invalid or expired: Not Authorized` 
 - **OAuth access tokens** (interactive login flow) expire after **1 hour**. Refresh tokens last **1 year** and rotate.
 - **Account / workspace / project tokens** (created in the dashboard) can be configured with a TTL or "No expiration" at creation time, per the existing repo runbook (`docs/RAILWAY_TOKEN_ROTATION_742.md`, which dates back to issue #742).
 - The Railway dashboard's *default* TTL for new tokens has changed over time; some users report 30/60/90-day defaults landing on accounts that previously had no expiry. **The expiration choice must be re-verified at every rotation.**
-- Railway's [Jan 28–29 2026 incident report](https://blog.railway.com/p/incident-report-january-26-2026) discusses account/auth issues but is not directly relevant to TTL changes.
+- Railway's [Jan 26 2026 incident report](https://blog.railway.com/p/incident-report-january-26-2026) discusses account/auth issues but is not directly relevant to TTL changes.
 
 ---
 
@@ -160,5 +160,5 @@ Based on the research, the agent picking up #912 should **not attempt rotation**
 | 6 | Railway Blog — Using GitHub Actions with Railway | https://blog.railway.com/p/github-actions | Project-token-based GitHub Actions tutorial |
 | 7 | Railway docs — GitHub Actions PR Environment | https://docs.railway.com/guides/github-actions-pr-environment | Reference flow for token in repo secrets |
 | 8 | GitHub community — Rotate PATs discussion #24366 | https://github.com/orgs/community/discussions/24366 | Confirms general "tokens can't mint tokens" constraint, validates CLAUDE.md policy |
-| 9 | Railway Incident Report — Jan 28–29, 2026 | https://blog.railway.com/p/incident-report-january-26-2026 | Background on recent Railway auth incidents (not the cause here) |
+| 9 | Railway Incident Report — Jan 26, 2026 | https://blog.railway.com/p/incident-report-january-26-2026 | Background on recent Railway auth incidents (not the cause here) |
 | 10 | Existing repo runbook | `docs/RAILWAY_TOKEN_ROTATION_742.md` | Current rotation procedure (should be updated per Recommendation #1) |
