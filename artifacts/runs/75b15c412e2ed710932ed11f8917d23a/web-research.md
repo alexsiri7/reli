@@ -9,7 +9,7 @@
 
 ## Summary
 
-The deploy failure is yet another `RAILWAY_TOKEN is invalid or expired: Not Authorized` event (60th in the series, 19th today). Railway's GraphQL API explicitly rejected the token used by `.github/workflows/staging-pipeline.yml` at the `Validate Railway secrets` step — this is a token-level rejection, not a network or endpoint failure. Per `CLAUDE.md`, agents cannot rotate the token; the fix requires a human to log into railway.com and rotate `RAILWAY_TOKEN`. Research into Railway's token system surfaced two systemic issues that may explain why this keeps recurring: (1) tokens must be created with **No workspace selected** (account-scoped) for the `{me{id}}` validation query to succeed, and (2) the workflow uses the legacy `backboard.railway.app` host rather than the documented `backboard.railway.com` host (currently still works but is not the published endpoint).
+The deploy failure is yet another `RAILWAY_TOKEN is invalid or expired: Not Authorized` event (60th in the series, 20th today). Railway's GraphQL API explicitly rejected the token used by `.github/workflows/staging-pipeline.yml` at the `Validate Railway secrets` step — this is a token-level rejection, not a network or endpoint failure. Per `CLAUDE.md`, agents cannot rotate the token; the fix requires a human to log into railway.com and rotate `RAILWAY_TOKEN`. Research into Railway's token system surfaced two systemic issues that may explain why this keeps recurring: (1) tokens must be created with **No workspace selected** (account-scoped) for the `{me{id}}` validation query to succeed, and (2) the workflow uses the legacy `backboard.railway.app` host rather than the documented `backboard.railway.com` host (currently still works but is not the published endpoint).
 
 ---
 
@@ -162,7 +162,7 @@ These are research-derived recommendations. **The agent cannot rotate the token 
 
 1. **For the current rotation (human action required)**: At railway.com → Account Settings (top-right user menu) → Tokens, create a new token with **(a) No workspace selected** AND **(b) No expiration** set. Then `gh secret set RAILWAY_TOKEN --repo alexsiri7/reli` and rerun the failed deploy. Both checkboxes matter — finding #3 explains why "No expiration" alone has not stopped the recurrence.
 
-2. **Stop the rotation treadmill — investigate the root cause**: 60 rotations in this repo (with 19 today) is not normal token-expiration behavior; account tokens are not documented to expire on any schedule. Plausible explanations to investigate next:
+2. **Stop the rotation treadmill — investigate the root cause**: 60 rotations in this repo (with 20 today) is not normal token-expiration behavior; account tokens are not documented to expire on any schedule. Plausible explanations to investigate next:
    - Whether prior rotations selected a workspace at creation (finding #3) and so were never valid for `{me{id}}` from the start;
    - Whether someone or some automation is repeatedly revoking the token via the dashboard;
    - Whether the token was originally created with a TTL that was carried forward into rotated copies.

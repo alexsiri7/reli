@@ -34,6 +34,7 @@ type: implementation
 | `artifacts/runs/75b15c412e2ed710932ed11f8917d23a/investigation.md` | CREATE | +183 |
 | `artifacts/runs/75b15c412e2ed710932ed11f8917d23a/web-research.md` | CREATE | +187 |
 | `artifacts/runs/75b15c412e2ed710932ed11f8917d23a/implementation.md` | CREATE | +this file |
+| `artifacts/runs/75b15c412e2ed710932ed11f8917d23a/validation.md` | CREATE | +104 (added by the validation phase after this report was written) |
 
 No source code, workflow, runbook, or `.github/RAILWAY_TOKEN_ROTATION_*.md` files were modified — per `CLAUDE.md` § "Railway Token Rotation" and Polecat Scope Discipline.
 

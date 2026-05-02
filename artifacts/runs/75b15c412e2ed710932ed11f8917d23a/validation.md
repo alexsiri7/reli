@@ -22,7 +22,7 @@ type: validation
 | Format | ⚪ N/A | No source code in diff |
 | Tests | ⚪ N/A | No source code in diff |
 | Build | ⚪ N/A | No source code in diff |
-| Markdown well-formed | ✅ Pass | 3 artifact files render in GitHub |
+| Markdown well-formed | ✅ Pass | 4 artifact files render in GitHub |
 | Scope guards | ✅ Pass | No out-of-scope files modified |
 | Category 1 guard | ✅ Pass | No `.github/RAILWAY_TOKEN_ROTATION_904.md` created |
 
@@ -34,13 +34,14 @@ This bead is **docs-only**, per the implementation report (`implementation.md` �
 
 > Agents cannot rotate the Railway API token. The token lives in GitHub Actions secrets (`RAILWAY_TOKEN`) and requires human access to railway.com.
 
-The bead-scoped diff (`git diff main..HEAD -- 'artifacts/runs/75b15c412e2ed710932ed11f8917d23a/*'`) contains only three markdown files in the run's artifact directory:
+The bead-scoped diff (`git diff main..HEAD -- 'artifacts/runs/75b15c412e2ed710932ed11f8917d23a/*'`) contains only four markdown files in the run's artifact directory:
 
 ```
 .../implementation.md                              | 102 +++++++++++
 .../investigation.md                               | 183 ++++++++++++++++++++
+.../validation.md                                  | 104 +++++++++++
 .../web-research.md                                | 187 +++++++++++++++++++++
-3 files changed, 472 insertions(+)
+4 files changed, 576 insertions(+)
 ```
 
 There is no Python, TypeScript, JSX, or build configuration to type-check, lint, format, test, or build. Running `npm run …` or `pytest` against this diff would produce no signal about the bead's correctness — the deliverable is documentation routing the human admin to perform the token rotation.
@@ -57,13 +58,13 @@ Confirmed the implementation phase's scope-guard table still holds — re-checke
 | `.github/workflows/staging-pipeline.yml` unmodified by this bead | not in `git diff main..HEAD -- 'artifacts/runs/75b15c.../*'` | ✅ |
 | `docs/RAILWAY_TOKEN_ROTATION_742.md` unmodified | not in bead-scoped diff | ✅ |
 | `DEPLOYMENT_SECRETS.md` unmodified | not in bead-scoped diff | ✅ |
-| Only artifact files in this run dir | bead-scoped diff = 3 files in `artifacts/runs/75b15c.../` | ✅ |
+| Only artifact files in this run dir | bead-scoped diff = 4 files in `artifacts/runs/75b15c.../` | ✅ |
 
 ---
 
 ## Markdown sanity
 
-All three artifact files (`investigation.md`, `web-research.md`, `implementation.md`) parse as valid GitHub-flavored Markdown:
+All four artifact files (`investigation.md`, `web-research.md`, `implementation.md`, `validation.md`) parse as valid GitHub-flavored Markdown:
 
 - YAML frontmatter blocks open and close cleanly (`---` … `---`).
 - Tables use consistent column counts.
