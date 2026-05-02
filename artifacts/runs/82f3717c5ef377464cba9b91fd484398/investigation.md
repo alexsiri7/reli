@@ -153,8 +153,8 @@ Railway's auth backend rejects the token currently held in `secrets.RAILWAY_TOKE
 
 1. Rotate `RAILWAY_TOKEN` per `docs/RAILWAY_TOKEN_ROTATION_742.md` — **with No workspace
    selected and No expiration** (see `web-research.md` § Recommendations #1–#2 in this
-   run before re-rotating like-for-like, since the chain has now repeated 12 times in
-   <8 hours).
+   run before re-rotating like-for-like, since the chain has now repeated 21 times
+   today).
 2. `gh workflow run railway-token-health.yml --repo alexsiri7/reli` — verify the new
    token authenticates.
 3. `gh run rerun 25256579563 --repo alexsiri7/reli --failed` — re-run the failed

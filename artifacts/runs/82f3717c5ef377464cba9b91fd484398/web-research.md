@@ -8,7 +8,7 @@
 
 ## Summary
 
-Issue #907 is the latest in a long string of `RAILWAY_TOKEN is invalid or expired: Not Authorized` failures (61st by commit count, 19th today as of recent issues #903/#904/#906). Per `CLAUDE.md`, agents cannot rotate this token — that requires human access to railway.com. Web research confirms the GitHub Actions workflow at `.github/workflows/staging-pipeline.yml` uses an `Authorization: Bearer` style token (account or workspace token, not a project token, which would use `Project-Access-Token`). The recurring nature plus Railway community evidence points to either a short-TTL token being re-issued each rotation **or** the token being created with the wrong workspace scope; Railway's official docs do not publish a TTL for non-OAuth tokens, so the existing runbook's "No expiration" advice cannot be verified from public docs.
+Issue #907 is the latest in a long string of `RAILWAY_TOKEN is invalid or expired: Not Authorized` failures (61st by commit count, 21st today, most recently #903/#904). Per `CLAUDE.md`, agents cannot rotate this token — that requires human access to railway.com. Web research confirms the GitHub Actions workflow at `.github/workflows/staging-pipeline.yml` uses an `Authorization: Bearer` style token (account or workspace token, not a project token, which would use `Project-Access-Token`). The recurring nature plus Railway community evidence points to either a short-TTL token being re-issued each rotation **or** the token being created with the wrong workspace scope; Railway's official docs do not publish a TTL for non-OAuth tokens, so the existing runbook's "No expiration" advice cannot be verified from public docs.
 
 ---
 
@@ -137,7 +137,7 @@ Project-Access-Token: <PROJECT_TOKEN>                # cannot answer {me{id}}
 ## Gaps and Conflicts
 
 - **Gap (authoritative TTL)**: Railway's public docs do not publish an expiration policy for account/workspace/project tokens. Only OAuth access tokens (1 h) and refresh tokens (1 y) are documented. We therefore cannot independently verify the existing runbook's claim that the UI defaults to a short TTL.
-- **Gap (root cause of recurrence)**: 19+ failures in a single day suggest something more aggressive than a TTL — possibilities include (a) automatic revocation when a workspace token is rotated elsewhere, (b) a scheduled/external rotator stepping on the secret, (c) repeated creation under the wrong scope. None of these can be confirmed without Railway dashboard access.
+- **Gap (root cause of recurrence)**: 21+ failures in a single day suggest something more aggressive than a TTL — possibilities include (a) automatic revocation when a workspace token is rotated elsewhere, (b) a scheduled/external rotator stepping on the secret, (c) repeated creation under the wrong scope. None of these can be confirmed without Railway dashboard access.
 - **Conflict (token recommendation vs current design)**: Railway's blog recommends a project token for GitHub Actions, but Reli's preflight (`{me{id}}`) explicitly cannot work with a project token. The two are reconcilable only by changing the preflight.
 - **Outdated content**: A community thread referenced `backboard.railway.app` while current docs use `backboard.railway.com`. Either still resolves, but mixing them invites future surprise.
 
@@ -153,7 +153,7 @@ These are research-level recommendations for the human implementer (per `CLAUDE.
    - Consider switching the *deploy* step to a **project token** (`Project-Access-Token` header), which is purpose-built for deployment automation and avoids account-level reauthorization. The preflight could then be dropped or weakened to a project-scoped query, eliminating the `{me{id}}` dependency.
 3. **Update `staging-pipeline.yml`** to call `https://backboard.railway.com/graphql/v2` instead of `.app`, matching current Railway docs. Cosmetic but removes a known footgun.
 4. **Do not** create yet another `.github/RAILWAY_TOKEN_ROTATION_*.md` claiming the rotation has been done — `CLAUDE.md` flags this as a Category 1 error. The action for this PR is to file/escalate, not to claim completion.
-5. **Track the recurrence**: 19 occurrences in one day is a system-level anomaly, not a token-lifetime issue. Worth a separate mail-to-mayor flagging that the rotation cadence has gone from "occasional" to "hourly" — something changed.
+5. **Track the recurrence**: 21 occurrences in one day is a system-level anomaly, not a token-lifetime issue. Worth a separate mail-to-mayor flagging that the rotation cadence has gone from "occasional" to "hourly" — something changed.
 
 ---
 
