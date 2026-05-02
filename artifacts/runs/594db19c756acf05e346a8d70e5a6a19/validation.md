@@ -22,12 +22,13 @@ All validation checks are vacuously satisfied: the only deliverables for this ta
 
 ## Branch State
 
-**Command**: `git diff --name-only HEAD~1 HEAD`
+**Command**: `git diff --name-only main...HEAD`
 **Result**:
 
 ```
 artifacts/runs/594db19c756acf05e346a8d70e5a6a19/implementation.md
 artifacts/runs/594db19c756acf05e346a8d70e5a6a19/investigation.md
+artifacts/runs/594db19c756acf05e346a8d70e5a6a19/validation.md
 artifacts/runs/594db19c756acf05e346a8d70e5a6a19/web-research.md
 ```
 

@@ -20,8 +20,8 @@
 
 | File | Action | Lines |
 |------|--------|-------|
-| `artifacts/runs/594db19c756acf05e346a8d70e5a6a19/investigation.md` | CREATE | +151 |
-| `artifacts/runs/594db19c756acf05e346a8d70e5a6a19/web-research.md` | CREATE | +~250 |
+| `artifacts/runs/594db19c756acf05e346a8d70e5a6a19/investigation.md` | CREATE | +150 |
+| `artifacts/runs/594db19c756acf05e346a8d70e5a6a19/web-research.md` | CREATE | +159 |
 | `artifacts/runs/594db19c756acf05e346a8d70e5a6a19/implementation.md` | CREATE | (this file) |
 
 No source, workflow, or configuration files were modified. The artifact's
