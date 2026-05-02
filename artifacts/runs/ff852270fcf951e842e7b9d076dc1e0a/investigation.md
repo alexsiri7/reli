@@ -2,7 +2,7 @@
 
 **Issue**: #901 (https://github.com/alexsiri7/reli/issues/901)
 **Type**: BUG (infrastructure / secret rotation — recurring)
-**Investigated**: 2026-05-02T16:10:00Z
+**Investigated**: 2026-05-02T15:00:00Z
 
 ### Assessment
 
@@ -44,8 +44,8 @@ No source code, workflow, or runbook changes. This bead produces investigation a
 
 | File | Lines | Action | Description |
 |------|-------|--------|-------------|
-| `artifacts/runs/ff852270fcf951e842e7b9d076dc1e0a/investigation.md` | NEW | CREATE | This document — failing run, error, runbook pointer, prior-occurrence count |
-| `artifacts/runs/ff852270fcf951e842e7b9d076dc1e0a/web-research.md` | EXISTING | KEEP | Already on disk — captures the project-token-vs-account-token hypothesis. Do not edit. |
+| `artifacts/runs/ff852270fcf951e842e7b9d076dc1e0a/investigation.md` | +179 | CREATE | This document — failing run, error, runbook pointer, prior-occurrence count |
+| `artifacts/runs/ff852270fcf951e842e7b9d076dc1e0a/web-research.md` | 152 | KEEP | Already on disk — captures the project-token-vs-account-token hypothesis. Do not edit. |
 
 ### Integration Points
 
@@ -172,7 +172,7 @@ Expected: `Validate Railway secrets` step prints success and the downstream `Dep
 ## Metadata
 
 - **Investigated by**: Claude (Opus 4.7, 1M context)
-- **Timestamp**: 2026-05-02T16:10:00Z
+- **Timestamp**: 2026-05-02T15:00:00Z
 - **Artifact**: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/ff852270fcf951e842e7b9d076dc1e0a/investigation.md`
 - **Companion**: `/home/asiri/.archon/workspaces/alexsiri7/reli/artifacts/runs/ff852270fcf951e842e7b9d076dc1e0a/web-research.md`
 - **Failing run**: https://github.com/alexsiri7/reli/actions/runs/25252013103
