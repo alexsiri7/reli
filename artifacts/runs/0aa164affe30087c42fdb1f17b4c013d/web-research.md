@@ -46,7 +46,7 @@ Action posture is unchanged: agent cannot rotate the token; human action against
 
 The docs do not describe the token-creation UI's expiration controls at all. The OAuth flow (a separate concept, not what CI uses) is documented as 1-hour access tokens / 1-year refresh tokens — no relation to the static `RAILWAY_TOKEN` secret.
 
-**Why this matters**: The runbook (`docs/RAILWAY_TOKEN_ROTATION_742.md` line 22) tells the human "**Expiration: No expiration** (critical — do not accept default TTL)". If this UI option does not exist, the runbook is impossible to follow correctly, and every "rotation" produces a token with whatever the default TTL is. After 39 occurrences this is the most plausible failure mode — the runbook itself is the bug.
+**Why this matters**: The runbook (`docs/RAILWAY_TOKEN_ROTATION_742.md` lines 20, 26) instructs the human to set "**Expiration: No expiration** (critical — do not accept default TTL)". If this UI option does not exist, the runbook is impossible to follow correctly, and every "rotation" produces a token with whatever the default TTL is. After 39 occurrences this is the most plausible failure mode — the runbook itself is the bug.
 
 **What to do next**: When the human next rotates, screenshot the Railway token-creation UI. Either (a) confirm "No expiration" exists and was missed previously, or (b) confirm it doesn't exist and update the runbook to reflect the actual default TTL.
 
