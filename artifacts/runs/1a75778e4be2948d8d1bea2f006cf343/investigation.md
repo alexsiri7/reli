@@ -20,6 +20,20 @@ The `Validate Railway secrets` step in the `Deploy to staging` job (workflow `St
 
 This is the **44th** instance of this identical authentication failure on the prod deploy pipeline (and the **4th today** — issues #860, #862, and #864 were all filed earlier on 2026-05-02).
 
+**Verify the same-day cadence** (re-derives the "4th today" claim from GitHub state, no privileges required):
+
+```bash
+gh issue list --repo alexsiri7/reli --state all --search 'RAILWAY_TOKEN created:2026-05-02' --json number,title,createdAt
+# Expect 4 issues: #860, #862, #864, #866 — all created 2026-05-02 UTC.
+```
+
+**Verify the prior-occurrence numbering ladder** (re-derives `#850=38th … #866=44th` from commit history):
+
+```bash
+git log --oneline --grep='RAILWAY_TOKEN expiration' | head -10
+# Most recent first; counts back to #850 (38th) at the bottom of the list.
+```
+
 ---
 
 ## Analysis
