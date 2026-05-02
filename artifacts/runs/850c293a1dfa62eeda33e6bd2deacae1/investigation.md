@@ -58,7 +58,7 @@ WHY: Prod deploy run 25246979867 failed.
   - `5fcc23b` docs: investigation for issue #876 (48th, 8th today)
   - `715992e` docs: investigation for issue #874 (47th, 7th today)
   - `bb5dfa7` docs: investigation for issue #870 (46th, 6th today)
-  - `0de37f2` docs: investigation for issue #871 (also 46th, 6th today)
+  - `0de37f2` docs: investigation for issue #871 (duplicate report of #870)
 - **Implication**: This is a high-frequency recurring operational problem. Issue #878's deploy ran at 07:04:31Z; this one (#880) ran at 07:34:53Z — only ~30 minutes later. At 10 occurrences in a single calendar day (2026-05-02), the rotated token's effective TTL is clearly far below the runbook's "No expiration" target. Either (a) the human is silently being given a short-TTL token by Railway's UI, (b) Railway has removed the "No expiration" option, or (c) an external process is revoking the token. The next rotator should screenshot the token-creation dialog and confirm the "No expiration" option still exists.
 
 ---
