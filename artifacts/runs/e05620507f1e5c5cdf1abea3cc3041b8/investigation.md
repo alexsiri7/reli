@@ -99,7 +99,7 @@ The agent cannot perform this step. Two options:
 **Option B — Durable (recommended, breaks the cycle):**
 1. In the Railway dashboard, navigate to **Project Settings → Tokens** (NOT Account → Tokens).
 2. Mint a Project token scoped to the staging environment; install as `RAILWAY_TOKEN`.
-3. (Optional, for cleaner separation) mint a second Project token for production and store as a separate secret; if the workflow keeps a single `RAILWAY_TOKEN`, ensure it is the staging one and that production has its own credential.
+3. (Optional, for cleaner separation) mint a second Project token for production and store as a separate secret; if the workflow keeps a single `RAILWAY_TOKEN`, ensure it is the staging one and that production has its own credential. (See `web-research.md` Recommendation 1, which prefers splitting into `RAILWAY_STAGING_TOKEN` / `RAILWAY_PRODUCTION_TOKEN` because Project tokens are environment-scoped — the Step 3 implementer should pick between the two shapes.)
 4. Open a follow-up PR per Step 3 below to make the workflow speak the Project-token protocol; the new token will fail validation under the *current* validator (`{me{id}}` does not work for Project tokens), so Step 2 and Step 3 must land together.
 
 ---
