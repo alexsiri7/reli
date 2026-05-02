@@ -141,7 +141,7 @@ curl -X POST "https://backboard.railway.app/graphql/v2" \
 - **Exact default TTL for account tokens** is not published anywhere in official Railway docs. Community reports suggest a short default (1–7 days has been mentioned in this repo's prior runbooks), but this is not authoritatively confirmed. The "No expiration" option exists, but the precise label and UI placement may have shifted between Railway dashboard versions.
 - **Whether the current `RAILWAY_TOKEN` in the repo holds an account or project token** cannot be determined from outside the GitHub Secrets vault. The pre-flight design (Bearer + `{me{id}}`) implies an account token, which means the env-var name (`RAILWAY_TOKEN`) is misaligned with Railway's documented naming convention. This may be working today by accident and could explain some past failures classified as "expiration."
 - **Railway OIDC support** is unconfirmed — searches surfaced no documented federation flow. Worth confirming via Railway support before recommending as a future direction.
-- **Token health-check workflow effectiveness**: the repo references `.github/workflows/railway-token-health.yml` (weekly Monday probe). At 40 occurrences, the cadence is clearly not catching pre-expiration. The 7-day window between probes is wider than at least some observed expirations.
+- **Token health-check workflow effectiveness**: the repo runs `.github/workflows/railway-token-health.yml` daily at 09:00 UTC (cron `0 9 * * *`). At 40 occurrences, even a daily probe is not catching pre-expiration — the failure mode appears to be a token going from valid to revoked between two probes, with no lead-time warning. The probe detects the failure but only after a deploy has already broken on it.
 
 ---
 
@@ -154,9 +154,10 @@ Based on research, three layered mitigations — short-term (this PR), medium-te
    - Decide whether the secret should be an **account token** (current Bearer + `{me{id}}` pattern, but rename to `RAILWAY_API_TOKEN` to match Railway's convention) or a **project token** (rewrite the pre-flight to use `Project-Access-Token` header and a project-scoped probe). Mixing the patterns is a documented source of "Not Authorized" misreporting.
    - Per the repo's own CLAUDE.md, **agents must not perform the rotation or create rotation-completion docs**. The fix to ship from this workflow is documentation/code, not the secret value.
 
-2. **Medium-term — tighten the health-check cadence and surface impending expiration.**
-   - Reduce the `railway-token-health.yml` cron from weekly to daily (or every 6 hours). At 40 incidents, the gap between health probe and real CI run is the bottleneck — the alert is firing only after a deploy is already broken.
-   - If Railway's API exposes token-metadata fields (e.g. `expiresAt` on `me { tokens }`), query it during the health check and open a warning issue at T-7 days, not at T+0.
+2. **Medium-term — surface impending expiration, not just current failure.**
+   - The current `railway-token-health.yml` cron is `0 9 * * *` (daily). Daily cadence has not prevented the recurrence — the failure window between probes is still long enough for a deploy to land on a stale token, and the probe only fires *after* the token is already rejected.
+   - If Railway's API exposes token-metadata fields (e.g. `expiresAt` on `me { tokens }`), query it during the health check and open a warning issue at T-7 days, rather than waiting for the post-expiry probe to fail.
+   - Optionally tighten the cron further (every 6 hours), but lead-time warning is the real fix; cadence alone won't help if the token is revoked server-side without warning.
 
 3. **Long-term — track Railway OIDC support and consider migration when available.**
    - File an internal tracking note (or upstream Railway feature request) for GitHub OIDC federation. This is the only durable fix that eliminates rotation toil. Until Railway ships it, no amount of in-repo tooling will end the recurrence.

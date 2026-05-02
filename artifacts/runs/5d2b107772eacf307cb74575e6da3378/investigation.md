@@ -39,7 +39,7 @@ WHY: Why did the prod deploy run fail?
   Evidence: `.github/workflows/staging-pipeline.yml:49-58` posts `{me{id}}` to `https://backboard.railway.app/graphql/v2` with `Authorization: Bearer $RAILWAY_TOKEN` and inspects `.data.me.id`. Railway returned `errors[0].message == "Not Authorized"` instead of a `me.id`.
 
 ↓ ROOT CAUSE: The `RAILWAY_TOKEN` GitHub Actions secret holds an account-scoped Railway API token that has been revoked or has expired.
-  Evidence: Identical failure mode to closed issues #742, #747, #751, #755, #762, #769, #774, #777, #779, #783, #785, #786, #789, #790, #793, #794, #798, #801, #804, #805, #808, #810, #811, #814, #816, #818, #820, #821, #824, #825, #828, #829, #832, #833, #836, #841, #843, #845, #847, #850, #854 — all resolved by rotating the token via `docs/RAILWAY_TOKEN_ROTATION_742.md` with no source change. This is the 40th occurrence.
+  Evidence: Identical failure mode to 39 prior closed issues, all resolved by rotating the token via `docs/RAILWAY_TOKEN_ROTATION_742.md` with no source change. The canonical prior-occurrence list is reproducible by `gh issue list --repo alexsiri7/reli --search '"RAILWAY_TOKEN" "Not Authorized"' --state closed --json number -q '.[].number'`; commit-history numbering pins #850 = 38th, #854 = 39th, #858 = 40th. This is the 40th occurrence.
 
 ### Affected Files
 
