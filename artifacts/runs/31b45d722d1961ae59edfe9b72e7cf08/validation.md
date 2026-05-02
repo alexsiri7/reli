@@ -10,7 +10,7 @@
 
 | Check | Result | Details |
 |-------|--------|---------|
-| Diff scope | ✅ | Docs-only — 2 markdown artifacts, 0 source files |
+| Diff scope | ✅ | Docs-only — 3 markdown artifacts, 0 source files |
 | Type check | ⏭️ N/A | No TS/Python source changed |
 | Lint | ⏭️ N/A | No source changed |
 | Format | ⏭️ N/A | No source changed |
@@ -27,8 +27,9 @@
 
 ```
 artifacts/runs/31b45d722d1961ae59edfe9b72e7cf08/investigation.md  | 188 +++++
+artifacts/runs/31b45d722d1961ae59edfe9b72e7cf08/validation.md     |  97 +++++
 artifacts/runs/31b45d722d1961ae59edfe9b72e7cf08/web-research.md   | 195 +++++
-2 files changed, 383 insertions(+)
+3 files changed, 480 insertions(+)
 ```
 
 No source files (`backend/`, `frontend/`, `scripts/`), no workflows (`.github/workflows/`), no
@@ -85,8 +86,8 @@ See `docs/RAILWAY_TOKEN_ROTATION_742.md` for the canonical runbook.
 
 ## Files Modified During Validation
 
-None. Validation produced no fixes because there was nothing to fix — the diff is two
-investigation artifacts, both already authored in the previous step.
+None. Validation produced no fixes because there was nothing to fix — the diff is three
+investigation artifacts, all authored as part of this workflow run.
 
 ---
 
