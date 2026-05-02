@@ -25,8 +25,8 @@
 
 ## Diff Scope
 
-This branch (`archon/task-archon-fix-github-issue-1777721425230`) carries a single
-commit (`7ce22b9`) with only three new markdown artifacts under
+This branch (`archon/task-archon-fix-github-issue-1777721425230`) carries two
+commits (`7ce22b9` + `160afbe`) with four new markdown artifacts under
 `artifacts/runs/e8c76f128bf0299ed89d2f4ac237a1fa/`:
 
 | File | Action | Lines |
@@ -34,12 +34,18 @@ commit (`7ce22b9`) with only three new markdown artifacts under
 | `artifacts/runs/e8c76f128bf0299ed89d2f4ac237a1fa/investigation.md` | CREATE | +207 |
 | `artifacts/runs/e8c76f128bf0299ed89d2f4ac237a1fa/web-research.md` | CREATE | +199 |
 | `artifacts/runs/e8c76f128bf0299ed89d2f4ac237a1fa/implementation.md` | CREATE | +73 |
+| `artifacts/runs/e8c76f128bf0299ed89d2f4ac237a1fa/validation.md` | CREATE | +144 |
 
-Total: 3 files, +479 lines, 0 source-code changes.
+Total: 4 files, +623 lines, 0 source-code changes.
+
+> Note: this artifact (`validation.md`) is itself committed as the second
+> commit (`160afbe`) on this branch — the table above includes its own
+> pre-fix line count for completeness, even though that count is finalized
+> at commit time.
 
 (`git diff main...HEAD` reports a much larger surface only because the local
 `main` ref is behind `origin/main`; that delta is not introduced by this branch.
-`git show --stat HEAD` is the authoritative scope.)
+`git diff origin/main...HEAD --stat` is the authoritative scope.)
 
 ---
 

@@ -23,8 +23,8 @@
 
 | File | Action | Lines |
 |------|--------|-------|
-| `artifacts/runs/e8c76f128bf0299ed89d2f4ac237a1fa/investigation.md` | CREATE | +208 |
-| `artifacts/runs/e8c76f128bf0299ed89d2f4ac237a1fa/web-research.md` | CREATE | +200 |
+| `artifacts/runs/e8c76f128bf0299ed89d2f4ac237a1fa/investigation.md` | CREATE | +207 |
+| `artifacts/runs/e8c76f128bf0299ed89d2f4ac237a1fa/web-research.md` | CREATE | +199 |
 | `artifacts/runs/e8c76f128bf0299ed89d2f4ac237a1fa/implementation.md` | CREATE | (this file) |
 
 No source-code, workflow, runbook, or `.github/RAILWAY_TOKEN_ROTATION_*.md` files were created or modified. Per `CLAUDE.md` § "Railway Token Rotation", creating a `.github/RAILWAY_TOKEN_ROTATION_896.md` claiming rotation is done would be a Category 1 error.
