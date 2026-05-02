@@ -145,7 +145,7 @@ and [Secretless Access for GitHub Actions and Workflows — Aembit](https://aemb
 ```yaml
 # From .github/workflows/staging-pipeline.yml (current implementation)
 RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-  -H "Authorization: $RAILWAY_TOKEN" \
+  -H "Authorization: Bearer $RAILWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query":"{me{id}}"}')
 ```
