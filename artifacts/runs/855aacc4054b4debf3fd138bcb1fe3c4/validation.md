@@ -28,6 +28,8 @@ Per `implementation.md` and `investigation.md`, this `/fix-issue` invocation pro
 ?? artifacts/runs/855aacc4054b4debf3fd138bcb1fe3c4/implementation.md
 ```
 
+(Snapshot taken before this file and `implementation.md` were committed in `93c48d8`.)
+
 `git diff --stat HEAD`: empty.
 
 The only artifact produced is a markdown investigation/implementation report. There is no source code to type-check, lint, format, test, or build.
