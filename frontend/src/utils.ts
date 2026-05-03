@@ -1,4 +1,6 @@
-import type { ThingType, TypeHint } from './store'
+import type { ThingType } from './generated/api-types'
+
+export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | 'preference' | string
 
 const FALLBACK_ICONS: Record<string, string> = {
   task: '📋',
@@ -52,11 +54,6 @@ const IMPORTANCE_LABELS: Record<number, string> = {
 
 export function importanceLabel(p: number): string {
   return IMPORTANCE_LABELS[p] ?? `Importance ${p}`
-}
-
-/** @deprecated Use importanceLabel instead */
-export function priorityLabel(p: number): string {
-  return importanceLabel(p)
 }
 
 export function formatTimestamp(iso: string | null | undefined): string {

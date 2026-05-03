@@ -4,7 +4,9 @@ import type {
   ThingType,
   Relationship,
   ChatMessage,
-} from '../store'
+} from '../generated/api-types'
+
+type CrudStore = 'things' | 'thingTypes' | 'relationships' | 'chatMessages'
 
 // --- Key-value cache entry ---
 
@@ -105,14 +107,14 @@ export function getDB(): Promise<IDBPDatabase<ReliDB>> {
 
 // --- Generic CRUD helpers ---
 
-export async function getAll<S extends 'things' | 'thingTypes' | 'relationships' | 'chatMessages'>(
+export async function getAll<S extends CrudStore>(
   store: S,
 ): Promise<ReliDB[S]['value'][]> {
   const db = await getDB()
   return db.getAll(store)
 }
 
-export async function getByKey<S extends 'things' | 'thingTypes' | 'relationships' | 'chatMessages'>(
+export async function getByKey<S extends CrudStore>(
   store: S,
   key: ReliDB[S]['key'],
 ): Promise<ReliDB[S]['value'] | undefined> {
@@ -120,7 +122,7 @@ export async function getByKey<S extends 'things' | 'thingTypes' | 'relationship
   return db.get(store, key)
 }
 
-export async function put<S extends 'things' | 'thingTypes' | 'relationships' | 'chatMessages'>(
+export async function put<S extends CrudStore>(
   store: S,
   value: ReliDB[S]['value'],
 ): Promise<ReliDB[S]['key']> {
@@ -128,7 +130,7 @@ export async function put<S extends 'things' | 'thingTypes' | 'relationships' | 
   return db.put(store, value)
 }
 
-export async function del<S extends 'things' | 'thingTypes' | 'relationships' | 'chatMessages'>(
+export async function del<S extends CrudStore>(
   store: S,
   key: ReliDB[S]['key'],
 ): Promise<void> {
@@ -177,7 +179,7 @@ export async function clearPendingOps(): Promise<void> {
 
 // --- Bulk operations ---
 
-export async function putAll<S extends 'things' | 'thingTypes' | 'relationships' | 'chatMessages'>(
+export async function putAll<S extends CrudStore>(
   store: S,
   values: ReliDB[S]['value'][],
 ): Promise<void> {

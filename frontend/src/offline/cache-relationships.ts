@@ -1,4 +1,4 @@
-import type { Relationship } from '../store'
+import type { Relationship } from '../generated/api-types'
 import { putAll, getRelationshipsByFrom, getRelationshipsByTo } from './idb'
 
 /**

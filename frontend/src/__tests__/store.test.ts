@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useStore, serialiseMorningBriefing, serialiseWeeklyBriefing } from '../store'
+import { useStore } from '../store'
+import { serialiseMorningBriefing, serialiseWeeklyBriefing } from '../format/briefing'
 
 const mockThing = {
   id: 't1',

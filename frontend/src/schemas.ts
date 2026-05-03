@@ -53,6 +53,24 @@ export const ReferencedThingSchema = z.object({
   thing_id: z.string(),
 })
 
+export const GmailMessageSchema = z.object({
+  id: z.string(),
+  subject: z.string(),
+  from: z.string(),
+  date: z.string(),
+  snippet: z.string(),
+})
+
+export const CalendarEventSchema = z.object({
+  id: z.string(),
+  summary: z.string(),
+  start: z.string(),
+  end: z.string(),
+  all_day: z.boolean(),
+  location: z.string().nullable(),
+  status: z.string(),
+})
+
 export const AppliedChangesSchema = z.object({
   created: z.array(z.object({ id: z.string(), title: z.string(), type_hint: z.string().optional() }).catchall(z.unknown())).optional(),
   updated: z.array(z.object({ id: z.string(), title: z.string() }).catchall(z.unknown())).optional(),
@@ -60,6 +78,8 @@ export const AppliedChangesSchema = z.object({
   context_things: z.array(ContextThingSchema).optional(),
   referenced_things: z.array(ReferencedThingSchema).optional(),
   web_results: z.array(WebSearchResultSchema).optional(),
+  gmail_context: z.array(GmailMessageSchema).optional(),
+  calendar_events: z.array(CalendarEventSchema).optional(),
 })
 
 // ChatMessage uses frontend-specific fields (streaming, id union) not in backend
@@ -131,16 +151,6 @@ export const BriefingResponseSchema = z.object({
   learned_preferences: z.array(GeneratedLearnedPreferenceSchema).optional(),
   total: z.number().optional(),
   stats: z.record(z.string(), z.number()).optional(),
-})
-
-export const CalendarEventSchema = z.object({
-  id: z.string(),
-  summary: z.string(),
-  start: z.string(),
-  end: z.string(),
-  all_day: z.boolean(),
-  location: z.string().nullable(),
-  status: z.string(),
 })
 
 export const CalendarStatusSchema = z.object({

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, serialiseMorningBriefing } from '../store'
+import { useStore } from '../store'
+import { serialiseMorningBriefing } from '../format/briefing'
 import type { SweepFinding, BriefingItem, LearnedPreference, CalendarEvent } from '../store'
 import { NudgeBanner } from './NudgeBanner'
 

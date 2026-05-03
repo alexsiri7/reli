@@ -1,4 +1,4 @@
-import type { ThingType } from '../store'
+import type { ThingType } from '../generated/api-types'
 import { putAll, getAll, clearStore } from './idb'
 
 /**
