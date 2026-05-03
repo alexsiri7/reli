@@ -60,6 +60,8 @@ export const AppliedChangesSchema = z.object({
   context_things: z.array(ContextThingSchema).optional(),
   referenced_things: z.array(ReferencedThingSchema).optional(),
   web_results: z.array(WebSearchResultSchema).optional(),
+  gmail_context: z.array(z.unknown()).optional(),
+  calendar_events: z.array(z.unknown()).optional(),
 })
 
 // ChatMessage uses frontend-specific fields (streaming, id union) not in backend
