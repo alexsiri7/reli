@@ -1,4 +1,6 @@
-import type { ThingType, TypeHint } from './store'
+import type { ThingType } from './generated/api-types'
+
+export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | 'preference' | string
 
 const FALLBACK_ICONS: Record<string, string> = {
   task: '📋',

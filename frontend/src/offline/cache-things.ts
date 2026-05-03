@@ -1,4 +1,5 @@
-import type { Thing, TypeHint } from '../store'
+import type { Thing } from '../generated/api-types'
+import type { TypeHint } from '../utils'
 import { putAll, getAll, clearStore } from './idb'
 
 /**

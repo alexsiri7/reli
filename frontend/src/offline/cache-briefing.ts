@@ -1,4 +1,4 @@
-import type { Thing, SweepFinding, LearnedPreference } from '../store'
+import type { Thing, SweepFinding, LearnedPreference } from '../generated/api-types'
 import { setCacheEntry, getCacheEntry } from './idb'
 
 interface CachedBriefing {

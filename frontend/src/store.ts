@@ -104,7 +104,7 @@ export interface ChatSession {
   message_count: number
 }
 
-export type TypeHint = 'task' | 'note' | 'project' | 'idea' | 'goal' | 'journal' | 'person' | 'place' | 'event' | 'concept' | 'reference' | 'preference' | string
+export type { TypeHint } from './utils'
 
 export interface WebSearchResult {
   title: string

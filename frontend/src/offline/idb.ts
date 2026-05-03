@@ -4,7 +4,7 @@ import type {
   ThingType,
   Relationship,
   ChatMessage,
-} from '../store'
+} from '../generated/api-types'
 
 // --- Key-value cache entry ---
 
