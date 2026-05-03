@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, serialiseWeeklyBriefing } from '../store'
+import { useStore } from '../store'
+import { serialiseWeeklyBriefing } from '../format/briefing'
 import { apiFetch } from '../api'
 import type { Thing, SweepFinding, FocusRecommendation, MorningBriefing, WeeklyBriefing } from '../store'
 import { NudgeBanner } from './NudgeBanner'

@@ -8,6 +8,8 @@ import { cacheBriefing, getCachedBriefing } from './offline/cache-briefing'
 import { cacheCalendarEvents, getCachedCalendarEvents } from './offline/cache-calendar'
 import { getByKey } from './offline/idb'
 import { mutationFetch } from './offline/mutation-fetch'
+import { serialiseMorningBriefing, serialiseWeeklyBriefing } from './format/briefing'
+import { parsePreferenceToasts } from './format/preferences'
 import {
   validateResponse,
   ThingSchema,
@@ -457,100 +459,6 @@ async function fetchThingDetailWithFallback(
     }
     throw new Error('Network error')
   }
-}
-
-function _preferenceConfidenceLabel(data: unknown): string {
-  if (!data || typeof data !== 'object') return ''
-  const d = data as Record<string, unknown>
-  if (typeof d.confidence === 'number') {
-    const c = d.confidence as number
-    if (c >= 0.7) return 'strong'
-    if (c >= 0.5) return 'moderate'
-    return 'emerging'
-  }
-  if (Array.isArray(d.patterns) && d.patterns.length > 0) {
-    const first = d.patterns[0] as Record<string, unknown>
-    return String(first.confidence ?? 'emerging')
-  }
-  return ''
-}
-
-function _parsePreferenceToasts(
-  changes: AppliedChanges | null | undefined
-): { id: string; title: string; confidenceLabel: string; action: 'created' | 'updated' }[] {
-  if (!changes) return []
-  const toasts: { id: string; title: string; confidenceLabel: string; action: 'created' | 'updated' }[] = []
-  const ts = Date.now()
-  const checkItem = (item: Record<string, unknown>, action: 'created' | 'updated') => {
-    if ((item.type_hint as string | undefined) !== 'preference') return
-    let data = item.data
-    if (typeof data === 'string') {
-      try { data = JSON.parse(data) } catch { data = null }
-    }
-    toasts.push({
-      id: `pref-toast-${ts}-${item.id}`,
-      title: String(item.title ?? ''),
-      confidenceLabel: _preferenceConfidenceLabel(data),
-      action,
-    })
-  }
-  for (const c of changes.created ?? []) checkItem(c as Record<string, unknown>, 'created')
-  for (const u of changes.updated ?? []) checkItem(u as Record<string, unknown>, 'updated')
-  return toasts
-}
-
-/** Render a morning briefing as plain text suitable for seeding an LLM `system` message.
- *  Drops empty sections; uses only the first entry of `reasons[]` to keep the seed compact. */
-export function serialiseMorningBriefing(b: MorningBriefing): string {
-  const c = b.content
-  const lines: string[] = [`Daily briefing — ${b.briefing_date}`]
-  if (c.summary) lines.push(`\nSummary: ${c.summary}`)
-  if (c.priorities.length) {
-    lines.push('\nPriorities:')
-    c.priorities.forEach(i => lines.push(`  • ${i.title}${i.reasons.length ? ` — ${i.reasons[0]}` : ''}`))
-  }
-  if (c.overdue.length) {
-    lines.push('\nOverdue:')
-    c.overdue.forEach(i => lines.push(`  • ${i.title}${i.days_overdue != null ? ` — ${i.days_overdue}d overdue` : ''}`))
-  }
-  if (c.blockers.length) {
-    lines.push('\nBlockers:')
-    c.blockers.forEach(i => lines.push(`  • ${i.title}`))
-  }
-  if (c.findings.length) {
-    lines.push('\nNeeds attention:')
-    c.findings.forEach(f => lines.push(`  • ${f.message}`))
-  }
-  return lines.join('\n')
-}
-
-/** Render a weekly briefing as plain text suitable for seeding an LLM `system` message.
- *  Drops empty sections. Mirrors the field set rendered in the WeeklyBriefingSection UI. */
-export function serialiseWeeklyBriefing(b: WeeklyBriefing): string {
-  const c = b.content
-  const lines: string[] = [`Weekly review — week of ${b.week_start}`]
-  if (c.summary) lines.push(`\nSummary: ${c.summary}`)
-  if (c.completed.length) {
-    lines.push('\nCompleted this week:')
-    c.completed.forEach(i => lines.push(`  • ${i.title}`))
-  }
-  if (c.upcoming.length) {
-    lines.push('\nUpcoming:')
-    c.upcoming.forEach(i => lines.push(`  • ${i.title}${i.detail ? ` — ${i.detail}` : ''}`))
-  }
-  if (c.new_connections.length) {
-    lines.push('\nNew connections this week:')
-    c.new_connections.forEach(conn => lines.push(`  • ${conn.from_title} → ${conn.to_title}${conn.relationship_type ? ` (${conn.relationship_type})` : ''}`))
-  }
-  if (c.preferences_learned.length) {
-    lines.push('\nPreferences learned:')
-    c.preferences_learned.forEach(p => lines.push(`  • ${p}`))
-  }
-  if (c.open_questions.length) {
-    lines.push('\nOpen questions:')
-    c.open_questions.forEach(i => lines.push(`  • ${i.title}`))
-  }
-  return lines.join('\n')
 }
 
 export const useStore = create<ReliState>((set, get) => ({
@@ -1225,7 +1133,7 @@ export const useStore = create<ReliState>((set, get) => ({
                 per_call_usage: chatData.usage?.per_call_usage ?? [],
                 timestamp: new Date().toISOString(),
               }
-              const newToasts = _parsePreferenceToasts(chatData.applied_changes)
+              const newToasts = parsePreferenceToasts(chatData.applied_changes)
               const updates: Partial<ReliState> = {
                 messages: get().messages.map(m => m.streaming ? assistantMsg : m),
               }
