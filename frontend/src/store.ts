@@ -8,7 +8,6 @@ import { cacheBriefing, getCachedBriefing } from './offline/cache-briefing'
 import { cacheCalendarEvents, getCachedCalendarEvents } from './offline/cache-calendar'
 import { getByKey } from './offline/idb'
 import { mutationFetch } from './offline/mutation-fetch'
-import { serialiseMorningBriefing, serialiseWeeklyBriefing } from './format/briefing'
 import { parsePreferenceToasts } from './format/preferences'
 import {
   validateResponse,
