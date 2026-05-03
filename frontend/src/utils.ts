@@ -56,11 +56,6 @@ export function importanceLabel(p: number): string {
   return IMPORTANCE_LABELS[p] ?? `Importance ${p}`
 }
 
-/** @deprecated Use importanceLabel instead */
-export function priorityLabel(p: number): string {
-  return importanceLabel(p)
-}
-
 export function formatTimestamp(iso: string | null | undefined): string {
   if (!iso) return ''
   return new Date(iso).toLocaleString(undefined, {
