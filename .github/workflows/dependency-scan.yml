@@ -34,8 +34,11 @@ jobs:
       - name: Install pip-audit
         run: pip install pip-audit
 
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
       - name: Run pip-audit
-        run: pip-audit -r backend/requirements.txt
+        run: pip-audit
 
   node-audit:
     name: Node.js dependency audit
