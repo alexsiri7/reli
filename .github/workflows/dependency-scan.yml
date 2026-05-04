@@ -37,6 +37,8 @@ jobs:
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
 
+      # Audits the installed environment (backend deps + pip-audit's own deps).
+      # Replaces `pip-audit -r` which hit ResolutionTooDeep on the AI-stack graph; see #920.
       - name: Run pip-audit
         run: pip-audit
 
