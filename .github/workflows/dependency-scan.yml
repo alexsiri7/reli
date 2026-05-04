@@ -31,11 +31,26 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install pip-audit
-        run: pip install pip-audit
+      # pip's resolver cannot solve the backend's AI/observability graph:
+      # pip 25.1+ hits ResolutionTooDeep, pip <25.1 hits ResolutionImpossible,
+      # and `pip-audit -r` triggers the same dry-run resolve. uv's
+      # pubgrub-based resolver solves it in ~25s. See #920.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/requirements.txt"
 
+      - name: Install pip-audit
+        run: uv pip install --system pip-audit
+
+      - name: Install backend dependencies
+        run: uv pip install --system -r backend/requirements.txt
+
+      # Audits the installed environment (backend deps + pip-audit's own deps).
+      # Replaces `pip-audit -r` which forces a dry-run pip resolve; see #920.
       - name: Run pip-audit
-        run: pip-audit -r backend/requirements.txt
+        run: pip-audit
 
   node-audit:
     name: Node.js dependency audit
