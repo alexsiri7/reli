@@ -39,6 +39,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
+      # pip 25.1+ ships resolvelib 1.1.0 which hits ResolutionTooDeep on the
+      # backend's AI/observability graph (litellm, google-adk, arize-phoenix,
+      # opentelemetry-*, mcp, supabase, strawberry-graphql). Pin to the last
+      # pre-regression release until upstream fixes the resolver. See #920.
+      - name: Pin pip < 25.1 (resolvelib regression workaround)
+        run: python -m pip install --upgrade "pip<25.1"
+
       - name: Install Python dependencies
         run: pip install -r backend/requirements.txt
 
@@ -79,6 +86,10 @@ jobs:
           key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
+
+      # See lint-and-typecheck job for rationale.
+      - name: Pin pip < 25.1 (resolvelib regression workaround)
+        run: python -m pip install --upgrade "pip<25.1"
 
       - name: Install Python dependencies
         run: pip install -r backend/requirements.txt
