@@ -458,6 +458,9 @@ const SEVERITY_COLORS: Record<string, string> = {
   warning: 'text-events',
 }
 
+const SEVERITY_ICONS: Record<string, string> = { critical: '\u{1F6A8}', warning: '⚠️' }
+const ALERT_TYPE_ICONS: Record<string, string> = { blocking_chain: '\u{1F6D1}', schedule_overlap: '\u{1F4C5}' }
+
 function singularize(label: string): string {
   if (label === 'People') return 'person'
   if (label.endsWith('ies')) return label.slice(0, -3) + 'y'
@@ -1071,8 +1074,6 @@ export function Sidebar() {
                 </h2>
                 {conflictAlerts.map((alert, i) => {
                   const severityColor = SEVERITY_COLORS[alert.severity] ?? 'text-primary'
-                  const SEVERITY_ICONS: Record<string, string> = { critical: '\u{1F6A8}', warning: '\u26A0\uFE0F' }
-                  const ALERT_TYPE_ICONS: Record<string, string> = { blocking_chain: '\u{1F6D1}', schedule_overlap: '\u{1F4C5}' }
                   const severityIcon = SEVERITY_ICONS[alert.severity] ?? '\u2139\uFE0F'
                   const alertTypeIcon = ALERT_TYPE_ICONS[alert.alert_type] ?? '\u23F0'
                   return (
