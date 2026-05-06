@@ -89,6 +89,44 @@ async def test_context_agent_returns_parsed_json():
 
 
 @pytest.mark.asyncio
+async def test_context_agent_accepts_preference_type_hint():
+    """run_context_agent preserves type_hint='preference' from LLM response."""
+    expected = {
+        "search_queries": ["preferences"],
+        "fetch_ids": [],
+        "filter_params": {"active_only": True, "type_hint": "preference"},
+        "needs_web_search": False,
+        "web_search_query": None,
+        "gmail_query": None,
+        "include_calendar": False,
+    }
+    events = [
+        _make_mock_event(json.dumps(expected), usage=True),
+    ]
+
+    with patch("backend.context_agent.Runner") as MockRunner:
+        mock_runner = MagicMock()
+        mock_runner.run_async = MagicMock(return_value=_mock_run_async_factory(events))
+        MockRunner.return_value = mock_runner
+
+        with patch("backend.context_agent._session_service") as mock_svc:
+            mock_session = MagicMock()
+            mock_session.id = "test-session"
+            mock_svc.create_session = AsyncMock(return_value=mock_session)
+
+            from backend.context_agent import run_context_agent
+
+            result = await run_context_agent(
+                "what are my preferences?",
+                [],
+                api_key="test-key",
+            )
+
+    assert result["filter_params"]["type_hint"] == "preference"
+    assert result["search_queries"] == ["preferences"]
+
+
+@pytest.mark.asyncio
 async def test_context_agent_invalid_json_fallback():
     """run_context_agent falls back to message-as-query on invalid JSON."""
     events = [
