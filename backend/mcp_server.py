@@ -118,12 +118,58 @@ def fetch_context(
 
 @mcp.tool()
 def get_thing(thing_id: str) -> dict[str, Any]:
-    """Get a single Thing by its ID, including all fields.
+    """Get a single Thing by its ID, including all fields and relationships.
 
     Args:
         thing_id: The UUID of the Thing to retrieve.
+
+    Returns:
+        Dict with 'thing' (all Thing fields) and 'relationships' (list of
+        relationship dicts with id, from_thing_id, to_thing_id,
+        relationship_type, metadata, created_at). Returns an error dict
+        if the Thing is not found.
     """
-    return shared_tools.get_thing(thing_id=thing_id, user_id=_user_id())
+    thing = shared_tools.get_thing(thing_id=thing_id, user_id=_user_id())
+    if "error" in thing:
+        return thing
+    relationships = shared_tools.list_relationships(thing_id=thing_id, user_id=_user_id())
+    return {"thing": thing, "relationships": relationships}
+
+
+@mcp.tool()
+def search_things(
+    query: str,
+    type_hint: str | None = None,
+    active_only: bool = False,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Search the knowledge graph by natural language query.
+
+    Uses SQL LIKE matching across Thing titles, types, data, and
+    relationship-connected Things. Returns up to ``limit`` Things sorted by
+    recency.
+
+    Call ``fetch_context`` instead when you need multi-query vector similarity
+    search or want to fetch Things by ID alongside search results.
+
+    Args:
+        query: Text to search for (required). Matched against title, type_hint,
+            data fields, and related Thing titles/relationship types.
+        type_hint: Optional type filter ('task', 'note', 'project', 'person',
+            'preference', etc.). None matches all types.
+        active_only: Only return active Things (default false — includes archived).
+        limit: Maximum results to return (1–200, default 20).
+
+    Returns:
+        List of Thing dicts. Empty list if query is blank or no matches found.
+    """
+    return shared_tools.search_things(
+        query=query,
+        type_hint=type_hint,
+        active_only=active_only,
+        limit=min(max(limit, 1), 200),
+        user_id=_user_id(),
+    )
 
 
 @mcp.tool()

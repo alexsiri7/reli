@@ -26,6 +26,7 @@ from backend.mcp_server import (
     merge_things,
     reasoning_agent_prompt,
     response_agent_prompt,
+    search_things,
     thing_schema_reference,
     update_thing,
 )
@@ -62,25 +63,99 @@ class TestFetchContext:
 
 
 class TestGetThing:
+    @patch("backend.mcp_server.shared_tools.list_relationships")
     @patch("backend.mcp_server.shared_tools.get_thing")
-    def test_get_existing(self, mock_get: MagicMock) -> None:
+    def test_get_existing(self, mock_get: MagicMock, mock_rels: MagicMock) -> None:
         thing = {
             "id": "abc-123",
             "title": "My Task",
             "type_hint": "task",
             "importance": 1,
         }
+        rels = [
+            {
+                "id": "rel-1",
+                "from_thing_id": "abc-123",
+                "to_thing_id": "other",
+                "relationship_type": "parent-of",
+            }
+        ]
         mock_get.return_value = thing
+        mock_rels.return_value = rels
         result = get_thing(thing_id="abc-123")
         mock_get.assert_called_once_with(thing_id="abc-123", user_id="")
-        assert result["id"] == "abc-123"
-        assert result["title"] == "My Task"
+        mock_rels.assert_called_once_with(thing_id="abc-123", user_id="")
+        assert result["thing"]["id"] == "abc-123"
+        assert result["thing"]["title"] == "My Task"
+        assert result["relationships"] == rels
 
+    @patch("backend.mcp_server.shared_tools.list_relationships")
     @patch("backend.mcp_server.shared_tools.get_thing")
-    def test_get_not_found(self, mock_get: MagicMock) -> None:
+    def test_get_no_relationships(self, mock_get: MagicMock, mock_rels: MagicMock) -> None:
+        mock_get.return_value = {"id": "abc-123", "title": "Lonely"}
+        mock_rels.return_value = []
+        result = get_thing(thing_id="abc-123")
+        assert result["thing"]["id"] == "abc-123"
+        assert result["relationships"] == []
+
+    @patch("backend.mcp_server.shared_tools.list_relationships")
+    @patch("backend.mcp_server.shared_tools.get_thing")
+    def test_get_not_found(self, mock_get: MagicMock, mock_rels: MagicMock) -> None:
         mock_get.return_value = {"error": "Thing nonexistent not found"}
         result = get_thing(thing_id="nonexistent")
         assert "error" in result
+        mock_rels.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# search_things
+# ---------------------------------------------------------------------------
+
+
+class TestSearchThings:
+    @patch("backend.mcp_server.shared_tools.search_things")
+    def test_basic_search(self, mock_search: MagicMock) -> None:
+        mock_search.return_value = [{"id": "t1", "title": "Buy milk"}]
+        result = search_things(query="milk")
+        mock_search.assert_called_once_with(
+            query="milk",
+            type_hint=None,
+            active_only=False,
+            limit=20,
+            user_id="",
+        )
+        assert len(result) == 1
+        assert result[0]["title"] == "Buy milk"
+
+    @patch("backend.mcp_server.shared_tools.search_things")
+    def test_search_with_type_hint(self, mock_search: MagicMock) -> None:
+        mock_search.return_value = []
+        search_things(query="vacation", type_hint="task", active_only=True, limit=5)
+        mock_search.assert_called_once_with(
+            query="vacation",
+            type_hint="task",
+            active_only=True,
+            limit=5,
+            user_id="",
+        )
+
+    @patch("backend.mcp_server.shared_tools.search_things")
+    def test_search_limit_clamped_high(self, mock_search: MagicMock) -> None:
+        mock_search.return_value = []
+        search_things(query="x", limit=999)
+        assert mock_search.call_args.kwargs["limit"] == 200
+
+    @patch("backend.mcp_server.shared_tools.search_things")
+    def test_search_limit_clamped_low(self, mock_search: MagicMock) -> None:
+        mock_search.return_value = []
+        search_things(query="x", limit=0)
+        assert mock_search.call_args.kwargs["limit"] == 1
+
+    @patch("backend.mcp_server.shared_tools.search_things")
+    def test_search_blank_returns_empty(self, mock_search: MagicMock) -> None:
+        mock_search.return_value = []
+        result = search_things(query="")
+        assert result == []
 
 
 # ---------------------------------------------------------------------------
@@ -345,6 +420,7 @@ class TestMcpMetadata:
         expected = {
             "fetch_context",
             "get_thing",
+            "search_things",
             "create_thing",
             "update_thing",
             "delete_thing",
@@ -381,9 +457,10 @@ class TestIntegration:
         assert created["title"] == "MCP Test Thing"
         thing_id = created["id"]
 
-        # Get
+        # Get — returns {thing, relationships}
         fetched = get_thing(thing_id=thing_id)
-        assert fetched["id"] == thing_id
+        assert fetched["thing"]["id"] == thing_id
+        assert fetched["relationships"] == []
 
         # Update
         updated = update_thing(thing_id=thing_id, title="Updated MCP Thing", importance=0)
@@ -401,7 +478,7 @@ class TestIntegration:
 
         # Thing still exists in the DB (soft-deleted)
         fetched_after = get_thing(thing_id=thing_id)
-        assert fetched_after["active"] in (False, 0)
+        assert fetched_after["thing"]["active"] in (False, 0)
 
     def test_merge_lifecycle(self, api_server: None) -> None:
         """Create two Things, merge them, verify the duplicate is gone."""
@@ -416,7 +493,7 @@ class TestIntegration:
 
         # Kept thing still exists
         kept = get_thing(thing_id=keep["id"])
-        assert kept["id"] == keep["id"]
+        assert kept["thing"]["id"] == keep["id"]
 
         # Removed thing is gone
         gone = get_thing(thing_id=remove["id"])
