@@ -192,20 +192,33 @@ def vector_count() -> int:
         return 0
 
 
-def reindex_all() -> int:
-    """Delete and re-embed all Things from the database.
+def reindex_all(user_id: str = "") -> int:
+    """Delete and re-embed Things for the given user (or all Things when user_id is empty).
 
     Returns the number of Things re-indexed.
     """
+    from .db_engine import user_filter_clause
+
     try:
         with Session(_engine_mod.engine) as session:
-            # Clear existing embeddings
-            session.execute(sa_text("DELETE FROM thing_embeddings"))
+            if user_id:
+                # Delete only this user's embeddings (including NULL-owner Things)
+                session.execute(
+                    sa_text(
+                        "DELETE FROM thing_embeddings WHERE thing_id IN "
+                        "(SELECT id FROM things WHERE user_id = :uid OR user_id IS NULL)"
+                    ),
+                    {"uid": user_id},
+                )
+            else:
+                session.execute(sa_text("DELETE FROM thing_embeddings"))
             session.commit()
 
-        # Fetch all things from the database
+        # Fetch Things scoped to this user
         with Session(_engine_mod.engine) as session:
-            records = session.exec(select(ThingRecord)).all()
+            records = session.exec(
+                select(ThingRecord).where(user_filter_clause(ThingRecord.user_id, user_id))
+            ).all()
 
         if not records:
             return 0
