@@ -4,7 +4,8 @@ import base64
 import json
 import logging
 import re
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
@@ -19,8 +20,11 @@ import backend.db_engine as _engine_mod
 from ..auth import require_user
 from ..config import settings
 from ..db_models import GoogleTokenRecord
+from ..oauth_state import cleanup_and_pop, cleanup_and_store, gmail_oauth_states
 from ..token_encryption import decrypt_or_plaintext, encrypt
 from ..tools import create_thing
+
+GMAIL_OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes
 
 logger = logging.getLogger(__name__)
 
@@ -279,6 +283,13 @@ def gmail_auth_url(request: Request, user_id: str = Depends(require_user)) -> di
     # Determine redirect URI from request
     redirect_uri = str(request.base_url).rstrip("/") + "/api/gmail/callback"
 
+    state = secrets.token_urlsafe(32)
+    cleanup_and_store(
+        gmail_oauth_states,
+        user_id,
+        {"state": state, "expires_at": datetime.now(timezone.utc) + timedelta(seconds=GMAIL_OAUTH_STATE_TTL_SECONDS)},
+    )
+
     flow = Flow.from_client_config(
         _google_client_config(),
         scopes=GMAIL_SCOPES,
@@ -288,6 +299,7 @@ def gmail_auth_url(request: Request, user_id: str = Depends(require_user)) -> di
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
+        state=state,
     )
     return {"auth_url": auth_url}
 
@@ -296,6 +308,7 @@ def gmail_auth_url(request: Request, user_id: str = Depends(require_user)) -> di
 def gmail_callback(
     request: Request,
     code: str = Query(...),
+    state: str = Query(...),
     error: str | None = Query(None),
     user_id: str = Depends(require_user),
 ) -> RedirectResponse:
@@ -303,6 +316,10 @@ def gmail_callback(
     if error:
         logger.error("Gmail OAuth returned error: %s", error)
         raise HTTPException(status_code=400, detail="Gmail authorization was denied or failed.")
+
+    stored = cleanup_and_pop(gmail_oauth_states, user_id)
+    if not stored or stored.get("state") != state:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
 
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=501, detail="Gmail integration not configured")
