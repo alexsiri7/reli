@@ -67,6 +67,14 @@ _FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    from .config import settings as _settings
+
+    if not _settings.SECRET_KEY and not _settings.RELI_API_TOKEN:
+        logger.warning(
+            "AUTH IS DISABLED — SECRET_KEY and RELI_API_TOKEN are both unset. "
+            "All user data is publicly accessible. Set AUTH_DISABLED=true explicitly if intentional."
+        )
+
     init_tracing()
 
     # Run Alembic migrations to ensure schema is up-to-date.

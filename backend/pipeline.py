@@ -108,7 +108,7 @@ def _sql_things_count(session: Session) -> int:
     return result or 0
 
 
-def _fetch_with_family(session: Session, seed_ids: list[str]) -> list[dict[str, Any]]:
+def _fetch_with_family(session: Session, seed_ids: list[str], user_id: str = "") -> list[dict[str, Any]]:
     """Given seed Thing IDs, return those Things plus their parents, children, and related Things via relationships."""
     seen_ids: set[str] = set()
     results: list[dict] = []
@@ -120,43 +120,47 @@ def _fetch_with_family(session: Session, seed_ids: list[str]) -> list[dict[str, 
 
     for thing_id in seed_ids:
         rec = session.get(ThingRecord, thing_id)
-        if rec:
-            _add_record(rec)
-            # Fetch parent-of / child-of related Things via relationships
-            parent_rels = session.exec(
-                select(ThingRelationshipRecord).where(
-                    ThingRelationshipRecord.to_thing_id == thing_id,
-                    ThingRelationshipRecord.relationship_type == "parent-of",
-                )
-            ).all()
-            for pr in parent_rels:
-                parent = session.get(ThingRecord, pr.from_thing_id)
-                if parent:
-                    _add_record(parent)
-            child_rels = session.exec(
-                select(ThingRelationshipRecord).where(
+        if rec is None:
+            continue
+        # Skip seed records not owned by this user (Stage A: NULL-owner records still readable)
+        if user_id and rec.user_id and rec.user_id != user_id:
+            continue
+        _add_record(rec)
+        # Fetch parent-of / child-of related Things via relationships
+        parent_rels = session.exec(
+            select(ThingRelationshipRecord).where(
+                ThingRelationshipRecord.to_thing_id == thing_id,
+                ThingRelationshipRecord.relationship_type == "parent-of",
+            )
+        ).all()
+        for pr in parent_rels:
+            parent = session.get(ThingRecord, pr.from_thing_id)
+            if parent:
+                _add_record(parent)
+        child_rels = session.exec(
+            select(ThingRelationshipRecord).where(
+                ThingRelationshipRecord.from_thing_id == thing_id,
+                ThingRelationshipRecord.relationship_type == "parent-of",
+            )
+        ).all()
+        for cr in child_rels:
+            child = session.get(ThingRecord, cr.to_thing_id)
+            if child:
+                _add_record(child)
+        rels = session.exec(
+            select(ThingRelationshipRecord).where(
+                or_(
                     ThingRelationshipRecord.from_thing_id == thing_id,
-                    ThingRelationshipRecord.relationship_type == "parent-of",
+                    ThingRelationshipRecord.to_thing_id == thing_id,
                 )
-            ).all()
-            for cr in child_rels:
-                child = session.get(ThingRecord, cr.to_thing_id)
-                if child:
-                    _add_record(child)
-            rels = session.exec(
-                select(ThingRelationshipRecord).where(
-                    or_(
-                        ThingRelationshipRecord.from_thing_id == thing_id,
-                        ThingRelationshipRecord.to_thing_id == thing_id,
-                    )
-                )
-            ).all()
-            for rel in rels:
-                other_id = rel.to_thing_id if rel.from_thing_id == thing_id else rel.from_thing_id
-                if other_id not in seen_ids:
-                    other = session.get(ThingRecord, other_id)
-                    if other:
-                        _add_record(other)
+            )
+        ).all()
+        for rel in rels:
+            other_id = rel.to_thing_id if rel.from_thing_id == thing_id else rel.from_thing_id
+            if other_id not in seen_ids:
+                other = session.get(ThingRecord, other_id)
+                if other:
+                    _add_record(other)
 
     return results
 

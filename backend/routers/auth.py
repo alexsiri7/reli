@@ -2,7 +2,6 @@
 
 import logging
 import secrets
-import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -42,9 +41,9 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_SECONDS = 60 * 60 * 24 * 7  # 7 days
 COOKIE_NAME = "reli_session"
 
-# PKCE state storage: state -> code_verifier (single-process, in-memory)
-_pending_flows: dict[str, str] = {}
-_pending_flows_lock = threading.Lock()
+# PKCE state storage: state -> {code_verifier, expires_at} (bounded, TTL-evicted)
+_pending_flows: dict[str, dict] = {}
+_PENDING_FLOW_TTL_SECONDS = 600  # 10 minutes
 
 MCP_AUTH_CODE_TTL_SECONDS = 60 * 10  # 10 minutes
 
@@ -175,9 +174,15 @@ def google_login() -> dict:
         include_granted_scopes="true",
         prompt="consent",
     )
-    # Store PKCE code_verifier for the callback
-    with _pending_flows_lock:
-        _pending_flows[state] = flow.code_verifier or ""
+    # Store PKCE code_verifier for the callback (bounded dict with TTL)
+    cleanup_and_store(
+        _pending_flows,
+        state,
+        {
+            "code_verifier": flow.code_verifier or "",
+            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=_PENDING_FLOW_TTL_SECONDS),
+        },
+    )
     return {"auth_url": str(auth_url)}
 
 
@@ -194,8 +199,8 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
 
     # Restore PKCE code_verifier from the auth request.
     # For MCP OAuth flows the verifier is stored in mcp_oauth_sessions instead.
-    with _pending_flows_lock:
-        code_verifier = _pending_flows.pop(state, None)
+    flow_entry = cleanup_and_pop(_pending_flows, state)
+    code_verifier = flow_entry["code_verifier"] if flow_entry else None
     if not code_verifier:
         mcp_session = cleanup_and_get(mcp_oauth_sessions, state)
         if mcp_session:
@@ -249,6 +254,7 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
                 "code_challenge": mcp_session["code_challenge"],
                 "code_challenge_method": mcp_session["code_challenge_method"],
                 "redirect_uri": mcp_session["redirect_uri"],
+                "client_id": mcp_session["client_id"],
                 "expires_at": datetime.now(timezone.utc) + timedelta(seconds=MCP_AUTH_CODE_TTL_SECONDS),
             },
         )

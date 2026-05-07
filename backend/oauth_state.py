@@ -45,6 +45,9 @@ mcp_registered_clients: dict[str, dict] = {}
 # }
 mcp_refresh_tokens: dict[str, dict] = {}
 
+# user_id -> {state, expires_at}  — CSRF protection for Gmail OAuth flow
+gmail_oauth_states: dict[str, dict] = {}
+
 
 def _cleanup_expired(store: dict[str, dict]) -> None:
     """Remove entries whose ``expires_at`` is in the past.
