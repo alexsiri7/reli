@@ -25,7 +25,7 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
   (e.g. following relationships, referencing previously mentioned Things by ID).
   Empty array when not needed.
 - filter_params.active_only: true unless user asks about archived/all items
-- filter_params.type_hint: null or one of task|note|idea|project|goal|journal|person|place|event|concept|reference
+- filter_params.type_hint: null or one of task|note|idea|project|goal|journal|person|place|event|concept|reference|preference
 - needs_web_search: true if the user is asking about external/real-world info
   that would benefit from a web search (current events, facts, how-to questions,
   product info, documentation, etc.). false for personal task management requests

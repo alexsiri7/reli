@@ -18,14 +18,5 @@ export async function getCachedRelationships(thingId: string): Promise<Relations
     getRelationshipsByFrom(thingId),
     getRelationshipsByTo(thingId),
   ])
-  // Deduplicate in case a relationship references the same thing in both directions
-  const seen = new Set<string>()
-  const result: Relationship[] = []
-  for (const rel of [...fromRels, ...toRels]) {
-    if (!seen.has(rel.id)) {
-      seen.add(rel.id)
-      result.push(rel)
-    }
-  }
-  return result
+  return [...new Map([...fromRels, ...toRels].map(r => [r.id, r])).values()]
 }
