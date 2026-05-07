@@ -584,8 +584,8 @@ def delete_thing(
 
 @router.post("/reindex", summary="Re-embed all Things with the current embedding model")
 def reindex_things(user_id: str = Depends(require_user)) -> dict[str, int]:
-    """Rebuild the vector search index for all Things."""
-    count = reindex_all()
+    """Rebuild the vector search index for the current user's Things."""
+    count = reindex_all(user_id=user_id)
     return {"reindexed": count}
 
 
@@ -765,20 +765,46 @@ def merge_things(
 # -- Orphan relationship management --
 
 
+def _orphan_stmt(user_id: str) -> Any:
+    """Build a SELECT for orphan relationships scoped to *user_id*.
+
+    When auth is disabled (user_id is empty) returns all orphans globally.
+    When authenticated, returns only orphans where the user owns at least one endpoint.
+    """
+    # Subquery: all active Thing IDs (used for existence check)
+    all_active_ids_sq = select(ThingRecord.id).where(ThingRecord.active)
+
+    # "Orphan" condition: at least one endpoint references a non-existent Thing
+    orphan_cond = or_(
+        ThingRelationshipRecord.from_thing_id.notin_(all_active_ids_sq),  # type: ignore[union-attr]
+        ThingRelationshipRecord.to_thing_id.notin_(all_active_ids_sq),  # type: ignore[union-attr]
+    )
+
+    if not user_id:
+        # Auth disabled — clean up all orphans regardless of ownership
+        return select(ThingRelationshipRecord).where(orphan_cond)
+
+    # Authenticated — restrict to relationships where this user owns at least one endpoint
+    user_thing_ids_sq = select(ThingRecord.id).where(
+        user_filter_clause(ThingRecord.user_id, user_id),
+        ThingRecord.active,
+    )
+    return select(ThingRelationshipRecord).where(
+        or_(
+            ThingRelationshipRecord.from_thing_id.in_(user_thing_ids_sq),  # type: ignore[union-attr]
+            ThingRelationshipRecord.to_thing_id.in_(user_thing_ids_sq),  # type: ignore[union-attr]
+        ),
+        orphan_cond,
+    )
+
+
 @router.get("/relationships/orphans", response_model=list[Relationship], summary="Find orphan relationships")
 def get_orphan_relationships(
     user_id: str = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> list[Relationship]:
-    """Return relationships where from_thing_id or to_thing_id doesn't exist."""
-    thing_ids = select(ThingRecord.id).where(user_filter_clause(ThingRecord.user_id, user_id))
-    stmt = select(ThingRelationshipRecord).where(
-        or_(
-            ThingRelationshipRecord.from_thing_id.not_in(thing_ids),  # type: ignore[union-attr]
-            ThingRelationshipRecord.to_thing_id.not_in(thing_ids),  # type: ignore[union-attr]
-        )
-    )
-    rows = session.exec(stmt).all()
+    """Return relationships where the user owns at least one endpoint and at least one endpoint no longer exists."""
+    rows = session.exec(_orphan_stmt(user_id)).all()
     return [_record_to_rel(r) for r in rows]
 
 
@@ -787,16 +813,8 @@ def cleanup_orphan_relationships(
     session: Session = Depends(get_session),
     user_id: str = Depends(require_user),
 ) -> OrphanCleanupResult:
-    """Delete all orphan relationships where from/to thing no longer exists."""
-    thing_ids_subq = select(ThingRecord.id).where(user_filter_clause(ThingRecord.user_id, user_id))
-    orphans = session.exec(
-        select(ThingRelationshipRecord).where(
-            or_(
-                ThingRelationshipRecord.from_thing_id.notin_(thing_ids_subq),  # type: ignore[union-attr]
-                ThingRelationshipRecord.to_thing_id.notin_(thing_ids_subq),  # type: ignore[union-attr]
-            )
-        )
-    ).all()
+    """Delete orphan relationships where the user owns at least one endpoint and at least one endpoint no longer exists."""
+    orphans = session.exec(_orphan_stmt(user_id)).all()
     orphan_ids = [r.id for r in orphans]
     for r in orphans:
         session.delete(r)
@@ -911,7 +929,7 @@ def delete_relationship(
     if user_id:
         from_thing = session.get(ThingRecord, record.from_thing_id)
         to_thing = session.get(ThingRecord, record.to_thing_id)
-        if not ((from_thing and from_thing.user_id == user_id) or (to_thing and to_thing.user_id == user_id)):
+        if not (from_thing and from_thing.user_id == user_id and to_thing and to_thing.user_id == user_id):
             raise HTTPException(status_code=404, detail=f"Relationship '{rel_id}' not found")
     session.delete(record)
     session.commit()
