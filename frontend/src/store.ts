@@ -768,11 +768,12 @@ export const useStore = create<ReliState>((set, get) => ({
       const res = await apiFetch(`${BASE}/briefing`)
       if (!res.ok) return
       const data = validateResponse(BriefingResponseSchema, await res.json(), '/briefing')
-      const things: Thing[] = []
       const theOneThing: BriefingItem | null = data.the_one_thing ?? null
-      if (data.the_one_thing) things.push(data.the_one_thing.thing)
       const secondaryItems: BriefingItem[] = data.secondary ?? []
-      for (const item of secondaryItems) things.push(item.thing)
+      const things: Thing[] = [
+        ...(theOneThing ? [theOneThing.thing] : []),
+        ...secondaryItems.map(item => item.thing),
+      ]
       const findings = data.findings ?? []
       const learnedPreferences = data.learned_preferences ?? []
       const briefingStats: BriefingStats | null = data.stats ? {
@@ -832,12 +833,7 @@ export const useStore = create<ReliState>((set, get) => ({
   dismissFinding: async (findingId: string) => {
     try {
       const res = await mutationFetch(`${BASE}/briefing/findings/${findingId}/dismiss`, { method: 'PATCH' })
-      if (res.status === 202) {
-        // Queued offline — optimistically remove from UI
-        set(state => ({ findings: state.findings.filter(f => f.id !== findingId) }))
-        return
-      }
-      if (!res.ok) return
+      if (!res.ok && res.status !== 202) return
       set(state => ({ findings: state.findings.filter(f => f.id !== findingId) }))
     } catch {
       // ignore

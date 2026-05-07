@@ -76,7 +76,7 @@ mcp = FastMCP(
 
 def _user_id() -> str:
     """Get the authenticated user_id for the current MCP request."""
-    return _current_user_id.get("")
+    return _current_user_id.get()
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +247,6 @@ def update_thing(
     data_json = json.dumps(data) if data is not None else ""
     oq_json = json.dumps(open_questions) if open_questions is not None else ""
 
-    # Check if any field was actually provided
     has_fields = any(
         v is not None for v in [title, type_hint, data, importance, checkin_date, active, surface, open_questions]
     )

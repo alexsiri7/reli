@@ -424,6 +424,8 @@ function PreferenceCard({ thing }: { thing: Thing }) {
   )
 }
 
+const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
 const SIDEBAR_MIN_WIDTH = 200
 const SIDEBAR_MAX_WIDTH = 500
 const SIDEBAR_DEFAULT_WIDTH = 240
@@ -646,12 +648,11 @@ export function Sidebar() {
     const interval = setInterval(() => setNowMs(Date.now()), 60_000)
     return () => clearInterval(interval)
   }, [])
-  const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
   const recentlyDiscussed = useMemo(() => {
     return things
       .filter(t => t.last_referenced != null && (nowMs - new Date(t.last_referenced).getTime()) < RECENT_WINDOW_MS)
       .sort((a, b) => new Date(b.last_referenced!).getTime() - new Date(a.last_referenced!).getTime())
-  }, [things, nowMs, RECENT_WINDOW_MS])
+  }, [things, nowMs])
 
   // Group active things by type, excluding children of projects (shown under parent)
   const activeGroups = useMemo(() => {
