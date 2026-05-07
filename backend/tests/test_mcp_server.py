@@ -451,7 +451,7 @@ class TestIntegration:
         yield
 
     def test_crud_lifecycle(self, api_server: None) -> None:
-        """Create, read, update, search, and soft-delete a Thing end-to-end."""
+        """Create, read, update, and soft-delete a Thing end-to-end."""
         # Create
         created = create_thing(title="MCP Test Thing", type_hint="task", importance=1)
         assert created["title"] == "MCP Test Thing"
@@ -531,6 +531,27 @@ class TestIntegration:
         # Clean up (soft-delete)
         delete_thing(thing_id=t1["id"])
         delete_thing(thing_id=t2["id"])
+
+    def test_search_lifecycle(self, api_server: None) -> None:
+        """Create a Thing, then find it via search_things end-to-end."""
+        created = create_thing(title="Unique MCP Search Target", type_hint="task")
+        thing_id = created["id"]
+
+        results = search_things(query="Unique MCP Search Target")
+        assert any(t["id"] == thing_id for t in results)
+
+        results_typed = search_things(query="Unique MCP Search Target", type_hint="task")
+        assert any(t["id"] == thing_id for t in results_typed)
+
+        results_wrong_type = search_things(query="Unique MCP Search Target", type_hint="person")
+        assert not any(t["id"] == thing_id for t in results_wrong_type)
+
+        delete_thing(thing_id=thing_id)
+        results_active_only = search_things(query="Unique MCP Search Target", active_only=True)
+        assert not any(t["id"] == thing_id for t in results_active_only)
+
+        results_all = search_things(query="Unique MCP Search Target", active_only=False)
+        assert any(t["id"] == thing_id for t in results_all)
 
 
 # ---------------------------------------------------------------------------

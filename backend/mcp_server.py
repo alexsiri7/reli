@@ -132,7 +132,11 @@ def get_thing(thing_id: str) -> dict[str, Any]:
     thing = shared_tools.get_thing(thing_id=thing_id, user_id=_user_id())
     if "error" in thing:
         return thing
-    relationships = shared_tools.list_relationships(thing_id=thing_id, user_id=_user_id())
+    try:
+        relationships = shared_tools.list_relationships(thing_id=thing_id, user_id=_user_id())
+    except Exception:
+        logger.exception("list_relationships failed for thing_id=%s", thing_id)
+        raise
     return {"thing": thing, "relationships": relationships}
 
 
@@ -143,7 +147,7 @@ def search_things(
     active_only: bool = False,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    """Search the knowledge graph by natural language query.
+    """Search the knowledge graph by keyword query.
 
     Uses SQL LIKE matching across Thing titles, types, data, and
     relationship-connected Things. Returns up to ``limit`` Things sorted by
@@ -154,7 +158,7 @@ def search_things(
 
     Args:
         query: Text to search for (required). Matched against title, type_hint,
-            data fields, and related Thing titles/relationship types.
+            data fields, and related Thing titles, data, and relationship types.
         type_hint: Optional type filter ('task', 'note', 'project', 'person',
             'preference', etc.). None matches all types.
         active_only: Only return active Things (default false — includes archived).
