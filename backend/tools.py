@@ -106,6 +106,7 @@ def fetch_context(
             id_things = _fetch_with_family(
                 session,
                 [tid for tid in fetch_ids if tid not in seen_ids],
+                user_id=user_id,
             )
             for t in id_things:
                 if t["id"] not in seen_ids:
@@ -252,6 +253,7 @@ def create_thing(
             .where(
                 func.lower(ThingRecord.title) == func.lower(title),
                 ThingRecord.active,
+                user_filter_clause(ThingRecord.user_id, user_id),
             )
             .limit(1)
         )
@@ -740,6 +742,14 @@ def list_relationships(
     Returns a list of relationship dicts.
     """
     with Session(_engine_mod.engine) as session:
+        thing = session.exec(
+            select(ThingRecord).where(
+                ThingRecord.id == thing_id,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+        ).first()
+        if not thing:
+            return []
         stmt = select(ThingRelationshipRecord).where(
             or_(
                 ThingRelationshipRecord.from_thing_id == thing_id,
