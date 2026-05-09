@@ -1,5 +1,7 @@
 import type { AppliedChanges } from '../store'
 
+export type PreferenceToast = { id: string; title: string; confidenceLabel: string; action: 'created' | 'updated' }
+
 export function preferenceConfidenceLabel(data: unknown): string {
   if (!data || typeof data !== 'object') return ''
   const d = data as Record<string, unknown>
@@ -18,11 +20,11 @@ export function preferenceConfidenceLabel(data: unknown): string {
 
 export function parsePreferenceToasts(
   changes: AppliedChanges | null | undefined
-): { id: string; title: string; confidenceLabel: string; action: 'created' | 'updated' }[] {
+): PreferenceToast[] {
   if (!changes) return []
-  const toasts: { id: string; title: string; confidenceLabel: string; action: 'created' | 'updated' }[] = []
+  const toasts: PreferenceToast[] = []
   const ts = Date.now()
-  const checkItem = (item: Record<string, unknown>, action: 'created' | 'updated') => {
+  const checkItem = (item: Record<string, unknown>, action: PreferenceToast['action']) => {
     if ((item.type_hint as string | undefined) !== 'preference') return
     let data = item.data
     if (typeof data === 'string') {

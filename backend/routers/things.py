@@ -771,20 +771,16 @@ def _orphan_stmt(user_id: str) -> Any:
     When auth is disabled (user_id is empty) returns all orphans globally.
     When authenticated, returns only orphans where the user owns at least one endpoint.
     """
-    # Subquery: all active Thing IDs (used for existence check)
     all_active_ids_sq = select(ThingRecord.id).where(ThingRecord.active)
 
-    # "Orphan" condition: at least one endpoint references a non-existent Thing
     orphan_cond = or_(
         ThingRelationshipRecord.from_thing_id.notin_(all_active_ids_sq),  # type: ignore[union-attr]
         ThingRelationshipRecord.to_thing_id.notin_(all_active_ids_sq),  # type: ignore[union-attr]
     )
 
     if not user_id:
-        # Auth disabled — clean up all orphans regardless of ownership
         return select(ThingRelationshipRecord).where(orphan_cond)
 
-    # Authenticated — restrict to relationships where this user owns at least one endpoint
     user_thing_ids_sq = select(ThingRecord.id).where(
         user_filter_clause(ThingRecord.user_id, user_id),
         ThingRecord.active,
