@@ -47,6 +47,9 @@ jobs:
       - name: Install backend dependencies
         run: uv pip install --system -r backend/requirements.txt
 
+      - name: Upgrade pip to patched version
+        run: uv pip install --system "pip>=26.1"
+
       # Audits the installed environment (backend deps + pip-audit's own deps).
       # Replaces `pip-audit -r` which forces a dry-run pip resolve; see #920.
       - name: Run pip-audit
