@@ -18,5 +18,6 @@ export async function getCachedRelationships(thingId: string): Promise<Relations
     getRelationshipsByFrom(thingId),
     getRelationshipsByTo(thingId),
   ])
-  return [...new Map([...fromRels, ...toRels].map(r => [r.id, r])).values()]
+  const byId = new Map([...fromRels, ...toRels].map(r => [r.id, r]))
+  return [...byId.values()]
 }

@@ -16,11 +16,13 @@ export function preferenceConfidenceLabel(data: unknown): string {
   return ''
 }
 
+type PreferenceToast = { id: string; title: string; confidenceLabel: string; action: 'created' | 'updated' }
+
 export function parsePreferenceToasts(
   changes: AppliedChanges | null | undefined
-): { id: string; title: string; confidenceLabel: string; action: 'created' | 'updated' }[] {
+): PreferenceToast[] {
   if (!changes) return []
-  const toasts: { id: string; title: string; confidenceLabel: string; action: 'created' | 'updated' }[] = []
+  const toasts: PreferenceToast[] = []
   const ts = Date.now()
   const checkItem = (item: Record<string, unknown>, action: 'created' | 'updated') => {
     if ((item.type_hint as string | undefined) !== 'preference') return
