@@ -14,7 +14,6 @@ import base64
 import hashlib
 import logging
 import secrets
-import urllib.parse
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -93,16 +92,6 @@ def authorization_server_metadata() -> JSONResponse:
 # ---------------------------------------------------------------------------
 
 
-def _allowed_redirect_hosts() -> set[str]:
-    """Return hostnames that may appear in registered redirect_uris."""
-    hosts = {"localhost", "127.0.0.1"}
-    base = _base_url()
-    parsed = urllib.parse.urlparse(base)
-    if parsed.hostname:
-        hosts.add(parsed.hostname)
-    return hosts
-
-
 @router.post("/oauth/register", include_in_schema=False)
 async def oauth_register(request: Request) -> JSONResponse:
     """Register a new OAuth client dynamically (RFC 7591).
@@ -111,15 +100,6 @@ async def oauth_register(request: Request) -> JSONResponse:
     in memory. No approval flow needed.
     """
     body = await request.json()
-
-    allowed_hosts = _allowed_redirect_hosts()
-    for uri in body.get("redirect_uris", []):
-        parsed = urllib.parse.urlparse(uri)
-        if parsed.hostname not in allowed_hosts:
-            raise HTTPException(
-                status_code=400,
-                detail=f"redirect_uri host '{parsed.hostname}' is not allowed",
-            )
 
     client_id = str(uuid.uuid4())
     client_secret = secrets.token_urlsafe(32)
