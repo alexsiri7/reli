@@ -2,7 +2,7 @@
 id: "007"
 title: "Google Search integration"
 status: "done"
-github_issue: 955
+github_issue: "955"
 updated: 2026-05-12
 ---
 

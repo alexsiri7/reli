@@ -2,7 +2,7 @@
 id: "014"
 title: "MCP server (Reli as intelligence service)"
 status: "idea"
-github_issue: 955
+github_issue: "955"
 updated: 2026-05-12
 ---
 

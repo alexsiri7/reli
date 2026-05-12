@@ -2,7 +2,7 @@
 id: "013"
 title: "Concerns (modular life domains)"
 status: "idea"
-github_issue: 955
+github_issue: "955"
 updated: 2026-05-12
 ---
 
