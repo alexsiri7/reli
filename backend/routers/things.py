@@ -771,7 +771,6 @@ def _orphan_stmt(user_id: str) -> Any:
     When auth is disabled (user_id is empty) returns all orphans globally.
     When authenticated, returns only orphans where the user owns at least one endpoint.
     """
-    # Subquery: all active Thing IDs (used for existence check)
     all_active_ids_sq = select(ThingRecord.id).where(ThingRecord.active)
 
     # "Orphan" condition: at least one endpoint references a non-existent Thing
