@@ -104,12 +104,22 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
             )
         ).all()
 
+        active_ids = [t.id for t in all_active]
+
         # Relationships for blocker graph
-        rel_rows = session.exec(
-            select(ThingRelationshipRecord).where(
-                ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"])  # type: ignore[union-attr]
-            )
-        ).all()
+        rel_rows = (
+            session.exec(
+                select(ThingRelationshipRecord).where(
+                    ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"]),  # type: ignore[union-attr]
+                    or_(
+                        ThingRelationshipRecord.from_thing_id.in_(active_ids),
+                        ThingRelationshipRecord.to_thing_id.in_(active_ids),
+                    ),
+                )
+            ).all()
+            if active_ids
+            else []
+        )
 
         # Active (not dismissed, not expired, not snoozed) sweep findings with linked Things
         finding_stmt = (

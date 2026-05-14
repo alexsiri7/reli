@@ -17,7 +17,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from sqlmodel import Session, select
+from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
 
@@ -87,13 +87,29 @@ def find_connection_candidates(
         if user_id:
             thing_stmt = thing_stmt.where(user_filter_clause(ThingRecord.user_id, user_id))
         things = session.exec(thing_stmt).all()
+        thing_ids = [t.id for t in things]
 
-        # Build set of existing relationships (both directions)
-        rel_rows = session.exec(select(ThingRelationshipRecord)).all()
+        # Build set of existing relationships (both directions) and parent pairs in one query
+        rel_rows = (
+            session.exec(
+                select(ThingRelationshipRecord).where(
+                    or_(
+                        ThingRelationshipRecord.from_thing_id.in_(thing_ids),
+                        ThingRelationshipRecord.to_thing_id.in_(thing_ids),
+                    )
+                )
+            ).all()
+            if thing_ids
+            else []
+        )
         existing_rels: set[tuple[str, str]] = set()
+        parent_pairs: set[tuple[str, str]] = set()
         for row in rel_rows:
             existing_rels.add((row.from_thing_id, row.to_thing_id))
             existing_rels.add((row.to_thing_id, row.from_thing_id))
+            if row.relationship_type == "parent-of":
+                parent_pairs.add((row.from_thing_id, row.to_thing_id))
+                parent_pairs.add((row.to_thing_id, row.from_thing_id))
 
         # Build set of existing pending/deferred suggestions
         sugg_rows = session.exec(
@@ -105,15 +121,6 @@ def find_connection_candidates(
         for row in sugg_rows:
             existing_suggestions.add((row.from_thing_id, row.to_thing_id))
             existing_suggestions.add((row.to_thing_id, row.from_thing_id))
-
-        # Also exclude parent-child relationships (via parent-of relationships)
-        parent_pairs: set[tuple[str, str]] = set()
-        parent_rels = session.exec(
-            select(ThingRelationshipRecord).where(ThingRelationshipRecord.relationship_type == "parent-of")
-        ).all()
-        for rel in parent_rels:
-            parent_pairs.add((rel.from_thing_id, rel.to_thing_id))
-            parent_pairs.add((rel.to_thing_id, rel.from_thing_id))
 
     thing_map = {t.id: {"id": t.id, "title": t.title, "type_hint": t.type_hint} for t in things}
     seen_pairs: set[tuple[str, str]] = set()

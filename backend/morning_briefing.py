@@ -152,9 +152,21 @@ def generate_morning_briefing(
             .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
         )  # type: ignore[union-attr]
         thing_rows = session.exec(thing_stmt).all()
+        thing_ids = [r.id for r in thing_rows]
 
         # Fetch relationships for blocking analysis
-        rel_rows = session.exec(select(ThingRelationshipRecord)).all()
+        rel_rows = (
+            session.exec(
+                select(ThingRelationshipRecord).where(
+                    or_(
+                        ThingRelationshipRecord.from_thing_id.in_(thing_ids),
+                        ThingRelationshipRecord.to_thing_id.in_(thing_ids),
+                    )
+                )
+            ).all()
+            if thing_ids
+            else []
+        )
 
         # Fetch active sweep findings (with thing title via join)
         now_dt = datetime.now(timezone.utc)
