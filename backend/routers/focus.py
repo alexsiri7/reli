@@ -7,7 +7,7 @@ from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlmodel import Session, select
+from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
 
@@ -90,8 +90,20 @@ def _compute_recommendations(
             .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
         )  # type: ignore[union-attr, attr-defined]
         thing_records = session.exec(thing_stmt).all()
+        thing_ids = [r.id for r in thing_records]
 
-        rel_records = session.exec(select(ThingRelationshipRecord)).all()
+        rel_records = (
+            session.exec(
+                select(ThingRelationshipRecord).where(
+                    or_(
+                        ThingRelationshipRecord.from_thing_id.in_(thing_ids),
+                        ThingRelationshipRecord.to_thing_id.in_(thing_ids),
+                    )
+                )
+            ).all()
+            if thing_ids
+            else []
+        )
 
     things = [_record_to_thing(r) for r in thing_records]
     thing_map: dict[str, Thing] = {t.id: t for t in things}
