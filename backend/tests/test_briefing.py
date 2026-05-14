@@ -2,6 +2,8 @@
 
 from datetime import date, datetime, timedelta
 
+from fastapi.testclient import TestClient
+
 from backend.routers.briefing import _confidence_label
 
 
@@ -235,6 +237,87 @@ class TestSnoozeFinding:
         resp = client.get("/api/briefing")
         finding_ids = [f["id"] for f in resp.json()["findings"]]
         assert finding["id"] in finding_ids
+
+
+class TestBriefingRelationshipScoping:
+    def test_cross_user_relationship_not_visible(self, patched_db, db):
+        """Relationships owned by another user must not appear in User A's briefing blocker graph."""
+        import uuid
+
+        from backend.auth import require_user
+        from backend.main import app
+
+        user_a = "user-brief-a"
+        user_b = "user-brief-b"
+
+        def _insert_thing(user_id, title):
+            thing_id = str(uuid.uuid4())
+            with db() as conn:
+                conn.execute(
+                    """INSERT INTO things
+                       (id, title, type_hint, importance, active, surface,
+                        data, checkin_date, user_id, created_at, updated_at)
+                       VALUES (?, ?, 'task', 2, 1, 1, NULL, NULL, ?, datetime('now'), datetime('now'))""",
+                    (thing_id, title, user_id),
+                )
+            return thing_id
+
+        def _insert_rel(from_id, to_id, rel_type):
+            rel_id = str(uuid.uuid4())
+            with db() as conn:
+                conn.execute(
+                    "INSERT INTO thing_relationships"
+                    " (id, from_thing_id, to_thing_id, relationship_type)"
+                    " VALUES (?, ?, ?, ?)",
+                    (rel_id, from_id, to_id, rel_type),
+                )
+
+        # User A has one thing with no relationships
+        _insert_thing(user_a, "A Task 1")
+
+        # User B has two things with a blocking relationship between them
+        b1 = _insert_thing(user_b, "B Task 1")
+        b2 = _insert_thing(user_b, "B Task 2")
+        _insert_rel(b1, b2, "blocks")
+
+        app.dependency_overrides[require_user] = lambda: user_a
+        try:
+            with TestClient(app) as c:
+                resp = c.get("/api/briefing")
+                assert resp.status_code == 200
+                data = resp.json()
+                # B's things must not appear in User A's briefing
+                all_ids_in_response: set[str] = set()
+                if data.get("the_one_thing"):
+                    all_ids_in_response.add(data["the_one_thing"]["thing"]["id"])
+                for item in data.get("secondary", []):
+                    all_ids_in_response.add(item["thing"]["id"])
+                assert b1 not in all_ids_in_response
+                assert b2 not in all_ids_in_response
+        finally:
+            app.dependency_overrides.pop(require_user, None)
+
+    def test_scoped_relationship_query_executes_without_error(self, client, db):
+        """Inserting a blocking relationship between user's things should not error on briefing."""
+        import uuid
+        from datetime import date
+
+        today = date.today().isoformat()
+        t1 = _create_thing(client, "Blocker Task", checkin_date=f"{today}T00:00:00")
+        t2 = _create_thing(client, "Blocked Task", checkin_date=f"{today}T00:00:00")
+
+        rel_id = str(uuid.uuid4())
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO thing_relationships"
+                " (id, from_thing_id, to_thing_id, relationship_type)"
+                " VALUES (?, ?, ?, 'blocks')",
+                (rel_id, t1["id"], t2["id"]),
+            )
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        assert "the_one_thing" in resp.json()
 
 
 class TestFindingsForInactiveThings:
