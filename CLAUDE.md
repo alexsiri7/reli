@@ -17,7 +17,7 @@ The app runs in Docker. After merging code changes, the container must be rebuil
 ```bash
 cd /home/asiri/gt/reli/mayor/rig
 git pull
-npm --prefix frontend install --legacy-peer-deps
+npm --prefix frontend ci --legacy-peer-deps
 npm --prefix frontend run build
 docker compose build && docker compose up -d
 ```
