@@ -1,5 +1,6 @@
 import { getPendingOps, removePendingOp, type PendingOp } from './pending-ops'
 import { getDB } from './idb'
+import { useStore } from '../store'
 
 const MAX_RETRIES = 3
 
@@ -63,7 +64,11 @@ export async function syncPendingOps(): Promise<void> {
   if (syncing) return
   syncing = true
 
-  const ops = await getPendingOps()
+  const currentUserId = useStore.getState().currentUser?.id ?? ''
+  const allOps = await getPendingOps()
+  // Only replay ops that belong to the currently authenticated user.
+  // Ops with no user_id (queued before this fix) are skipped as a safety measure.
+  const ops = allOps.filter(op => op.user_id === currentUserId && currentUserId !== '')
   if (ops.length === 0) {
     syncing = false
     return
