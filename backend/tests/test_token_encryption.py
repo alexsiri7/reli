@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import unittest.mock
+from pathlib import Path
 
 import pytest
 
@@ -113,3 +115,36 @@ class TestKeyPersistence:
         # The key file should NOT have been created
         key_file = tmp_path / ".token_key_env"
         assert not key_file.exists()
+
+
+class TestProductionSafety:
+    def test_raises_in_production_when_data_dir_not_writable(self, monkeypatch):
+        monkeypatch.setattr(
+            "backend.token_encryption._PRIMARY_KEY_FILE",
+            Path("/nonexistent_cannot_create/.token_key"),
+        )
+        monkeypatch.setenv("PRODUCTION", "true")
+        reset_for_testing()
+        with pytest.raises(RuntimeError, match="TOKEN_ENCRYPTION_KEY"):
+            encrypt("test")
+
+    def test_raises_in_production_on_write_oserror(self, tmp_path, monkeypatch):
+        key_file = tmp_path / "subdir" / ".token_key"
+        monkeypatch.setattr("backend.token_encryption._PRIMARY_KEY_FILE", key_file)
+        monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "production")
+        reset_for_testing()
+        key_file.parent.mkdir(parents=True)
+        with unittest.mock.patch("pathlib.Path.write_text", side_effect=OSError("disk full")):
+            with pytest.raises(RuntimeError, match="TOKEN_ENCRYPTION_KEY"):
+                encrypt("test")
+
+    def test_non_production_falls_back_to_tmp(self, monkeypatch):
+        monkeypatch.setattr(
+            "backend.token_encryption._PRIMARY_KEY_FILE",
+            Path("/nonexistent_cannot_create/.token_key"),
+        )
+        monkeypatch.delenv("PRODUCTION", raising=False)
+        monkeypatch.delenv("RAILWAY_ENVIRONMENT_NAME", raising=False)
+        reset_for_testing()
+        result = encrypt("test")
+        assert result
