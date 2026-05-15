@@ -72,7 +72,7 @@ cd reli
 pip install -r backend/requirements.txt
 
 # Frontend
-cd frontend && npm install --legacy-peer-deps && cd ..
+cd frontend && npm ci --legacy-peer-deps && cd ..
 ```
 
 ### 2. Configure environment
