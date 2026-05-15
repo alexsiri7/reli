@@ -227,6 +227,61 @@ class TestRateLimitMiddleware:
             res = client.post("/api/chat")
             assert res.status_code == 200
 
+    def test_x_forwarded_for_ignored_without_trusted_cidr(self):
+        """X-Forwarded-For is ignored when no trusted CIDRs are configured."""
+        app = _make_app(api_rpm=1)  # no trusted_proxy_cidrs
+        client = TestClient(app)
+        # Exhaust bucket for the real IP
+        res = client.get("/api/things")
+        assert res.status_code == 200
+        # Spoofed header should NOT get a fresh bucket
+        res = client.get("/api/things", headers={"X-Forwarded-For": "1.2.3.4"})
+        assert res.status_code == 429
+
+    def test_x_forwarded_for_trusted_from_known_proxy(self):
+        """X-Forwarded-For is used when direct IP is within a trusted CIDR."""
+        from starlette.types import ASGIApp, Receive, Scope, Send
+
+        class _FakeClientIP:
+            """ASGI middleware that overrides client IP for testing."""
+
+            def __init__(self, app: ASGIApp, ip: str = "127.0.0.1") -> None:
+                self.app = app
+                self.ip = ip
+
+            async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+                if scope["type"] == "http":
+                    scope["client"] = (self.ip, 0)
+                await self.app(scope, receive, send)
+
+        app = FastAPI()
+        # RateLimitMiddleware is added first (outermost), then _FakeClientIP
+        # wraps it so that by the time RateLimitMiddleware sees the request,
+        # client.host is "127.0.0.1" instead of "testclient".
+        app.add_middleware(
+            RateLimitMiddleware,
+            llm_rpm=3,
+            api_rpm=1,
+            enabled=True,
+            trusted_proxy_cidrs="127.0.0.0/8",
+        )
+        app.add_middleware(_FakeClientIP, ip="127.0.0.1")
+
+        @app.get("/api/things")
+        def list_things():
+            return JSONResponse({"items": []})
+
+        client = TestClient(app)
+        # First request from "1.1.1.1" via trusted proxy
+        res = client.get("/api/things", headers={"X-Forwarded-For": "1.1.1.1"})
+        assert res.status_code == 200
+        # Second request from "1.1.1.1" hits its bucket (exhausted at rpm=1)
+        res = client.get("/api/things", headers={"X-Forwarded-For": "1.1.1.1"})
+        assert res.status_code == 429
+        # Different spoofed IP gets its own fresh bucket
+        res = client.get("/api/things", headers={"X-Forwarded-For": "2.2.2.2"})
+        assert res.status_code == 200
+
     def test_warning_logged_on_rate_limit_exceeded(self):
         """log.warning is emitted with key, path, and retry_after when rate limited."""
         from unittest.mock import patch
