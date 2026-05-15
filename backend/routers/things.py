@@ -498,9 +498,32 @@ def list_merge_history(
             triggered_by=r.triggered_by,
             user_id=r.user_id,
             created_at=r.created_at or datetime.min,
+            expires_at=r.expires_at,
         )
         for r in records
     ]
+
+
+@router.delete(
+    "/merge-history/{record_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a merge history record",
+)
+def delete_merge_history_record(
+    record_id: str,
+    user_id: str = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> None:
+    """Permanently delete a single merge history record."""
+    stmt = select(MergeHistoryDBRecord).where(
+        MergeHistoryDBRecord.id == record_id,
+        user_filter_clause(MergeHistoryDBRecord.user_id, user_id),
+    )
+    record = session.exec(stmt).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Merge history record '{record_id}' not found")
+    session.delete(record)
+    session.commit()
 
 
 @router.get("/{thing_id}", response_model=Thing, summary="Get a Thing")
