@@ -3,6 +3,11 @@
 import json
 import uuid
 
+from starlette.testclient import TestClient
+
+from backend.auth import require_user
+from backend.main import app
+
 
 def _insert_thing(conn, title, type_hint="task", data=None, open_questions=None):
     """Insert a Thing directly and return its id."""
@@ -354,10 +359,6 @@ class TestMergeHistoryAPI:
         rather than using two simultaneous fixture clients (which share the same
         overrides dict and would conflict).
         """
-        from backend.auth import require_user
-        from backend.main import app
-        from starlette.testclient import TestClient
-
         def _as_user(uid: str) -> TestClient:
             app.dependency_overrides[require_user] = lambda: uid
             return TestClient(app)
