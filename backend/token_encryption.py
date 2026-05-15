@@ -30,6 +30,10 @@ _FALLBACK_KEY_FILE = _FALLBACK_KEY_DIR / ".token_key"
 _fernet: Fernet | None = None
 
 
+def _is_production() -> bool:
+    return bool(os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("PRODUCTION"))
+
+
 def _key_file_path() -> Path:
     """Return a writable key-file path, preferring DATA_DIR, falling back to /tmp."""
     if _PRIMARY_KEY_FILE.exists():
@@ -41,6 +45,17 @@ def _key_file_path() -> Path:
             return _PRIMARY_KEY_FILE
     except OSError:
         pass
+    if _is_production():
+        logger.critical(
+            "TOKEN_ENCRYPTION_KEY is not set and DATA_DIR (%s) is not writable. "
+            "Refusing to fall back to world-readable /tmp in production. "
+            "Set the TOKEN_ENCRYPTION_KEY environment variable.",
+            _PRIMARY_KEY_FILE.parent,
+        )
+        raise RuntimeError(
+            "Cannot store token encryption key securely: DATA_DIR is not writable "
+            "and TOKEN_ENCRYPTION_KEY is not set. Set TOKEN_ENCRYPTION_KEY env var."
+        )
     return _FALLBACK_KEY_FILE
 
 
@@ -70,7 +85,17 @@ def _get_fernet() -> Fernet:
             key_file.chmod(0o600)
             logger.info("Generated new token encryption key at %s", key_file)
         except OSError:
-            # Last resort: use /tmp fallback if even the chosen path fails
+            if _is_production():
+                logger.critical(
+                    "Could not write token encryption key to %s in production. "
+                    "Set TOKEN_ENCRYPTION_KEY environment variable.",
+                    key_file,
+                )
+                raise RuntimeError(
+                    f"Cannot write token encryption key to {key_file}. "
+                    "Set TOKEN_ENCRYPTION_KEY env var in production."
+                )
+            # Non-production only: fall back to /tmp
             _FALLBACK_KEY_DIR.mkdir(parents=True, exist_ok=True)
             _FALLBACK_KEY_FILE.write_text(key)
             _FALLBACK_KEY_FILE.chmod(0o600)

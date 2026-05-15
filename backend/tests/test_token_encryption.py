@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -113,3 +114,46 @@ class TestKeyPersistence:
         # The key file should NOT have been created
         key_file = tmp_path / ".token_key_env"
         assert not key_file.exists()
+
+
+class TestProductionSafety:
+    def test_raises_in_production_when_data_dir_not_writable(self, tmp_path, monkeypatch):
+        """In production, refuse to fall back to /tmp when DATA_DIR is not writable."""
+        monkeypatch.setattr(
+            "backend.token_encryption._PRIMARY_KEY_FILE",
+            Path("/nonexistent_dir_that_cannot_be_created/.token_key"),
+        )
+        monkeypatch.setenv("PRODUCTION", "true")
+        reset_for_testing()
+
+        with pytest.raises(RuntimeError, match="TOKEN_ENCRYPTION_KEY"):
+            encrypt("test")
+
+    def test_raises_in_production_on_write_oserror(self, tmp_path, monkeypatch):
+        """In production, OSError on key write raises instead of falling back."""
+        import unittest.mock
+
+        key_file = tmp_path / "subdir" / ".token_key"
+        monkeypatch.setattr("backend.token_encryption._PRIMARY_KEY_FILE", key_file)
+        monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "production")
+        reset_for_testing()
+
+        # Make the directory, but make write fail
+        key_file.parent.mkdir(parents=True)
+        with unittest.mock.patch("pathlib.Path.write_text", side_effect=OSError("disk full")):
+            with pytest.raises(RuntimeError, match="TOKEN_ENCRYPTION_KEY"):
+                encrypt("test")
+
+    def test_non_production_falls_back_to_tmp(self, tmp_path, monkeypatch):
+        """Non-production still falls back to /tmp (existing behavior preserved)."""
+        monkeypatch.setattr(
+            "backend.token_encryption._PRIMARY_KEY_FILE",
+            Path("/nonexistent_dir_that_cannot_be_created/.token_key"),
+        )
+        monkeypatch.delenv("PRODUCTION", raising=False)
+        monkeypatch.delenv("RAILWAY_ENVIRONMENT_NAME", raising=False)
+        reset_for_testing()
+
+        # Should not raise — falls back to /tmp
+        result = encrypt("test")
+        assert result  # encrypted successfully
