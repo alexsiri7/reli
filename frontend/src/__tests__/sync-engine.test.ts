@@ -13,6 +13,12 @@ vi.mock('../offline/idb', () => ({
   getDB: (...args: unknown[]) => mockGetDB(...args),
 }))
 
+vi.mock('../store', () => ({
+  useStore: {
+    getState: () => ({ currentUser: { id: 'user-1' } }),
+  },
+}))
+
 import { syncPendingOps, onSyncEvent } from '../offline/sync-engine'
 import type { PendingOp } from '../offline/idb'
 
@@ -25,6 +31,7 @@ function makeOp(overrides: Partial<PendingOp> = {}): PendingOp {
     timestamp: '2026-01-01T00:00:00Z',
     status: 'pending',
     retries: 0,
+    user_id: 'user-1',
     ...overrides,
   }
 }
@@ -129,6 +136,21 @@ describe('syncPendingOps', () => {
     expect(failEvents).toHaveLength(1)
     expect(failEvents[0]!.error).toContain('Network offline')
     expect(mockRemovePendingOp).not.toHaveBeenCalled()
+  })
+
+  it('skips ops belonging to a different user', async () => {
+    const foreignOp = makeOp({ id: 2, user_id: 'user-2' })
+    mockGetPendingOps.mockResolvedValue([foreignOp])
+
+    const events: string[] = []
+    const unsub = onSyncEvent(e => events.push(e.type))
+
+    await syncPendingOps()
+    unsub()
+
+    expect(mockRemovePendingOp).not.toHaveBeenCalled()
+    // No sync:start since filtered ops list is empty
+    expect(events).not.toContain('sync:start')
   })
 
   it('empty queue returns immediately without emitting sync:start', async () => {

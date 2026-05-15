@@ -28,6 +28,7 @@ export interface PendingOp {
   timestamp: string
   status: PendingOpStatus
   retries: number
+  user_id: string
 }
 
 // --- IndexedDB schema ---
@@ -68,14 +69,14 @@ export interface ReliDB extends DBSchema {
 }
 
 const DB_NAME = 'reli'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 let dbPromise: Promise<IDBPDatabase<ReliDB>> | null = null
 
 export function getDB(): Promise<IDBPDatabase<ReliDB>> {
   if (!dbPromise) {
     dbPromise = openDB<ReliDB>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion) {
+      async upgrade(db, oldVersion, _newVersion, tx) {
         if (oldVersion < 1) {
           db.createObjectStore('things', { keyPath: 'id' })
           db.createObjectStore('thingTypes', { keyPath: 'id' })
@@ -98,6 +99,17 @@ export function getDB(): Promise<IDBPDatabase<ReliDB>> {
         }
         if (oldVersion < 2) {
           db.createObjectStore('kvCache', { keyPath: 'key' })
+        }
+        if (oldVersion < 3) {
+          // Existing queued ops have no user_id — mark them as orphaned (empty string).
+          // syncPendingOps will skip ops whose user_id doesn't match the current user.
+          const store = tx.objectStore('pendingOps')
+          const allOps = await store.getAll()
+          for (const op of allOps) {
+            if (!op.user_id) {
+              await store.put({ ...op, user_id: '' })
+            }
+          }
         }
       },
     })
