@@ -206,8 +206,9 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
         mcp_session = cleanup_and_get(mcp_oauth_sessions, state)
         if mcp_session:
             code_verifier = mcp_session.get("google_code_verifier", "")
-    if code_verifier:
-        flow.code_verifier = code_verifier
+    if not code_verifier:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state.")
+    flow.code_verifier = code_verifier
 
     # Google returns scopes in expanded URI form; tell oauthlib to accept it
     import os as _os
