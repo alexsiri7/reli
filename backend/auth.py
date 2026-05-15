@@ -12,6 +12,8 @@ Two auth methods are supported:
    first user in the database (single-tenant shortcut).
 """
 
+import secrets
+
 import jwt
 from fastapi import HTTPException, Request, status
 
@@ -60,7 +62,7 @@ async def require_user(request: Request) -> str:
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Bearer ") and _API_TOKEN:
         provided = auth_header[7:]
-        if provided == _API_TOKEN:
+        if secrets.compare_digest(provided, _API_TOKEN):
             return _resolve_api_token_user()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
