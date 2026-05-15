@@ -128,9 +128,7 @@ export async function syncPendingOps(): Promise<void> {
  * Call once at app startup. Returns a cleanup function.
  */
 export function initSyncEngine(): () => void {
-  const handler = () => {
-    syncPendingOps()
-  }
+  const handler = syncPendingOps
 
   window.addEventListener('online', handler)
 
