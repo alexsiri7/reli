@@ -33,3 +33,6 @@ backend/chroma_db/
 
 # Python virtualenv
 .venv/
+
+# Debug reproduction scripts
+reproduce_*.py
