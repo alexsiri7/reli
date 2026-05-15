@@ -4,6 +4,7 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
@@ -263,7 +264,7 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
         sep = "&" if "?" in client_redirect else "?"
         location = f"{client_redirect}{sep}code={auth_code}"
         if client_state:
-            location += f"&state={client_state}"
+            location += f"&state={quote(client_state, safe='')}"
         logger.info("MCP OAuth: redirecting to client with auth code, redirect_uri=%s", client_redirect)
         return RedirectResponse(url=location, status_code=302)
 
