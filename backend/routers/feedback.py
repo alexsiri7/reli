@@ -58,9 +58,11 @@ async def submit_feedback(
     # Build issue body with context
     context_lines = []
     if body.user_agent:
-        context_lines.append(f"**Browser:** {body.user_agent}")
+        safe_user_agent = body.user_agent.replace("\r", "").replace("\n", " ")
+        context_lines.append(f"**Browser:** {safe_user_agent}")
     if body.url:
-        context_lines.append(f"**Page:** {body.url}")
+        safe_url = body.url.replace("\r", "").replace("\n", " ")
+        context_lines.append(f"**Page:** {safe_url}")
     if user_id:
         context_lines.append(f"**User:** {user_id}")
 
