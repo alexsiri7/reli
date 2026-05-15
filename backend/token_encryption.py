@@ -92,8 +92,7 @@ def _get_fernet() -> Fernet:
                     key_file,
                 )
                 raise RuntimeError(
-                    f"Cannot write token encryption key to {key_file}. "
-                    "Set TOKEN_ENCRYPTION_KEY env var in production."
+                    f"Cannot write token encryption key to {key_file}. Set TOKEN_ENCRYPTION_KEY env var in production."
                 )
             # Non-production only: fall back to /tmp
             _FALLBACK_KEY_DIR.mkdir(parents=True, exist_ok=True)
