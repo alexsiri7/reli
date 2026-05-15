@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from backend.token_encryption import (
+    _is_production,
     decrypt,
     decrypt_json_or_plaintext,
     decrypt_or_plaintext,
@@ -148,3 +149,36 @@ class TestProductionSafety:
         reset_for_testing()
         result = encrypt("test")
         assert result
+        # Verify the ciphertext is valid and the fallback key works end-to-end
+        assert decrypt(result) == "test"
+
+
+class TestIsProduction:
+    """Direct unit tests for the _is_production() helper."""
+
+    def test_false_when_both_env_vars_unset(self, monkeypatch):
+        monkeypatch.delenv("RAILWAY_ENVIRONMENT_NAME", raising=False)
+        monkeypatch.delenv("PRODUCTION", raising=False)
+        assert _is_production() is False
+
+    def test_true_when_production_env_var_set(self, monkeypatch):
+        monkeypatch.delenv("RAILWAY_ENVIRONMENT_NAME", raising=False)
+        monkeypatch.setenv("PRODUCTION", "true")
+        assert _is_production() is True
+
+    def test_true_when_railway_environment_name_is_production(self, monkeypatch):
+        monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "production")
+        monkeypatch.delenv("PRODUCTION", raising=False)
+        assert _is_production() is True
+
+    def test_true_when_railway_environment_name_is_staging(self, monkeypatch):
+        # Any non-empty RAILWAY_ENVIRONMENT_NAME is treated as production —
+        # staging should behave like production for key security.
+        monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "staging")
+        monkeypatch.delenv("PRODUCTION", raising=False)
+        assert _is_production() is True
+
+    def test_true_when_railway_environment_name_is_any_nonempty_value(self, monkeypatch):
+        monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "preview")
+        monkeypatch.delenv("PRODUCTION", raising=False)
+        assert _is_production() is True

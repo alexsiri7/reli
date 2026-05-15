@@ -95,14 +95,23 @@ def _get_fernet() -> Fernet:
                     f"Cannot write token encryption key to {key_file}. Set TOKEN_ENCRYPTION_KEY env var in production."
                 )
             # Non-production only: fall back to /tmp
-            _FALLBACK_KEY_DIR.mkdir(parents=True, exist_ok=True)
-            _FALLBACK_KEY_FILE.write_text(key)
-            _FALLBACK_KEY_FILE.chmod(0o600)
-            logger.warning(
-                "Could not write key to %s, using fallback %s",
-                key_file,
-                _FALLBACK_KEY_FILE,
-            )
+            try:
+                _FALLBACK_KEY_DIR.mkdir(parents=True, exist_ok=True)
+                _FALLBACK_KEY_FILE.write_text(key)
+                _FALLBACK_KEY_FILE.chmod(0o600)
+                logger.warning(
+                    "Could not write key to %s, using fallback %s",
+                    key_file,
+                    _FALLBACK_KEY_FILE,
+                )
+            except OSError as fallback_err:
+                logger.error(
+                    "Could not write token encryption key to fallback %s either: %s. "
+                    "Set TOKEN_ENCRYPTION_KEY environment variable.",
+                    _FALLBACK_KEY_FILE,
+                    fallback_err,
+                )
+                raise
 
     _fernet = Fernet(key.encode())
     return _fernet
