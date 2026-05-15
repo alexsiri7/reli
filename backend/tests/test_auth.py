@@ -121,6 +121,22 @@ class TestJWTAuth:
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
 
+    def test_health_detailed_requires_auth(self, authed_client):
+        """SEC-036: /api/health must reject unauthenticated requests."""
+        resp = authed_client.get("/api/health")
+        assert resp.status_code == 401
+
+    def test_health_detailed_accessible_with_valid_jwt(self, authed_client):
+        """Authenticated users can access /api/health."""
+        import jwt
+
+        payload = {"sub": "test-user-id", "email": "test@example.com", "exp": 9999999999}
+        token = jwt.encode(payload, "test-secret-key", algorithm="HS256")
+        authed_client.cookies.set("reli_session", token)
+        resp = authed_client.get("/api/health")
+        assert resp.status_code == 200
+        assert resp.json()["status"] in ("ok", "degraded")
+
     def test_auth_routes_are_public(self, authed_client):
         """Auth endpoints should not require authentication."""
         resp = authed_client.get("/api/auth/me")
