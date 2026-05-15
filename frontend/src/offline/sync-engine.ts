@@ -128,9 +128,7 @@ export async function syncPendingOps(): Promise<void> {
  * Call once at app startup. Returns a cleanup function.
  */
 export function initSyncEngine(): () => void {
-  const handler = syncPendingOps
-
-  window.addEventListener('online', handler)
+  window.addEventListener('online', syncPendingOps)
 
   // If already online and there might be queued ops from a previous session, sync now
   if (navigator.onLine) {
@@ -138,6 +136,6 @@ export function initSyncEngine(): () => void {
   }
 
   return () => {
-    window.removeEventListener('online', handler)
+    window.removeEventListener('online', syncPendingOps)
   }
 }
