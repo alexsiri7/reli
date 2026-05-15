@@ -99,6 +99,7 @@ The core resource. Everything in Reli is a Thing.
 | GET | `/api/things/merge-suggestions` | Detect potential duplicate Things |
 | POST | `/api/things/merge` | Merge two Things into one |
 | GET | `/api/things/merge-history` | List past merges |
+| DELETE | `/api/things/merge-history/{record_id}` | Delete a merge history record |
 | GET | `/api/things/relationships/orphans` | Find relationships with deleted Things |
 | POST | `/api/things/relationships/cleanup` | Delete all orphaned relationships |
 

@@ -169,6 +169,55 @@ def client(patched_db) -> Generator[TestClient, None, None]:
         yield c
 
 
+def _make_authenticated_client(patched_db, user_id: str) -> Generator[TestClient, None, None]:
+    """Create a TestClient with ``require_user`` overridden to return *user_id*.
+
+    Because ``user_filter_clause`` treats an empty ``user_id`` as "no filter",
+    cross-user isolation tests require both parties to have distinct, non-empty
+    user identities.  This helper is the single source of truth for that pattern.
+
+    NOTE: ``app.dependency_overrides`` is a shared dict on the FastAPI singleton.
+    Callers must never hold two overrides for the same key simultaneously — yield
+    one client at a time and restore the override in the finally block.
+    """
+    from backend.auth import require_user
+    from backend.main import app
+
+    saved = app.dependency_overrides.get(require_user)
+    app.dependency_overrides[require_user] = lambda: user_id
+    try:
+        with TestClient(app) as c:
+            yield c
+    finally:
+        if saved is None:
+            app.dependency_overrides.pop(require_user, None)
+        else:
+            app.dependency_overrides[require_user] = saved
+
+
+@pytest.fixture()
+def other_client(patched_db) -> Generator[TestClient, None, None]:
+    """Synchronous TestClient authenticated as ``"other-user"`` (User B).
+
+    Use alongside ``user_a_client`` to verify user-isolation invariants: that
+    User B cannot read or modify User A's records.
+
+    Do **not** combine this fixture with ``client`` (auth-disabled, user_id=``""``)
+    — empty user_id bypasses ``user_filter_clause`` by design. Both parties must
+    have distinct, non-empty user_ids for isolation to be enforced.
+    """
+    yield from _make_authenticated_client(patched_db, "other-user")
+
+
+@pytest.fixture()
+def user_a_client(patched_db) -> Generator[TestClient, None, None]:
+    """Synchronous TestClient authenticated as ``"user-a"`` (User A).
+
+    Pair with ``other_client`` for cross-user isolation tests.
+    """
+    yield from _make_authenticated_client(patched_db, "user-a")
+
+
 @pytest_asyncio.fixture()
 async def async_client(patched_db) -> AsyncClient:
     """Async HTTPX client for async endpoint tests."""

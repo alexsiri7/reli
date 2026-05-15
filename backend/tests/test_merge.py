@@ -311,20 +311,21 @@ class TestMergeHistoryAPI:
         """DELETE /api/things/merge-history/{id} removes the record."""
         a = client.post("/api/things", json={"title": "Del-A", "type_hint": "person"})
         b = client.post("/api/things", json={"title": "Del-B", "type_hint": "person"})
-        client.post("/api/things/merge", json={"keep_id": a.json()["id"], "remove_id": b.json()["id"]})
+        keep_id = a.json()["id"]
+        client.post("/api/things/merge", json={"keep_id": keep_id, "remove_id": b.json()["id"]})
 
-        history = client.get("/api/things/merge-history")
+        # Scope to this test's record via thing_id filter to avoid ordering fragility
+        history = client.get(f"/api/things/merge-history?thing_id={keep_id}")
         records = history.json()
-        assert len(records) >= 1
+        assert len(records) == 1
         record_id = records[0]["id"]
 
         resp = client.delete(f"/api/things/merge-history/{record_id}")
         assert resp.status_code == 204
 
         # Verify gone from list
-        history2 = client.get("/api/things/merge-history")
-        ids = [r["id"] for r in history2.json()]
-        assert record_id not in ids
+        history2 = client.get(f"/api/things/merge-history?thing_id={keep_id}")
+        assert len(history2.json()) == 0
 
     def test_delete_merge_history_404_on_missing(self, client):
         """DELETE /api/things/merge-history/{id} returns 404 for unknown id."""
@@ -343,3 +344,44 @@ class TestMergeHistoryAPI:
         assert len(records) >= 1
         assert "expires_at" in records[0]
         assert records[0]["expires_at"] is None
+
+    def test_delete_merge_history_cross_user_isolation(self, patched_db):
+        """DELETE /api/things/merge-history/{id} returns 404 when record belongs to another user.
+
+        ``user_filter_clause`` treats empty user_id as "no filter" (auth-disabled
+        passthrough), so both parties must have distinct non-empty user_ids for
+        isolation to be enforced.  We manage ``app.dependency_overrides`` directly
+        rather than using two simultaneous fixture clients (which share the same
+        overrides dict and would conflict).
+        """
+        from backend.auth import require_user
+        from backend.main import app
+        from starlette.testclient import TestClient
+
+        def _as_user(uid: str) -> TestClient:
+            app.dependency_overrides[require_user] = lambda: uid
+            return TestClient(app)
+
+        # --- Phase 1: User A creates a merge history record ---
+        with _as_user("user-a") as user_a:
+            a = user_a.post("/api/things", json={"title": "Iso-A", "type_hint": "person"})
+            b = user_a.post("/api/things", json={"title": "Iso-B", "type_hint": "person"})
+            keep_id = a.json()["id"]
+            user_a.post("/api/things/merge", json={"keep_id": keep_id, "remove_id": b.json()["id"]})
+            history = user_a.get(f"/api/things/merge-history?thing_id={keep_id}")
+            records = history.json()
+            assert len(records) == 1
+            record_id = records[0]["id"]
+
+        # --- Phase 2: User B attempts cross-user delete — must 404, not 204 ---
+        with _as_user("other-user") as user_b:
+            resp = user_b.delete(f"/api/things/merge-history/{record_id}")
+            assert resp.status_code == 404
+
+        # --- Phase 3: User A's record must still exist ---
+        with _as_user("user-a") as user_a:
+            history2 = user_a.get(f"/api/things/merge-history?thing_id={keep_id}")
+            assert record_id in [r["id"] for r in history2.json()]
+
+        # Restore override to auth-disabled state
+        app.dependency_overrides.pop(require_user, None)

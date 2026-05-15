@@ -652,7 +652,7 @@ class MergeHistoryRecord(BaseModel):
     triggered_by: str
     user_id: str | None
     created_at: datetime
-    expires_at: datetime | None
+    expires_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
