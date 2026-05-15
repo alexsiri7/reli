@@ -295,6 +295,7 @@ class MergeHistoryRecord(SQLModel, table=True):
     triggered_by: str = Field(default="api", sa_column_kwargs={"server_default": "'api'"})
     user_id: str | None = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+    expires_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
