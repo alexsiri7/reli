@@ -18,6 +18,7 @@ Configurable via environment variables:
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import time
 from collections import defaultdict
@@ -69,11 +70,26 @@ class _Bucket:
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Per-user (JWT) / per-IP token-bucket rate limiter."""
 
-    def __init__(self, app, *, llm_rpm: int = 30, api_rpm: int = 60, enabled: bool = True) -> None:  # type: ignore[no-untyped-def]
+    def __init__(  # type: ignore[no-untyped-def]
+        self,
+        app,
+        *,
+        llm_rpm: int = 30,
+        api_rpm: int = 60,
+        enabled: bool = True,
+        trusted_proxy_cidrs: str = "",
+    ) -> None:
         super().__init__(app)
         self.enabled = enabled
         self.llm_rpm = llm_rpm
         self.api_rpm = api_rpm
+        # Parse CIDR strings into network objects once at startup
+        self._trusted_networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+        for cidr in (c.strip() for c in trusted_proxy_cidrs.split(",") if c.strip()):
+            try:
+                self._trusted_networks.append(ipaddress.ip_network(cidr, strict=False))
+            except ValueError:
+                log.warning("Invalid TRUSTED_PROXY_CIDR entry ignored: %r", cidr)
         # Separate buckets for LLM and general API, keyed by user id or IP
         self._llm_buckets: dict[str, _Bucket] = defaultdict(
             lambda: _Bucket(tokens=float(llm_rpm), max_tokens=float(llm_rpm), refill_rate=llm_rpm / 60.0)
@@ -83,10 +99,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         )
 
     def _get_client_ip(self, request: Request) -> str:
+        direct_ip = request.client.host if request.client else None
         forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        return request.client.host if request.client else "unknown"
+        if forwarded and direct_ip and self._trusted_networks:
+            try:
+                addr = ipaddress.ip_address(direct_ip)
+                if any(addr in net for net in self._trusted_networks):
+                    return forwarded.split(",")[0].strip()
+            except ValueError:
+                log.debug("Could not parse direct IP %r; ignoring X-Forwarded-For", direct_ip)
+        return direct_ip or "unknown"
 
     def _get_rate_limit_key(self, request: Request) -> str:
         """Derive the rate-limit key from the JWT session cookie.
@@ -159,4 +181,5 @@ def get_rate_limit_config() -> dict:
         "enabled": s.rate_limit_enabled_bool,
         "llm_rpm": max(1, s.RATE_LIMIT_LLM_RPM),
         "api_rpm": max(1, s.RATE_LIMIT_API_RPM),
+        "trusted_proxy_cidrs": s.RATE_LIMIT_TRUSTED_PROXY_CIDRS,
     }

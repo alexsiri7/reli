@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: str = "true"
     RATE_LIMIT_LLM_RPM: int = 30
     RATE_LIMIT_API_RPM: int = 60
+    # Comma-separated CIDRs of trusted reverse proxies (e.g. "10.0.0.0/8,172.16.0.0/12").
+    # X-Forwarded-For is only trusted when the direct connection IP falls within one of these.
+    # Empty string (default) means never trust X-Forwarded-For.
+    RATE_LIMIT_TRUSTED_PROXY_CIDRS: str = ""
 
     # --- GitHub Feedback ---
     GITHUB_FEEDBACK_TOKEN: str = ""
