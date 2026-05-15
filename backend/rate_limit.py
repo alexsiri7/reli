@@ -85,7 +85,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.api_rpm = api_rpm
         # Parse CIDR strings into network objects once at startup
         self._trusted_networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
-        for cidr in (c.strip() for c in trusted_proxy_cidrs.split(",") if c.strip()):
+        for cidr in filter(None, (c.strip() for c in trusted_proxy_cidrs.split(","))):
             try:
                 self._trusted_networks.append(ipaddress.ip_network(cidr, strict=False))
             except ValueError:
