@@ -6,6 +6,12 @@ vi.mock('../offline/pending-ops', () => ({
   queueOperation: (...args: unknown[]) => mockQueueOperation(...args),
 }))
 
+vi.mock('../store', () => ({
+  useStore: {
+    getState: () => ({ currentUser: { id: 'test-user-id' } }),
+  },
+}))
+
 import { mutationFetch } from '../offline/mutation-fetch'
 
 beforeEach(() => {
@@ -35,7 +41,7 @@ describe('mutationFetch', () => {
 
     const res = await mutationFetch('/api/things', { method: 'POST', body: '{"title":"test"}' })
 
-    expect(mockQueueOperation).toHaveBeenCalledWith('/api/things', 'POST', { title: 'test' })
+    expect(mockQueueOperation).toHaveBeenCalledWith('/api/things', 'POST', { title: 'test' }, 'test-user-id')
     expect(res.status).toBe(202)
     const body = await res.json()
     expect(body).toEqual({ queued: true })
@@ -47,7 +53,7 @@ describe('mutationFetch', () => {
 
     await mutationFetch('/api/things', { method: 'POST', body: 'not json' })
 
-    expect(mockQueueOperation).toHaveBeenCalledWith('/api/things', 'POST', 'not json')
+    expect(mockQueueOperation).toHaveBeenCalledWith('/api/things', 'POST', 'not json', 'test-user-id')
   })
 
   it('offline: synthetic response has correct headers and status', async () => {

@@ -1,5 +1,6 @@
 import { queueOperation } from './pending-ops'
 import type { PendingOp } from './idb'
+import { useStore } from '../store'
 
 /**
  * A fetch wrapper for mutations that queues operations when offline.
@@ -27,7 +28,8 @@ export async function mutationFetch(
     }
   }
 
-  await queueOperation(url, init.method, body)
+  const userId = useStore.getState().currentUser?.id ?? ''
+  await queueOperation(url, init.method, body, userId)
 
   // Return a synthetic "queued" response
   return new Response(JSON.stringify({ queued: true }), {

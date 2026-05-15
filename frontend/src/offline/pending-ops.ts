@@ -14,6 +14,7 @@ export async function queueOperation(
   url: string,
   method: PendingOp['method'],
   body?: unknown,
+  user_id: string = '',
 ): Promise<number> {
   return enqueuePendingOp({
     url,
@@ -22,6 +23,7 @@ export async function queueOperation(
     timestamp: new Date().toISOString(),
     status: 'pending',
     retries: 0,
+    user_id,
   })
 }
 
