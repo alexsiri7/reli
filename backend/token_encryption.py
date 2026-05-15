@@ -137,7 +137,7 @@ def decrypt_or_plaintext(value: str) -> tuple[str, bool]:
     """
     try:
         return decrypt(value), True
-    except (InvalidToken, Exception):
+    except Exception:
         return value, False
 
 
