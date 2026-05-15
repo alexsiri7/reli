@@ -21,18 +21,6 @@ test.describe('Smoke – backend health', () => {
     expect(body).toHaveProperty('status', 'ok')
     expect(body).toHaveProperty('service', 'reli')
   })
-
-  test('GET /api/health returns detailed status', async ({ request }) => {
-    const resp = await request.get('/api/health')
-    expect(resp.status()).toBe(200)
-    const body = await resp.json()
-    expect(body).toHaveProperty('service', 'reli')
-    expect(body).toHaveProperty('db_connected')
-    expect(body).toHaveProperty('vector_count')
-    expect(body).toHaveProperty('uptime_seconds')
-    // DB must be connected for staging to be healthy
-    expect(body.db_connected).toBe(true)
-  })
 })
 
 test.describe('Smoke – frontend serving', () => {
@@ -55,6 +43,11 @@ test.describe('Smoke – auth-gated API endpoints', () => {
   test('GET /api/auth/me returns 401 without session', async ({ request }) => {
     const resp = await request.get('/api/auth/me')
     // 401 or 403 — either is acceptable for unauthenticated requests
+    expect([401, 403]).toContain(resp.status())
+  })
+
+  test('GET /api/health rejects unauthenticated request', async ({ request }) => {
+    const resp = await request.get('/api/health')
     expect([401, 403]).toContain(resp.status())
   })
 
