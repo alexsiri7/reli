@@ -24,7 +24,6 @@ All CI runs since the fix was merged show green status:
 - ✅ Commit `46d6b9a` — SUCCESS
 - ✅ Commit `a7caff1` — SUCCESS
 - ✅ Commit `52c7757` — SUCCESS
-- ✅ All commits from `38d3126` onward — SUCCESS
 
 ## Test Validation Results
 
