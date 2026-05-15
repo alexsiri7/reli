@@ -362,26 +362,27 @@ class TestMergeHistoryAPI:
             app.dependency_overrides[require_user] = lambda: uid
             return TestClient(app)
 
-        # --- Phase 1: User A creates a merge history record ---
-        with _as_user("user-a") as user_a:
-            a = user_a.post("/api/things", json={"title": "Iso-A", "type_hint": "person"})
-            b = user_a.post("/api/things", json={"title": "Iso-B", "type_hint": "person"})
-            keep_id = a.json()["id"]
-            user_a.post("/api/things/merge", json={"keep_id": keep_id, "remove_id": b.json()["id"]})
-            history = user_a.get(f"/api/things/merge-history?thing_id={keep_id}")
-            records = history.json()
-            assert len(records) == 1
-            record_id = records[0]["id"]
+        try:
+            # --- Phase 1: User A creates a merge history record ---
+            with _as_user("user-a") as user_a:
+                a = user_a.post("/api/things", json={"title": "Iso-A", "type_hint": "person"})
+                b = user_a.post("/api/things", json={"title": "Iso-B", "type_hint": "person"})
+                keep_id = a.json()["id"]
+                user_a.post("/api/things/merge", json={"keep_id": keep_id, "remove_id": b.json()["id"]})
+                history = user_a.get(f"/api/things/merge-history?thing_id={keep_id}")
+                records = history.json()
+                assert len(records) == 1
+                record_id = records[0]["id"]
 
-        # --- Phase 2: User B attempts cross-user delete — must 404, not 204 ---
-        with _as_user("other-user") as user_b:
-            resp = user_b.delete(f"/api/things/merge-history/{record_id}")
-            assert resp.status_code == 404
+            # --- Phase 2: User B attempts cross-user delete — must 404, not 204 ---
+            with _as_user("other-user") as user_b:
+                resp = user_b.delete(f"/api/things/merge-history/{record_id}")
+                assert resp.status_code == 404
 
-        # --- Phase 3: User A's record must still exist ---
-        with _as_user("user-a") as user_a:
-            history2 = user_a.get(f"/api/things/merge-history?thing_id={keep_id}")
-            assert record_id in [r["id"] for r in history2.json()]
-
-        # Restore override to auth-disabled state
-        app.dependency_overrides.pop(require_user, None)
+            # --- Phase 3: User A's record must still exist ---
+            with _as_user("user-a") as user_a:
+                history2 = user_a.get(f"/api/things/merge-history?thing_id={keep_id}")
+                assert record_id in [r["id"] for r in history2.json()]
+        finally:
+            # Restore override to auth-disabled state even if an assertion fails
+            app.dependency_overrides.pop(require_user, None)
