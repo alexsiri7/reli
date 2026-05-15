@@ -356,7 +356,7 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/health", tags=["health"])
-def health_detailed() -> dict:
+def health_detailed(user_id: str = Depends(require_user)) -> dict:
     """Detailed health check with DB, pgvector, and performance metrics."""
     from sqlalchemy import text
 
