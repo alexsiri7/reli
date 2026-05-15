@@ -142,3 +142,101 @@ class TestMcpRedirectScheme:
         location = resp.headers["location"]
         assert "testserver" not in location, "redirect used request.url (testserver) instead of settings"
         assert "http://" not in location, f"redirect incorrectly uses http://: {location}"
+
+
+class TestGoogleCallbackMcpStateEncoding:
+    """MCP OAuth: google_callback must URL-encode client_state in the redirect.
+
+    Regression tests for SEC-031 / GitHub issue #939.
+    """
+
+    def _seed_mcp_session(self, state_key: str, client_state: str) -> None:
+        """Seed an MCP OAuth session with the given client_state."""
+        from datetime import datetime, timedelta, timezone
+
+        from backend.oauth_state import mcp_oauth_sessions
+
+        mcp_oauth_sessions[state_key] = {
+            "code_challenge": "test-challenge",
+            "code_challenge_method": "S256",
+            "redirect_uri": "https://client.example.com/callback",
+            "client_id": "test-client",
+            "client_state": client_state,
+            "google_code_verifier": "test-verifier",
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
+        }
+
+    def _call_callback(self, mcp_client, state_key: str):
+        """Call google_callback with mocked Google OAuth internals."""
+        from unittest.mock import MagicMock
+
+        mock_credentials = MagicMock()
+        mock_credentials.id_token = "fake-id-token"
+
+        mock_flow_instance = MagicMock()
+        mock_flow_instance.credentials = mock_credentials
+
+        with (
+            patch("backend.routers.auth.SECRET_KEY", "test-secret"),
+            patch("backend.routers.auth.Flow") as mock_flow_cls,
+            patch("backend.routers.auth.google_id_token") as mock_id_token,
+            patch("backend.routers.auth._upsert_user", return_value="u-test"),
+            patch("backend.routers.auth.settings") as mock_settings,
+        ):
+            mock_flow_cls.from_client_config.return_value = mock_flow_instance
+            mock_id_token.verify_oauth2_token.return_value = {
+                "sub": "google-123",
+                "email": "test@example.com",
+                "name": "Test User",
+                "picture": None,
+            }
+            mock_settings.allowed_emails_set = set()
+
+            return mcp_client.get(
+                f"/api/auth/google/callback?code=fake-auth-code&state={state_key}",
+            )
+
+    def test_state_with_special_chars_is_url_encoded(self, mcp_client):
+        """State containing & or = must be percent-encoded to prevent param injection."""
+        state_key = "test-state-key-1"
+        self._seed_mcp_session(state_key, "legit&injected=evil")
+
+        resp = self._call_callback(mcp_client, state_key)
+
+        assert resp.status_code == 302
+        location = resp.headers["location"]
+        # The raw "&injected=evil" must NOT appear as a separate query param
+        assert "injected=evil" not in location
+        # The encoded form must be present
+        assert "legit%26injected%3Devil" in location
+
+    @pytest.mark.parametrize(
+        ("raw_state", "must_contain", "tag"),
+        [
+            ("a&b=c", "a%26b%3Dc", "ampersand"),
+            ("has space", "has%20space", "space"),
+            ("has#fragment", "has%23fragment", "hash"),
+            ("plus+sign", "plus%2Bsign", "plus"),
+        ],
+    )
+    def test_special_chars_encoded(self, mcp_client, raw_state, must_contain, tag):
+        """Various special characters must be percent-encoded in the redirect."""
+        state_key = f"test-state-{tag}"
+        self._seed_mcp_session(state_key, raw_state)
+
+        resp = self._call_callback(mcp_client, state_key)
+
+        assert resp.status_code == 302
+        location = resp.headers["location"]
+        assert must_contain in location
+
+    def test_empty_state_omitted_from_redirect(self, mcp_client):
+        """When client_state is empty, &state= should not appear in redirect."""
+        state_key = "test-state-empty"
+        self._seed_mcp_session(state_key, "")
+
+        resp = self._call_callback(mcp_client, state_key)
+
+        assert resp.status_code == 302
+        location = resp.headers["location"]
+        assert "&state=" not in location
