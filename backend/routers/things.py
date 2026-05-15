@@ -591,6 +591,8 @@ def reindex_things(user_id: str = Depends(require_user)) -> dict[str, int]:
 
 # -- Merge suggestions & execution --
 
+_MERGE_CANDIDATE_LIMIT = 200
+
 
 def _normalize(title: str) -> str:
     t = title.lower().strip()
@@ -630,6 +632,7 @@ def get_merge_suggestions(
             user_filter_clause(ThingRecord.user_id, user_id),
         )
         .order_by(ThingRecord.title)
+        .limit(_MERGE_CANDIDATE_LIMIT)
     )
     records = session.exec(stmt).all()
 
