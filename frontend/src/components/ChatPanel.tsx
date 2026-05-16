@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore, type AppliedChanges, type CalendarEvent, type ChatMessage, type ChatMode, type ChatSession, type ContextThing, type GmailMessage, type InteractionStyle, type ModelUsage, type ReferencedThing, type SessionStats, type StreamingStage, type WebSearchResult } from '../store'
@@ -47,103 +47,92 @@ function ExpandChevron({ expanded }: { expanded: boolean }) {
   )
 }
 
-function WebSources({ results }: { results: WebSearchResult[] }) {
+function CollapsibleSources<T>({
+  items,
+  noun,
+  colorClass,
+  renderItem,
+}: {
+  items: T[]
+  noun: string
+  colorClass: string
+  renderItem: (item: T, index: number) => ReactNode
+}) {
   const [expanded, setExpanded] = useState(false)
-
-  if (results.length === 0) return null
-
+  if (items.length === 0) return null
   return (
     <div className="mt-3">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+        className={`flex items-center gap-1 text-xs font-medium ${colorClass} transition-colors`}
       >
         <ExpandChevron expanded={expanded} />
-        {results.length} source{results.length !== 1 ? 's' : ''}
+        {items.length} {noun}{items.length !== 1 ? 's' : ''}
       </button>
       {expanded && (
         <div className="mt-1.5 space-y-1.5">
-          {results.map((r, i) => (
-            <a
-              key={i}
-              href={r.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-xs text-on-surface-variant hover:text-primary transition-colors"
-            >
-              <span className="font-medium">{r.title}</span>
-              <span className="block text-on-surface-variant/60 truncate">{r.snippet}</span>
-            </a>
-          ))}
+          {items.map(renderItem)}
         </div>
       )}
     </div>
+  )
+}
+
+function WebSources({ results }: { results: WebSearchResult[] }) {
+  return (
+    <CollapsibleSources
+      items={results}
+      noun="source"
+      colorClass="text-primary hover:text-primary/80"
+      renderItem={(r, i) => (
+        <a
+          key={i}
+          href={r.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-xs text-on-surface-variant hover:text-primary transition-colors"
+        >
+          <span className="font-medium">{r.title}</span>
+          <span className="block text-on-surface-variant/60 truncate">{r.snippet}</span>
+        </a>
+      )}
+    />
   )
 }
 
 function GmailSources({ messages }: { messages: GmailMessage[] }) {
-  const [expanded, setExpanded] = useState(false)
-
-  if (messages.length === 0) return null
-
   return (
-    <div className="mt-3">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs font-medium text-ideas hover:text-ideas/80 transition-colors"
-      >
-        <ExpandChevron expanded={expanded} />
-        {messages.length} email{messages.length !== 1 ? 's' : ''}
-      </button>
-      {expanded && (
-        <div className="mt-1.5 space-y-1.5">
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className="text-xs text-on-surface-variant"
-            >
-              <span className="font-medium">{m.subject}</span>
-              <span className="text-on-surface-variant/60"> — {m.from}</span>
-              <span className="block text-on-surface-variant/60 truncate">{m.snippet}</span>
-            </div>
-          ))}
+    <CollapsibleSources
+      items={messages}
+      noun="email"
+      colorClass="text-ideas hover:text-ideas/80"
+      renderItem={(m, i) => (
+        <div key={i} className="text-xs text-on-surface-variant">
+          <span className="font-medium">{m.subject}</span>
+          <span className="text-on-surface-variant/60"> — {m.from}</span>
+          <span className="block text-on-surface-variant/60 truncate">{m.snippet}</span>
         </div>
       )}
-    </div>
+    />
   )
 }
 
 function CalendarSources({ events }: { events: CalendarEvent[] }) {
-  const [expanded, setExpanded] = useState(false)
-
-  if (events.length === 0) return null
-
   return (
-    <div className="mt-3">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs font-medium text-events hover:text-events/80 transition-colors"
-      >
-        <ExpandChevron expanded={expanded} />
-        {events.length} event{events.length !== 1 ? 's' : ''}
-      </button>
-      {expanded && (
-        <div className="mt-1.5 space-y-1.5">
-          {events.map((ev, i) => (
-            <div
-              key={i}
-              className="text-xs text-on-surface-variant"
-            >
-              <span className="font-medium">{ev.summary}</span>
-              <span className="text-on-surface-variant/60"> — {new Date(ev.start).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
-              {ev.location && (
-                <span className="block text-on-surface-variant/60 truncate">{ev.location}</span>
-              )}
-            </div>
-          ))}
+    <CollapsibleSources
+      items={events}
+      noun="event"
+      colorClass="text-events hover:text-events/80"
+      renderItem={(ev, i) => (
+        <div key={i} className="text-xs text-on-surface-variant">
+          <span className="font-medium">{ev.summary}</span>
+          <span className="text-on-surface-variant/60"> — {new Date(ev.start).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+          {ev.location && (
+            <span className="block text-on-surface-variant/60 truncate">{ev.location}</span>
+          )}
         </div>
       )}
-    </div>
+    />
   )
 }
 
