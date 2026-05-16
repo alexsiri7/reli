@@ -1417,7 +1417,9 @@ class TestFindActiveConcerns:
         """A concern with no last_checked should always be returned."""
         with db() as conn:
             _insert_thing(
-                conn, "c1", "Drink more water",
+                conn,
+                "c1",
+                "Drink more water",
                 type_hint="concern",
                 data={"check_frequency": "daily", "last_checked": None},
             )
@@ -1432,7 +1434,9 @@ class TestFindActiveConcerns:
         yesterday = (date.today() - timedelta(days=1)).isoformat()
         with db() as conn:
             _insert_thing(
-                conn, "c2", "Track spending",
+                conn,
+                "c2",
+                "Track spending",
                 type_hint="concern",
                 data={"check_frequency": "weekly", "last_checked": yesterday},
             )
@@ -1445,7 +1449,9 @@ class TestFindActiveConcerns:
         week_ago = (date.today() - timedelta(days=7)).isoformat()
         with db() as conn:
             _insert_thing(
-                conn, "c3", "Keep an eye on Gonzalo",
+                conn,
+                "c3",
+                "Keep an eye on Gonzalo",
                 type_hint="concern",
                 data={"check_frequency": "weekly", "last_checked": week_ago},
             )
@@ -1459,7 +1465,9 @@ class TestFindActiveConcerns:
         yesterday = (date.today() - timedelta(days=1)).isoformat()
         with db() as conn:
             _insert_thing(
-                conn, "c4", "Concern no frequency",
+                conn,
+                "c4",
+                "Concern no frequency",
                 type_hint="concern",
                 data={"last_checked": yesterday},
             )
@@ -1472,7 +1480,9 @@ class TestFindActiveConcerns:
         """An inactive concern should not be returned."""
         with db() as conn:
             _insert_thing(
-                conn, "c5", "Old concern",
+                conn,
+                "c5",
+                "Old concern",
                 type_hint="concern",
                 active=False,
                 data={"check_frequency": "daily", "last_checked": None},
