@@ -1,4 +1,4 @@
-import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import { openDB, type DBSchema, type IDBPDatabase, type StoreNames } from 'idb'
 import type {
   Thing,
   ThingType,
@@ -203,7 +203,7 @@ export async function putAll<S extends CrudStore>(
   await tx.done
 }
 
-export async function clearStore(store: keyof ReliDB): Promise<void> {
+export async function clearStore(store: StoreNames<ReliDB>): Promise<void> {
   const db = await getDB()
   return db.clear(store)
 }
