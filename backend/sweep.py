@@ -49,6 +49,7 @@ import backend.db_engine as _engine_mod
 from .db_engine import user_filter_clause
 from .db_models import (
     ChatHistoryRecord,
+    McpMutationRecord,
     SweepFindingRecord,
     ThingRecord,
     ThingRelationshipRecord,
@@ -1418,6 +1419,64 @@ def find_active_concerns(
 
 
 # ---------------------------------------------------------------------------
+# Suspicious MCP mutations
+# ---------------------------------------------------------------------------
+
+
+def find_suspicious_mutations(
+    session: Session,
+    hours: int = 24,
+    user_id: str = "",
+) -> list[SweepCandidate]:
+    """Find suspicious MCP mutation patterns in the recent journal.
+
+    Detects:
+    - bulk_delete: 5+ delete_thing operations within the window
+    - mass_field_removal: update where before_snapshot has 10+ more keys than after_snapshot
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    candidates: list[SweepCandidate] = []
+
+    stmt = select(McpMutationRecord).where(McpMutationRecord.occurred_at >= cutoff)
+    if user_id:
+        stmt = stmt.where(
+            or_(McpMutationRecord.client_id == user_id, McpMutationRecord.client_id.is_(None))  # type: ignore[union-attr]
+        )
+    rows = session.exec(stmt).all()
+
+    # Bulk delete detection
+    delete_ops = [r for r in rows if r.operation in ("delete_thing", "merge_things_delete")]
+    if len(delete_ops) >= 5:
+        candidates.append(
+            SweepCandidate(
+                thing_id="",
+                thing_title="MCP Mutations",
+                finding_type="suspicious_bulk_delete",
+                message=f"{len(delete_ops)} delete operations in the last {hours}h — possible bulk destruction.",
+                priority=1,
+            )
+        )
+
+    # Mass field removal detection
+    for r in rows:
+        if r.operation == "update_thing" and r.before_snapshot and r.after_snapshot:
+            before_keys = len(r.before_snapshot) if isinstance(r.before_snapshot, dict) else 0
+            after_keys = len(r.after_snapshot) if isinstance(r.after_snapshot, dict) else 0
+            if before_keys - after_keys >= 10:
+                candidates.append(
+                    SweepCandidate(
+                        thing_id=r.thing_id or "",
+                        thing_title=r.after_snapshot.get("title", "Unknown") if isinstance(r.after_snapshot, dict) else "Unknown",
+                        finding_type="suspicious_mass_field_removal",
+                        message=f"Update removed {before_keys - after_keys} fields from Thing.",
+                        priority=1,
+                    )
+                )
+
+    return candidates
+
+
+# ---------------------------------------------------------------------------
 # Main sweep entry point
 # ---------------------------------------------------------------------------
 
@@ -1490,6 +1549,7 @@ def collect_candidates(
             + find_cross_project_duplicate_effort(session)
             + find_broad_things_without_subtasks(session, today, user_id=user_id)
             + concern_candidates
+            + find_suspicious_mutations(session, user_id=user_id)
         )
 
     # Deduplicate: keep the highest-priority (lowest number) candidate per (thing_id, finding_type)

@@ -18,7 +18,7 @@ from sqlmodel import Session, or_, select
 import backend.db_engine as _engine_mod
 
 from .db_engine import user_filter_clause
-from .db_models import ChatHistoryRecord, ScheduledTaskRecord, ThingRecord, ThingRelationshipRecord
+from .db_models import ChatHistoryRecord, McpMutationRecord, ScheduledTaskRecord, ThingRecord, ThingRelationshipRecord
 from .db_models import MergeHistoryRecord as MergeHistoryDBRecord
 from .vector_store import delete_thing as vs_delete
 from .vector_store import upsert_thing
@@ -47,6 +47,25 @@ def _rel_to_dict(record: ThingRelationshipRecord) -> dict[str, Any]:
         "metadata": record.metadata_,
         "created_at": record.created_at,
     }
+
+
+def _log_mutation(
+    session: Session,
+    operation: str,
+    thing_id: str | None,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    client_id: str = "",
+) -> None:
+    """Insert a mutation journal row into the session (caller must commit)."""
+    record = McpMutationRecord(
+        operation=operation,
+        thing_id=thing_id or None,
+        before_snapshot=before,
+        after_snapshot=after,
+        client_id=client_id or None,
+    )
+    session.add(record)
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +284,7 @@ def create_thing(
                 title,
                 existing.id,
             )
+            before_snap = _thing_to_dict(existing)
             if data:
                 old = existing.data if isinstance(existing.data, dict) else {}
                 existing.data = {**old, **data}
@@ -276,6 +296,7 @@ def create_thing(
                 )
             existing.updated_at = now
             session.add(existing)
+            _log_mutation(session, "create_thing", existing.id, before_snap, _thing_to_dict(existing), client_id=user_id)
             session.commit()
             session.refresh(existing)
             row_dict = _thing_to_dict(existing)
@@ -306,6 +327,7 @@ def create_thing(
             user_id=user_id or None,
         )
         session.add(record)
+        _log_mutation(session, "create_thing", thing_id, None, record.model_dump(), client_id=user_id)
         session.commit()
         session.refresh(record)
         row_dict = _thing_to_dict(record)
@@ -348,6 +370,7 @@ def update_thing(
         if record.user_id and user_id and record.user_id != user_id:
             return {"error": "Unauthorized"}
 
+        before_snap = _thing_to_dict(record)
         changed = False
         if title:
             record.title = title
@@ -396,6 +419,7 @@ def update_thing(
 
         record.updated_at = now
         session.add(record)
+        _log_mutation(session, "update_thing", thing_id, before_snap, record.model_dump(), client_id=user_id)
         session.commit()
         session.refresh(record)
         row_dict = _thing_to_dict(record)
@@ -426,6 +450,8 @@ def delete_thing(thing_id: str, user_id: str = "") -> dict[str, Any]:
             return {"error": "Unauthorized"}
 
         title = record.title
+        before_snap = _thing_to_dict(record)
+        _log_mutation(session, "delete_thing", thing_id, before_snap, None, client_id=user_id)
         session.delete(record)
         session.commit()
         vs_delete(thing_id)
@@ -476,6 +502,8 @@ def merge_things(
             return {"error": "Unauthorized"}
 
         remove_title = remove_rec.title
+        remove_before = _thing_to_dict(remove_rec)
+        keep_before = _thing_to_dict(keep_rec)
 
         # 1. Merge data
         old_data = keep_rec.data if isinstance(keep_rec.data, dict) else {}
@@ -535,6 +563,9 @@ def merge_things(
             created_at=now,
         )
         session.add(merge_record)
+
+        _log_mutation(session, "merge_things_delete", remove_id, remove_before, None, client_id=user_id)
+        _log_mutation(session, "merge_things_update", keep_id, keep_before, keep_rec.model_dump(), client_id=user_id)
 
         session.commit()
 
@@ -613,6 +644,11 @@ def create_relationship(
             metadata_=None,
         )
         session.add(record)
+        _log_mutation(
+            session, "create_relationship", from_id, None,
+            {"id": rel_id, "from_thing_id": from_id, "to_thing_id": to_id, "relationship_type": rel_type},
+            client_id=user_id,
+        )
         session.commit()
         return {
             "id": rel_id,
@@ -644,6 +680,30 @@ def get_thing(
     if not record:
         return {"error": f"Thing {thing_id} not found"}
     return _thing_to_dict(record)
+
+
+# ---------------------------------------------------------------------------
+# get_mutations
+# ---------------------------------------------------------------------------
+
+
+def get_mutations(
+    thing_id: str | None = None,
+    limit: int = 50,
+    user_id: str = "",
+) -> list[dict[str, Any]]:
+    """Query the MCP mutation journal, newest first."""
+    with Session(_engine_mod.engine) as session:
+        stmt = select(McpMutationRecord)
+        if user_id:
+            stmt = stmt.where(
+                or_(McpMutationRecord.client_id == user_id, McpMutationRecord.client_id.is_(None))  # type: ignore[union-attr]
+            )
+        if thing_id:
+            stmt = stmt.where(McpMutationRecord.thing_id == thing_id)
+        stmt = stmt.order_by(McpMutationRecord.occurred_at.desc()).limit(limit)  # type: ignore[union-attr]
+        rows = session.exec(stmt).all()
+    return [r.model_dump() for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -841,6 +901,8 @@ def delete_relationship(relationship_id: str, user_id: str = "") -> dict[str, An
             if to_thing and to_thing.user_id and to_thing.user_id != user_id:
                 return {"error": "Unauthorized"}
 
+        before_snap = _rel_to_dict(record)
+        _log_mutation(session, "delete_relationship", record.from_thing_id, before_snap, None, client_id=user_id)
         session.delete(record)
         session.commit()
     return {"ok": True}
