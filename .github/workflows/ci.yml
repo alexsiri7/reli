@@ -132,5 +132,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Prune old GHCR images (keep last 3)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true   # GITHUB_TOKEN lacks delete:packages; prune is best-effort until PAT is added
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: reli
+          package-type: container
+          min-versions-to-keep: 3
+          ignore-versions: ^latest$
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   # Deploy moved to staging-pipeline.yml — CI success triggers staging deploy,
   # then production deploy (with rollback) after staging health check passes.
