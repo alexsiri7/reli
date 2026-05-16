@@ -17,7 +17,7 @@ import logging
 import os
 from pathlib import Path
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 
 from .config import settings
 
