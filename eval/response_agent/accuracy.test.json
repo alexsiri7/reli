@@ -87,7 +87,7 @@
         "reasoning_summary": "Updated 'Server migration' importance to critical. Deadline is today.",
         "applied_changes": {
           "created": [],
-          "updated": [{"id": "thing-srv01", "title": "Server migration", "type_hint": "task", "importance": 2, "active": 1}],
+          "updated": [{"id": "thing-srv01", "title": "Server migration", "type_hint": "task", "importance": 0, "active": 1}],
           "deleted": [],
           "merged": [],
           "relationships_created": []
@@ -112,11 +112,12 @@
         "applied_changes": {
           "created": [],
           "updated": [
-            {"id": "thing-bud01", "title": "Budget review Q2", "type_hint": "task", "active": 1},
-            {"id": "thing-bud02", "title": "Q2 budget analysis", "type_hint": "task", "active": 0}
+            {"id": "thing-bud01", "title": "Budget review Q2", "type_hint": "task", "active": 1}
           ],
           "deleted": [],
-          "merged": [],
+          "merged": [
+            {"keep_id": "thing-bud01", "remove_id": "thing-bud02", "keep_title": "Budget review Q2", "remove_title": "Q2 budget analysis"}
+          ],
           "relationships_created": []
         },
         "questions_for_user": [],
