@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
     paths:
-      - "backend/requirements.txt"
+      - "uv.lock"
       - "frontend/package.json"
       - "frontend/package-lock.json"
   pull_request:
     branches: [main]
     paths:
-      - "backend/requirements.txt"
+      - "uv.lock"
       - "frontend/package.json"
       - "frontend/package-lock.json"
   schedule:
@@ -26,10 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       # pip's resolver cannot solve the backend's AI/observability graph:
       # pip 25.1+ hits ResolutionTooDeep, pip <25.1 hits ResolutionImpossible,
@@ -39,13 +39,13 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          cache-dependency-glob: "backend/requirements.txt"
+          cache-dependency-glob: "uv.lock"
 
       - name: Install pip-audit
         run: uv pip install --system pip-audit
 
       - name: Install backend dependencies
-        run: uv pip install --system -r backend/requirements.txt
+        run: UV_SYSTEM_PYTHON=1 uv sync --frozen
 
       - name: Upgrade pip to patched version
         run: uv pip install --system "pip>=26.1"

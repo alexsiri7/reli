@@ -34,11 +34,6 @@ class FeedbackResponse(BaseModel):
     message: str = ""
 
 
-def _category_label(category: str) -> str:
-    labels = {"bug": "bug", "feature": "enhancement"}
-    return labels.get(category, "feedback")
-
-
 @router.post("", response_model=FeedbackResponse, summary="Submit feedback")
 async def submit_feedback(
     body: FeedbackRequest,
@@ -102,7 +97,7 @@ async def submit_feedback(
     title_summary = first_line[:80] + ("..." if len(first_line) > 80 else "")
     title = f"[{title_prefix}] {title_summary}"
 
-    label = _category_label(body.category)
+    label = {"bug": "bug", "feature": "enhancement"}.get(body.category, "feedback")
 
     try:
         resp = await client.post(

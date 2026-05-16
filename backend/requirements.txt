@@ -1,3 +1,5 @@
+# Reference only — uv.lock is the authoritative lock file.
+# To update dependencies: edit pyproject.toml then run `uv lock`.
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 pydantic>=2.7.0
@@ -6,9 +8,6 @@ openai>=1.30.0
 python-dotenv>=1.0.0
 cryptography>=42.0.0
 pgvector>=0.3.0
-google-api-python-client>=2.100.0
-google-auth>=2.23.0
-google-auth-oauthlib>=1.1.0
 ruff>=0.8.0
 mypy>=1.10.0
 pytest>=8.0.0

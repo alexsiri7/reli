@@ -359,6 +359,7 @@ class TestMergeHistoryAPI:
         rather than using two simultaneous fixture clients (which share the same
         overrides dict and would conflict).
         """
+
         def _as_user(uid: str) -> TestClient:
             app.dependency_overrides[require_user] = lambda: uid
             return TestClient(app)

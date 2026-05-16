@@ -13,10 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
@@ -40,10 +40,10 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          cache-dependency-glob: "backend/requirements.txt"
+          cache-dependency-glob: "uv.lock"
 
       - name: Install Python dependencies
-        run: uv pip install --system -r backend/requirements.txt
+        run: UV_SYSTEM_PYTHON=1 uv sync --frozen
 
       - name: Setup
         run: ./scripts/gates.sh setup
@@ -57,10 +57,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
@@ -80,10 +80,10 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          cache-dependency-glob: "backend/requirements.txt"
+          cache-dependency-glob: "uv.lock"
 
       - name: Install Python dependencies
-        run: uv pip install --system -r backend/requirements.txt
+        run: UV_SYSTEM_PYTHON=1 uv sync --frozen
 
       - name: Setup
         run: ./scripts/gates.sh setup

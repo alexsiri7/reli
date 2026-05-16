@@ -48,6 +48,16 @@ def _parse_dt(val: str | None) -> datetime | None:
     return datetime.fromisoformat(val)
 
 
+def _unwrap_json_str(value: Any) -> Any:
+    """Repeatedly JSON-decode a string until it's no longer a string or decoding fails."""
+    while isinstance(value, str) and value:
+        try:
+            value = json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            break
+    return value
+
+
 def _record_to_thing(record: ThingRecord) -> Thing:
     """Convert a ThingRecord (SQLModel) to a Thing (Pydantic response model)."""
     # Handle data: SQLAlchemy JSON type auto-deserializes, but may have edge cases
@@ -88,12 +98,7 @@ def _row_to_thing(row: Any) -> Thing:
     if isinstance(row, ThingRecord):
         return _record_to_thing(row)
     # Legacy sqlite3.Row handling
-    data = row.data
-    while isinstance(data, str) and data:
-        try:
-            data = json.loads(data)
-        except (json.JSONDecodeError, ValueError):
-            break
+    data = _unwrap_json_str(row.data)
     if isinstance(data, str):
         data = None
     surface = True
@@ -110,12 +115,7 @@ def _row_to_thing(row: Any) -> Thing:
     try:
         raw_oq = row.open_questions
         if raw_oq:
-            oq = raw_oq
-            while isinstance(oq, str):
-                try:
-                    oq = json.loads(oq)
-                except (json.JSONDecodeError, ValueError):
-                    break
+            oq = _unwrap_json_str(raw_oq)
             if isinstance(oq, list):
                 open_questions = oq
     except (IndexError, KeyError):
@@ -839,7 +839,7 @@ def cleanup_orphan_relationships(
     session: Session = Depends(get_session),
     user_id: str = Depends(require_user),
 ) -> OrphanCleanupResult:
-    """Delete orphan relationships where the user owns at least one endpoint and at least one endpoint no longer exists."""
+    """Delete orphan relationships where the user owns at least one endpoint and at least one endpoint no longer exists."""  # noqa: E501
     orphans = session.exec(_orphan_stmt(user_id)).all()
     orphan_ids = [r.id for r in orphans]
     for r in orphans:
