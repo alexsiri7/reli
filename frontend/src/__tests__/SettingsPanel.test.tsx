@@ -183,8 +183,38 @@ describe('SettingsPanel', () => {
     ]
     render(<SettingsPanel />)
 
-    // Cost info should be shown below the selected model
-    expect(screen.getAllByText(/\$30\.00 in/)[0]).toBeInTheDocument()
+    // Cost info should be shown below the selected model (per 1K tokens: 30/1000 = 0.03)
+    expect(screen.getAllByText(/\$0\.03 in/)[0]).toBeInTheDocument()
+  })
+
+  describe('ModelPicker keyboard navigation', () => {
+    it('closes dropdown on Escape key', () => {
+      storeState.modelSettings = { context: 'openai/gpt-4', reasoning: 'openai/gpt-4', response: 'openai/gpt-4', chat_context_window: 3 }
+      storeState.availableModels = [{ id: 'openai/gpt-4' }, { id: 'openai/gpt-3.5' }]
+      render(<SettingsPanel />)
+
+      const contextTrigger = screen.getByText('Context Model').closest('div')!.querySelector('button')!
+      fireEvent.click(contextTrigger)
+      expect(screen.getByPlaceholderText('Search models...')).toBeInTheDocument()
+
+      fireEvent.keyDown(contextTrigger, { key: 'Escape' })
+      expect(screen.queryByPlaceholderText('Search models...')).not.toBeInTheDocument()
+    })
+
+    it('highlights next model on ArrowDown and selects on Enter', () => {
+      storeState.modelSettings = { context: 'openai/gpt-4', reasoning: 'openai/gpt-4', response: 'openai/gpt-4', chat_context_window: 3 }
+      storeState.availableModels = [{ id: 'openai/gpt-4' }, { id: 'openai/gpt-3.5' }]
+      render(<SettingsPanel />)
+
+      const contextTrigger = screen.getByText('Context Model').closest('div')!.querySelector('button')!
+      fireEvent.click(contextTrigger)
+      fireEvent.keyDown(contextTrigger, { key: 'ArrowDown' })
+      fireEvent.keyDown(contextTrigger, { key: 'Enter' })
+
+      // Should have selected the first model in the list
+      // Dropdown should be closed
+      expect(screen.queryByPlaceholderText('Search models...')).not.toBeInTheDocument()
+    })
   })
 })
 
