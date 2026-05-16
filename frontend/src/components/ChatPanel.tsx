@@ -470,7 +470,14 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
             <>
               <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-blockquote:my-1 prose-pre:bg-surface-container-low prose-pre:border prose-pre:border-on-surface-variant/10 prose-code:text-primary">
                 <ReactMarkdown
-                  urlTransform={(url) => /^(javascript|data|vbscript):/i.test(url.trim()) ? '' : url}
+                  urlTransform={(url) => {
+                    try {
+                      const { protocol } = new URL(url)
+                      return ['http:', 'https:', 'mailto:', 'thing:'].includes(protocol) ? url : ''
+                    } catch {
+                      return url.startsWith('/') || url.startsWith('#') ? url : ''
+                    }
+                  }}
                   components={{
                     a: ({ href, children }) => {
                       if (href?.startsWith('thing://')) {
