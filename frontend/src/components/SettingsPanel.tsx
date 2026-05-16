@@ -1123,7 +1123,7 @@ function ModelPicker({
     } else if (e.key === 'ArrowUp' && open) {
       setFocusedIndex(i => Math.max(i - 1, 0))
       e.preventDefault()
-    } else if (e.key === 'Enter' && focusedIndex >= 0 && open) {
+    } else if (e.key === 'Enter' && focusedIndex >= 0 && focusedIndex < flatIds.length && open) {
       onChange(flatIds[focusedIndex]!)
       setOpen(false)
       setSearch('')
