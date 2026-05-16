@@ -20,6 +20,7 @@ Finding types:
   - cross_project_thematic_connection: Similar Things across different projects
   - cross_project_duplicate_effort: Tasks with near-identical titles in different projects
   - information_gap: Active Thing missing key information (no dates, minimal data, etc.)
+  - concern_checkin: Concern Thing due for a check-in based on check_frequency
   - llm_insight: LLM-generated finding from reflection phase
 
 Preference aggregation (separate phase, see preference_sweep.py):
@@ -1352,6 +1353,65 @@ def find_cross_project_duplicate_effort(
     return candidates
 
 
+def find_active_concerns(
+    session: Session,
+    today: date | None = None,
+    user_id: str = "",
+) -> list[SweepCandidate]:
+    """Find concern Things that are due for a check-in based on check_frequency.
+
+    A concern is due if:
+      - data.last_checked is null (never checked), OR
+      - check_frequency is "daily" and last_checked < today, OR
+      - check_frequency is "weekly" and last_checked < today - 7d, OR
+      - check_frequency is "monthly" and last_checked < today - 30d
+    """
+    today = today or date.today()
+    candidates: list[SweepCandidate] = []
+
+    stmt = select(ThingRecord).where(
+        ThingRecord.type_hint == "concern",
+        ThingRecord.active == True,  # noqa: E712
+        user_filter_clause(ThingRecord.user_id, user_id),
+    )
+    rows = session.exec(stmt).all()
+
+    for row in rows:
+        try:
+            data = json.loads(row.data) if isinstance(row.data, str) else (row.data or {})
+        except (json.JSONDecodeError, TypeError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+
+        check_frequency = data.get("check_frequency") or "weekly"
+        last_checked_str = data.get("last_checked")
+
+        threshold_days = {"daily": 1, "weekly": 7, "monthly": 30}.get(check_frequency, 7)
+
+        if last_checked_str:
+            try:
+                last_checked = date.fromisoformat(last_checked_str)
+            except ValueError:
+                last_checked = None
+        else:
+            last_checked = None
+
+        if last_checked is None or (today - last_checked).days >= threshold_days:
+            candidates.append(
+                SweepCandidate(
+                    thing_id=row.id,
+                    thing_title=row.title,
+                    finding_type="concern_checkin",
+                    message=f"Concern check-in due: {row.title}",
+                    priority=2,
+                    extra={"check_frequency": check_frequency, "last_checked": last_checked_str},
+                )
+            )
+
+    return candidates
+
+
 # ---------------------------------------------------------------------------
 # Main sweep entry point
 # ---------------------------------------------------------------------------
@@ -1389,6 +1449,20 @@ def collect_candidates(
             session.commit()
             logger.info("prune_stale_open_questions: cleared questions on %d Things", pruned)
 
+        concern_candidates = find_active_concerns(session, today, user_id=user_id)
+        if concern_candidates:
+            # Update last_checked so concerns don't fire again this period
+            for c in concern_candidates:
+                thing = session.get(ThingRecord, c.thing_id)
+                if thing:
+                    data = json.loads(thing.data) if isinstance(thing.data, str) else (thing.data or {})
+                    if not isinstance(data, dict):
+                        data = {}
+                    data["last_checked"] = today.isoformat()
+                    thing.data = data
+            session.commit()
+            logger.info("find_active_concerns: found %d due concerns, updated last_checked", len(concern_candidates))
+
         candidates = (
             find_approaching_dates(session, today, window_days, user_id=user_id)
             + find_stale_things(session, today, stale_days, user_id=user_id)
@@ -1403,6 +1477,7 @@ def collect_candidates(
             + find_cross_project_thematic_connections(session)
             + find_cross_project_duplicate_effort(session)
             + find_broad_things_without_subtasks(session, today, user_id=user_id)
+            + concern_candidates
         )
 
     # Deduplicate: keep the highest-priority (lowest number) candidate per (thing_id, finding_type)
@@ -1560,6 +1635,12 @@ GUARD RAILS — you MUST follow these:
 - When in doubt, surface information rather than recommend destructive action.
 - You will be shown currently active findings. Do NOT generate findings that repeat or \
 rephrase existing ones. Only add genuinely new insights.
+
+Concern check-in guidance:
+- For concern_checkin candidates: generate a warm, natural check-in question.
+  Don't just repeat the concern title — reference recent context if available.
+  Good: "You mentioned wanting to drink more water — how's that going today?"
+  Bad: "Concern check-in: Drink more water"
 """
 
 
