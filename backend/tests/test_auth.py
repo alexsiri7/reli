@@ -141,6 +141,36 @@ class TestJWTAuth:
                 assert resp.status_code == 200
 
 
+class TestCookieSecureFlag:
+    """Test that COOKIE_SECURE env var controls the cookie secure attribute."""
+
+    def test_cookie_secure_true_by_default(self):
+        from backend.config import Settings
+
+        s = Settings(SECRET_KEY="x", ALLOWED_EMAILS="")
+        assert s.cookie_secure_bool is True
+
+    def test_cookie_secure_false_when_disabled(self):
+        from backend.config import Settings
+
+        s = Settings(SECRET_KEY="x", ALLOWED_EMAILS="", COOKIE_SECURE="false")
+        assert s.cookie_secure_bool is False
+
+    def test_cookie_secure_false_variants(self):
+        from backend.config import Settings
+
+        for val in ("false", "False", "FALSE", "0", "no"):
+            s = Settings(SECRET_KEY="x", ALLOWED_EMAILS="", COOKIE_SECURE=val)
+            assert s.cookie_secure_bool is False, f"Expected False for COOKIE_SECURE={val!r}"
+
+    def test_cookie_secure_true_variants(self):
+        from backend.config import Settings
+
+        for val in ("true", "True", "TRUE", "1", "yes"):
+            s = Settings(SECRET_KEY="x", ALLOWED_EMAILS="", COOKIE_SECURE=val)
+            assert s.cookie_secure_bool is True, f"Expected True for COOKIE_SECURE={val!r}"
+
+
 class TestApiTokenWithoutSecretKey:
     """Staging scenario: RELI_API_TOKEN set, SECRET_KEY absent."""
 

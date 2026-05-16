@@ -216,7 +216,9 @@ def reindex_all(user_id: str = "") -> int:
 
         # Fetch Things scoped to this user
         with Session(_engine_mod.engine) as session:
-            records = session.exec(select(ThingRecord).where(user_filter_clause(ThingRecord.user_id, user_id))).all()
+            records = session.exec(
+                select(ThingRecord).where(user_filter_clause(ThingRecord.user_id, user_id))
+            ).all()
 
         if not records:
             return 0

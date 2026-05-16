@@ -173,6 +173,7 @@ Both data stores contain production data. Handle with care.
 | `SECRET_KEY` | Yes | — | JWT signing secret |
 | `RELI_API_TOKEN` | No | — | Static bearer token for API auth; enables token-based access without Google OAuth |
 | `DATA_DIR` | No | `backend/` | Directory for `reli.db` |
+| `COOKIE_SECURE` | No | `true` | Set to `false` in local dev when running without HTTPS; always `true` in production |
 | `LOG_LEVEL` | No | `INFO` | Log verbosity: DEBUG, INFO, WARNING |
 | `OLLAMA_MODEL` | No | — | Local model for context agent |
 | `OLLAMA_BASE_URL` | No | `http://localhost:11434` | Ollama server URL |

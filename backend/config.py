@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     # --- Auth ---
     SECRET_KEY: str = ""
     ALLOWED_EMAILS: str = ""  # Comma-separated allowlist; empty = allow all
+    COOKIE_SECURE: str = "true"  # Set to "false" only in local dev (no HTTPS)
 
     # --- MCP API token (for MCP server → REST API auth) ---
     RELI_API_TOKEN: str = ""  # Shared secret; set to enable token-based auth for MCP
@@ -185,6 +186,10 @@ class Settings(BaseSettings):
     @property
     def sweep_enabled_bool(self) -> bool:
         return self._is_truthy(self.SWEEP_ENABLED)
+
+    @property
+    def cookie_secure_bool(self) -> bool:
+        return self._is_truthy(self.COOKIE_SECURE)
 
 
 settings = Settings()
