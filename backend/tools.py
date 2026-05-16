@@ -1221,6 +1221,9 @@ def get_due_scheduled_tasks(user_id: str = "") -> list[dict[str, Any]]:
 # get_preferences / update_preference
 # ---------------------------------------------------------------------------
 
+# Accept all four levels: sweep code uses "emerging"/"established"/"strong",
+# MCP prompts use "emerging"/"moderate"/"strong". Accepting the union prevents
+# caller breakage when both vocabularies are in use.
 _VALID_CONFIDENCE_LEVELS = {"emerging", "moderate", "established", "strong"}
 
 
@@ -1274,7 +1277,7 @@ def update_preference(
         if confidence not in _VALID_CONFIDENCE_LEVELS:
             return {"error": f"patterns[{i}].confidence must be one of {sorted(_VALID_CONFIDENCE_LEVELS)}"}
         observations = item.get("observations")
-        if not isinstance(observations, int) or observations < 1:
+        if isinstance(observations, bool) or not isinstance(observations, int) or observations < 1:
             return {"error": f"patterns[{i}].observations must be an int >= 1"}
 
     now = datetime.now(timezone.utc)

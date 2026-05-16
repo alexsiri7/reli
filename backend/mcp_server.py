@@ -440,7 +440,8 @@ def update_preference(
         patterns: List of pattern dicts to set. Replaces existing patterns.
 
     Returns:
-        The updated Thing dict, or an error dict if validation fails.
+        The updated Thing dict, or an error dict if the request is invalid
+        or the Thing cannot be updated (not found, wrong type, inactive).
     """
     return shared_tools.update_preference(
         thing_id=thing_id,
