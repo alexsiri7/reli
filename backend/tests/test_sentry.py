@@ -63,8 +63,6 @@ def test_set_sentry_user_sets_only_id():
 
         set_sentry_user("user-123")
         mock_sdk.set_user.assert_called_once_with({"id": "user-123"})
-        call_args = mock_sdk.set_user.call_args[0][0]
-        assert "email" not in call_args
 
 
 @pytest.mark.parametrize("header_key", ["Cookie", "Set-Cookie", "cookie", "set-cookie"])
