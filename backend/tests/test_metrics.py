@@ -39,8 +39,6 @@ class TestMetricsEndpoint:
 
     def test_requires_auth(self, patched_db):
         """The /metrics endpoint must reject unauthenticated requests."""
-        from unittest.mock import patch
-
         from backend.main import app
 
         with patch("backend.auth.SECRET_KEY", "test-secret-key"):
