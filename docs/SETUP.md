@@ -131,6 +131,16 @@ docker run -d \
   reli:latest
 ```
 
+### Optional: Distributed tracing with Phoenix
+
+To enable the Phoenix tracing UI (port 6006, local only):
+
+```bash
+PHOENIX_ENABLED=true docker compose --profile tracing up -d
+```
+
+Phoenix runs as a sidecar under the `tracing` profile. Set `PHOENIX_ENDPOINT` to point to an external OTLP collector if you prefer a hosted provider (Arize, Honeycomb). Trace data persists in `./data-phoenix/` across container restarts.
+
 ### After code changes
 
 The container must be rebuilt after merging code changes:
@@ -183,6 +193,9 @@ Both data stores contain production data. Handle with care.
 | `REQUESTY_MODEL` | No | — | Override model for all pipeline stages |
 | `REQUESTY_REASONING_MODEL` | No | — | Override model for reasoning stage |
 | `REQUESTY_RESPONSE_MODEL` | No | — | Override model for response stage |
+| `PHOENIX_ENABLED` | No | `false` | Enable Phoenix/OTLP distributed tracing sidecar |
+| `PHOENIX_ENDPOINT` | No | `http://phoenix:6006/v1/traces` | OTLP trace ingest endpoint |
+| `OTEL_SERVICE_NAME` | No | `reli` (`reli-staging` in staging) | OpenTelemetry service name for traces |
 
 ---
 

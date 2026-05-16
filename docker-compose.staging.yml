@@ -28,5 +28,8 @@ services:
       - RELI_API_TOKEN=${RELI_API_TOKEN:-reli-staging-placeholder}  # Override at deploy time with a real secret
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=staging
+      - PHOENIX_ENABLED=${PHOENIX_ENABLED:-false}
+      - PHOENIX_ENDPOINT=${PHOENIX_ENDPOINT:-http://phoenix:6006/v1/traces}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-reli-staging}
       - DATABASE_URL=${DATABASE_URL:-}
     restart: unless-stopped
