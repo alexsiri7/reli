@@ -36,7 +36,7 @@ mcp_auth_codes: dict[str, dict] = {}
 
 # client_id -> {
 #   client_id, client_secret, redirect_uris, client_name, grant_types,
-#   response_types, token_endpoint_auth_method, created_at
+#   response_types, token_endpoint_auth_method, created_at, expires_at
 # }
 mcp_registered_clients: dict[str, dict] = {}
 
@@ -53,8 +53,8 @@ def _cleanup_expired(store: dict[str, dict]) -> None:
     """Remove entries whose ``expires_at`` is in the past.
 
     Entries may store ``expires_at`` as either a :class:`datetime` (timezone-aware)
-    or a :class:`float` (Unix epoch).  Entries without ``expires_at`` (e.g.
-    registered clients) are never evicted by this function.
+    or a :class:`float` (Unix epoch).  Entries without ``expires_at`` are never
+    evicted by this function.
     """
     now_ts = time.time()
     now_dt = datetime.now(timezone.utc)
