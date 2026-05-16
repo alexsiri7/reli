@@ -88,16 +88,18 @@ async def submit_feedback(
     if screenshot_url:
         issue_body += f"\n\n## Screenshot\n\n![Screenshot]({screenshot_url})"
 
-    # Map category to title prefix
-    prefix_map = {"bug": "Bug", "feature": "Feature request", "other": "Feedback"}
-    title_prefix = prefix_map.get(body.category, "Feedback")
+    # Map category to (title prefix, GitHub label)
+    _category_map = {
+        "bug": ("Bug", "bug"),
+        "feature": ("Feature request", "enhancement"),
+        "other": ("Feedback", "feedback"),
+    }
+    title_prefix, label = _category_map.get(body.category, ("Feedback", "feedback"))
 
     # Truncate message for title (first line, max 80 chars)
     first_line = body.message.split("\n")[0].strip()
     title_summary = first_line[:80] + ("..." if len(first_line) > 80 else "")
     title = f"[{title_prefix}] {title_summary}"
-
-    label = {"bug": "bug", "feature": "enhancement"}.get(body.category, "feedback")
 
     try:
         resp = await client.post(

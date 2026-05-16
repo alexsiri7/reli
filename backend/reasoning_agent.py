@@ -39,6 +39,16 @@ _tracer = get_tracer("reli.reasoning_agent")
 # Max length for span attribute values to avoid oversized payloads
 _ATTR_VALUE_LIMIT = 4096
 
+# Content fields that must never appear in OTEL span attributes (user PII/data)
+_CONTENT_FIELDS = frozenset({
+    "title", "data_json",
+    "open_questions_json",
+    "summary", "description", "location",
+    "merged_data_json", "payload_json",
+    "search_queries_json", "search_query",
+    "relationship_type",               # personal roles: sister, doctor, therapist
+})
+
 
 def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
     """Wrap a tool function with an OTEL span recording inputs and outputs."""
@@ -56,6 +66,8 @@ def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str,
             bound = sig.bind(*args, **kwargs)
             bound.apply_defaults()
             for param_name, value in bound.arguments.items():
+                if param_name in _CONTENT_FIELDS:
+                    continue
                 attr_val = str(value) if not isinstance(value, str) else value
                 if len(attr_val) > _ATTR_VALUE_LIMIT:
                     attr_val = attr_val[:_ATTR_VALUE_LIMIT] + "..."
@@ -75,18 +87,13 @@ def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str,
                 span.record_exception(exc)
                 return {"error": f"Tool {func.__name__} failed: {exc}"}
 
-            # Record output
+            # Record result status and structural IDs (no content is stored)
             if isinstance(result, dict):
                 if "error" in result:
                     span.set_status(trace.StatusCode.ERROR, result["error"])
                     span.set_attribute("tool.error", result["error"])
                 else:
                     span.set_status(trace.StatusCode.OK)
-                result_str = json.dumps(result, default=str)
-                if len(result_str) > _ATTR_VALUE_LIMIT:
-                    result_str = result_str[:_ATTR_VALUE_LIMIT] + "..."
-                span.set_attribute("tool.output", result_str)
-
                 # Set key identifiers as top-level attributes for easy filtering
                 for key in ("id", "deleted", "keep_id"):
                     if key in result:
