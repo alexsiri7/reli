@@ -203,7 +203,7 @@ export async function putAll<S extends CrudStore>(
   await tx.done
 }
 
-export async function clearStore(store: 'things' | 'thingTypes' | 'relationships' | 'chatMessages' | 'pendingOps' | 'kvCache'): Promise<void> {
+export async function clearStore(store: keyof ReliDB): Promise<void> {
   const db = await getDB()
   return db.clear(store)
 }

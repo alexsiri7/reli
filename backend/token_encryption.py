@@ -141,24 +141,6 @@ def decrypt_or_plaintext(value: str) -> tuple[str, bool]:
         return value, False
 
 
-def encrypt_json(data: str) -> str:
-    """Encrypt a JSON string (used for Gmail token file)."""
-    return encrypt(data)
-
-
-def decrypt_json(data: str) -> str:
-    """Decrypt an encrypted JSON string."""
-    return decrypt(data)
-
-
-def decrypt_json_or_plaintext(data: str) -> tuple[str, bool]:
-    """Try to decrypt JSON data; if it fails, assume plaintext JSON.
-
-    Returns ``(json_str, was_encrypted)``.
-    """
-    return decrypt_or_plaintext(data)
-
-
 def reset_for_testing() -> None:
     """Reset the cached Fernet instance (for tests only)."""
     global _fernet

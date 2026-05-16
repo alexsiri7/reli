@@ -11,10 +11,8 @@ import pytest
 from backend.token_encryption import (
     _is_production,
     decrypt,
-    decrypt_json_or_plaintext,
     decrypt_or_plaintext,
     encrypt,
-    encrypt_json,
     reset_for_testing,
 )
 
@@ -67,14 +65,14 @@ class TestDecryptOrPlaintext:
     def test_json_plaintext(self):
         """Plain JSON (like a Gmail token file) is detected as not encrypted."""
         token_json = json.dumps({"token": "ya29.xxx", "refresh_token": "1//xxx"})
-        value, was_encrypted = decrypt_json_or_plaintext(token_json)
+        value, was_encrypted = decrypt_or_plaintext(token_json)
         assert value == token_json
         assert was_encrypted is False
 
     def test_json_encrypted(self):
         token_json = json.dumps({"token": "ya29.xxx"})
-        encrypted = encrypt_json(token_json)
-        value, was_encrypted = decrypt_json_or_plaintext(encrypted)
+        encrypted = encrypt(token_json)
+        value, was_encrypted = decrypt_or_plaintext(encrypted)
         assert value == token_json
         assert was_encrypted is True
 
