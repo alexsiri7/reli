@@ -230,6 +230,81 @@ describe('ChatPanel', () => {
     expect(screen.getByText('Your personal knowledge companion')).toBeInTheDocument()
   })
 
+  it('urlTransform blocks dangerous protocols in assistant markdown', async () => {
+    mockStore.messages = [
+      {
+        id: '1',
+        session_id: 's',
+        role: 'assistant',
+        content: [
+          '[safe http](http://example.com)',
+          '[safe https](https://example.com)',
+          '[safe mailto](mailto:user@example.com)',
+          '[blocked js](javascript:alert(1))',
+          '[blocked data](data:text/html,<h1>x</h1>)',
+          '[blocked file](file:///etc/passwd)',
+          '[blocked protocol-relative](//evil.com)',
+          '[allowed relative](/some/path)',
+          '[allowed anchor](#section)',
+          '[bare relative](some/path)',
+        ].join('\n'),
+        applied_changes: null,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:00:00Z',
+      },
+    ]
+    render(<ChatPanel />)
+
+    // Safe protocols should produce real hrefs
+    expect(screen.getByRole('link', { name: 'safe http' })).toHaveAttribute('href', 'http://example.com')
+    expect(screen.getByRole('link', { name: 'safe https' })).toHaveAttribute('href', 'https://example.com')
+    expect(screen.getByRole('link', { name: 'safe mailto' })).toHaveAttribute('href', 'mailto:user@example.com')
+
+    // Dangerous protocols should be stripped — the link text is rendered but href is ''
+    // (an <a href=""> is not accessible as role=link, so we query by text)
+    expect(screen.queryByRole('link', { name: 'blocked js' })).toBeNull()
+    expect(screen.getByText('blocked js')).toBeInTheDocument()
+
+    expect(screen.queryByRole('link', { name: 'blocked data' })).toBeNull()
+    expect(screen.getByText('blocked data')).toBeInTheDocument()
+
+    expect(screen.queryByRole('link', { name: 'blocked file' })).toBeNull()
+    expect(screen.getByText('blocked file')).toBeInTheDocument()
+
+    // Protocol-relative URLs should be stripped
+    expect(screen.queryByRole('link', { name: 'blocked protocol-relative' })).toBeNull()
+    expect(screen.getByText('blocked protocol-relative')).toBeInTheDocument()
+
+    // Relative paths should pass through
+    expect(screen.getByRole('link', { name: 'allowed relative' })).toHaveAttribute('href', '/some/path')
+    expect(screen.getByRole('link', { name: 'allowed anchor' })).toHaveAttribute('href', '#section')
+
+    // Bare relative URLs without leading slash should be stripped
+    expect(screen.queryByRole('link', { name: 'bare relative' })).toBeNull()
+    expect(screen.getByText('bare relative')).toBeInTheDocument()
+
+    mockStore.messages = []
+  })
+
+  it('urlTransform allows thing: protocol for internal navigation', () => {
+    mockStore.messages = [
+      {
+        id: '1',
+        session_id: 's',
+        role: 'assistant',
+        content: '[Open thing](thing://abc-123)',
+        applied_changes: null,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:00:00Z',
+      },
+    ]
+    render(<ChatPanel />)
+    // The components.a handler renders thing:// links as a <button>, not an <a>
+    // urlTransform must NOT strip thing: — if it did, no button would render
+    expect(screen.getByRole('button', { name: 'Open thing' })).toBeInTheDocument()
+    mockStore.messages = []
+  })
+
   it('does not render system messages in the visible message stream', () => {
     mockStore.messages = [
       {

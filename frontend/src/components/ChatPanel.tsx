@@ -475,7 +475,7 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
                       const { protocol } = new URL(url)
                       return ['http:', 'https:', 'mailto:', 'thing:'].includes(protocol) ? url : ''
                     } catch {
-                      return url.startsWith('/') || url.startsWith('#') ? url : ''
+                      return (url.startsWith('/') && !url.startsWith('//')) || url.startsWith('#') ? url : ''
                     }
                   }}
                   components={{
