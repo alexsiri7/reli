@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["oauth"])
 
 AUTH_CODE_TTL_SECONDS = 60 * 10  # 10 minutes
+REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
 
 def _base_url() -> str:
@@ -113,6 +114,8 @@ async def oauth_register(request: Request) -> JSONResponse:
         "response_types": body.get("response_types", ["code"]),
         "token_endpoint_auth_method": body.get("token_endpoint_auth_method", "client_secret_post"),
         "scope": body.get("scope", "mcp"),
+        # Client registration TTL mirrors refresh token lifetime — a client without
+        # an active refresh token is effectively useless after 30 days.
         "expires_at": datetime.now(timezone.utc) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
     }
     cleanup_and_store(mcp_registered_clients, client_id, client)
@@ -129,6 +132,7 @@ async def oauth_register(request: Request) -> JSONResponse:
             "response_types": client["response_types"],
             "token_endpoint_auth_method": client["token_endpoint_auth_method"],
             "scope": client["scope"],
+            "client_secret_expires_at": int(client["expires_at"].timestamp()),
         },
         status_code=201,
     )
@@ -201,9 +205,6 @@ def oauth_authorize(
 # ---------------------------------------------------------------------------
 # Token endpoint
 # ---------------------------------------------------------------------------
-
-
-REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
 
 def _issue_token_response(user_id: str, email: str, client_id: str, scope: str) -> JSONResponse:

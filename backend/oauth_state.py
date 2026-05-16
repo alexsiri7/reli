@@ -53,8 +53,8 @@ def _cleanup_expired(store: dict[str, dict]) -> None:
     """Remove entries whose ``expires_at`` is in the past.
 
     Entries may store ``expires_at`` as either a :class:`datetime` (timezone-aware)
-    or a :class:`float` (Unix epoch).  Entries without ``expires_at`` (e.g.
-    registered clients) are never evicted by this function.
+    or a :class:`float` (Unix epoch).  Entries without ``expires_at`` are never
+    evicted by this function.
     """
     now_ts = time.time()
     now_dt = datetime.now(timezone.utc)
