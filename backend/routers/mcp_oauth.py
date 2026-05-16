@@ -113,6 +113,7 @@ async def oauth_register(request: Request) -> JSONResponse:
         "response_types": body.get("response_types", ["code"]),
         "token_endpoint_auth_method": body.get("token_endpoint_auth_method", "client_secret_post"),
         "scope": body.get("scope", "mcp"),
+        "expires_at": datetime.now(timezone.utc) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
     }
     cleanup_and_store(mcp_registered_clients, client_id, client)
 

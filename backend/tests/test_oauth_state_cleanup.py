@@ -139,3 +139,34 @@ def test_cleanup_and_pop_purges_expired():
     }
     cleanup_and_pop(store, "alive")
     assert "dead" not in store
+
+
+# ---------------------------------------------------------------------------
+# Registered client TTL
+# ---------------------------------------------------------------------------
+
+
+def test_registered_client_without_expires_at_is_never_evicted():
+    """Legacy guard: entries with no expires_at survive cleanup (existing behaviour)."""
+    store: dict[str, dict] = {
+        "client_legacy": {"client_id": "client_legacy", "client_secret": "s"},
+    }
+    _cleanup_expired(store)
+    assert "client_legacy" in store
+
+
+def test_registered_client_with_expires_at_is_evicted_when_expired():
+    """Clients with an expires_at in the past are cleaned up."""
+    store: dict[str, dict] = {
+        "client_fresh": {
+            "client_id": "client_fresh",
+            "expires_at": datetime.now(timezone.utc) + timedelta(days=30),
+        },
+        "client_expired": {
+            "client_id": "client_expired",
+            "expires_at": datetime.now(timezone.utc) - timedelta(seconds=1),
+        },
+    }
+    _cleanup_expired(store)
+    assert "client_fresh" in store
+    assert "client_expired" not in store

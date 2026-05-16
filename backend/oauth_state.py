@@ -36,7 +36,7 @@ mcp_auth_codes: dict[str, dict] = {}
 
 # client_id -> {
 #   client_id, client_secret, redirect_uris, client_name, grant_types,
-#   response_types, token_endpoint_auth_method, created_at
+#   response_types, token_endpoint_auth_method, created_at, expires_at
 # }
 mcp_registered_clients: dict[str, dict] = {}
 
