@@ -24,8 +24,8 @@ def _strip_cookie_breadcrumb(crumb: dict, hint: dict | None) -> dict | None:
     data = crumb.get("data")
     if not isinstance(data, dict):
         return crumb
-    for key in ("Cookie", "Set-Cookie", "cookie", "set-cookie"):
-        if key in data:
+    for key in list(data):
+        if key.lower() in ("cookie", "set-cookie"):
             data[key] = "[Filtered]"
     return crumb
 

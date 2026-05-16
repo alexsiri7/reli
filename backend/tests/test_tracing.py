@@ -119,8 +119,22 @@ def test_set_span_error_records_exception():
 # ---------------------------------------------------------------------------
 
 
+def _span_attrs(mock_span: MagicMock) -> dict:
+    """Extract span attribute key-value pairs from a mock span."""
+    return {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
+
+
 class TestTracedToolDecorator:
     """Tests for the _traced_tool span instrumentation decorator."""
+
+    @pytest.fixture()
+    def mock_tracer_ctx(self):
+        """Return (mock_span, mock_tracer) wired up as a context manager."""
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+        return mock_span, mock_tracer
 
     def test_traced_tool_preserves_function_name(self):
         """Wrapped function should preserve __name__ for ADK schema generation."""
@@ -157,14 +171,11 @@ class TestTracedToolDecorator:
         assert "error" in result
         assert "boom" in result["error"]
 
-    def test_traced_tool_records_span_attributes(self):
+    def test_traced_tool_records_span_attributes(self, mock_tracer_ctx):
         """_traced_tool records non-content span attributes; content fields and tool output are scrubbed."""
         from backend.reasoning_agent import _traced_tool
 
-        mock_span = MagicMock()
-        mock_tracer = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+        mock_span, mock_tracer = mock_tracer_ctx
 
         with patch("backend.reasoning_agent._tracer", mock_tracer):
 
@@ -182,20 +193,17 @@ class TestTracedToolDecorator:
         assert call_args[0][0] == "tool.create_thing"
 
         # Non-content inputs are recorded; content fields must be absent
-        set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
+        set_attr_calls = _span_attrs(mock_span)
         assert "tool.input.title" not in set_attr_calls  # content field scrubbed
         assert set_attr_calls["tool.input.importance"] == "0"
         assert "tool.output" not in set_attr_calls  # full output scrubbed
         assert set_attr_calls["tool.result.id"] == "new-uuid"
 
-    def test_traced_tool_scrubs_content_fields(self):
+    def test_traced_tool_scrubs_content_fields(self, mock_tracer_ctx):
         """_traced_tool must not record any _CONTENT_FIELDS as span attributes."""
         from backend.reasoning_agent import _CONTENT_FIELDS, _traced_tool
 
-        mock_span = MagicMock()
-        mock_tracer = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+        mock_span, mock_tracer = mock_tracer_ctx
 
         with patch("backend.reasoning_agent._tracer", mock_tracer):
 
@@ -238,14 +246,11 @@ class TestTracedToolDecorator:
             )
         assert "tool.output" not in set_attr_calls
 
-    def test_traced_tool_records_error_status_on_error_result(self):
+    def test_traced_tool_records_error_status_on_error_result(self, mock_tracer_ctx):
         """Wrapped tool should set ERROR status when result contains 'error' key."""
         from backend.reasoning_agent import _traced_tool
 
-        mock_span = MagicMock()
-        mock_tracer = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+        mock_span, mock_tracer = mock_tracer_ctx
 
         with patch("backend.reasoning_agent._tracer", mock_tracer):
 
@@ -257,7 +262,7 @@ class TestTracedToolDecorator:
 
         assert result == {"error": "Thing not found"}
 
-        set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
+        set_attr_calls = _span_attrs(mock_span)
         assert set_attr_calls["tool.error"] == "Thing not found"
 
     def test_tools_from_factory_are_traced(self):
