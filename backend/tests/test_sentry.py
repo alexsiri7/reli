@@ -48,12 +48,12 @@ def test_set_sentry_user_noop_without_dsn():
 
         # Should not raise or call sentry_sdk
         with patch("backend.sentry.sentry_sdk") as mock_sdk:
-            set_sentry_user("user-123", "test@example.com")
+            set_sentry_user("user-123")
             mock_sdk.set_user.assert_not_called()
 
 
-def test_set_sentry_user_sets_context():
-    """set_sentry_user should set user context on the Sentry scope."""
+def test_set_sentry_user_sets_only_id():
+    """set_sentry_user should set only opaque user ID — no email PII."""
     with (
         patch("backend.sentry.settings") as mock_settings,
         patch("backend.sentry.sentry_sdk") as mock_sdk,
@@ -61,18 +61,92 @@ def test_set_sentry_user_sets_context():
         mock_settings.SENTRY_DSN = "https://examplePublicKey@o0.ingest.sentry.io/0"
         from backend.sentry import set_sentry_user
 
-        set_sentry_user("user-123", "test@example.com")
-        mock_sdk.set_user.assert_called_once_with({"id": "user-123", "email": "test@example.com"})
+        set_sentry_user("user-123")
+        mock_sdk.set_user.assert_called_once_with({"id": "user-123"})
+        call_args = mock_sdk.set_user.call_args[0][0]
+        assert "email" not in call_args
 
 
-def test_set_sentry_user_without_email():
-    """set_sentry_user should omit email when not provided."""
+@pytest.mark.parametrize("header_key", ["Cookie", "Set-Cookie", "cookie", "set-cookie"])
+def test_strip_cookie_breadcrumb_filters_cookie_header(header_key):
+    """_strip_cookie_breadcrumb should redact all cookie header name variants."""
+    from backend.sentry import _strip_cookie_breadcrumb
+
+    crumb = {"data": {header_key: "reli_session=supersecretjwt", "X-Other": "value"}}
+    result = _strip_cookie_breadcrumb(crumb, None)
+    assert result is not None
+    assert result["data"][header_key] == "[Filtered]"
+    assert result["data"]["X-Other"] == "value"
+
+
+def test_strip_cookie_breadcrumb_no_data_key():
+    """_strip_cookie_breadcrumb should handle breadcrumbs with no 'data' key."""
+    from backend.sentry import _strip_cookie_breadcrumb
+
+    crumb = {"type": "http", "category": "fetch"}
+    result = _strip_cookie_breadcrumb(crumb, None)
+    assert result is not None
+
+
+def test_strip_cookie_breadcrumb_data_is_none():
+    """_strip_cookie_breadcrumb should handle breadcrumbs where data is None."""
+    from backend.sentry import _strip_cookie_breadcrumb
+
+    crumb = {"data": None}
+    result = _strip_cookie_breadcrumb(crumb, None)
+    assert result is not None
+
+
+def test_strip_cookie_breadcrumb_no_cookie_passthrough():
+    """_strip_cookie_breadcrumb should pass through breadcrumbs without cookie headers."""
+    from backend.sentry import _strip_cookie_breadcrumb
+
+    crumb = {"data": {"Authorization": "Bearer token"}}
+    result = _strip_cookie_breadcrumb(crumb, None)
+    assert result is not None
+    assert result["data"]["Authorization"] == "Bearer token"
+
+
+def test_init_sentry_sets_before_breadcrumb():
+    """init_sentry should register _strip_cookie_breadcrumb as before_breadcrumb hook."""
     with (
         patch("backend.sentry.settings") as mock_settings,
         patch("backend.sentry.sentry_sdk") as mock_sdk,
     ):
         mock_settings.SENTRY_DSN = "https://examplePublicKey@o0.ingest.sentry.io/0"
-        from backend.sentry import set_sentry_user
+        mock_settings.SENTRY_ENVIRONMENT = "test"
+        mock_settings.SENTRY_TRACES_SAMPLE_RATE = 0.1
+        from backend.sentry import _strip_cookie_breadcrumb, init_sentry
 
-        set_sentry_user("user-456")
-        mock_sdk.set_user.assert_called_once_with({"id": "user-456"})
+        init_sentry()
+        call_kwargs = mock_sdk.init.call_args[1]
+        assert call_kwargs.get("before_breadcrumb") is _strip_cookie_breadcrumb
+        assert call_kwargs.get("send_default_pii") is False
+
+
+def test_middleware_does_not_pass_email_to_set_sentry_user():
+    """SentryUserContextMiddleware should call set_sentry_user with only user_id."""
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    import jwt
+
+    from backend.main import JWT_ALGORITHM, SentryUserContextMiddleware
+
+    _test_secret = "test-secret-key-for-middleware-test"
+    token = jwt.encode(
+        {"sub": "user-42", "email": "should@not.appear"},
+        _test_secret,
+        algorithm=JWT_ALGORITHM,
+    )
+    request = MagicMock()
+    request.cookies.get.return_value = token
+
+    with (
+        patch("backend.main.SECRET_KEY", _test_secret),
+        patch("backend.main.set_sentry_user") as mock_set_user,
+    ):
+        middleware = SentryUserContextMiddleware(app=MagicMock())
+        asyncio.run(middleware.dispatch(request, AsyncMock(return_value=MagicMock())))
+        mock_set_user.assert_called_once_with("user-42")
+        assert len(mock_set_user.call_args[0]) == 1

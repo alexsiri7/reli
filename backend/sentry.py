@@ -1,7 +1,7 @@
 """Sentry error monitoring integration.
 
 Initializes Sentry SDK when SENTRY_DSN is configured. Provides a helper
-to set user context (user_id, email) on the current Sentry scope.
+to set user context (opaque user_id only) on the current Sentry scope.
 """
 
 import logging
@@ -13,6 +13,21 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from .config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_cookie_breadcrumb(crumb: dict, hint: dict | None) -> dict | None:
+    """Redact all Cookie/Set-Cookie header values from breadcrumbs.
+
+    Sentry before_breadcrumb hook: return the crumb to keep it,
+    or None to drop it entirely. This implementation always keeps the crumb.
+    """
+    data = crumb.get("data")
+    if not isinstance(data, dict):
+        return crumb
+    for key in ("Cookie", "Set-Cookie", "cookie", "set-cookie"):
+        if key in data:
+            data[key] = "[Filtered]"
+    return crumb
 
 
 def init_sentry() -> None:
@@ -30,15 +45,13 @@ def init_sentry() -> None:
             FastApiIntegration(),
         ],
         send_default_pii=False,
+        before_breadcrumb=_strip_cookie_breadcrumb,
     )
     logger.info("Sentry initialized (env=%s)", settings.SENTRY_ENVIRONMENT)
 
 
-def set_sentry_user(user_id: str, email: str | None = None) -> None:
-    """Set user context on the current Sentry scope."""
+def set_sentry_user(user_id: str) -> None:
+    """Set user context on the current Sentry scope using opaque user ID only."""
     if not settings.SENTRY_DSN:
         return
-    user_data: dict[str, str] = {"id": user_id}
-    if email:
-        user_data["email"] = email
-    sentry_sdk.set_user(user_data)
+    sentry_sdk.set_user({"id": user_id})

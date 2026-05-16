@@ -74,7 +74,7 @@ async def submit_feedback(
 
     # Upload screenshot to GitHub CDN if provided
     screenshot_url: str | None = None
-    if body.screenshot_base64 and token and repo:
+    if body.screenshot_base64:
         try:
             image_data = base64.b64decode(body.screenshot_base64)
             upload_resp = await client.post(
