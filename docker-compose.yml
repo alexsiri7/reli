@@ -24,5 +24,15 @@ services:
       - RELI_API_TOKEN=${RELI_API_TOKEN}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
+      - PHOENIX_ENABLED=${PHOENIX_ENABLED:-false}
+      - PHOENIX_ENDPOINT=${PHOENIX_ENDPOINT:-http://phoenix:6006/v1/traces}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-reli}
       - DATABASE_URL=${DATABASE_URL:-}
+    restart: unless-stopped
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    profiles: [tracing]
+    ports:
+      - "127.0.0.1:6006:6006"
     restart: unless-stopped
