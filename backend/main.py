@@ -179,7 +179,7 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
                 import jwt as pyjwt
 
                 payload = pyjwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
-                set_sentry_user(payload.get("sub", ""), payload.get("email"))
+                set_sentry_user(payload.get("sub", ""))
             except Exception:
                 logger.debug("Failed to decode JWT for Sentry context", exc_info=True)
         return await call_next(request)

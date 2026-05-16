@@ -48,12 +48,12 @@ def test_set_sentry_user_noop_without_dsn():
 
         # Should not raise or call sentry_sdk
         with patch("backend.sentry.sentry_sdk") as mock_sdk:
-            set_sentry_user("user-123", "test@example.com")
+            set_sentry_user("user-123")
             mock_sdk.set_user.assert_not_called()
 
 
-def test_set_sentry_user_sets_context():
-    """set_sentry_user should set user context on the Sentry scope."""
+def test_set_sentry_user_sets_only_id():
+    """set_sentry_user should set only opaque user ID — no email PII."""
     with (
         patch("backend.sentry.settings") as mock_settings,
         patch("backend.sentry.sentry_sdk") as mock_sdk,
@@ -61,18 +61,45 @@ def test_set_sentry_user_sets_context():
         mock_settings.SENTRY_DSN = "https://examplePublicKey@o0.ingest.sentry.io/0"
         from backend.sentry import set_sentry_user
 
-        set_sentry_user("user-123", "test@example.com")
-        mock_sdk.set_user.assert_called_once_with({"id": "user-123", "email": "test@example.com"})
+        set_sentry_user("user-123")
+        mock_sdk.set_user.assert_called_once_with({"id": "user-123"})
+        call_args = mock_sdk.set_user.call_args[0][0]
+        assert "email" not in call_args
 
 
-def test_set_sentry_user_without_email():
-    """set_sentry_user should omit email when not provided."""
+def test_strip_cookie_breadcrumb_filters_cookie_header():
+    """_strip_cookie_breadcrumb should redact Cookie header values."""
+    from backend.sentry import _strip_cookie_breadcrumb
+
+    crumb = {"data": {"Cookie": "reli_session=supersecretjwt", "X-Other": "value"}}
+    result = _strip_cookie_breadcrumb(crumb, None)
+    assert result is not None
+    assert result["data"]["Cookie"] == "[Filtered]"
+    assert result["data"]["X-Other"] == "value"
+
+
+def test_strip_cookie_breadcrumb_no_cookie_passthrough():
+    """_strip_cookie_breadcrumb should pass through breadcrumbs without cookie headers."""
+    from backend.sentry import _strip_cookie_breadcrumb
+
+    crumb = {"data": {"Authorization": "Bearer token"}}
+    result = _strip_cookie_breadcrumb(crumb, None)
+    assert result is not None
+    assert result["data"]["Authorization"] == "Bearer token"
+
+
+def test_init_sentry_sets_before_breadcrumb():
+    """init_sentry should register _strip_cookie_breadcrumb as before_breadcrumb hook."""
     with (
         patch("backend.sentry.settings") as mock_settings,
         patch("backend.sentry.sentry_sdk") as mock_sdk,
     ):
         mock_settings.SENTRY_DSN = "https://examplePublicKey@o0.ingest.sentry.io/0"
-        from backend.sentry import set_sentry_user
+        mock_settings.SENTRY_ENVIRONMENT = "test"
+        mock_settings.SENTRY_TRACES_SAMPLE_RATE = 0.1
+        from backend.sentry import _strip_cookie_breadcrumb, init_sentry
 
-        set_sentry_user("user-456")
-        mock_sdk.set_user.assert_called_once_with({"id": "user-456"})
+        init_sentry()
+        call_kwargs = mock_sdk.init.call_args[1]
+        assert call_kwargs.get("before_breadcrumb") is _strip_cookie_breadcrumb
+        assert call_kwargs.get("send_default_pii") is False
