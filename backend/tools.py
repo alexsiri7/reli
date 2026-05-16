@@ -1282,3 +1282,92 @@ def get_due_scheduled_tasks(user_id: str = "") -> list[dict[str, Any]]:
         )
         records = session.exec(stmt).all()
     return [r.model_dump() for r in records]
+
+
+# ---------------------------------------------------------------------------
+# get_preferences / update_preference
+# ---------------------------------------------------------------------------
+
+# Accept all four levels: sweep code uses "emerging"/"established"/"strong",
+# MCP prompts use "emerging"/"moderate"/"strong". Accepting the union prevents
+# caller breakage when both vocabularies are in use.
+_VALID_CONFIDENCE_LEVELS = {"emerging", "moderate", "established", "strong"}
+
+
+def get_preferences(user_id: str = "") -> list[dict[str, Any]]:
+    """Return all active preference Things for the given user."""
+    with Session(_engine_mod.engine) as session:
+        stmt = (
+            select(ThingRecord)
+            .where(
+                ThingRecord.type_hint == "preference",
+                ThingRecord.active == True,  # noqa: E712
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+            .order_by(ThingRecord.updated_at.desc())  # type: ignore[union-attr]
+        )
+        records = session.exec(stmt).all()
+    return [_thing_to_dict(r) for r in records]
+
+
+def update_preference(
+    thing_id: str,
+    patterns_json: str,
+    user_id: str = "",
+) -> dict[str, Any]:
+    """Replace the patterns array on a preference Thing.
+
+    Validates pattern structure and confidence levels, then writes only
+    data["patterns"] — all other Thing fields remain unchanged.
+
+    Returns the updated Thing dict, or an error dict.
+    """
+    thing_id = thing_id.strip()
+    if not thing_id:
+        return {"error": "thing_id is required"}
+
+    try:
+        patterns = json.loads(patterns_json)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {"error": f"patterns_json is not valid JSON: {exc}"}
+
+    if not isinstance(patterns, list):
+        return {"error": "patterns must be a JSON array"}
+
+    for i, item in enumerate(patterns):
+        if not isinstance(item, dict):
+            return {"error": f"patterns[{i}] must be a dict"}
+        pattern_str = item.get("pattern")
+        if not pattern_str or not isinstance(pattern_str, str) or not pattern_str.strip():
+            return {"error": f"patterns[{i}].pattern must be a non-empty string"}
+        confidence = item.get("confidence")
+        if confidence not in _VALID_CONFIDENCE_LEVELS:
+            return {"error": f"patterns[{i}].confidence must be one of {sorted(_VALID_CONFIDENCE_LEVELS)}"}
+        observations = item.get("observations")
+        if isinstance(observations, bool) or not isinstance(observations, int) or observations < 1:
+            return {"error": f"patterns[{i}].observations must be an int >= 1"}
+
+    now = datetime.now(timezone.utc)
+
+    with Session(_engine_mod.engine) as session:
+        record = session.get(ThingRecord, thing_id)
+        if not record:
+            return {"error": f"Thing {thing_id} not found"}
+
+        if record.user_id and user_id and record.user_id != user_id:
+            return {"error": "Unauthorized"}
+
+        if record.type_hint != "preference":
+            return {"error": f"Thing {thing_id} is not a preference (type_hint={record.type_hint!r})"}
+
+        if not record.active:
+            return {"error": f"Thing {thing_id} is not active"}
+
+        record.data = {**(record.data if isinstance(record.data, dict) else {}), "patterns": patterns}
+        record.updated_at = now
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+        row_dict = _thing_to_dict(record)
+        upsert_thing(row_dict)
+        return row_dict
