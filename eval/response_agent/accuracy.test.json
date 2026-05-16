@@ -1,0 +1,135 @@
+{
+  "eval_set_id": "response-agent-accuracy",
+  "name": "Response Agent — Accuracy and Faithfulness",
+  "description": "Golden dataset: response agent must accurately reflect what the reasoning agent decided without hallucinating changes or omitting key information.",
+  "eval_cases": [
+    {
+      "eval_id": "accuracy-deletion-confirmed",
+      "description": "Reasoning deleted a thing. Response must confirm deletion, not say 'created' or 'updated'.",
+      "input": {
+        "user_message": "remove the dentist appointment, I already went",
+        "reasoning_summary": "Deleted 'Dentist appointment' — user confirmed it's no longer needed.",
+        "applied_changes": {
+          "created": [],
+          "updated": [],
+          "deleted": [{"id": "thing-den01", "title": "Dentist appointment", "type_hint": "task"}],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response confirms the item was removed or deleted",
+        "Response does NOT say the item was 'created' or 'updated'",
+        "Response does NOT claim any items were added or modified"
+      ]
+    },
+    {
+      "eval_id": "accuracy-no-changes-no-hallucination",
+      "description": "Reasoning made no changes. Response must NOT claim any changes were made.",
+      "input": {
+        "user_message": "how's my week looking?",
+        "reasoning_summary": "No changes made. Surfacing active items: Team standup, Client proposal draft, Gym session.",
+        "applied_changes": {
+          "created": [],
+          "updated": [],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response does NOT claim anything was created, updated, deleted, or changed",
+        "Response surfaces or mentions at least one of the active items (Team standup, Client proposal draft, or Gym session)",
+        "Response does NOT fabricate items that are not in the reasoning summary"
+      ]
+    },
+    {
+      "eval_id": "accuracy-multi-create-all-mentioned",
+      "description": "Reasoning created multiple things. Response must acknowledge all of them, not just one.",
+      "input": {
+        "user_message": "add grocery shopping and pick up dry cleaning to my errands",
+        "reasoning_summary": "Created two tasks: 'Grocery shopping' and 'Pick up dry cleaning'.",
+        "applied_changes": {
+          "created": [
+            {"id": "thing-gro01", "title": "Grocery shopping", "type_hint": "task", "active": 1},
+            {"id": "thing-dry01", "title": "Pick up dry cleaning", "type_hint": "task", "active": 1}
+          ],
+          "updated": [],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response mentions grocery shopping (or groceries)",
+        "Response mentions dry cleaning",
+        "Response does NOT omit either of the two created items",
+        "Response does NOT claim items were deleted or completed"
+      ]
+    },
+    {
+      "eval_id": "accuracy-importance-update",
+      "description": "Reasoning changed importance to critical. Response must reflect urgency, not neutral tone.",
+      "input": {
+        "user_message": "the server migration is now critical, it has to be done by end of day",
+        "reasoning_summary": "Updated 'Server migration' importance to critical. Deadline is today.",
+        "applied_changes": {
+          "created": [],
+          "updated": [{"id": "thing-srv01", "title": "Server migration", "type_hint": "task", "importance": 0, "active": 1}],
+          "deleted": [],
+          "merged": [],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response acknowledges the increased urgency or critical priority of the server migration",
+        "Response does NOT treat this as a routine update with neutral language",
+        "Response does NOT claim the item was created or deleted"
+      ]
+    },
+    {
+      "eval_id": "accuracy-merge-confirmed",
+      "description": "Reasoning consolidated two duplicate things. Response must mention the merge/consolidation.",
+      "input": {
+        "user_message": "those two budget items are the same thing, combine them",
+        "reasoning_summary": "Merged 'Budget review Q2' and 'Q2 budget analysis' into one item. Kept 'Budget review Q2', marked 'Q2 budget analysis' as inactive.",
+        "applied_changes": {
+          "created": [],
+          "updated": [
+            {"id": "thing-bud01", "title": "Budget review Q2", "type_hint": "task", "active": 1}
+          ],
+          "deleted": [],
+          "merged": [
+            {"keep_id": "thing-bud01", "remove_id": "thing-bud02", "keep_title": "Budget review Q2", "remove_title": "Q2 budget analysis"}
+          ],
+          "relationships_created": []
+        },
+        "questions_for_user": [],
+        "priority_question": "",
+        "briefing_mode": false,
+        "personality_patterns": []
+      },
+      "rubric": [
+        "Response mentions that items were merged, combined, or consolidated",
+        "Response does NOT say two new items were created",
+        "Response does NOT omit the fact that a merge/consolidation happened"
+      ]
+    }
+  ]
+}

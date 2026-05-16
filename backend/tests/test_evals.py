@@ -463,3 +463,12 @@ async def test_response_agent_question_quality() -> None:
         test_file=str(EVAL_ROOT / "response_agent" / "question_quality.test.json"),
         threshold=0.7,
     )
+
+
+@pytest.mark.asyncio
+async def test_response_agent_accuracy() -> None:
+    """Eval: response agent — accuracy and faithfulness to reasoning agent output."""
+    await _run_response_agent_eval(
+        test_file=str(EVAL_ROOT / "response_agent" / "accuracy.test.json"),
+        threshold=0.7,
+    )
