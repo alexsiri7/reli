@@ -296,7 +296,9 @@ def create_thing(
                 )
             existing.updated_at = now
             session.add(existing)
-            _log_mutation(session, "create_thing", existing.id, before_snap, _thing_to_dict(existing), client_id=user_id)
+            _log_mutation(
+                session, "create_thing", existing.id, before_snap, _thing_to_dict(existing), client_id=user_id
+            )
             session.commit()
             session.refresh(existing)
             row_dict = _thing_to_dict(existing)
@@ -645,7 +647,10 @@ def create_relationship(
         )
         session.add(record)
         _log_mutation(
-            session, "create_relationship", from_id, None,
+            session,
+            "create_relationship",
+            from_id,
+            None,
             {"id": rel_id, "from_thing_id": from_id, "to_thing_id": to_id, "relationship_type": rel_type},
             client_id=user_id,
         )

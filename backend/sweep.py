@@ -1466,7 +1466,9 @@ def find_suspicious_mutations(
                 candidates.append(
                     SweepCandidate(
                         thing_id=r.thing_id or "",
-                        thing_title=r.after_snapshot.get("title", "Unknown") if isinstance(r.after_snapshot, dict) else "Unknown",
+                        thing_title=r.after_snapshot.get("title", "Unknown")
+                        if isinstance(r.after_snapshot, dict)
+                        else "Unknown",
                         finding_type="suspicious_mass_field_removal",
                         message=f"Update removed {before_keys - after_keys} fields from Thing.",
                         priority=1,
