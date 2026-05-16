@@ -95,11 +95,13 @@ jobs:
           sleep 90
           echo "Polling ${RAILWAY_STAGING_URL}/healthz ..."
           for i in $(seq 1 20); do
-            if curl -sf --max-time 5 "${RAILWAY_STAGING_URL}/healthz" | grep -q '"status":"ok"'; then
+            HTTP_CODE=$(curl -s -o /tmp/hc_body.txt -w "%{http_code}" --max-time 5 "${RAILWAY_STAGING_URL}/healthz" 2>/dev/null || echo "000")
+            BODY=$(cat /tmp/hc_body.txt 2>/dev/null)
+            echo "Attempt $i/20: HTTP $HTTP_CODE — ${BODY:0:100}"
+            if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q '"status":"ok"'; then
               echo "Staging healthy after attempt $i"
               exit 0
             fi
-            echo "Attempt $i/20 failed, waiting 30s..."
             sleep 30
           done
           echo "Staging failed to become healthy after 20 attempts"
