@@ -34,6 +34,14 @@ class FeedbackResponse(BaseModel):
     message: str = ""
 
 
+# Maps feedback category → (issue title prefix, GitHub label)
+_CATEGORY_MAP: dict[str, tuple[str, str]] = {
+    "bug": ("Bug", "bug"),
+    "feature": ("Feature request", "enhancement"),
+    "other": ("Feedback", "feedback"),
+}
+
+
 @router.post("", response_model=FeedbackResponse, summary="Submit feedback")
 async def submit_feedback(
     body: FeedbackRequest,
@@ -88,13 +96,7 @@ async def submit_feedback(
     if screenshot_url:
         issue_body += f"\n\n## Screenshot\n\n![Screenshot]({screenshot_url})"
 
-    # Map category to (title prefix, GitHub label)
-    _category_map = {
-        "bug": ("Bug", "bug"),
-        "feature": ("Feature request", "enhancement"),
-        "other": ("Feedback", "feedback"),
-    }
-    title_prefix, label = _category_map.get(body.category, ("Feedback", "feedback"))
+    title_prefix, label = _CATEGORY_MAP.get(body.category, ("Feedback", "feedback"))
 
     # Truncate message for title (first line, max 80 chars)
     first_line = body.message.split("\n")[0].strip()
