@@ -211,9 +211,63 @@ describe('SettingsPanel', () => {
       fireEvent.keyDown(contextTrigger, { key: 'ArrowDown' })
       fireEvent.keyDown(contextTrigger, { key: 'Enter' })
 
-      // Should have selected the first model in the list
       // Dropdown should be closed
       expect(screen.queryByPlaceholderText('Search models...')).not.toBeInTheDocument()
+      // On open, focusedIndex starts at 0; ArrowDown advances to 1 (gpt-4 is second in list)
+      expect(contextTrigger).toHaveTextContent('gpt-4')
+    })
+
+    it('opens dropdown on ArrowDown when closed', () => {
+      storeState.modelSettings = { context: 'openai/gpt-4', reasoning: 'openai/gpt-4', response: 'openai/gpt-4', chat_context_window: 3 }
+      storeState.availableModels = [{ id: 'openai/gpt-4' }, { id: 'openai/gpt-3.5' }]
+      render(<SettingsPanel />)
+
+      const contextTrigger = screen.getByText('Context Model').closest('div')!.querySelector('button')!
+      // Do NOT click — use keyboard only
+      fireEvent.keyDown(contextTrigger, { key: 'ArrowDown' })
+      expect(screen.getByPlaceholderText('Search models...')).toBeInTheDocument()
+    })
+
+    it('navigates up with ArrowUp and selects correct model', () => {
+      storeState.modelSettings = { context: 'openai/gpt-4', reasoning: 'openai/gpt-4', response: 'openai/gpt-4', chat_context_window: 3 }
+      storeState.availableModels = [{ id: 'openai/gpt-4' }, { id: 'openai/gpt-3.5' }]
+      render(<SettingsPanel />)
+
+      const contextTrigger = screen.getByText('Context Model').closest('div')!.querySelector('button')!
+      fireEvent.click(contextTrigger)
+      // Navigate down twice (index 0, then 1), then up once (back to 0)
+      fireEvent.keyDown(contextTrigger, { key: 'ArrowDown' })
+      fireEvent.keyDown(contextTrigger, { key: 'ArrowDown' })
+      fireEvent.keyDown(contextTrigger, { key: 'ArrowUp' })
+      fireEvent.keyDown(contextTrigger, { key: 'Enter' })
+
+      // Dropdown should be closed (model selected)
+      expect(screen.queryByPlaceholderText('Search models...')).not.toBeInTheDocument()
+      // ArrowUp returns to index 0 (gpt-3.5) from index 1 (gpt-4)
+      expect(contextTrigger).toHaveTextContent('gpt-3.5')
+    })
+
+    it('closes dropdown on Escape key fired from search input', () => {
+      storeState.modelSettings = { context: 'openai/gpt-4', reasoning: 'openai/gpt-4', response: 'openai/gpt-4', chat_context_window: 3 }
+      storeState.availableModels = [{ id: 'openai/gpt-4' }, { id: 'openai/gpt-3.5' }]
+      render(<SettingsPanel />)
+
+      const contextTrigger = screen.getByText('Context Model').closest('div')!.querySelector('button')!
+      fireEvent.click(contextTrigger)
+      const searchInput = screen.getByPlaceholderText('Search models...')
+      fireEvent.keyDown(searchInput, { key: 'Escape' })
+      expect(screen.queryByPlaceholderText('Search models...')).not.toBeInTheDocument()
+    })
+
+    it('displays <$0.0001 sentinel for extremely cheap models', () => {
+      storeState.modelSettings = { context: 'openai/gpt-4', reasoning: 'openai/gpt-4', response: 'openai/gpt-4', chat_context_window: 3 }
+      storeState.availableModels = [
+        // 0.05 / 1000 = 0.00005 which is < 0.0001 threshold
+        { id: 'openai/gpt-4', name: null, input_cost_per_million: 0.05, output_cost_per_million: 0.1 },
+      ]
+      render(<SettingsPanel />)
+      // The trigger button subtitle should show the sentinel
+      expect(screen.getAllByText(/<\$0\.0001 in/)[0]).toBeInTheDocument()
     })
   })
 })

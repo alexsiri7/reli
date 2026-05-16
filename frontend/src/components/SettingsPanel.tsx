@@ -1056,6 +1056,7 @@ function ModelPicker({
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [focusedIndex, setFocusedIndex] = useState(-1)
+  const rowRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
   const containerRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -1098,8 +1099,12 @@ function ModelPicker({
   // Flat list of model IDs in display order (for keyboard navigation)
   const flatIds = useMemo(() => grouped.flatMap(([, ids]) => ids), [grouped])
 
-  // Reset focused index when search changes or dropdown closes
-  useEffect(() => { setFocusedIndex(-1) }, [search, open])
+  // Reset to first item on open, to -1 on close; reset on search change
+  useEffect(() => { setFocusedIndex(open ? 0 : -1) }, [search, open])
+  // Scroll focused row into view
+  useEffect(() => {
+    if (focusedIndex >= 0) rowRefs.current.get(focusedIndex)?.scrollIntoView({ block: 'nearest' })
+  }, [focusedIndex])
 
   // Keyboard handler for trigger button and search input
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1108,11 +1113,14 @@ function ModelPicker({
       setSearch('')
       e.preventDefault()
     } else if (e.key === 'ArrowDown') {
-      if (!open) { setOpen(true) } else {
+      if (!open) {
+        setOpen(true)
+        setFocusedIndex(0)
+      } else {
         setFocusedIndex(i => Math.min(i + 1, flatIds.length - 1))
       }
       e.preventDefault()
-    } else if (e.key === 'ArrowUp') {
+    } else if (e.key === 'ArrowUp' && open) {
       setFocusedIndex(i => Math.max(i - 1, 0))
       e.preventDefault()
     } else if (e.key === 'Enter' && focusedIndex >= 0 && open) {
@@ -1210,11 +1218,13 @@ function ModelPicker({
                   const tier = m ? costTier(m) : 'unknown'
                   const ts = COST_TIER_STYLES[tier]
                   const isSelected = id === value
+                  const flatIdx = flatIds.indexOf(id)
                   const isFocused = flatIds[focusedIndex] === id
                   return (
                     <button
                       key={id}
                       type="button"
+                      ref={el => { if (el) rowRefs.current.set(flatIdx, el); else rowRefs.current.delete(flatIdx) }}
                       onClick={() => { onChange(id); setOpen(false); setSearch('') }}
                       className={`w-full text-left px-3 py-2 flex items-center gap-2 text-sm transition-colors ${
                         isSelected
