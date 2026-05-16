@@ -91,6 +91,8 @@ jobs:
         env:
           RAILWAY_STAGING_URL: ${{ secrets.RAILWAY_STAGING_URL }}
         run: |
+          echo "Waiting 90s for Railway to start the new container..."
+          sleep 90
           echo "Polling ${RAILWAY_STAGING_URL}/healthz ..."
           for i in $(seq 1 20); do
             if curl -sf --max-time 5 "${RAILWAY_STAGING_URL}/healthz" | grep -q '"status":"ok"'; then

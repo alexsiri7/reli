@@ -21,6 +21,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.13 /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 RUN UV_SYSTEM_PYTHON=1 uv sync --frozen --no-dev
 
+# Add the virtualenv created by uv sync to PATH so uvicorn and python
+# resolve to the venv's binaries rather than the (empty) system install.
+ENV PATH="/app/.venv/bin:$PATH"
+
 # Copy config
 COPY config.yaml ./config.yaml
 COPY alembic.ini ./alembic.ini
