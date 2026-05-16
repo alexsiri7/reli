@@ -59,6 +59,54 @@ _CONTENT_FIELDS = frozenset(
 
 def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
     """Wrap a tool function with an OTEL span recording inputs and outputs."""
+    import inspect
+
+    if inspect.iscoroutinefunction(func):
+
+        @functools.wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            with _tracer.start_as_current_span(
+                f"tool.{func.__name__}",
+                kind=trace.SpanKind.INTERNAL,
+            ) as span:
+                sig = inspect.signature(func)
+                bound = sig.bind(*args, **kwargs)
+                bound.apply_defaults()
+                for param_name, value in bound.arguments.items():
+                    if param_name in _CONTENT_FIELDS:
+                        continue
+                    attr_val = str(value) if not isinstance(value, str) else value
+                    if len(attr_val) > _ATTR_VALUE_LIMIT:
+                        attr_val = attr_val[:_ATTR_VALUE_LIMIT] + "..."
+                    span.set_attribute(f"tool.input.{param_name}", attr_val)
+
+                try:
+                    result = await func(*args, **kwargs)
+                except Exception as exc:
+                    logger.exception(
+                        "Tool %s crashed: %s (args=%s kwargs=%s)",
+                        func.__name__,
+                        exc,
+                        args,
+                        kwargs,
+                    )
+                    span.set_status(trace.StatusCode.ERROR, str(exc))
+                    span.record_exception(exc)
+                    return {"error": f"Tool {func.__name__} failed: {exc}"}
+
+                if isinstance(result, dict):
+                    if "error" in result:
+                        span.set_status(trace.StatusCode.ERROR, result["error"])
+                        span.set_attribute("tool.error", result["error"])
+                    else:
+                        span.set_status(trace.StatusCode.OK)
+                    for key in ("id", "deleted", "keep_id"):
+                        if key in result:
+                            span.set_attribute(f"tool.result.{key}", str(result[key]))
+
+                return result
+
+        return async_wrapper  # type: ignore[return-value]
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -66,9 +114,6 @@ def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str,
             f"tool.{func.__name__}",
             kind=trace.SpanKind.INTERNAL,
         ) as span:
-            # Record input arguments
-            import inspect
-
             sig = inspect.signature(func)
             bound = sig.bind(*args, **kwargs)
             bound.apply_defaults()
@@ -130,6 +175,11 @@ You have tools to query and modify the database. Call them as needed:
 - fetch_context — search the Things database for relevant context. Call this
   FIRST to understand what Things already exist before making storage changes.
   Pass search queries derived from the user's message.
+- context_agent — smart context search using AI query planning. Call this when
+  warm context is insufficient and the topic has shifted or you need Things you
+  cannot easily describe with explicit keywords. Pass a natural language description
+  of what you need. Internally uses a query-planning LLM to formulate optimal
+  searches.
 - chat_history — retrieve older messages from the conversation. Use this when
   the user references something from earlier in the conversation that isn't
   in the provided history, or when you need more context about what was
@@ -149,10 +199,10 @@ You have tools to query and modify the database. Call them as needed:
 WORKFLOW:
 1. Check if warm context is provided (Things from recent conversation turns).
    If warm context covers the user's request, skip fetch_context and proceed
-   directly to storage changes. Only call fetch_context when:
-   - No warm context is provided
-   - The user's message references Things NOT in the warm context
-   - You need to search for Things beyond what's in the warm context
+   directly to storage changes. When you DO need to fetch more context:
+   - Use fetch_context when you have precise keyword queries ready.
+   - Use context_agent when the topic is complex or has shifted and you want
+     the query planner to formulate the best search strategy.
 2. If the user references something from earlier in the conversation not in the
    provided history, call chat_history to retrieve older messages.
 3. Review the available Things (warm context and/or fetched context).
@@ -555,6 +605,9 @@ def get_system_prompt_for_mode(mode: str, interaction_style: str = "auto") -> st
 def _make_reasoning_tools(
     user_id: str,
     session_id: str = "",
+    usage_stats: "UsageStats | None" = None,
+    api_key: str | None = None,
+    model: str | None = None,
 ) -> tuple[list[Callable[..., Any]], dict[str, list[Any]], dict[str, list[Any]]]:
     """Create tool functions bound to the given user context.
 
@@ -643,6 +696,38 @@ def _make_reasoning_tools(
             session_id=session_id,
             user_id=user_id,
             cross_session=False,
+        )
+
+    # ------------------------------------------------------------------
+    async def context_agent(query: str) -> dict[str, Any]:
+        """Smart context search using AI query planning.
+
+        Call this instead of fetch_context when warm context is insufficient
+        and the topic has changed or you cannot easily describe the needed
+        context with explicit keyword queries.
+
+        Args:
+            query: Natural language description of what context you need,
+                e.g. "information about the user's project X and related tasks".
+
+        Returns:
+            Dict with 'things' (list of Thing dicts), 'relationships' (list of
+            relationship dicts), and 'count' (number of Things found).
+        """
+        from .context_agent import run_context_agent as _run_ctx
+
+        params = await _run_ctx(
+            message=query,
+            history=[],
+            usage_stats=usage_stats,
+            api_key=api_key,
+            model=model,
+        )
+        fp = params.get("filter_params", {})
+        return fetch_context(
+            search_queries_json=json.dumps(params.get("search_queries", [query])),
+            active_only=fp.get("active_only", True),
+            type_hint=fp.get("type_hint") or "",
         )
 
     # ------------------------------------------------------------------
@@ -916,6 +1001,7 @@ def _make_reasoning_tools(
         for t in [
             fetch_context,
             chat_history,
+            context_agent,
             create_thing,
             update_thing,
             delete_thing,
@@ -1118,7 +1204,13 @@ async def run_reasoning_agent(
             logger.warning("Ollama reasoning agent failed, falling back to ADK: %s", exc)
 
     # -- ADK path with tool calling --
-    tools, applied_changes, fetched_context = _make_reasoning_tools(user_id, session_id=session_id)
+    tools, applied_changes, fetched_context = _make_reasoning_tools(
+        user_id,
+        session_id=session_id,
+        usage_stats=usage_stats,
+        api_key=api_key,
+        model=model,
+    )
 
     # Seed fetched_context with warm context so Things from recent turns
     # appear in the pipeline result even if fetch_context is not called
