@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import json
-import uuid
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
 from sqlmodel import Session
 
 import backend.db_engine as _engine_mod
@@ -15,7 +13,6 @@ from backend.db_models import ThingRecord
 from backend.mcp_server import get_preferences, update_preference
 from backend.tools import get_preferences as tools_get_preferences
 from backend.tools import update_preference as tools_update_preference
-
 
 # ---------------------------------------------------------------------------
 # tools.py unit tests (hit real temp DB)
@@ -243,7 +240,8 @@ class TestGetPreferencesMCP:
 class TestUpdatePreferenceMCP:
     @patch("backend.mcp_server.shared_tools.update_preference")
     def test_delegates_to_shared_tools(self, mock_update: MagicMock) -> None:
-        mock_update.return_value = {"id": "p1", "data": {"patterns": [{"pattern": "X", "confidence": "strong", "observations": 3}]}}
+        pattern = {"pattern": "X", "confidence": "strong", "observations": 3}
+        mock_update.return_value = {"id": "p1", "data": {"patterns": [pattern]}}
         patterns = [{"pattern": "X", "confidence": "strong", "observations": 3}]
         result = update_preference(thing_id="p1", patterns=patterns)
         mock_update.assert_called_once_with(
