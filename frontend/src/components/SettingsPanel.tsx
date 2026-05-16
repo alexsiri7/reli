@@ -896,12 +896,6 @@ function NotificationsSection() {
   )
 }
 
-function formatCost(cost: number | null | undefined): string {
-  if (cost == null) return '—'
-  if (cost < 0.01) return '<$0.01'
-  return `$${cost.toFixed(2)}`
-}
-
 /** Format cost in per-1K-token units (more intuitive than per 1M) */
 function formatCostPer1K(costPerMillion: number | null | undefined): string {
   if (costPerMillion == null) return '—'
@@ -1061,6 +1055,8 @@ function ModelPicker({
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [focusedIndex, setFocusedIndex] = useState(-1)
+  const rowRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
   const containerRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -1100,6 +1096,42 @@ function ModelPicker({
     return entries
   }, [options, search, value, modelMap])
 
+  // Flat list of model IDs in display order (for keyboard navigation)
+  const flatIds = useMemo(() => grouped.flatMap(([, ids]) => ids), [grouped])
+
+  // Reset to first item on open, to -1 on close; reset on search change
+  useEffect(() => { setFocusedIndex(open ? 0 : -1) }, [search, open])
+  // Scroll focused row into view
+  useEffect(() => {
+    if (focusedIndex >= 0) rowRefs.current.get(focusedIndex)?.scrollIntoView({ block: 'nearest' })
+  }, [focusedIndex])
+
+  // Keyboard handler for trigger button and search input
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setOpen(false)
+      setSearch('')
+      e.preventDefault()
+    } else if (e.key === 'ArrowDown') {
+      if (!open) {
+        setOpen(true)
+        setFocusedIndex(0)
+      } else {
+        setFocusedIndex(i => Math.min(i + 1, flatIds.length - 1))
+      }
+      e.preventDefault()
+    } else if (e.key === 'ArrowUp' && open) {
+      setFocusedIndex(i => Math.max(i - 1, 0))
+      e.preventDefault()
+    } else if (e.key === 'Enter' && focusedIndex >= 0 && open) {
+      onChange(flatIds[focusedIndex]!)
+      setOpen(false)
+      setSearch('')
+      setFocusedIndex(-1)
+      e.preventDefault()
+    }
+  }
+
   // Close on outside click
   useEffect(() => {
     if (!open) return
@@ -1134,6 +1166,7 @@ function ModelPicker({
       <button
         type="button"
         onClick={() => { setOpen(!open); setSearch('') }}
+        onKeyDown={handleKeyDown}
         className="w-full px-3 py-2.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-left flex items-center gap-3 hover:border-gray-300 dark:hover:border-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-500 transition-colors"
       >
         <div className="flex-1 min-w-0">
@@ -1141,7 +1174,7 @@ function ModelPicker({
           <div className="text-xs text-gray-400 dark:text-gray-500 truncate">
             {PROVIDER_LABELS[selProvider] || selProvider}
             {selected?.input_cost_per_million != null && (
-              <> &middot; {formatCost(selected.input_cost_per_million)} in / {formatCost(selected.output_cost_per_million)} out per 1M tokens</>
+              <> &middot; {formatCostPer1K(selected.input_cost_per_million)} in / {formatCostPer1K(selected.output_cost_per_million)} out per 1K tokens</>
             )}
           </div>
         </div>
@@ -1164,6 +1197,7 @@ function ModelPicker({
               placeholder="Search models..."
               value={search}
               onChange={e => setSearch(e.target.value)}
+              onKeyDown={handleKeyDown}
               className="w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
             />
           </div>
@@ -1184,15 +1218,20 @@ function ModelPicker({
                   const tier = m ? costTier(m) : 'unknown'
                   const ts = COST_TIER_STYLES[tier]
                   const isSelected = id === value
+                  const flatIdx = flatIds.indexOf(id)
+                  const isFocused = flatIds[focusedIndex] === id
                   return (
                     <button
                       key={id}
                       type="button"
+                      ref={el => { if (el) rowRefs.current.set(flatIdx, el); else rowRefs.current.delete(flatIdx) }}
                       onClick={() => { onChange(id); setOpen(false); setSearch('') }}
                       className={`w-full text-left px-3 py-2 flex items-center gap-2 text-sm transition-colors ${
                         isSelected
                           ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
-                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-750'
+                          : isFocused
+                            ? 'bg-indigo-100 dark:bg-indigo-900 text-gray-700 dark:text-gray-300'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-750'
                       }`}
                     >
                       {isSelected && (
@@ -1205,7 +1244,7 @@ function ModelPicker({
                         <div className="truncate font-medium">{name}</div>
                         {m?.input_cost_per_million != null && (
                           <div className="text-[11px] text-gray-400 dark:text-gray-500">
-                            {formatCost(m.input_cost_per_million)} in / {formatCost(m.output_cost_per_million)} out per 1M tokens
+                            {formatCostPer1K(m.input_cost_per_million)} in / {formatCostPer1K(m.output_cost_per_million)} out per 1K tokens
                           </div>
                         )}
                       </div>
