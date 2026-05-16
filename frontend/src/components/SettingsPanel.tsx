@@ -896,12 +896,6 @@ function NotificationsSection() {
   )
 }
 
-function formatCost(cost: number | null | undefined): string {
-  if (cost == null) return '—'
-  if (cost < 0.01) return '<$0.01'
-  return `$${cost.toFixed(2)}`
-}
-
 /** Format cost in per-1K-token units (more intuitive than per 1M) */
 function formatCostPer1K(costPerMillion: number | null | undefined): string {
   if (costPerMillion == null) return '—'
@@ -1122,7 +1116,7 @@ function ModelPicker({
       setFocusedIndex(i => Math.max(i - 1, 0))
       e.preventDefault()
     } else if (e.key === 'Enter' && focusedIndex >= 0 && open) {
-      onChange(flatIds[focusedIndex])
+      onChange(flatIds[focusedIndex]!)
       setOpen(false)
       setSearch('')
       setFocusedIndex(-1)
