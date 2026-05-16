@@ -1362,9 +1362,9 @@ def find_active_concerns(
 
     A concern is due if:
       - data.last_checked is null (never checked), OR
-      - check_frequency is "daily" and last_checked < today, OR
-      - check_frequency is "weekly" and last_checked < today - 7d, OR
-      - check_frequency is "monthly" and last_checked < today - 30d
+      - check_frequency is "daily" and last_checked was 1 or more days ago, OR
+      - check_frequency is "weekly" and last_checked was 7 or more days ago, OR
+      - check_frequency is "monthly" and last_checked was 30 or more days ago
     """
     today = today or date.today()
     candidates: list[SweepCandidate] = []
@@ -1393,6 +1393,11 @@ def find_active_concerns(
             try:
                 last_checked = date.fromisoformat(last_checked_str)
             except ValueError:
+                logger.warning(
+                    "find_active_concerns: invalid last_checked value %r for thing %s, treating as never checked",
+                    last_checked_str,
+                    row.id,
+                )
                 last_checked = None
         else:
             last_checked = None
@@ -1455,7 +1460,14 @@ def collect_candidates(
             for c in concern_candidates:
                 thing = session.get(ThingRecord, c.thing_id)
                 if thing:
-                    data = json.loads(thing.data) if isinstance(thing.data, str) else (thing.data or {})
+                    try:
+                        data = json.loads(thing.data) if isinstance(thing.data, str) else dict(thing.data or {})
+                    except (json.JSONDecodeError, TypeError):
+                        logger.warning(
+                            "find_active_concerns: could not parse data for thing %s, skipping last_checked update",
+                            c.thing_id,
+                        )
+                        continue
                     if not isinstance(data, dict):
                         data = {}
                     data["last_checked"] = today.isoformat()
