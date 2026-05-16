@@ -421,6 +421,28 @@ def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+def get_mutations(
+    thing_id: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Get MCP mutation journal entries for audit and rollback reference.
+
+    Returns the most recent MCP write operations logged in the mutations journal,
+    newest first. Use this to audit what changes were made, by whom, and what the
+    state was before and after each change.
+
+    Args:
+        thing_id: Optional Thing UUID — returns only mutations affecting this Thing.
+        limit: Maximum number of entries to return (1-200, default 50).
+    """
+    return shared_tools.get_mutations(
+        thing_id=thing_id,
+        limit=min(max(limit, 1), 200),
+        user_id=_user_id(),
+    )
+
+
+@mcp.tool()
 def schedule_task(
     scheduled_at: str,
     task_type: str = "remind",

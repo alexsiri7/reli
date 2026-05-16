@@ -299,6 +299,26 @@ class MergeHistoryRecord(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
+# MCP Mutations Journal
+# ---------------------------------------------------------------------------
+
+
+class McpMutationRecord(SQLModel, table=True):
+    """Append-only audit log for MCP write operations."""
+
+    __tablename__ = "mcp_mutations"
+
+    id: str = Field(default_factory=_new_id, primary_key=True)
+    occurred_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+    client_id: str | None = None
+    operation: str
+    thing_id: str | None = Field(default=None, index=True)
+    before_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
+    after_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+
+
+# ---------------------------------------------------------------------------
 # Morning Briefings
 # ---------------------------------------------------------------------------
 

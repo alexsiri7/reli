@@ -211,14 +211,14 @@ class TestTracedToolDecorator:
                 title: str,
                 data_json: str,
                 open_questions_json: str,
-                summary: str,              # calendar_create_event / calendar_update_event
-                description: str,          # calendar_create_event / calendar_update_event
-                location: str,             # calendar_create_event / calendar_update_event
+                summary: str,  # calendar_create_event / calendar_update_event
+                description: str,  # calendar_create_event / calendar_update_event
+                location: str,  # calendar_create_event / calendar_update_event
                 search_queries_json: str,  # fetch_context
-                search_query: str,         # chat_history
-                merged_data_json: str,     # merge_things
-                payload_json: str,         # schedule_task
-                relationship_type: str,    # create_relationship (personal roles)
+                search_query: str,  # chat_history
+                merged_data_json: str,  # merge_things
+                payload_json: str,  # schedule_task
+                relationship_type: str,  # create_relationship (personal roles)
                 importance: int = 2,
             ) -> dict:
                 return {"id": "uuid-1"}

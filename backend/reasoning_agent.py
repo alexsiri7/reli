@@ -40,14 +40,21 @@ _tracer = get_tracer("reli.reasoning_agent")
 _ATTR_VALUE_LIMIT = 4096
 
 # Content fields that must never appear in OTEL span attributes (user PII/data)
-_CONTENT_FIELDS = frozenset({
-    "title", "data_json",
-    "open_questions_json",
-    "summary", "description", "location",
-    "merged_data_json", "payload_json",
-    "search_queries_json", "search_query",
-    "relationship_type",               # personal roles: sister, doctor, therapist
-})
+_CONTENT_FIELDS = frozenset(
+    {
+        "title",
+        "data_json",
+        "open_questions_json",
+        "summary",
+        "description",
+        "location",
+        "merged_data_json",
+        "payload_json",
+        "search_queries_json",
+        "search_query",
+        "relationship_type",  # personal roles: sister, doctor, therapist
+    }
+)
 
 
 def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
