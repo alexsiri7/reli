@@ -329,7 +329,7 @@ def create_thing(
             user_id=user_id or None,
         )
         session.add(record)
-        _log_mutation(session, "create_thing", thing_id, None, record.model_dump(), client_id=user_id)
+        _log_mutation(session, "create_thing", thing_id, None, _thing_to_dict(record), client_id=user_id)
         session.commit()
         session.refresh(record)
         row_dict = _thing_to_dict(record)
@@ -421,7 +421,7 @@ def update_thing(
 
         record.updated_at = now
         session.add(record)
-        _log_mutation(session, "update_thing", thing_id, before_snap, record.model_dump(), client_id=user_id)
+        _log_mutation(session, "update_thing", thing_id, before_snap, _thing_to_dict(record), client_id=user_id)
         session.commit()
         session.refresh(record)
         row_dict = _thing_to_dict(record)
@@ -567,7 +567,7 @@ def merge_things(
         session.add(merge_record)
 
         _log_mutation(session, "merge_things_delete", remove_id, remove_before, None, client_id=user_id)
-        _log_mutation(session, "merge_things_update", keep_id, keep_before, keep_rec.model_dump(), client_id=user_id)
+        _log_mutation(session, "merge_things_update", keep_id, keep_before, _thing_to_dict(keep_rec), client_id=user_id)
 
         session.commit()
 

@@ -425,7 +425,7 @@ def get_mutations(
     thing_id: str | None = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    """Get MCP mutation journal entries for audit and rollback reference.
+    """Get MCP mutation journal entries for audit.
 
     Returns the most recent MCP write operations logged in the mutations journal,
     newest first. Use this to audit what changes were made, by whom, and what the
