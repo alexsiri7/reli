@@ -106,9 +106,7 @@ export function getDB(): Promise<IDBPDatabase<ReliDB>> {
           const store = tx.objectStore('pendingOps')
           const allOps = await store.getAll()
           for (const op of allOps) {
-            if (!op.user_id) {
-              await store.put({ ...op, user_id: '' })
-            }
+            await store.put({ ...op, user_id: '' })
           }
         }
       },
