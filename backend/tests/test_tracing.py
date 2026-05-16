@@ -158,7 +158,7 @@ class TestTracedToolDecorator:
         assert "boom" in result["error"]
 
     def test_traced_tool_records_span_attributes(self):
-        """Wrapped tool should set span attributes for inputs and outputs."""
+        """_traced_tool records non-content span attributes; content fields and tool output are scrubbed."""
         from backend.reasoning_agent import _traced_tool
 
         mock_span = MagicMock()
@@ -181,7 +181,7 @@ class TestTracedToolDecorator:
         call_args = mock_tracer.start_as_current_span.call_args
         assert call_args[0][0] == "tool.create_thing"
 
-        # Verify input attributes were set — content fields must be absent
+        # Non-content inputs are recorded; content fields must be absent
         set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
         assert "tool.input.title" not in set_attr_calls  # content field scrubbed
         assert set_attr_calls["tool.input.importance"] == "0"
@@ -203,6 +203,14 @@ class TestTracedToolDecorator:
                 title: str,
                 data_json: str,
                 open_questions_json: str,
+                summary: str,              # calendar_create_event / calendar_update_event
+                description: str,          # calendar_create_event / calendar_update_event
+                location: str,             # calendar_create_event / calendar_update_event
+                search_queries_json: str,  # fetch_context
+                search_query: str,         # chat_history
+                merged_data_json: str,     # merge_things
+                payload_json: str,         # schedule_task
+                relationship_type: str,    # create_relationship (personal roles)
                 importance: int = 2,
             ) -> dict:
                 return {"id": "uuid-1"}
@@ -212,6 +220,14 @@ class TestTracedToolDecorator:
                 title="Secret title",
                 data_json='{"key": "secret"}',
                 open_questions_json="[]",
+                summary="Board meeting",
+                description="Sensitive agenda",
+                location="User's home",
+                search_queries_json='["private query"]',
+                search_query="private search",
+                merged_data_json="{}",
+                payload_json="{}",
+                relationship_type="therapist",
                 importance=3,
             )
 

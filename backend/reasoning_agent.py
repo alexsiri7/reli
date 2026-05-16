@@ -41,11 +41,12 @@ _ATTR_VALUE_LIMIT = 4096
 
 # Content fields that must never appear in OTEL span attributes (user PII/data)
 _CONTENT_FIELDS = frozenset({
-    "title", "data", "data_json",
-    "open_questions", "open_questions_json",
+    "title", "data_json",
+    "open_questions_json",
     "summary", "description", "location",
     "merged_data_json", "payload_json",
     "search_queries_json", "search_query",
+    "relationship_type",               # personal roles: sister, doctor, therapist
 })
 
 
@@ -86,7 +87,7 @@ def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str,
                 span.record_exception(exc)
                 return {"error": f"Tool {func.__name__} failed: {exc}"}
 
-            # Record output
+            # Record result status and structural IDs (no content is stored)
             if isinstance(result, dict):
                 if "error" in result:
                     span.set_status(trace.StatusCode.ERROR, result["error"])
