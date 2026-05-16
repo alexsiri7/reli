@@ -839,7 +839,7 @@ def cleanup_orphan_relationships(
     session: Session = Depends(get_session),
     user_id: str = Depends(require_user),
 ) -> OrphanCleanupResult:
-    """Delete orphan relationships where the user owns at least one endpoint and at least one endpoint no longer exists."""
+    """Delete orphan relationships where the user owns at least one endpoint and at least one endpoint no longer exists."""  # noqa: E501
     orphans = session.exec(_orphan_stmt(user_id)).all()
     orphan_ids = [r.id for r in orphans]
     for r in orphans:
