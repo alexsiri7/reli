@@ -241,6 +241,31 @@ class TestChatPipeline:
         resp = await async_client.post("/api/chat", json={"session_id": "", "message": ""})
         assert resp.status_code == 422
 
+    async def test_context_things_forwarded_to_response_agent(self, async_client):
+        """context_things derived from relevant_things should be forwarded to run_response_agent."""
+        reasoning_with_things = {
+            **MOCK_REASONING_RESULT,
+            "fetched_context": {
+                "things": [{"id": "t-1", "title": "Paris Trip", "type_hint": "travel"}],
+                "relationships": [],
+            },
+        }
+        with patch(
+            "backend.pipeline.run_reasoning_agent",
+            new=AsyncMock(return_value=reasoning_with_things),
+        ), patch(
+            "backend.pipeline.run_response_agent",
+            new=AsyncMock(return_value=ResponseResult(text="ok")),
+        ) as mock_resp:
+            await async_client.post(
+                "/api/chat",
+                json={"session_id": "ctx-sess", "message": "Tell me about my trip"},
+            )
+        call_kwargs = mock_resp.call_args.kwargs
+        assert call_kwargs.get("context_things") == [
+            {"id": "t-1", "title": "Paris Trip", "type_hint": "travel"}
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Unit tests for _fetch_user_relationships
