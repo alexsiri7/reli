@@ -41,10 +41,9 @@ class TestMetricsEndpoint:
         """The /metrics endpoint must reject unauthenticated requests."""
         from backend.main import app
 
-        with patch("backend.auth.SECRET_KEY", "test-secret-key"):
-            with TestClient(app) as c:
-                resp = c.get("/metrics")
-                assert resp.status_code == 401
+        with patch("backend.auth.SECRET_KEY", "test-secret-key"), TestClient(app) as c:
+            resp = c.get("/metrics")
+            assert resp.status_code == 401
 
 
 class TestPathNormalization:
