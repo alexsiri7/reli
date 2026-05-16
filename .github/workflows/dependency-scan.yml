@@ -26,10 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       # pip's resolver cannot solve the backend's AI/observability graph:
       # pip 25.1+ hits ResolutionTooDeep, pip <25.1 hits ResolutionImpossible,
@@ -42,7 +42,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install pip-audit
-        run: uv tool install pip-audit
+        run: uv pip install --system pip-audit
 
       - name: Install backend dependencies
         run: UV_SYSTEM_PYTHON=1 uv sync --frozen
