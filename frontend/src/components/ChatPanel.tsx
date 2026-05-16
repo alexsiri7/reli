@@ -19,10 +19,7 @@ function formatTimestamp(iso: string): string {
   const date = new Date(iso)
   if (isNaN(date.getTime())) return ''
   const now = new Date()
-  const isToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
+  const isToday = date.toDateString() === now.toDateString()
   const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
   if (isToday) return time
   const monthDay = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })

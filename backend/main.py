@@ -140,6 +140,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     shutdown_tracing()
 
 
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self'; "
+    "img-src 'self' data: blob: https://*.googleusercontent.com; "
+    "connect-src 'self'; "
+    "font-src 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add standard security headers to every response."""
 
@@ -150,15 +161,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self'; "
-            "img-src 'self' data: blob: https://*.googleusercontent.com; "
-            "connect-src 'self'; "
-            "font-src 'self'; "
-            "frame-ancestors 'none'"
-        )
+        response.headers["Content-Security-Policy"] = _CSP
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         return response
