@@ -101,3 +101,35 @@ class TestBuildUserPrompt:
         )
         assert "Open questions" in result
         assert "What is the deadline?" in result
+
+    def test_with_context_things(self):
+        result = _build_user_prompt(
+            message="How is it?",
+            reasoning_summary="Found Trip",
+            questions_for_user=[],
+            applied_changes={},
+            context_things=[{"id": "thing-abc", "title": "Trip to Paris", "type_hint": "travel"}],
+        )
+        assert "Context Things" in result
+        assert "thing-abc" in result
+        assert "Trip to Paris" in result
+
+    def test_context_things_none_does_not_pollute_prompt(self):
+        result = _build_user_prompt(
+            message="Hello",
+            reasoning_summary="Summary",
+            questions_for_user=[],
+            applied_changes={},
+            context_things=None,
+        )
+        assert "Context Things" not in result
+
+    def test_context_things_empty_list_does_not_pollute_prompt(self):
+        result = _build_user_prompt(
+            message="Hello",
+            reasoning_summary="Summary",
+            questions_for_user=[],
+            applied_changes={},
+            context_things=[],
+        )
+        assert "Context Things" not in result

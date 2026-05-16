@@ -717,6 +717,7 @@ class ChatPipeline:
                             briefing_mode=briefing_mode,
                             interaction_style=self.interaction_style,
                             user_id=self.user_id,
+                            context_things=relevant_things or None,
                         )
                         reply = response_result.text
                         referenced_things = response_result.referenced_things
@@ -878,6 +879,7 @@ class ChatPipeline:
                             briefing_mode=briefing_mode,
                             interaction_style=self.interaction_style,
                             user_id=self.user_id,
+                            context_things=relevant_things or None,
                         ):
                             reply_parts.append(token)
                             yield PipelineEvent(type="token", data=token)

@@ -1338,7 +1338,7 @@ def update_preference(
         if not isinstance(item, dict):
             return {"error": f"patterns[{i}] must be a dict"}
         pattern_str = item.get("pattern")
-        if not pattern_str or not isinstance(pattern_str, str) or not pattern_str.strip():
+        if not isinstance(pattern_str, str) or not pattern_str.strip():
             return {"error": f"patterns[{i}].pattern must be a non-empty string"}
         confidence = item.get("confidence")
         if confidence not in _VALID_CONFIDENCE_LEVELS:
