@@ -65,10 +65,11 @@ export async function syncPendingOps(): Promise<void> {
   syncing = true
 
   const currentUserId = useStore.getState().currentUser?.id ?? ''
-  const allOps = await getPendingOps()
-  // Only replay ops that belong to the currently authenticated user.
-  // Ops with no user_id (queued before this fix) are skipped as a safety measure.
-  const ops = allOps.filter(op => op.user_id === currentUserId && currentUserId !== '')
+  // Only replay ops for the current authenticated user; skip if not logged in.
+  // Ops with no user_id (queued before this fix) are never replayed.
+  const ops = currentUserId
+    ? (await getPendingOps()).filter(op => op.user_id === currentUserId)
+    : []
   if (ops.length === 0) {
     syncing = false
     return
