@@ -15,9 +15,15 @@ from .config import settings
 logger = logging.getLogger(__name__)
 
 
-def _strip_cookie_breadcrumb(crumb: dict, hint: object) -> dict | None:
-    """Remove reli_session JWT from breadcrumb cookie headers."""
-    data = crumb.get("data") or {}
+def _strip_cookie_breadcrumb(crumb: dict, hint: dict | None) -> dict | None:
+    """Redact all Cookie/Set-Cookie header values from breadcrumbs.
+
+    Sentry before_breadcrumb hook: return the crumb to keep it,
+    or None to drop it entirely. This implementation always keeps the crumb.
+    """
+    data = crumb.get("data")
+    if not isinstance(data, dict):
+        return crumb
     for key in ("Cookie", "Set-Cookie", "cookie", "set-cookie"):
         if key in data:
             data[key] = "[Filtered]"
