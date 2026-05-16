@@ -101,3 +101,15 @@ class TestBuildUserPrompt:
         )
         assert "Open questions" in result
         assert "What is the deadline?" in result
+
+    def test_with_context_things(self):
+        result = _build_user_prompt(
+            message="How is it?",
+            reasoning_summary="Found Trip",
+            questions_for_user=[],
+            applied_changes={},
+            context_things=[{"id": "thing-abc", "title": "Trip to Paris", "type_hint": "travel"}],
+        )
+        assert "Context Things" in result
+        assert "thing-abc" in result
+        assert "Trip to Paris" in result

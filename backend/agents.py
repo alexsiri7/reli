@@ -849,6 +849,7 @@ def _build_response_messages(
     priority_question: str = "",
     briefing_mode: bool = False,
     interaction_style: str = "auto",
+    context_things: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build the message list for the response agent (shared by streaming and non-streaming)."""
     context = (
@@ -859,6 +860,11 @@ def _build_response_messages(
         f"Priority question (ask THIS one): {json.dumps(priority_question)}\n\n"
         f"Briefing mode: {json.dumps(briefing_mode)}"
     )
+    if context_things:
+        context += (
+            f"\n\nContext Things (use their IDs for referenced_things): "
+            f"{json.dumps(context_things, default=str)}"
+        )
     if open_questions_by_thing:
         context += (
             f"\n\nOpen questions on Things (knowledge gaps to ask about conversationally):\n"

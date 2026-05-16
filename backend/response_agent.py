@@ -90,6 +90,7 @@ def _build_user_prompt(
     priority_question: str = "",
     briefing_mode: bool = False,
     interaction_style: str = "auto",
+    context_things: list[dict[str, Any]] | None = None,
 ) -> str:
     """Build the user prompt content for the ADK agent.
 
@@ -106,6 +107,7 @@ def _build_user_prompt(
         priority_question=priority_question,
         briefing_mode=briefing_mode,
         interaction_style=interaction_style,
+        context_things=context_things,
     )
     # The second message (index 1) is the user message with all context
     content: str = messages[1]["content"]
@@ -278,6 +280,7 @@ async def run_response_agent(
     briefing_mode: bool = False,
     interaction_style: str = "auto",
     user_id: str = "",
+    context_things: list[dict[str, Any]] | None = None,
 ) -> ResponseResult:
     """Stage 4: generate friendly user-facing response via ADK LlmAgent.
 
@@ -296,6 +299,7 @@ async def run_response_agent(
         priority_question=priority_question,
         briefing_mode=briefing_mode,
         interaction_style=interaction_style,
+        context_things=context_things,
     )
 
     litellm_model = _make_litellm_model(
@@ -328,6 +332,7 @@ async def run_response_agent_stream(
     briefing_mode: bool = False,
     interaction_style: str = "auto",
     user_id: str = "",
+    context_things: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[str]:
     """Stage 4 (streaming): yield response tokens as they arrive via ADK LlmAgent."""
     personality_patterns = load_personality_preferences(user_id)
@@ -342,6 +347,7 @@ async def run_response_agent_stream(
         priority_question=priority_question,
         briefing_mode=briefing_mode,
         interaction_style=interaction_style,
+        context_things=context_things,
     )
 
     litellm_model = _make_litellm_model(
