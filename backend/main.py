@@ -395,7 +395,7 @@ def health_detailed(user_id: str = Depends(require_user)) -> dict:
     }
 
 
-@app.get("/metrics", tags=["monitoring"], include_in_schema=False)
+@app.get("/metrics", tags=["monitoring"], include_in_schema=False, dependencies=[Depends(require_user)])
 def metrics() -> StarletteResponse:
     return metrics_response()
 

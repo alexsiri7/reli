@@ -37,13 +37,16 @@ class TestMetricsEndpoint:
         resp = client.get("/metrics")
         assert "db_users_total" in resp.text
 
-    def test_no_auth_required(self, patched_db):
-        """The /metrics endpoint must be accessible without a session cookie."""
+    def test_requires_auth(self, patched_db):
+        """The /metrics endpoint must reject unauthenticated requests."""
+        from unittest.mock import patch
+
         from backend.main import app
 
-        with TestClient(app) as c:
-            resp = c.get("/metrics")
-            assert resp.status_code == 200
+        with patch("backend.auth.SECRET_KEY", "test-secret-key"):
+            with TestClient(app) as c:
+                resp = c.get("/metrics")
+                assert resp.status_code == 401
 
 
 class TestPathNormalization:
