@@ -11,7 +11,7 @@ SHA-tagged images are retained in GHCR. To roll back, identify the target SHA an
 
 ```bash
 # List recent commits on main to find the SHA before the bad deploy
-git log --oneline main | head -10
+git log --format="%H %s" main | head -10
 ```
 
 Or browse recent CI runs:
@@ -31,8 +31,10 @@ re-trigger CI on the target commit to rebuild it, or use the next-oldest retaine
 
 ## Step 3: Redeploy via Railway API
 
-You need `RAILWAY_TOKEN`, `RAILWAY_PRODUCTION_SERVICE_ID`, and `RAILWAY_PRODUCTION_ENVIRONMENT_ID`
-— see `DEPLOYMENT_SECRETS.md` for where to find these.
+You need three values — find them as follows:
+- `RAILWAY_TOKEN`: GitHub → Settings → Secrets → Actions → `RAILWAY_TOKEN`
+- `RAILWAY_PRODUCTION_SERVICE_ID`: Railway dashboard → project → service → Settings → copy Service ID
+- `RAILWAY_PRODUCTION_ENVIRONMENT_ID`: Railway dashboard → project → Environments → Production → copy Environment ID
 
 ```bash
 export RAILWAY_TOKEN=<token>

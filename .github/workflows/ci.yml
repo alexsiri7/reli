@@ -134,6 +134,7 @@ jobs:
 
       - name: Prune old GHCR images (keep last 3)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true   # GITHUB_TOKEN lacks delete:packages; prune is best-effort until PAT is added
         uses: actions/delete-package-versions@v5
         with:
           package-name: reli
