@@ -40,10 +40,10 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          cache-dependency-glob: "backend/requirements.txt"
+          cache-dependency-glob: "uv.lock"
 
       - name: Install Python dependencies
-        run: uv pip install --system -r backend/requirements.txt
+        run: UV_SYSTEM_PYTHON=1 uv sync --frozen
 
       - name: Setup
         run: ./scripts/gates.sh setup
@@ -80,10 +80,10 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          cache-dependency-glob: "backend/requirements.txt"
+          cache-dependency-glob: "uv.lock"
 
       - name: Install Python dependencies
-        run: uv pip install --system -r backend/requirements.txt
+        run: UV_SYSTEM_PYTHON=1 uv sync --frozen
 
       - name: Setup
         run: ./scripts/gates.sh setup

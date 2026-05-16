@@ -14,9 +14,12 @@ WORKDIR /app
 RUN groupadd --gid 1000 reli && \
     useradd --uid 1000 --gid reli --shell /bin/false reli
 
-# Install Python dependencies
-COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+# Install uv (pinned version for reproducibility)
+COPY --from=ghcr.io/astral-sh/uv:0.11.13 /uv /usr/local/bin/uv
+
+# Install Python dependencies from lock file
+COPY pyproject.toml uv.lock ./
+RUN UV_SYSTEM_PYTHON=1 uv sync --frozen --no-dev
 
 # Copy config
 COPY config.yaml ./config.yaml

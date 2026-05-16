@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
     paths:
-      - "backend/requirements.txt"
+      - "uv.lock"
       - "frontend/package.json"
       - "frontend/package-lock.json"
   pull_request:
     branches: [main]
     paths:
-      - "backend/requirements.txt"
+      - "uv.lock"
       - "frontend/package.json"
       - "frontend/package-lock.json"
   schedule:
@@ -39,13 +39,13 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          cache-dependency-glob: "backend/requirements.txt"
+          cache-dependency-glob: "uv.lock"
 
       - name: Install pip-audit
-        run: uv pip install --system pip-audit
+        run: uv tool install pip-audit
 
       - name: Install backend dependencies
-        run: uv pip install --system -r backend/requirements.txt
+        run: UV_SYSTEM_PYTHON=1 uv sync --frozen
 
       - name: Upgrade pip to patched version
         run: uv pip install --system "pip>=26.1"
