@@ -61,12 +61,13 @@ class TestMakeReasoningTools:
             tools, applied, _fetched = _make_reasoning_tools(user_id)
             return tools, applied, None
 
-    def test_returns_ten_tools(self):
+    def test_returns_eleven_tools(self):
         tools, applied, _ = self._get_tools()
-        assert len(tools) == 10
+        assert len(tools) == 11
         names = [t.__name__ for t in tools]
         assert "fetch_context" in names
         assert "chat_history" in names
+        assert "context_agent" in names
         assert "create_thing" in names
         assert "update_thing" in names
         assert "delete_thing" in names
@@ -163,6 +164,72 @@ class TestChatHistoryTool:
 
 
 # ---------------------------------------------------------------------------
+# context_agent tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestContextAgentTool:
+    def _get_context_agent(self, user_id: str = "test-user"):
+        """Extract the context_agent tool from the tools list."""
+        from backend.reasoning_agent import _make_reasoning_tools
+
+        with (
+            patch("backend.tools.upsert_thing"),
+            patch("backend.tools.vs_delete"),
+        ):
+            tools, _, _ = _make_reasoning_tools(user_id)
+            return next(t for t in tools if t.__name__ == "context_agent")
+
+    @pytest.mark.asyncio
+    async def test_context_agent_calls_run_context_agent_and_fetch_context(self):
+        """context_agent tool calls run_context_agent then fetch_context."""
+        from unittest.mock import AsyncMock
+
+        ctx_agent = self._get_context_agent()
+
+        mock_params = {
+            "search_queries": ["vacation plans", "travel"],
+            "filter_params": {"active_only": True, "type_hint": ""},
+        }
+        with (
+            patch(
+                "backend.context_agent.run_context_agent",
+                new=AsyncMock(return_value=mock_params),
+            ),
+            patch(
+                "backend.tools.fetch_context",
+                return_value={"things": [], "relationships": [], "count": 0},
+            ),
+        ):
+            result = await ctx_agent(query="I need vacation context")
+
+        assert "things" in result
+        assert "count" in result
+
+    @pytest.mark.asyncio
+    async def test_context_agent_falls_back_to_raw_query_on_empty_search_queries(self):
+        """context_agent uses the raw query if run_context_agent returns empty search_queries."""
+        from unittest.mock import AsyncMock
+
+        ctx_agent = self._get_context_agent()
+
+        mock_params = {"search_queries": [], "filter_params": {}}
+        with (
+            patch(
+                "backend.context_agent.run_context_agent",
+                new=AsyncMock(return_value=mock_params),
+            ),
+            patch(
+                "backend.tools.fetch_context",
+                return_value={"things": [], "relationships": [], "count": 0},
+            ),
+        ):
+            result = await ctx_agent(query="find projects")
+
+        assert result == {"things": [], "relationships": [], "count": 0}
+
+
+# ---------------------------------------------------------------------------
 # create_thing tool tests
 # ---------------------------------------------------------------------------
 
@@ -172,7 +239,7 @@ class TestCreateThingTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        create_fn = tools[2]
+        create_fn = tools[3]
         result = create_fn(title="   ")
         assert "error" in result
         assert applied["created"] == []
@@ -186,7 +253,7 @@ class TestCreateThingTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        create_fn = tools[2]
+        create_fn = tools[3]
 
         create_fn(title="Test Thing", data_json='{"extra": "new"}')
 
@@ -197,7 +264,7 @@ class TestCreateThingTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        create_fn = tools[2]
+        create_fn = tools[3]
 
         create_fn(title="Brand New", type_hint="task")
 
@@ -207,7 +274,7 @@ class TestCreateThingTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        create_fn = tools[2]
+        create_fn = tools[3]
 
         result = create_fn(title="Alice", type_hint="person", surface=True)
 
@@ -219,7 +286,7 @@ class TestCreateThingTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        create_fn = tools[2]
+        create_fn = tools[3]
 
         result = create_fn(title="Scheduling preferences", type_hint="preference", surface=True)
 
@@ -263,7 +330,7 @@ class TestDeleteThingTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        delete_fn = tools[4]
+        delete_fn = tools[5]
 
         result = delete_fn(thing_id="nonexistent")
         assert "error" in result
@@ -278,7 +345,7 @@ class TestDeleteThingTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        delete_fn = tools[4]
+        delete_fn = tools[5]
 
         result = delete_fn(thing_id=thing_id)
         assert result["deleted"] == thing_id
@@ -295,7 +362,7 @@ class TestCreateRelationshipTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        rel_fn = tools[6]
+        rel_fn = tools[7]
         result = rel_fn(
             from_thing_id="same-id",
             to_thing_id="same-id",
@@ -307,7 +374,7 @@ class TestCreateRelationshipTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        rel_fn = tools[6]
+        rel_fn = tools[7]
 
         result = rel_fn(
             from_thing_id="from-uuid",
@@ -327,7 +394,7 @@ class TestCreateRelationshipTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        rel_fn = tools[6]
+        rel_fn = tools[7]
 
         result = rel_fn(
             from_thing_id=t1["id"],
@@ -346,7 +413,7 @@ class TestCreateRelationshipTool:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        rel_fn = tools[6]
+        rel_fn = tools[7]
 
         result = rel_fn(
             from_thing_id=t1["id"],
@@ -691,7 +758,7 @@ class TestDataJsonStringRegression:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        create_fn = tools[2]
+        create_fn = tools[3]
 
         result = create_fn(title="Test", data_json='"just a string"')
         assert "error" in result
@@ -707,7 +774,7 @@ class TestDataJsonStringRegression:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        update_fn = tools[3]
+        update_fn = tools[4]
 
         result = update_fn(thing_id=created["id"], data_json='"string value"')
         assert "error" in result
@@ -722,7 +789,7 @@ class TestDataJsonStringRegression:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        update_fn = tools[3]
+        update_fn = tools[4]
 
         result = update_fn(thing_id=created["id"], data_json="[1, 2, 3]")
         assert "error" in result
@@ -733,7 +800,7 @@ class TestDataJsonStringRegression:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        merge_fn = tools[5]
+        merge_fn = tools[6]
 
         result = merge_fn(keep_id="keep-uuid", remove_id="remove-uuid", merged_data_json='"not a dict"')
         assert "error" in result
@@ -1036,7 +1103,7 @@ class TestCommStylePreferenceStructure:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        create_fn = tools[2]
+        create_fn = tools[3]
 
         result = create_fn(
             title="How the user wants Reli to communicate",
@@ -1081,7 +1148,7 @@ class TestCommStylePreferenceStructure:
         from backend.reasoning_agent import _make_reasoning_tools
 
         tools, applied, _fetched = _make_reasoning_tools("test-user")
-        update_fn = tools[3]
+        update_fn = tools[4]
 
         new_data = json.dumps(
             {

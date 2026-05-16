@@ -276,6 +276,7 @@ class TestTracedToolDecorator:
         assert names == [
             "fetch_context",
             "chat_history",
+            "context_agent",
             "create_thing",
             "update_thing",
             "delete_thing",
