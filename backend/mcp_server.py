@@ -406,6 +406,50 @@ def get_user_profile() -> dict[str, Any]:
 
 
 @mcp.tool()
+def get_preferences() -> list[dict[str, Any]]:
+    """Return all active preference Things for the current user.
+
+    Preference Things (type_hint='preference') encode learned behaviour signals
+    such as communication style, proactivity level, and question frequency.
+    Each Thing's data.patterns list holds individual pattern objects:
+      { pattern: str, confidence: str, observations: int }
+
+    Call this at session start alongside get_user_profile to load the full
+    behaviour configuration. Returns an empty list if no preferences exist.
+    """
+    return shared_tools.get_preferences(user_id=_user_id())
+
+
+@mcp.tool()
+def update_preference(
+    thing_id: str,
+    patterns: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Update the patterns array on a preference Thing.
+
+    Replaces data.patterns with the supplied list. Only the patterns key is
+    touched — all other Thing fields remain unchanged.
+
+    Each pattern must have:
+      - pattern: str  — the observed behaviour description
+      - confidence: str — one of "emerging", "moderate", "established", "strong"
+      - observations: int (>= 1) — number of times the pattern was observed
+
+    Args:
+        thing_id: ID of the preference Thing to update.
+        patterns: List of pattern dicts to set. Replaces existing patterns.
+
+    Returns:
+        The updated Thing dict, or an error dict if validation fails.
+    """
+    return shared_tools.update_preference(
+        thing_id=thing_id,
+        patterns_json=json.dumps(patterns),
+        user_id=_user_id(),
+    )
+
+
+@mcp.tool()
 def get_conflicts(window: int = 14) -> list[dict[str, Any]]:
     """Detect blockers, schedule overlaps, and deadline conflicts among Things.
 
