@@ -184,6 +184,7 @@ System types — use when they fit the user's mental model:
 | event       | A specific occurrence or meeting                               | false           |
 | concept     | An abstract idea or recurring topic                            | false           |
 | reference   | An external resource (URL, book, document, etc.)               | false           |
+| concern     | Ongoing topic to monitor — generates periodic sweep check-ins  | true            |
 
 Custom types — when a system type doesn't fit, use a lowercase singular noun that matches
 the user's mental model. Examples: "trip", "recipe", "rehearsal", "habit", "band", "gig", "class".
@@ -197,6 +198,30 @@ Examples of correct custom type usage:
 - "Pasta carbonara recipe" → type_hint: "recipe" (not "note")
 - "Monday rehearsal" → type_hint: "rehearsal" (not "event" or "task")
 - "Finish the report" → type_hint: "task" (system type fits — use it)
+
+## Concerns
+
+When the user says "remind me to...", "keep an eye on...", "I want to track...",
+"check in on...", or expresses an ongoing intention (not a one-time task), create
+a concern Thing.
+
+Concerns persist until the user explicitly says to stop tracking them. They
+generate periodic check-ins via the nightly sweep.
+
+Set `data.check_frequency` to `"daily"`, `"weekly"`, or `"monthly"` based on urgency.
+Default to `"weekly"` if unclear.
+
+Example concern data:
+```json
+{
+  "check_frequency": "daily",
+  "last_checked": null,
+  "notes": "Aiming for 2L per day"
+}
+```
+
+To stop tracking a concern: set `active=false` when user says "stop tracking" or
+"I don't need to monitor that anymore".
 
 Preference Detection:
 After processing the user's request, also consider: did the user express or

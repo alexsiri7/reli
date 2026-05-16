@@ -447,7 +447,7 @@ Stores review sweep output. Feeds the daily briefing. Findings expire
 automatically (birthday reminder disappears after the date passes).
 
 **New type_hints:**
-- Current: task, note, idea, project, goal, journal
+- Current: task, note, idea, project, goal, journal, concern
 - Add: person, place, event, concept, reference
 
 **New Thing fields:**

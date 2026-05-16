@@ -14,6 +14,7 @@ from backend.sweep import (
 from backend.sweep import (
     breakdown_broad_things,
     collect_candidates,
+    find_active_concerns,
     find_approaching_dates,
     find_broad_things_without_subtasks,
     find_completed_projects,
@@ -855,6 +856,27 @@ class TestCollectCandidates:
         types = {c.finding_type for c in results}
         assert "cross_project_duplicate_effort" in types
 
+    def test_collect_candidates_updates_last_checked(self, patched_db, db):
+        """Running collect_candidates twice should not return the same concern twice."""
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "c-idem",
+                "Daily check",
+                type_hint="concern",
+                data={"check_frequency": "daily", "last_checked": None},
+            )
+        today = date.today()
+        # First run — concern is due
+        candidates1 = collect_candidates(today=today)
+        concern_ids_1 = [c.thing_id for c in candidates1 if c.finding_type == "concern_checkin"]
+        assert "c-idem" in concern_ids_1
+
+        # Second run same day — last_checked was updated, should not re-surface
+        candidates2 = collect_candidates(today=today)
+        concern_ids_2 = [c.thing_id for c in candidates2 if c.finding_type == "concern_checkin"]
+        assert "c-idem" not in concern_ids_2
+
 
 # ---------------------------------------------------------------------------
 # Cross-project: shared blockers
@@ -1404,3 +1426,134 @@ class TestBreakdownBroadThings:
         # The user message should reference exactly 5 items
         user_content = captured[0][1]["content"]
         assert "5 broad Things" in user_content
+
+
+# ---------------------------------------------------------------------------
+# Concerns
+# ---------------------------------------------------------------------------
+
+
+class TestFindActiveConcerns:
+    def test_never_checked_concern_is_due(self, patched_db, db):
+        """A concern with no last_checked should always be returned."""
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "c1",
+                "Drink more water",
+                type_hint="concern",
+                data={"check_frequency": "daily", "last_checked": None},
+            )
+        with Session(_engine_mod.engine) as session:
+            results = find_active_concerns(session, date.today())
+        assert len(results) == 1
+        assert results[0].thing_id == "c1"
+        assert results[0].finding_type == "concern_checkin"
+
+    def test_concern_not_due_yet(self, patched_db, db):
+        """A weekly concern checked yesterday should NOT be returned."""
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "c2",
+                "Track spending",
+                type_hint="concern",
+                data={"check_frequency": "weekly", "last_checked": yesterday},
+            )
+        with Session(_engine_mod.engine) as session:
+            results = find_active_concerns(session, date.today())
+        assert results == []
+
+    def test_concern_due_after_period(self, patched_db, db):
+        """A weekly concern last checked 7 days ago should be returned."""
+        week_ago = (date.today() - timedelta(days=7)).isoformat()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "c3",
+                "Keep an eye on Gonzalo",
+                type_hint="concern",
+                data={"check_frequency": "weekly", "last_checked": week_ago},
+            )
+        with Session(_engine_mod.engine) as session:
+            results = find_active_concerns(session, date.today())
+        assert len(results) == 1
+        assert results[0].thing_id == "c3"
+
+    def test_missing_check_frequency_defaults_to_weekly(self, patched_db, db):
+        """A concern with no check_frequency should default to weekly behavior."""
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "c4",
+                "Concern no frequency",
+                type_hint="concern",
+                data={"last_checked": yesterday},
+            )
+        with Session(_engine_mod.engine) as session:
+            results = find_active_concerns(session, date.today())
+        # Only 1 day since last check, default is weekly (7 days) — not due
+        assert results == []
+
+    def test_inactive_concern_skipped(self, patched_db, db):
+        """An inactive concern should not be returned."""
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "c5",
+                "Old concern",
+                type_hint="concern",
+                active=False,
+                data={"check_frequency": "daily", "last_checked": None},
+            )
+        with Session(_engine_mod.engine) as session:
+            results = find_active_concerns(session, date.today())
+        assert results == []
+
+    def test_monthly_concern_due_after_30_days(self, patched_db, db):
+        """A monthly concern last checked 30 days ago should be returned."""
+        thirty_days_ago = (date.today() - timedelta(days=30)).isoformat()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "c6",
+                "Review savings goal",
+                type_hint="concern",
+                data={"check_frequency": "monthly", "last_checked": thirty_days_ago},
+            )
+        with Session(_engine_mod.engine) as session:
+            results = find_active_concerns(session, date.today())
+        assert len(results) == 1
+        assert results[0].thing_id == "c6"
+
+    def test_monthly_concern_not_due_at_29_days(self, patched_db, db):
+        """A monthly concern last checked 29 days ago should NOT be returned."""
+        twenty_nine_ago = (date.today() - timedelta(days=29)).isoformat()
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "c7",
+                "Review savings goal",
+                type_hint="concern",
+                data={"check_frequency": "monthly", "last_checked": twenty_nine_ago},
+            )
+        with Session(_engine_mod.engine) as session:
+            results = find_active_concerns(session, date.today())
+        assert results == []
+
+    def test_invalid_last_checked_string_treated_as_never_checked(self, patched_db, db):
+        """A concern with an unparseable last_checked should be returned (treated as null)."""
+        with db() as conn:
+            _insert_thing(
+                conn,
+                "c8",
+                "Bad date concern",
+                type_hint="concern",
+                data={"check_frequency": "weekly", "last_checked": "not-a-date"},
+            )
+        with Session(_engine_mod.engine) as session:
+            results = find_active_concerns(session, date.today())
+        assert len(results) == 1
+        assert results[0].thing_id == "c8"
