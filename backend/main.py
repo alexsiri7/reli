@@ -1,9 +1,13 @@
 """Reli FastAPI application entry point."""
 
 import logging
+import os
 import pathlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+
+# Google OAuth returns scopes in expanded URI form; set once at startup.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 import httpx
 
