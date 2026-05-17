@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
