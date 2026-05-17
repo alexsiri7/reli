@@ -24,6 +24,7 @@ RUN UV_SYSTEM_PYTHON=1 uv sync --frozen --no-dev
 # Add the virtualenv created by uv sync to PATH so uvicorn and python
 # resolve to the venv's binaries rather than the (empty) system install.
 ENV PATH="/app/.venv/bin:$PATH"
+ENV OAUTHLIB_RELAX_TOKEN_SCOPE=1
 
 # Copy config
 COPY config.yaml ./config.yaml
