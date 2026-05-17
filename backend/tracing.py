@@ -46,6 +46,11 @@ def init_tracing() -> None:
         exporter = OTLPSpanExporter(endpoint=settings.PHOENIX_ENDPOINT)
         provider.add_span_processor(BatchSpanProcessor(exporter))
         trace.set_tracer_provider(provider)
+
+        from openinference.instrumentation.google_adk import GoogleADKInstrumentor
+
+        GoogleADKInstrumentor().instrument()
+
         _initialized = True
 
         from openinference.instrumentation.google_adk import GoogleADKInstrumentor

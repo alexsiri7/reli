@@ -2996,6 +2996,24 @@ wheels = [
 ]
 
 [[package]]
+name = "openinference-instrumentation-google-adk"
+version = "0.1.13"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "openinference-instrumentation" },
+    { name = "openinference-semantic-conventions" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-instrumentation" },
+    { name = "opentelemetry-semantic-conventions" },
+    { name = "typing-extensions" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9b/ae/a1abf77d606515c3610d030bf5a4a6831b23ffd215b38f85f9201192855d/openinference_instrumentation_google_adk-0.1.13.tar.gz", hash = "sha256:026255bc683204bec00e7439c21f61ac21141f492e00948439c3bb85942c1f0d", size = 14499, upload-time = "2026-05-14T19:29:19.085Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/21/be/76bf335747fc00a00edf43986c39504d23b24bf95d6761d0b30636cb344c/openinference_instrumentation_google_adk-0.1.13-py3-none-any.whl", hash = "sha256:68e5995c3b5152d9622a517bdbc147899d6cf348aabc59a725aba85a08c6c7e8", size = 16443, upload-time = "2026-05-14T19:29:16.267Z" },
+]
+
+[[package]]
 name = "openinference-instrumentation-openai"
 version = "0.1.48"
 source = { registry = "https://pypi.org/simple" }
@@ -4392,6 +4410,7 @@ dependencies = [
     { name = "litellm" },
     { name = "mcp" },
     { name = "openai" },
+    { name = "openinference-instrumentation-google-adk" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -4435,6 +4454,7 @@ requires-dist = [
     { name = "litellm", specifier = ">=1.80.0" },
     { name = "mcp", specifier = ">=1.27.1" },
     { name = "openai", specifier = ">=1.30.0" },
+    { name = "openinference-instrumentation-google-adk", specifier = ">=0.1.0" },
     { name = "opentelemetry-api", specifier = ">=1.20.0" },
     { name = "opentelemetry-exporter-otlp", specifier = ">=1.20.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.41.1" },
