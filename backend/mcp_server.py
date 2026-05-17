@@ -597,6 +597,20 @@ def response_agent_prompt() -> str:
 
 
 @mcp.prompt(
+    name="context-refinement-agent",
+    description=(
+        "The Reli context refinement agent's full system prompt. Adopt this persona "
+        "to decide whether enough context has been retrieved or if additional searches "
+        "are needed. Used as a continuation step after context-agent. "
+        "Designed for use with the fetch_context tool (read-only)."
+    ),
+)
+def context_refinement_agent_prompt() -> str:
+    """Reli context refinement agent — decides if more context searches are needed."""
+    return _load_prompt("context-refinement-agent")
+
+
+@mcp.prompt(
     name="thing-schema",
     description=(
         "Complete reference for the Reli Thing data model: all fields, valid values, "
