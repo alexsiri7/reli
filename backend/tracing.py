@@ -47,6 +47,10 @@ def init_tracing() -> None:
         provider.add_span_processor(BatchSpanProcessor(exporter))
         trace.set_tracer_provider(provider)
         _initialized = True
+
+        from openinference.instrumentation.google_adk import GoogleADKInstrumentor
+        GoogleADKInstrumentor().instrument()
+
         logger.info(
             "OTEL tracing initialized — exporting to %s (service: %s)",
             settings.PHOENIX_ENDPOINT,
