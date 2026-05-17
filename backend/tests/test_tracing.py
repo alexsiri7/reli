@@ -58,6 +58,55 @@ def test_init_tracing_configures_provider_when_enabled():
             assert backend.tracing._initialized is True
 
 
+def test_init_tracing_calls_adk_instrumentor_when_enabled():
+    """init_tracing should activate GoogleADKInstrumentor when PHOENIX_ENABLED=true."""
+    with patch("backend.tracing.settings") as mock_settings:
+        mock_settings.phoenix_enabled_bool = True
+        mock_settings.PHOENIX_ENDPOINT = "http://localhost:6006/v1/traces"
+        mock_settings.OTEL_SERVICE_NAME = "reli-test"
+
+        mock_instrumentor = MagicMock()
+
+        with (
+            patch("opentelemetry.sdk.trace.TracerProvider", return_value=MagicMock()),
+            patch(
+                "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "opentelemetry.sdk.trace.export.BatchSpanProcessor",
+                return_value=MagicMock(),
+            ),
+            patch("opentelemetry.trace.set_tracer_provider"),
+            patch(
+                "openinference.instrumentation.google_adk.GoogleADKInstrumentor",
+                return_value=mock_instrumentor,
+            ),
+        ):
+            import backend.tracing
+
+            backend.tracing._initialized = False
+            backend.tracing.init_tracing()
+
+        mock_instrumentor.instrument.assert_called_once()
+
+
+def test_init_tracing_does_not_call_adk_instrumentor_when_disabled():
+    """GoogleADKInstrumentor must not be called when PHOENIX_ENABLED=false."""
+    with patch("backend.tracing.settings") as mock_settings:
+        mock_settings.phoenix_enabled_bool = False
+
+        with patch(
+            "openinference.instrumentation.google_adk.GoogleADKInstrumentor"
+        ) as mock_cls:
+            import backend.tracing
+
+            backend.tracing._initialized = False
+            backend.tracing.init_tracing()
+
+        mock_cls.assert_not_called()
+
+
 def test_shutdown_tracing_flushes_provider():
     """shutdown_tracing should call shutdown on the tracer provider."""
     import backend.tracing
