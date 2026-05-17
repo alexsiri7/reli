@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -81,9 +80,6 @@ def exchange_code(code: str, state: str = "", user_id: str = "") -> Credentials:
         code_verifier = None
     if code_verifier:
         flow.code_verifier = code_verifier
-
-    # Google returns scopes in expanded URI form; tell oauthlib to accept it
-    os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
 
     flow.fetch_token(code=code)
     creds: Credentials = flow.credentials

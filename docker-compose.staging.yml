@@ -32,4 +32,5 @@ services:
       - PHOENIX_ENDPOINT=${PHOENIX_ENDPOINT:-http://phoenix:6006/v1/traces}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-reli-staging}
       - DATABASE_URL=${DATABASE_URL:-}
+      - OAUTHLIB_RELAX_TOKEN_SCOPE=1
     restart: unless-stopped
