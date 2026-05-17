@@ -82,9 +82,6 @@ def exchange_code(code: str, state: str = "", user_id: str = "") -> Credentials:
     if code_verifier:
         flow.code_verifier = code_verifier
 
-    # Google returns scopes in expanded URI form; tell oauthlib to accept it
-    os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
-
     flow.fetch_token(code=code)
     creds: Credentials = flow.credentials
     _save_credentials(creds, user_id=user_id)

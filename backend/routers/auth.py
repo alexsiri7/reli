@@ -210,11 +210,6 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state.")
     flow.code_verifier = code_verifier
 
-    # Google returns scopes in expanded URI form; tell oauthlib to accept it
-    import os as _os
-
-    _os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
-
     try:
         flow.fetch_token(code=code)
     except Exception:
