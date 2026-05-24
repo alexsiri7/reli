@@ -725,6 +725,7 @@ class TestAggregateCommunicationStylePatterns:
         data = json.loads(row["data"])
         pattern_map = {p["pattern"]: p for p in data["patterns"]}
         assert pattern_map["prefers concise responses"]["observations"] == 4
+        assert pattern_map["prefers concise responses"]["confidence"] == "strong"
         assert pattern_map["no emoji"]["observations"] == 6
         assert pattern_map["no emoji"]["confidence"] == "strong"
 
@@ -745,3 +746,40 @@ class TestAggregateCommunicationStylePatterns:
         assert result.patterns_added == 0
         assert result.patterns_reinforced == 0
         assert result.thing_id is None
+
+    @pytest.mark.asyncio
+    async def test_positive_engagement_reinforces_established_pattern_only(self, patched_db, db):
+        """Positive signals reinforce established patterns; the sweep prompt guides LLM to exclude emerging."""
+        comm_data = {
+            "category": "reli_communication",
+            "patterns": [
+                {"pattern": "prefers concise responses", "confidence": "established", "observations": 2},
+                {"pattern": "uses bullet points", "confidence": "emerging", "observations": 1},
+            ],
+        }
+        with db() as conn:
+            _insert_thing(conn, "pref-comm", "How user wants Reli to communicate", type_hint="preference", data=comm_data)
+            for i in range(MIN_INTERACTIONS + 2):
+                _insert_chat_message(conn, "user", f"Message {i}")
+                _insert_chat_message(conn, "assistant", f"Response {i}")
+            _insert_chat_message(conn, "user", "Perfect, thanks!")
+
+        # LLM correctly follows the prompt and only includes established/strong patterns
+        llm_response = json.dumps({
+            "detected": [],
+            "reinforced": ["prefers concise responses"],  # emerging pattern excluded per prompt guidance
+            "contradicted": [],
+        })
+
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
+            result = await aggregate_communication_style_patterns()
+
+        assert result.patterns_reinforced == 1
+
+        with db() as conn:
+            row = conn.execute("SELECT data FROM things WHERE id = 'pref-comm'").fetchone()
+        data = json.loads(row["data"])
+        pattern_map = {p["pattern"]: p for p in data["patterns"]}
+        assert pattern_map["prefers concise responses"]["observations"] == 3
+        assert pattern_map["uses bullet points"]["observations"] == 1  # unchanged
+        assert pattern_map["uses bullet points"]["confidence"] == "emerging"  # not promoted

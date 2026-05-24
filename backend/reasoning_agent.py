@@ -419,8 +419,8 @@ feedback about Reli's own behavior.
 - User appears to be correcting Reli's verbosity or style in their next message
 
 **Positive engagement signals** (reinforce existing patterns only, do NOT create new ones):
-- User expresses satisfaction: "thanks", "perfect", "exactly right", "that's helpful",
-  "great", "love it", "exactly what I needed"
+- User expresses satisfaction: "thanks", "perfect", "exactly right", "exactly",
+  "that's helpful", "great", "love it", "exactly what I needed", "that was clear"
 - These signal the current approach is working — strengthen what already exists
 - ONLY act on positive signals if a reli_communication preference Thing already exists
 - Increment observations on each established/strong pattern (the ones that are working)

@@ -452,10 +452,10 @@ Look for:
 - User appears to be correcting Reli's response length or style
 
 **Positive engagement signals** (reinforce existing patterns):
-- User expresses satisfaction after Reli's response: "thanks", "perfect", "exactly",
+- User expresses satisfaction after Reli's response: "thanks", "perfect", "exactly right", "exactly",
   "that's helpful", "great", "love it", "exactly what I needed", "that was clear"
 - These signal the current communication style is appreciated
-- Add matching existing patterns to "reinforced" (the style is working)
+- Add only existing patterns whose confidence is "established" or "strong" to "reinforced" (the style is working — only reinforce confirmed patterns)
 - Do NOT add new patterns from positive signals alone
 
 For each detected correction pattern, describe it briefly (e.g., "avoids emoji",
@@ -559,8 +559,8 @@ async def aggregate_communication_style_patterns(
         return CommStyleAggregationResult(usage=usage_stats.to_dict())
 
     detected = parsed.get("detected", [])
-    reinforced_names = set(parsed.get("reinforced", []))
-    contradicted_names = set(parsed.get("contradicted", []))
+    reinforced_names = {n for n in parsed.get("reinforced", []) if isinstance(n, str)}
+    contradicted_names = {n for n in parsed.get("contradicted", []) if isinstance(n, str)}
 
     if not isinstance(detected, list):
         detected = []
@@ -605,6 +605,8 @@ async def aggregate_communication_style_patterns(
             is_explicit = ep["confidence"] in ("established", "strong")
             ep["confidence"] = _comm_confidence_from_observations(ep["observations"], is_explicit)
             patterns_reinforced += 1
+        else:
+            logger.debug("reinforced name unmatched in existing patterns: %s", name)
 
     # Add newly detected patterns
     for item in detected:
