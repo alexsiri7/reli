@@ -16,7 +16,6 @@ from typing import Any
 
 from google.adk.agents import LlmAgent
 
-from backend.context_agent import _make_litellm_model
 from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
 from eval._eval_model import make_eval_model
 
