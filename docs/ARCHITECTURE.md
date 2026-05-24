@@ -12,10 +12,10 @@ Reli is a personal AI information manager. It stores knowledge as **Things** (ta
                               │    │
                     ┌─────────┘    └─────────┐
                     ▼                        ▼
-              ┌──────────┐           ┌──────────────┐
-              │  SQLite  │           │  ChromaDB    │
-              │  (data)  │           │  (vectors)   │
-              └──────────┘           └──────────────┘
+              ┌──────────────────┐    ┌──────────────┐
+              │  SQLite          │    │  ChromaDB    │
+              │  (or Postgres)   │    │  (vectors)   │
+              └──────────────────┘    └──────────────┘
 ```
 
 ## 2. The 4-Stage Agent Pipeline
