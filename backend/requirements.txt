@@ -35,4 +35,4 @@ sqlmodel>=0.0.22
 alembic>=1.18.4
 psycopg2-binary>=2.9.0
 mcp>=1.27.1
-strawberry-graphql>=0.312.3
+strawberry-graphql>=0.316.0
