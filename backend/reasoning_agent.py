@@ -75,7 +75,7 @@ def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str,
                 for param_name, value in bound.arguments.items():
                     if param_name in _CONTENT_FIELDS:
                         continue
-                    attr_val = str(value) if not isinstance(value, str) else value
+                    attr_val = str(value)
                     if len(attr_val) > _ATTR_VALUE_LIMIT:
                         attr_val = attr_val[:_ATTR_VALUE_LIMIT] + "..."
                     span.set_attribute(f"tool.input.{param_name}", attr_val)

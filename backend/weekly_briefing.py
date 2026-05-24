@@ -31,6 +31,10 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+
+def _s(n: int) -> str:
+    return "s" if n != 1 else ""
+
 _DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 _ALL_DATE_KEYS = {
     "birthday",
@@ -292,13 +296,13 @@ def generate_weekly_briefing(
     # Build summary
     parts: list[str] = []
     if completed:
-        parts.append(f"{len(completed)} item{'s' if len(completed) != 1 else ''} completed")
+        parts.append(f"{len(completed)} item{_s(len(completed))} completed")
     if upcoming:
-        parts.append(f"{len(upcoming)} upcoming deadline{'s' if len(upcoming) != 1 else ''}")
+        parts.append(f"{len(upcoming)} upcoming deadline{_s(len(upcoming))}")
     if new_connections:
-        parts.append(f"{len(new_connections)} new connection{'s' if len(new_connections) != 1 else ''} discovered")
+        parts.append(f"{len(new_connections)} new connection{_s(len(new_connections))} discovered")
     if preferences_learned:
-        parts.append(f"{len(preferences_learned)} preference{'s' if len(preferences_learned) != 1 else ''} reinforced")
+        parts.append(f"{len(preferences_learned)} preference{_s(len(preferences_learned))} reinforced")
 
     if parts:
         summary = f"This week: {', '.join(parts)}."

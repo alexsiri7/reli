@@ -141,6 +141,48 @@ class TestFetchHistory:
         assert "Recent message" in all_content
         assert "Recent response" in all_content
 
+    def test_includes_messages_from_previous_session_after_summary(self, patched_db, db):
+        """With a summary, recent messages from a DIFFERENT session are still included.
+
+        Scenario: summary covers msgs 1-2 in sess-A; msgs 3-4 also in sess-A but
+        unsummarized; user opens sess-B. History for sess-B must include msgs 3-4.
+        """
+        user_id = "test-user"
+        with db() as conn:
+            _create_test_user(conn, user_id)
+            # Insert 4 messages in sess-A
+            msg_ids = _insert_messages(
+                conn,
+                user_id,
+                [
+                    ("user", "old msg sess-A"),
+                    ("assistant", "old reply sess-A"),
+                    ("user", "recent msg sess-A"),
+                    ("assistant", "recent reply sess-A"),
+                ],
+                session_id="sess-A",
+            )
+
+        # Summarize only the first two messages
+        create_summary(user_id, "User chatted in session A.", msg_ids[1], 50)
+
+        # User opens a new session — sess-B has no messages yet
+        history = _fetch_history("sess-B", context_window=50, user_id=user_id)
+
+        # Summary should be first
+        assert history[0]["role"] == "system"
+        assert "[Conversation summary]" in history[0]["content"]  # routing verified — consistent with siblings
+        assert "session A" in history[0]["content"]               # content verified
+
+        # Messages from sess-A that are AFTER the summary cutoff must be present
+        non_system = [h for h in history if h["role"] != "system"]
+        contents = [h["content"] for h in non_system]
+        assert "recent msg sess-A" in contents
+        assert "recent reply sess-A" in contents
+        # Old messages before summary cutoff must NOT be present
+        assert "old msg sess-A" not in contents
+        assert "old reply sess-A" not in contents
+
     def test_no_user_id_falls_back_to_raw_history(self, patched_db, db):
         """Without a user_id, summary lookup is skipped."""
         with db() as conn:

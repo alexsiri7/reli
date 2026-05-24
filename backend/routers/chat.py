@@ -536,7 +536,7 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
                 records = session.exec(
                     select(ChatHistoryRecord)
                     .where(
-                        ChatHistoryRecord.session_id == session_id,
+                        ChatHistoryRecord.user_id == user_id,
                         ChatHistoryRecord.id > latest_summary["messages_summarized_up_to"],
                     )
                     .order_by(ChatHistoryRecord.timestamp)
