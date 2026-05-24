@@ -116,7 +116,7 @@ def build_agent(model: str | None = None) -> LlmAgent:
 
     If *model* is provided it overrides the default reasoning model.
     """
-    llm = make_eval_model("reasoning", model=model)
+    llm = make_eval_model("reasoning", model_override=model)
     return LlmAgent(
         name="reasoning_agent",
         description="Reasoning agent for Reli — decides storage changes via tool calls.",
