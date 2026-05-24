@@ -276,8 +276,10 @@ def generate_weekly_briefing(
     def _urgency_sort_key(item: WeeklyBriefingItem) -> int:
         if item.detail and "today" in item.detail:
             return 0
-        if item.detail and "in " in item.detail:
-            return int(item.detail.split("in ")[1].rstrip("d"))
+        if item.detail:
+            m = re.search(r" in (\d+)d$", item.detail)
+            if m:
+                return int(m.group(1))
         return 1
 
     upcoming.sort(key=_urgency_sort_key)
