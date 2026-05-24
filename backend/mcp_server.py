@@ -623,6 +623,20 @@ def thing_schema_reference() -> str:
     return _load_prompt("thing-schema")
 
 
+@mcp.prompt(
+    name="pa-behavior",
+    description=(
+        "Core PA behavior instructions for a calling agent using Reli as its memory. "
+        "Covers: entity capture (people, places, events), data preservation, preference "
+        "tracking, anchor Thing handling, question discipline, and proactive surfacing. "
+        "Read this prompt to know how to act as the user's personal assistant."
+    ),
+)
+def pa_behavior_prompt() -> str:
+    """PA behavior — how a calling agent should act as the user's personal assistant."""
+    return _load_prompt("pa-behavior")
+
+
 # ---------------------------------------------------------------------------
 # Reasoning-as-a-service: reli_think
 # ---------------------------------------------------------------------------

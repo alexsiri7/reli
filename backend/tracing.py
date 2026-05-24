@@ -53,9 +53,6 @@ def init_tracing() -> None:
 
         _initialized = True
 
-        from openinference.instrumentation.google_adk import GoogleADKInstrumentor
-        GoogleADKInstrumentor().instrument()
-
         logger.info(
             "OTEL tracing initialized — exporting to %s (service: %s)",
             settings.PHOENIX_ENDPOINT,
