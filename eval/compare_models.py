@@ -45,6 +45,7 @@ MODEL_MATRIX: dict[str, list[str]] = {
     ],
 }
 
+# USD per 1M tokens (public pricing as of 2026-05; update when pricing changes)
 KNOWN_COSTS: dict[str, dict[str, float]] = {
     "google/gemini-2.5-flash": {"input": 0.15, "output": 0.60},
     "google/gemini-2.5-flash-lite": {"input": 0.10, "output": 0.40},
@@ -71,6 +72,7 @@ def _load_eval_cases(test_file: str) -> list[EvalCase]:
 
 
 def _tool_names_in_order(actual_names: list[str], expected_names: list[str]) -> bool:
+    """Return True if expected_names is an ordered subsequence of actual_names."""
     if not expected_names:
         return True
     if not actual_names:
@@ -105,13 +107,12 @@ async def _run_single_reasoning_case(agent, case) -> bool:
         expected_names = [tc.name for tc in get_all_tool_calls(expected_inv.intermediate_data) if tc.name]
         if _tool_names_in_order(actual_names, expected_names):
             return True
-        return False
+        else:
+            return False
     return False
 
 
-async def run_reasoning_eval(
-    model: str, dataset_path: str, runs: int = RUNS_PER_COMBO
-) -> tuple[float, float]:
+async def run_reasoning_eval(model: str, dataset_path: str, runs: int = RUNS_PER_COMBO) -> tuple[float, float]:
     """Run reasoning eval for *model* on *dataset_path* N times.
 
     Returns (mean_pass_rate, std_dev).
@@ -138,9 +139,7 @@ async def run_reasoning_eval(
     return mean, std
 
 
-async def run_context_eval(
-    model: str, dataset_path: str, runs: int = RUNS_PER_COMBO
-) -> tuple[float, float]:
+async def run_context_eval(model: str, dataset_path: str, runs: int = RUNS_PER_COMBO) -> tuple[float, float]:
     """Run context eval for *model* N times. Checks JSON validity.
 
     Returns (mean_pass_rate, std_dev).
@@ -204,10 +203,11 @@ def _discover_datasets() -> dict[str, list[Path]]:
 # ---------------------------------------------------------------------------
 
 
-Row = tuple[str, str, str, float, float]  # (stage, model, dataset, mean, std)
+Row = tuple[str, str, str, float | None, float | None]  # (stage, model, dataset, mean, std) — None = run failed
 
 
 def _format_report(rows: list[Row]) -> str:
+    """Format eval results as a markdown report string."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines: list[str] = [
         "## Model Comparison Results",
@@ -228,10 +228,17 @@ def _format_report(rows: list[Row]) -> str:
         for _, model, dataset, mean, std in stage_rows:
             cost = KNOWN_COSTS.get(model, {"input": "?", "output": "?"})
             threshold = THRESHOLDS[stage]
-            pass_mark = "\u2713" if mean >= threshold else "\u2717"
+            mean_str = f"{mean:.2f}" if mean is not None else "ERROR"
+            std_str = f"{std:.2f}" if std is not None else "—"
+            if mean is None:
+                pass_mark = "\u26a0 failed"
+            elif mean >= threshold:
+                pass_mark = "\u2713"
+            else:
+                pass_mark = "\u2717"
             ci = f"${cost['input']}" if isinstance(cost["input"], float) else "?"
             co = f"${cost['output']}" if isinstance(cost["output"], float) else "?"
-            lines.append(f"| {model} | {dataset} | {mean:.2f} | {std:.2f} | {pass_mark} | {ci} | {co} |")
+            lines.append(f"| {model} | {dataset} | {mean_str} | {std_str} | {pass_mark} | {ci} | {co} |")
         lines.append("")
 
     # Recommendations
@@ -241,16 +248,17 @@ def _format_report(rows: list[Row]) -> str:
         stage_rows = [r for r in rows if r[0] == stage]
         if not stage_rows:
             continue
-        # Group by model, compute overall mean
+        # Group by model, compute overall mean (skip failed runs with None mean)
         model_scores: dict[str, list[float]] = {}
         for _, model, _, mean, _ in stage_rows:
-            model_scores.setdefault(model, []).append(mean)
+            if mean is not None:
+                model_scores.setdefault(model, []).append(mean)
         best_model = None
         best_avg = -1.0
         threshold = THRESHOLDS[stage]
         for model, means in model_scores.items():
             avg = sum(means) / len(means)
-            if avg >= threshold and avg > best_avg:
+            if avg >= threshold:
                 # Prefer cheapest among passing models
                 cost = KNOWN_COSTS.get(model, {}).get("input", float("inf"))
                 if best_model is None or cost < KNOWN_COSTS.get(best_model, {}).get("input", float("inf")):
@@ -294,7 +302,7 @@ async def main() -> None:
                     mean, std = await runner(model, str(ds_path))
                 except Exception:
                     traceback.print_exc()
-                    mean, std = 0.0, 0.0
+                    mean, std = None, None  # sentinel: run failed, not zero score
                 rows.append((stage, model, ds_name, mean, std))
 
     report = _format_report(rows)
