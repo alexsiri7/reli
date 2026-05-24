@@ -455,7 +455,8 @@ Look for:
 - User expresses satisfaction after Reli's response: "thanks", "perfect", "exactly right", "exactly",
   "that's helpful", "great", "love it", "exactly what I needed", "that was clear"
 - These signal the current communication style is appreciated
-- Add only existing patterns whose confidence is "established" or "strong" to "reinforced" (the style is working — only reinforce confirmed patterns)
+- Add only existing patterns whose confidence is "established" or "strong" to "reinforced"
+  (the style is working — only reinforce confirmed patterns)
 - Do NOT add new patterns from positive signals alone
 
 For each detected correction pattern, describe it briefly (e.g., "avoids emoji",

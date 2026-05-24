@@ -701,7 +701,8 @@ class TestAggregateCommunicationStylePatterns:
             ],
         }
         with db() as conn:
-            _insert_thing(conn, "pref-comm", "How user wants Reli to communicate", type_hint="preference", data=comm_data)
+            _insert_thing(conn, "pref-comm", "How user wants Reli to communicate",
+                          type_hint="preference", data=comm_data)
             for i in range(MIN_INTERACTIONS + 2):
                 _insert_chat_message(conn, "user", f"Message {i}")
                 _insert_chat_message(conn, "assistant", f"Response {i}")
@@ -758,7 +759,8 @@ class TestAggregateCommunicationStylePatterns:
             ],
         }
         with db() as conn:
-            _insert_thing(conn, "pref-comm", "How user wants Reli to communicate", type_hint="preference", data=comm_data)
+            _insert_thing(conn, "pref-comm", "How user wants Reli to communicate",
+                          type_hint="preference", data=comm_data)
             for i in range(MIN_INTERACTIONS + 2):
                 _insert_chat_message(conn, "user", f"Message {i}")
                 _insert_chat_message(conn, "assistant", f"Response {i}")
