@@ -93,6 +93,12 @@ def _tool_names_in_order(actual_names: list[str], expected_names: list[str]) -> 
 # ---------------------------------------------------------------------------
 
 
+def _mean_std(scores: list[float]) -> tuple[float, float]:
+    mean = sum(scores) / len(scores)
+    std = math.sqrt(sum((s - mean) ** 2 for s in scores) / len(scores)) if len(scores) > 1 else 0.0
+    return mean, std
+
+
 async def _run_single_reasoning_case(agent, case) -> bool:
     """Run one reasoning eval case, return True if passed."""
     user_sim = UserSimulatorProvider().provide(case)
@@ -100,16 +106,11 @@ async def _run_single_reasoning_case(agent, case) -> bool:
         root_agent=agent,
         user_simulator=user_sim,
     )
-    if not invocations:
+    if not invocations or not case.conversation:
         return False
-    for actual_inv, expected_inv in zip(invocations, case.conversation):
-        actual_names = [tc.name for tc in get_all_tool_calls(actual_inv.intermediate_data) if tc.name]
-        expected_names = [tc.name for tc in get_all_tool_calls(expected_inv.intermediate_data) if tc.name]
-        if _tool_names_in_order(actual_names, expected_names):
-            return True
-        else:
-            return False
-    return False
+    actual_names = [tc.name for tc in get_all_tool_calls(invocations[0].intermediate_data) if tc.name]
+    expected_names = [tc.name for tc in get_all_tool_calls(case.conversation[0].intermediate_data) if tc.name]
+    return _tool_names_in_order(actual_names, expected_names)
 
 
 async def run_reasoning_eval(model: str, dataset_path: str, runs: int = RUNS_PER_COMBO) -> tuple[float, float]:
@@ -134,9 +135,7 @@ async def run_reasoning_eval(model: str, dataset_path: str, runs: int = RUNS_PER
         scores.append(passed / len(cases))
         print(f"  run {run_idx + 1}/{runs}: {scores[-1]:.2f}")
 
-    mean = sum(scores) / len(scores)
-    std = math.sqrt(sum((s - mean) ** 2 for s in scores) / len(scores)) if len(scores) > 1 else 0.0
-    return mean, std
+    return _mean_std(scores)
 
 
 async def run_context_eval(model: str, dataset_path: str, runs: int = RUNS_PER_COMBO) -> tuple[float, float]:
@@ -181,9 +180,7 @@ async def run_context_eval(model: str, dataset_path: str, runs: int = RUNS_PER_C
         scores.append(passed / len(cases))
         print(f"  run {run_idx + 1}/{runs}: {scores[-1]:.2f}")
 
-    mean = sum(scores) / len(scores)
-    std = math.sqrt(sum((s - mean) ** 2 for s in scores) / len(scores)) if len(scores) > 1 else 0.0
-    return mean, std
+    return _mean_std(scores)
 
 
 # ---------------------------------------------------------------------------
