@@ -171,7 +171,8 @@ class TestFetchHistory:
 
         # Summary should be first
         assert history[0]["role"] == "system"
-        assert "session A" in history[0]["content"]
+        assert "[Conversation summary]" in history[0]["content"]  # routing verified — consistent with siblings
+        assert "session A" in history[0]["content"]               # content verified
 
         # Messages from sess-A that are AFTER the summary cutoff must be present
         non_system = [h for h in history if h["role"] != "system"]
