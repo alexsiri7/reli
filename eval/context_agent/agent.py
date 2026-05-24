@@ -22,7 +22,7 @@ def build_agent(model: str | None = None) -> LlmAgent:
     return LlmAgent(
         name="context_agent",
         description="Generates search parameters to find relevant Things in the database.",
-        model=make_eval_model("context", model_override=model),
+        model=make_eval_model("context", model),
         instruction=CONTEXT_AGENT_SYSTEM,
         generate_content_config=genai_types.GenerateContentConfig(
             response_mime_type="application/json",

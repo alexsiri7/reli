@@ -31,7 +31,7 @@ def build_agent(
     return LlmAgent(
         name="response_agent",
         description="Generates friendly, conversational responses to the user.",
-        model=make_eval_model("response", model_override=model),
+        model=make_eval_model("response", model),
         instruction=get_response_system_prompt(interaction_style, personality_patterns or []),
     )
 
