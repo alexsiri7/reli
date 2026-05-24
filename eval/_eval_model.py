@@ -23,18 +23,18 @@ _STAGE_MODELS = {
 }
 
 
-def make_eval_model(stage: str = "reasoning", model_override: str | None = None) -> LiteLlm:
+def make_eval_model(stage: str = "reasoning", model: str | None = None) -> LiteLlm:
     """Create a LiteLlm model for evals.
 
     Uses Google AI Studio directly if GOOGLE_API_KEY is set (avoids
     Requesty shared quota limits on preview models). Falls back to
     Requesty routing otherwise.
 
-    If *model_override* is given it is used instead of the default model
-    for the requested stage.
+    If *model* is provided (full Requesty-format name, e.g.
+    ``"google/gemini-2.5-flash-lite"``), it overrides the stage lookup.
     """
     google_api_key = os.environ.get("GOOGLE_API_KEY")
-    model_name = model_override if model_override is not None else _STAGE_MODELS.get(stage, REQUESTY_REASONING_MODEL)
+    model_name = model or _STAGE_MODELS.get(stage, REQUESTY_REASONING_MODEL)
 
     # Strip provider prefix to get the base model name
     base_name = model_name.rsplit("/", 1)[-1] if "/" in model_name else model_name
