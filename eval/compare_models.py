@@ -22,8 +22,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import statistics
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -336,7 +338,7 @@ async def _evaluate_model(
         print(f"[warn] No eval cases loaded for stage '{stage}' — score will be 0.0", file=sys.stderr)
 
     per_run_scores: list[float] = []
-    for run_idx in range(runs):
+    for _ in range(runs):
         run_total = 0.0
         for case in all_cases:
             run_total += await run_case(agent, case, max_retries=1)
@@ -467,9 +469,6 @@ def _print_help() -> None:
 
 
 async def main() -> None:
-    import os
-    from datetime import date
-
     args = _parse_args(sys.argv[1:])
 
     if args["help"]:
