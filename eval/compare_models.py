@@ -19,21 +19,13 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Opt-in guard (mirrors backend/tests/test_evals.py)
-# ---------------------------------------------------------------------------
+from google.adk.evaluation.eval_case import EvalCase
+from google.adk.evaluation.evaluation_generator import EvaluationGenerator
+from google.adk.evaluation.simulation.user_simulator_provider import UserSimulatorProvider
+from google.adk.evaluation.trajectory_evaluator import get_all_tool_calls
 
-if os.environ.get("RUN_EVALS", "0") not in ("1", "true", "yes"):
-    print("Skipping model comparison — set RUN_EVALS=1 to run")
-    sys.exit(0)
-
-from google.adk.evaluation.eval_case import EvalCase  # noqa: E402
-from google.adk.evaluation.evaluation_generator import EvaluationGenerator  # noqa: E402
-from google.adk.evaluation.simulation.user_simulator_provider import UserSimulatorProvider  # noqa: E402
-from google.adk.evaluation.trajectory_evaluator import get_all_tool_calls  # noqa: E402
-
-from eval.context_agent.agent import build_agent as build_context_agent  # noqa: E402
-from eval.reasoning_agent.agent import build_agent as build_reasoning_agent  # noqa: E402
+from eval.context_agent.agent import build_agent as build_context_agent
+from eval.reasoning_agent.agent import build_agent as build_reasoning_agent
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -310,4 +302,8 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    # Opt-in guard (mirrors backend/tests/test_evals.py)
+    if os.environ.get("RUN_EVALS", "0") not in ("1", "true", "yes"):
+        print("Skipping model comparison — set RUN_EVALS=1 to run")
+        sys.exit(0)
     asyncio.run(main())
