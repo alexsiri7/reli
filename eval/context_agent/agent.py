@@ -13,14 +13,21 @@ from google.genai import types as genai_types
 from backend.agents import CONTEXT_AGENT_SYSTEM
 from eval._eval_model import make_eval_model
 
-model = make_eval_model("context")
 
-root_agent = LlmAgent(
-    name="context_agent",
-    description="Generates search parameters to find relevant Things in the database.",
-    model=model,
-    instruction=CONTEXT_AGENT_SYSTEM,
-    generate_content_config=genai_types.GenerateContentConfig(
-        response_mime_type="application/json",
-    ),
-)
+def build_agent(model: str | None = None) -> LlmAgent:
+    """Build the context agent for eval.
+
+    If *model* is provided it overrides the default context model.
+    """
+    return LlmAgent(
+        name="context_agent",
+        description="Generates search parameters to find relevant Things in the database.",
+        model=make_eval_model("context", model=model),
+        instruction=CONTEXT_AGENT_SYSTEM,
+        generate_content_config=genai_types.GenerateContentConfig(
+            response_mime_type="application/json",
+        ),
+    )
+
+
+root_agent = build_agent()

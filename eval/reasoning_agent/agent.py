@@ -111,13 +111,16 @@ def chat_history(
 # ---------------------------------------------------------------------------
 
 
-def _build_agent() -> LlmAgent:
-    """Build the reasoning agent wired with stub tools."""
-    model = make_eval_model("reasoning")
+def build_agent(model: str | None = None) -> LlmAgent:
+    """Build the reasoning agent wired with stub tools.
+
+    If *model* is provided it overrides the default reasoning model.
+    """
+    llm = make_eval_model("reasoning", model=model)
     return LlmAgent(
         name="reasoning_agent",
         description="Reasoning agent for Reli — decides storage changes via tool calls.",
-        model=model,
+        model=llm,
         instruction=REASONING_AGENT_TOOL_SYSTEM,
         tools=[
             fetch_context,
@@ -131,4 +134,4 @@ def _build_agent() -> LlmAgent:
     )
 
 
-root_agent = _build_agent()
+root_agent = build_agent()

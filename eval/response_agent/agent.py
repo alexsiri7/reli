@@ -22,12 +22,16 @@ from eval._eval_model import make_eval_model
 def build_agent(
     interaction_style: str = "auto",
     personality_patterns: list[dict[str, Any]] | None = None,
+    model: str | None = None,
 ) -> LlmAgent:
-    """Build the response agent for eval with optional personality patterns."""
+    """Build the response agent for eval with optional personality patterns.
+
+    If *model* is provided it overrides the default response model.
+    """
     return LlmAgent(
         name="response_agent",
         description="Generates friendly, conversational responses to the user.",
-        model=make_eval_model("response"),
+        model=make_eval_model("response", model=model),
         instruction=get_response_system_prompt(interaction_style, personality_patterns or []),
     )
 
