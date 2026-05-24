@@ -14,6 +14,7 @@ from sqlmodel import Session, or_, select
 import backend.db_engine as _engine_mod
 
 from ..auth import require_user
+from ..config import settings
 from ..db_engine import get_session, user_filter_clause, user_filter_text
 from ..db_models import MergeHistoryRecord as MergeHistoryDBRecord
 from ..db_models import ThingRecord, ThingRelationshipRecord
@@ -260,12 +261,18 @@ def search_things(
         filters += " AND t.type_hint = :type_hint"
         params["type_hint"] = type_hint
 
+    # Postgres needs ILIKE for case-insensitive matching (SQLite LIKE is already
+    # case-insensitive for ASCII). Postgres also requires ::text cast for JSONB.
+    _is_pg = settings.STORAGE_BACKEND == "supabase"
+    _like = "ILIKE" if _is_pg else "LIKE"
+    _data_cast = "{}::text" if _is_pg else "CAST({} AS TEXT)"
+
     with Session(_engine_mod.engine) as sess:
         # Phase 1: Direct matches on title, type_hint, and data
         direct_sql = text(
             "SELECT t.* FROM things t"
-            " WHERE (t.title LIKE :pattern OR t.type_hint LIKE :pattern"
-            "        OR CAST(t.data AS TEXT) LIKE :pattern)" + filters + " ORDER BY t.updated_at DESC"
+            f" WHERE (t.title {_like} :pattern OR t.type_hint {_like} :pattern"
+            f"        OR {_data_cast.format('t.data')} {_like} :pattern)" + filters + " ORDER BY t.updated_at DESC"
             " LIMIT :qlimit"
         )
         direct_rows = sess.execute(direct_sql, params).fetchall()
@@ -287,17 +294,17 @@ def search_things(
                 "     SELECT 1 FROM thing_relationships r"
                 "     JOIN things m ON m.id = r.to_thing_id"
                 "     WHERE r.from_thing_id = t.id"
-                "       AND (r.relationship_type LIKE :pattern"
-                "            OR m.title LIKE :pattern"
-                "            OR CAST(m.data AS TEXT) LIKE :pattern)"
+                f"       AND (r.relationship_type {_like} :pattern"
+                f"            OR m.title {_like} :pattern"
+                f"            OR {_data_cast.format('m.data')} {_like} :pattern)"
                 "   )"
                 "   OR EXISTS ("
                 "     SELECT 1 FROM thing_relationships r"
                 "     JOIN things m ON m.id = r.from_thing_id"
                 "     WHERE r.to_thing_id = t.id"
-                "       AND (r.relationship_type LIKE :pattern"
-                "            OR m.title LIKE :pattern"
-                "            OR CAST(m.data AS TEXT) LIKE :pattern)"
+                f"       AND (r.relationship_type {_like} :pattern"
+                f"            OR m.title {_like} :pattern"
+                f"            OR {_data_cast.format('m.data')} {_like} :pattern)"
                 "   )"
                 " )" + filters + " ORDER BY t.updated_at DESC"
                 " LIMIT :qlimit"
