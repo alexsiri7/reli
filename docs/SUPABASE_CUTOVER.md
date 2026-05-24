@@ -8,8 +8,9 @@
 
 ## Cutover Steps (brief downtime)
 
+0. **Navigate to project root**: `cd /home/asiri/gt/reli/mayor/rig`
 1. **Stop the server**: `docker compose stop reli`
-2. **Export**: `DATABASE_URL=sqlite:///data/reli.db python scripts/export_sqlite.py`
+2. **Export** (run on the host, not inside the container): `DATABASE_URL=sqlite:///data/reli.db python scripts/export_sqlite.py`
 3. **Import**: `DATABASE_URL=postgresql://... STORAGE_BACKEND=supabase python scripts/import_supabase.py`
 4. **Verify row counts**: compare `export/*.json` line counts against Supabase dashboard
 5. **Set env vars**: add `DATABASE_URL=postgresql://...` and `STORAGE_BACKEND=supabase` to `.env`

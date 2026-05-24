@@ -196,6 +196,10 @@ Both data stores contain production data. Handle with care.
 | `PHOENIX_ENABLED` | No | `false` | Enable Phoenix/OTLP distributed tracing sidecar |
 | `PHOENIX_ENDPOINT` | No | `http://phoenix:6006/v1/traces` | OTLP trace ingest endpoint |
 | `OTEL_SERVICE_NAME` | No | `reli` (`reli-staging` in staging) | OpenTelemetry service name for traces |
+| `STORAGE_BACKEND` | No | `sqlite` | Set to `supabase` to use Postgres instead of SQLite for Things data. See [docs/SUPABASE_CUTOVER.md](SUPABASE_CUTOVER.md). |
+| `DATABASE_URL` | No (required when STORAGE_BACKEND=supabase) | `sqlite:///data/reli.db` | SQLAlchemy connection URL. For Postgres: `postgresql://postgres:<pass>@db.<ref>.supabase.co:5432/postgres` |
+| `SUPABASE_URL` | No | — | Supabase project URL |
+| `SUPABASE_KEY` | No | — | Supabase anon/service key |
 
 ---
 

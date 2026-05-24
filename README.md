@@ -49,7 +49,7 @@ For how Reli compares to related projects, see [comparisons](docs/comparisons.md
 
 **Backend:** Python 3.12, FastAPI, Uvicorn, Pydantic
 **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, Zustand
-**Storage:** SQLite (data), ChromaDB (vector embeddings)
+**Storage:** SQLite or Postgres/Supabase (data), ChromaDB (vector embeddings)
 **LLM Gateway:** Requesty (OpenAI-compatible, routes to multiple providers)
 **Integrations:** Google Calendar, Gmail, Google Search (all optional)
 **Infrastructure:** Docker, Cloudflare Tunnel, GitHub Actions CI, Railway (staging + production deploy)

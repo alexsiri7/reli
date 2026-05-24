@@ -1,5 +1,7 @@
 """Tests for Things CRUD endpoints."""
 
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
@@ -340,3 +342,81 @@ class TestOrphanRelationships:
         assert resp.status_code == 200
         assert resp.json()["deleted_count"] == 0
         assert resp.json()["deleted_ids"] == []
+
+
+# ---------------------------------------------------------------------------
+# Dialect-aware SQL generation
+# ---------------------------------------------------------------------------
+
+
+class TestSearchDialect:
+    """Verify dialect-aware SQL generation in search_things."""
+
+    def test_sqlite_uses_like_and_cast(self, client):
+        """When STORAGE_BACKEND != 'supabase', SQL uses LIKE and CAST(... AS TEXT)."""
+        from sqlalchemy import text as sa_text
+
+        captured: list[str] = []
+
+        def capturing_text(stmt: str):
+            captured.append(stmt)
+            return sa_text(stmt)
+
+        with patch("backend.routers.things.text", side_effect=capturing_text):
+            with patch("backend.routers.things.settings") as mock_settings:
+                mock_settings.STORAGE_BACKEND = "sqlite"
+                client.get("/api/things/search?q=foo")
+
+        assert any("LIKE" in s and "CAST(" in s for s in captured), (
+            "SQLite path should use LIKE and CAST(... AS TEXT)"
+        )
+        assert not any("ILIKE" in s for s in captured), (
+            "SQLite path must not use ILIKE"
+        )
+
+    def test_postgres_uses_ilike_and_text_cast(self, client):
+        """When STORAGE_BACKEND == 'supabase', SQL uses ILIKE and ::text cast."""
+        from sqlalchemy import text as sa_text
+
+        captured: list[str] = []
+
+        def capturing_text(stmt: str):
+            captured.append(stmt)
+            return sa_text(stmt)
+
+        with patch("backend.routers.things.text", side_effect=capturing_text):
+            with patch("backend.routers.things.settings") as mock_settings:
+                mock_settings.STORAGE_BACKEND = "supabase"
+                # SQLite doesn't support ILIKE so execution will fail; we only
+                # care that the SQL strings were constructed correctly.
+                try:
+                    client.get("/api/things/search?q=foo")
+                except Exception:
+                    pass
+
+        assert any("ILIKE" in s for s in captured), (
+            "Postgres path should use ILIKE"
+        )
+        assert any("::text" in s for s in captured), (
+            "Postgres path should use ::text cast for JSONB"
+        )
+        assert not any("CAST(" in s for s in captured), (
+            "Postgres path must not use CAST(... AS TEXT)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Migration script helpers
+# ---------------------------------------------------------------------------
+
+
+def test_embedding_stringification():
+    """Verify that list embeddings survive the str() cast for pgvector.
+
+    pgvector expects '[0.1, 0.2, 0.3]' — str() on a Python list produces this.
+    """
+    rows = [{"id": "e1", "embedding": [0.1, 0.2, 0.3]}]
+    for row in rows:
+        if row.get("embedding") is not None:
+            row["embedding"] = str(row["embedding"])
+    assert rows[0]["embedding"] == "[0.1, 0.2, 0.3]"

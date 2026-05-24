@@ -2,6 +2,13 @@
 -- Run once in Supabase SQL Editor after schema creation.
 -- These policies enforce the same (user_id = X OR user_id IS NULL) logic as app code.
 
+-- IMPORTANT: These policies use current_setting('app.user_id', true) for
+-- user identity. They are decorative until the application sets this
+-- variable at session open time:
+--     SET LOCAL app.user_id = '<uid>';
+-- This wiring is deferred to Task 6 (Supabase Auth). Until then, the app
+-- connects as a service role (RLS bypassed) so there is no security gap.
+
 -- Enable pgvector extension (may already be enabled)
 CREATE EXTENSION IF NOT EXISTS vector;
 

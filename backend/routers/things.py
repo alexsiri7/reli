@@ -261,9 +261,10 @@ def search_things(
         filters += " AND t.type_hint = :type_hint"
         params["type_hint"] = type_hint
 
-    # Postgres needs ILIKE for case-insensitive matching (SQLite LIKE is already
-    # case-insensitive for ASCII). Postgres also requires ::text cast for JSONB.
-    _is_pg = settings.STORAGE_BACKEND == "supabase"
+    # Postgres (Supabase backend) needs ILIKE for case-insensitive matching;
+    # SQLite LIKE is already case-insensitive for ASCII.
+    # Postgres also requires ::text cast for JSONB columns.
+    _is_pg = settings.STORAGE_BACKEND == "supabase"  # supabase ↔ postgres dialect
     _like = "ILIKE" if _is_pg else "LIKE"
     _data_cast = "{}::text" if _is_pg else "CAST({} AS TEXT)"
 
