@@ -62,6 +62,17 @@ def _parse_date(value: object) -> date | None:
     return None
 
 
+def _urgency_sort_key(item: WeeklyBriefingItem) -> int:
+    """Sort key for upcoming items: today=0, 'in Xd'=X, everything else=1."""
+    if item.detail and "today" in item.detail:
+        return 0
+    if item.detail:
+        m = re.search(r" in (\d+)d$", item.detail)
+        if m:
+            return int(m.group(1))
+    return 1
+
+
 def _days_until_recurring(target: date, today: date) -> int:
     this_year = today.replace(month=target.month, day=target.day)
     if this_year >= today:
@@ -272,15 +283,6 @@ def generate_weekly_briefing(
     # Build preferences learned
     for rec in pref_rows:
         preferences_learned.append(rec.title)
-
-    def _urgency_sort_key(item: WeeklyBriefingItem) -> int:
-        if item.detail and "today" in item.detail:
-            return 0
-        if item.detail:
-            m = re.search(r" in (\d+)d$", item.detail)
-            if m:
-                return int(m.group(1))
-        return 1
 
     upcoming.sort(key=_urgency_sort_key)
 
