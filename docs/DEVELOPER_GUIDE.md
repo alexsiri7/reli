@@ -214,6 +214,18 @@ To make it permanent, update `config.yaml`. To allow per-user override, use `PUT
 
 To add pricing for a new model, update the pricing dict in `backend/agents.py`.
 
+To compare multiple models across all eval suites before switching:
+
+```bash
+# Quick sanity check (1 run, no expensive pro model)
+python -m eval.compare_models --runs 1
+
+# Full comparison including gemini-2.5-pro
+python -m eval.compare_models --include-pro --output /tmp/comparison.json
+```
+
+Results show avg score, variance, pass/fail vs threshold, and cost per 1M tokens. The script recommends the cheapest model that passes the threshold for each stage.
+
 ---
 
 ## Debugging

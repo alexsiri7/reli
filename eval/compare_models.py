@@ -37,6 +37,7 @@ from google.genai import types as genai_types
 from backend.agents import CONTEXT_AGENT_SYSTEM
 from backend.reasoning_agent import REASONING_AGENT_TOOL_SYSTEM
 from eval._eval_model import make_eval_model
+from eval.tool_name_evaluator import ToolNameTrajectoryEvaluator
 
 # ---------------------------------------------------------------------------
 # Stub tools — same as eval/reasoning_agent/agent.py
@@ -180,25 +181,19 @@ THRESHOLDS: dict[str, float] = {
 
 
 def _load_eval_cases(test_file: str) -> list[EvalCase]:
-    with open(test_file) as f:
-        raw = json.load(f)
-    return [EvalCase(**c) for c in raw.get("eval_cases", [])]
+    try:
+        with open(test_file) as f:
+            raw = json.load(f)
+        return [EvalCase(**c) for c in raw.get("eval_cases", [])]
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Test file not found: {test_file}") from None
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in {test_file}: {exc}") from exc
 
 
 def _tool_names_in_order(actual_names: list[str], expected_names: list[str]) -> bool:
-    if not expected_names:
-        return True
-    if not actual_names:
-        return False
-    expected_iter = iter(expected_names)
-    current = next(expected_iter)
-    for name in actual_names:
-        if name == current:
-            try:
-                current = next(expected_iter)
-            except StopIteration:
-                return True
-    return False
+    """Return True if expected_names is a subsequence of actual_names (order-preserving, extras allowed)."""
+    return bool(ToolNameTrajectoryEvaluator._names_in_order(actual_names, expected_names))
 
 
 # ---------------------------------------------------------------------------
@@ -244,34 +239,45 @@ def _build_context_agent(model_override: str) -> LlmAgent:
 
 
 async def _run_reasoning_case(agent: LlmAgent, case: EvalCase, max_retries: int = 3) -> float:
-    """Run a single reasoning eval case. Returns 1.0 (pass) or 0.0 (fail)."""
-    for _ in range(max_retries):
-        user_sim = UserSimulatorProvider().provide(case)
-        invocations = await EvaluationGenerator._generate_inferences_from_root_agent(
-            root_agent=agent,
-            user_simulator=user_sim,
-        )
+    """Run a single reasoning eval case. Returns avg tool-match score across all turns."""
+    for attempt in range(max_retries):
+        try:
+            user_sim = UserSimulatorProvider().provide(case)
+            invocations = await EvaluationGenerator._generate_inferences_from_root_agent(
+                root_agent=agent,
+                user_simulator=user_sim,
+            )
+        except Exception as exc:
+            print(f"    [warn] attempt {attempt + 1} failed: {exc}", file=sys.stderr)
+            continue
         if not invocations:
             continue
 
+        scores: list[float] = []
         for actual_inv, expected_inv in zip(invocations, case.conversation):
             actual_tools = get_all_tool_calls(actual_inv.intermediate_data)
             expected_tools = get_all_tool_calls(expected_inv.intermediate_data)
             actual_names = [tc.name for tc in actual_tools if tc.name]
             expected_names = [tc.name for tc in expected_tools if tc.name]
-            if _tool_names_in_order(actual_names, expected_names):
-                return 1.0
+            scores.append(1.0 if _tool_names_in_order(actual_names, expected_names) else 0.0)
+
+        if scores:
+            return statistics.mean(scores)
     return 0.0
 
 
 async def _run_context_case(agent: LlmAgent, case: EvalCase, max_retries: int = 3) -> float:
     """Run a single context eval case. Returns 1.0 (pass) or 0.0 (fail)."""
-    for _ in range(max_retries):
-        user_sim = UserSimulatorProvider().provide(case)
-        invocations = await EvaluationGenerator._generate_inferences_from_root_agent(
-            root_agent=agent,
-            user_simulator=user_sim,
-        )
+    for attempt in range(max_retries):
+        try:
+            user_sim = UserSimulatorProvider().provide(case)
+            invocations = await EvaluationGenerator._generate_inferences_from_root_agent(
+                root_agent=agent,
+                user_simulator=user_sim,
+            )
+        except Exception as exc:
+            print(f"    [warn] attempt {attempt + 1} failed: {exc}", file=sys.stderr)
+            continue
         if not invocations:
             continue
         inv = invocations[0]
@@ -281,6 +287,7 @@ async def _run_context_case(agent: LlmAgent, case: EvalCase, max_retries: int = 
         if not text:
             continue
         clean = text.strip()
+        # Some model versions wrap JSON in markdown fences despite response_mime_type
         if clean.startswith("```"):
             clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
             if clean.endswith("```"):
@@ -310,6 +317,9 @@ async def _evaluate_model(
 
     Each case is run *runs* times; per-run averages are aggregated into a
     mean and standard deviation.
+
+    Note: max_retries=1 is intentional here — outer *runs* loop handles
+    variance; inner retries in _run_*_case are for transient API failures only.
     """
     if stage == "reasoning":
         agent = _build_reasoning_agent(model)
@@ -321,6 +331,9 @@ async def _evaluate_model(
     all_cases: list[EvalCase] = []
     for tf in test_files:
         all_cases.extend(_load_eval_cases(tf))
+
+    if not all_cases:
+        print(f"[warn] No eval cases loaded for stage '{stage}' — score will be 0.0", file=sys.stderr)
 
     per_run_scores: list[float] = []
     for run_idx in range(runs):
@@ -370,9 +383,14 @@ def _print_markdown_table(results: list[dict[str, Any]]) -> None:
 
 
 def _write_json_report(results: list[dict[str, Any]], path: Path) -> None:
-    with open(path, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"Report written to: {path}")
+    try:
+        with open(path, "w") as f:
+            json.dump(results, f, indent=2)
+        print(f"Report written to: {path}")
+    except OSError as exc:
+        print(f"ERROR: Could not write report to {path}: {exc}", file=sys.stderr)
+        print("Results (copy to save):", file=sys.stderr)
+        print(json.dumps(results, indent=2), file=sys.stderr)
 
 
 def _print_recommendation(results: list[dict[str, Any]]) -> None:
@@ -423,7 +441,11 @@ def _parse_args(argv: list[str]) -> dict[str, Any]:
             args["dry_run"] = True
         elif arg == "--runs" and i + 1 < len(argv):
             i += 1
-            args["runs"] = int(argv[i])
+            try:
+                args["runs"] = int(argv[i])
+            except ValueError:
+                print(f"ERROR: --runs expects an integer, got: {argv[i]!r}", file=sys.stderr)
+                sys.exit(1)
         elif arg == "--output" and i + 1 < len(argv):
             i += 1
             args["output"] = argv[i]
@@ -480,19 +502,21 @@ async def main() -> None:
         print("(dry run — exiting)")
         return
 
-    # Run evaluations
+    # Run evaluations — try/finally ensures partial results are always written
     results: list[dict[str, Any]] = []
-    for stage, models in models_to_test.items():
-        test_files = REASONING_TEST_FILES if stage == "reasoning" else CONTEXT_TEST_FILES
-        for model in models:
-            print(f"Evaluating {stage} / {model} ...", flush=True)
-            result = await _evaluate_model(stage, model, test_files, runs=runs)
-            results.append(result)
-            print(f"  -> avg={result['avg_score']:.2f} stdev={result['stdev']:.2f}")
-
-    _print_markdown_table(results)
-    _write_json_report(results, output_path)
-    _print_recommendation(results)
+    try:
+        for stage, models in models_to_test.items():
+            test_files = REASONING_TEST_FILES if stage == "reasoning" else CONTEXT_TEST_FILES
+            for model in models:
+                print(f"Evaluating {stage} / {model} ...", flush=True)
+                result = await _evaluate_model(stage, model, test_files, runs=runs)
+                results.append(result)
+                print(f"  -> avg={result['avg_score']:.2f} stdev={result['stdev']:.2f}")
+    finally:
+        if results:
+            _print_markdown_table(results)
+            _write_json_report(results, output_path)
+            _print_recommendation(results)
 
 
 if __name__ == "__main__":
