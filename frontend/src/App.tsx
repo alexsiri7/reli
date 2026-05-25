@@ -7,7 +7,7 @@ import { DetailPanel } from './components/DetailPanel'
 import { BriefingPanel } from './components/BriefingPanel'
 import GraphView from './components/GraphView'
 import { CalendarView } from './components/CalendarView'
-import { LoginPage } from './components/LoginPage'
+import { LandingPage } from './components/LandingPage'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -110,7 +110,7 @@ function App() {
 
   // Show login page if not authenticated
   if (!currentUser) {
-    return <LoginPage />
+    return <LandingPage />
   }
 
   return (
