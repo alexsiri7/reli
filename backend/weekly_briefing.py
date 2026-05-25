@@ -70,10 +70,8 @@ def _urgency_sort_key(item: WeeklyBriefingItem) -> int:
     """Sort key for upcoming items: today=0, 'in Xd'=X, everything else=1."""
     if item.detail and "today" in item.detail:
         return 0
-    if item.detail:
-        m = re.search(r" in (\d+)d$", item.detail)
-        if m:
-            return int(m.group(1))
+    if item.detail and (m := re.search(r" in (\d+)d$", item.detail)):
+        return int(m.group(1))
     return 1
 
 
