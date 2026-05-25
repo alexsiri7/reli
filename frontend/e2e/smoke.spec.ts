@@ -35,7 +35,7 @@ test.describe('Smoke – frontend serving', () => {
   test('unauthenticated user sees login page', async ({ page }) => {
     await page.goto('/')
     // The app should show the login page for unauthenticated users
-    await expect(page.getByText('Sign in with Google')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText('Sign in with Google').first()).toBeVisible({ timeout: 15_000 })
   })
 })
 
