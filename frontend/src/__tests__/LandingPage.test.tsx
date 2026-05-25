@@ -35,7 +35,7 @@ describe('LandingPage', () => {
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})))
     render(<LandingPage />)
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[0])
+    fireEvent.click(buttons[0]!)
     await waitFor(() => {
       expect(screen.getAllByText('Redirecting...').length).toBeGreaterThan(0)
     })
@@ -58,7 +58,7 @@ describe('LandingPage', () => {
     }))
     render(<LandingPage />)
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[0])
+    fireEvent.click(buttons[0]!)
     await waitFor(() => {
       expect(hrefSetter).toHaveBeenCalledWith('https://accounts.google.com/oauth')
     })
@@ -71,7 +71,7 @@ describe('LandingPage', () => {
     }))
     render(<LandingPage />)
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[0])
+    fireEvent.click(buttons[0]!)
     await waitFor(() => {
       expect(screen.getByText('OAuth not configured')).toBeInTheDocument()
     })
@@ -81,7 +81,7 @@ describe('LandingPage', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')))
     render(<LandingPage />)
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[0])
+    fireEvent.click(buttons[0]!)
     await waitFor(() => {
       expect(screen.getByText('Could not connect to server')).toBeInTheDocument()
     })
@@ -91,7 +91,7 @@ describe('LandingPage', () => {
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})))
     render(<LandingPage />)
     const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[0])
+    fireEvent.click(buttons[0]!)
     for (const btn of buttons) {
       expect(btn).toBeDisabled()
     }
