@@ -92,6 +92,13 @@ def test_model_pricing_populated():
         }, f"No pricing found for configured model {model}"
 
 
+def test_deprecated_model_removed_from_pricing():
+    """gemini-3.1-flash-lite-preview was deprecated and must not appear in pricing."""
+    import backend.agents as agents
+
+    assert "google/gemini-3.1-flash-lite-preview" not in agents.MODEL_PRICING
+
+
 def test_fetch_requesty_pricing_api_failure():
     """Pricing fetch should fall back to defaults when API is unreachable."""
     from backend.agents import _fetch_requesty_pricing

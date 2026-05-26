@@ -1,5 +1,25 @@
 import { useState } from 'react'
 
+const HOW_IT_WORKS = [
+  { emoji: '🧠', titleColor: 'text-projects', title: 'Knowledge Graph', description: "Everything Reli knows is stored as typed Things with relationships. People, events, tasks, preferences — all linked so Reli can reason across your whole life." },
+  { emoji: '🔗', titleColor: 'text-primary',  title: 'Claude via MCP',  description: "Through MCP, any agent can tap into Reli's intelligence — your preferences, patterns, and relationships that make every AI interaction smarter about you." },
+  { emoji: '📋', titleColor: 'text-events',   title: 'Daily Briefing',  description: "Reli's nightly sweep thinks about your life — detecting gaps, aggregating patterns, and assembling briefings prioritized by urgency and your habits." },
+]
+
+const KEY_CONCEPTS = [
+  { color: 'projects', letter: 'T', title: 'Things',         description: 'People, events, tasks, preferences — everything is a typed Thing in your knowledge graph.' },
+  { color: 'people',   letter: 'R', title: 'Relationships',  description: 'Things are connected by relationships, letting Reli reason across domains and contexts.' },
+  { color: 'events',   letter: 'B', title: 'Briefings',      description: "Prioritized by urgency and your patterns, not just chronological. What actually needs your attention." },
+  { color: 'ideas',    letter: '?', title: 'Open Questions', description: "Gaps Reli detects in its understanding — things it needs to ask you to build a complete picture." },
+]
+
+const STEPS = [
+  { title: 'Sign in',        description: 'Sign in with your Google account' },
+  { title: 'Open Claude',    description: 'Open Claude Desktop on your computer' },
+  { title: 'Add MCP server', description: 'Connect Reli as an MCP server in Claude' },
+  { title: 'Start talking',  description: 'Have a conversation and let Reli learn' },
+]
+
 interface SignInButtonProps {
   loading: boolean
   onLogin: () => void
@@ -84,27 +104,13 @@ export function LandingPage() {
           How it works
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="bg-surface-container-low rounded-xl p-6 border border-white/5">
-            <div className="text-3xl mb-4">🧠</div>
-            <h3 className="text-title font-semibold text-projects mb-2">Knowledge Graph</h3>
-            <p className="text-body text-on-surface-variant">
-              Everything Reli knows is stored as typed Things with relationships. People, events, tasks, preferences — all linked so Reli can reason across your whole life.
-            </p>
-          </div>
-          <div className="bg-surface-container-low rounded-xl p-6 border border-white/5">
-            <div className="text-3xl mb-4">🔗</div>
-            <h3 className="text-title font-semibold text-primary mb-2">Claude via MCP</h3>
-            <p className="text-body text-on-surface-variant">
-              Through MCP, any agent can tap into Reli's intelligence — your preferences, patterns, and relationships that make every AI interaction smarter about you.
-            </p>
-          </div>
-          <div className="bg-surface-container-low rounded-xl p-6 border border-white/5">
-            <div className="text-3xl mb-4">📋</div>
-            <h3 className="text-title font-semibold text-events mb-2">Daily Briefing</h3>
-            <p className="text-body text-on-surface-variant">
-              Reli's nightly sweep thinks about your life — detecting gaps, aggregating patterns, and assembling briefings prioritized by urgency and your habits.
-            </p>
-          </div>
+          {HOW_IT_WORKS.map(({ emoji, titleColor, title, description }) => (
+            <div key={title} className="bg-surface-container-low rounded-xl p-6 border border-white/5">
+              <div className="text-3xl mb-4">{emoji}</div>
+              <h3 className={`text-title font-semibold ${titleColor} mb-2`}>{title}</h3>
+              <p className="text-body text-on-surface-variant">{description}</p>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -114,42 +120,15 @@ export function LandingPage() {
           Key concepts
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-surface-container-low rounded-xl p-6 border border-white/5">
-            <div className="w-10 h-10 rounded-lg bg-projects/20 flex items-center justify-center mb-4">
-              <span className="text-projects text-lg font-bold">T</span>
+          {KEY_CONCEPTS.map(({ color, letter, title, description }) => (
+            <div key={title} className="bg-surface-container-low rounded-xl p-6 border border-white/5">
+              <div className={`w-10 h-10 rounded-lg bg-${color}/20 flex items-center justify-center mb-4`}>
+                <span className={`text-${color} text-lg font-bold`}>{letter}</span>
+              </div>
+              <h3 className="text-title font-semibold text-on-surface mb-2">{title}</h3>
+              <p className="text-body text-on-surface-variant">{description}</p>
             </div>
-            <h3 className="text-title font-semibold text-on-surface mb-2">Things</h3>
-            <p className="text-body text-on-surface-variant">
-              People, events, tasks, preferences — everything is a typed Thing in your knowledge graph.
-            </p>
-          </div>
-          <div className="bg-surface-container-low rounded-xl p-6 border border-white/5">
-            <div className="w-10 h-10 rounded-lg bg-people/20 flex items-center justify-center mb-4">
-              <span className="text-people text-lg font-bold">R</span>
-            </div>
-            <h3 className="text-title font-semibold text-on-surface mb-2">Relationships</h3>
-            <p className="text-body text-on-surface-variant">
-              Things are connected by relationships, letting Reli reason across domains and contexts.
-            </p>
-          </div>
-          <div className="bg-surface-container-low rounded-xl p-6 border border-white/5">
-            <div className="w-10 h-10 rounded-lg bg-events/20 flex items-center justify-center mb-4">
-              <span className="text-events text-lg font-bold">B</span>
-            </div>
-            <h3 className="text-title font-semibold text-on-surface mb-2">Briefings</h3>
-            <p className="text-body text-on-surface-variant">
-              Prioritized by urgency and your patterns, not just chronological. What actually needs your attention.
-            </p>
-          </div>
-          <div className="bg-surface-container-low rounded-xl p-6 border border-white/5">
-            <div className="w-10 h-10 rounded-lg bg-ideas/20 flex items-center justify-center mb-4">
-              <span className="text-ideas text-lg font-bold">?</span>
-            </div>
-            <h3 className="text-title font-semibold text-on-surface mb-2">Open Questions</h3>
-            <p className="text-body text-on-surface-variant">
-              Gaps Reli detects in its understanding — things it needs to ask you to build a complete picture.
-            </p>
-          </div>
+          ))}
         </div>
       </section>
 
@@ -159,34 +138,15 @@ export function LandingPage() {
           Get started
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-4">
-              <span className="text-on-primary-container font-bold">1</span>
+          {STEPS.map(({ title, description }, i) => (
+            <div key={title} className="text-center">
+              <div className="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-4">
+                <span className="text-on-primary-container font-bold">{i + 1}</span>
+              </div>
+              <h3 className="text-title font-semibold text-on-surface mb-1">{title}</h3>
+              <p className="text-body text-on-surface-variant">{description}</p>
             </div>
-            <h3 className="text-title font-semibold text-on-surface mb-1">Sign in</h3>
-            <p className="text-body text-on-surface-variant">Sign in with your Google account</p>
-          </div>
-          <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-4">
-              <span className="text-on-primary-container font-bold">2</span>
-            </div>
-            <h3 className="text-title font-semibold text-on-surface mb-1">Open Claude</h3>
-            <p className="text-body text-on-surface-variant">Open Claude Desktop on your computer</p>
-          </div>
-          <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-4">
-              <span className="text-on-primary-container font-bold">3</span>
-            </div>
-            <h3 className="text-title font-semibold text-on-surface mb-1">Add MCP server</h3>
-            <p className="text-body text-on-surface-variant">Connect Reli as an MCP server in Claude</p>
-          </div>
-          <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-4">
-              <span className="text-on-primary-container font-bold">4</span>
-            </div>
-            <h3 className="text-title font-semibold text-on-surface mb-1">Start talking</h3>
-            <p className="text-body text-on-surface-variant">Have a conversation and let Reli learn</p>
-          </div>
+          ))}
         </div>
       </section>
 
