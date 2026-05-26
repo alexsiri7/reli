@@ -85,7 +85,6 @@ _DEFAULT_PRICING: dict[str, tuple[float, float]] = {
     "google/gemini-2.5-flash-preview-05-20": (0.15, 0.60),
     "google/gemini-2.5-flash-lite": (0.10, 0.40),
     "google/gemini-2.5-flash": (0.15, 0.60),
-    "google/gemini-3.1-flash-lite-preview": (0.10, 0.40),
     "google/gemini-3-flash-preview": (0.15, 0.60),
 }
 
