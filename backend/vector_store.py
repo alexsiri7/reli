@@ -40,6 +40,19 @@ VECTOR_SEARCH_THRESHOLD = 0
 # ---------------------------------------------------------------------------
 
 
+_openai_client: Any = None
+
+
+def _get_openai_client() -> Any:
+    """Return a cached OpenAI client for Requesty embeddings."""
+    global _openai_client
+    if _openai_client is None:
+        from openai import OpenAI
+
+        _openai_client = OpenAI(api_key=REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
+    return _openai_client
+
+
 class _ThingEmbedder:
     """Embed text via Requesty (OpenAI-compatible) with Ollama fallback."""
 
@@ -47,28 +60,24 @@ class _ThingEmbedder:
         # Try Requesty first (if API key configured)
         if REQUESTY_API_KEY:
             try:
-                from openai import OpenAI
-
-                client = OpenAI(api_key=REQUESTY_API_KEY, base_url=REQUESTY_BASE_URL)
+                client = _get_openai_client()
                 resp = client.embeddings.create(model=EMBEDDING_MODEL, input=input)
                 return [e.embedding for e in resp.data]
             except Exception as exc:
                 logger.warning("Requesty embedding failed, falling back to Ollama: %s", exc)
 
         # Fallback: Ollama HTTP API
-        import urllib.request
+        import httpx
 
         embeddings = []
-        for text in input:
-            payload = json.dumps({"model": OLLAMA_EMBED_MODEL, "prompt": text}).encode()
-            req = urllib.request.Request(
-                f"{OLLAMA_BASE_URL}/api/embeddings",
-                data=payload,
-                headers={"Content-Type": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read())
-            embeddings.append(data["embedding"])
+        with httpx.Client(timeout=30) as http_client:
+            for text in input:
+                resp = http_client.post(
+                    f"{OLLAMA_BASE_URL}/api/embeddings",
+                    json={"model": OLLAMA_EMBED_MODEL, "prompt": text},
+                )
+                resp.raise_for_status()
+                embeddings.append(resp.json()["embedding"])
         return embeddings
 
 

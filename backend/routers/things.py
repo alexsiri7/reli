@@ -15,7 +15,7 @@ import backend.db_engine as _engine_mod
 
 from ..auth import require_user
 from ..config import settings
-from ..db_engine import get_session, user_filter_clause, user_filter_text
+from ..db_engine import get_session, parse_dt, user_filter_clause, user_filter_text
 from ..db_models import MergeHistoryRecord as MergeHistoryDBRecord
 from ..db_models import ThingRecord, ThingRelationshipRecord
 from ..models import (
@@ -39,14 +39,6 @@ from ..vector_store import reindex_all, upsert_thing
 
 router = APIRouter(prefix="/things", tags=["things"])
 _logger = logging.getLogger(__name__)
-
-
-def _parse_dt(val: str | None) -> datetime | None:
-    if val is None:
-        return None
-    if isinstance(val, datetime):
-        return val
-    return datetime.fromisoformat(val)
 
 
 def _unwrap_json_str(value: Any) -> Any:
@@ -90,50 +82,6 @@ def _record_to_thing(record: ThingRecord) -> Thing:
         updated_at=record.updated_at or datetime.min,
         last_referenced=record.last_referenced,
         open_questions=open_questions if isinstance(open_questions, list) else None,
-    )
-
-
-# Keep _row_to_thing for backward compat (imported by other modules)
-def _row_to_thing(row: Any) -> Thing:
-    """Convert a sqlite3.Row to a Thing response model. Legacy compat wrapper."""
-    if isinstance(row, ThingRecord):
-        return _record_to_thing(row)
-    # Legacy sqlite3.Row handling
-    data = _unwrap_json_str(row.data)
-    if isinstance(data, str):
-        data = None
-    surface = True
-    try:
-        surface = bool(row.surface) if row.surface is not None else True
-    except (IndexError, KeyError):
-        pass
-    last_referenced = None
-    try:
-        last_referenced = _parse_dt(row.last_referenced)
-    except (IndexError, KeyError):
-        pass
-    open_questions = None
-    try:
-        raw_oq = row.open_questions
-        if raw_oq:
-            oq = _unwrap_json_str(raw_oq)
-            if isinstance(oq, list):
-                open_questions = oq
-    except (IndexError, KeyError):
-        pass
-    return Thing(
-        id=row.id,
-        title=row.title,
-        type_hint=row.type_hint,
-        checkin_date=_parse_dt(row.checkin_date),
-        importance=row.importance,
-        active=bool(row.active),
-        surface=surface,
-        data=data,
-        created_at=_parse_dt(row.created_at) or datetime.min,
-        updated_at=_parse_dt(row.updated_at) or datetime.min,
-        last_referenced=last_referenced,
-        open_questions=open_questions,
     )
 
 
@@ -320,7 +268,7 @@ def search_things(
     results.sort(key=lambda x: x[0].updated_at, reverse=True)
     results.sort(key=lambda x: x[1])
 
-    return [_row_to_thing(r) for r, _rank in results[:limit]]
+    return [_record_to_thing(ThingRecord.model_validate(dict(r._mapping))) for r, _rank in results[:limit]]
 
 
 @router.get("", response_model=list[Thing], summary="List Things")
@@ -878,7 +826,7 @@ def _parse_rel_row(row: Any) -> Relationship:
         to_thing_id=row.to_thing_id,
         relationship_type=row.relationship_type,
         metadata=meta,
-        created_at=_parse_dt(created_at) if isinstance(created_at, str) else (created_at or datetime.min),  # type: ignore[arg-type]
+        created_at=parse_dt(created_at) if isinstance(created_at, str) else (created_at or datetime.min),  # type: ignore[arg-type]
     )
 
 
