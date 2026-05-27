@@ -52,14 +52,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-def _parse_dt(val: str | None) -> datetime | None:
-    if val is None:
-        return None
-    if isinstance(val, datetime):
-        return val
-    return datetime.fromisoformat(val)
-
-
 def _record_to_msg(record: ChatHistoryRecord, usage_records: list[ChatMessageUsageRecord] | None = None) -> ChatMessage:
     changes = record.applied_changes
     if isinstance(changes, str):
@@ -89,39 +81,6 @@ def _record_to_msg(record: ChatHistoryRecord, usage_records: list[ChatMessageUsa
         model=record.model,
         per_call_usage=per_call_usage,
         timestamp=record.timestamp or datetime.min,
-    )
-
-
-def _row_to_msg(row: Any, usage_rows: Any = None) -> ChatMessage:
-    changes = row.applied_changes
-    if isinstance(changes, str):
-        changes = json.loads(changes) if changes else None
-    # Prefer per-call usage from the dedicated table; fall back to applied_changes JSON
-    per_call_usage: list[CallUsage] = []
-    if usage_rows:
-        per_call_usage = [
-            CallUsage(
-                model=u.model,
-                prompt_tokens=u.prompt_tokens,
-                completion_tokens=u.completion_tokens,
-                cost_usd=u.cost_usd,
-            )
-            for u in usage_rows
-        ]
-    elif isinstance(changes, dict) and "per_call_usage" in changes:
-        per_call_usage = [CallUsage(**c) for c in changes["per_call_usage"]]
-    return ChatMessage(
-        id=row.id,
-        session_id=row.session_id,
-        role=row.role,
-        content=row.content,
-        applied_changes=changes,
-        prompt_tokens=row.prompt_tokens or 0,
-        completion_tokens=row.completion_tokens or 0,
-        cost_usd=row.cost_usd or 0.0,
-        model=row.model,
-        per_call_usage=per_call_usage,
-        timestamp=_parse_dt(row.timestamp) or datetime.min,
     )
 
 

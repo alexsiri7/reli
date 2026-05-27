@@ -44,6 +44,18 @@ def json_serializer(value: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
+def parse_dt(val: str | None) -> datetime | None:
+    """Parse an ISO-8601 string to a datetime, returning None for None/empty.
+
+    Passes through values that are already ``datetime`` instances.
+    """
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val
+    return datetime.fromisoformat(val)
+
+
 def user_filter_clause(user_id_column: Any, user_id: str) -> Any:
     """Return a SQLAlchemy filter clause for user-scoped queries.
 

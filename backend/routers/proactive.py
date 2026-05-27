@@ -13,7 +13,7 @@ from ..auth import require_user
 from ..db_engine import user_filter_clause
 from ..db_models import ThingRecord
 from ..models import ProactiveSurface
-from .things import _row_to_thing
+from .things import _record_to_thing
 
 router = APIRouter(prefix="/proactive", tags=["proactive"])
 
@@ -130,7 +130,7 @@ def get_proactive_surfaces(
 
     surfaces: list[ProactiveSurface] = []
     for row in rows:
-        thing = _row_to_thing(row)
+        thing = _record_to_thing(row)
         if thing.data is None:
             continue
         hits = _scan_data(thing.data, today, days)
