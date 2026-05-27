@@ -268,7 +268,18 @@ def search_things(
     results.sort(key=lambda x: x[0].updated_at, reverse=True)
     results.sort(key=lambda x: x[1])
 
-    return [_record_to_thing(ThingRecord.model_validate(dict(r._mapping))) for r, _rank in results[:limit]]
+    def _coerce_row(r: Any) -> ThingRecord:
+        d = dict(r._mapping)
+        for key in ("data", "open_questions"):
+            if isinstance(d.get(key), str):
+                d[key] = _unwrap_json_str(d[key])
+                if d[key] is None or (key == "data" and not isinstance(d[key], dict)):
+                    d[key] = None
+                if key == "open_questions" and not isinstance(d.get(key), list):
+                    d[key] = None
+        return ThingRecord.model_validate(d)
+
+    return [_record_to_thing(_coerce_row(r)) for r, _rank in results[:limit]]
 
 
 @router.get("", response_model=list[Thing], summary="List Things")
