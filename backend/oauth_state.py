@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from . import db_engine as _engine_module
 from .db_models import (
@@ -40,7 +40,7 @@ from .db_models import (
 
 logger = logging.getLogger(__name__)
 
-MAX_ENTRIES_PER_DICT = 10_000
+MAX_ENTRIES_PER_DICT = 10_000  # applies to both in-memory dict stores and DB-backed _Store objects
 
 # Fields stored as JSON-encoded strings in the DB that must be deserialized
 # back to lists when returning dicts to callers.
@@ -90,6 +90,7 @@ def _is_expired(entry: dict, now_ts: float, now_dt: datetime) -> bool:
 
 
 def _cleanup_expired(store: dict[str, dict]) -> None:
+    """Remove expired entries from an in-memory store. See ``_is_expired`` for expiry semantics."""
     now_ts = time.time()
     now_dt = datetime.now(timezone.utc)
     expired_keys = [k for k, v in store.items() if _is_expired(v, now_ts, now_dt)]
@@ -155,7 +156,16 @@ def _record_to_dict(record: Any, store: _Store) -> dict:
     for col in record.__table__.columns:
         val = getattr(record, col.key)
         if col.key in store.json_fields:
-            val = json.loads(val)
+            try:
+                val = json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                logger.error(
+                    "oauth_state: failed to decode JSON field %r for %s key=%r — returning raw value",
+                    col.key,
+                    store.model.__tablename__,  # type: ignore[attr-defined]
+                    record.__dict__.get(store.pk_field, "?"),
+                )
+                raise
         d[col.key] = val
     # Convert expires_at back to datetime for backward compatibility with
     # callers that compare datetime.now(timezone.utc) > entry["expires_at"].
@@ -184,8 +194,8 @@ def _dict_to_kwargs(store: _Store, key: str, value: dict) -> dict:
 def _db_cleanup_and_store(store: _Store, key: str, value: dict) -> None:
     with Session(_engine_module.engine) as session:
         _purge_expired(session, store)
-        count_stmt = select(store.model)  # type: ignore[arg-type, var-annotated]
-        live_count = len(session.exec(count_stmt).all())
+        count_stmt = select(func.count()).select_from(store.model)  # type: ignore[arg-type]
+        live_count = session.exec(count_stmt).one()
         if live_count >= MAX_ENTRIES_PER_DICT:
             raise StoreFullError(f"OAuth state store is full ({MAX_ENTRIES_PER_DICT} entries)")
 
@@ -201,8 +211,9 @@ def _db_cleanup_and_store(store: _Store, key: str, value: dict) -> None:
 
 def _db_cleanup_and_get(store: _Store, key: str) -> dict | None:
     with Session(_engine_module.engine) as session:
-        _purge_expired(session, store)
-        session.commit()
+        purged = _purge_expired(session, store)
+        if purged:
+            session.commit()
         record = session.get(store.model, key)
         if record is None:
             return None

@@ -82,6 +82,7 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.Float(), nullable=False),
         sa.PrimaryKeyConstraint("user_id"),
     )
+    op.create_index("ix_gmail_oauth_states_expires_at", "gmail_oauth_states", ["expires_at"])
 
 
 def downgrade() -> None:
@@ -93,4 +94,5 @@ def downgrade() -> None:
     op.drop_table("mcp_registered_clients")
     op.drop_index("ix_mcp_refresh_tokens_expires_at", "mcp_refresh_tokens")
     op.drop_table("mcp_refresh_tokens")
+    op.drop_index("ix_gmail_oauth_states_expires_at", "gmail_oauth_states")
     op.drop_table("gmail_oauth_states")

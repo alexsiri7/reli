@@ -19,6 +19,7 @@ import backend.db_engine as _engine_mod
 from ..config import settings
 from ..db_models import ThingRecord, UserRecord
 from ..oauth_state import (
+    StoreFullError,
     cleanup_and_get,
     cleanup_and_pop,
     cleanup_and_store,
@@ -177,14 +178,18 @@ def google_login() -> dict:
         prompt="consent",
     )
     # Store PKCE code_verifier for the callback (bounded dict with TTL)
-    cleanup_and_store(
-        _pending_flows,
-        state,
-        {
-            "code_verifier": flow.code_verifier or "",
-            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=_PENDING_FLOW_TTL_SECONDS),
-        },
-    )
+    try:
+        cleanup_and_store(
+            _pending_flows,
+            state,
+            {
+                "code_verifier": flow.code_verifier or "",
+                "expires_at": datetime.now(timezone.utc) + timedelta(seconds=_PENDING_FLOW_TTL_SECONDS),
+            },
+        )
+    except StoreFullError:
+        logger.warning("auth: pending flows store full, rejecting Google login")
+        raise HTTPException(status_code=503, detail="Server is at capacity; try again later")
     return {"auth_url": str(auth_url)}
 
 
@@ -243,19 +248,23 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
     if mcp_session:
         # Issue a short-lived auth code for the MCP client to exchange
         auth_code = secrets.token_urlsafe(32)
-        cleanup_and_store(
-            mcp_auth_codes,
-            auth_code,
-            {
-                "user_id": user_id,
-                "email": email,
-                "code_challenge": mcp_session["code_challenge"],
-                "code_challenge_method": mcp_session["code_challenge_method"],
-                "redirect_uri": mcp_session["redirect_uri"],
-                "client_id": mcp_session["client_id"],
-                "expires_at": datetime.now(timezone.utc) + timedelta(seconds=MCP_AUTH_CODE_TTL_SECONDS),
-            },
-        )
+        try:
+            cleanup_and_store(
+                mcp_auth_codes,
+                auth_code,
+                {
+                    "user_id": user_id,
+                    "email": email,
+                    "code_challenge": mcp_session["code_challenge"],
+                    "code_challenge_method": mcp_session["code_challenge_method"],
+                    "redirect_uri": mcp_session["redirect_uri"],
+                    "client_id": mcp_session["client_id"],
+                    "expires_at": datetime.now(timezone.utc) + timedelta(seconds=MCP_AUTH_CODE_TTL_SECONDS),
+                },
+            )
+        except StoreFullError:
+            logger.warning("auth: auth code store full, rejecting MCP OAuth for user %s", user_id)
+            raise HTTPException(status_code=503, detail="Server is at capacity; try again later")
         client_redirect = mcp_session["redirect_uri"]
         client_state = mcp_session.get("client_state", "")
         sep = "&" if "?" in client_redirect else "?"

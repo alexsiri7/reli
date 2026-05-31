@@ -11,7 +11,10 @@ from backend.oauth_state import (
     cleanup_and_get,
     cleanup_and_pop,
     cleanup_and_store,
+    gmail_oauth_states,
+    mcp_auth_codes,
     mcp_oauth_sessions,
+    mcp_refresh_tokens,
     mcp_registered_clients,
 )
 
@@ -381,3 +384,188 @@ def test_oauth_register_sets_expires_at(patched_db):
     assert isinstance(data["client_secret_expires_at"], int), "client_secret_expires_at must be a Unix epoch integer"
     expected_epoch = int(exp.timestamp())
     assert data["client_secret_expires_at"] == expected_epoch
+
+
+# ---------------------------------------------------------------------------
+# mcp_auth_codes store
+# ---------------------------------------------------------------------------
+
+
+def test_auth_code_client_id_roundtrip(patched_db):
+    """client_id must survive the DB roundtrip — prevents code injection."""
+    cleanup_and_store(
+        mcp_auth_codes,
+        "code-abc",
+        {
+            "user_id": "user-1",
+            "email": "user@example.com",
+            "code_challenge": "challenge",
+            "code_challenge_method": "S256",
+            "redirect_uri": "http://localhost/cb",
+            "client_id": "client-xyz",
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+        },
+    )
+    result = cleanup_and_get(mcp_auth_codes, "code-abc")
+    assert result is not None
+    assert result["client_id"] == "client-xyz"
+    assert result["user_id"] == "user-1"
+    assert result["email"] == "user@example.com"
+    assert isinstance(result["expires_at"], datetime)
+
+
+def test_auth_code_pop_removes_and_returns(patched_db):
+    """cleanup_and_pop consumes the auth code (one-time use)."""
+    cleanup_and_store(
+        mcp_auth_codes,
+        "code-once",
+        {
+            "user_id": "u",
+            "email": "e@e.com",
+            "code_challenge": "cc",
+            "code_challenge_method": "S256",
+            "redirect_uri": "http://cb",
+            "client_id": "client-xyz",
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+        },
+    )
+    result = cleanup_and_pop(mcp_auth_codes, "code-once")
+    assert result is not None
+    assert result["client_id"] == "client-xyz"
+    assert cleanup_and_pop(mcp_auth_codes, "code-once") is None
+
+
+def test_auth_code_evicted_when_expired(patched_db):
+    """Expired auth codes are purged on access."""
+    cleanup_and_store(
+        mcp_auth_codes,
+        "code-dead",
+        {
+            "user_id": "u",
+            "email": "e@e.com",
+            "code_challenge": "cc",
+            "code_challenge_method": "S256",
+            "redirect_uri": "http://cb",
+            "client_id": "client-xyz",
+            "expires_at": datetime.now(timezone.utc) - timedelta(seconds=1),
+        },
+    )
+    assert cleanup_and_get(mcp_auth_codes, "code-dead") is None
+
+
+# ---------------------------------------------------------------------------
+# mcp_refresh_tokens store
+# ---------------------------------------------------------------------------
+
+
+def test_refresh_token_roundtrip(patched_db):
+    """Refresh token fields must survive DB roundtrip."""
+    expires = datetime.now(timezone.utc) + timedelta(days=30)
+    cleanup_and_store(
+        mcp_refresh_tokens,
+        "rt-secret",
+        {
+            "user_id": "user-1",
+            "email": "user@example.com",
+            "client_id": "client-xyz",
+            "scope": "mcp",
+            "expires_at": expires,
+        },
+    )
+    result = cleanup_and_pop(mcp_refresh_tokens, "rt-secret")
+    assert result is not None
+    assert result["user_id"] == "user-1"
+    assert result["client_id"] == "client-xyz"
+    assert result["scope"] == "mcp"
+    assert isinstance(result["expires_at"], datetime)
+    assert result["expires_at"].tzinfo is not None
+    assert cleanup_and_pop(mcp_refresh_tokens, "rt-secret") is None
+
+
+def test_refresh_token_evicted_when_expired(patched_db):
+    """Expired refresh tokens are purged on access."""
+    cleanup_and_store(
+        mcp_refresh_tokens,
+        "rt-dead",
+        {
+            "user_id": "user-1",
+            "email": "user@example.com",
+            "client_id": "client-xyz",
+            "scope": "mcp",
+            "expires_at": datetime.now(timezone.utc) - timedelta(seconds=1),
+        },
+    )
+    assert cleanup_and_get(mcp_refresh_tokens, "rt-dead") is None
+
+
+# ---------------------------------------------------------------------------
+# gmail_oauth_states store
+# ---------------------------------------------------------------------------
+
+
+def test_gmail_oauth_state_roundtrip(patched_db):
+    """Gmail OAuth state fields survive the DB roundtrip."""
+    cleanup_and_store(
+        gmail_oauth_states,
+        "user-123",
+        {
+            "state": "oauth-state-value",
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+        },
+    )
+    result = cleanup_and_get(gmail_oauth_states, "user-123")
+    assert result is not None
+    assert result["state"] == "oauth-state-value"
+    assert isinstance(result["expires_at"], datetime)
+
+
+def test_gmail_oauth_state_upsert_replaces(patched_db):
+    """Storing a second state for the same user_id replaces the first (upsert path)."""
+    cleanup_and_store(
+        gmail_oauth_states,
+        "user-123",
+        {
+            "state": "old-state",
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+        },
+    )
+    cleanup_and_store(
+        gmail_oauth_states,
+        "user-123",
+        {
+            "state": "new-state",
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+        },
+    )
+    result = cleanup_and_get(gmail_oauth_states, "user-123")
+    assert result is not None
+    assert result["state"] == "new-state"
+
+
+def test_gmail_oauth_state_pop_removes(patched_db):
+    """cleanup_and_pop removes the entry after returning it."""
+    cleanup_and_store(
+        gmail_oauth_states,
+        "user-456",
+        {
+            "state": "state-val",
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+        },
+    )
+    result = cleanup_and_pop(gmail_oauth_states, "user-456")
+    assert result is not None
+    assert result["state"] == "state-val"
+    assert cleanup_and_get(gmail_oauth_states, "user-456") is None
+
+
+def test_gmail_oauth_state_evicted_when_expired(patched_db):
+    """Expired Gmail OAuth states are purged on access."""
+    cleanup_and_store(
+        gmail_oauth_states,
+        "user-789",
+        {
+            "state": "dead-state",
+            "expires_at": datetime.now(timezone.utc) - timedelta(seconds=1),
+        },
+    )
+    assert cleanup_and_get(gmail_oauth_states, "user-789") is None
