@@ -365,6 +365,7 @@ class TestBucketPruning:
     def test_prune_removes_stale_buckets(self, monkeypatch: pytest.MonkeyPatch):
         """Buckets inactive for longer than _BUCKET_TTL are removed."""
         import time as time_mod
+
         import backend.rate_limit as rl_mod
 
         fake_time = [1000.0]
@@ -388,6 +389,7 @@ class TestBucketPruning:
     def test_prune_keeps_active_buckets(self, monkeypatch: pytest.MonkeyPatch):
         """Buckets that were recently active are NOT pruned."""
         import time as time_mod
+
         import backend.rate_limit as rl_mod
 
         fake_time = [1000.0]
@@ -407,8 +409,9 @@ class TestBucketPruning:
     def test_dispatch_triggers_cleanup_after_interval(self, monkeypatch: pytest.MonkeyPatch):
         """dispatch() triggers _prune_stale_buckets once the cleanup interval elapses."""
         import time as time_mod
-        import backend.rate_limit as rl_mod
         from unittest.mock import MagicMock
+
+        import backend.rate_limit as rl_mod
 
         fake_time = [1000.0]
         monkeypatch.setattr(time_mod, "monotonic", lambda: fake_time[0])
@@ -418,7 +421,6 @@ class TestBucketPruning:
         client = TestClient(app)
 
         # Patch at the class level so dispatch() calls the mock
-        original = RateLimitMiddleware._prune_stale_buckets
         mock_prune = MagicMock()
         monkeypatch.setattr(RateLimitMiddleware, "_prune_stale_buckets", mock_prune)
 

@@ -30,8 +30,8 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse
 
-_BUCKET_TTL = 300.0        # seconds of inactivity before a bucket is pruned
-_CLEANUP_INTERVAL = 60.0   # minimum seconds between cleanup sweeps
+_BUCKET_TTL = 300.0  # seconds of inactivity before a bucket is pruned
+_CLEANUP_INTERVAL = 60.0  # minimum seconds between cleanup sweeps
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +50,6 @@ _AUTH_PATHS = {
     "/oauth/authorize",
     "/oauth/register",
 }
-
 
 
 @dataclass
