@@ -183,7 +183,7 @@ class TestChatStream:
         events = _parse_sse(resp.text)
         error_events = [e for e in events if e["event"] == "error"]
         assert len(error_events) == 1
-        assert "LLM API failed" in error_events[0]["data"]["message"]
+        assert "internal error" in error_events[0]["data"]["message"].lower()
 
     async def test_stream_invalid_request_returns_422(self, async_client):
         resp = await async_client.post(

@@ -516,12 +516,15 @@ def _fetch_history(session_id: str, context_window: int, user_id: str = "") -> l
 
     # Fallback: raw history (no summary available or no user_id)
     with Session(_engine_mod.engine) as session:
-        records = session.exec(
+        stmt = (
             select(ChatHistoryRecord)
             .where(ChatHistoryRecord.session_id == session_id)
             .order_by(ChatHistoryRecord.timestamp)
             .limit(history_limit)
-        ).all()
+        )
+        if user_id:
+            stmt = stmt.where(user_filter_clause(ChatHistoryRecord.user_id, user_id))
+        records = session.exec(stmt).all()
     result = []
     for r in records:
         entry = {"role": r.role, "content": r.content or ""}
@@ -574,9 +577,13 @@ def _persist_exchange(
     with Session(_engine_mod.engine) as session:
         existing_session = session.exec(select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)).first()
         if existing_session:
-            existing_session.last_active_at = now
-            session.add(existing_session)
-        else:
+            if existing_session.user_id and existing_session.user_id != user_id:
+                # Session belongs to another user — do not update it, create a new one instead
+                existing_session = None
+            else:
+                existing_session.last_active_at = now
+                session.add(existing_session)
+        if not existing_session:
             new_session_record = ChatSessionRecord(
                 id=session_id, user_id=user_id or "", title="New chat", last_active_at=now
             )
@@ -748,9 +755,9 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
             )
             yield _sse("complete", complete_data.model_dump())
 
-        except Exception as e:
+        except Exception:
             logger.exception("Streaming chat pipeline error")
-            yield _sse("error", {"message": str(e)})
+            yield _sse("error", {"message": "An internal error occurred. Please try again."})
 
     return StreamingResponse(
         event_generator(),
