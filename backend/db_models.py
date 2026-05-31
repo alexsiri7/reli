@@ -452,3 +452,78 @@ class ScheduledTaskRecord(SQLModel, table=True):
     executed_at: datetime | None = None
     result: dict[str, Any] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
     created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+
+
+# ---------------------------------------------------------------------------
+# MCP OAuth Persistent State (SEC-016)
+# ---------------------------------------------------------------------------
+
+
+class McpOAuthSessionRecord(SQLModel, table=True):
+    """Transient MCP OAuth sessions keyed by server_state (Google OAuth CSRF token)."""
+
+    __tablename__ = "mcp_oauth_sessions"
+
+    server_state: str = Field(primary_key=True)
+    client_state: str
+    redirect_uri: str
+    code_challenge: str
+    code_challenge_method: str
+    client_id: str
+    scope: str
+    google_code_verifier: str
+    expires_at: float  # Unix epoch
+
+
+class McpAuthCodeRecord(SQLModel, table=True):
+    """Short-lived MCP authorization codes (PKCE exchange)."""
+
+    __tablename__ = "mcp_auth_codes"
+
+    auth_code: str = Field(primary_key=True)
+    user_id: str
+    email: str
+    code_challenge: str
+    code_challenge_method: str
+    redirect_uri: str
+    client_id: str
+    expires_at: float  # Unix epoch
+
+
+class McpRegisteredClientRecord(SQLModel, table=True):
+    """MCP dynamic client registrations."""
+
+    __tablename__ = "mcp_registered_clients"
+
+    client_id: str = Field(primary_key=True)
+    client_secret: str
+    redirect_uris: str  # JSON-encoded list
+    client_name: str
+    grant_types: str  # JSON-encoded list
+    response_types: str  # JSON-encoded list
+    token_endpoint_auth_method: str
+    scope: str
+    expires_at: float  # Unix epoch
+
+
+class McpRefreshTokenRecord(SQLModel, table=True):
+    """MCP refresh tokens."""
+
+    __tablename__ = "mcp_refresh_tokens"
+
+    refresh_token: str = Field(primary_key=True)
+    user_id: str
+    email: str
+    client_id: str
+    scope: str
+    expires_at: float  # Unix epoch
+
+
+class GmailOAuthStateRecord(SQLModel, table=True):
+    """CSRF state for Gmail OAuth flow, keyed by user_id."""
+
+    __tablename__ = "gmail_oauth_states"
+
+    user_id: str = Field(primary_key=True)
+    state: str
+    expires_at: float  # Unix epoch

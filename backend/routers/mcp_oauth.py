@@ -22,6 +22,8 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..config import settings
 from ..oauth_state import (
+    StoreFullError,
+    cleanup_and_get,
     cleanup_and_pop,
     cleanup_and_store,
     mcp_auth_codes,
@@ -118,7 +120,11 @@ async def oauth_register(request: Request) -> JSONResponse:
         # an active refresh token is effectively useless after 30 days.
         "expires_at": datetime.now(timezone.utc) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
     }
-    cleanup_and_store(mcp_registered_clients, client_id, client)
+    try:
+        cleanup_and_store(mcp_registered_clients, client_id, client)
+    except StoreFullError:
+        logger.warning("MCP OAuth: client registration rejected — store full")
+        raise HTTPException(status_code=503, detail="Server is at capacity; try again later")
 
     logger.info("MCP OAuth: registered client %s (%s)", client_id, client.get("client_name"))
 
@@ -164,7 +170,7 @@ def oauth_authorize(
         raise HTTPException(status_code=400, detail="Only code_challenge_method=S256 is supported")
     if not redirect_uri:
         raise HTTPException(status_code=400, detail="redirect_uri is required")
-    registered = mcp_registered_clients.get(client_id)
+    registered = cleanup_and_get(mcp_registered_clients, client_id)
     if not registered:
         raise HTTPException(status_code=400, detail="Unknown client_id — register first via POST /oauth/register")
     if redirect_uri not in registered.get("redirect_uris", []):
@@ -184,20 +190,24 @@ def oauth_authorize(
         state=server_state,
     )
 
-    cleanup_and_store(
-        mcp_oauth_sessions,
-        server_state,
-        {
-            "client_state": state,
-            "redirect_uri": redirect_uri,
-            "code_challenge": code_challenge,
-            "code_challenge_method": code_challenge_method,
-            "client_id": client_id,
-            "scope": scope,
-            "google_code_verifier": flow.code_verifier or "",
-            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=AUTH_CODE_TTL_SECONDS),
-        },
-    )
+    try:
+        cleanup_and_store(
+            mcp_oauth_sessions,
+            server_state,
+            {
+                "client_state": state,
+                "redirect_uri": redirect_uri,
+                "code_challenge": code_challenge,
+                "code_challenge_method": code_challenge_method,
+                "client_id": client_id,
+                "scope": scope,
+                "google_code_verifier": flow.code_verifier or "",
+                "expires_at": datetime.now(timezone.utc) + timedelta(seconds=AUTH_CODE_TTL_SECONDS),
+            },
+        )
+    except StoreFullError:
+        logger.warning("MCP OAuth: session store full, rejecting authorize for client %s", client_id)
+        raise HTTPException(status_code=503, detail="Server is at capacity; try again later")
 
     return RedirectResponse(url=str(auth_url), status_code=302)
 
@@ -212,17 +222,21 @@ def _issue_token_response(user_id: str, email: str, client_id: str, scope: str) 
     access_token = _create_jwt(user_id, email)
 
     refresh_token = secrets.token_urlsafe(32)
-    cleanup_and_store(
-        mcp_refresh_tokens,
-        refresh_token,
-        {
-            "user_id": user_id,
-            "email": email,
-            "client_id": client_id,
-            "scope": scope,
-            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
-        },
-    )
+    try:
+        cleanup_and_store(
+            mcp_refresh_tokens,
+            refresh_token,
+            {
+                "user_id": user_id,
+                "email": email,
+                "client_id": client_id,
+                "scope": scope,
+                "expires_at": datetime.now(timezone.utc) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
+            },
+        )
+    except StoreFullError:
+        logger.warning("MCP OAuth: refresh token store full, rejecting token issuance for client %s", client_id)
+        raise HTTPException(status_code=503, detail="Server is at capacity; try again later")
 
     return JSONResponse(
         {
