@@ -1,7 +1,9 @@
 """Tests for JWT session authentication."""
 
 import json
-from unittest.mock import patch
+import logging
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -202,3 +204,51 @@ class TestApiTokenWithoutSecretKey:
         )
         assert resp.status_code == 401
         assert "Invalid API token" in resp.json()["detail"]
+
+
+class TestOAuthAllowlistRejection:
+    """Test that OAuth allowlist rejection does not log the user's email (SEC-021)."""
+
+    def test_oauth_rejection_log_contains_no_email(self, patched_db, caplog):
+        """Verify the allowlist rejection log line never leaks the user's email address."""
+        fake_id_info = {
+            "sub": "google-123",
+            "email": "blocked@example.com",
+            "name": "Blocked User",
+            "picture": None,
+        }
+        fake_state = "test-state-value"
+        fake_flow_entry = {
+            "code_verifier": "fake-code-verifier",
+            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=600),
+        }
+
+        mock_flow = MagicMock()
+        mock_flow.fetch_token.return_value = None
+        mock_flow.credentials.id_token = "fake-token"
+        mock_flow.code_verifier = None
+
+        with (
+            patch("backend.routers.auth.SECRET_KEY", "test-secret-key"),
+            patch("backend.routers.auth.GOOGLE_CLIENT_ID", "fake-client-id"),
+            patch("backend.routers.auth._pending_flows", {fake_state: fake_flow_entry}),
+            patch("backend.routers.auth.Flow.from_client_config", return_value=mock_flow),
+            patch(
+                "backend.routers.auth.google_id_token.verify_oauth2_token",
+                return_value=fake_id_info,
+            ),
+            patch(
+                "backend.config.Settings.allowed_emails_set",
+                new_callable=lambda: property(lambda self: {"allowed@example.com"}),
+            ),
+            caplog.at_level(logging.WARNING, logger="backend.routers.auth"),
+        ):
+            from backend.main import app
+
+            with TestClient(app, follow_redirects=False) as client:
+                resp = client.get(
+                    f"/api/auth/google/callback?code=fake-code&state={fake_state}"
+                )
+
+        assert resp.status_code in (302, 307)
+        assert "blocked@example.com" not in caplog.text
