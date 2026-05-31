@@ -270,11 +270,10 @@ def search_things(
 
     def _coerce_row(r: Any) -> ThingRecord:
         d = dict(r._mapping)
-        for key in ("data", "open_questions"):
+        for key, expected in (("data", dict), ("open_questions", list)):
             if isinstance(d.get(key), str):
                 d[key] = _unwrap_json_str(d[key])
-                expected_type: type = dict if key == "data" else list
-                if not isinstance(d.get(key), expected_type):
+                if not isinstance(d.get(key), expected):
                     d[key] = None
         return ThingRecord.model_validate(d)
 

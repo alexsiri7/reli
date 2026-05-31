@@ -45,7 +45,7 @@ _CATEGORY_MAP: dict[str, tuple[str, str]] = {
 @router.post("", response_model=FeedbackResponse, summary="Submit feedback")
 async def submit_feedback(
     body: FeedbackRequest,
-    user_id: str = Depends(require_user),
+    _user_id: str = Depends(require_user),
     client: httpx.AsyncClient = Depends(get_http_client),
 ) -> FeedbackResponse:
     """Create a GitHub issue with the user's feedback and app context."""
@@ -66,9 +66,6 @@ async def submit_feedback(
     if body.url:
         safe_url = body.url.replace("\r", "").replace("\n", " ")
         context_lines.append(f"**Page:** {safe_url}")
-    if user_id:
-        context_lines.append(f"**User:** {user_id}")
-
     context_section = "\n".join(context_lines)
     issue_body = f"{body.message}\n\n---\n\n{context_section}" if context_lines else body.message
 
