@@ -23,7 +23,9 @@ class ThinkRequest(BaseModel):
     """Request body for the /think endpoint."""
 
     message: str = Field(..., min_length=1, max_length=5000, description="Natural language message to reason about.")
-    context: str = Field(default="", max_length=10_000, description="Optional additional context from the calling agent.")
+    context: str = Field(
+        default="", max_length=10_000, description="Optional additional context from the calling agent."
+    )
 
 
 class ThinkResponse(BaseModel):

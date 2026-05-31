@@ -3,7 +3,6 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.routers.think import ThinkRequest
 from backend.models import (
     ChatMessageCreate,
     ChatRequest,
@@ -16,6 +15,7 @@ from backend.models import (
     ThingCreate,
     ThingUpdate,
 )
+from backend.routers.think import ThinkRequest
 
 
 class TestThingCreateLimits:
