@@ -22,7 +22,7 @@ from .agents import (
     REQUESTY_RESPONSE_MODEL,
     UsageStats,
 )
-from .db_engine import user_filter_clause
+from .db_engine import like_pattern, user_filter_clause
 from .db_models import ChatHistoryRecord, ThingRecord, ThingRelationshipRecord
 from .google_calendar import fetch_upcoming_events
 from .google_calendar import is_connected as gcal_connected
@@ -197,8 +197,7 @@ def _fetch_user_relationships(
     # Build LIKE filter conditions for search queries
     like_conditions = []
     for query in search_queries[:3]:
-        q_escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        pattern = f"%{q_escaped}%"
+        pattern = like_pattern(query)
         like_conditions.append(
             or_(
                 ThingRecord.title.like(pattern, escape="\\"),  # type: ignore[union-attr]

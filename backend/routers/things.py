@@ -15,7 +15,7 @@ import backend.db_engine as _engine_mod
 
 from ..auth import require_user
 from ..config import settings
-from ..db_engine import get_session, parse_dt, user_filter_clause, user_filter_text
+from ..db_engine import get_session, like_pattern, parse_dt, user_filter_clause, user_filter_text
 from ..db_models import MergeHistoryRecord as MergeHistoryDBRecord
 from ..db_models import ThingRecord, ThingRelationshipRecord
 from ..models import (
@@ -199,8 +199,7 @@ def search_things(
     if not q.strip():
         return []
 
-    q_escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    pattern = f"%{q_escaped}%"
+    pattern = like_pattern(q)
     uf_frag, uf_p = user_filter_text(user_id, "t")
     filters = uf_frag
     params: dict[str, Any] = {**uf_p, "pattern": pattern, "qlimit": limit}

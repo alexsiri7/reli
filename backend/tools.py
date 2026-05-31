@@ -733,10 +733,9 @@ def search_things(
     if not query.strip():
         return []
 
-    from .db_engine import user_filter_text
+    from .db_engine import like_pattern, user_filter_text
 
-    q_escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    pattern = f"%{q_escaped}%"
+    pattern = like_pattern(query)
     with Session(_engine_mod.engine) as session:
         uf_frag, uf_params = user_filter_text(user_id, "t")
 

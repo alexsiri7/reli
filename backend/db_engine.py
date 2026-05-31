@@ -74,6 +74,16 @@ def user_filter_clause(user_id_column: Any, user_id: str) -> Any:
     return or_(user_id_column == user_id, user_id_column.is_(None))  # type: ignore[union-attr]
 
 
+def like_pattern(value: str) -> str:
+    """Return a ``%value%`` LIKE pattern with SQL metacharacters escaped.
+
+    Escapes ``\\``, ``%``, and ``_`` so callers can safely use
+    ``ESCAPE '\\\\'`` without matching unintended rows.
+    """
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 def user_filter_text(user_id: str, table_alias: str = "", param_name: str = "uf_uid") -> tuple[str, dict]:
     """Return a text()-compatible SQL WHERE fragment and params dict for user filtering.
 
