@@ -86,7 +86,7 @@ def _is_expired(entry: dict, now_ts: float, now_dt: datetime) -> bool:
         return False
     if isinstance(exp, datetime):
         return now_dt > exp
-    return bool(now_ts > float(exp))
+    return now_ts > float(exp)
 
 
 def _cleanup_expired(store: dict[str, dict]) -> None:
@@ -160,7 +160,7 @@ def _record_to_dict(record: Any, store: _Store) -> dict:
                 val = json.loads(val)
             except (json.JSONDecodeError, TypeError):
                 logger.error(
-                    "oauth_state: failed to decode JSON field %r for %s key=%r — returning raw value",
+                    "oauth_state: failed to decode JSON field %r for %s key=%r",
                     col.key,
                     store.model.__tablename__,  # type: ignore[attr-defined]
                     record.__dict__.get(store.pk_field, "?"),
