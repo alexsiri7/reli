@@ -69,17 +69,18 @@ def get_auth_url() -> str:
 
 def exchange_code(code: str, state: str = "", user_id: str = "") -> Credentials:
     """Exchange authorization code for credentials and store them."""
+    if not state:
+        raise ValueError("OAuth state parameter is required")
+
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI
 
     # Restore PKCE code_verifier from the auth request
-    if state:
-        with _pending_flows_lock:
-            code_verifier = _pending_flows.pop(state, None)
-    else:
-        code_verifier = None
-    if code_verifier:
-        flow.code_verifier = code_verifier
+    with _pending_flows_lock:
+        code_verifier = _pending_flows.pop(state, None)
+    if code_verifier is None:
+        raise ValueError("Invalid or expired OAuth state")
+    flow.code_verifier = code_verifier
 
     flow.fetch_token(code=code)
     creds: Credentials = flow.credentials
