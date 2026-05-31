@@ -250,21 +250,22 @@ class TestChatPipeline:
                 "relationships": [],
             },
         }
-        with patch(
-            "backend.pipeline.run_reasoning_agent",
-            new=AsyncMock(return_value=reasoning_with_things),
-        ), patch(
-            "backend.pipeline.run_response_agent",
-            new=AsyncMock(return_value=ResponseResult(text="ok")),
-        ) as mock_resp:
+        with (
+            patch(
+                "backend.pipeline.run_reasoning_agent",
+                new=AsyncMock(return_value=reasoning_with_things),
+            ),
+            patch(
+                "backend.pipeline.run_response_agent",
+                new=AsyncMock(return_value=ResponseResult(text="ok")),
+            ) as mock_resp,
+        ):
             await async_client.post(
                 "/api/chat",
                 json={"session_id": "ctx-sess", "message": "Tell me about my trip"},
             )
         call_kwargs = mock_resp.call_args.kwargs
-        assert call_kwargs.get("context_things") == [
-            {"id": "t-1", "title": "Paris Trip", "type_hint": "travel"}
-        ]
+        assert call_kwargs.get("context_things") == [{"id": "t-1", "title": "Paris Trip", "type_hint": "travel"}]
 
 
 # ---------------------------------------------------------------------------

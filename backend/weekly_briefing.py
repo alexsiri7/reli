@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 def _s(n: int) -> str:
     return "s" if n != 1 else ""
 
+
 _DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 _ALL_DATE_KEYS = {
     "birthday",

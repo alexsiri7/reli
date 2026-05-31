@@ -367,12 +367,8 @@ class TestSearchDialect:
                 mock_settings.STORAGE_BACKEND = "sqlite"
                 client.get("/api/things/search?q=foo")
 
-        assert any("LIKE" in s and "CAST(" in s for s in captured), (
-            "SQLite path should use LIKE and CAST(... AS TEXT)"
-        )
-        assert not any("ILIKE" in s for s in captured), (
-            "SQLite path must not use ILIKE"
-        )
+        assert any("LIKE" in s and "CAST(" in s for s in captured), "SQLite path should use LIKE and CAST(... AS TEXT)"
+        assert not any("ILIKE" in s for s in captured), "SQLite path must not use ILIKE"
 
     def test_postgres_uses_ilike_and_text_cast(self, client):
         """When STORAGE_BACKEND == 'supabase', SQL uses ILIKE and ::text cast."""
@@ -394,15 +390,9 @@ class TestSearchDialect:
                 except Exception:
                     pass
 
-        assert any("ILIKE" in s for s in captured), (
-            "Postgres path should use ILIKE"
-        )
-        assert any("::text" in s for s in captured), (
-            "Postgres path should use ::text cast for JSONB"
-        )
-        assert not any("CAST(" in s for s in captured), (
-            "Postgres path must not use CAST(... AS TEXT)"
-        )
+        assert any("ILIKE" in s for s in captured), "Postgres path should use ILIKE"
+        assert any("::text" in s for s in captured), "Postgres path should use ::text cast for JSONB"
+        assert not any("CAST(" in s for s in captured), "Postgres path must not use CAST(... AS TEXT)"
 
 
 # ---------------------------------------------------------------------------
