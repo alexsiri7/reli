@@ -86,7 +86,7 @@ def _is_expired(entry: dict, now_ts: float, now_dt: datetime) -> bool:
         return False
     if isinstance(exp, datetime):
         return now_dt > exp
-    return now_ts > exp
+    return bool(now_ts > float(exp))
 
 
 def _cleanup_expired(store: dict[str, dict]) -> None:
@@ -139,13 +139,13 @@ def _expires_at_to_datetime(epoch: float) -> datetime:
 def _purge_expired(session: Session, store: _Store) -> int:
     """Delete expired rows from *store*'s table. Returns count deleted."""
     now = time.time()
-    stmt = select(store.model).where(store.model.expires_at <= now)  # type: ignore[attr-defined]
+    stmt = select(store.model).where(store.model.expires_at <= now)  # type: ignore[attr-defined, var-annotated]
     expired = session.exec(stmt).all()
     for row in expired:
         session.delete(row)
     if expired:
         session.flush()
-        logger.debug("oauth_state: purged %d expired entries from %s", len(expired), store.model.__tablename__)
+        logger.debug("oauth_state: purged %d expired entries from %s", len(expired), store.model.__tablename__)  # type: ignore[attr-defined]
     return len(expired)
 
 
@@ -184,7 +184,7 @@ def _dict_to_kwargs(store: _Store, key: str, value: dict) -> dict:
 def _db_cleanup_and_store(store: _Store, key: str, value: dict) -> None:
     with Session(_engine_module.engine) as session:
         _purge_expired(session, store)
-        count_stmt = select(store.model)  # type: ignore[arg-type]
+        count_stmt = select(store.model)  # type: ignore[arg-type, var-annotated]
         live_count = len(session.exec(count_stmt).all())
         if live_count >= MAX_ENTRIES_PER_DICT:
             raise StoreFullError(f"OAuth state store is full ({MAX_ENTRIES_PER_DICT} entries)")
