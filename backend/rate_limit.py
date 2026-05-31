@@ -193,14 +193,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 log.warning("Bucket pruning failed; will retry after next interval", exc_info=True)
 
         key = self._get_rate_limit_key(request)
-        is_llm = path in _LLM_PATHS
-        is_auth = path in _AUTH_PATHS
-        if is_llm:
+        if path in _LLM_PATHS:
             bucket = self._llm_buckets[key]
-        elif is_auth:
+            limit = self.llm_rpm
+        elif path in _AUTH_PATHS:
             bucket = self._auth_buckets[key]
+            limit = self.auth_rpm
         else:
             bucket = self._api_buckets[key]
+            limit = self.api_rpm
 
         if not bucket.consume():
             retry_after = int(bucket.retry_after) + 1
@@ -217,12 +218,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         # Add rate limit headers for visibility
-        if is_llm:
-            limit = self.llm_rpm
-        elif is_auth:
-            limit = self.auth_rpm
-        else:
-            limit = self.api_rpm
         response.headers["X-RateLimit-Limit"] = str(limit)
         response.headers["X-RateLimit-Remaining"] = str(int(bucket.tokens))
 
