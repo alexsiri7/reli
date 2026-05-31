@@ -36,8 +36,15 @@ log = logging.getLogger(__name__)
 _LLM_PATHS = {"/api/chat", "/api/chat/stream", "/api/sweep/run", "/api/sweep/gaps", "/api/sweep/connections"}
 
 # Auth paths that need stricter-than-API but looser-than-LLM rate limiting
-_AUTH_PATHS = {"/api/auth/google", "/api/auth/google/callback", "/api/auth/me", "/api/logout",
-               "/oauth/authorize", "/oauth/token", "/oauth/register"}
+_AUTH_PATHS = {
+    "/api/auth/google",
+    "/api/auth/google/callback",
+    "/api/auth/me",
+    "/api/logout",
+    "/oauth/authorize",
+    "/oauth/token",
+    "/oauth/register",
+}
 
 
 def _is_llm_path(path: str) -> bool:
