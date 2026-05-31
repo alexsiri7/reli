@@ -1,5 +1,6 @@
 """Tests for Things CRUD endpoints."""
 
+import pytest
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -398,41 +399,20 @@ class TestSearchDialect:
 class TestSearchWildcardEscape:
     """Wildcard characters in q must not broaden search results."""
 
-    def test_percent_in_query_is_literal(self, client):
-        """A literal % in the search term should not match all records but should match titles containing %."""
-        create_thing(client, title="exact match")
-        create_thing(client, title="50% off")  # has a literal %
+    @pytest.mark.parametrize("query, title_match, title_no_match", [
+        ("%25", "50% off", "exact match"),             # literal %
+        ("_", "snake_case", "a"),                      # literal _
+        ("%5C", "C:\\path\\file", "no special chars"),  # literal backslash
+    ])
+    def test_wildcard_is_literal(self, client, query, title_match, title_no_match):
+        create_thing(client, title=title_match)
+        create_thing(client, title=title_no_match)
 
-        resp = client.get("/api/things/search?q=%25")  # URL-encoded %
+        resp = client.get(f"/api/things/search?q={query}")
         assert resp.status_code == 200
-        results = resp.json()
-        titles = [r["title"] for r in results]
-        assert "exact match" not in titles      # must NOT match (no %)
-        assert "50% off" in titles              # MUST match (has literal %)
-
-    def test_underscore_in_query_is_literal(self, client):
-        """A literal _ in the search term should not act as single-char wildcard."""
-        create_thing(client, title="a")
-        create_thing(client, title="snake_case")  # has a literal _
-
-        resp = client.get("/api/things/search?q=_")
-        assert resp.status_code == 200
-        results = resp.json()
-        titles = [r["title"] for r in results]
-        assert "a" not in titles               # must NOT match (no _)
-        assert "snake_case" in titles          # MUST match (has literal _)
-
-    def test_backslash_in_query_is_literal(self, client):
-        """A literal \\ in the search term should match titles with backslash and not corrupt the pattern."""
-        create_thing(client, title="C:\\path\\file")  # has literal backslashes
-        create_thing(client, title="no special chars")
-
-        resp = client.get("/api/things/search?q=%5C")  # URL-encoded \\
-        assert resp.status_code == 200
-        results = resp.json()
-        titles = [r["title"] for r in results]
-        assert "C:\\path\\file" in titles          # MUST match (has literal \\)
-        assert "no special chars" not in titles   # must NOT match
+        titles = [r["title"] for r in resp.json()]
+        assert title_match in titles
+        assert title_no_match not in titles
 
 
 # ---------------------------------------------------------------------------

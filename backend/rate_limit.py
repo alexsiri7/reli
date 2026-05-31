@@ -26,6 +26,8 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+import jwt as pyjwt
+
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse
@@ -146,8 +148,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         token = request.cookies.get(COOKIE_NAME)
         if token and SECRET_KEY:
             try:
-                import jwt as pyjwt
-
                 payload = pyjwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
                 sub = payload.get("sub")
                 if sub:

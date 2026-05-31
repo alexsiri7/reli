@@ -1,6 +1,5 @@
 """Tests for JWT session authentication."""
 
-import json
 import logging
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -80,9 +79,10 @@ class TestUserThingCreation:
         assert thing is not None
         assert thing["title"] == "Alice"
         assert thing["surface"] == 0
-        data = json.loads(thing["data"])
-        assert data["email"] == "alice@example.com"
-        assert data["google_id"] == "google-123"
+        # PII is stored in UserRecord, not Thing.data; data must be NULL (or JSON null)
+        # SQLAlchemy's JSON column stores Python None as either SQL NULL or the JSON literal 'null'
+        raw_data = thing["data"]
+        assert raw_data is None or raw_data == "null", f"Expected NULL data, got: {raw_data!r}"
 
     def test_upsert_user_no_duplicate_thing_on_repeat_login(self, patched_db, db):
 
