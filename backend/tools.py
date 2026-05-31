@@ -733,9 +733,9 @@ def search_things(
     if not query.strip():
         return []
 
-    from .db_engine import user_filter_text
+    from .db_engine import like_pattern, user_filter_text
 
-    pattern = f"%{query}%"
+    pattern = like_pattern(query)
     with Session(_engine_mod.engine) as session:
         uf_frag, uf_params = user_filter_text(user_id, "t")
 
@@ -750,8 +750,8 @@ def search_things(
         # Phase 1: Direct matches on title, type_hint, and data
         direct_sql = text(
             "SELECT t.* FROM things t"
-            " WHERE (t.title LIKE :pattern OR t.type_hint LIKE :pattern"
-            "        OR CAST(t.data AS TEXT) LIKE :pattern)" + filters + " ORDER BY t.updated_at DESC"
+            " WHERE (t.title LIKE :pattern ESCAPE '\\' OR t.type_hint LIKE :pattern ESCAPE '\\'"
+            "        OR CAST(t.data AS TEXT) LIKE :pattern ESCAPE '\\')" + filters + " ORDER BY t.updated_at DESC"
             " LIMIT :lim"
         )
         direct_rows = session.execute(direct_sql, params).fetchall()
@@ -769,17 +769,17 @@ def search_things(
                 "     SELECT 1 FROM thing_relationships r"
                 "     JOIN things m ON m.id = r.to_thing_id"
                 "     WHERE r.from_thing_id = t.id"
-                "       AND (r.relationship_type LIKE :pattern"
-                "            OR m.title LIKE :pattern"
-                "            OR CAST(m.data AS TEXT) LIKE :pattern)"
+                "       AND (r.relationship_type LIKE :pattern ESCAPE '\\'"
+                "            OR m.title LIKE :pattern ESCAPE '\\'"
+                "            OR CAST(m.data AS TEXT) LIKE :pattern ESCAPE '\\')"
                 "   )"
                 "   OR EXISTS ("
                 "     SELECT 1 FROM thing_relationships r"
                 "     JOIN things m ON m.id = r.from_thing_id"
                 "     WHERE r.to_thing_id = t.id"
-                "       AND (r.relationship_type LIKE :pattern"
-                "            OR m.title LIKE :pattern"
-                "            OR CAST(m.data AS TEXT) LIKE :pattern)"
+                "       AND (r.relationship_type LIKE :pattern ESCAPE '\\'"
+                "            OR m.title LIKE :pattern ESCAPE '\\'"
+                "            OR CAST(m.data AS TEXT) LIKE :pattern ESCAPE '\\')"
                 "   )"
                 " )" + filters + " ORDER BY t.updated_at DESC"
                 " LIMIT :lim"

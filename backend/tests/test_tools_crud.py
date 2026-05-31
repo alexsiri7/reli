@@ -100,3 +100,34 @@ class TestGetUserProfile:
         assert len(rels) == 1
         assert rels[0]["direction"] == "incoming"
         assert rels[0]["related_thing_title"] == "Carol"
+
+
+class TestToolsSearchWildcardEscape:
+    """Wildcard chars passed to tools.search_things must be literal, not SQL wildcards."""
+
+    def test_percent_is_literal(self, patched_db):
+        from backend.tools import create_thing as tools_create, search_things
+        tools_create(title="no percent here")
+        tools_create(title="50% done")  # has a literal %
+        results = search_things(query="%")
+        titles = [r["title"] for r in results]
+        assert "no percent here" not in titles  # must NOT match (no %)
+        assert "50% done" in titles             # MUST match (has literal %)
+
+    def test_underscore_is_literal(self, patched_db):
+        from backend.tools import create_thing as tools_create, search_things
+        tools_create(title="a")
+        tools_create(title="snake_case")  # has a literal _
+        results = search_things(query="_")
+        titles = [r["title"] for r in results]
+        assert "a" not in titles           # must NOT match (no _)
+        assert "snake_case" in titles      # MUST match (has literal _)
+
+    def test_backslash_is_literal(self, patched_db):
+        from backend.tools import create_thing as tools_create, search_things
+        tools_create(title="C:\\path\\file")  # has literal backslashes
+        tools_create(title="no special chars")
+        results = search_things(query="\\")
+        titles = [r["title"] for r in results]
+        assert "C:\\path\\file" in titles          # MUST match (has literal \\)
+        assert "no special chars" not in titles   # must NOT match
