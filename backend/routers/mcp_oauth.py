@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..config import settings
 from ..oauth_state import (
+    cleanup_and_get,
     cleanup_and_pop,
     cleanup_and_store,
     mcp_auth_codes,
@@ -164,7 +165,7 @@ def oauth_authorize(
         raise HTTPException(status_code=400, detail="Only code_challenge_method=S256 is supported")
     if not redirect_uri:
         raise HTTPException(status_code=400, detail="redirect_uri is required")
-    registered = mcp_registered_clients.get(client_id)
+    registered = cleanup_and_get(mcp_registered_clients, client_id)
     if not registered:
         raise HTTPException(status_code=400, detail="Unknown client_id — register first via POST /oauth/register")
     if redirect_uri not in registered.get("redirect_uris", []):
