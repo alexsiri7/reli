@@ -232,7 +232,7 @@ def google_callback(code: str, state: str = "") -> RedirectResponse:
     # Enforce invite-only allowlist
     allowed = settings.allowed_emails_set
     if allowed and email.lower() not in allowed:
-        logger.warning("OAuth rejected: %s not in ALLOWED_EMAILS", email)
+        logger.warning("OAuth rejected: user not in ALLOWED_EMAILS")
         return RedirectResponse(url="/?error=invite_only")
 
     user_id = _upsert_user(google_id, email, name, picture)
