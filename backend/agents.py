@@ -847,8 +847,7 @@ def _build_response_messages(
     )
     if context_things:
         context += (
-            f"\n\nContext Things (use their IDs for referenced_things): "
-            f"{json.dumps(context_things, default=str)}"
+            f"\n\nContext Things (use their IDs for referenced_things): {json.dumps(context_things, default=str)}"
         )
     if open_questions_by_thing:
         context += (

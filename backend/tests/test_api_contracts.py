@@ -8,11 +8,13 @@ This is the cheapest test that catches the most common AI-generated bugs:
 type mismatches between backend responses and frontend expectations.
 """
 
+import importlib
 import re
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi.testclient import TestClient
 
 from backend.response_agent import ResponseResult
 
@@ -471,6 +473,64 @@ class TestOpenAPIContract:
         resp = client.get("/docs")
         assert resp.status_code == 200
         assert "swagger-ui" in resp.text.lower() or "openapi" in resp.text.lower()
+
+
+# ===========================================================================
+# Security tests — docs disabled in production
+# ===========================================================================
+
+
+class TestDocsDisabledInProduction:
+    """Verify /docs, /redoc, /openapi.json are unreachable in production.
+
+    NOTE: _is_production in main.py is a module-level bool evaluated once at
+    import time. Tests cannot patch it with monkeypatch.setenv alone — they
+    must reload the module after patching env vars, then reload again afterward
+    to restore the dev app for other tests.
+    """
+
+    @pytest.fixture()
+    def prod_client(self, monkeypatch, patched_db):
+        monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "production")
+        # Config validation requires these in production — set placeholders
+        monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-docs-disable-test")
+        monkeypatch.setenv("REQUESTY_API_KEY", "test-api-key-placeholder")
+        import backend.main as main_module
+
+        importlib.reload(main_module)
+        client = TestClient(main_module.app, raise_server_exceptions=False)
+        yield client
+        importlib.reload(main_module)  # restore dev app for other tests
+
+    def test_openapi_json_not_accessible_in_production(self, prod_client):
+        resp = prod_client.get("/openapi.json")
+        # The OpenAPI schema must not be served in production.
+        # A 404 JSON error is acceptable (no frontend/dist in CI); only the schema is forbidden.
+        assert resp.status_code != 200 or "application/json" not in resp.headers.get("content-type", "")
+
+    def test_docs_not_accessible_in_production(self, prod_client):
+        resp = prod_client.get("/docs")
+        # Swagger UI must not be served — either 404 or SPA HTML (not Swagger)
+        assert "swagger-ui" not in resp.text.lower()
+
+    def test_redoc_not_accessible_in_production(self, prod_client):
+        resp = prod_client.get("/redoc")
+        # ReDoc UI must not be served — either 404 or SPA HTML (not ReDoc)
+        assert 'id="redoc-container"' not in resp.text.lower()
+
+    def test_production_env_var_alias_also_disables_docs(self, monkeypatch, patched_db):
+        """PRODUCTION=true (the alias) must also disable docs."""
+        import backend.main as main_module
+
+        monkeypatch.delenv("RAILWAY_ENVIRONMENT_NAME", raising=False)
+        monkeypatch.setenv("PRODUCTION", "true")
+        monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-docs-disable-test")
+        monkeypatch.setenv("REQUESTY_API_KEY", "test-api-key-placeholder")
+        importlib.reload(main_module)
+        client = TestClient(main_module.app, raise_server_exceptions=False)
+        resp = client.get("/openapi.json")
+        assert resp.status_code != 200 or "application/json" not in resp.headers.get("content-type", "")
+        importlib.reload(main_module)
 
 
 # ===========================================================================

@@ -69,7 +69,7 @@ cd frontend && npm run dev
 
 - Frontend: `http://localhost:5173`
 - Backend/API: `http://localhost:8000`
-- Swagger docs: `http://localhost:8000/docs`
+- Swagger docs: `http://localhost:8000/docs` *(local only — disabled in production)*
 
 ---
 

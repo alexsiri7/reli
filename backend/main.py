@@ -256,6 +256,11 @@ _TAG_METADATA = [
     },
 ]
 
+# NOTE: module-level bool — evaluated once at import time. Tests that assert
+# docs-disable behavior must use importlib.reload(backend.main) after patching
+# env vars; simple monkeypatch.setenv alone will not take effect.
+_is_production = bool(os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("PRODUCTION"))
+
 app = FastAPI(
     title="Reli API",
     description=(
@@ -269,6 +274,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
     openapi_tags=_TAG_METADATA,
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
 _default_origins = ["http://localhost:5173", "http://localhost:3000"]

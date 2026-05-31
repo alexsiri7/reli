@@ -709,11 +709,13 @@ class TestAggregateCommunicationStylePatterns:
                 _insert_chat_message(conn, "assistant", f"Response {i}")
             _insert_chat_message(conn, "user", "Perfect, thanks! Exactly what I needed.")
 
-        llm_response = json.dumps({
-            "detected": [],
-            "reinforced": ["prefers concise responses", "no emoji"],
-            "contradicted": [],
-        })
+        llm_response = json.dumps(
+            {
+                "detected": [],
+                "reinforced": ["prefers concise responses", "no emoji"],
+                "contradicted": [],
+            }
+        )
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await aggregate_communication_style_patterns()

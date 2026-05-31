@@ -96,9 +96,7 @@ def test_init_tracing_does_not_call_adk_instrumentor_when_disabled():
     with patch("backend.tracing.settings") as mock_settings:
         mock_settings.phoenix_enabled_bool = False
 
-        with patch(
-            "openinference.instrumentation.google_adk.GoogleADKInstrumentor"
-        ) as mock_cls:
+        with patch("openinference.instrumentation.google_adk.GoogleADKInstrumentor") as mock_cls:
             import backend.tracing
 
             backend.tracing._initialized = False
