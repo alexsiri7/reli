@@ -378,6 +378,30 @@ class TestFetchUserRelationships:
         assert results[0]["id"] == "task-new"
         assert results[1]["id"] == "task-old"
 
+    def test_percent_query_does_not_match_all(self, patched_db, db):
+        """% in a search query must be literal, not a SQL wildcard that matches all."""
+        from backend.pipeline import _fetch_user_relationships
+
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, importance, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
+                ("user-1", "Alice", "person", 2, 1, 1),
+            )
+            conn.execute(
+                "INSERT INTO things (id, title, type_hint, importance, active, surface) VALUES (?, ?, ?, ?, ?, ?)",
+                ("project-1", "Acme Project", "project", 2, 1, 1),
+            )
+            conn.execute(
+                "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) "
+                "VALUES (?, ?, ?, ?)",
+                ("rel-1", "user-1", "project-1", "works-on"),
+            )
+
+        # Searching for bare "%" must not match all relationship-connected things
+        with Session(_engine_mod.engine) as session:
+            results = _fetch_user_relationships(session, "user-1", ["%"])
+        assert results == []  # % must be literal, not a match-all wildcard
+
 
 # ---------------------------------------------------------------------------
 # Unit tests for _fetch_relevant_things preference boost (GH#191)
