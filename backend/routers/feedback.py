@@ -66,9 +66,6 @@ async def submit_feedback(
     if body.url:
         safe_url = body.url.replace("\r", "").replace("\n", " ")
         context_lines.append(f"**Page:** {safe_url}")
-    if user_id:
-        context_lines.append(f"**User:** {user_id}")
-
     context_section = "\n".join(context_lines)
     issue_body = f"{body.message}\n\n---\n\n{context_section}" if context_lines else body.message
 
