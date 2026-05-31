@@ -119,6 +119,7 @@ class TestThinkRequestLimits:
     def test_valid_request(self) -> None:
         req = ThinkRequest(message="hello", context="some context")
         assert req.message == "hello"
+        assert req.context == "some context"
 
 
 class TestConnectionSuggestionAcceptLimits:
