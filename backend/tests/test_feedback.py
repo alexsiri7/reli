@@ -61,6 +61,7 @@ class TestFeedbackUserIdNotLeaked:
         )
 
         assert resp.status_code == 200
+        assert route.called, "Expected GitHub Issues API to be called"
         body = route.calls.last.request.content.decode()
         assert "test-user-id" not in body
         assert "**User:**" not in body
@@ -86,6 +87,7 @@ class TestFeedbackUserIdNotLeaked:
         )
 
         assert resp.status_code == 200
+        assert route.called, "Expected GitHub Issues API to be called"
         body = route.calls.last.request.content.decode()
         assert "TestBrowser/1.0" in body
         assert "http://localhost/settings" in body
