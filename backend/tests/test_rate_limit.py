@@ -354,3 +354,79 @@ class TestAuthRateLimit:
             assert res.status_code == 200
         res = client.get("/api/auth/me")
         assert res.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# Bucket pruning tests
+# ---------------------------------------------------------------------------
+
+
+class TestBucketPruning:
+    def test_prune_removes_stale_buckets(self, monkeypatch: pytest.MonkeyPatch):
+        """Buckets inactive for longer than _BUCKET_TTL are removed."""
+        import time as time_mod
+        import backend.rate_limit as rl_mod
+
+        fake_time = [1000.0]
+        monkeypatch.setattr(time_mod, "monotonic", lambda: fake_time[0])
+        monkeypatch.setattr(rl_mod, "_BUCKET_TTL", 60.0)
+
+        # Construct middleware directly to avoid middleware-stack traversal issues
+        mw = RateLimitMiddleware(app=FastAPI(), api_rpm=5, llm_rpm=3, auth_rpm=5)
+
+        # Directly insert a bucket with last_refill at the current fake time
+        mw._api_buckets["test_key"] = _Bucket(
+            tokens=5.0, max_tokens=5.0, refill_rate=5.0 / 60.0, last_refill=fake_time[0]
+        )
+        assert len(mw._api_buckets) == 1
+
+        # Advance clock past TTL
+        fake_time[0] += 61.0
+        mw._prune_stale_buckets()
+        assert len(mw._api_buckets) == 0
+
+    def test_prune_keeps_active_buckets(self, monkeypatch: pytest.MonkeyPatch):
+        """Buckets that were recently active are NOT pruned."""
+        import time as time_mod
+        import backend.rate_limit as rl_mod
+
+        fake_time = [1000.0]
+        monkeypatch.setattr(time_mod, "monotonic", lambda: fake_time[0])
+        monkeypatch.setattr(rl_mod, "_BUCKET_TTL", 60.0)
+
+        mw = RateLimitMiddleware(app=FastAPI(), api_rpm=5, llm_rpm=3, auth_rpm=5)
+
+        mw._api_buckets["test_key"] = _Bucket(
+            tokens=5.0, max_tokens=5.0, refill_rate=5.0 / 60.0, last_refill=fake_time[0]
+        )
+        # Only 30s elapsed — bucket should survive
+        fake_time[0] += 30.0
+        mw._prune_stale_buckets()
+        assert len(mw._api_buckets) == 1
+
+    def test_dispatch_triggers_cleanup_after_interval(self, monkeypatch: pytest.MonkeyPatch):
+        """dispatch() triggers _prune_stale_buckets once the cleanup interval elapses."""
+        import time as time_mod
+        import backend.rate_limit as rl_mod
+        from unittest.mock import MagicMock
+
+        fake_time = [1000.0]
+        monkeypatch.setattr(time_mod, "monotonic", lambda: fake_time[0])
+        monkeypatch.setattr(rl_mod, "_CLEANUP_INTERVAL", 10.0)
+
+        app = _make_app(api_rpm=100)
+        client = TestClient(app)
+
+        # Patch at the class level so dispatch() calls the mock
+        original = RateLimitMiddleware._prune_stale_buckets
+        mock_prune = MagicMock()
+        monkeypatch.setattr(RateLimitMiddleware, "_prune_stale_buckets", mock_prune)
+
+        # First request — no cleanup yet (interval not elapsed)
+        client.get("/api/things")
+        mock_prune.assert_not_called()
+
+        # Advance past interval
+        fake_time[0] += 11.0
+        client.get("/api/things")
+        mock_prune.assert_called_once()

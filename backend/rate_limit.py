@@ -30,6 +30,9 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse
 
+_BUCKET_TTL = 300.0        # seconds of inactivity before a bucket is pruned
+_CLEANUP_INTERVAL = 60.0   # minimum seconds between cleanup sweeps
+
 log = logging.getLogger(__name__)
 
 # LLM-calling paths that need strict rate limiting
@@ -117,6 +120,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._api_buckets: dict[str, _Bucket] = defaultdict(
             lambda: _Bucket(tokens=float(api_rpm), max_tokens=float(api_rpm), refill_rate=api_rpm / 60.0)
         )
+        self._last_cleanup: float = time.monotonic()
 
     def _get_client_ip(self, request: Request) -> str:
         direct_ip = request.client.host if request.client else None
@@ -153,6 +157,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 log.debug("JWT decode failed for rate-limit key; falling back to IP")
         return f"ip:{self._get_client_ip(request)}"
 
+    def _prune_stale_buckets(self) -> None:
+        """Remove bucket entries inactive for longer than _BUCKET_TTL.
+
+        Called at most every _CLEANUP_INTERVAL seconds from dispatch().
+        Safe to call concurrently — builds a list of stale keys first,
+        then removes them one at a time (no dict mutation during iteration).
+        """
+        now = time.monotonic()
+        for buckets in (self._llm_buckets, self._auth_buckets, self._api_buckets):
+            stale = [k for k, b in buckets.items() if now - b.last_refill > _BUCKET_TTL]
+            for k in stale:
+                buckets.pop(k, None)
+
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if not self.enabled:
             return await call_next(request)
@@ -162,6 +179,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Skip rate limiting for health checks and static assets only
         if path == "/healthz" or path.startswith("/assets/"):
             return await call_next(request)
+
+        # Periodically prune stale buckets to bound memory usage (CWE-400)
+        now = time.monotonic()
+        if now - self._last_cleanup > _CLEANUP_INTERVAL:
+            self._last_cleanup = now
+            self._prune_stale_buckets()
 
         key = self._get_rate_limit_key(request)
         is_llm = path in _LLM_PATHS
