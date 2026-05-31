@@ -504,9 +504,9 @@ class TestDocsDisabledInProduction:
 
     def test_openapi_json_not_accessible_in_production(self, prod_client):
         resp = prod_client.get("/openapi.json")
-        # The SPA fallback returns HTML for unregistered routes; the important
-        # thing is the API schema is NOT returned (no application/json + openapi key).
-        assert "application/json" not in resp.headers.get("content-type", "")
+        # The OpenAPI schema must not be served in production.
+        # A 404 JSON error is acceptable (no frontend/dist in CI); only the schema is forbidden.
+        assert resp.status_code != 200 or "application/json" not in resp.headers.get("content-type", "")
 
     def test_docs_not_accessible_in_production(self, prod_client):
         resp = prod_client.get("/docs")
@@ -529,7 +529,7 @@ class TestDocsDisabledInProduction:
         importlib.reload(main_module)
         client = TestClient(main_module.app, raise_server_exceptions=False)
         resp = client.get("/openapi.json")
-        assert "application/json" not in resp.headers.get("content-type", "")
+        assert resp.status_code != 200 or "application/json" not in resp.headers.get("content-type", "")
         importlib.reload(main_module)
 
 
