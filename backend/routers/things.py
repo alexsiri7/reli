@@ -273,9 +273,8 @@ def search_things(
         for key in ("data", "open_questions"):
             if isinstance(d.get(key), str):
                 d[key] = _unwrap_json_str(d[key])
-                if d[key] is None or (key == "data" and not isinstance(d[key], dict)):
-                    d[key] = None
-                if key == "open_questions" and not isinstance(d.get(key), list):
+                expected_type: type = dict if key == "data" else list
+                if not isinstance(d.get(key), expected_type):
                     d[key] = None
         return ThingRecord.model_validate(d)
 

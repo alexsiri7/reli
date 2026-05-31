@@ -15,6 +15,7 @@ from backend.models import (
     ThingCreate,
     ThingUpdate,
 )
+from backend.routers.think import ThinkRequest
 
 
 class TestThingCreateLimits:
@@ -104,6 +105,21 @@ class TestMergeRequestLimits:
     def test_id_too_long(self) -> None:
         with pytest.raises(ValidationError, match="string_too_long|max_length"):
             MergeRequest(keep_id="x" * 101, remove_id="ok")
+
+
+class TestThinkRequestLimits:
+    def test_message_too_long(self) -> None:
+        with pytest.raises(ValidationError, match="string_too_long|max_length"):
+            ThinkRequest(message="x" * 5001)
+
+    def test_context_too_long(self) -> None:
+        with pytest.raises(ValidationError, match="string_too_long|max_length"):
+            ThinkRequest(message="hi", context="x" * 10_001)
+
+    def test_valid_request(self) -> None:
+        req = ThinkRequest(message="hello", context="some context")
+        assert req.message == "hello"
+        assert req.context == "some context"
 
 
 class TestConnectionSuggestionAcceptLimits:
