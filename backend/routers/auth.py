@@ -6,6 +6,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
+import jwt
+
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
@@ -64,8 +66,6 @@ def _client_config() -> dict:
 
 def _create_jwt(user_id: str, email: str) -> str:
     """Create a signed JWT for the given user."""
-    import jwt
-
     now = datetime.now(timezone.utc)
     now_ts = int(now.timestamp())
     payload = {
@@ -79,8 +79,6 @@ def _create_jwt(user_id: str, email: str) -> str:
 
 def _decode_jwt(token: str) -> dict[str, str]:
     """Decode and validate a JWT. Raises on invalid/expired tokens."""
-    import jwt
-
     result: dict[str, str] = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
     return result
 
