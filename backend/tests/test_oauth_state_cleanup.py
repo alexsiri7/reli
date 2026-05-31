@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from backend.oauth_state import (
-    MAX_ENTRIES_PER_DICT,
     StoreFullError,
     cleanup_and_get,
     cleanup_and_pop,
@@ -16,7 +14,6 @@ from backend.oauth_state import (
     mcp_oauth_sessions,
     mcp_registered_clients,
 )
-
 
 # ---------------------------------------------------------------------------
 # cleanup_and_store
