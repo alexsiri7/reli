@@ -34,13 +34,16 @@ def upgrade() -> None:
         try:
             data = json.loads(raw) if isinstance(raw, str) else raw
         except (ValueError, TypeError):
+            print(f"[k5l6m7n8o9p0] WARNING: skipping row id={row[0]} — data is not valid JSON, PII not scrubbed")
             continue
         if not isinstance(data, dict):
+            print(f"[k5l6m7n8o9p0] WARNING: skipping row id={row[0]} — data is not a dict (type={type(data).__name__}), PII not scrubbed")
             continue
         if not any(k in data for k in _PII_KEYS):
             continue
         for k in _PII_KEYS:
             data.pop(k, None)
+        # Empty dict after PII removal → NULL, consistent with new data=None default in auth.py
         new_val = json.dumps(data) if data else None
         conn.execute(
             sa.text("UPDATE things SET data = :data WHERE id = :id"),
