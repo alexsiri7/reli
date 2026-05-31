@@ -49,13 +49,6 @@ _AUTH_PATHS = {
 }
 
 
-def _is_llm_path(path: str) -> bool:
-    return path in _LLM_PATHS
-
-
-def _is_auth_path(path: str) -> bool:
-    return path in _AUTH_PATHS
-
 
 @dataclass
 class _Bucket:
@@ -171,8 +164,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         key = self._get_rate_limit_key(request)
-        is_llm = _is_llm_path(path)
-        is_auth = _is_auth_path(path)
+        is_llm = path in _LLM_PATHS
+        is_auth = path in _AUTH_PATHS
         if is_llm:
             bucket = self._llm_buckets[key]
         elif is_auth:
