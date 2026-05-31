@@ -119,6 +119,20 @@ class TestJWTAuth:
         resp = authed_client.get("/api/things")
         assert resp.status_code == 200
 
+    def test_create_jwt_claims_are_integers(self):
+        """iat and exp must be int (RFC 7519 NumericDate), not datetime or float."""
+        import jwt as pyjwt
+
+        with patch("backend.routers.auth.SECRET_KEY", "test-secret"):
+            from backend.routers.auth import JWT_ALGORITHM, _create_jwt
+
+            token = _create_jwt("u-abc123", "user@example.com")
+            payload = pyjwt.decode(token, "test-secret", algorithms=[JWT_ALGORITHM])
+
+        assert isinstance(payload["iat"], int), f"iat must be int, got {type(payload['iat'])}"
+        assert isinstance(payload["exp"], int), f"exp must be int, got {type(payload['exp'])}"
+        assert payload["exp"] > payload["iat"]
+
     def test_healthz_no_auth_required(self, authed_client):
         resp = authed_client.get("/healthz")
         assert resp.status_code == 200
