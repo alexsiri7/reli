@@ -124,14 +124,17 @@ class TestJWTAuth:
         import jwt as pyjwt
 
         with patch("backend.routers.auth.SECRET_KEY", "test-secret"):
-            from backend.routers.auth import JWT_ALGORITHM, _create_jwt
+            from backend.routers.auth import JWT_ALGORITHM, JWT_EXPIRY_SECONDS, _create_jwt
 
             token = _create_jwt("u-abc123", "user@example.com")
             payload = pyjwt.decode(token, "test-secret", algorithms=[JWT_ALGORITHM])
 
-        assert isinstance(payload["iat"], int), f"iat must be int, got {type(payload['iat'])}"
-        assert isinstance(payload["exp"], int), f"exp must be int, got {type(payload['exp'])}"
-        assert payload["exp"] > payload["iat"]
+            assert isinstance(payload["iat"], int), f"iat must be int, got {type(payload['iat'])}"
+            assert isinstance(payload["exp"], int), f"exp must be int, got {type(payload['exp'])}"
+            assert payload["exp"] > payload["iat"]
+            assert payload["exp"] - payload["iat"] == JWT_EXPIRY_SECONDS, (
+                f"exp-iat delta should be {JWT_EXPIRY_SECONDS}, got {payload['exp'] - payload['iat']}"
+            )
 
     def test_healthz_no_auth_required(self, authed_client):
         resp = authed_client.get("/healthz")
