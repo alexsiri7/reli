@@ -1,8 +1,9 @@
 """In-memory rate limiting middleware for FastAPI.
 
 Uses a simple token-bucket algorithm per user (via JWT) with IP fallback.
-Two tiers:
+Three tiers:
 - **LLM endpoints** (chat, sweep): strict limits to prevent cost amplification
+- **Auth endpoints** (login, OAuth): stricter-than-API limits to prevent abuse
 - **General API**: more lenient limits for normal usage
 
 When a valid JWT session cookie is present the ``sub`` claim is used as the
@@ -13,6 +14,7 @@ health, etc.) fall back to client IP.
 Configurable via environment variables:
 - ``RATE_LIMIT_ENABLED``: "true" (default) or "false"
 - ``RATE_LIMIT_LLM_RPM``: requests per minute for LLM endpoints (default: 30)
+- ``RATE_LIMIT_AUTH_RPM``: requests per minute for auth endpoints (default: 10)
 - ``RATE_LIMIT_API_RPM``: requests per minute for general API (default: 60)
 """
 
@@ -33,9 +35,19 @@ log = logging.getLogger(__name__)
 # LLM-calling paths that need strict rate limiting
 _LLM_PATHS = {"/api/chat", "/api/chat/stream", "/api/sweep/run", "/api/sweep/gaps", "/api/sweep/connections"}
 
+# Auth paths (login, OAuth flows) — rated separately to prevent credential-abuse.
+# Default: stricter than general API (auth_rpm=10 vs api_rpm=60).
+# NOTE: /oauth/token is intentionally excluded — MCP token refresh needs
+# separate investigation before a rate limit is applied.
+_AUTH_PATHS = {
+    "/api/auth/google",
+    "/api/auth/google/callback",
+    "/api/auth/me",
+    "/api/logout",
+    "/oauth/authorize",
+    "/oauth/register",
+}
 
-def _is_llm_path(path: str) -> bool:
-    return path in _LLM_PATHS
 
 
 @dataclass
@@ -75,6 +87,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         app,
         *,
         llm_rpm: int = 30,
+        auth_rpm: int = 10,
         api_rpm: int = 60,
         enabled: bool = True,
         trusted_proxy_cidrs: str = "",
@@ -82,6 +95,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.enabled = enabled
         self.llm_rpm = llm_rpm
+        self.auth_rpm = auth_rpm
         self.api_rpm = api_rpm
         # Parse CIDR strings into network objects once at startup
         self._trusted_networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
@@ -93,9 +107,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 self._trusted_networks.append(ipaddress.ip_network(cidr, strict=False))
             except ValueError:
                 log.warning("Invalid TRUSTED_PROXY_CIDR entry ignored: %r", cidr)
-        # Separate buckets for LLM and general API, keyed by user id or IP
+        # Separate buckets for LLM, auth, and general API, keyed by user id or IP
         self._llm_buckets: dict[str, _Bucket] = defaultdict(
             lambda: _Bucket(tokens=float(llm_rpm), max_tokens=float(llm_rpm), refill_rate=llm_rpm / 60.0)
+        )
+        self._auth_buckets: dict[str, _Bucket] = defaultdict(
+            lambda: _Bucket(tokens=float(auth_rpm), max_tokens=float(auth_rpm), refill_rate=auth_rpm / 60.0)
         )
         self._api_buckets: dict[str, _Bucket] = defaultdict(
             lambda: _Bucket(tokens=float(api_rpm), max_tokens=float(api_rpm), refill_rate=api_rpm / 60.0)
@@ -147,8 +164,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         key = self._get_rate_limit_key(request)
-        is_llm = _is_llm_path(path)
-        bucket = self._llm_buckets[key] if is_llm else self._api_buckets[key]
+        is_llm = path in _LLM_PATHS
+        is_auth = path in _AUTH_PATHS
+        if is_llm:
+            bucket = self._llm_buckets[key]
+        elif is_auth:
+            bucket = self._auth_buckets[key]
+        else:
+            bucket = self._api_buckets[key]
 
         if not bucket.consume():
             retry_after = int(bucket.retry_after) + 1
@@ -165,7 +188,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         # Add rate limit headers for visibility
-        response.headers["X-RateLimit-Limit"] = str(self.llm_rpm if is_llm else self.api_rpm)
+        if is_llm:
+            limit = self.llm_rpm
+        elif is_auth:
+            limit = self.auth_rpm
+        else:
+            limit = self.api_rpm
+        response.headers["X-RateLimit-Limit"] = str(limit)
         response.headers["X-RateLimit-Remaining"] = str(int(bucket.tokens))
 
         return response
@@ -183,6 +212,7 @@ def get_rate_limit_config() -> dict:
     return {
         "enabled": s.rate_limit_enabled_bool,
         "llm_rpm": max(1, s.RATE_LIMIT_LLM_RPM),
+        "auth_rpm": max(1, s.RATE_LIMIT_AUTH_RPM),
         "api_rpm": max(1, s.RATE_LIMIT_API_RPM),
         "trusted_proxy_cidrs": s.RATE_LIMIT_TRUSTED_PROXY_CIDRS,
     }

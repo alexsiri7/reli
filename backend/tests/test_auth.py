@@ -246,9 +246,7 @@ class TestOAuthAllowlistRejection:
             from backend.main import app
 
             with TestClient(app, follow_redirects=False) as client:
-                resp = client.get(
-                    f"/api/auth/google/callback?code=fake-code&state={fake_state}"
-                )
+                resp = client.get(f"/api/auth/google/callback?code=fake-code&state={fake_state}")
 
         assert resp.status_code in (302, 307)
         assert "blocked@example.com" not in caplog.text
