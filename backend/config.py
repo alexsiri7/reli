@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     # --- Rate limiting ---
     RATE_LIMIT_ENABLED: str = "true"
     RATE_LIMIT_LLM_RPM: int = 30
+    RATE_LIMIT_AUTH_RPM: int = 10
     RATE_LIMIT_API_RPM: int = 60
     # Comma-separated CIDRs of trusted reverse proxies (e.g. "10.0.0.0/8,172.16.0.0/12").
     # X-Forwarded-For is only trusted when the direct connection IP falls within one of these.

@@ -73,6 +73,7 @@ class TestGetConfig:
         config = get_rate_limit_config()
         assert config["enabled"] is True
         assert config["llm_rpm"] == 30
+        assert config["auth_rpm"] == 10
         assert config["api_rpm"] == 60
 
     def test_disabled(self, monkeypatch: pytest.MonkeyPatch):
@@ -93,9 +94,9 @@ class TestGetConfig:
 # ---------------------------------------------------------------------------
 
 
-def _make_app(llm_rpm: int = 3, api_rpm: int = 5) -> FastAPI:
+def _make_app(llm_rpm: int = 3, auth_rpm: int = 5, api_rpm: int = 5) -> FastAPI:
     app = FastAPI()
-    app.add_middleware(RateLimitMiddleware, llm_rpm=llm_rpm, api_rpm=api_rpm, enabled=True)
+    app.add_middleware(RateLimitMiddleware, llm_rpm=llm_rpm, auth_rpm=auth_rpm, api_rpm=api_rpm, enabled=True)
 
     @app.get("/api/things")
     def list_things():
@@ -120,6 +121,10 @@ def _make_app(llm_rpm: int = 3, api_rpm: int = 5) -> FastAPI:
     @app.post("/api/sweep/connections")
     def sweep_connections():
         return JSONResponse({"connections": []})
+
+    @app.get("/api/auth/google")
+    def auth_google():
+        return JSONResponse({"url": "https://accounts.google.com"})
 
     @app.get("/healthz")
     def health():
@@ -301,3 +306,34 @@ class TestRateLimitMiddleware:
         call_args = mock_log.warning.call_args[0]
         assert "Rate limit exceeded" in call_args[0]
         assert "retry_after" in call_args[0]
+
+
+class TestAuthRateLimit:
+    def test_auth_endpoint_stricter_than_api(self):
+        """Auth endpoints use auth_rpm bucket, not the api_rpm bucket."""
+        app = _make_app(auth_rpm=2, api_rpm=100)
+        client = TestClient(app)
+        for _ in range(2):
+            res = client.get("/api/auth/google")
+            assert res.status_code == 200
+        res = client.get("/api/auth/google")
+        assert res.status_code == 429
+
+    def test_auth_bucket_independent_of_api_bucket(self):
+        """Exhausting the auth bucket doesn't affect the general API bucket."""
+        app = _make_app(auth_rpm=1, api_rpm=10)
+        client = TestClient(app)
+        # Exhaust auth bucket
+        client.get("/api/auth/google")
+        res = client.get("/api/auth/google")
+        assert res.status_code == 429
+        # General API still works
+        res = client.get("/api/things")
+        assert res.status_code == 200
+
+    def test_auth_rate_limit_headers(self):
+        """X-RateLimit-Limit header reflects auth_rpm for auth endpoints."""
+        app = _make_app(auth_rpm=7, api_rpm=100)
+        client = TestClient(app)
+        res = client.get("/api/auth/google")
+        assert res.headers["X-RateLimit-Limit"] == "7"
