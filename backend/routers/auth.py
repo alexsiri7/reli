@@ -66,11 +66,12 @@ def _create_jwt(user_id: str, email: str) -> str:
     import jwt
 
     now = datetime.now(timezone.utc)
+    now_ts = int(now.timestamp())
     payload = {
         "sub": user_id,
         "email": email,
-        "iat": now,
-        "exp": now.timestamp() + JWT_EXPIRY_SECONDS,
+        "iat": now_ts,
+        "exp": now_ts + JWT_EXPIRY_SECONDS,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGORITHM)
 
