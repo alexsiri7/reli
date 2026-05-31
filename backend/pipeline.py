@@ -197,11 +197,12 @@ def _fetch_user_relationships(
     # Build LIKE filter conditions for search queries
     like_conditions = []
     for query in search_queries[:3]:
-        pattern = f"%{query}%"
+        q_escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{q_escaped}%"
         like_conditions.append(
             or_(
-                ThingRecord.title.like(pattern),  # type: ignore[union-attr]
-                cast(ThingRecord.data, String).like(pattern),
+                ThingRecord.title.like(pattern, escape="\\"),  # type: ignore[union-attr]
+                cast(ThingRecord.data, String).like(pattern, escape="\\"),
             )
         )
 
@@ -347,11 +348,12 @@ def _fetch_relevant_things(
     if not use_vector:
         seen_sql: set[str] = set()
         for query in search_queries[:3]:
-            pattern = f"%{query}%"
+            q_escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{q_escaped}%"
             stmt = select(ThingRecord.id).where(
                 or_(
-                    ThingRecord.title.like(pattern),  # type: ignore[union-attr]
-                    cast(ThingRecord.data, String).like(pattern),
+                    ThingRecord.title.like(pattern, escape="\\"),  # type: ignore[union-attr]
+                    cast(ThingRecord.data, String).like(pattern, escape="\\"),
                 ),
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
@@ -383,12 +385,13 @@ def _fetch_relevant_things(
         if not preference_ids:
             pref_seen: set[str] = set()
             for query in search_queries[:3]:
-                pattern = f"%{query}%"
+                q_escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                pattern = f"%{q_escaped}%"
                 pref_stmt = select(ThingRecord.id).where(
                     ThingRecord.type_hint == "preference",
                     or_(
-                        ThingRecord.title.like(pattern),  # type: ignore[union-attr]
-                        cast(ThingRecord.data, String).like(pattern),
+                        ThingRecord.title.like(pattern, escape="\\"),  # type: ignore[union-attr]
+                        cast(ThingRecord.data, String).like(pattern, escape="\\"),
                     ),
                     user_filter_clause(ThingRecord.user_id, user_id),
                 )
@@ -452,12 +455,13 @@ def _fetch_relevant_things(
     if not pref_ids:
         # SQL fallback for preference Things
         for query in search_queries[:3]:
-            pattern = f"%{query}%"
+            q_escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{q_escaped}%"
             pref_stmt2 = select(ThingRecord.id).where(
                 ThingRecord.type_hint == "preference",
                 or_(
-                    ThingRecord.title.like(pattern),  # type: ignore[union-attr]
-                    cast(ThingRecord.data, String).like(pattern),
+                    ThingRecord.title.like(pattern, escape="\\"),  # type: ignore[union-attr]
+                    cast(ThingRecord.data, String).like(pattern, escape="\\"),
                 ),
                 user_filter_clause(ThingRecord.user_id, user_id),
             )

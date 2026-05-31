@@ -199,7 +199,8 @@ def search_things(
     if not q.strip():
         return []
 
-    pattern = f"%{q}%"
+    q_escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{q_escaped}%"
     uf_frag, uf_p = user_filter_text(user_id, "t")
     filters = uf_frag
     params: dict[str, Any] = {**uf_p, "pattern": pattern, "qlimit": limit}
@@ -220,8 +221,8 @@ def search_things(
         # Phase 1: Direct matches on title, type_hint, and data
         direct_sql = text(
             "SELECT t.* FROM things t"
-            f" WHERE (t.title {_like} :pattern OR t.type_hint {_like} :pattern"
-            f"        OR {_data_cast.format('t.data')} {_like} :pattern)" + filters + " ORDER BY t.updated_at DESC"
+            f" WHERE (t.title {_like} :pattern ESCAPE '\\' OR t.type_hint {_like} :pattern ESCAPE '\\'"
+            f"        OR {_data_cast.format('t.data')} {_like} :pattern ESCAPE '\\')" + filters + " ORDER BY t.updated_at DESC"
             " LIMIT :qlimit"
         )
         direct_rows = sess.execute(direct_sql, params).fetchall()
@@ -243,17 +244,17 @@ def search_things(
                 "     SELECT 1 FROM thing_relationships r"
                 "     JOIN things m ON m.id = r.to_thing_id"
                 "     WHERE r.from_thing_id = t.id"
-                f"       AND (r.relationship_type {_like} :pattern"
-                f"            OR m.title {_like} :pattern"
-                f"            OR {_data_cast.format('m.data')} {_like} :pattern)"
+                f"       AND (r.relationship_type {_like} :pattern ESCAPE '\\'"
+                f"            OR m.title {_like} :pattern ESCAPE '\\'"
+                f"            OR {_data_cast.format('m.data')} {_like} :pattern ESCAPE '\\')"
                 "   )"
                 "   OR EXISTS ("
                 "     SELECT 1 FROM thing_relationships r"
                 "     JOIN things m ON m.id = r.from_thing_id"
                 "     WHERE r.to_thing_id = t.id"
-                f"       AND (r.relationship_type {_like} :pattern"
-                f"            OR m.title {_like} :pattern"
-                f"            OR {_data_cast.format('m.data')} {_like} :pattern)"
+                f"       AND (r.relationship_type {_like} :pattern ESCAPE '\\'"
+                f"            OR m.title {_like} :pattern ESCAPE '\\'"
+                f"            OR {_data_cast.format('m.data')} {_like} :pattern ESCAPE '\\')"
                 "   )"
                 " )" + filters + " ORDER BY t.updated_at DESC"
                 " LIMIT :qlimit"

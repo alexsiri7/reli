@@ -395,6 +395,30 @@ class TestSearchDialect:
         assert not any("CAST(" in s for s in captured), "Postgres path must not use CAST(... AS TEXT)"
 
 
+class TestSearchWildcardEscape:
+    """Wildcard characters in q must not broaden search results."""
+
+    def test_percent_in_query_is_literal(self, client):
+        """A literal % in the search term should not match all records."""
+        create_thing(client, title="exact match")
+
+        resp = client.get("/api/things/search?q=%25")  # URL-encoded %
+        assert resp.status_code == 200
+        results = resp.json()
+        # No title contains a literal %, so nothing should match
+        assert not any(r["title"] == "exact match" for r in results)
+
+    def test_underscore_in_query_is_literal(self, client):
+        """A literal _ in the search term should not act as single-char wildcard."""
+        create_thing(client, title="a")
+
+        resp = client.get("/api/things/search?q=_")
+        assert resp.status_code == 200
+        results = resp.json()
+        # _ should be literal, not match single-character titles
+        assert not any(r["title"] == "a" for r in results)
+
+
 # ---------------------------------------------------------------------------
 # Migration script helpers
 # ---------------------------------------------------------------------------
