@@ -256,6 +256,9 @@ _TAG_METADATA = [
     },
 ]
 
+# NOTE: module-level bool — evaluated once at import time. Tests that assert
+# docs-disable behavior must use importlib.reload(backend.main) after patching
+# env vars; simple monkeypatch.setenv alone will not take effect.
 _is_production = bool(os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("PRODUCTION"))
 
 app = FastAPI(
