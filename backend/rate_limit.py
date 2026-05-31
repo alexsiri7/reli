@@ -164,10 +164,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         then removes them one at a time (no dict mutation during iteration).
         """
         now = time.monotonic()
+        total_pruned = 0
         for buckets in (self._llm_buckets, self._auth_buckets, self._api_buckets):
             stale = [k for k, b in buckets.items() if now - b.last_refill > _BUCKET_TTL]
             for k in stale:
                 buckets.pop(k, None)
+            total_pruned += len(stale)
+        if total_pruned:
+            log.debug("Pruned %d stale rate-limit buckets", total_pruned)
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if not self.enabled:
@@ -183,7 +187,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         now = time.monotonic()
         if now - self._last_cleanup > _CLEANUP_INTERVAL:
             self._last_cleanup = now
-            self._prune_stale_buckets()
+            try:
+                self._prune_stale_buckets()
+            except Exception:
+                log.warning("Bucket pruning failed; will retry after next interval", exc_info=True)
 
         key = self._get_rate_limit_key(request)
         is_llm = path in _LLM_PATHS
