@@ -35,14 +35,16 @@ log = logging.getLogger(__name__)
 # LLM-calling paths that need strict rate limiting
 _LLM_PATHS = {"/api/chat", "/api/chat/stream", "/api/sweep/run", "/api/sweep/gaps", "/api/sweep/connections"}
 
-# Auth paths that need stricter-than-API but looser-than-LLM rate limiting
+# Auth paths (login, OAuth flows) — rated separately to prevent credential-abuse.
+# Default: stricter than general API (auth_rpm=10 vs api_rpm=60).
+# NOTE: /oauth/token is intentionally excluded — MCP token refresh needs
+# separate investigation before a rate limit is applied.
 _AUTH_PATHS = {
     "/api/auth/google",
     "/api/auth/google/callback",
     "/api/auth/me",
     "/api/logout",
     "/oauth/authorize",
-    "/oauth/token",
     "/oauth/register",
 }
 

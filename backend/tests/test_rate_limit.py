@@ -69,6 +69,7 @@ class TestGetConfig:
     def test_defaults(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.delenv("RATE_LIMIT_ENABLED", raising=False)
         monkeypatch.delenv("RATE_LIMIT_LLM_RPM", raising=False)
+        monkeypatch.delenv("RATE_LIMIT_AUTH_RPM", raising=False)
         monkeypatch.delenv("RATE_LIMIT_API_RPM", raising=False)
         config = get_rate_limit_config()
         assert config["enabled"] is True
@@ -83,9 +84,11 @@ class TestGetConfig:
 
     def test_custom_limits(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("RATE_LIMIT_LLM_RPM", "5")
+        monkeypatch.setenv("RATE_LIMIT_AUTH_RPM", "3")
         monkeypatch.setenv("RATE_LIMIT_API_RPM", "30")
         config = get_rate_limit_config()
         assert config["llm_rpm"] == 5
+        assert config["auth_rpm"] == 3
         assert config["api_rpm"] == 30
 
 
@@ -125,6 +128,10 @@ def _make_app(llm_rpm: int = 3, auth_rpm: int = 5, api_rpm: int = 5) -> FastAPI:
     @app.get("/api/auth/google")
     def auth_google():
         return JSONResponse({"url": "https://accounts.google.com"})
+
+    @app.get("/api/auth/me")
+    def auth_me():
+        return JSONResponse({"user": None})
 
     @app.get("/healthz")
     def health():
@@ -337,3 +344,13 @@ class TestAuthRateLimit:
         client = TestClient(app)
         res = client.get("/api/auth/google")
         assert res.headers["X-RateLimit-Limit"] == "7"
+
+    def test_auth_me_uses_auth_bucket(self):
+        """Non-google auth paths such as /api/auth/me are also rate-limited by auth_rpm."""
+        app = _make_app(auth_rpm=2, api_rpm=100)
+        client = TestClient(app)
+        for _ in range(2):
+            res = client.get("/api/auth/me")
+            assert res.status_code == 200
+        res = client.get("/api/auth/me")
+        assert res.status_code == 429
