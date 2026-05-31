@@ -80,9 +80,10 @@ class TestUserThingCreation:
         assert thing is not None
         assert thing["title"] == "Alice"
         assert thing["surface"] == 0
-        data = json.loads(thing["data"])
-        assert data["email"] == "alice@example.com"
-        assert data["google_id"] == "google-123"
+        # PII is stored in UserRecord, not Thing.data
+        data = json.loads(thing["data"]) if thing["data"] else None
+        assert data is None or "email" not in data
+        assert data is None or "google_id" not in data
 
     def test_upsert_user_no_duplicate_thing_on_repeat_login(self, patched_db, db):
 

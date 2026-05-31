@@ -148,7 +148,7 @@ def _create_user_thing_sqlmodel(
         importance=2,
         active=True,
         surface=False,
-        data={"email": email, "google_id": google_id},
+        data=None,
         created_at=now,
         updated_at=now,
         user_id=user_id,
