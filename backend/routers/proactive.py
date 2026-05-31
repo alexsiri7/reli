@@ -71,7 +71,7 @@ def _parse_date_value(value: object) -> date | None:
 
 def _days_until_next_occurrence(target: date, today: date) -> int:
     """Days until the next month/day occurrence (recurring, ignores year)."""
-    this_year = today.replace(year=today.year, month=target.month, day=target.day)
+    this_year = today.replace(month=target.month, day=target.day)
     if this_year >= today:
         return (this_year - today).days
     next_year = today.replace(year=today.year + 1, month=target.month, day=target.day)
