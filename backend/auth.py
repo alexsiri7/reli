@@ -9,7 +9,8 @@ Two auth methods are supported:
 2. Bearer token (``Authorization: Bearer <RELI_API_TOKEN>``) — used by the MCP
    server and other programmatic clients.  When RELI_API_TOKEN is set and the
    request carries a matching Bearer token, the request is authenticated as the
-   first user in the database (single-tenant shortcut).
+   user specified by RELI_API_TOKEN_USER_ID (or the first user in the database
+   if that setting is empty — single-tenant shortcut).
 """
 
 import secrets
@@ -23,15 +24,19 @@ SECRET_KEY = settings.SECRET_KEY
 JWT_ALGORITHM = "HS256"
 COOKIE_NAME = "reli_session"
 _API_TOKEN: str = settings.RELI_API_TOKEN
+_API_TOKEN_USER_ID: str = settings.RELI_API_TOKEN_USER_ID
 
 
 def _resolve_api_token_user() -> str:
     """Return the user_id for API-token authenticated requests.
 
-    For single-tenant deployments the token represents the sole user.
-    Returns the first user_id found in the database, or "" if none exist
-    (which falls through to the auth-disabled path).
+    If RELI_API_TOKEN_USER_ID is configured, returns that user_id directly.
+    Otherwise falls back to the first user in the database (single-tenant shortcut).
+    Returns "" if no user can be resolved (falls through to auth-disabled path).
     """
+    if _API_TOKEN_USER_ID:
+        return _API_TOKEN_USER_ID
+
     from sqlmodel import Session, select
 
     import backend.db_engine as _engine_mod
