@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
-from ..db_engine import get_session
+from ..auth import require_user
+from ..db_engine import get_session, user_filter_clause
 from ..db_models import ThingTypeRecord
 from ..models import ThingType, ThingTypeCreate, ThingTypeUpdate
 
@@ -27,11 +28,13 @@ def _record_to_thing_type(record: ThingTypeRecord) -> ThingType:
 def list_thing_types(
     limit: int = Query(100, ge=1, le=500, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
+    user_id: str = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> list[ThingType]:
-    """List all Thing Types, sorted alphabetically by name."""
+    """List Thing Types owned by the current user plus system types (user_id=NULL)."""
     records = session.exec(
         select(ThingTypeRecord)
+        .where(user_filter_clause(ThingTypeRecord.user_id, user_id))
         .order_by(ThingTypeRecord.name.asc())  # type: ignore[attr-defined]
         .limit(limit)
         .offset(offset)
@@ -42,10 +45,16 @@ def list_thing_types(
 @router.get("/{type_id}", response_model=ThingType, summary="Get a Thing Type")
 def get_thing_type(
     type_id: str,
+    user_id: str = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ThingType:
-    """Retrieve a single Thing Type by ID."""
-    record = session.get(ThingTypeRecord, type_id)
+    """Retrieve a single Thing Type by ID (must belong to current user or be a system type)."""
+    record = session.exec(
+        select(ThingTypeRecord).where(
+            ThingTypeRecord.id == type_id,
+            user_filter_clause(ThingTypeRecord.user_id, user_id),
+        )
+    ).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Thing type '{type_id}' not found")
     return _record_to_thing_type(record)
@@ -54,10 +63,16 @@ def get_thing_type(
 @router.post("", response_model=ThingType, status_code=status.HTTP_201_CREATED, summary="Create a Thing Type")
 def create_thing_type(
     body: ThingTypeCreate,
+    user_id: str = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ThingType:
-    """Create a new Thing Type. Names must be unique."""
-    existing = session.exec(select(ThingTypeRecord).where(ThingTypeRecord.name == body.name)).first()
+    """Create a new Thing Type scoped to the current user. Names must be unique per user."""
+    existing = session.exec(
+        select(ThingTypeRecord).where(
+            ThingTypeRecord.name == body.name,
+            ThingTypeRecord.user_id == user_id,
+        )
+    ).first()
     if existing:
         raise HTTPException(
             status_code=409,
@@ -70,6 +85,7 @@ def create_thing_type(
         icon=body.icon,
         color=body.color,
         created_at=datetime.now(timezone.utc),
+        user_id=user_id,
     )
     session.add(record)
     session.commit()
@@ -81,10 +97,16 @@ def create_thing_type(
 def update_thing_type(
     type_id: str,
     body: ThingTypeUpdate,
+    user_id: str = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ThingType:
-    """Partially update a Thing Type. Names must remain unique."""
-    record = session.get(ThingTypeRecord, type_id)
+    """Partially update a Thing Type. Only the owning user may update."""
+    record = session.exec(
+        select(ThingTypeRecord).where(
+            ThingTypeRecord.id == type_id,
+            ThingTypeRecord.user_id == user_id,
+        )
+    ).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Thing type '{type_id}' not found")
 
@@ -92,6 +114,7 @@ def update_thing_type(
         existing = session.exec(
             select(ThingTypeRecord).where(
                 ThingTypeRecord.name == body.name,
+                ThingTypeRecord.user_id == user_id,
                 ThingTypeRecord.id != type_id,
             )
         ).first()
@@ -115,10 +138,16 @@ def update_thing_type(
 @router.delete("/{type_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a Thing Type")
 def delete_thing_type(
     type_id: str,
+    user_id: str = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> None:
-    """Delete a Thing Type by ID."""
-    record = session.get(ThingTypeRecord, type_id)
+    """Delete a Thing Type by ID. Only the owning user may delete."""
+    record = session.exec(
+        select(ThingTypeRecord).where(
+            ThingTypeRecord.id == type_id,
+            ThingTypeRecord.user_id == user_id,
+        )
+    ).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Thing type '{type_id}' not found")
     session.delete(record)

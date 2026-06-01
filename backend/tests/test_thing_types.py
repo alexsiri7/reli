@@ -110,9 +110,10 @@ class TestCreateThingType:
         assert resp.status_code == 409
         assert "already exists" in resp.json()["detail"]
 
-    def test_create_duplicate_seeded_name_returns_409(self, client):
+    def test_create_seeded_name_allowed_for_user(self, client):
+        """Users can create a type with the same name as a system type (different scope)."""
         resp = client.post("/api/thing-types", json={"name": "task"})
-        assert resp.status_code == 409
+        assert resp.status_code == 201
 
     def test_create_empty_name_returns_422(self, client):
         resp = client.post("/api/thing-types", json={"name": ""})
@@ -189,8 +190,7 @@ class TestDeleteThingType:
         resp = client.delete("/api/thing-types/not-here")
         assert resp.status_code == 404
 
-    def test_delete_seeded_type(self, client):
-        """Seeded types can be deleted."""
+    def test_delete_seeded_type_forbidden(self, client):
+        """System-seeded types (user_id=NULL) cannot be deleted by a user."""
         resp = client.delete("/api/thing-types/task")
-        assert resp.status_code == 204
-        assert client.get("/api/thing-types/task").status_code == 404
+        assert resp.status_code == 404
