@@ -1,5 +1,8 @@
 """Tests for Thing Types CRUD endpoints."""
 
+from collections.abc import Generator
+from contextlib import contextmanager
+
 from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
@@ -12,6 +15,28 @@ def create_type(client: TestClient, **kwargs) -> dict:
     resp = client.post("/api/thing-types", json=payload)
     assert resp.status_code == 201, resp.text
     return resp.json()
+
+
+@contextmanager
+def _auth_client(user_id: str) -> Generator[TestClient, None, None]:
+    """Context manager: TestClient with require_user overridden to return user_id.
+
+    Use sequentially (not simultaneously) per the NOTE in conftest._make_authenticated_client —
+    app.dependency_overrides is a shared dict and only one override can be active at a time.
+    """
+    from backend.auth import require_user
+    from backend.main import app
+
+    saved = app.dependency_overrides.get(require_user)
+    app.dependency_overrides[require_user] = lambda: user_id
+    try:
+        with TestClient(app) as c:
+            yield c
+    finally:
+        if saved is None:
+            app.dependency_overrides.pop(require_user, None)
+        else:
+            app.dependency_overrides[require_user] = saved
 
 
 # ---------------------------------------------------------------------------
@@ -194,3 +219,91 @@ class TestDeleteThingType:
         """System-seeded types (user_id=NULL) cannot be deleted by a user."""
         resp = client.delete("/api/thing-types/task")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# User Isolation (cross-user security invariants)
+# ---------------------------------------------------------------------------
+
+
+class TestUserIsolation:
+    """Verify that per-user scoping prevents cross-user access.
+
+    Uses _auth_client() context manager sequentially — app.dependency_overrides
+    is a shared dict; only one user override can be active at a time.
+    """
+
+    def test_other_user_cannot_see_private_type(self, patched_db):
+        with _auth_client("user-a") as c:
+            t = create_type(c, name="private-a")
+        with _auth_client("other-user") as c:
+            resp = c.get(f"/api/thing-types/{t['id']}")
+            assert resp.status_code == 404
+
+    def test_other_user_cannot_update_private_type(self, patched_db):
+        with _auth_client("user-a") as c:
+            t = create_type(c, name="private-b")
+        with _auth_client("other-user") as c:
+            resp = c.patch(f"/api/thing-types/{t['id']}", json={"name": "hijacked"})
+            assert resp.status_code == 404
+
+    def test_other_user_cannot_delete_private_type(self, patched_db):
+        with _auth_client("user-a") as c:
+            t = create_type(c, name="private-c")
+        with _auth_client("other-user") as c:
+            resp = c.delete(f"/api/thing-types/{t['id']}")
+            assert resp.status_code == 404
+
+    def test_other_user_cannot_see_private_type_in_list(self, patched_db):
+        with _auth_client("user-a") as c:
+            create_type(c, name="list-private")
+        with _auth_client("other-user") as c:
+            resp = c.get("/api/thing-types")
+            names = {t["name"] for t in resp.json()}
+            assert "list-private" not in names
+
+    def test_system_types_visible_to_all(self, patched_db):
+        """NULL user_id types are visible to every authenticated user."""
+        for uid in ("user-a", "other-user"):
+            with _auth_client(uid) as c:
+                resp = c.get("/api/thing-types/task")
+                assert resp.status_code == 200
+
+    def test_two_users_can_have_same_type_name(self, patched_db):
+        """Per-user uniqueness: two users may both own a type with the same name."""
+        with _auth_client("user-a") as c:
+            resp_a = c.post("/api/thing-types", json={"name": "widget"})
+            assert resp_a.status_code == 201
+        with _auth_client("other-user") as c:
+            resp_b = c.post("/api/thing-types", json={"name": "widget"})
+            assert resp_b.status_code == 201
+        assert resp_a.json()["id"] != resp_b.json()["id"]
+
+    def test_authenticated_user_cannot_update_system_type(self, patched_db):
+        """Authenticated user gets 404 when patching a system type (user_id=NULL)."""
+        with _auth_client("user-a") as c:
+            resp = c.patch("/api/thing-types/task", json={"name": "hacked"})
+            assert resp.status_code == 404
+
+    def test_authenticated_user_cannot_delete_system_type(self, patched_db):
+        """Authenticated user gets 404 when deleting a system type (user_id=NULL)."""
+        with _auth_client("user-a") as c:
+            resp = c.delete("/api/thing-types/task")
+            assert resp.status_code == 404
+
+    def test_authenticated_user_can_read_system_type(self, patched_db):
+        """Authenticated user can still GET a system type (user_id=NULL is included)."""
+        with _auth_client("user-a") as c:
+            resp = c.get("/api/thing-types/task")
+            assert resp.status_code == 200
+            assert resp.json()["name"] == "task"
+
+    def test_update_to_name_used_by_other_user_succeeds(self, patched_db):
+        """Renaming to a name owned by a different user should not conflict."""
+        with _auth_client("other-user") as c:
+            c.post("/api/thing-types", json={"name": "shared-name"})
+        with _auth_client("user-a") as c:
+            t = create_type(c, name="my-name")
+            resp = c.patch(f"/api/thing-types/{t['id']}", json={"name": "shared-name"})
+            assert resp.status_code == 200
+            assert resp.json()["name"] == "shared-name"

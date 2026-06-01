@@ -35,6 +35,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # WARNING: If users have created thing types with names that duplicate
+    # another user's types (allowed by the per-user unique constraint), this
+    # downgrade will fail when restoring UNIQUE(name) due to duplicate name values.
+    # Manual dedup required before running downgrade:
+    #   DELETE FROM thing_types
+    #   WHERE user_id IS NOT NULL
+    #   AND name IN (SELECT name FROM thing_types GROUP BY name HAVING COUNT(*) > 1);
     with op.batch_alter_table("thing_types", recreate="always") as batch_op:
         batch_op.drop_column("user_id")
         batch_op.drop_constraint("uq_thing_types_user_id_name", type_="unique")

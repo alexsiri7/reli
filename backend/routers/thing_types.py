@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from ..auth import require_user
@@ -88,7 +89,14 @@ def create_thing_type(
         user_id=user_id,
     )
     session.add(record)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"Thing type with name '{body.name}' already exists",
+        )
     session.refresh(record)
     return _record_to_thing_type(record)
 
@@ -100,7 +108,10 @@ def update_thing_type(
     user_id: str = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> ThingType:
-    """Partially update a Thing Type. Only the owning user may update."""
+    """Partially update a Thing Type. Only the owning user may update.
+
+    System types (built-in, user_id=NULL) are read-only and return 404.
+    """
     record = session.exec(
         select(ThingTypeRecord).where(
             ThingTypeRecord.id == type_id,
@@ -130,7 +141,14 @@ def update_thing_type(
         record.color = body.color
 
     session.add(record)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"Thing type with name '{body.name}' already exists",
+        )
     session.refresh(record)
     return _record_to_thing_type(record)
 
@@ -141,7 +159,10 @@ def delete_thing_type(
     user_id: str = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> None:
-    """Delete a Thing Type by ID. Only the owning user may delete."""
+    """Delete a Thing Type by ID. Only the owning user may delete.
+
+    System types (built-in, user_id=NULL) are read-only and return 404.
+    """
     record = session.exec(
         select(ThingTypeRecord).where(
             ThingTypeRecord.id == type_id,
