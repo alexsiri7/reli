@@ -962,7 +962,7 @@ class TestBearerTokenAuth:
     def test_cookie_auth_still_works_alongside_token(self, token_client_with_user):
         """Cookie-based JWT auth should still work when token auth is configured."""
 
-        payload = {"sub": "u-test-123", "email": "test@example.com", "exp": 9999999999}
+        payload = {"sub": "u-test-123", "email": "test@example.com", "aud": "web", "exp": 9999999999}
         token = jwt.encode(payload, "test-secret-key", algorithm="HS256")
         token_client_with_user.cookies.set("reli_session", token)
         resp = token_client_with_user.get("/api/things")

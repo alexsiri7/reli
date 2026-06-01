@@ -113,7 +113,7 @@ class TestJWTAuth:
         """Create a valid JWT and verify it grants access."""
         import jwt
 
-        payload = {"sub": "test-user-id", "email": "test@example.com", "exp": 9999999999}
+        payload = {"sub": "test-user-id", "email": "test@example.com", "aud": "web", "exp": 9999999999}
         token = jwt.encode(payload, "test-secret-key", algorithm="HS256")
         authed_client.cookies.set("reli_session", token)
         resp = authed_client.get("/api/things")
@@ -127,7 +127,7 @@ class TestJWTAuth:
             from backend.routers.auth import JWT_ALGORITHM, JWT_EXPIRY_SECONDS, _create_jwt
 
             token = _create_jwt("u-abc123", "user@example.com")
-            payload = pyjwt.decode(token, "test-secret", algorithms=[JWT_ALGORITHM])
+            payload = pyjwt.decode(token, "test-secret", algorithms=[JWT_ALGORITHM], audience="web")
 
             assert isinstance(payload["iat"], int), f"iat must be int, got {type(payload['iat'])}"
             assert isinstance(payload["exp"], int), f"exp must be int, got {type(payload['exp'])}"
@@ -135,6 +135,38 @@ class TestJWTAuth:
             assert payload["exp"] - payload["iat"] == JWT_EXPIRY_SECONDS, (
                 f"exp-iat delta should be {JWT_EXPIRY_SECONDS}, got {payload['exp'] - payload['iat']}"
             )
+
+    def test_mcp_token_rejected_as_web_cookie(self, authed_client):
+        """MCP OAuth token (aud='mcp') must not authenticate as a web session cookie."""
+        import jwt
+
+        payload = {"sub": "test-user-id", "email": "test@example.com", "aud": "mcp", "exp": 9999999999}
+        token = jwt.encode(payload, "test-secret-key", algorithm="HS256")
+        authed_client.cookies.set("reli_session", token)
+        resp = authed_client.get("/api/things")
+        assert resp.status_code == 401
+
+    def test_web_token_has_web_audience(self):
+        """Tokens issued by _create_jwt default to aud='web'."""
+        import jwt as pyjwt
+
+        with patch("backend.routers.auth.SECRET_KEY", "test-secret"):
+            from backend.routers.auth import JWT_ALGORITHM, _create_jwt
+
+            token = _create_jwt("u-abc123", "user@example.com")
+            payload = pyjwt.decode(token, "test-secret", algorithms=[JWT_ALGORITHM], audience="web")
+            assert payload["aud"] == "web"
+
+    def test_mcp_token_has_mcp_audience(self):
+        """Tokens issued with aud='mcp' carry the mcp audience claim."""
+        import jwt as pyjwt
+
+        with patch("backend.routers.auth.SECRET_KEY", "test-secret"):
+            from backend.routers.auth import JWT_ALGORITHM, _create_jwt
+
+            token = _create_jwt("u-abc123", "user@example.com", aud="mcp")
+            payload = pyjwt.decode(token, "test-secret", algorithms=[JWT_ALGORITHM], audience="mcp")
+            assert payload["aud"] == "mcp"
 
     def test_healthz_no_auth_required(self, authed_client):
         resp = authed_client.get("/healthz")
