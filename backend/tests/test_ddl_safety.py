@@ -1,12 +1,14 @@
 """Tests for the destructive DDL safety guard in Alembic migrations."""
 
 import textwrap
+from unittest.mock import MagicMock
 
 import pytest
 
 from backend.alembic.safety import (
     DestructiveDDLFound,
     _find_destructive_ops_in_source,
+    check_pending_migrations,
 )
 
 
@@ -145,20 +147,12 @@ class TestCheckPendingMigrations:
 
     def test_allows_when_env_var_set(self, tmp_path, monkeypatch):
         """ALLOW_DESTRUCTIVE_DDL=true bypasses the check entirely."""
-        from unittest.mock import MagicMock
-
-        from backend.alembic.safety import check_pending_migrations
-
         monkeypatch.setenv("ALLOW_DESTRUCTIVE_DDL", "true")
         mock_script_dir = MagicMock()
         # Should not raise even with a mocked script dir
         check_pending_migrations(mock_script_dir, current_heads=set())
 
     def test_env_var_case_insensitive(self, monkeypatch):
-        from unittest.mock import MagicMock
-
-        from backend.alembic.safety import check_pending_migrations
-
         for value in ("TRUE", "True", "1", "yes", "YES"):
             monkeypatch.setenv("ALLOW_DESTRUCTIVE_DDL", value)
             mock_script_dir = MagicMock()
@@ -186,10 +180,6 @@ class TestCheckPendingMigrations:
                 op.create_table('users')
         """)
         )
-
-        from unittest.mock import MagicMock
-
-        from backend.alembic.safety import check_pending_migrations
 
         # Mock script directory
         mock_rev = MagicMock()
@@ -232,10 +222,6 @@ class TestCheckPendingMigrations:
         """)
         )
 
-        from unittest.mock import MagicMock
-
-        from backend.alembic.safety import check_pending_migrations
-
         mock_rev = MagicMock()
         mock_rev.revision = "def456"
         mock_rev.doc = "add column"
@@ -269,10 +255,6 @@ class TestCheckPendingMigrations:
                 pass
         """)
         )
-
-        from unittest.mock import MagicMock
-
-        from backend.alembic.safety import check_pending_migrations
 
         mock_rev = MagicMock()
         mock_rev.revision = "abc123"
@@ -308,10 +290,6 @@ class TestCheckPendingMigrations:
                 pass
         """)
         )
-
-        from unittest.mock import MagicMock
-
-        from backend.alembic.safety import check_pending_migrations
 
         mock_rev = MagicMock()
         mock_rev.revision = "ghi789"

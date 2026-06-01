@@ -14,9 +14,9 @@ import os
 import re
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 from alembic.script import ScriptDirectory
+
+logger = logging.getLogger(__name__)
 
 # Alembic op.* calls considered destructive
 DESTRUCTIVE_OPS = frozenset(
