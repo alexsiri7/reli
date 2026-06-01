@@ -91,3 +91,40 @@ class TestFeedbackUserIdNotLeaked:
         body = route.calls.last.request.content.decode()
         assert "TestBrowser/1.0" in body
         assert "http://localhost/settings" in body
+
+
+class TestScreenshotSizeLimit:
+    """SEC-014: oversized screenshot must be rejected before processing."""
+
+    def test_oversized_screenshot_rejected(self, auth_client: TestClient):
+        """A screenshot_base64 exceeding 5 MB must return 422."""
+        resp = auth_client.post(
+            "/api/feedback",
+            json={
+                "category": "bug",
+                "message": "Help",
+                "screenshot_base64": "A" * 5_242_881,
+            },
+        )
+        assert resp.status_code == 422
+
+    @respx.mock
+    def test_max_size_screenshot_accepted(self, auth_client: TestClient):
+        """A screenshot_base64 exactly at the limit must pass validation."""
+        respx.post("https://uploads.github.com/repos/owner/repo/issues/uploads").mock(
+            side_effect=Exception("upload skipped")
+        )
+        issue_route = respx.post(_GITHUB_ISSUES_URL).mock(
+            return_value=httpx.Response(201, json={"html_url": "https://github.com/owner/repo/issues/3"})
+        )
+        resp = auth_client.post(
+            "/api/feedback",
+            json={
+                "category": "bug",
+                "message": "Help",
+                "screenshot_base64": "A" * 5_242_880,
+            },
+        )
+        # Screenshot upload fails gracefully; issue is still created
+        assert resp.status_code == 200
+        assert issue_route.called, "GitHub issue should be created even when screenshot upload fails"
