@@ -137,8 +137,8 @@ def _expires_at_to_datetime(epoch: float) -> datetime:
     return datetime.fromtimestamp(epoch, tz=timezone.utc)
 
 
-def _purge_expired(session: Session, store: _Store) -> int:
-    """Delete expired rows from *store*'s table. Returns count deleted."""
+def _purge_expired(session: Session, store: _Store) -> None:
+    """Delete expired rows from *store*'s table."""
     now = time.time()
     stmt = select(store.model).where(store.model.expires_at <= now)  # type: ignore[attr-defined, var-annotated]
     expired = session.exec(stmt).all()
@@ -147,7 +147,6 @@ def _purge_expired(session: Session, store: _Store) -> int:
     if expired:
         session.flush()
         logger.debug("oauth_state: purged %d expired entries from %s", len(expired), store.model.__tablename__)  # type: ignore[attr-defined]
-    return len(expired)
 
 
 def _record_to_dict(record: Any, store: _Store) -> dict:
@@ -177,8 +176,8 @@ def _record_to_dict(record: Any, store: _Store) -> dict:
 def _dict_to_kwargs(store: _Store, key: str, value: dict) -> dict:
     """Build keyword arguments for creating a SQLModel record from a value dict."""
     kwargs: dict[str, Any] = {}
-    columns = {col.key for col in store.model.__table__.columns}  # type: ignore[attr-defined]
-    for col_name in columns:
+    for col in store.model.__table__.columns:  # type: ignore[attr-defined]
+        col_name = col.key
         if col_name == store.pk_field:
             kwargs[col_name] = key
         elif col_name in value:
