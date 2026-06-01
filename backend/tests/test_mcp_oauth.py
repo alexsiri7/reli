@@ -207,7 +207,7 @@ class TestMcpRedirectScheme:
 
 
 class TestOAuthRegisterRedirectUriValidation:
-    """POST /oauth/register must reject redirect_uris with unsafe URL schemes."""
+    """POST /oauth/register must enforce redirect_uri scheme rules (accept https/localhost, reject others)."""
 
     def test_register_accepts_https_redirect_uri(self, mcp_client):
         resp = mcp_client.post(
@@ -244,13 +244,16 @@ class TestOAuthRegisterRedirectUriValidation:
             json={"redirect_uris": ["javascript:alert(1)"], "client_name": "test"},
         )
         assert resp.status_code == 400
+        assert "redirect_uri must use https" in resp.json()["detail"]
 
-    def test_register_rejects_malformed_uri(self, mcp_client):
+    def test_register_rejects_schemeless_uri(self, mcp_client):
+        # urllib.parse yields scheme="" for bare strings; the else branch rejects it
         resp = mcp_client.post(
             "/oauth/register",
             json={"redirect_uris": ["notavalidurl"], "client_name": "test"},
         )
         assert resp.status_code == 400
+        assert "redirect_uri must use https" in resp.json()["detail"]
 
     def test_register_accepts_empty_redirect_uris(self, mcp_client):
         resp = mcp_client.post(
@@ -258,6 +261,37 @@ class TestOAuthRegisterRedirectUriValidation:
             json={"redirect_uris": [], "client_name": "test"},
         )
         assert resp.status_code == 201
+
+    def test_register_accepts_null_redirect_uris_as_empty(self, mcp_client):
+        # null redirect_uris is treated the same as an absent key (empty list)
+        # and must not cause a 500 TypeError
+        resp = mcp_client.post(
+            "/oauth/register",
+            json={"redirect_uris": None, "client_name": "test"},
+        )
+        assert resp.status_code == 201
+
+    def test_register_rejects_mixed_valid_and_invalid_uris(self, mcp_client):
+        """A single invalid URI in the list must reject the whole registration."""
+        resp = mcp_client.post(
+            "/oauth/register",
+            json={
+                "redirect_uris": ["https://good.example.com/callback", "http://evil.com/steal"],
+                "client_name": "test",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_register_rejects_invalid_uri_regardless_of_position(self, mcp_client):
+        """Validation applies even when the invalid URI is not first."""
+        resp = mcp_client.post(
+            "/oauth/register",
+            json={
+                "redirect_uris": ["http://evil.com/steal", "https://good.example.com/callback"],
+                "client_name": "test",
+            },
+        )
+        assert resp.status_code == 400
 
 
 class TestMcpTokenAudience:
