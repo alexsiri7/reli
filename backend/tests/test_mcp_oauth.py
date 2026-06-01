@@ -206,6 +206,60 @@ class TestMcpRedirectScheme:
         assert "http://" not in location, f"redirect incorrectly uses http://: {location}"
 
 
+class TestOAuthRegisterRedirectUriValidation:
+    """POST /oauth/register must reject redirect_uris with unsafe URL schemes."""
+
+    def test_register_accepts_https_redirect_uri(self, mcp_client):
+        resp = mcp_client.post(
+            "/oauth/register",
+            json={"redirect_uris": ["https://legitimate.example.com/callback"], "client_name": "test"},
+        )
+        assert resp.status_code == 201
+
+    def test_register_accepts_http_localhost(self, mcp_client):
+        resp = mcp_client.post(
+            "/oauth/register",
+            json={"redirect_uris": ["http://localhost:8080/callback"], "client_name": "test"},
+        )
+        assert resp.status_code == 201
+
+    def test_register_accepts_http_127_0_0_1(self, mcp_client):
+        resp = mcp_client.post(
+            "/oauth/register",
+            json={"redirect_uris": ["http://127.0.0.1:3000/callback"], "client_name": "test"},
+        )
+        assert resp.status_code == 201
+
+    def test_register_rejects_http_external_host(self, mcp_client):
+        resp = mcp_client.post(
+            "/oauth/register",
+            json={"redirect_uris": ["http://evil.com/steal"], "client_name": "test"},
+        )
+        assert resp.status_code == 400
+        assert "redirect_uri must use https" in resp.json()["detail"]
+
+    def test_register_rejects_javascript_scheme(self, mcp_client):
+        resp = mcp_client.post(
+            "/oauth/register",
+            json={"redirect_uris": ["javascript:alert(1)"], "client_name": "test"},
+        )
+        assert resp.status_code == 400
+
+    def test_register_rejects_malformed_uri(self, mcp_client):
+        resp = mcp_client.post(
+            "/oauth/register",
+            json={"redirect_uris": ["notavalidurl"], "client_name": "test"},
+        )
+        assert resp.status_code == 400
+
+    def test_register_accepts_empty_redirect_uris(self, mcp_client):
+        resp = mcp_client.post(
+            "/oauth/register",
+            json={"redirect_uris": [], "client_name": "test"},
+        )
+        assert resp.status_code == 201
+
+
 class TestMcpTokenAudience:
     """Tokens issued via /oauth/token must carry aud='mcp'."""
 

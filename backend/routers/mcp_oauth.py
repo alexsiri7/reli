@@ -14,6 +14,7 @@ import base64
 import hashlib
 import logging
 import secrets
+import urllib.parse
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -103,6 +104,19 @@ async def oauth_register(request: Request) -> JSONResponse:
     in memory. No approval flow needed.
     """
     body = await request.json()
+
+    # Validate redirect_uris: only https:// is allowed (http:// only for localhost in dev)
+    for uri in body.get("redirect_uris", []):
+        parsed = urllib.parse.urlparse(uri)
+        if parsed.scheme == "https":
+            pass  # always allowed
+        elif parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1"):
+            pass  # allow http for local development
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"redirect_uri must use https (or http://localhost for development): {uri}",
+            )
 
     client_id = str(uuid.uuid4())
     client_secret = secrets.token_urlsafe(32)
