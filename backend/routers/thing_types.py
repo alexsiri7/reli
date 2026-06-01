@@ -68,18 +68,6 @@ def create_thing_type(
     session: Session = Depends(get_session),
 ) -> ThingType:
     """Create a new Thing Type scoped to the current user. Names must be unique per user."""
-    existing = session.exec(
-        select(ThingTypeRecord).where(
-            ThingTypeRecord.name == body.name,
-            ThingTypeRecord.user_id == user_id,
-        )
-    ).first()
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Thing type with name '{body.name}' already exists",
-        )
-
     record = ThingTypeRecord(
         id=str(uuid.uuid4()),
         name=body.name,
@@ -122,18 +110,6 @@ def update_thing_type(
         raise HTTPException(status_code=404, detail=f"Thing type '{type_id}' not found")
 
     if body.name is not None:
-        existing = session.exec(
-            select(ThingTypeRecord).where(
-                ThingTypeRecord.name == body.name,
-                ThingTypeRecord.user_id == user_id,
-                ThingTypeRecord.id != type_id,
-            )
-        ).first()
-        if existing:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Thing type with name '{body.name}' already exists",
-            )
         record.name = body.name
     if body.icon is not None:
         record.icon = body.icon
