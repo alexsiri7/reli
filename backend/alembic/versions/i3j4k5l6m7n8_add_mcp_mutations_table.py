@@ -21,6 +21,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Create mcp_mutations table for audit logging."""
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if inspector.has_table("mcp_mutations"):
+        return  # Table already exists (e.g. created via create_all fallback); nothing to do.
+
     op.create_table(
         "mcp_mutations",
         sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
