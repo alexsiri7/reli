@@ -23,7 +23,7 @@ def upgrade() -> None:
     """Create mcp_mutations table for audit logging."""
     conn = op.get_bind()
     inspector = sa.inspect(conn)
-    if "mcp_mutations" in inspector.get_table_names():
+    if inspector.has_table("mcp_mutations"):
         return  # Table already exists (e.g. created via create_all fallback); nothing to do.
 
     op.create_table(
