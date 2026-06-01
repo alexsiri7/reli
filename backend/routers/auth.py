@@ -63,22 +63,23 @@ def _client_config() -> dict:
     }
 
 
-def _create_jwt(user_id: str, email: str) -> str:
+def _create_jwt(user_id: str, email: str, aud: str = "web") -> str:
     """Create a signed JWT for the given user."""
     now = datetime.now(timezone.utc)
     now_ts = int(now.timestamp())
     payload = {
         "sub": user_id,
         "email": email,
+        "aud": aud,
         "iat": now_ts,
         "exp": now_ts + JWT_EXPIRY_SECONDS,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
-def _decode_jwt(token: str) -> dict[str, str]:
+def _decode_jwt(token: str, audience: str = "web") -> dict[str, str]:
     """Decode and validate a JWT. Raises on invalid/expired tokens."""
-    return jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    return jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM], audience=audience)
 
 
 def _apply_profile_fields(user: UserRecord, email: str, name: str, picture: str | None, now: datetime) -> None:
@@ -295,6 +296,7 @@ def get_current_user(request: Request) -> dict:
     try:
         payload = _decode_jwt(token)
     except Exception:
+        logger.debug("JWT decode failed for /auth/me", exc_info=True)
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
     user_id = payload.get("sub")

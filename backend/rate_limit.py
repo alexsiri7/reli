@@ -146,7 +146,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         token = request.cookies.get(COOKIE_NAME)
         if token and SECRET_KEY:
             try:
-                payload = pyjwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+                payload = pyjwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM], audience="web")
                 sub = payload.get("sub")
                 if sub:
                     return f"user:{sub}"

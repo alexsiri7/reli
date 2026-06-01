@@ -219,7 +219,7 @@ def oauth_authorize(
 
 def _issue_token_response(user_id: str, email: str, client_id: str, scope: str) -> JSONResponse:
     """Create an access token + refresh token and return the RFC 6749 token response."""
-    access_token = _create_jwt(user_id, email)
+    access_token = _create_jwt(user_id, email, aud="mcp")
 
     refresh_token = secrets.token_urlsafe(32)
     try:

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
+import jwt as pyjwt
 import pytest
 from fastapi.testclient import TestClient
 
@@ -200,3 +204,54 @@ class TestMcpRedirectScheme:
         location = resp.headers["location"]
         assert "testserver" not in location, "redirect used request.url (testserver) instead of settings"
         assert "http://" not in location, f"redirect incorrectly uses http://: {location}"
+
+
+class TestMcpTokenAudience:
+    """Tokens issued via /oauth/token must carry aud='mcp'."""
+
+    def _make_code_challenge(self, verifier: str) -> str:
+        digest = hashlib.sha256(verifier.encode("ascii")).digest()
+        return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+    def test_oauth_token_response_has_mcp_audience(self, patched_db):
+        """Access tokens from the /oauth/token endpoint must have aud='mcp'."""
+        from backend.main import app
+        from backend.oauth_state import cleanup_and_store, mcp_auth_codes
+        from backend.routers.auth import JWT_ALGORITHM
+
+        secret = "test-secret-key-mcp-audience"
+        code_verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+        auth_code = "test-auth-code-aud-check"
+
+        cleanup_and_store(
+            mcp_auth_codes,
+            auth_code,
+            {
+                "user_id": "u-test-001",
+                "email": "test@example.com",
+                "code_challenge": self._make_code_challenge(code_verifier),
+                "code_challenge_method": "S256",
+                "redirect_uri": "https://client.example.com/callback",
+                "client_id": "test-client-id",
+                "expires_at": datetime.now(timezone.utc) + timedelta(seconds=600),
+            },
+        )
+
+        with patch("backend.routers.auth.SECRET_KEY", secret):
+            with TestClient(app) as c:
+                resp = c.post(
+                    "/oauth/token",
+                    data={
+                        "grant_type": "authorization_code",
+                        "code": auth_code,
+                        "redirect_uri": "https://client.example.com/callback",
+                        "client_id": "test-client-id",
+                        "code_verifier": code_verifier,
+                    },
+                )
+
+        assert resp.status_code == 200
+        access_token = resp.json()["access_token"]
+        payload = pyjwt.decode(access_token, secret, algorithms=[JWT_ALGORITHM], audience="mcp")
+        assert payload["aud"] == "mcp"
+        assert payload["sub"] == "u-test-001"
