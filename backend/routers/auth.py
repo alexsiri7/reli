@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 import jwt
-
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
@@ -79,8 +78,7 @@ def _create_jwt(user_id: str, email: str) -> str:
 
 def _decode_jwt(token: str) -> dict[str, str]:
     """Decode and validate a JWT. Raises on invalid/expired tokens."""
-    result: dict[str, str] = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
-    return result
+    return jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
 
 
 def _apply_profile_fields(user: UserRecord, email: str, name: str, picture: str | None, now: datetime) -> None:
