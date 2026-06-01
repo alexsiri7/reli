@@ -114,7 +114,7 @@ class TestScreenshotSizeLimit:
         respx.post("https://uploads.github.com/repos/owner/repo/issues/uploads").mock(
             side_effect=Exception("upload skipped")
         )
-        respx.post(_GITHUB_ISSUES_URL).mock(
+        issue_route = respx.post(_GITHUB_ISSUES_URL).mock(
             return_value=httpx.Response(201, json={"html_url": "https://github.com/owner/repo/issues/3"})
         )
         resp = auth_client.post(
@@ -127,3 +127,4 @@ class TestScreenshotSizeLimit:
         )
         # Screenshot upload fails gracefully; issue is still created
         assert resp.status_code == 200
+        assert issue_route.called, "GitHub issue should be created even when screenshot upload fails"
