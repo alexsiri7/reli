@@ -1580,10 +1580,7 @@ class TestConnectionSweepUserScoping:
             conn.execute("UPDATE things SET user_id = 'user_b' WHERE id = 'ub1'")
 
         candidates = find_connection_candidates(user_id="user_a")
-        thing_ids_in_candidates = set()
-        for c in candidates:
-            thing_ids_in_candidates.add(c.from_thing_id)
-            thing_ids_in_candidates.add(c.to_thing_id)
+        thing_ids_in_candidates = {id_ for c in candidates for id_ in (c.from_thing_id, c.to_thing_id)}
 
         # user_b's Things must never appear
         assert "ub1" not in thing_ids_in_candidates
@@ -1598,16 +1595,10 @@ class TestConnectionSweepUserScoping:
             _insert_thing(conn, "xb1", "X User B", updated_at="2026-01-01")
             conn.execute("UPDATE things SET user_id = 'user_b' WHERE id = 'xb1'")
 
-        candidates = find_connection_candidates(user_id="")
-        thing_ids_in_candidates = set()
-        for c in candidates:
-            thing_ids_in_candidates.add(c.from_thing_id)
-            thing_ids_in_candidates.add(c.to_thing_id)
-
-        # Both users' Things should be eligible when no user scoping
-        # (We can't guarantee candidates are generated without embeddings,
-        # but at minimum the function should not raise.)
-        # This test primarily validates the no-filter path still works.
+        # Both users' Things should be eligible when no user scoping.
+        # We can't guarantee candidates are generated without embeddings —
+        # this test primarily validates the no-filter path does not raise.
+        find_connection_candidates(user_id="")
 
     def test_connection_sweep_requires_auth(self, patched_db):
         """POST /api/sweep/connections must reject unauthenticated requests."""
