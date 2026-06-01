@@ -63,7 +63,7 @@ class TestMcpOAuthCors:
             },
         )
         assert resp.status_code == 204
-        assert resp.headers.get("access-control-allow-origin") == "https://claude.ai"
+        assert resp.headers.get("access-control-allow-origin") == "*"
 
     def test_oauth_register_cors_preflight(self, mcp_client):
         resp = mcp_client.options(
@@ -75,7 +75,7 @@ class TestMcpOAuthCors:
             },
         )
         assert resp.status_code == 204
-        assert resp.headers.get("access-control-allow-origin") == "https://example.com"
+        assert resp.headers.get("access-control-allow-origin") == "*"
 
     def test_well_known_cors_preflight(self, mcp_client):
         resp = mcp_client.options(
@@ -86,7 +86,7 @@ class TestMcpOAuthCors:
             },
         )
         assert resp.status_code == 204
-        assert resp.headers.get("access-control-allow-origin") == "https://claude.ai"
+        assert resp.headers.get("access-control-allow-origin") == "*"
 
     def test_oauth_token_post_has_cors_header(self, mcp_client):
         resp = mcp_client.post(
@@ -96,7 +96,65 @@ class TestMcpOAuthCors:
         )
         # Should fail with 400 (bad code) but still have CORS headers
         assert resp.status_code == 400
+        assert resp.headers.get("access-control-allow-origin") == "*"
+
+    def test_allowlisted_origin_is_reflected(self, mcp_client, monkeypatch):
+        """When MCP_CORS_ORIGINS is set, only listed origins are reflected."""
+        import backend.main as main_module
+
+        monkeypatch.setattr(main_module, "_mcp_allowed_origins", {"https://claude.ai"})
+        resp = mcp_client.options(
+            "/oauth/token",
+            headers={
+                "Origin": "https://claude.ai",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
         assert resp.headers.get("access-control-allow-origin") == "https://claude.ai"
+
+    def test_non_allowlisted_origin_gets_wildcard(self, mcp_client, monkeypatch):
+        """Origins not in the allowlist get * even when an allowlist is configured."""
+        import backend.main as main_module
+
+        monkeypatch.setattr(main_module, "_mcp_allowed_origins", {"https://claude.ai"})
+        resp = mcp_client.options(
+            "/oauth/token",
+            headers={
+                "Origin": "https://evil.example.com",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert resp.headers.get("access-control-allow-origin") == "*"
+
+    def test_no_origin_header_always_gets_wildcard(self, mcp_client, monkeypatch):
+        """Requests without an Origin header always get * regardless of allowlist state."""
+        import backend.main as main_module
+
+        monkeypatch.setattr(main_module, "_mcp_allowed_origins", {"https://claude.ai"})
+        resp = mcp_client.options(
+            "/oauth/token",
+            headers={"Access-Control-Request-Method": "POST"},  # no Origin header
+        )
+        acao = resp.headers.get("access-control-allow-origin", "")
+        assert acao == "*"
+
+    def test_mcp_cors_origins_parsed_from_env(self, monkeypatch):
+        """MCP_CORS_ORIGINS string is split, stripped, and deduplicated correctly."""
+        import backend.config as cfg_module
+
+        monkeypatch.setenv("MCP_CORS_ORIGINS", " https://claude.ai , https://example.com ")
+        new_settings = cfg_module.Settings()
+        result = {o.strip() for o in new_settings.MCP_CORS_ORIGINS.split(",") if o.strip()}
+        assert result == {"https://claude.ai", "https://example.com"}
+
+    def test_mcp_cors_origins_whitespace_only_yields_empty_set(self, monkeypatch):
+        """A whitespace-only MCP_CORS_ORIGINS must produce an empty set (wildcard mode)."""
+        import backend.config as cfg_module
+
+        monkeypatch.setenv("MCP_CORS_ORIGINS", "   ")
+        new_settings = cfg_module.Settings()
+        result = {o.strip() for o in new_settings.MCP_CORS_ORIGINS.split(",") if o.strip()}
+        assert result == set()
 
     def test_api_route_does_not_get_permissive_cors(self, mcp_client):
         """Non-OAuth routes should NOT allow arbitrary origins."""

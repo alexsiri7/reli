@@ -64,8 +64,7 @@ def _record_to_thing(record: ThingRecord) -> Thing:
     open_questions = record.open_questions
     if isinstance(open_questions, str):
         try:
-            oq = json.loads(open_questions)
-            open_questions = oq if isinstance(oq, list) else None
+            open_questions = json.loads(open_questions)
         except (json.JSONDecodeError, ValueError):
             open_questions = None
 

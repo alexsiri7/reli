@@ -22,9 +22,7 @@ _PII_KEYS = {"email", "google_id"}
 def upgrade() -> None:
     conn = op.get_bind()
     rows = conn.execute(
-        sa.text(
-            "SELECT id, data FROM things WHERE type_hint = 'person' AND user_id IS NOT NULL AND data IS NOT NULL"
-        )
+        sa.text("SELECT id, data FROM things WHERE type_hint = 'person' AND user_id IS NOT NULL AND data IS NOT NULL")
     ).fetchall()
 
     for row in rows:
@@ -37,7 +35,8 @@ def upgrade() -> None:
             print(f"[k5l6m7n8o9p0] WARNING: skipping row id={row[0]} — data is not valid JSON, PII not scrubbed")
             continue
         if not isinstance(data, dict):
-            print(f"[k5l6m7n8o9p0] WARNING: skipping row id={row[0]} — data is not a dict (type={type(data).__name__}), PII not scrubbed")
+            t = type(data).__name__
+            print(f"[k5l6m7n8o9p0] WARNING: skipping row id={row[0]} — data is not a dict (type={t}), PII not scrubbed")
             continue
         if not any(k in data for k in _PII_KEYS):
             continue

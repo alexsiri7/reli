@@ -1,8 +1,8 @@
 """Tests for Things CRUD endpoints."""
 
-import pytest
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
@@ -399,11 +399,14 @@ class TestSearchDialect:
 class TestSearchWildcardEscape:
     """Wildcard characters in q must not broaden search results."""
 
-    @pytest.mark.parametrize("query, title_match, title_no_match", [
-        ("%25", "50% off", "exact match"),             # literal %
-        ("_", "snake_case", "a"),                      # literal _
-        ("%5C", "C:\\path\\file", "no special chars"),  # literal backslash
-    ])
+    @pytest.mark.parametrize(
+        "query, title_match, title_no_match",
+        [
+            ("%25", "50% off", "exact match"),  # literal %
+            ("_", "snake_case", "a"),  # literal _
+            ("%5C", "C:\\path\\file", "no special chars"),  # literal backslash
+        ],
+    )
     def test_wildcard_is_literal(self, client, query, title_match, title_no_match):
         create_thing(client, title=title_match)
         create_thing(client, title=title_no_match)

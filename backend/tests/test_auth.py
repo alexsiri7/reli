@@ -235,9 +235,7 @@ class TestApiTokenWithoutSecretKey:
 
         with (
             patch("backend.auth._API_TOKEN_USER_ID", "u-explicit"),
-            patch.object(
-                engine_mod, "engine", side_effect=AssertionError("DB should not be queried")
-            ),
+            patch.object(engine_mod, "engine", side_effect=AssertionError("DB should not be queried")),
         ):
             from backend.auth import _resolve_api_token_user
 

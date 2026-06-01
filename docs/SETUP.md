@@ -201,6 +201,8 @@ Both data stores contain production data. Handle with care.
 | `DATABASE_URL` | No (required when STORAGE_BACKEND=supabase) | `sqlite:///data/reli.db` | SQLAlchemy connection URL. For Postgres: `postgresql://postgres:<pass>@db.<ref>.supabase.co:5432/postgres` |
 | `SUPABASE_URL` | No | — | Supabase project URL |
 | `SUPABASE_KEY` | No | — | Supabase anon/service key |
+| `CORS_ORIGINS` | No | — | Comma-separated extra origins allowed on standard API endpoints (e.g. `https://reli.example.com`) |
+| `MCP_CORS_ORIGINS` | No | — | Comma-separated origins allowed on MCP/OAuth endpoints (e.g. `https://claude.ai`); if empty, the wildcard `*` is used for all origins (no credentials) |
 
 ---
 

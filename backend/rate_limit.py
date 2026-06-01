@@ -27,7 +27,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 import jwt as pyjwt
-
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse
@@ -83,6 +82,11 @@ class _Bucket:
         return (1.0 - self.tokens) / self.refill_rate
 
 
+def _make_bucket_store(rpm: int) -> dict[str, _Bucket]:
+    """Create a defaultdict of fresh token buckets for the given RPM limit."""
+    return defaultdict(lambda: _Bucket(tokens=float(rpm), max_tokens=float(rpm), refill_rate=rpm / 60.0))
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Per-user (JWT) / per-IP token-bucket rate limiter."""
 
@@ -112,15 +116,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             except ValueError:
                 log.warning("Invalid TRUSTED_PROXY_CIDR entry ignored: %r", cidr)
         # Separate buckets for LLM, auth, and general API, keyed by user id or IP
-        self._llm_buckets: dict[str, _Bucket] = defaultdict(
-            lambda: _Bucket(tokens=float(llm_rpm), max_tokens=float(llm_rpm), refill_rate=llm_rpm / 60.0)
-        )
-        self._auth_buckets: dict[str, _Bucket] = defaultdict(
-            lambda: _Bucket(tokens=float(auth_rpm), max_tokens=float(auth_rpm), refill_rate=auth_rpm / 60.0)
-        )
-        self._api_buckets: dict[str, _Bucket] = defaultdict(
-            lambda: _Bucket(tokens=float(api_rpm), max_tokens=float(api_rpm), refill_rate=api_rpm / 60.0)
-        )
+        self._llm_buckets: dict[str, _Bucket] = _make_bucket_store(llm_rpm)
+        self._auth_buckets: dict[str, _Bucket] = _make_bucket_store(auth_rpm)
+        self._api_buckets: dict[str, _Bucket] = _make_bucket_store(api_rpm)
         self._last_cleanup: float = time.monotonic()
 
     def _get_client_ip(self, request: Request) -> str:
