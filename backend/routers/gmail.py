@@ -34,8 +34,15 @@ def _gmail_redirect_uri() -> str:
     if settings.RELI_BASE_URL:
         return settings.RELI_BASE_URL.rstrip("/") + "/api/gmail/callback"
     # Fall back to GOOGLE_REDIRECT_URI base (already config-driven) for local dev
-    base = settings.GOOGLE_REDIRECT_URI.rsplit("/api/", 1)[0]
-    return base + "/api/gmail/callback"
+    uri = settings.GOOGLE_REDIRECT_URI
+    parts = uri.split("/")
+    base = "/".join(parts[:3])  # scheme://host
+    redirect_uri = base + "/api/gmail/callback"
+    logger.warning(
+        "RELI_BASE_URL not set; derived Gmail redirect URI from GOOGLE_REDIRECT_URI: %s",
+        redirect_uri,
+    )
+    return redirect_uri
 
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
