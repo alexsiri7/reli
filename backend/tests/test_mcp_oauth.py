@@ -101,6 +101,7 @@ class TestMcpOAuthCors:
     def test_allowlisted_origin_is_reflected(self, mcp_client, monkeypatch):
         """When MCP_CORS_ORIGINS is set, only listed origins are reflected."""
         import backend.main as main_module
+
         monkeypatch.setattr(main_module, "_mcp_allowed_origins", {"https://claude.ai"})
         resp = mcp_client.options(
             "/oauth/token",
@@ -114,6 +115,7 @@ class TestMcpOAuthCors:
     def test_non_allowlisted_origin_gets_wildcard(self, mcp_client, monkeypatch):
         """Origins not in the allowlist get * even when an allowlist is configured."""
         import backend.main as main_module
+
         monkeypatch.setattr(main_module, "_mcp_allowed_origins", {"https://claude.ai"})
         resp = mcp_client.options(
             "/oauth/token",

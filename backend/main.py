@@ -313,9 +313,7 @@ class _MCPCorsMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         origin = request.headers.get("origin", "")
-        allow_origin = (
-            origin if _mcp_allowed_origins and origin in _mcp_allowed_origins else "*"
-        )
+        allow_origin = origin if _mcp_allowed_origins and origin in _mcp_allowed_origins else "*"
 
         if request.method == "OPTIONS":
             resp = StarletteResponse(status_code=204)
