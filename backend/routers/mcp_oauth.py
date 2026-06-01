@@ -14,6 +14,7 @@ import base64
 import hashlib
 import logging
 import secrets
+import urllib.parse
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -99,10 +100,32 @@ def authorization_server_metadata() -> JSONResponse:
 async def oauth_register(request: Request) -> JSONResponse:
     """Register a new OAuth client dynamically (RFC 7591).
 
-    Single-tenant: accepts any registration request and stores the client
-    in memory. No approval flow needed.
+    Single-tenant: validates redirect_uris and stores the client in memory.
+    No approval flow is required.
+
+    Raises:
+        HTTPException 400: if any redirect_uri uses a scheme other than
+            https (or http for localhost/127.0.0.1 in development).
+        HTTPException 503: if the client store is at capacity.
     """
     body = await request.json()
+
+    # Validate redirect_uris: only https:// is allowed
+    # (http:// permitted only for localhost / 127.0.0.1 in development)
+    for uri in body.get("redirect_uris") or []:
+        parsed = urllib.parse.urlparse(uri)
+        allowed = parsed.scheme == "https" or (
+            parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1")
+        )
+        if not allowed:
+            logger.warning(
+                "MCP OAuth: rejected redirect_uri with unsafe scheme during registration: %r",
+                uri,
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=f"redirect_uri must use https (or http://localhost / http://127.0.0.1 for development): {uri}",
+            )
 
     client_id = str(uuid.uuid4())
     client_secret = secrets.token_urlsafe(32)
@@ -110,7 +133,7 @@ async def oauth_register(request: Request) -> JSONResponse:
     client = {
         "client_id": client_id,
         "client_secret": client_secret,
-        "redirect_uris": body.get("redirect_uris", []),
+        "redirect_uris": body.get("redirect_uris") or [],
         "client_name": body.get("client_name", ""),
         "grant_types": body.get("grant_types", ["authorization_code"]),
         "response_types": body.get("response_types", ["code"]),
