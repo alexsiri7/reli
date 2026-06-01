@@ -114,21 +114,17 @@ async def oauth_register(request: Request) -> JSONResponse:
     # (http:// permitted only for localhost / 127.0.0.1 in development)
     for uri in body.get("redirect_uris") or []:
         parsed = urllib.parse.urlparse(uri)
-        if parsed.scheme == "https":
-            pass  # always allowed
-        elif parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1"):
-            pass  # allow http for local development
-        else:
+        allowed = parsed.scheme == "https" or (
+            parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1")
+        )
+        if not allowed:
             logger.warning(
                 "MCP OAuth: rejected redirect_uri with unsafe scheme during registration: %r",
                 uri,
             )
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"redirect_uri must use https "
-                    f"(or http://localhost / http://127.0.0.1 for development): {uri}"
-                ),
+                detail=f"redirect_uri must use https (or http://localhost / http://127.0.0.1 for development): {uri}",
             )
 
     client_id = str(uuid.uuid4())
