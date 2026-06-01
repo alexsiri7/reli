@@ -29,13 +29,9 @@ def upgrade() -> None:
     All existing rows receive user_id=NULL (visible to all users via user_filter_clause).
     """
     with op.batch_alter_table("thing_types", recreate="always") as batch_op:
-        batch_op.add_column(
-            sa.Column("user_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True)
-        )
+        batch_op.add_column(sa.Column("user_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True))
         batch_op.drop_constraint("uq_thing_types_name", type_="unique")
-        batch_op.create_unique_constraint(
-            "uq_thing_types_user_id_name", ["user_id", "name"]
-        )
+        batch_op.create_unique_constraint("uq_thing_types_user_id_name", ["user_id", "name"])
 
 
 def downgrade() -> None:
