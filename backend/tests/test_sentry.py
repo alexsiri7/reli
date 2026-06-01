@@ -133,7 +133,7 @@ def test_middleware_does_not_pass_email_to_set_sentry_user():
 
     _test_secret = "test-secret-key-for-middleware-test"
     token = jwt.encode(
-        {"sub": "user-42", "email": "should@not.appear"},
+        {"sub": "user-42", "email": "should@not.appear", "aud": "web"},
         _test_secret,
         algorithm=JWT_ALGORITHM,
     )

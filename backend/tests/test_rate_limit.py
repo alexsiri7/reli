@@ -506,3 +506,40 @@ class TestBucketPruning:
         fake_time[0] += 60.0
         mw._prune_stale_buckets()
         assert len(mw._api_buckets) == 1
+
+
+# ---------------------------------------------------------------------------
+# Audience enforcement tests
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimitKeyAudienceFallback:
+    """An MCP-audience cookie in the session slot must fall through to IP-based key."""
+
+    def test_rate_limit_key_falls_back_to_ip_for_mcp_cookie(self, monkeypatch):
+        """MCP-audience JWT in the session cookie must not be accepted as a user key."""
+        import jwt
+        from unittest.mock import MagicMock
+
+        import backend.rate_limit as rl_mod
+        from backend.auth import JWT_ALGORITHM
+
+        secret = "test-secret-key-rl"
+        token = jwt.encode(
+            {"sub": "u-mcp-user", "aud": "mcp", "exp": 9999999999},
+            secret,
+            algorithm=JWT_ALGORITHM,
+        )
+        monkeypatch.setattr(rl_mod, "SECRET_KEY", secret, raising=False)
+
+        middleware = RateLimitMiddleware(app=FastAPI(), api_rpm=60, llm_rpm=30, auth_rpm=10)
+        request = MagicMock()
+        request.cookies.get.return_value = token
+        request.client.host = "1.2.3.4"
+        request.headers.get.return_value = ""
+
+        import backend.auth as auth_mod
+        monkeypatch.setattr(auth_mod, "SECRET_KEY", secret)
+
+        key = middleware._get_rate_limit_key(request)
+        assert key.startswith("ip:"), f"Expected IP fallback for MCP-aud token, got: {key}"

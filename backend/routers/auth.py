@@ -296,6 +296,7 @@ def get_current_user(request: Request) -> dict:
     try:
         payload = _decode_jwt(token)
     except Exception:
+        logger.debug("JWT decode failed for /auth/me", exc_info=True)
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
     user_id = payload.get("sub")
