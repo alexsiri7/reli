@@ -9,6 +9,10 @@ relationships, then drops the parent_id column and its index from the
 things table.  See GitHub issue #338.
 """
 
+# reli:allow-destructive-ddl — parent_id data is migrated to thing_relationships
+# in Step 1 of upgrade() before the column and index are dropped in Step 2.
+# Downgrade restores both. Approved per issue #1110.
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa

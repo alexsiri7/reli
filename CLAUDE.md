@@ -31,7 +31,7 @@ Reli stores user data in two places — both contain production data that must b
 ### SQLite (`data/reli.db`)
 
 1. **NEVER delete or recreate the database file.** The Docker volume mounts `./data:/app/data` — the DB persists across container rebuilds.
-2. **Schema changes must use additive SQL migrations** (`ALTER TABLE`, `CREATE TABLE IF NOT EXISTS`). See `backend/database.py` for the existing migration pattern. Never use destructive DDL (`DROP TABLE`, `DROP COLUMN`) without a data migration plan.
+2. **Schema changes must use additive SQL migrations** (`ALTER TABLE`, `CREATE TABLE IF NOT EXISTS`). See `backend/database.py` for the existing migration pattern. Never use destructive DDL (`DROP TABLE`, `DROP COLUMN`) without a data migration plan. When a destructive operation is intentional and data is preserved, add `# reli:allow-destructive-ddl` as a top-level comment in the migration file to opt in per-migration (preferred over the global `ALLOW_DESTRUCTIVE_DDL=true` env override).
 3. **Test migrations on a copy first** — copy `reli.db` and run your migration against the copy before committing.
 4. **Never hard-code a different DB path** — the path is set by `DATA_DIR` env var (defaults to `backend/`). Production uses `/app/data` inside the container.
 

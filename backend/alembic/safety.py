@@ -1,16 +1,22 @@
 """Safety guard for destructive DDL operations in Alembic migrations.
 
 Scans pending migration scripts for destructive operations (DROP TABLE,
-DROP COLUMN, etc.) and blocks execution unless explicitly allowed via
-the ALLOW_DESTRUCTIVE_DDL environment variable.
+DROP COLUMN, etc.) and blocks execution unless explicitly allowed via:
+
+- The ``ALLOW_DESTRUCTIVE_DDL`` environment variable (global override), or
+- A ``# reli:allow-destructive-ddl`` comment in the migration file itself
+  (per-migration opt-in, preferred when data is preserved within the migration).
 """
 
 import ast
+import logging
 import os
 import re
 from pathlib import Path
 
 from alembic.script import ScriptDirectory
+
+logger = logging.getLogger(__name__)
 
 # Alembic op.* calls considered destructive
 DESTRUCTIVE_OPS = frozenset(
@@ -31,6 +37,11 @@ _DESTRUCTIVE_SQL_PATTERNS = [
     re.compile(r"\bTRUNCATE\b", re.IGNORECASE),
     re.compile(r"\bDELETE\s+FROM\b", re.IGNORECASE),
 ]
+
+# Per-migration opt-in marker.  Add this comment to a migration file to
+# acknowledge that the destructive operations are intentional and data has
+# been preserved (e.g. migrated to another table before the column drop).
+_ALLOW_MARKER = "# reli:allow-destructive-ddl"
 
 
 class DestructiveDDLFound(RuntimeError):
@@ -111,6 +122,14 @@ def check_pending_migrations(
             continue
 
         source = source_path.read_text()
+        # Per-migration opt-in: skip safety check if the migration explicitly
+        # acknowledges the destructive operation.
+        if _ALLOW_MARKER in source:
+            logger.info(
+                "Skipping destructive DDL check for %s — per-migration opt-in marker present",
+                rev_id,
+            )
+            continue
         findings = _find_destructive_ops_in_source(source)
 
         if findings:
@@ -136,7 +155,11 @@ def check_pending_migrations(
             "To apply these migrations, set the environment variable:",
             "  ALLOW_DESTRUCTIVE_DDL=true alembic upgrade head",
             "",
-            "Or from Python:",
+            "Or add the following comment to the migration file to opt-in per-migration",
+            "(only after verifying data is preserved):",
+            "  # reli:allow-destructive-ddl",
+            "",
+            "Or from Python (global override):",
             '  os.environ["ALLOW_DESTRUCTIVE_DDL"] = "true"',
         ]
     )

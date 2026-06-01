@@ -33,7 +33,8 @@ class TestGmailRedirectUri:
             assert _gmail_redirect_uri() == "http://localhost:8000/api/gmail/callback"
 
     def test_fallback_does_not_double_path(self):
-        """Positional split must not produce a doubled path when GOOGLE_REDIRECT_URI already ends with /api/gmail/callback."""
+        """Positional split must not produce a doubled path when GOOGLE_REDIRECT_URI
+        already ends with /api/gmail/callback."""
         with patch("backend.routers.gmail.settings") as mock_settings:
             mock_settings.RELI_BASE_URL = ""
             mock_settings.GOOGLE_REDIRECT_URI = "https://prod.example.com/api/gmail/callback"

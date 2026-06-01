@@ -178,7 +178,7 @@ def init_db() -> None:
 
 3. **Test on a copy first:** `cp data/reli.db /tmp/reli-test.db` and run the migration against the copy.
 
-**Never use** `DROP TABLE` or `DROP COLUMN` without a data migration plan.
+**Never use** `DROP TABLE` or `DROP COLUMN` without a data migration plan. When a destructive operation is intentional and data is preserved (e.g. migrated to another column/table before the drop), add `# reli:allow-destructive-ddl` as a top-level comment in the Alembic migration file. This opts that single migration out of the safety check without disabling the check globally.
 
 ---
 
