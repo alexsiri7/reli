@@ -101,14 +101,14 @@ async def run_gap_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
 
 
 @router.post("/connections", summary="Run connection sweep")
-async def run_connection_sweep() -> dict[str, Any]:
+async def run_connection_sweep(user_id: str = Depends(require_user)) -> dict[str, Any]:
     """Run the connection sweep: find semantically similar but unconnected Things.
 
     Returns the candidate pairs found and the suggestions created by LLM validation.
     """
     from ..connection_sweep import run_connection_sweep as _run
 
-    result = await _run()
+    result = await _run(user_id=user_id)
     return {
         "candidates_found": result.candidates_found,
         "suggestions_created": result.suggestions_created,

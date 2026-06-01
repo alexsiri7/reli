@@ -1557,3 +1557,56 @@ class TestFindActiveConcerns:
             results = find_active_concerns(session, date.today())
         assert len(results) == 1
         assert results[0].thing_id == "c8"
+
+
+# ---------------------------------------------------------------------------
+# Connection sweep user scoping
+# ---------------------------------------------------------------------------
+
+
+class TestConnectionSweepUserScoping:
+    """Ensure POST /api/sweep/connections only processes the authenticated user's Things."""
+
+    def test_connection_sweep_scopes_to_user(self, patched_db, db):
+        """run_connection_sweep(user_id=X) should only consider Things belonging to X."""
+        from backend.connection_sweep import find_connection_candidates
+
+        with db() as conn:
+            _insert_thing(conn, "ua1", "User A Thing 1", updated_at="2026-01-01")
+            conn.execute("UPDATE things SET user_id = 'user_a' WHERE id = 'ua1'")
+            _insert_thing(conn, "ua2", "User A Thing 2", updated_at="2026-01-01")
+            conn.execute("UPDATE things SET user_id = 'user_a' WHERE id = 'ua2'")
+            _insert_thing(conn, "ub1", "User B Thing 1", updated_at="2026-01-01")
+            conn.execute("UPDATE things SET user_id = 'user_b' WHERE id = 'ub1'")
+
+        candidates = find_connection_candidates(user_id="user_a")
+        thing_ids_in_candidates = {id_ for c in candidates for id_ in (c.from_thing_id, c.to_thing_id)}
+
+        # user_b's Things must never appear
+        assert "ub1" not in thing_ids_in_candidates
+
+    def test_connection_sweep_empty_user_id_does_not_raise(self, patched_db, db):
+        """When user_id is empty (auth disabled), find_connection_candidates should not raise."""
+        from backend.connection_sweep import find_connection_candidates
+
+        with db() as conn:
+            _insert_thing(conn, "xa1", "X User A", updated_at="2026-01-01")
+            conn.execute("UPDATE things SET user_id = 'user_a' WHERE id = 'xa1'")
+            _insert_thing(conn, "xb1", "X User B", updated_at="2026-01-01")
+            conn.execute("UPDATE things SET user_id = 'user_b' WHERE id = 'xb1'")
+
+        # Both users' Things should be eligible when no user scoping.
+        # We can't guarantee candidates are generated without embeddings —
+        # this test primarily validates the no-filter path does not raise.
+        find_connection_candidates(user_id="")
+
+    def test_connection_sweep_requires_auth(self, patched_db):
+        """POST /api/sweep/connections must reject unauthenticated requests."""
+        with patch("backend.auth.SECRET_KEY", "test-secret-key"):
+            from fastapi.testclient import TestClient
+
+            from backend.main import app
+
+            with TestClient(app) as client:
+                response = client.post("/api/sweep/connections")
+        assert response.status_code in (401, 403)
