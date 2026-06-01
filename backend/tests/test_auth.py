@@ -267,3 +267,55 @@ class TestOAuthAllowlistRejection:
 
         assert resp.status_code in (302, 307)
         assert "blocked@example.com" not in caplog.text
+
+
+class TestOAuthCallbackDoesNotLogCode:
+    """Regression test for CWE-532: authorization code must not appear in logs."""
+
+    def test_google_callback_does_not_log_authorization_code(self, patched_db, caplog):
+        """The INFO log at callback entry must not include any fragment of the auth code."""
+        fake_state = "test-state-value"
+        fake_code = "supersecretauthcode123456"
+        fake_flow_entry = {
+            "code_verifier": "fake-verifier",
+            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=600),
+        }
+
+        mock_flow = MagicMock()
+        mock_flow.fetch_token.return_value = None
+        mock_flow.credentials.id_token = "fake-token"
+        mock_flow.code_verifier = None
+
+        fake_id_info = {
+            "sub": "google-001",
+            "email": "allowed@example.com",
+            "name": "Test User",
+            "picture": None,
+        }
+
+        with (
+            patch("backend.routers.auth.SECRET_KEY", "test-secret-key"),
+            patch("backend.routers.auth.GOOGLE_CLIENT_ID", "fake-client-id"),
+            patch("backend.routers.auth._pending_flows", {fake_state: fake_flow_entry}),
+            patch("backend.routers.auth.Flow.from_client_config", return_value=mock_flow),
+            patch(
+                "backend.routers.auth.google_id_token.verify_oauth2_token",
+                return_value=fake_id_info,
+            ),
+            patch(
+                "backend.config.Settings.allowed_emails_set",
+                new_callable=lambda: property(lambda self: {"allowed@example.com"}),
+            ),
+            caplog.at_level(logging.INFO, logger="backend.routers.auth"),
+        ):
+            from backend.main import app
+
+            with TestClient(app, follow_redirects=False) as client:
+                client.get(f"/api/auth/google/callback?code={fake_code}&state={fake_state}")
+
+        assert fake_code not in caplog.text, (
+            f"Authorization code appeared in logs — CWE-532 regression: {caplog.text!r}"
+        )
+        assert fake_code[:20] not in caplog.text, (
+            f"Authorization code prefix appeared in logs — CWE-532 regression: {caplog.text!r}"
+        )
