@@ -211,9 +211,8 @@ def _db_cleanup_and_store(store: _Store, key: str, value: dict) -> None:
 
 def _db_cleanup_and_get(store: _Store, key: str) -> dict | None:
     with Session(_engine_module.engine) as session:
-        purged = _purge_expired(session, store)
-        if purged:
-            session.commit()
+        _purge_expired(session, store)
+        session.commit()
         record = session.get(store.model, key)
         if record is None:
             return None

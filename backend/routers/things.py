@@ -214,14 +214,15 @@ def search_things(
     # Postgres also requires ::text cast for JSONB columns.
     _is_pg = settings.STORAGE_BACKEND == "supabase"  # supabase ↔ postgres dialect
     _like = "ILIKE" if _is_pg else "LIKE"
-    _data_cast = "{}::text" if _is_pg else "CAST({} AS TEXT)"
+    _t_data = "t.data::text" if _is_pg else "CAST(t.data AS TEXT)"
+    _m_data = "m.data::text" if _is_pg else "CAST(m.data AS TEXT)"
 
     with Session(_engine_mod.engine) as sess:
         # Phase 1: Direct matches on title, type_hint, and data
         direct_sql = text(
             "SELECT t.* FROM things t"
             f" WHERE (t.title {_like} :pattern ESCAPE '\\' OR t.type_hint {_like} :pattern ESCAPE '\\'"
-            f"        OR {_data_cast.format('t.data')} {_like} :pattern ESCAPE '\\')" + filters + " ORDER BY t.updated_at DESC"
+            f"        OR {_t_data} {_like} :pattern ESCAPE '\\')" + filters + " ORDER BY t.updated_at DESC"
             " LIMIT :qlimit"
         )
         direct_rows = sess.execute(direct_sql, params).fetchall()
@@ -245,7 +246,7 @@ def search_things(
                 "     WHERE r.from_thing_id = t.id"
                 f"       AND (r.relationship_type {_like} :pattern ESCAPE '\\'"
                 f"            OR m.title {_like} :pattern ESCAPE '\\'"
-                f"            OR {_data_cast.format('m.data')} {_like} :pattern ESCAPE '\\')"
+                f"            OR {_m_data} {_like} :pattern ESCAPE '\\')"
                 "   )"
                 "   OR EXISTS ("
                 "     SELECT 1 FROM thing_relationships r"
@@ -253,7 +254,7 @@ def search_things(
                 "     WHERE r.to_thing_id = t.id"
                 f"       AND (r.relationship_type {_like} :pattern ESCAPE '\\'"
                 f"            OR m.title {_like} :pattern ESCAPE '\\'"
-                f"            OR {_data_cast.format('m.data')} {_like} :pattern ESCAPE '\\')"
+                f"            OR {_m_data} {_like} :pattern ESCAPE '\\')"
                 "   )"
                 " )" + filters + " ORDER BY t.updated_at DESC"
                 " LIMIT :qlimit"
