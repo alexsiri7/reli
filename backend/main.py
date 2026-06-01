@@ -313,7 +313,16 @@ class _MCPCorsMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         origin = request.headers.get("origin", "")
-        allow_origin = origin if _mcp_allowed_origins and origin in _mcp_allowed_origins else "*"
+        if _mcp_allowed_origins and origin in _mcp_allowed_origins:
+            allow_origin = origin
+        else:
+            # Unlisted origins get safe wildcard, not a rejection.
+            # MCP_CORS_ORIGINS enables credential-compatible reflection for listed
+            # origins; all other origins (including unconfigured/wildcard mode) still
+            # get '*' so any MCP client can connect without credentials.
+            if _mcp_allowed_origins and origin:
+                logger.debug("MCP CORS: origin %r not in allowlist, using wildcard", origin)
+            allow_origin = "*"
 
         if request.method == "OPTIONS":
             resp = StarletteResponse(status_code=204)
@@ -321,10 +330,12 @@ class _MCPCorsMiddleware(BaseHTTPMiddleware):
             resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
             resp.headers["Access-Control-Allow-Headers"] = "content-type, authorization"
             resp.headers["Access-Control-Max-Age"] = "600"
+            resp.headers["Vary"] = "Origin"
             return resp
 
         response = await call_next(request)
         response.headers["Access-Control-Allow-Origin"] = allow_origin
+        response.headers["Vary"] = "Origin"
         return response
 
 

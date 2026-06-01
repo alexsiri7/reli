@@ -126,6 +126,36 @@ class TestMcpOAuthCors:
         )
         assert resp.headers.get("access-control-allow-origin") == "*"
 
+    def test_no_origin_header_always_gets_wildcard(self, mcp_client, monkeypatch):
+        """Requests without an Origin header always get * regardless of allowlist state."""
+        import backend.main as main_module
+
+        monkeypatch.setattr(main_module, "_mcp_allowed_origins", {"https://claude.ai"})
+        resp = mcp_client.options(
+            "/oauth/token",
+            headers={"Access-Control-Request-Method": "POST"},  # no Origin header
+        )
+        acao = resp.headers.get("access-control-allow-origin", "")
+        assert acao == "*"
+
+    def test_mcp_cors_origins_parsed_from_env(self, monkeypatch):
+        """MCP_CORS_ORIGINS string is split, stripped, and deduplicated correctly."""
+        import backend.config as cfg_module
+
+        monkeypatch.setenv("MCP_CORS_ORIGINS", " https://claude.ai , https://example.com ")
+        new_settings = cfg_module.Settings()
+        result = {o.strip() for o in new_settings.MCP_CORS_ORIGINS.split(",") if o.strip()}
+        assert result == {"https://claude.ai", "https://example.com"}
+
+    def test_mcp_cors_origins_whitespace_only_yields_empty_set(self, monkeypatch):
+        """A whitespace-only MCP_CORS_ORIGINS must produce an empty set (wildcard mode)."""
+        import backend.config as cfg_module
+
+        monkeypatch.setenv("MCP_CORS_ORIGINS", "   ")
+        new_settings = cfg_module.Settings()
+        result = {o.strip() for o in new_settings.MCP_CORS_ORIGINS.split(",") if o.strip()}
+        assert result == set()
+
     def test_api_route_does_not_get_permissive_cors(self, mcp_client):
         """Non-OAuth routes should NOT allow arbitrary origins."""
         resp = mcp_client.options(
