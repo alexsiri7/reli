@@ -74,7 +74,7 @@ def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
     ]
     with Session(test_engine) as session:
         for name, icon in _DEFAULT_THING_TYPES:
-            session.add(ThingTypeRecord(id=name, name=name, icon=icon))
+            session.add(ThingTypeRecord(id=name, name=name, icon=icon, user_id=None))  # system type: visible to all
         session.commit()
 
     monkeypatch.setattr(engine_module, "engine", test_engine)

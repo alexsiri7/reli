@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, Column, Text, text
+from sqlalchemy import JSON, Column, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -244,12 +244,14 @@ class ThingTypeRecord(SQLModel, table=True):
     """A named thing type with icon and color."""
 
     __tablename__ = "thing_types"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_thing_types_user_id_name"),)
 
     id: str = Field(primary_key=True)
-    name: str = Field(unique=True)
+    name: str
     icon: str = Field(default="\U0001f4cc", sa_column_kwargs={"server_default": "'\U0001f4cc'"})
     color: str | None = None
     created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+    user_id: str | None = Field(default=None, foreign_key="users.id")
 
 
 # ---------------------------------------------------------------------------
