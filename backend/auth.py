@@ -13,12 +13,15 @@ Two auth methods are supported:
    if that setting is empty — single-tenant shortcut).
 """
 
+import logging
 import secrets
 
 import jwt
 from fastapi import HTTPException, Request, status
 
 from .config import settings
+
+_log = logging.getLogger(__name__)
 
 SECRET_KEY = settings.SECRET_KEY
 JWT_ALGORITHM = "HS256"
@@ -50,6 +53,10 @@ def _resolve_api_token_user() -> str:
             ).first()
             return record.id if record else ""
     except Exception:
+        _log.warning(
+            "Bearer token auth: DB lookup failed, returning empty user_id",
+            exc_info=True,
+        )
         return ""
 
 

@@ -243,6 +243,27 @@ class TestApiTokenWithoutSecretKey:
 
             assert _resolve_api_token_user() == "u-explicit"
 
+    def test_bearer_token_with_configured_user_id_wires_through_require_user(self, patched_db):
+        """End-to-end: valid Bearer token + _API_TOKEN_USER_ID → require_user returns that id."""
+        import asyncio
+
+        from fastapi import Request
+
+        with (
+            patch("backend.auth.SECRET_KEY", ""),
+            patch("backend.auth._API_TOKEN", "staging-token-abc"),
+            patch("backend.auth._API_TOKEN_USER_ID", "configured-user-99"),
+        ):
+            from backend.auth import require_user
+
+            scope = {
+                "type": "http",
+                "headers": [(b"authorization", b"Bearer staging-token-abc")],
+            }
+            request = Request(scope)
+            user_id = asyncio.run(require_user(request))
+            assert user_id == "configured-user-99"
+
 
 class TestOAuthAllowlistRejection:
     """Test that OAuth allowlist rejection does not log the user's email (SEC-021)."""
