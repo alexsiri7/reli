@@ -267,6 +267,38 @@ class TestCheckPendingMigrations:
         # abc123 is already applied — should not raise
         check_pending_migrations(mock_script_dir, current_heads={"abc123"})
 
+    def test_passes_merge_migration(self, tmp_path, monkeypatch):
+        """A merge migration (empty upgrade/downgrade) should pass the DDL safety check."""
+        monkeypatch.delenv("ALLOW_DESTRUCTIVE_DDL", raising=False)
+
+        versions_dir = tmp_path / "versions"
+        versions_dir.mkdir()
+        migration_file = versions_dir / "1a2b3c4d5e6f_merge_heads.py"
+        migration_file.write_text(
+            textwrap.dedent("""\
+            revision = '1a2b3c4d5e6f'
+            down_revision = ('h2i3j4k5l6m7', 'l6m7n8o9p0q1')
+
+            def upgrade() -> None:
+                pass
+
+            def downgrade() -> None:
+                pass
+        """)
+        )
+
+        mock_rev = MagicMock()
+        mock_rev.revision = "1a2b3c4d5e6f"
+        mock_rev.doc = "merge heads"
+        mock_rev.path = str(migration_file)
+
+        mock_script_dir = MagicMock()
+        mock_script_dir.walk_revisions.return_value = [mock_rev]
+        mock_script_dir.get_heads.return_value = ("1a2b3c4d5e6f",)
+
+        # Should not raise — empty upgrade body has no destructive ops
+        check_pending_migrations(mock_script_dir, current_heads=set())
+
     def test_allows_migration_with_per_migration_marker(self, tmp_path, monkeypatch):
         """Migration with # reli:allow-destructive-ddl marker bypasses the safety check."""
         monkeypatch.delenv("ALLOW_DESTRUCTIVE_DDL", raising=False)
