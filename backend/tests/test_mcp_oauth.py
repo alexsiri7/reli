@@ -63,7 +63,7 @@ class TestMcpOAuthCors:
             },
         )
         assert resp.status_code == 204
-        assert resp.headers.get("access-control-allow-origin") == "https://claude.ai"
+        assert resp.headers.get("access-control-allow-origin") == "*"
 
     def test_oauth_register_cors_preflight(self, mcp_client):
         resp = mcp_client.options(
@@ -75,7 +75,7 @@ class TestMcpOAuthCors:
             },
         )
         assert resp.status_code == 204
-        assert resp.headers.get("access-control-allow-origin") == "https://example.com"
+        assert resp.headers.get("access-control-allow-origin") == "*"
 
     def test_well_known_cors_preflight(self, mcp_client):
         resp = mcp_client.options(
@@ -86,7 +86,7 @@ class TestMcpOAuthCors:
             },
         )
         assert resp.status_code == 204
-        assert resp.headers.get("access-control-allow-origin") == "https://claude.ai"
+        assert resp.headers.get("access-control-allow-origin") == "*"
 
     def test_oauth_token_post_has_cors_header(self, mcp_client):
         resp = mcp_client.post(
@@ -96,7 +96,33 @@ class TestMcpOAuthCors:
         )
         # Should fail with 400 (bad code) but still have CORS headers
         assert resp.status_code == 400
+        assert resp.headers.get("access-control-allow-origin") == "*"
+
+    def test_allowlisted_origin_is_reflected(self, mcp_client, monkeypatch):
+        """When MCP_CORS_ORIGINS is set, only listed origins are reflected."""
+        import backend.main as main_module
+        monkeypatch.setattr(main_module, "_mcp_allowed_origins", {"https://claude.ai"})
+        resp = mcp_client.options(
+            "/oauth/token",
+            headers={
+                "Origin": "https://claude.ai",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
         assert resp.headers.get("access-control-allow-origin") == "https://claude.ai"
+
+    def test_non_allowlisted_origin_gets_wildcard(self, mcp_client, monkeypatch):
+        """Origins not in the allowlist get * even when an allowlist is configured."""
+        import backend.main as main_module
+        monkeypatch.setattr(main_module, "_mcp_allowed_origins", {"https://claude.ai"})
+        resp = mcp_client.options(
+            "/oauth/token",
+            headers={
+                "Origin": "https://evil.example.com",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert resp.headers.get("access-control-allow-origin") == "*"
 
     def test_api_route_does_not_get_permissive_cors(self, mcp_client):
         """Non-OAuth routes should NOT allow arbitrary origins."""

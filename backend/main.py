@@ -285,14 +285,24 @@ _extra_origins = (
 )
 _all_origins = _default_origins + _extra_origins
 
+_mcp_allowed_origins: set[str] = (
+    {o.strip() for o in _app_settings.MCP_CORS_ORIGINS.split(",") if o.strip()}
+    if _app_settings.MCP_CORS_ORIGINS
+    else set()
+)
+
 # MCP endpoints must accept cross-origin requests from any MCP client.
-# Use a separate permissive CORS middleware for those paths, and the
-# restrictive one for everything else.
+# Use a separate CORS middleware for those paths, and the restrictive
+# one for everything else.
 _MCP_CORS_PREFIXES = ("/oauth/", "/.well-known/", "/mcp")
 
 
 class _MCPCorsMiddleware(BaseHTTPMiddleware):
-    """Allow any origin on MCP OAuth / well-known endpoints."""
+    """CORS for MCP OAuth / well-known endpoints.
+
+    If MCP_CORS_ORIGINS is configured, only those origins are reflected.
+    Otherwise, the wildcard '*' is used (no credential exposure).
+    """
 
     async def dispatch(  # type: ignore[override]
         self, request: Request, call_next: Callable[[Request], Awaitable[StarletteResponse]]
@@ -303,17 +313,20 @@ class _MCPCorsMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         origin = request.headers.get("origin", "")
+        allow_origin = (
+            origin if _mcp_allowed_origins and origin in _mcp_allowed_origins else "*"
+        )
 
         if request.method == "OPTIONS":
             resp = StarletteResponse(status_code=204)
-            resp.headers["Access-Control-Allow-Origin"] = origin or "*"
+            resp.headers["Access-Control-Allow-Origin"] = allow_origin
             resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
             resp.headers["Access-Control-Allow-Headers"] = "content-type, authorization"
             resp.headers["Access-Control-Max-Age"] = "600"
             return resp
 
         response = await call_next(request)
-        response.headers["Access-Control-Allow-Origin"] = origin or "*"
+        response.headers["Access-Control-Allow-Origin"] = allow_origin
         return response
 
 
