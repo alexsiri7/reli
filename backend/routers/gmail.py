@@ -37,6 +37,7 @@ def _gmail_redirect_uri() -> str:
     base = settings.GOOGLE_REDIRECT_URI.rsplit("/api/", 1)[0]
     return base + "/api/gmail/callback"
 
+
 router = APIRouter(prefix="/gmail", tags=["gmail"])
 
 # ---------------------------------------------------------------------------

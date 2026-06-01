@@ -518,8 +518,9 @@ class TestRateLimitKeyAudienceFallback:
 
     def test_rate_limit_key_falls_back_to_ip_for_mcp_cookie(self, monkeypatch):
         """MCP-audience JWT in the session cookie must not be accepted as a user key."""
-        import jwt
         from unittest.mock import MagicMock
+
+        import jwt
 
         import backend.rate_limit as rl_mod
         from backend.auth import JWT_ALGORITHM
@@ -539,6 +540,7 @@ class TestRateLimitKeyAudienceFallback:
         request.headers.get.return_value = ""
 
         import backend.auth as auth_mod
+
         monkeypatch.setattr(auth_mod, "SECRET_KEY", secret)
 
         key = middleware._get_rate_limit_key(request)
