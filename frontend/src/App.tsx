@@ -84,7 +84,13 @@ function App() {
     fetchChatSessions()
     fetchCalendarStatus()
     fetchGmailStatus()
-    const interval = setInterval(() => { fetchThings(); fetchBriefing(); fetchProactiveSurfaces(); fetchFocusRecommendations(); fetchConflictAlerts() }, 30_000)
+    const interval = setInterval(() => {
+      fetchThings()
+      fetchBriefing()
+      fetchProactiveSurfaces()
+      fetchFocusRecommendations()
+      fetchConflictAlerts()
+    }, 30_000)
 
     // Handle OAuth callback redirect
     const params = new URLSearchParams(window.location.search)
