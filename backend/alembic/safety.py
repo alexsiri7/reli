@@ -1,14 +1,20 @@
 """Safety guard for destructive DDL operations in Alembic migrations.
 
 Scans pending migration scripts for destructive operations (DROP TABLE,
-DROP COLUMN, etc.) and blocks execution unless explicitly allowed via
-the ALLOW_DESTRUCTIVE_DDL environment variable.
+DROP COLUMN, etc.) and blocks execution unless explicitly allowed via:
+
+- The ``ALLOW_DESTRUCTIVE_DDL`` environment variable (global override), or
+- A ``# reli:allow-destructive-ddl`` comment in the migration file itself
+  (per-migration opt-in, preferred when data is preserved within the migration).
 """
 
 import ast
+import logging
 import os
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from alembic.script import ScriptDirectory
 
@@ -119,6 +125,10 @@ def check_pending_migrations(
         # Per-migration opt-in: skip safety check if the migration explicitly
         # acknowledges the destructive operation.
         if _ALLOW_MARKER in source:
+            logger.info(
+                "Skipping destructive DDL check for %s — per-migration opt-in marker present",
+                rev_id,
+            )
             continue
         findings = _find_destructive_ops_in_source(source)
 

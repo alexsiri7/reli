@@ -207,6 +207,7 @@ class TestCheckPendingMigrations:
         error_msg = str(exc_info.value)
         assert "drop_table" in error_msg
         assert "ALLOW_DESTRUCTIVE_DDL" in error_msg
+        assert "reli:allow-destructive-ddl" in error_msg
 
     def test_passes_safe_migration(self, tmp_path, monkeypatch):
         """A pending migration with only safe ops should pass."""
@@ -283,3 +284,42 @@ class TestCheckPendingMigrations:
 
         # abc123 is already applied — should not raise
         check_pending_migrations(mock_script_dir, current_heads={"abc123"})
+
+    def test_allows_migration_with_per_migration_marker(self, tmp_path, monkeypatch):
+        """Migration with # reli:allow-destructive-ddl marker bypasses the safety check."""
+        monkeypatch.delenv("ALLOW_DESTRUCTIVE_DDL", raising=False)
+
+        versions_dir = tmp_path / "versions"
+        versions_dir.mkdir()
+        migration_file = versions_dir / "ghi789_drop_col.py"
+        migration_file.write_text(
+            textwrap.dedent("""\
+            # reli:allow-destructive-ddl — data migrated before this drop
+
+            revision = 'ghi789'
+            down_revision = None
+
+            from alembic import op
+
+            def upgrade():
+                op.drop_column('things', 'parent_id')
+
+            def downgrade():
+                pass
+        """)
+        )
+
+        from unittest.mock import MagicMock
+
+        from backend.alembic.safety import check_pending_migrations
+
+        mock_rev = MagicMock()
+        mock_rev.revision = "ghi789"
+        mock_rev.doc = "drop parent_id"
+        mock_rev.path = str(migration_file)
+
+        mock_script_dir = MagicMock()
+        mock_script_dir.walk_revisions.return_value = [mock_rev]
+
+        # Should NOT raise — marker opts this migration out of the safety check
+        check_pending_migrations(mock_script_dir, current_heads=set())
