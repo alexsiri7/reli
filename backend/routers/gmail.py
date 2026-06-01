@@ -10,7 +10,7 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -27,6 +27,15 @@ from ..tools import create_thing
 GMAIL_OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes
 
 logger = logging.getLogger(__name__)
+
+
+def _gmail_redirect_uri() -> str:
+    """Return the Gmail OAuth callback URI derived from config, not request headers."""
+    if settings.RELI_BASE_URL:
+        return settings.RELI_BASE_URL.rstrip("/") + "/api/gmail/callback"
+    # Fall back to GOOGLE_REDIRECT_URI base (already config-driven) for local dev
+    base = settings.GOOGLE_REDIRECT_URI.rsplit("/api/", 1)[0]
+    return base + "/api/gmail/callback"
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
 
@@ -273,15 +282,14 @@ def gmail_status(user_id: str = Depends(require_user)) -> GmailStatus:
 
 
 @router.get("/auth-url", summary="Get Gmail OAuth2 authorization URL")
-def gmail_auth_url(request: Request, user_id: str = Depends(require_user)) -> dict[str, str]:
+def gmail_auth_url(user_id: str = Depends(require_user)) -> dict[str, str]:
     """Generate the Google OAuth2 consent URL."""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=501, detail="Gmail integration not configured")
 
     from google_auth_oauthlib.flow import Flow
 
-    # Determine redirect URI from request
-    redirect_uri = str(request.base_url).rstrip("/") + "/api/gmail/callback"
+    redirect_uri = _gmail_redirect_uri()
 
     state = secrets.token_urlsafe(32)
     cleanup_and_store(
@@ -306,7 +314,6 @@ def gmail_auth_url(request: Request, user_id: str = Depends(require_user)) -> di
 
 @router.get("/callback", summary="Handle OAuth2 callback from Google")
 def gmail_callback(
-    request: Request,
     code: str = Query(...),
     state: str = Query(...),
     error: str | None = Query(None),
@@ -326,7 +333,7 @@ def gmail_callback(
 
     from google_auth_oauthlib.flow import Flow
 
-    redirect_uri = str(request.base_url).rstrip("/") + "/api/gmail/callback"
+    redirect_uri = _gmail_redirect_uri()
 
     flow = Flow.from_client_config(
         _google_client_config(),
