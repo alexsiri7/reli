@@ -222,6 +222,48 @@ class TestApiTokenWithoutSecretKey:
         assert resp.status_code == 401
         assert "Invalid API token" in resp.json()["detail"]
 
+    def test_bearer_token_resolves_to_configured_user_id(self, patched_db):
+        """When RELI_API_TOKEN_USER_ID is set, _resolve_api_token_user returns that id."""
+        with patch("backend.auth._API_TOKEN_USER_ID", "explicit-user-123"):
+            from backend.auth import _resolve_api_token_user
+
+            assert _resolve_api_token_user() == "explicit-user-123"
+
+    def test_bearer_token_resolves_without_db_when_user_id_set(self, patched_db):
+        """_resolve_api_token_user must NOT query the DB when _API_TOKEN_USER_ID is set."""
+        import backend.db_engine as engine_mod
+
+        with (
+            patch("backend.auth._API_TOKEN_USER_ID", "u-explicit"),
+            patch.object(
+                engine_mod, "engine", side_effect=AssertionError("DB should not be queried")
+            ),
+        ):
+            from backend.auth import _resolve_api_token_user
+
+            assert _resolve_api_token_user() == "u-explicit"
+
+    def test_bearer_token_with_configured_user_id_wires_through_require_user(self, patched_db):
+        """End-to-end: valid Bearer token + _API_TOKEN_USER_ID → require_user returns that id."""
+        import asyncio
+
+        from fastapi import Request
+
+        with (
+            patch("backend.auth.SECRET_KEY", ""),
+            patch("backend.auth._API_TOKEN", "staging-token-abc"),
+            patch("backend.auth._API_TOKEN_USER_ID", "configured-user-99"),
+        ):
+            from backend.auth import require_user
+
+            scope = {
+                "type": "http",
+                "headers": [(b"authorization", b"Bearer staging-token-abc")],
+            }
+            request = Request(scope)
+            user_id = asyncio.run(require_user(request))
+            assert user_id == "configured-user-99"
+
 
 class TestOAuthAllowlistRejection:
     """Test that OAuth allowlist rejection does not log the user's email (SEC-021)."""

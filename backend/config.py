@@ -60,6 +60,7 @@ class Settings(BaseSettings):
 
     # --- MCP API token (for MCP server → REST API auth) ---
     RELI_API_TOKEN: str = ""  # Shared secret; set to enable token-based auth for MCP
+    RELI_API_TOKEN_USER_ID: str = ""  # user_id this token authenticates as; if empty, falls back to first user (single-tenant)
     RELI_API_URL: str = "http://localhost:8000"  # Base URL for MCP server to reach REST API
 
     # --- MCP HTTP server token (for Claude Code → MCP server auth) ---

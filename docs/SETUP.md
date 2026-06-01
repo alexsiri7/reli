@@ -182,6 +182,7 @@ Both data stores contain production data. Handle with care.
 | `GOOGLE_CLIENT_SECRET` | Yes | — | Google OAuth client secret |
 | `SECRET_KEY` | Yes | — | JWT signing secret |
 | `RELI_API_TOKEN` | No | — | Static bearer token for API auth; enables token-based access without Google OAuth |
+| `RELI_API_TOKEN_USER_ID` | No | — | user_id that `RELI_API_TOKEN` authenticates as; if empty, falls back to the first user in the database (single-tenant shortcut) |
 | `DATA_DIR` | No | `backend/` | Directory for `reli.db` |
 | `COOKIE_SECURE` | No | `true` | Set to `false` in local dev when running without HTTPS; always `true` in production |
 | `LOG_LEVEL` | No | `INFO` | Log verbosity: DEBUG, INFO, WARNING |
