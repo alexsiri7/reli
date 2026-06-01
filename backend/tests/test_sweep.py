@@ -2,7 +2,7 @@
 
 import json
 from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlmodel import Session
@@ -1582,14 +1582,14 @@ class TestConnectionSweepUserScoping:
         candidates = find_connection_candidates(user_id="user_a")
         thing_ids_in_candidates = set()
         for c in candidates:
-            thing_ids_in_candidates.add(c.thing_a_id)
-            thing_ids_in_candidates.add(c.thing_b_id)
+            thing_ids_in_candidates.add(c.from_thing_id)
+            thing_ids_in_candidates.add(c.to_thing_id)
 
         # user_b's Things must never appear
         assert "ub1" not in thing_ids_in_candidates
 
-    def test_connection_sweep_empty_user_id_returns_all(self, patched_db, db):
-        """When user_id is empty (auth disabled), all Things are considered."""
+    def test_connection_sweep_empty_user_id_does_not_raise(self, patched_db, db):
+        """When user_id is empty (auth disabled), find_connection_candidates should not raise."""
         from backend.connection_sweep import find_connection_candidates
 
         with db() as conn:
@@ -1601,10 +1601,21 @@ class TestConnectionSweepUserScoping:
         candidates = find_connection_candidates(user_id="")
         thing_ids_in_candidates = set()
         for c in candidates:
-            thing_ids_in_candidates.add(c.thing_a_id)
-            thing_ids_in_candidates.add(c.thing_b_id)
+            thing_ids_in_candidates.add(c.from_thing_id)
+            thing_ids_in_candidates.add(c.to_thing_id)
 
         # Both users' Things should be eligible when no user scoping
         # (We can't guarantee candidates are generated without embeddings,
         # but at minimum the function should not raise.)
         # This test primarily validates the no-filter path still works.
+
+    def test_connection_sweep_requires_auth(self, patched_db):
+        """POST /api/sweep/connections must reject unauthenticated requests."""
+        with patch("backend.auth.SECRET_KEY", "test-secret-key"):
+            from fastapi.testclient import TestClient
+
+            from backend.main import app
+
+            with TestClient(app) as client:
+                response = client.post("/api/sweep/connections")
+        assert response.status_code in (401, 403)
