@@ -23,7 +23,7 @@ class FeedbackRequest(BaseModel):
     message: str = Field(min_length=1, max_length=5000)
     user_agent: str = ""
     url: str = ""
-    screenshot_base64: str | None = None
+    screenshot_base64: str | None = Field(default=None, max_length=5_242_880)
 
 
 class FeedbackResponse(BaseModel):
