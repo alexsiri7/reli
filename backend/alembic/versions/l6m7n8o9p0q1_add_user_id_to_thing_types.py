@@ -39,8 +39,13 @@ def upgrade() -> None:
     # The initial migration created UNIQUE(name) without an explicit name, so
     # SQLite auto-generated an internal name that varies by installation.
     # Use a naming_convention so Alembic assigns a predictable name to the
-    # reflected unnamed constraint, allowing us to drop it reliably.
+    # reflected unnamed constraint during reflection — the template expands to
+    # "uq_thing_types_name", which is what drop_constraint targets below.
     naming_convention = {"uq": "uq_%(table_name)s_%(column_0_name)s"}
+    print(
+        "[l6m7n8o9p0q1] Applying naming_convention to reflect unnamed UNIQUE(name) constraint "
+        "as 'uq_thing_types_name' before dropping it."
+    )
 
     with op.batch_alter_table(
         "thing_types", recreate="always", naming_convention=naming_convention
