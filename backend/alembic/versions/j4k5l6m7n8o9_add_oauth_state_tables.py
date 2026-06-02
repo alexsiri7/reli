@@ -19,6 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """Create OAuth state tables (mcp_oauth_sessions and related) for MCP auth."""
     conn = op.get_bind()
     inspector = sa.inspect(conn)
     if inspector.has_table("mcp_oauth_sessions"):

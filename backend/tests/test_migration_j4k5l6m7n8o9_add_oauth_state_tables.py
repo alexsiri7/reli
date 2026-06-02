@@ -12,7 +12,7 @@ class TestOAuthStateTablesMigrationUpgrade:
     @patch("backend.alembic.versions.j4k5l6m7n8o9_add_oauth_state_tables.op")
     @patch("backend.alembic.versions.j4k5l6m7n8o9_add_oauth_state_tables.sa")
     def test_skips_create_when_tables_exist(self, mock_sa, mock_op):
-        """upgrade() must not call op.create_table when mcp_oauth_sessions already exists."""
+        """upgrade() must not call op.create_table or op.create_index when mcp_oauth_sessions already exists."""
         mock_inspector = MagicMock()
         mock_inspector.has_table.return_value = True
         mock_sa.inspect.return_value = mock_inspector
@@ -26,7 +26,7 @@ class TestOAuthStateTablesMigrationUpgrade:
     @patch("backend.alembic.versions.j4k5l6m7n8o9_add_oauth_state_tables.op")
     @patch("backend.alembic.versions.j4k5l6m7n8o9_add_oauth_state_tables.sa")
     def test_creates_tables_when_absent(self, mock_sa, mock_op):
-        """upgrade() must create all 5 tables when mcp_oauth_sessions does not exist."""
+        """upgrade() must create all 5 tables and 5 indexes when mcp_oauth_sessions does not exist."""
         mock_inspector = MagicMock()
         mock_inspector.has_table.return_value = False
         mock_sa.inspect.return_value = mock_inspector
