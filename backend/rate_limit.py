@@ -166,7 +166,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         for buckets in (self._llm_buckets, self._auth_buckets, self._api_buckets):
             stale = [k for k, b in buckets.items() if now - b.last_refill > _BUCKET_TTL]
             for k in stale:
-                buckets.pop(k, None)
+                del buckets[k]
             total_pruned += len(stale)
         if total_pruned:
             log.debug("Pruned %d stale rate-limit buckets", total_pruned)

@@ -28,8 +28,31 @@ def upgrade() -> None:
     so we use batch_alter_table with recreate='always' for compatibility.
     All existing rows receive user_id=NULL (visible to all users via user_filter_clause).
     """
-    with op.batch_alter_table("thing_types", recreate="always") as batch_op:
-        batch_op.add_column(sa.Column("user_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True))
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+
+    # Idempotency guard: if user_id already exists, this migration has already run.
+    columns = [c["name"] for c in inspector.get_columns("thing_types")]
+    if "user_id" in columns:
+        return
+
+    # The initial migration created UNIQUE(name) without an explicit name, so
+    # SQLite auto-generated an internal name that varies by installation.
+    # Use a naming_convention so Alembic assigns a predictable name to the
+    # reflected unnamed constraint during reflection — the template expands to
+    # "uq_thing_types_name", which is what drop_constraint targets below.
+    naming_convention = {"uq": "uq_%(table_name)s_%(column_0_name)s"}
+    print(
+        "[l6m7n8o9p0q1] Applying naming_convention to reflect unnamed UNIQUE(name) constraint "
+        "as 'uq_thing_types_name' before dropping it."
+    )
+
+    with op.batch_alter_table(
+        "thing_types", recreate="always", naming_convention=naming_convention
+    ) as batch_op:
+        batch_op.add_column(
+            sa.Column("user_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True)
+        )
         batch_op.drop_constraint("uq_thing_types_name", type_="unique")
         batch_op.create_unique_constraint("uq_thing_types_user_id_name", ["user_id", "name"])
 

@@ -65,8 +65,7 @@ def _client_config() -> dict:
 
 def _create_jwt(user_id: str, email: str, aud: str = "web") -> str:
     """Create a signed JWT for the given user."""
-    now = datetime.now(timezone.utc)
-    now_ts = int(now.timestamp())
+    now_ts = int(datetime.now(timezone.utc).timestamp())
     payload = {
         "sub": user_id,
         "email": email,
