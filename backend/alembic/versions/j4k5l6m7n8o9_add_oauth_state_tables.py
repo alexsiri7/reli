@@ -19,6 +19,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """Create OAuth state tables (mcp_oauth_sessions and related) for MCP auth."""
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if inspector.has_table("mcp_oauth_sessions"):
+        return  # Tables already exist (e.g. created via create_all fallback); nothing to do.
+
     op.create_table(
         "mcp_oauth_sessions",
         sa.Column("server_state", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
