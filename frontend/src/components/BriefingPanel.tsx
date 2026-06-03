@@ -17,6 +17,26 @@ const FINDING_TYPE_CONFIG: Record<string, { icon: string; borderClass: string }>
   connection: { icon: '\u{1F517}', borderClass: 'border-projects' },
 }
 
+function ConfidenceBadge({ confidence }: { confidence: number }) {
+  let label: string
+  let colorClass: string
+  if (confidence >= 0.7) {
+    label = 'Strong'
+    colorClass = 'text-projects bg-projects/10'
+  } else if (confidence >= 0.5) {
+    label = 'Moderate'
+    colorClass = 'text-primary bg-primary/10'
+  } else {
+    label = 'Emerging'
+    colorClass = 'text-on-surface-variant bg-surface-container'
+  }
+  return (
+    <span className={`inline-block text-xs px-1.5 py-0.5 rounded font-medium mt-1 ${colorClass}`}>
+      {label}
+    </span>
+  )
+}
+
 function formatGreetingDate(): string {
   return new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -175,15 +195,7 @@ export function FindingCard({ finding, isFirst, onDismiss, onSnooze, onAct, snoo
             </p>
           )}
           {typeof finding.confidence === 'number' && (
-            <span className={`inline-block text-xs px-1.5 py-0.5 rounded font-medium mt-1 ${
-              finding.confidence >= 0.7
-                ? 'text-projects bg-projects/10'
-                : finding.confidence >= 0.5
-                ? 'text-primary bg-primary/10'
-                : 'text-on-surface-variant bg-surface-container'
-            }`}>
-              {finding.confidence >= 0.7 ? 'Strong' : finding.confidence >= 0.5 ? 'Moderate' : 'Emerging'}
-            </span>
+            <ConfidenceBadge confidence={finding.confidence} />
           )}
           <div className="flex items-center gap-2 mt-1.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
             {finding.thing_id && (
@@ -308,15 +320,7 @@ export function ActionTakenCard({ action }: { action: SweepAction }) {
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium text-on-surface leading-snug">{action.description}</p>
           {typeof action.confidence === 'number' && (
-            <span className={`inline-block text-xs px-1.5 py-0.5 rounded font-medium mt-1 ${
-              action.confidence >= 0.7
-                ? 'text-projects bg-projects/10'
-                : action.confidence >= 0.5
-                ? 'text-primary bg-primary/10'
-                : 'text-on-surface-variant bg-surface-container'
-            }`}>
-              {action.confidence >= 0.7 ? 'Strong' : action.confidence >= 0.5 ? 'Moderate' : 'Emerging'}
-            </span>
+            <ConfidenceBadge confidence={action.confidence} />
           )}
         </div>
       </div>
