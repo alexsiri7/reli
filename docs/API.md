@@ -235,6 +235,7 @@ Daily briefing: check-in due Things, sweep findings, and learned preferences.
 | `priority` | int | 0=critical … 3=low |
 | `dismissed` | bool | Whether the user dismissed it |
 | `expires_at` | string \| null | ISO timestamp or null |
+| `confidence` | float | 0.0–1.0; LLM confidence in the finding (default 0.5). Findings below `SWEEP_MIN_CONFIDENCE` are excluded from briefings |
 
 **`LearnedPreference` shape:**
 

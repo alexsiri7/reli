@@ -1,6 +1,8 @@
 """Tests for the daily briefing endpoint."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+
+import pytest
 
 from backend.routers.briefing import _confidence_label
 
@@ -392,3 +394,50 @@ class TestConfidenceGate:
         assert resp.status_code == 200
         finding_ids = [f["id"] for f in resp.json()["findings"]]
         assert finding_id in finding_ids
+
+    @pytest.mark.parametrize("conf,should_appear", [(0.49, False), (0.5, True), (0.51, True)])
+    def test_confidence_gate_boundary(self, client, monkeypatch, conf, should_appear):
+        """Findings at exact threshold boundary are included (>=), just below are excluded."""
+        monkeypatch.setattr(
+            "backend.routers.briefing.settings.SWEEP_MIN_CONFIDENCE",
+            0.5,
+        )
+        payload = {"finding_type": "llm_insight", "message": f"boundary {conf}", "priority": 2, "confidence": conf}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+        finding_id = resp.json()["id"]
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert (finding_id in finding_ids) == should_appear
+
+    def test_null_confidence_passes_gate(self, client, monkeypatch):
+        """Pre-migration findings with NULL confidence must still appear when gate is active."""
+        monkeypatch.setattr(
+            "backend.routers.briefing.settings.SWEEP_MIN_CONFIDENCE",
+            0.5,
+        )
+        # Insert directly via ORM to create a NULL-confidence record (simulating pre-migration data)
+        from backend.db_engine import engine as db_engine
+        from backend.db_models import SweepFindingRecord
+        from sqlmodel import Session
+
+        with Session(db_engine) as session:
+            record = SweepFindingRecord(
+                id="sf-null-conf-test",
+                thing_id=None,
+                finding_type="llm_insight",
+                message="pre-migration finding with NULL confidence",
+                priority=2,
+                dismissed=False,
+                created_at=datetime.now(timezone.utc),
+                confidence=None,
+            )
+            session.add(record)
+            session.commit()
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert "sf-null-conf-test" in finding_ids

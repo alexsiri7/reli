@@ -15,7 +15,7 @@ import warnings
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -183,8 +183,13 @@ class Settings(BaseSettings):
     SWEEP_HOUR: int = 3
     SWEEP_MINUTE: int = 0
     SWEEP_SUPPRESSED_FINDING_TYPES: str = "lifestyle_wellness,location_suggestion,unverified_context"
-    # 0.0 = disabled, 1.0 = blocks everything; findings below threshold are excluded from briefings
+    # 0.0 = show all; 1.0 = only direct-evidence findings (NULL confidence always passes through)
     SWEEP_MIN_CONFIDENCE: float = 0.5
+
+    @field_validator("SWEEP_MIN_CONFIDENCE")
+    @classmethod
+    def _clamp_min_confidence(cls, v: float) -> float:
+        return max(0.0, min(1.0, v))
 
     @property
     def suppressed_finding_types_set(self) -> frozenset[str]:
