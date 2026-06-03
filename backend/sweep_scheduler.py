@@ -308,6 +308,30 @@ async def _run_sweep_for_user(user_id: str) -> None:
         except Exception:
             logger.exception("Breakdown sweep failed for user %s", user_label)
 
+        # Auto-merge sweep: execute merges for exact-title duplicate Things
+        try:
+            from .sweep import auto_merge_duplicates
+
+            async with asyncio.timeout(300):
+                am_result = await auto_merge_duplicates(user_id=user_id)
+            if am_result.merges_executed:
+                logger.info(
+                    "Auto-merge sweep [%s]: %d duplicate(s) merged, %d skipped",
+                    user_label,
+                    am_result.merges_executed,
+                    am_result.merges_skipped,
+                )
+            elif am_result.merges_skipped:
+                logger.warning(
+                    "Auto-merge sweep [%s]: 0 merged, %d candidate(s) skipped — check duplicate detection",
+                    user_label,
+                    am_result.merges_skipped,
+                )
+        except TimeoutError:
+            logger.error("Auto-merge sweep timed out for user %s (300s limit)", user_label)
+        except Exception:
+            logger.exception("Auto-merge sweep failed for user %s", user_label)
+
         # Dependency sweep: LLM-powered implicit dependency detection
         await _run_dependency_sweep_for_user(user_id, user_label)
 

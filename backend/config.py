@@ -185,6 +185,10 @@ class Settings(BaseSettings):
     SWEEP_SUPPRESSED_FINDING_TYPES: str = "lifestyle_wellness,location_suggestion,unverified_context"
     # 0.0 = disabled, 1.0 = blocks everything; findings below threshold are excluded from briefings
     SWEEP_MIN_CONFIDENCE: float = 0.5
+    # Auto-merge: set to "false" to disable autonomous duplicate merging entirely
+    SWEEP_AUTO_MERGE_ENABLED: str = "true"
+    # Minimum confidence for autonomous merge; pairs below this are skipped (0.0–1.0)
+    SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD: float = 0.95
 
     @property
     def suppressed_finding_types_set(self) -> frozenset[str]:
@@ -197,6 +201,10 @@ class Settings(BaseSettings):
     @property
     def sweep_enabled_bool(self) -> bool:
         return self._is_truthy(self.SWEEP_ENABLED)
+
+    @property
+    def sweep_auto_merge_enabled_bool(self) -> bool:
+        return self._is_truthy(self.SWEEP_AUTO_MERGE_ENABLED)
 
     @property
     def cookie_secure_bool(self) -> bool:
