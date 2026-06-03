@@ -6,8 +6,6 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, or_, select
 
@@ -44,6 +42,8 @@ from ..weekly_briefing import (
     store_weekly_briefing,
 )
 from .things import _record_to_thing
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/briefing", tags=["briefing"])
 
@@ -141,7 +141,8 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                 SweepFindingRecord.created_at.desc(),  # type: ignore[union-attr]
             )
         )
-        suppressed = list(settings.suppressed_finding_types_set)  # list() ensures SQLAlchemy .in_() compatibility across dialects
+        # list() ensures SQLAlchemy .in_() compatibility across dialects
+        suppressed = list(settings.suppressed_finding_types_set)
         if suppressed:
             logger.debug("briefing: applying suppression filter for types=%r", suppressed)
             finding_stmt = finding_stmt.where(

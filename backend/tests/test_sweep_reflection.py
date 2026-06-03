@@ -364,7 +364,10 @@ class TestReflectOnCandidates:
         })
         with (
             patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response),
-            patch.object(type(cfg_module.settings), "suppressed_finding_types_set", new_callable=PropertyMock, return_value=frozenset()),
+            patch.object(
+                type(cfg_module.settings), "suppressed_finding_types_set",
+                new_callable=PropertyMock, return_value=frozenset()
+            ),
         ):
             result = await reflect_on_candidates(candidates)
 
