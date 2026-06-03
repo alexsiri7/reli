@@ -345,6 +345,8 @@ class SweepFinding(BaseModel):
     snoozed_until: datetime | None = None
     confidence: float = 0.5
     thing: Thing | None = None
+    context_snapshot: dict[str, Any] | None = None
+    dismissed_reason: str | None = None
 
     model_config = {"from_attributes": True}
 

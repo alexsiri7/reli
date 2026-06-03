@@ -195,6 +195,8 @@ class SweepFindingRecord(SQLModel, table=True):
     snoozed_until: datetime | None = None
     user_id: str | None = None
     confidence: float | None = Field(default=None, sa_column_kwargs={"server_default": "0.5"})
+    context_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(_JSON, nullable=True))
+    dismissed_reason: str | None = None
 
 
 class SweepRunRecord(SQLModel, table=True):

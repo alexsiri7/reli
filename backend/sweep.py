@@ -1573,11 +1573,13 @@ def collect_candidates(
 
 
 def dismiss_stale_findings(user_id: str = "") -> int:
-    """Dismiss findings whose linked Thing is inactive or that have expired.
+    """Dismiss findings whose linked Thing is inactive, that have expired,
+    or whose context has materially changed since creation.
 
     Returns count of findings dismissed.
     """
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
     total = 0
 
     with Session(_engine_mod.engine) as session:
@@ -1594,18 +1596,54 @@ def dismiss_stale_findings(user_id: str = "") -> int:
             )
             for finding in session.exec(stmt_inactive).all():
                 finding.dismissed = True
+                finding.dismissed_reason = "linked_thing_inactive"
+                logger.debug("sweep: auto-dismissed finding %s — linked Thing inactive", finding.id)
                 total += 1
 
         # Dismiss expired findings
         stmt_expired = select(SweepFindingRecord).where(
             SweepFindingRecord.dismissed == False,  # noqa: E712
             SweepFindingRecord.expires_at.is_not(None),  # type: ignore[union-attr]
-            SweepFindingRecord.expires_at < now,  # type: ignore[operator]
+            SweepFindingRecord.expires_at < now_iso,  # type: ignore[operator]
             user_filter_clause(SweepFindingRecord.user_id, user_id),
         )
         for finding in session.exec(stmt_expired).all():
             finding.dismissed = True
+            finding.dismissed_reason = "expired"
+            logger.debug("sweep: auto-dismissed finding %s — past expires_at", finding.id)
             total += 1
+
+        # Dismiss findings whose linked Thing was updated after the finding was created
+        stmt_with_snapshot = select(SweepFindingRecord).where(
+            SweepFindingRecord.dismissed == False,  # noqa: E712
+            SweepFindingRecord.thing_id.is_not(None),  # type: ignore[union-attr]
+            SweepFindingRecord.context_snapshot.is_not(None),  # type: ignore[union-attr]
+            user_filter_clause(SweepFindingRecord.user_id, user_id),
+        )
+        findings_with_snapshot = session.exec(stmt_with_snapshot).all()
+        if findings_with_snapshot:
+            snapshot_thing_ids = {f.thing_id for f in findings_with_snapshot}
+            current_things = session.exec(
+                select(ThingRecord).where(ThingRecord.id.in_(snapshot_thing_ids))
+            ).all()
+            thing_by_id = {t.id: t for t in current_things}
+            for finding in findings_with_snapshot:
+                thing = thing_by_id.get(finding.thing_id)
+                if not thing:
+                    continue
+                snap = finding.context_snapshot or {}
+                snap_updated_at = snap.get("updated_at")
+                if snap_updated_at and thing.updated_at:
+                    snap_dt = datetime.fromisoformat(snap_updated_at)
+                    if thing.updated_at > snap_dt and thing.updated_at > finding.created_at:
+                        finding.dismissed = True
+                        finding.dismissed_reason = "context_changed"
+                        logger.info(
+                            "sweep: auto-dismissed finding %s — Thing %s updated after finding created "
+                            "(thing.updated_at=%s, finding.created_at=%s)",
+                            finding.id, finding.thing_id, thing.updated_at, finding.created_at,
+                        )
+                        total += 1
 
         session.commit()
 
@@ -1809,6 +1847,17 @@ async def reflect_on_candidates(
     _suppressed = settings.suppressed_finding_types_set
 
     with Session(_engine_mod.engine) as session:
+        # Pre-fetch Things for context snapshots
+        thing_ids_in_findings = {
+            f.get("thing_id") for f in raw_findings if isinstance(f, dict) and f.get("thing_id")
+        }
+        thing_map: dict[str, ThingRecord] = {}
+        if thing_ids_in_findings:
+            things_in_map = session.exec(
+                select(ThingRecord).where(ThingRecord.id.in_(thing_ids_in_findings))
+            ).all()
+            thing_map = {t.id: t for t in things_in_map}
+
         for f in raw_findings:
             if not isinstance(f, dict):
                 continue
@@ -1848,6 +1897,18 @@ async def reflect_on_candidates(
             if isinstance(expires_in, (int, float)) and 1 <= expires_in <= 30:
                 expires_at = (now + timedelta(days=int(expires_in))).isoformat()
 
+            # Build snapshot from thing_map lookup
+            context_snapshot: dict | None = None
+            if thing_id and thing_id in thing_map:
+                t = thing_map[thing_id]
+                context_snapshot = {
+                    "title": t.title,
+                    "active": t.active,
+                    "type_hint": t.type_hint,
+                    "importance": t.importance,
+                    "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+                }
+
             finding_id = f"sf-{uuid.uuid4().hex[:8]}"
             session.add(
                 SweepFindingRecord(
@@ -1861,6 +1922,7 @@ async def reflect_on_candidates(
                     expires_at=datetime.fromisoformat(expires_at) if expires_at else None,
                     user_id=user_id or None,
                     confidence=confidence,
+                    context_snapshot=context_snapshot,
                 )
             )
             created.append(

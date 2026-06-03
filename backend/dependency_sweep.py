@@ -398,6 +398,17 @@ async def detect_cluster_dependencies(
                     thing_rec = session.get(ThingRecord, thing_id)
                     finding_user_id = thing_rec.user_id if thing_rec else (user_id or None)
 
+                    # Build context snapshot for stale-finding detection
+                    dep_context_snapshot: dict | None = None
+                    if thing_rec:
+                        dep_context_snapshot = {
+                            "title": thing_rec.title,
+                            "active": thing_rec.active,
+                            "type_hint": thing_rec.type_hint,
+                            "importance": thing_rec.importance,
+                            "updated_at": thing_rec.updated_at.isoformat() if thing_rec.updated_at else None,
+                        }
+
                     finding_id = f"sf-{uuid.uuid4().hex[:8]}"
                     session.add(
                         SweepFindingRecord(
@@ -410,6 +421,7 @@ async def detect_cluster_dependencies(
                             created_at=now,
                             expires_at=expires_at,
                             user_id=finding_user_id,
+                            context_snapshot=dep_context_snapshot,
                         )
                     )
                     all_findings.append(
