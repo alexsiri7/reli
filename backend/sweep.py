@@ -2309,7 +2309,7 @@ async def auto_merge_duplicates(
                         dismissed=False,
                         created_at=now,
                         user_id=user_id or None,
-                        confidence=threshold,
+                        confidence=1.0,
                     )
                 )
                 try:

@@ -86,7 +86,7 @@ class TestAutoMergeDuplicates:
                 )
             ).all()
         assert len(findings) >= 1
-        assert findings[0].confidence == pytest.approx(0.95)
+        assert findings[0].confidence == pytest.approx(1.0)
 
     def test_auto_merge_creates_sweep_action(self, db):
         """Auto-merge records a SweepActionRecord with action_type='merge'."""
