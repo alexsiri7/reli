@@ -1687,6 +1687,7 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
       "finding_type": "llm_insight | lifestyle_wellness | location_suggestion | unverified_context",
       "message": "Concise, actionable message for the user",
       "priority": 1,
+      "confidence": 0.85,
       "expires_in_days": 7
     }
   ]
@@ -1701,6 +1702,11 @@ Rules:
   Use "lifestyle_wellness", "location_suggestion", or "unverified_context" only to categorize;
   these types are suppressed by default and will not surface to the user.
 - priority: 0=critical, 1=high, 2=medium, 3=low
+- confidence: 0.0–1.0, how certain you are in this finding.
+  0.9+ = direct evidence from data (e.g. overdue date, stale for 60 days)
+  0.7–0.89 = strong inference (e.g. pattern observed multiple times)
+  0.5–0.69 = moderate inference (e.g. possible connection, could be wrong)
+  0.0–0.49 = speculative (e.g. based on a single weak signal)
 - expires_in_days: how long this finding stays relevant (1-30, null for no expiry)
 - thing_id: link to a specific Thing when relevant, null for general observations
 - message: written for the USER, not for a system. Be warm and direct.
@@ -1798,7 +1804,6 @@ async def reflect_on_candidates(
     # Collect valid thing_ids from candidates for validation
     valid_thing_ids = {c.thing_id for c in candidates}
 
-    # Hoist loop invariants: both are constant for the duration of this sweep run
     # allowed_types must mirror the values listed in SWEEP_REFLECTION_SYSTEM prompt and SWEEP_SUPPRESSED_FINDING_TYPES
     _allowed_types = frozenset({"llm_insight", "lifestyle_wellness", "location_suggestion", "unverified_context"})
     _suppressed = settings.suppressed_finding_types_set
@@ -1818,6 +1823,11 @@ async def reflect_on_candidates(
             priority = f.get("priority", 2)
             if not isinstance(priority, int) or priority < 0 or priority > 4:
                 priority = 2
+
+            confidence = f.get("confidence", 0.5)
+            if not isinstance(confidence, (int, float)):
+                confidence = 0.5
+            confidence = max(0.0, min(1.0, float(confidence)))
 
             # Derive finding_type (LLM may now use granular categories)
             finding_type = str(f.get("finding_type", "llm_insight")).strip()
@@ -1850,6 +1860,7 @@ async def reflect_on_candidates(
                     created_at=now,
                     expires_at=datetime.fromisoformat(expires_at) if expires_at else None,
                     user_id=user_id or None,
+                    confidence=confidence,
                 )
             )
             created.append(
@@ -1859,6 +1870,7 @@ async def reflect_on_candidates(
                     "finding_type": finding_type,
                     "message": message,
                     "priority": priority,
+                    "confidence": confidence,
                     "expires_at": expires_at,
                 }
             )

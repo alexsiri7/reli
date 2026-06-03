@@ -94,6 +94,7 @@ Override per-environment via env vars:
 - `REQUESTY_REASONING_MODEL` — overrides reasoning stage only
 - `REQUESTY_RESPONSE_MODEL` — overrides response stage only
 - `SWEEP_SUPPRESSED_FINDING_TYPES` — comma-separated list of finding types to suppress from the briefing (default: `lifestyle_wellness,location_suggestion,unverified_context`). Set to empty string to show all types.
+- `SWEEP_MIN_CONFIDENCE` — minimum confidence score (0.0–1.0) a finding must have to appear in briefings (default: `0.5`). Set to `0.0` to disable filtering.
 
 ---
 
@@ -204,6 +205,7 @@ Both data stores contain production data. Handle with care.
 | `SUPABASE_KEY` | No | — | Supabase anon/service key |
 | `CORS_ORIGINS` | No | — | Comma-separated extra origins allowed on standard API endpoints (e.g. `https://reli.example.com`) |
 | `MCP_CORS_ORIGINS` | No | — | Comma-separated origins allowed on MCP/OAuth endpoints (e.g. `https://claude.ai`); if empty, the wildcard `*` is used for all origins (no credentials) |
+| `SWEEP_MIN_CONFIDENCE` | No | `0.5` | Minimum confidence score (0.0–1.0) for sweep findings to appear in briefings. Set to `0.0` to disable the gate and show all findings. |
 
 ---
 

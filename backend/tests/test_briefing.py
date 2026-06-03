@@ -342,3 +342,53 @@ class TestFindingCategorySuppress:
         assert resp.status_code == 200
         finding_ids = [f["id"] for f in resp.json()["findings"]]
         assert finding_id in finding_ids
+
+
+class TestConfidenceGate:
+    def test_high_confidence_finding_appears_in_briefing(self, client, monkeypatch):
+        """Findings with confidence >= SWEEP_MIN_CONFIDENCE appear in the briefing."""
+        monkeypatch.setattr(
+            "backend.routers.briefing.settings.SWEEP_MIN_CONFIDENCE",
+            0.5,
+        )
+        payload = {"finding_type": "llm_insight", "message": "high confidence insight", "priority": 2, "confidence": 0.9}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+        finding_id = resp.json()["id"]
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding_id in finding_ids
+
+    def test_low_confidence_finding_excluded_from_briefing(self, client, monkeypatch):
+        """Findings with confidence < SWEEP_MIN_CONFIDENCE are excluded from the briefing."""
+        monkeypatch.setattr(
+            "backend.routers.briefing.settings.SWEEP_MIN_CONFIDENCE",
+            0.5,
+        )
+        payload = {"finding_type": "llm_insight", "message": "speculative insight", "priority": 2, "confidence": 0.1}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+        finding_id = resp.json()["id"]
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding_id not in finding_ids
+
+    def test_gate_disabled_at_zero_includes_all_confidence_levels(self, client, monkeypatch):
+        """When SWEEP_MIN_CONFIDENCE=0.0, all findings appear regardless of confidence."""
+        monkeypatch.setattr(
+            "backend.routers.briefing.settings.SWEEP_MIN_CONFIDENCE",
+            0.0,
+        )
+        payload = {"finding_type": "llm_insight", "message": "zero conf finding", "priority": 2, "confidence": 0.0}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+        finding_id = resp.json()["id"]
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding_id in finding_ids

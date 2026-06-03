@@ -110,6 +110,7 @@ const mockFinding: SweepFinding = {
   dismissed: false,
   snoozed_until: null,
   priority: 1,
+  confidence: 0.8,
   expires_at: null,
   created_at: '2026-03-01T10:00:00Z',
 }
@@ -176,5 +177,33 @@ describe('FindingCard', () => {
     )
     fireEvent.click(screen.getByText('Snooze'))
     expect(onSnoozeToggle).toHaveBeenCalled()
+  })
+})
+
+describe('FindingCard confidence badge', () => {
+  it('renders Strong badge for confidence >= 0.7', () => {
+    const finding = { ...mockFinding, confidence: 0.9 }
+    render(<FindingCard finding={finding} isFirst={false} onDismiss={vi.fn()} onSnooze={vi.fn()} onAct={vi.fn()} snoozeMenuOpen={false} onSnoozeToggle={vi.fn()} />)
+    expect(screen.getByText('Strong')).toBeInTheDocument()
+  })
+
+  it('renders Moderate badge for confidence 0.5–0.69', () => {
+    const finding = { ...mockFinding, confidence: 0.6 }
+    render(<FindingCard finding={finding} isFirst={false} onDismiss={vi.fn()} onSnooze={vi.fn()} onAct={vi.fn()} snoozeMenuOpen={false} onSnoozeToggle={vi.fn()} />)
+    expect(screen.getByText('Moderate')).toBeInTheDocument()
+  })
+
+  it('renders Emerging badge for confidence < 0.5', () => {
+    const finding = { ...mockFinding, confidence: 0.3 }
+    render(<FindingCard finding={finding} isFirst={false} onDismiss={vi.fn()} onSnooze={vi.fn()} onAct={vi.fn()} snoozeMenuOpen={false} onSnoozeToggle={vi.fn()} />)
+    expect(screen.getByText('Emerging')).toBeInTheDocument()
+  })
+
+  it('does not render confidence badge when confidence is absent', () => {
+    const findingWithoutConf = { ...mockFinding, confidence: undefined } as unknown as typeof mockFinding
+    render(<FindingCard finding={findingWithoutConf} isFirst={false} onDismiss={vi.fn()} onSnooze={vi.fn()} onAct={vi.fn()} snoozeMenuOpen={false} onSnoozeToggle={vi.fn()} />)
+    expect(screen.queryByText('Strong')).not.toBeInTheDocument()
+    expect(screen.queryByText('Moderate')).not.toBeInTheDocument()
+    expect(screen.queryByText('Emerging')).not.toBeInTheDocument()
   })
 })

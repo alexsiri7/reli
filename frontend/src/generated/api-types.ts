@@ -136,6 +136,7 @@ export interface SweepFinding {
   created_at: string
   expires_at: string | null
   snoozed_until: string | null
+  confidence: number
   thing: Thing | null
 }
 
@@ -511,6 +512,7 @@ export const SweepFindingSchema = z.object({
   created_at: z.string(),
   expires_at: z.string().nullable(),
   snoozed_until: z.string().nullable().default(null),
+  confidence: z.number().default(0.5),
   thing: ThingSchema.nullable().default(null),
 })
 

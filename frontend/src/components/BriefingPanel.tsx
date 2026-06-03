@@ -173,6 +173,17 @@ export function FindingCard({ finding, isFirst, onDismiss, onSnooze, onAct, snoo
               {finding.thing.title}
             </p>
           )}
+          {typeof finding.confidence === 'number' && (
+            <span className={`inline-block text-xs px-1.5 py-0.5 rounded font-medium mt-1 ${
+              finding.confidence >= 0.7
+                ? 'text-projects bg-projects/10'
+                : finding.confidence >= 0.5
+                ? 'text-primary bg-primary/10'
+                : 'text-on-surface-variant bg-surface-container'
+            }`}>
+              {finding.confidence >= 0.7 ? 'Strong' : finding.confidence >= 0.5 ? 'Moderate' : 'Emerging'}
+            </span>
+          )}
           <div className="flex items-center gap-2 mt-1.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
             {finding.thing_id && (
               <button

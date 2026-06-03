@@ -140,6 +140,7 @@ const MOCK_FINDING = {
   priority: 1,
   expires_at: null,
   created_at: '2026-03-01T10:00:00Z',
+  confidence: 0.85,
 }
 
 const MOCK_FINDING_APPROACHING = {
@@ -153,6 +154,7 @@ const MOCK_FINDING_APPROACHING = {
   priority: 2,
   expires_at: null,
   created_at: '2026-03-01T10:00:00Z',
+  confidence: 0.6,
 }
 
 const MOCK_FINDING_CONNECTION = {
@@ -166,6 +168,7 @@ const MOCK_FINDING_CONNECTION = {
   priority: 3,
   expires_at: null,
   created_at: '2026-03-01T10:00:00Z',
+  confidence: 0.3,
 }
 
 const MOCK_BRIEFING_PREF = { id: 'pref-1', title: 'Prefers async communication', confidence_label: 'strong' }

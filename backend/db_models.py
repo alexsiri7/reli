@@ -194,6 +194,7 @@ class SweepFindingRecord(SQLModel, table=True):
     expires_at: datetime | None = None
     snoozed_until: datetime | None = None
     user_id: str | None = None
+    confidence: float | None = Field(default=None, sa_column_kwargs={"server_default": "0.5"})
 
 
 class SweepRunRecord(SQLModel, table=True):
