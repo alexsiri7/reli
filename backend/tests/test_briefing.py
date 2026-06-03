@@ -270,3 +270,29 @@ class TestFindingsForInactiveThings:
         resp = client.get("/api/briefing")
         finding_ids = [f["id"] for f in resp.json()["findings"]]
         assert finding["id"] in finding_ids
+
+
+class TestFindingCategorySuppress:
+    def test_suppressed_finding_type_excluded_from_briefing(self, client):
+        """Findings with a suppressed finding_type must not appear in the briefing."""
+        payload = {"finding_type": "lifestyle_wellness", "message": "drink more water", "priority": 2}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+        finding_id = resp.json()["id"]
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding_id not in finding_ids
+
+    def test_unsuppressed_finding_type_appears_in_briefing(self, client):
+        """Findings with finding_type='llm_insight' must still appear in the briefing."""
+        payload = {"finding_type": "llm_insight", "message": "important insight", "priority": 1}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+        finding_id = resp.json()["id"]
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding_id in finding_ids

@@ -46,6 +46,7 @@ from sqlmodel import Session, or_, select
 
 import backend.db_engine as _engine_mod
 
+from .config import settings
 from .db_engine import user_filter_clause
 from .db_models import (
     ChatHistoryRecord,
@@ -1683,7 +1684,7 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
   "findings": [
     {
       "thing_id": "uuid-or-null",
-      "finding_type": "llm_insight",
+      "finding_type": "llm_insight | lifestyle_wellness | location_suggestion | unverified_context",
       "message": "Concise, actionable message for the user",
       "priority": 1,
       "expires_in_days": 7
@@ -1692,7 +1693,13 @@ Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
 }
 
 Rules:
-- finding_type MUST be "llm_insight" for all your findings
+- finding_type MUST be one of:
+  - "llm_insight" — general insight, connections, patterns, actionable observations
+  - "lifestyle_wellness" — unsolicited lifestyle/health/wellness advice
+  - "location_suggestion" — suggestions based on location or geographic context
+  - "unverified_context" — findings derived from context fields that haven't been verified (speculative)
+  Use "lifestyle_wellness", "location_suggestion", or "unverified_context" only to categorize;
+  these types are suppressed by default and will not surface to the user.
 - priority: 0=critical, 1=high, 2=medium, 3=low
 - expires_in_days: how long this finding stays relevant (1-30, null for no expiry)
 - thing_id: link to a specific Thing when relevant, null for general observations
@@ -1807,6 +1814,22 @@ async def reflect_on_candidates(
             if not isinstance(priority, int) or priority < 0 or priority > 4:
                 priority = 2
 
+            # Derive finding_type (LLM may now use granular categories)
+            finding_type = str(f.get("finding_type", "llm_insight")).strip()
+            allowed_types = {"llm_insight", "lifestyle_wellness", "location_suggestion", "unverified_context"}
+            if finding_type not in allowed_types:
+                finding_type = "llm_insight"  # coerce unknown values
+
+            # Suppression check
+            suppressed = settings.suppressed_finding_types_set
+            if finding_type in suppressed:
+                logger.info(
+                    "sweep: suppressed finding type=%r message=%.80r",
+                    finding_type,
+                    message,
+                )
+                continue
+
             expires_in = f.get("expires_in_days")
             expires_at = None
             if isinstance(expires_in, (int, float)) and 1 <= expires_in <= 30:
@@ -1817,7 +1840,7 @@ async def reflect_on_candidates(
                 SweepFindingRecord(
                     id=finding_id,
                     thing_id=thing_id,
-                    finding_type="llm_insight",
+                    finding_type=finding_type,
                     message=message,
                     priority=priority,
                     dismissed=False,
@@ -1830,7 +1853,7 @@ async def reflect_on_candidates(
                 {
                     "id": finding_id,
                     "thing_id": thing_id,
-                    "finding_type": "llm_insight",
+                    "finding_type": finding_type,
                     "message": message,
                     "priority": priority,
                     "expires_at": expires_at,

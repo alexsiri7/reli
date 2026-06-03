@@ -11,6 +11,7 @@ from sqlmodel import Session, or_, select
 import backend.db_engine as _engine_mod
 
 from ..auth import require_user
+from ..config import settings
 from ..db_engine import user_filter_clause
 from ..db_models import SweepFindingRecord, ThingRecord, ThingRelationshipRecord
 from ..models import (
@@ -137,6 +138,11 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                 SweepFindingRecord.created_at.desc(),  # type: ignore[union-attr]
             )
         )
+        suppressed = list(settings.suppressed_finding_types_set)
+        if suppressed:
+            finding_stmt = finding_stmt.where(
+                ~SweepFindingRecord.finding_type.in_(suppressed)  # type: ignore[union-attr]
+            )
         finding_results = session.exec(finding_stmt).all()
 
     # Learned preference Things for "I Noticed" section

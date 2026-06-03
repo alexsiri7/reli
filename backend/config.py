@@ -182,6 +182,11 @@ class Settings(BaseSettings):
     SWEEP_ENABLED: str = "true"
     SWEEP_HOUR: int = 3
     SWEEP_MINUTE: int = 0
+    SWEEP_SUPPRESSED_FINDING_TYPES: str = "lifestyle_wellness,location_suggestion,unverified_context"
+
+    @property
+    def suppressed_finding_types_set(self) -> frozenset[str]:
+        return frozenset(t.strip() for t in self.SWEEP_SUPPRESSED_FINDING_TYPES.split(",") if t.strip())
 
     @property
     def rate_limit_enabled_bool(self) -> bool:
