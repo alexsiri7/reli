@@ -141,7 +141,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
         suppressed = list(settings.suppressed_finding_types_set)
         if suppressed:
             finding_stmt = finding_stmt.where(
-                ~SweepFindingRecord.finding_type.in_(suppressed)  # type: ignore[union-attr]
+                ~SweepFindingRecord.finding_type.in_(suppressed)  # type: ignore[attr-defined]
             )
         finding_results = session.exec(finding_stmt).all()
 
