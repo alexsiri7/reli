@@ -185,8 +185,9 @@ class Settings(BaseSettings):
     SWEEP_SUPPRESSED_FINDING_TYPES: str = "lifestyle_wellness,location_suggestion,unverified_context"
     # 0.0 = disabled, 1.0 = blocks everything; findings below threshold are excluded from briefings
     SWEEP_MIN_CONFIDENCE: float = 0.5
-    # Auto-merge: execute merges autonomously for exact-match duplicates above this threshold
+    # Auto-merge: set to "false" to disable autonomous duplicate merging entirely
     SWEEP_AUTO_MERGE_ENABLED: str = "true"
+    # Minimum confidence for autonomous merge; pairs below this are skipped (0.0–1.0)
     SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD: float = 0.95
 
     @property

@@ -316,9 +316,16 @@ async def _run_sweep_for_user(user_id: str) -> None:
                 am_result = await auto_merge_duplicates(user_id=user_id)
             if am_result.merges_executed:
                 logger.info(
-                    "Auto-merge sweep [%s]: %d duplicate(s) merged",
+                    "Auto-merge sweep [%s]: %d duplicate(s) merged, %d skipped",
                     user_label,
                     am_result.merges_executed,
+                    am_result.merges_skipped,
+                )
+            elif am_result.merges_skipped:
+                logger.warning(
+                    "Auto-merge sweep [%s]: 0 merged, %d candidate(s) skipped — check duplicate detection",
+                    user_label,
+                    am_result.merges_skipped,
                 )
         except TimeoutError:
             logger.error("Auto-merge sweep timed out for user %s (300s limit)", user_label)

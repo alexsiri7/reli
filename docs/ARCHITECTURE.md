@@ -243,11 +243,12 @@ The sweep scheduler (`sweep_scheduler.py`) runs nightly jobs:
 | Preference sweep | Infers user preferences from conversation patterns |
 | Connection sweep | Detects semantically related Things to suggest connections |
 | Research sweep | Fetches external data (web, Gmail, calendar) for Things with open questions |
+| Auto-merge sweep | Auto-merges exact-title cross-project duplicate Things above confidence threshold |
 | Morning briefing | Pre-generates the daily briefing |
 
 Scheduler starts at app startup and stops on shutdown (via FastAPI lifespan context).
 
-Autonomous actions taken by sweep jobs (e.g. Thing merges) are persisted to the `sweep_actions` table via `record_sweep_action()` in `morning_briefing.py` and surfaced in the pre-generated morning briefing under `actions_taken`.
+Autonomous actions taken by sweep jobs (Thing merges via auto-merge sweep, connection suggestions, etc.) are persisted to the `sweep_actions` table via `record_sweep_action()` in `morning_briefing.py` and surfaced in the pre-generated morning briefing under `actions_taken`.
 
 ## 9. Frontend Architecture
 

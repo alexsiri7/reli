@@ -95,6 +95,8 @@ Override per-environment via env vars:
 - `REQUESTY_RESPONSE_MODEL` — overrides response stage only
 - `SWEEP_SUPPRESSED_FINDING_TYPES` — comma-separated list of finding types to suppress from the briefing (default: `lifestyle_wellness,location_suggestion,unverified_context`). Set to empty string to show all types.
 - `SWEEP_MIN_CONFIDENCE` — minimum confidence score (0.0–1.0) a finding must have to appear in briefings (default: `0.5`). Set to `0.0` to disable filtering.
+- `SWEEP_AUTO_MERGE_ENABLED` — set to `false` to disable autonomous duplicate-Thing merging (default: `true`). When disabled, exact-match duplicates are detected but not merged without human action.
+- `SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD` — minimum confidence score (0.0–1.0) for a duplicate pair to be auto-merged (default: `0.95`). Only SQL exact-match duplicates are candidates; lower values have no effect below the floor set by the detection logic.
 
 ---
 
@@ -206,6 +208,8 @@ Both data stores contain production data. Handle with care.
 | `CORS_ORIGINS` | No | — | Comma-separated extra origins allowed on standard API endpoints (e.g. `https://reli.example.com`) |
 | `MCP_CORS_ORIGINS` | No | — | Comma-separated origins allowed on MCP/OAuth endpoints (e.g. `https://claude.ai`); if empty, the wildcard `*` is used for all origins (no credentials) |
 | `SWEEP_MIN_CONFIDENCE` | No | `0.5` | Minimum confidence score (0.0–1.0) for sweep findings to appear in briefings. Set to `0.0` to disable the gate and show all findings. |
+| `SWEEP_AUTO_MERGE_ENABLED` | No | `true` | Set to `false` to disable autonomous exact-match duplicate merging. Merges are still detected and logged when disabled. |
+| `SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD` | No | `0.95` | Minimum confidence score (0.0–1.0) for a duplicate pair to be auto-merged. Currently only exact-title cross-project duplicates are candidates. |
 
 ---
 

@@ -138,3 +138,38 @@ class TestAutoMergeDuplicates:
 
         result = asyncio.run(auto_merge_duplicates(user_id=""))
         assert result.merges_executed == 0
+
+    def test_high_threshold_skips_merge(self, db, monkeypatch):
+        """When SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD > 1.0, no merges fire."""
+        with db() as conn:
+            _insert_project(conn, "proj-a", "Project Alpha")
+            _insert_project(conn, "proj-b", "Project Beta")
+            _insert_task_under_project(conn, "task-a", "Shared work", "proj-a")
+            _insert_task_under_project(conn, "task-b", "Shared work", "proj-b")
+
+        from backend import config as _config
+        monkeypatch.setattr(_config.settings, "SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD", 2.0)
+
+        result = asyncio.run(auto_merge_duplicates(user_id=""))
+        assert result.merges_executed == 0
+
+    def test_candidate_missing_duplicate_id_is_skipped(self, db, monkeypatch):
+        """Candidates without a duplicate_thing_id in extra are counted as skipped."""
+        from backend import sweep as _sweep
+        from backend.sweep import SweepCandidate
+
+        fake_candidate = SweepCandidate(
+            thing_id="nonexistent-id",
+            thing_title="Ghost task",
+            finding_type="cross_project_duplicate_effort",
+            message="Ghost",
+            priority=2,
+            extra={},  # no duplicate_thing_id
+        )
+        monkeypatch.setattr(
+            _sweep, "find_cross_project_duplicate_effort", lambda session: [fake_candidate]
+        )
+
+        result = asyncio.run(auto_merge_duplicates(user_id=""))
+        assert result.merges_executed == 0
+        assert result.merges_skipped == 1

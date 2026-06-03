@@ -2214,7 +2214,6 @@ class AutoMergeResult:
 
     merges_executed: int = 0
     merges_skipped: int = 0
-    usage: dict = field(default_factory=dict)
 
 
 async def auto_merge_duplicates(
@@ -2222,9 +2221,10 @@ async def auto_merge_duplicates(
 ) -> AutoMergeResult:
     """Phase: Auto-merge exact-title duplicates detected across projects.
 
-    Uses find_cross_project_duplicate_effort() (SQL exact match) for high-confidence
-    pairs. For each pair above the confidence threshold, calls merge_things()
-    autonomously and records a sweep finding as an audit note.
+    Uses find_cross_project_duplicate_effort() (SQL exact match) for candidate pairs.
+    Each candidate's confidence score is compared against
+    settings.SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD; only pairs at or above the
+    threshold are merged autonomously. Records a sweep finding as an audit note per merge.
 
     Low-confidence / semantic duplicates are NOT handled here — they are surfaced by
     reflect_on_candidates() as llm_insight findings for human review.
@@ -2234,6 +2234,10 @@ async def auto_merge_duplicates(
 
     if not settings.sweep_auto_merge_enabled_bool:
         return AutoMergeResult()
+
+    threshold = settings.SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD
+    # SQL exact-title match is always a perfect match
+    EXACT_MATCH_CONFIDENCE = 1.0
 
     now = datetime.now(timezone.utc)
     merges_executed = 0
@@ -2245,6 +2249,10 @@ async def auto_merge_duplicates(
             return AutoMergeResult()
 
         for candidate in candidates:
+            if EXACT_MATCH_CONFIDENCE < threshold:
+                merges_skipped += 1
+                continue
+
             keep_id = candidate.thing_id
             remove_id = candidate.extra.get("duplicate_thing_id")
             if not remove_id:
@@ -2261,12 +2269,22 @@ async def auto_merge_duplicates(
             if remove_rec.created_at < keep_rec.created_at:
                 keep_id, remove_id = remove_id, keep_id
 
-            result = _tools.merge_things(
-                keep_id=keep_id,
-                remove_id=remove_id,
-                merged_data_json="{}",
-                user_id=user_id,
-            )
+            try:
+                result = _tools.merge_things(
+                    keep_id=keep_id,
+                    remove_id=remove_id,
+                    merged_data_json="{}",
+                    user_id=user_id,
+                )
+            except Exception:
+                logger.exception(
+                    "auto_merge_duplicates: unexpected error merging %s→%s",
+                    remove_id,
+                    keep_id,
+                )
+                merges_skipped += 1
+                continue
+
             if "error" in result:
                 logger.warning(
                     "auto_merge_duplicates: merge failed %s→%s: %s",
@@ -2277,23 +2295,32 @@ async def auto_merge_duplicates(
 
             merges_executed += 1
             finding_id = f"sf-{uuid.uuid4().hex[:8]}"
-            session.add(
-                SweepFindingRecord(
-                    id=finding_id,
-                    thing_id=keep_id,
-                    finding_type="duplicate_auto_merged",
-                    message=(
-                        f"Auto-merged duplicate \"{result['remove_title']}\" "
-                        f"into \"{result['keep_title']}\""
-                    ),
-                    priority=3,
-                    dismissed=False,
-                    created_at=now,
-                    user_id=user_id or None,
-                    confidence=0.95,
+            with Session(_engine_mod.engine) as finding_session:
+                finding_session.add(
+                    SweepFindingRecord(
+                        id=finding_id,
+                        thing_id=keep_id,
+                        finding_type="duplicate_auto_merged",
+                        message=(
+                            f"Auto-merged duplicate \"{result['remove_title']}\" "
+                            f"into \"{result['keep_title']}\""
+                        ),
+                        priority=3,
+                        dismissed=False,
+                        created_at=now,
+                        user_id=user_id or None,
+                        confidence=threshold,
+                    )
                 )
-            )
-        session.commit()
+                try:
+                    finding_session.commit()
+                except Exception:
+                    logger.warning(
+                        "auto_merge_duplicates: failed to record finding for merge %s→%s",
+                        remove_id,
+                        keep_id,
+                        exc_info=True,
+                    )
 
     return AutoMergeResult(merges_executed=merges_executed, merges_skipped=merges_skipped)
 
