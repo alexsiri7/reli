@@ -397,8 +397,7 @@ class TestConfidenceClamping:
             "message": "confidence edge case test",
             "priority": 2,
         }
-        if bad_conf is not None:
-            finding["confidence"] = bad_conf
+        finding["confidence"] = bad_conf
         llm_response = json.dumps({"findings": [finding]})
 
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
