@@ -426,3 +426,60 @@ describe('serialiseWeeklyBriefing', () => {
     expect(result).toContain('Quiet hours after 6pm')
   })
 })
+
+describe('serialiseMorningBriefing — actions_taken', () => {
+  it('includes actions_taken section when actions exist', () => {
+    const result = serialiseMorningBriefing({
+      briefing_date: '2026-06-03',
+      content: {
+        summary: 'Busy day',
+        priorities: [],
+        overdue: [],
+        blockers: [],
+        findings: [],
+        actions_taken: [
+          {
+            id: 'sa-abc',
+            action_type: 'merge',
+            description: "Merged 'Buy milk' into 'Groceries'",
+            confidence: 0.8,
+            thing_id: 't-1',
+            secondary_thing_id: 't-2',
+            created_at: '2026-06-03T06:00:00Z',
+          },
+        ],
+      },
+    } as never)
+    expect(result).toContain('Actions taken:')
+    expect(result).toContain("Merged 'Buy milk' into 'Groceries'")
+  })
+
+  it('omits actions_taken section when list is empty', () => {
+    const result = serialiseMorningBriefing({
+      briefing_date: '2026-06-03',
+      content: {
+        summary: '',
+        priorities: [],
+        overdue: [],
+        blockers: [],
+        findings: [],
+        actions_taken: [],
+      },
+    } as never)
+    expect(result).not.toContain('Actions taken:')
+  })
+
+  it('omits actions_taken section when field is missing (backward compat)', () => {
+    const result = serialiseMorningBriefing({
+      briefing_date: '2026-06-03',
+      content: {
+        summary: '',
+        priorities: [],
+        overdue: [],
+        blockers: [],
+        findings: [],
+      },
+    } as never)
+    expect(result).not.toContain('Actions taken:')
+  })
+})

@@ -71,3 +71,23 @@ class TestMergeThings:
         a = create_thing(title="Self")
         result = merge_things(keep_id=a["id"], remove_id=a["id"])
         assert "error" in result
+
+    def test_merge_records_sweep_action(self, patched_db):
+        """merge_things creates a SweepActionRecord audit entry."""
+        from sqlmodel import Session, select
+
+        import backend.db_engine as engine_mod
+        from backend.db_models import SweepActionRecord
+
+        a = create_thing(title="Keep")
+        b = create_thing(title="Remove")
+
+        merge_things(keep_id=a["id"], remove_id=b["id"])
+
+        with Session(engine_mod.engine) as session:
+            rows = session.exec(select(SweepActionRecord)).all()
+        assert len(rows) >= 1
+        rec = rows[-1]
+        assert rec.action_type == "merge"
+        assert rec.thing_id == a["id"]
+        assert rec.secondary_thing_id == b["id"]

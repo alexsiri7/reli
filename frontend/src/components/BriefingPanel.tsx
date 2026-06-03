@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import { serialiseMorningBriefing } from '../format/briefing'
 import type { SweepFinding, BriefingItem, LearnedPreference, CalendarEvent } from '../store'
+import type { SweepAction } from '../generated/api-types'
 import { NudgeBanner } from './NudgeBanner'
 
 const FINDING_TYPE_CONFIG: Record<string, { icon: string; borderClass: string }> = {
@@ -14,6 +15,26 @@ const FINDING_TYPE_CONFIG: Record<string, { icon: string; borderClass: string }>
   inconsistency: { icon: '\u26A0\uFE0F', borderClass: 'border-events' },
   open_question: { icon: '\u2753', borderClass: 'border-people' },
   connection: { icon: '\u{1F517}', borderClass: 'border-projects' },
+}
+
+function ConfidenceBadge({ confidence }: { confidence: number }) {
+  let label: string
+  let colorClass: string
+  if (confidence >= 0.7) {
+    label = 'Strong'
+    colorClass = 'text-projects bg-projects/10'
+  } else if (confidence >= 0.5) {
+    label = 'Moderate'
+    colorClass = 'text-primary bg-primary/10'
+  } else {
+    label = 'Emerging'
+    colorClass = 'text-on-surface-variant bg-surface-container'
+  }
+  return (
+    <span className={`inline-block text-xs px-1.5 py-0.5 rounded font-medium mt-1 ${colorClass}`}>
+      {label}
+    </span>
+  )
 }
 
 function formatGreetingDate(): string {
@@ -174,15 +195,7 @@ export function FindingCard({ finding, isFirst, onDismiss, onSnooze, onAct, snoo
             </p>
           )}
           {typeof finding.confidence === 'number' && (
-            <span className={`inline-block text-xs px-1.5 py-0.5 rounded font-medium mt-1 ${
-              finding.confidence >= 0.7
-                ? 'text-projects bg-projects/10'
-                : finding.confidence >= 0.5
-                ? 'text-primary bg-primary/10'
-                : 'text-on-surface-variant bg-surface-container'
-            }`}>
-              {finding.confidence >= 0.7 ? 'Strong' : finding.confidence >= 0.5 ? 'Moderate' : 'Emerging'}
-            </span>
+            <ConfidenceBadge confidence={finding.confidence} />
           )}
           <div className="flex items-center gap-2 mt-1.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
             {finding.thing_id && (
@@ -286,6 +299,31 @@ function StatCard({ label, value, suffix, accent }: { label: string; value: numb
         {suffix && <span className={`text-sm font-medium ${accent ?? 'text-on-surface-variant'}`}>{suffix}</span>}
       </div>
       <p className="text-label text-on-surface-variant mt-1">{label}</p>
+    </div>
+  )
+}
+
+const ACTION_TYPE_CONFIG: Record<string, { icon: string; borderClass: string }> = {
+  merge:   { icon: '🔀', borderClass: 'border-indigo-400' },
+  close:   { icon: '✅', borderClass: 'border-green-400' },
+  dismiss: { icon: '🗑️', borderClass: 'border-surface-variant' },
+}
+
+export function ActionTakenCard({ action }: { action: SweepAction }) {
+  const config = ACTION_TYPE_CONFIG[action.action_type]
+  const icon = config?.icon ?? '\u26A1'
+  const borderColor = config?.borderClass ?? 'border-primary'
+  return (
+    <div className={`bg-surface-container-high rounded-2xl border-l-4 ${borderColor} p-4`}>
+      <div className="flex items-start gap-3">
+        <span className="text-sm mt-0.5 shrink-0">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-on-surface leading-snug">{action.description}</p>
+          {typeof action.confidence === 'number' && (
+            <ConfidenceBadge confidence={action.confidence} />
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -470,6 +508,15 @@ export function BriefingPanel() {
                 snoozeMenuOpen={snoozeMenuId === item.thing.id}
                 onSnoozeToggle={() => setSnoozeMenuId(snoozeMenuId === item.thing.id ? null : item.thing.id)}
               />
+            ))}
+          </SectionCard>
+        )}
+
+        {/* Actions Taken */}
+        {morningBriefing?.content?.actions_taken && morningBriefing.content.actions_taken.length > 0 && (
+          <SectionCard title="Actions Taken" accent="text-indigo-400">
+            {morningBriefing.content.actions_taken.map(action => (
+              <ActionTakenCard key={action.id} action={action} />
             ))}
           </SectionCard>
         )}

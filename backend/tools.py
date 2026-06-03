@@ -571,6 +571,26 @@ def merge_things(
 
         session.commit()
 
+        # Record autonomous action for morning briefing.
+        # Confidence 0.8: merge is a high-confidence action (agent confirmed both sides
+        # are duplicates before calling this function); not 1.0 to leave room for
+        # future calibration.
+        try:
+            from .morning_briefing import record_sweep_action as _record_action
+            _record_action(
+                user_id=user_id,
+                action_type="merge",
+                description=f"Merged '{remove_title}' into '{keep_rec.title}'",
+                confidence=0.8,
+                thing_id=keep_id,
+                secondary_thing_id=remove_id,
+            )
+        except Exception:
+            logger.warning(
+                "merge_things: failed to record sweep action for merge %s→%s",
+                remove_id, keep_id, exc_info=True,
+            )
+
         # 6. Re-embed
         session.refresh(keep_rec)
         row_dict = _thing_to_dict(keep_rec)

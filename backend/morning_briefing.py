@@ -10,7 +10,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlmodel import Session, or_, select
 
@@ -20,6 +20,7 @@ from .config import settings
 from .db_engine import user_filter_clause
 from .db_models import (
     MorningBriefingRecord,
+    SweepActionRecord,
     SweepFindingRecord,
     ThingRecord,
     ThingRelationshipRecord,
@@ -28,6 +29,7 @@ from .db_models import (
 from .models import (
     BriefingPreferences,
     MorningBriefingContent,
+    SweepAction,
     MorningBriefingFinding,
     MorningBriefingItem,
 )
@@ -71,6 +73,40 @@ def _earliest_deadline(data: dict | None) -> date | None:
         if parsed and (earliest is None or parsed < earliest):
             earliest = parsed
     return earliest
+
+
+def record_sweep_action(
+    user_id: str | None,
+    action_type: str,
+    description: str,
+    confidence: float = 0.5,
+    thing_id: str | None = None,
+    secondary_thing_id: str | None = None,
+) -> None:
+    """Persist an autonomous sweep action to the audit log."""
+    action_id = f"sa-{uuid.uuid4().hex[:8]}"
+    now = datetime.now(timezone.utc)
+    try:
+        with Session(_engine_mod.engine) as session:
+            record = SweepActionRecord(
+                id=action_id,
+                user_id=user_id,
+                action_type=action_type,
+                description=description,
+                confidence=confidence,
+                thing_id=thing_id,
+                secondary_thing_id=secondary_thing_id,
+                created_at=now,
+            )
+            session.add(record)
+            session.commit()
+    except Exception:
+        logger.warning(
+            "record_sweep_action: failed to persist %s action %s",
+            action_type, action_id, exc_info=True,
+        )
+        raise
+    logger.info("Sweep action recorded: %s %s", action_type, action_id)
 
 
 def get_briefing_preferences(user_id: str) -> BriefingPreferences:
@@ -198,6 +234,18 @@ def generate_morning_briefing(
                 | SweepFindingRecord.confidence.is_(None)  # type: ignore[union-attr]
             )
         finding_rows = session.execute(finding_stmt).fetchall()
+
+        # Fetch autonomous actions from the past 24 hours
+        action_cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        action_stmt = (
+            select(SweepActionRecord)
+            .where(
+                SweepActionRecord.created_at >= action_cutoff,
+                user_filter_clause(SweepActionRecord.user_id, user_id),
+            )
+            .order_by(SweepActionRecord.created_at.desc())
+        )
+        action_rows = session.exec(action_stmt).all()
 
     # Build thing map
     thing_map: dict[str, dict] = {}
@@ -389,6 +437,20 @@ def generate_morning_briefing(
     else:
         summary = "Good morning! Everything looks clear today."
 
+    # Collect autonomous actions
+    actions_taken: list[SweepAction] = [
+        SweepAction(
+            id=r.id,
+            action_type=r.action_type,
+            description=r.description,
+            confidence=r.confidence if r.confidence is not None else 0.5,
+            thing_id=r.thing_id,
+            secondary_thing_id=r.secondary_thing_id,
+            created_at=r.created_at,
+        )
+        for r in action_rows
+    ]
+
     stats = {
         "total_active": len([t for t in thing_map.values() if t.get("type_hint") not in skip_types]),
         "priorities_count": len(priorities),
@@ -403,6 +465,7 @@ def generate_morning_briefing(
         overdue=overdue,
         blockers=blockers,
         findings=findings_list,
+        actions_taken=actions_taken,
         stats=stats,
     )
 

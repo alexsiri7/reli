@@ -464,6 +464,18 @@ class MorningBriefingFinding(BaseModel):
     confidence: float = 0.5
 
 
+class SweepAction(BaseModel):
+    """An autonomous action taken by the sweep."""
+
+    id: str
+    action_type: str  # "merge", "close", "dismiss"
+    description: str
+    confidence: float = 0.5
+    thing_id: str | None = None
+    secondary_thing_id: str | None = None
+    created_at: datetime
+
+
 class MorningBriefingContent(BaseModel):
     """Structured content of a pre-generated morning briefing."""
 
@@ -472,6 +484,7 @@ class MorningBriefingContent(BaseModel):
     overdue: list[MorningBriefingItem] = []
     blockers: list[MorningBriefingItem] = []
     findings: list[MorningBriefingFinding] = []
+    actions_taken: list[SweepAction] = []
     stats: dict[str, int] = {}
 
 
