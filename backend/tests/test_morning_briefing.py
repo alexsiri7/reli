@@ -186,3 +186,35 @@ class TestBriefingPreferencesWithUser:
         # Generate briefing — should respect preferences
         content = generate_morning_briefing("test-user2")
         assert len(content.findings) == 0
+
+
+class TestMorningBriefingConfidenceGate:
+    def test_low_confidence_finding_excluded_from_morning_briefing(self, client, monkeypatch):
+        """Low-confidence findings must not appear in the morning briefing."""
+        monkeypatch.setattr(
+            "backend.morning_briefing.settings.SWEEP_MIN_CONFIDENCE",
+            0.5,
+        )
+        payload = {"finding_type": "llm_insight", "message": "speculative morning finding", "priority": 2, "confidence": 0.1}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+
+        resp = client.get("/api/briefing/morning")
+        assert resp.status_code == 200
+        finding_msgs = [f["message"] for f in resp.json()["content"]["findings"]]
+        assert "speculative morning finding" not in finding_msgs
+
+    def test_high_confidence_finding_appears_in_morning_briefing(self, client, monkeypatch):
+        """High-confidence findings must appear in the morning briefing."""
+        monkeypatch.setattr(
+            "backend.morning_briefing.settings.SWEEP_MIN_CONFIDENCE",
+            0.5,
+        )
+        payload = {"finding_type": "llm_insight", "message": "high confidence morning finding", "priority": 2, "confidence": 0.9}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+
+        resp = client.get("/api/briefing/morning")
+        assert resp.status_code == 200
+        finding_msgs = [f["message"] for f in resp.json()["content"]["findings"]]
+        assert "high confidence morning finding" in finding_msgs

@@ -192,6 +192,7 @@ def generate_morning_briefing(
         )
         min_conf = settings.SWEEP_MIN_CONFIDENCE
         if min_conf > 0.0:
+            logger.debug("morning_briefing: applying confidence gate min_confidence=%.2f", min_conf)
             finding_stmt = finding_stmt.where(
                 (SweepFindingRecord.confidence >= min_conf)
                 | SweepFindingRecord.confidence.is_(None)  # type: ignore[union-attr]
@@ -368,7 +369,7 @@ def generate_morning_briefing(
                     priority=r.priority,
                     thing_id=r.thing_id,
                     thing_title=r.thing_title,
-                    confidence=r.confidence or 0.5,
+                    confidence=r.confidence if r.confidence is not None else 0.5,
                 )
             )
 

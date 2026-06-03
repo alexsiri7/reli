@@ -359,7 +359,13 @@ class SweepFindingCreate(BaseModel):
     message: str = Field(..., min_length=1, max_length=5000, description="Human-readable finding message")
     priority: int = Field(default=2, ge=0, le=4, description="0 (critical) to 4 (backlog)")
     expires_at: datetime | None = Field(default=None, description="Auto-dismiss after this time")
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="LLM confidence in this finding (0.0 = speculative, 1.0 = direct evidence). "
+                    "Findings below SWEEP_MIN_CONFIDENCE are excluded from briefings.",
+    )
 
 
 class SweepFindingSnooze(BaseModel):

@@ -376,3 +376,19 @@ class TestConfidenceGate:
         assert resp.status_code == 200
         finding_ids = [f["id"] for f in resp.json()["findings"]]
         assert finding_id not in finding_ids
+
+    def test_gate_disabled_at_zero_includes_all_confidence_levels(self, client, monkeypatch):
+        """When SWEEP_MIN_CONFIDENCE=0.0, all findings appear regardless of confidence."""
+        monkeypatch.setattr(
+            "backend.routers.briefing.settings.SWEEP_MIN_CONFIDENCE",
+            0.0,
+        )
+        payload = {"finding_type": "llm_insight", "message": "zero conf finding", "priority": 2, "confidence": 0.0}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+        finding_id = resp.json()["id"]
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding_id in finding_ids

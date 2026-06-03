@@ -376,6 +376,38 @@ class TestReflectOnCandidates:
 
 
 # ---------------------------------------------------------------------------
+# Confidence clamping / defaulting
+# ---------------------------------------------------------------------------
+
+
+class TestConfidenceClamping:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("bad_conf,expected", [
+        ("high", 0.5),   # non-numeric string → default
+        (None, 0.5),     # explicit null → default
+        (1.5, 1.0),      # over max → clamped to 1.0
+        (-0.2, 0.0),     # below min → clamped to 0.0
+    ])
+    async def test_confidence_clamped_or_defaulted(self, patched_db, bad_conf, expected):
+        """Non-numeric or out-of-range confidence values are sanitised before persistence."""
+        candidates = [_make_candidate()]
+        finding = {
+            "thing_id": None,
+            "finding_type": "llm_insight",
+            "message": "confidence edge case test",
+            "priority": 2,
+        }
+        if bad_conf is not None:
+            finding["confidence"] = bad_conf
+        llm_response = json.dumps({"findings": [finding]})
+
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
+            result = await reflect_on_candidates(candidates)
+
+        assert result.findings[0]["confidence"] == expected
+
+
+# ---------------------------------------------------------------------------
 # Sweep router endpoint
 # ---------------------------------------------------------------------------
 
