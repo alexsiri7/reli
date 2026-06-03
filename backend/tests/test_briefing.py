@@ -270,3 +270,75 @@ class TestFindingsForInactiveThings:
         resp = client.get("/api/briefing")
         finding_ids = [f["id"] for f in resp.json()["findings"]]
         assert finding["id"] in finding_ids
+
+
+class TestFindingCategorySuppress:
+    def test_suppressed_finding_type_excluded_from_briefing(self, client, monkeypatch):
+        """Findings with a suppressed finding_type must not appear in the briefing."""
+        monkeypatch.setattr(
+            "backend.routers.briefing.settings.SWEEP_SUPPRESSED_FINDING_TYPES",
+            "lifestyle_wellness,location_suggestion,unverified_context",
+        )
+        payload = {"finding_type": "lifestyle_wellness", "message": "drink more water", "priority": 2}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+        finding_id = resp.json()["id"]
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding_id not in finding_ids
+
+    def test_unsuppressed_finding_type_appears_in_briefing(self, client, monkeypatch):
+        """Findings with finding_type='llm_insight' must still appear in the briefing."""
+        monkeypatch.setattr(
+            "backend.routers.briefing.settings.SWEEP_SUPPRESSED_FINDING_TYPES",
+            "lifestyle_wellness,location_suggestion,unverified_context",
+        )
+        payload = {"finding_type": "llm_insight", "message": "important insight", "priority": 1}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+        finding_id = resp.json()["id"]
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding_id in finding_ids
+
+    def test_all_three_suppressed_types_excluded(self, client, monkeypatch):
+        """All three default-suppressed types must be absent from the briefing."""
+        monkeypatch.setattr(
+            "backend.routers.briefing.settings.SWEEP_SUPPRESSED_FINDING_TYPES",
+            "lifestyle_wellness,location_suggestion,unverified_context",
+        )
+        suppressed_types = ["lifestyle_wellness", "location_suggestion", "unverified_context"]
+        created_ids = []
+        for ftype in suppressed_types:
+            resp = client.post(
+                "/api/briefing/findings",
+                json={"finding_type": ftype, "message": f"msg {ftype}", "priority": 2},
+            )
+            assert resp.status_code == 201
+            created_ids.append(resp.json()["id"])
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        for fid in created_ids:
+            assert fid not in finding_ids
+
+    def test_empty_suppressed_list_shows_all_finding_types(self, client, monkeypatch):
+        """When suppression is disabled (empty list), all finding types appear in the briefing."""
+        monkeypatch.setattr(
+            "backend.routers.briefing.settings.SWEEP_SUPPRESSED_FINDING_TYPES",
+            "",
+        )
+        payload = {"finding_type": "lifestyle_wellness", "message": "should appear", "priority": 2}
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201
+        finding_id = resp.json()["id"]
+
+        resp = client.get("/api/briefing")
+        assert resp.status_code == 200
+        finding_ids = [f["id"] for f in resp.json()["findings"]]
+        assert finding_id in finding_ids

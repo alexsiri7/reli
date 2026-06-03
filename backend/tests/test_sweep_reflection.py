@@ -285,6 +285,95 @@ class TestReflectOnCandidates:
 
         assert "api_calls" in result.usage
 
+    @pytest.mark.asyncio
+    async def test_suppressed_finding_type_not_written_to_db(self, patched_db, db):
+        """LLM emitting a suppressed finding_type must not write it to the DB."""
+        candidates = [_make_candidate()]
+        llm_response = json.dumps({
+            "findings": [
+                {
+                    "thing_id": None,
+                    "finding_type": "lifestyle_wellness",
+                    "message": "drink more water",
+                    "priority": 2,
+                }
+            ]
+        })
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
+            result = await reflect_on_candidates(candidates)
+
+        assert result.findings_created == 0
+        assert result.findings == []
+        with db() as conn:
+            rows = conn.execute("SELECT * FROM sweep_findings").fetchall()
+        assert len(rows) == 0
+
+    @pytest.mark.asyncio
+    async def test_unknown_finding_type_coerced_to_llm_insight(self, patched_db, db):
+        """Unknown finding_type from LLM is coerced to 'llm_insight' and persisted."""
+        candidates = [_make_candidate()]
+        llm_response = json.dumps({
+            "findings": [
+                {
+                    "thing_id": None,
+                    "finding_type": "totally_made_up_type",
+                    "message": "some finding",
+                    "priority": 2,
+                }
+            ]
+        })
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
+            result = await reflect_on_candidates(candidates)
+
+        assert result.findings_created == 1
+        assert result.findings[0]["finding_type"] == "llm_insight"
+        with db() as conn:
+            row = conn.execute("SELECT finding_type FROM sweep_findings").fetchone()
+        assert row["finding_type"] == "llm_insight"
+
+    @pytest.mark.asyncio
+    async def test_mixed_batch_only_unsuppressed_persisted(self, patched_db, db):
+        """Mixed batch: suppressed types skipped, llm_insight type persisted."""
+        candidates = [_make_candidate()]
+        llm_response = json.dumps({
+            "findings": [
+                {"thing_id": None, "finding_type": "lifestyle_wellness", "message": "skipped 1", "priority": 2},
+                {"thing_id": None, "finding_type": "location_suggestion", "message": "skipped 2", "priority": 2},
+                {"thing_id": None, "finding_type": "llm_insight", "message": "kept insight", "priority": 1},
+            ]
+        })
+        with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
+            result = await reflect_on_candidates(candidates)
+
+        assert result.findings_created == 1
+        assert result.findings[0]["message"] == "kept insight"
+        assert result.findings[0]["finding_type"] == "llm_insight"
+
+    @pytest.mark.asyncio
+    async def test_granular_allowed_type_persisted_when_not_suppressed(self, patched_db, db):
+        """When SWEEP_SUPPRESSED_FINDING_TYPES is empty, allowed types are persisted."""
+        from unittest.mock import PropertyMock
+
+        from backend import config as cfg_module
+
+        candidates = [_make_candidate()]
+        llm_response = json.dumps({
+            "findings": [
+                {"thing_id": None, "finding_type": "lifestyle_wellness", "message": "wellness note", "priority": 2},
+            ]
+        })
+        with (
+            patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response),
+            patch.object(
+                type(cfg_module.settings), "suppressed_finding_types_set",
+                new_callable=PropertyMock, return_value=frozenset()
+            ),
+        ):
+            result = await reflect_on_candidates(candidates)
+
+        assert result.findings_created == 1
+        assert result.findings[0]["finding_type"] == "lifestyle_wellness"
+
 
 # ---------------------------------------------------------------------------
 # Sweep router endpoint

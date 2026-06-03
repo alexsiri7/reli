@@ -1,6 +1,7 @@
 """Daily briefing endpoint — combines checkin-due Things with sweep findings."""
 
 import json
+import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -11,6 +12,7 @@ from sqlmodel import Session, or_, select
 import backend.db_engine as _engine_mod
 
 from ..auth import require_user
+from ..config import settings
 from ..db_engine import user_filter_clause
 from ..db_models import SweepFindingRecord, ThingRecord, ThingRelationshipRecord
 from ..models import (
@@ -40,6 +42,8 @@ from ..weekly_briefing import (
     store_weekly_briefing,
 )
 from .things import _record_to_thing
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/briefing", tags=["briefing"])
 
@@ -137,6 +141,13 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                 SweepFindingRecord.created_at.desc(),  # type: ignore[union-attr]
             )
         )
+        # list() ensures SQLAlchemy .in_() compatibility across dialects
+        suppressed = list(settings.suppressed_finding_types_set)
+        if suppressed:
+            logger.debug("briefing: applying suppression filter for types=%r", suppressed)
+            finding_stmt = finding_stmt.where(
+                ~SweepFindingRecord.finding_type.in_(suppressed)  # type: ignore[attr-defined]
+            )
         finding_results = session.exec(finding_stmt).all()
 
     # Learned preference Things for "I Noticed" section

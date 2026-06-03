@@ -224,6 +224,18 @@ Daily briefing: check-in due Things, sweep findings, and learned preferences.
 | `total` | int | Total item count |
 | `stats` | object | Per-type counts |
 
+**`SweepFinding` shape:**
+
+| Field | Type | Values |
+|-------|------|--------|
+| `id` | string | UUID |
+| `thing_id` | string \| null | Related Thing ID, if any |
+| `finding_type` | string | `"llm_insight"` (default); operator-suppressed types (`lifestyle_wellness`, `location_suggestion`, `unverified_context`) are excluded from the response by default |
+| `message` | string | Human-readable finding text |
+| `priority` | int | 0=critical … 3=low |
+| `dismissed` | bool | Whether the user dismissed it |
+| `expires_at` | string \| null | ISO timestamp or null |
+
 **`LearnedPreference` shape:**
 
 | Field | Type | Values |

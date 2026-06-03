@@ -242,3 +242,40 @@ def test_settings_partial_auth_warns_about_cookie_only():
             assert not any("authentication is DISABLED" in m for m in messages), (
                 "Should not claim auth fully disabled when API token is set"
             )
+
+
+# ---------------------------------------------------------------------------
+# suppressed_finding_types_set property
+# ---------------------------------------------------------------------------
+
+
+class TestSuppressedFindingTypesSet:
+    def test_default_returns_three_suppressed_types(self):
+        """Default env var produces the three expected suppressed types."""
+        from backend.config import Settings
+
+        s = Settings()
+        assert s.suppressed_finding_types_set == frozenset(
+            {"lifestyle_wellness", "location_suggestion", "unverified_context"}
+        )
+
+    def test_empty_string_returns_empty_frozenset(self):
+        """Empty env var produces an empty frozenset (suppression disabled)."""
+        from backend.config import Settings
+
+        s = Settings(SWEEP_SUPPRESSED_FINDING_TYPES="")
+        assert s.suppressed_finding_types_set == frozenset()
+
+    def test_whitespace_only_entries_are_stripped(self):
+        """Whitespace-only comma entries are excluded from the frozenset."""
+        from backend.config import Settings
+
+        s = Settings(SWEEP_SUPPRESSED_FINDING_TYPES="llm_insight, , lifestyle_wellness")
+        assert s.suppressed_finding_types_set == frozenset({"llm_insight", "lifestyle_wellness"})
+
+    def test_single_type_returns_single_element_frozenset(self):
+        """A single comma-free value produces a one-element frozenset."""
+        from backend.config import Settings
+
+        s = Settings(SWEEP_SUPPRESSED_FINDING_TYPES="lifestyle_wellness")
+        assert s.suppressed_finding_types_set == frozenset({"lifestyle_wellness"})

@@ -93,6 +93,7 @@ Override per-environment via env vars:
 - `REQUESTY_MODEL` — overrides all three model stages
 - `REQUESTY_REASONING_MODEL` — overrides reasoning stage only
 - `REQUESTY_RESPONSE_MODEL` — overrides response stage only
+- `SWEEP_SUPPRESSED_FINDING_TYPES` — comma-separated list of finding types to suppress from the briefing (default: `lifestyle_wellness,location_suggestion,unverified_context`). Set to empty string to show all types.
 
 ---
 
