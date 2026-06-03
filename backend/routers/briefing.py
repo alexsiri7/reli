@@ -1,9 +1,12 @@
 """Daily briefing endpoint — combines checkin-due Things with sweep findings."""
 
 import json
+import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, or_, select
@@ -138,8 +141,9 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                 SweepFindingRecord.created_at.desc(),  # type: ignore[union-attr]
             )
         )
-        suppressed = list(settings.suppressed_finding_types_set)
+        suppressed = list(settings.suppressed_finding_types_set)  # list() ensures SQLAlchemy .in_() compatibility across dialects
         if suppressed:
+            logger.debug("briefing: applying suppression filter for types=%r", suppressed)
             finding_stmt = finding_stmt.where(
                 ~SweepFindingRecord.finding_type.in_(suppressed)  # type: ignore[attr-defined]
             )

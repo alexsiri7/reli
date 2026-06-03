@@ -1798,6 +1798,11 @@ async def reflect_on_candidates(
     # Collect valid thing_ids from candidates for validation
     valid_thing_ids = {c.thing_id for c in candidates}
 
+    # Hoist loop invariants: both are constant for the duration of this sweep run
+    # allowed_types must mirror the values listed in SWEEP_REFLECTION_SYSTEM prompt and SWEEP_SUPPRESSED_FINDING_TYPES
+    _allowed_types = frozenset({"llm_insight", "lifestyle_wellness", "location_suggestion", "unverified_context"})
+    _suppressed = settings.suppressed_finding_types_set
+
     with Session(_engine_mod.engine) as session:
         for f in raw_findings:
             if not isinstance(f, dict):
@@ -1816,13 +1821,11 @@ async def reflect_on_candidates(
 
             # Derive finding_type (LLM may now use granular categories)
             finding_type = str(f.get("finding_type", "llm_insight")).strip()
-            allowed_types = {"llm_insight", "lifestyle_wellness", "location_suggestion", "unverified_context"}
-            if finding_type not in allowed_types:
-                finding_type = "llm_insight"  # coerce unknown values
+            if finding_type not in _allowed_types:
+                finding_type = "llm_insight"  # coerce unknown values to safe default
 
             # Suppression check
-            suppressed = settings.suppressed_finding_types_set
-            if finding_type in suppressed:
+            if finding_type in _suppressed:
                 logger.info(
                     "sweep: suppressed finding type=%r message=%.80r",
                     finding_type,
