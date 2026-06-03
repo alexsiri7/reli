@@ -218,3 +218,101 @@ class TestMorningBriefingConfidenceGate:
         assert resp.status_code == 200
         finding_msgs = [f["message"] for f in resp.json()["content"]["findings"]]
         assert "high confidence morning finding" in finding_msgs
+
+
+class TestRecordSweepAction:
+    def test_creates_db_row(self, patched_db):
+        """record_sweep_action persists a SweepActionRecord to the DB."""
+        from sqlmodel import Session, select
+
+        import backend.db_engine as engine_mod
+        from backend.db_models import SweepActionRecord
+        from backend.morning_briefing import record_sweep_action
+
+        record_sweep_action(
+            user_id="user-1",
+            action_type="merge",
+            description="Merged 'Buy milk' into 'Groceries'",
+            confidence=0.8,
+            thing_id="t-keep",
+            secondary_thing_id="t-remove",
+        )
+
+        with Session(engine_mod.engine) as session:
+            rows = session.exec(select(SweepActionRecord)).all()
+        assert len(rows) == 1
+        r = rows[0]
+        assert r.action_type == "merge"
+        assert r.confidence == 0.8
+        assert r.id.startswith("sa-")
+        assert r.user_id == "user-1"
+        assert r.thing_id == "t-keep"
+        assert r.secondary_thing_id == "t-remove"
+
+    def test_none_user_id_stored_as_null(self, patched_db):
+        """record_sweep_action with user_id=None stores NULL in the DB."""
+        from sqlmodel import Session, select
+
+        import backend.db_engine as engine_mod
+        from backend.db_models import SweepActionRecord
+        from backend.morning_briefing import record_sweep_action
+
+        record_sweep_action(user_id=None, action_type="merge", description="test")
+
+        with Session(engine_mod.engine) as session:
+            rows = session.exec(select(SweepActionRecord)).all()
+        assert rows[0].user_id is None
+
+
+class TestMorningBriefingActionsTaken:
+    def test_actions_appear_in_morning_briefing(self, client, patched_db):
+        """Actions recorded in the past 24 hours appear in briefing content."""
+        from backend.morning_briefing import record_sweep_action
+
+        record_sweep_action(
+            user_id=None,
+            action_type="merge",
+            description="Merged 'Dentist' into 'Appointments'",
+            confidence=0.8,
+        )
+        resp = client.get("/api/briefing/morning")
+        assert resp.status_code == 200
+        actions = resp.json()["content"]["actions_taken"]
+        assert len(actions) == 1
+        assert actions[0]["action_type"] == "merge"
+        assert actions[0]["confidence"] == 0.8
+        assert actions[0]["description"] == "Merged 'Dentist' into 'Appointments'"
+
+    def test_action_older_than_24h_excluded(self, patched_db, client):
+        """Actions older than 24 hours are excluded from the briefing."""
+        from datetime import datetime, timedelta, timezone
+
+        from sqlmodel import Session
+
+        import backend.db_engine as engine_mod
+        from backend.db_models import SweepActionRecord
+
+        old_time = datetime.now(timezone.utc) - timedelta(hours=25)
+        with Session(engine_mod.engine) as session:
+            session.add(SweepActionRecord(
+                id="sa-old",
+                user_id=None,
+                action_type="merge",
+                description="Old action",
+                confidence=0.5,
+                created_at=old_time,
+            ))
+            session.commit()
+
+        resp = client.get("/api/briefing/morning")
+        assert resp.status_code == 200
+        ids = [a["id"] for a in resp.json()["content"]["actions_taken"]]
+        assert "sa-old" not in ids
+
+    def test_actions_taken_key_present_when_empty(self, client):
+        """actions_taken key is always present even when no actions exist."""
+        resp = client.get("/api/briefing/morning")
+        assert resp.status_code == 200
+        content = resp.json()["content"]
+        assert "actions_taken" in content
+        assert isinstance(content["actions_taken"], list)

@@ -244,6 +244,30 @@ Daily briefing: check-in due Things, sweep findings, and learned preferences.
 | `title` | string | Preference description |
 | `confidence_label` | string | `"emerging"`, `"moderate"`, `"strong"` |
 
+**`GET /api/briefing/morning` response shape (`MorningBriefingContent`):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `summary` | string | Narrative summary for the day |
+| `priorities` | MorningBriefingItem[] | High-priority items |
+| `overdue` | MorningBriefingItem[] | Overdue items |
+| `blockers` | MorningBriefingItem[] | Blocking items |
+| `findings` | MorningBriefingFinding[] | Active sweep findings |
+| `actions_taken` | SweepAction[] | Autonomous actions taken by the sweep in the past 24 hours |
+| `stats` | object | Per-type counts |
+
+**`SweepAction` shape:**
+
+| Field | Type | Values |
+|-------|------|--------|
+| `id` | string | Prefixed UUID (`sa-…`) |
+| `action_type` | string | `"merge"`, `"close"`, `"dismiss"` |
+| `description` | string | Human-readable e.g. "Merged 'Buy milk' into 'Groceries'" |
+| `confidence` | float | 0.0–1.0; displayed as Emerging / Moderate / Strong |
+| `thing_id` | string \| null | Primary Thing involved |
+| `secondary_thing_id` | string \| null | Secondary Thing (e.g. removed item in a merge) |
+| `created_at` | string | ISO 8601 UTC timestamp |
+
 ---
 
 ## Google Calendar (`/api/calendar`)

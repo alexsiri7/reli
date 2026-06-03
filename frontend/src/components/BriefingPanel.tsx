@@ -292,9 +292,9 @@ function StatCard({ label, value, suffix, accent }: { label: string; value: numb
 }
 
 const ACTION_TYPE_CONFIG: Record<string, { icon: string; borderClass: string }> = {
-  merge: { icon: '\u{1F500}', borderClass: 'border-indigo-400' },
-  close: { icon: '\u2705', borderClass: 'border-green-400' },
-  dismiss: { icon: '\u{1F5D1}\uFE0F', borderClass: 'border-surface-variant' },
+  merge:   { icon: '🔀', borderClass: 'border-indigo-400' },
+  close:   { icon: '✅', borderClass: 'border-green-400' },
+  dismiss: { icon: '🗑️', borderClass: 'border-surface-variant' },
 }
 
 export function ActionTakenCard({ action }: { action: SweepAction }) {

@@ -76,7 +76,7 @@ def _earliest_deadline(data: dict | None) -> date | None:
 
 
 def record_sweep_action(
-    user_id: str,
+    user_id: str | None,
     action_type: str,
     description: str,
     confidence: float = 0.5,
@@ -86,19 +86,26 @@ def record_sweep_action(
     """Persist an autonomous sweep action to the audit log."""
     action_id = f"sa-{uuid.uuid4().hex[:8]}"
     now = datetime.now(timezone.utc)
-    with Session(_engine_mod.engine) as session:
-        record = SweepActionRecord(
-            id=action_id,
-            user_id=user_id or None,
-            action_type=action_type,
-            description=description,
-            confidence=confidence,
-            thing_id=thing_id,
-            secondary_thing_id=secondary_thing_id,
-            created_at=now,
+    try:
+        with Session(_engine_mod.engine) as session:
+            record = SweepActionRecord(
+                id=action_id,
+                user_id=user_id,
+                action_type=action_type,
+                description=description,
+                confidence=confidence,
+                thing_id=thing_id,
+                secondary_thing_id=secondary_thing_id,
+                created_at=now,
+            )
+            session.add(record)
+            session.commit()
+    except Exception:
+        logger.warning(
+            "record_sweep_action: failed to persist %s action %s",
+            action_type, action_id, exc_info=True,
         )
-        session.add(record)
-        session.commit()
+        raise
     logger.info("Sweep action recorded: %s %s", action_type, action_id)
 
 

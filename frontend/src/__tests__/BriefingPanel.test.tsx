@@ -207,3 +207,48 @@ describe('FindingCard confidence badge', () => {
     expect(screen.queryByText('Emerging')).not.toBeInTheDocument()
   })
 })
+
+import { ActionTakenCard } from '../components/BriefingPanel'
+import type { SweepAction } from '../generated/api-types'
+
+const mockAction: SweepAction = {
+  id: 'sa-abc1',
+  action_type: 'merge',
+  description: "Merged 'Buy milk' into 'Groceries'",
+  confidence: 0.8,
+  thing_id: 't-1',
+  secondary_thing_id: 't-2',
+  created_at: '2026-06-03T06:00:00Z',
+}
+
+describe('ActionTakenCard', () => {
+  it('renders action description', () => {
+    render(<ActionTakenCard action={mockAction} />)
+    expect(screen.getByText("Merged 'Buy milk' into 'Groceries'")).toBeInTheDocument()
+  })
+
+  it('renders Strong confidence badge for confidence >= 0.7', () => {
+    render(<ActionTakenCard action={{ ...mockAction, confidence: 0.8 }} />)
+    expect(screen.getByText('Strong')).toBeInTheDocument()
+  })
+
+  it('renders Moderate confidence badge for confidence 0.5–0.69', () => {
+    render(<ActionTakenCard action={{ ...mockAction, confidence: 0.6 }} />)
+    expect(screen.getByText('Moderate')).toBeInTheDocument()
+  })
+
+  it('renders Emerging confidence badge for confidence < 0.5', () => {
+    render(<ActionTakenCard action={{ ...mockAction, confidence: 0.3 }} />)
+    expect(screen.getByText('Emerging')).toBeInTheDocument()
+  })
+
+  it('renders merge icon for merge action type', () => {
+    const { container } = render(<ActionTakenCard action={{ ...mockAction, action_type: 'merge' }} />)
+    expect(container.textContent).toContain('🔀')
+  })
+
+  it('falls back gracefully for unknown action type', () => {
+    render(<ActionTakenCard action={{ ...mockAction, action_type: 'unknown_type' }} />)
+    expect(screen.getByText("Merged 'Buy milk' into 'Groceries'")).toBeInTheDocument()
+  })
+})

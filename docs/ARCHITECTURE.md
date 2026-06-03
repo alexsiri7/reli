@@ -247,6 +247,8 @@ The sweep scheduler (`sweep_scheduler.py`) runs nightly jobs:
 
 Scheduler starts at app startup and stops on shutdown (via FastAPI lifespan context).
 
+Autonomous actions taken by sweep jobs (e.g. Thing merges) are persisted to the `sweep_actions` table via `record_sweep_action()` in `morning_briefing.py` and surfaced in the pre-generated morning briefing under `actions_taken`.
+
 ## 9. Frontend Architecture
 
 The frontend is a React 19 SPA built with Vite.
