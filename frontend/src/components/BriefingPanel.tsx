@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import { serialiseMorningBriefing } from '../format/briefing'
 import type { SweepFinding, BriefingItem, LearnedPreference, CalendarEvent } from '../store'
+import type { SweepAction } from '../generated/api-types'
 import { NudgeBanner } from './NudgeBanner'
 
 const FINDING_TYPE_CONFIG: Record<string, { icon: string; borderClass: string }> = {
@@ -290,6 +291,39 @@ function StatCard({ label, value, suffix, accent }: { label: string; value: numb
   )
 }
 
+const ACTION_TYPE_CONFIG: Record<string, { icon: string; borderClass: string }> = {
+  merge: { icon: '\u{1F500}', borderClass: 'border-indigo-400' },
+  close: { icon: '\u2705', borderClass: 'border-green-400' },
+  dismiss: { icon: '\u{1F5D1}\uFE0F', borderClass: 'border-surface-variant' },
+}
+
+export function ActionTakenCard({ action }: { action: SweepAction }) {
+  const config = ACTION_TYPE_CONFIG[action.action_type]
+  const icon = config?.icon ?? '\u26A1'
+  const borderColor = config?.borderClass ?? 'border-primary'
+  return (
+    <div className={`bg-surface-container-high rounded-2xl border-l-4 ${borderColor} p-4`}>
+      <div className="flex items-start gap-3">
+        <span className="text-sm mt-0.5 shrink-0">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-on-surface leading-snug">{action.description}</p>
+          {typeof action.confidence === 'number' && (
+            <span className={`inline-block text-xs px-1.5 py-0.5 rounded font-medium mt-1 ${
+              action.confidence >= 0.7
+                ? 'text-projects bg-projects/10'
+                : action.confidence >= 0.5
+                ? 'text-primary bg-primary/10'
+                : 'text-on-surface-variant bg-surface-container'
+            }`}>
+              {action.confidence >= 0.7 ? 'Strong' : action.confidence >= 0.5 ? 'Moderate' : 'Emerging'}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function BriefingPanel() {
   const {
     theOneThing, secondaryItems, briefingStats, findings, learnedPreferences, nudges,
@@ -470,6 +504,15 @@ export function BriefingPanel() {
                 snoozeMenuOpen={snoozeMenuId === item.thing.id}
                 onSnoozeToggle={() => setSnoozeMenuId(snoozeMenuId === item.thing.id ? null : item.thing.id)}
               />
+            ))}
+          </SectionCard>
+        )}
+
+        {/* Actions Taken */}
+        {morningBriefing?.content?.actions_taken && morningBriefing.content.actions_taken.length > 0 && (
+          <SectionCard title="Actions Taken" accent="text-indigo-400">
+            {morningBriefing.content.actions_taken.map(action => (
+              <ActionTakenCard key={action.id} action={action} />
             ))}
           </SectionCard>
         )}

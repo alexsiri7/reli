@@ -216,6 +216,21 @@ class SweepRunRecord(SQLModel, table=True):
     completed_at: datetime | None = None
 
 
+class SweepActionRecord(SQLModel, table=True):
+    """Audit trail for autonomous actions taken by the sweep."""
+
+    __tablename__ = "sweep_actions"
+
+    id: str = Field(primary_key=True)
+    user_id: str | None = Field(default=None, foreign_key="users.id")
+    action_type: str  # "merge", "close", "dismiss"
+    description: str  # Human-readable: "Merged 'Buy milk' into 'Groceries'"
+    confidence: float = Field(default=0.5, sa_column_kwargs={"server_default": "0.5"})
+    thing_id: str | None = Field(default=None)
+    secondary_thing_id: str | None = Field(default=None)
+    created_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
+
+
 # ---------------------------------------------------------------------------
 # Usage
 # ---------------------------------------------------------------------------

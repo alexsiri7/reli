@@ -209,12 +209,23 @@ export interface MorningBriefingFinding {
   thing_title: string | null
 }
 
+export interface SweepAction {
+  id: string
+  action_type: string
+  description: string
+  confidence: number
+  thing_id: string | null
+  secondary_thing_id: string | null
+  created_at: string
+}
+
 export interface MorningBriefingContent {
   summary: string
   priorities: MorningBriefingItem[]
   overdue: MorningBriefingItem[]
   blockers: MorningBriefingItem[]
   findings: MorningBriefingFinding[]
+  actions_taken: SweepAction[]
   stats: Record<string, number>
 }
 
@@ -585,12 +596,23 @@ export const MorningBriefingFindingSchema = z.object({
   thing_title: z.string().nullable().default(null),
 })
 
+export const SweepActionSchema = z.object({
+  id: z.string(),
+  action_type: z.string(),
+  description: z.string(),
+  confidence: z.number().default(0.5),
+  thing_id: z.string().nullable().default(null),
+  secondary_thing_id: z.string().nullable().default(null),
+  created_at: z.string(),
+})
+
 export const MorningBriefingContentSchema = z.object({
   summary: z.string(),
   priorities: z.array(MorningBriefingItemSchema).default([]),
   overdue: z.array(MorningBriefingItemSchema).default([]),
   blockers: z.array(MorningBriefingItemSchema).default([]),
   findings: z.array(MorningBriefingFindingSchema).default([]),
+  actions_taken: z.array(SweepActionSchema).default([]),
   stats: z.record(z.string(), z.number()).default({}),
 })
 

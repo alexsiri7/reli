@@ -571,6 +571,17 @@ def merge_things(
 
         session.commit()
 
+        # Record autonomous action for morning briefing
+        from .morning_briefing import record_sweep_action as _record_action
+        _record_action(
+            user_id=user_id or "",
+            action_type="merge",
+            description=f"Merged '{remove_title}' into '{keep_rec.title}'",
+            confidence=0.8,
+            thing_id=keep_id,
+            secondary_thing_id=remove_id,
+        )
+
         # 6. Re-embed
         session.refresh(keep_rec)
         row_dict = _thing_to_dict(keep_rec)
