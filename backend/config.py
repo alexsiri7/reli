@@ -183,6 +183,7 @@ class Settings(BaseSettings):
     SWEEP_HOUR: int = 3
     SWEEP_MINUTE: int = 0
     SWEEP_SUPPRESSED_FINDING_TYPES: str = "lifestyle_wellness,location_suggestion,unverified_context"
+    SWEEP_MIN_CONFIDENCE: float = 0.5  # Findings below this score are excluded from briefings (0.0 = off, 1.0 = only perfect)
 
     @property
     def suppressed_finding_types_set(self) -> frozenset[str]:

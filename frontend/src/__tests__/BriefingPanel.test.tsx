@@ -110,6 +110,7 @@ const mockFinding: SweepFinding = {
   dismissed: false,
   snoozed_until: null,
   priority: 1,
+  confidence: 0.8,
   expires_at: null,
   created_at: '2026-03-01T10:00:00Z',
 }

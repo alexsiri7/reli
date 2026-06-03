@@ -343,6 +343,7 @@ class SweepFinding(BaseModel):
     created_at: datetime
     expires_at: datetime | None
     snoozed_until: datetime | None = None
+    confidence: float = 0.5
     thing: Thing | None = None
 
     model_config = {"from_attributes": True}
@@ -358,6 +359,7 @@ class SweepFindingCreate(BaseModel):
     message: str = Field(..., min_length=1, max_length=5000, description="Human-readable finding message")
     priority: int = Field(default=2, ge=0, le=4, description="0 (critical) to 4 (backlog)")
     expires_at: datetime | None = Field(default=None, description="Auto-dismiss after this time")
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 class SweepFindingSnooze(BaseModel):
@@ -453,6 +455,7 @@ class MorningBriefingFinding(BaseModel):
     priority: int
     thing_id: str | None = None
     thing_title: str | None = None
+    confidence: float = 0.5
 
 
 class MorningBriefingContent(BaseModel):

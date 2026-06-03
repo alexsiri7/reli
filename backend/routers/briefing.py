@@ -59,6 +59,7 @@ def _record_to_finding(record: SweepFindingRecord, thing: Thing | None = None) -
         created_at=record.created_at,
         expires_at=record.expires_at,
         snoozed_until=record.snoozed_until,
+        confidence=record.confidence if record.confidence is not None else 0.5,
         thing=thing,
     )
 
@@ -147,6 +148,13 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
             logger.debug("briefing: applying suppression filter for types=%r", suppressed)
             finding_stmt = finding_stmt.where(
                 ~SweepFindingRecord.finding_type.in_(suppressed)  # type: ignore[attr-defined]
+            )
+        min_conf = settings.SWEEP_MIN_CONFIDENCE
+        if min_conf > 0.0:
+            logger.debug("briefing: applying confidence gate min_confidence=%.2f", min_conf)
+            finding_stmt = finding_stmt.where(
+                (SweepFindingRecord.confidence >= min_conf)
+                | SweepFindingRecord.confidence.is_(None)  # type: ignore[union-attr]
             )
         finding_results = session.exec(finding_stmt).all()
 
@@ -262,6 +270,7 @@ def create_finding(body: SweepFindingCreate, user_id: str = Depends(require_user
             created_at=now,
             expires_at=body.expires_at,
             user_id=user_id or None,
+            confidence=body.confidence,
         )
         session.add(record)
         session.commit()
