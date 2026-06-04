@@ -9,7 +9,7 @@ Covers:
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -256,7 +256,9 @@ class TestMaybeTriggerSummarization:
         async def _signal_summarize(uid):
             summarize_called.set()
 
-        with patch("backend.summarization_agent.summarize_conversation", side_effect=_signal_summarize) as mock_summarize:
+        with patch(
+            "backend.summarization_agent.summarize_conversation", side_effect=_signal_summarize
+        ) as mock_summarize:
             _maybe_trigger_summarization(user_id)
             await asyncio.wait_for(summarize_called.wait(), timeout=5.0)
             mock_summarize.assert_called_once_with(user_id)

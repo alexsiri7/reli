@@ -1909,9 +1909,9 @@ async def reflect_on_candidates(
                 continue
 
             expires_in = f.get("expires_in_days")
-            expires_at = None
+            expires_at: datetime | None = None
             if isinstance(expires_in, (int, float)) and 1 <= expires_in <= 30:
-                expires_at = (now + timedelta(days=int(expires_in))).isoformat()
+                expires_at = now + timedelta(days=int(expires_in))
 
             # Build snapshot from thing_map lookup
             context_snapshot: dict | None = None
@@ -1935,7 +1935,7 @@ async def reflect_on_candidates(
                     priority=priority,
                     dismissed=False,
                     created_at=now,
-                    expires_at=datetime.fromisoformat(expires_at) if expires_at else None,
+                    expires_at=expires_at,
                     user_id=user_id or None,
                     confidence=confidence,
                     context_snapshot=context_snapshot,
@@ -1949,7 +1949,7 @@ async def reflect_on_candidates(
                     "message": message,
                     "priority": priority,
                     "confidence": confidence,
-                    "expires_at": expires_at,
+                    "expires_at": expires_at.isoformat() if expires_at else None,
                 }
             )
         session.commit()

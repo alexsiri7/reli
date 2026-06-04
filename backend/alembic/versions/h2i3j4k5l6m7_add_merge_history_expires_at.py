@@ -19,9 +19,17 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add expires_at column to merge_history."""
-    op.add_column("merge_history", sa.Column("expires_at", sa.DateTime(), nullable=True))
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [c["name"] for c in inspector.get_columns("merge_history")]
+    if "expires_at" in columns:
+        print("[h2i3j4k5l6m7] expires_at already present — skipping add_column (idempotency guard)")
+        return  # column already exists (schema drift); skip to avoid duplicate column error
+    with op.batch_alter_table("merge_history") as batch_op:
+        batch_op.add_column(sa.Column("expires_at", sa.DateTime(), nullable=True))
 
 
 def downgrade() -> None:
     """Remove expires_at column from merge_history."""
-    op.drop_column("merge_history", "expires_at")
+    with op.batch_alter_table("merge_history") as batch_op:
+        batch_op.drop_column("expires_at")

@@ -32,7 +32,8 @@ def _insert_task_under_project(
         (task_id, task_title, now, now),
     )
     conn.execute(
-        "INSERT INTO thing_relationships (id, from_thing_id, to_thing_id, relationship_type) VALUES (?, ?, ?, 'parent-of')",
+        "INSERT INTO thing_relationships"
+        " (id, from_thing_id, to_thing_id, relationship_type) VALUES (?, ?, ?, 'parent-of')",
         (str(uuid.uuid4()), proj_id, task_id),
     )
 

@@ -195,7 +195,12 @@ class TestMorningBriefingConfidenceGate:
             "backend.morning_briefing.settings.SWEEP_MIN_CONFIDENCE",
             0.5,
         )
-        payload = {"finding_type": "llm_insight", "message": "speculative morning finding", "priority": 2, "confidence": 0.1}
+        payload = {
+            "finding_type": "llm_insight",
+            "message": "speculative morning finding",
+            "priority": 2,
+            "confidence": 0.1,
+        }
         resp = client.post("/api/briefing/findings", json=payload)
         assert resp.status_code == 201
 
@@ -210,7 +215,12 @@ class TestMorningBriefingConfidenceGate:
             "backend.morning_briefing.settings.SWEEP_MIN_CONFIDENCE",
             0.5,
         )
-        payload = {"finding_type": "llm_insight", "message": "high confidence morning finding", "priority": 2, "confidence": 0.9}
+        payload = {
+            "finding_type": "llm_insight",
+            "message": "high confidence morning finding",
+            "priority": 2,
+            "confidence": 0.9,
+        }
         resp = client.post("/api/briefing/findings", json=payload)
         assert resp.status_code == 201
 

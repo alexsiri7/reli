@@ -1,6 +1,5 @@
 """Tests for pipeline onboarding detection and vector search fallback."""
 
-from unittest.mock import patch
 
 from sqlmodel import Session
 
