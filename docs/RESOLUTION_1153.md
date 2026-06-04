@@ -39,11 +39,12 @@ http_code=${http_code:-000}
 ## Validation
 
 ✅ All validation checks passed:
-- Shell syntax validation (`bash -n`)
-- Frontend tests: 403 passed
-- Backend tests: 1226 passed
-- Frontend build successful
-- No regressions introduced
+- Shell syntax validation (`bash -n`) — run against the patched `pipeline-health-cron.sh`
+- External commit applied: `24418d1` in interstellarai.net
+- Reli regression check (confirms no impact to Reli monitoring layer):
+  - Frontend tests: 403 passed
+  - Backend tests: 1226 passed, 14 skipped
+  - Frontend build successful
 
 ## Related Issue
 
