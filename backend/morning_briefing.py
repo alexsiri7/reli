@@ -105,7 +105,7 @@ def record_sweep_action(
             "record_sweep_action: failed to persist %s action %s",
             action_type, action_id, exc_info=True,
         )
-        raise
+        return
     logger.info("Sweep action recorded: %s %s", action_type, action_id)
 
 
