@@ -140,7 +140,7 @@ class TestBriefing:
 
     def test_preference_cap_at_five(self, client):
         """learned_preferences is capped at 5 even when more preferences exist."""
-        for i in range(6):
+        for i in range(8):
             client.post(
                 "/api/things",
                 json={
@@ -151,7 +151,7 @@ class TestBriefing:
             )
         resp = client.get("/api/briefing")
         prefs = resp.json()["learned_preferences"]
-        assert len(prefs) <= 5
+        assert len(prefs) == 5
 
     def test_things_without_checkin_date_excluded(self, client):
         _create_thing(client, "No Date Thing")

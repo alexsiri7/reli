@@ -259,8 +259,8 @@ class TestStartStop:
         mod._task = None
         await start_scheduler()
         assert mod._task is not None
-        # Let the task start and exit (disabled -> returns immediately)
-        await asyncio.sleep(0.1)
+        # Wait for the task to finish (disabled -> returns immediately)
+        await asyncio.wait_for(mod._task, timeout=5.0)
         await stop_scheduler()
         assert mod._task is None
 

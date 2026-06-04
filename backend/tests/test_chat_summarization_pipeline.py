@@ -251,10 +251,14 @@ class TestMaybeTriggerSummarization:
             # DEFAULT_SUMMARY_TRIGGER_N is 20, so insert 20 messages
             _insert_messages(conn, user_id, [("user", f"msg{i}") for i in range(20)])
 
-        with patch("backend.summarization_agent.summarize_conversation", new_callable=AsyncMock) as mock_summarize:
+        summarize_called = asyncio.Event()
+
+        async def _signal_summarize(uid):
+            summarize_called.set()
+
+        with patch("backend.summarization_agent.summarize_conversation", side_effect=_signal_summarize) as mock_summarize:
             _maybe_trigger_summarization(user_id)
-            # Let background task run
-            await asyncio.sleep(0.1)
+            await asyncio.wait_for(summarize_called.wait(), timeout=5.0)
             mock_summarize.assert_called_once_with(user_id)
 
     def test_does_not_trigger_without_user_id(self, patched_db):
@@ -294,15 +298,13 @@ class TestSummarizationNonBlocking:
             # Trigger summarization — it should create a background task
             _maybe_trigger_summarization(user_id)
 
-            # Give the background task a moment to start
-            await asyncio.sleep(0.05)
-
-            # Summarization should have started
+            # Wait for the background task to start deterministically
+            await asyncio.wait_for(summarization_started.wait(), timeout=5.0)
             assert summarization_started.is_set(), "Background summarization should have started"
 
-            # Let it finish
+            # Let it finish and wait for completion
             summarization_can_finish.set()
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0)
 
     @pytest.mark.asyncio
     async def test_summarization_error_does_not_crash_pipeline(self, patched_db, db):
@@ -312,8 +314,13 @@ class TestSummarizationNonBlocking:
             _create_test_user(conn, user_id)
             _insert_messages(conn, user_id, [("user", f"msg{i}") for i in range(20)])
 
+        task_failed = asyncio.Event()
+
         async def failing_summarize(uid):
-            raise RuntimeError("LLM is down")
+            try:
+                raise RuntimeError("LLM is down")
+            finally:
+                task_failed.set()
 
         with (
             patch("backend.summarization_agent.should_summarize", return_value=True),
@@ -321,4 +328,4 @@ class TestSummarizationNonBlocking:
         ):
             # Should not raise
             _maybe_trigger_summarization(user_id)
-            await asyncio.sleep(0.1)  # Let background task run and fail gracefully
+            await asyncio.wait_for(task_failed.wait(), timeout=5.0)
