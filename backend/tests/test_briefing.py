@@ -351,7 +351,12 @@ class TestConfidenceGate:
             "backend.routers.briefing.settings.SWEEP_MIN_CONFIDENCE",
             0.5,
         )
-        payload = {"finding_type": "llm_insight", "message": "high confidence insight", "priority": 2, "confidence": 0.9}
+        payload = {
+            "finding_type": "llm_insight",
+            "message": "high confidence insight",
+            "priority": 2,
+            "confidence": 0.9,
+        }
         resp = client.post("/api/briefing/findings", json=payload)
         assert resp.status_code == 201
         finding_id = resp.json()["id"]

@@ -3,10 +3,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from backend.sweep import dismiss_stale_findings
-
 
 # ---------------------------------------------------------------------------
 # Helpers

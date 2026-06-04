@@ -29,9 +29,9 @@ from .db_models import (
 from .models import (
     BriefingPreferences,
     MorningBriefingContent,
-    SweepAction,
     MorningBriefingFinding,
     MorningBriefingItem,
+    SweepAction,
 )
 
 logger = logging.getLogger(__name__)

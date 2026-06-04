@@ -1,7 +1,8 @@
 """Tests for the idempotency guard in h2i3j4k5l6m7_add_merge_history_expires_at."""
 
-import sqlalchemy as sa
 from unittest.mock import MagicMock, patch
+
+import sqlalchemy as sa
 
 
 class TestMergeHistoryExpiresAtMigrationUpgrade:
@@ -38,8 +39,7 @@ class TestMergeHistoryExpiresAtMigrationUpgrade:
         ):
             mock_op.get_bind.return_value = MagicMock()
             mock_batch_op = MagicMock()
-            mock_op.batch_alter_table.return_value.__enter__ = MagicMock(return_value=mock_batch_op)
-            mock_op.batch_alter_table.return_value.__exit__ = MagicMock(return_value=False)
+            mock_op.batch_alter_table.return_value.__enter__.return_value = mock_batch_op
 
             self._run_upgrade()
 
