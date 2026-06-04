@@ -1634,8 +1634,24 @@ def dismiss_stale_findings(user_id: str = "") -> int:
                 snap = finding.context_snapshot or {}
                 snap_updated_at = snap.get("updated_at")
                 if snap_updated_at and thing.updated_at:
-                    snap_dt = datetime.fromisoformat(snap_updated_at)
-                    if thing.updated_at > snap_dt and thing.updated_at > finding.created_at:
+                    try:
+                        # Normalize to naive UTC: strip tzinfo from both the parsed snapshot
+                        # value and the ORM datetimes. SQLite may return either naive or
+                        # aware datetimes depending on how the row was inserted; stripping
+                        # tzinfo makes both sides consistent (all datetimes are implicitly UTC).
+                        snap_dt = datetime.fromisoformat(snap_updated_at).replace(tzinfo=None)
+                    except ValueError:
+                        logger.warning(
+                            "sweep: skipping context-change check for finding %s — "
+                            "invalid updated_at in snapshot: %r",
+                            finding.id, snap_updated_at,
+                        )
+                        continue
+                    thing_updated = thing.updated_at.replace(tzinfo=None)
+                    finding_created = finding.created_at.replace(tzinfo=None)
+                    # Both guards required: snap_dt is the Thing's updated_at at creation time;
+                    # the second clause defends against clock-skew where snap_dt > created_at.
+                    if thing_updated > snap_dt and thing_updated > finding_created:
                         finding.dismissed = True
                         finding.dismissed_reason = "context_changed"
                         logger.info(

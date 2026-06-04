@@ -178,3 +178,40 @@ class TestContextChangeDismissal:
         assert count == 1
         assert row["dismissed"] == 1
         assert row["dismissed_reason"] == "linked_thing_inactive"
+
+    def test_thing_updated_before_finding_created_not_dismissed(self, patched_db, db):
+        """Finding is NOT dismissed if Thing was updated before the finding was created.
+
+        Guards the `thing.updated_at > finding.created_at` condition in
+        dismiss_stale_findings(). The Thing update pre-dates the finding creation,
+        so the finding was created with awareness of the updated Thing state.
+        """
+        update_ts = (_utcnow() - timedelta(days=3)).isoformat()
+        snap_ts = (_utcnow() - timedelta(days=5)).isoformat()
+        # Finding was created AFTER the thing was last updated
+        finding_created_ts = (_utcnow() - timedelta(days=1)).isoformat()
+
+        with db() as conn:
+            _insert_thing(conn, "t-order", "Updated Title", updated_at=update_ts)
+            _insert_finding(
+                conn,
+                "sf-order",
+                thing_id="t-order",
+                created_at=finding_created_ts,
+                context_snapshot={
+                    "title": "Old Title",
+                    "active": True,
+                    "type_hint": None,
+                    "importance": 2,
+                    "updated_at": snap_ts,  # snap pre-dates thing update
+                },
+            )
+
+        count = dismiss_stale_findings()
+        assert count == 0  # thing updated at T-3, finding created at T-1 — no dismissal
+
+        with db() as conn:
+            row = conn.execute(
+                "SELECT dismissed FROM sweep_findings WHERE id = 'sf-order'"
+            ).fetchone()
+        assert row["dismissed"] == 0

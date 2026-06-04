@@ -150,6 +150,13 @@ class TestReflectOnCandidates:
         assert len(rows) == 2
         assert rows[0]["finding_type"] == "llm_insight"
         assert rows[0]["thing_id"] == "t1"
+        # context_snapshot must be populated for findings with a known thing_id
+        assert rows[0]["context_snapshot"] is not None
+        snap = json.loads(rows[0]["context_snapshot"])
+        assert snap["title"] == "Budget Report"
+        assert "updated_at" in snap
+        # Findings without a thing_id should have no snapshot (stored as SQL NULL or JSON null)
+        assert rows[1]["context_snapshot"] in (None, "null")
 
     @pytest.mark.asyncio
     async def test_invalid_json_returns_empty(self, patched_db):

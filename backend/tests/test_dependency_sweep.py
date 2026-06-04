@@ -262,6 +262,9 @@ class TestDetectClusterDependencies:
             ).all()
         assert len(findings) == 1
         assert "flights" in findings[0].message
+        # context_snapshot must be populated so context-change dismissal can fire later
+        assert findings[0].context_snapshot is not None
+        assert "updated_at" in findings[0].context_snapshot
 
     @pytest.mark.asyncio
     async def test_invalid_json_from_llm_returns_empty(self, db):
