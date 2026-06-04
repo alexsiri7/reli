@@ -234,6 +234,7 @@ Daily briefing: check-in due Things, sweep findings, and learned preferences.
 | `message` | string | Human-readable finding text |
 | `priority` | int | 0=critical … 3=low |
 | `dismissed` | bool | Whether the user dismissed it |
+| `dismissed_reason` | string \| null | Why it was auto-dismissed: `"linked_thing_inactive"`, `"expired"`, `"context_changed"`, or null if dismissed by the user |
 | `expires_at` | string \| null | ISO timestamp or null |
 
 **`LearnedPreference` shape:**
