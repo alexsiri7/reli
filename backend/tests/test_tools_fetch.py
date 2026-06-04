@@ -1,8 +1,8 @@
-"""Tests for tools.fetch_context()."""
+"""Tests for tools.fetch_context() and create/delete/merge validation."""
 
 import json
 
-from backend.tools import create_thing, fetch_context, update_thing
+from backend.tools import create_thing, delete_thing, fetch_context, get_thing, merge_things, update_thing
 
 
 class TestFetchContext:
@@ -55,3 +55,66 @@ class TestFetchContext:
         # Should return results (at least the task if search works)
         # Just verify no errors and we get results
         assert isinstance(result["things"], list)
+
+
+class TestCreateThingValidation:
+    def test_invalid_data_json_returns_error(self, patched_db):
+        """create_thing with invalid data_json returns error, not an unhandled 500."""
+        result = create_thing(title="Bad Data", data_json="not valid json")
+        assert "error" in result
+        assert "data_json" in result["error"]
+
+    def test_invalid_open_questions_json_falls_back_gracefully(self, patched_db):
+        """create_thing with broken open_questions_json does not error — falls back."""
+        result = create_thing(title="Bad OQ", open_questions_json="{broken")
+        assert "error" not in result
+        assert result["open_questions"] is None or result["open_questions"] == []
+
+    def test_valid_create_has_no_error(self, patched_db):
+        """Sanity: valid create_thing returns no error."""
+        result = create_thing(title="Good Thing")
+        assert "error" not in result
+        assert "id" in result
+
+
+class TestDeleteThingWrongUser:
+    def test_delete_thing_wrong_user_returns_error(self, patched_db):
+        """User B cannot delete User A's Thing."""
+        thing = create_thing(title="User A's task", user_id="user-a")
+        assert "error" not in thing
+
+        result = delete_thing(thing_id=thing["id"], user_id="user-b")
+        assert "error" in result
+
+        # Thing must still exist
+        fetched = get_thing(thing["id"])
+        assert "error" not in fetched
+        assert fetched["title"] == "User A's task"
+
+
+class TestMergeThings:
+    def test_merge_deletes_duplicate_and_keeps_primary(self, patched_db):
+        """Merging deletes the duplicate Thing and keeps the primary."""
+        a = create_thing(title="Primary Thing")
+        b = create_thing(title="Duplicate Thing")
+        assert "error" not in a
+        assert "error" not in b
+
+        result = merge_things(keep_id=a["id"], remove_id=b["id"])
+        assert "error" not in result
+        assert result["keep_id"] == a["id"]
+        assert result["remove_id"] == b["id"]
+
+        # Primary still exists
+        kept = get_thing(a["id"])
+        assert "error" not in kept
+
+        # Duplicate is gone
+        gone = get_thing(b["id"])
+        assert "error" in gone
+
+    def test_merge_same_id_returns_error(self, patched_db):
+        """Cannot merge a Thing with itself."""
+        a = create_thing(title="Self Merge")
+        result = merge_things(keep_id=a["id"], remove_id=a["id"])
+        assert "error" in result

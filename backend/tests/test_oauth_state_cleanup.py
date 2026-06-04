@@ -569,3 +569,89 @@ def test_gmail_oauth_state_evicted_when_expired(patched_db):
         },
     )
     assert cleanup_and_get(gmail_oauth_states, "user-789") is None
+
+
+# ---------------------------------------------------------------------------
+# Explicit TTL, atomic pop, and capacity gate tests
+# ---------------------------------------------------------------------------
+
+
+def test_expired_entry_returns_none_and_is_deleted(patched_db):
+    """An entry stored with an already-expired TTL returns None on get."""
+    cleanup_and_store(
+        mcp_oauth_sessions,
+        "ttl-expired",
+        {
+            "client_state": "cs",
+            "redirect_uri": "http://x",
+            "code_challenge": "cc",
+            "code_challenge_method": "S256",
+            "client_id": "cid",
+            "scope": "mcp",
+            "google_code_verifier": "gv",
+            "expires_at": datetime.now(timezone.utc) - timedelta(seconds=10),
+        },
+    )
+    result = cleanup_and_get(mcp_oauth_sessions, "ttl-expired")
+    assert result is None
+    # Confirm a second access also returns None (row was actually deleted)
+    assert cleanup_and_get(mcp_oauth_sessions, "ttl-expired") is None
+
+
+def test_pop_is_atomic_double_pop_returns_none(patched_db):
+    """cleanup_and_pop is one-time-use: second pop of same key returns None."""
+    cleanup_and_store(
+        mcp_oauth_sessions,
+        "atomic-key",
+        {
+            "client_state": "cs",
+            "redirect_uri": "http://x",
+            "code_challenge": "cc",
+            "code_challenge_method": "S256",
+            "client_id": "cid",
+            "scope": "mcp",
+            "google_code_verifier": "gv",
+            "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+        },
+    )
+    first = cleanup_and_pop(mcp_oauth_sessions, "atomic-key")
+    assert first is not None
+    assert first["client_state"] == "cs"
+
+    second = cleanup_and_pop(mcp_oauth_sessions, "atomic-key")
+    assert second is None
+
+
+def test_store_full_raises_at_cap_two(patched_db, monkeypatch):
+    """StoreFullError fires when cap is set to 2 and a 3rd entry is stored."""
+    monkeypatch.setattr("backend.oauth_state.MAX_ENTRIES_PER_DICT", 2)
+    for i in range(2):
+        cleanup_and_store(
+            mcp_oauth_sessions,
+            f"cap2-{i}",
+            {
+                "client_state": "cs",
+                "redirect_uri": "http://x",
+                "code_challenge": "cc",
+                "code_challenge_method": "S256",
+                "client_id": "cid",
+                "scope": "mcp",
+                "google_code_verifier": "gv",
+                "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+            },
+        )
+    with pytest.raises(StoreFullError):
+        cleanup_and_store(
+            mcp_oauth_sessions,
+            "cap2-overflow",
+            {
+                "client_state": "cs",
+                "redirect_uri": "http://x",
+                "code_challenge": "cc",
+                "code_challenge_method": "S256",
+                "client_id": "cid",
+                "scope": "mcp",
+                "google_code_verifier": "gv",
+                "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+            },
+        )

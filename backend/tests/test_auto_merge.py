@@ -49,9 +49,10 @@ class TestAutoMergeDuplicates:
 
         result = asyncio.run(auto_merge_duplicates(user_id=""))
 
-        assert result.merges_executed >= 1
-        # One of the tasks should be gone
-        assert "error" in get_thing("task-new") or "error" in get_thing("task-old")
+        assert result.merges_executed == 1
+        # Older thing survives, newer duplicate is removed
+        assert "error" not in get_thing("task-old")
+        assert "error" in get_thing("task-new")
 
     def test_older_thing_is_kept(self, db):
         """The older Thing is kept; the newer duplicate is removed."""

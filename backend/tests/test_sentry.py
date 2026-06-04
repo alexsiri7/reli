@@ -83,7 +83,7 @@ def test_strip_cookie_breadcrumb_no_data_key():
 
     crumb = {"type": "http", "category": "fetch"}
     result = _strip_cookie_breadcrumb(crumb, None)
-    assert result is not None
+    assert result == crumb
 
 
 def test_strip_cookie_breadcrumb_data_is_none():
@@ -92,7 +92,7 @@ def test_strip_cookie_breadcrumb_data_is_none():
 
     crumb = {"data": None}
     result = _strip_cookie_breadcrumb(crumb, None)
-    assert result is not None
+    assert result == crumb
 
 
 def test_strip_cookie_breadcrumb_no_cookie_passthrough():
@@ -101,7 +101,7 @@ def test_strip_cookie_breadcrumb_no_cookie_passthrough():
 
     crumb = {"data": {"Authorization": "Bearer token"}}
     result = _strip_cookie_breadcrumb(crumb, None)
-    assert result is not None
+    assert result == crumb
     assert result["data"]["Authorization"] == "Bearer token"
 
 
