@@ -2314,9 +2314,6 @@ async def auto_merge_duplicates(
         return AutoMergeResult()
 
     threshold = settings.SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD
-    # SQL exact-title match is always a perfect match
-    EXACT_MATCH_CONFIDENCE = 1.0
-
     now = datetime.now(timezone.utc)
     merges_executed = 0
     merges_skipped = 0
@@ -2326,11 +2323,12 @@ async def auto_merge_duplicates(
         if not candidates:
             return AutoMergeResult()
 
-        for candidate in candidates:
-            if EXACT_MATCH_CONFIDENCE < threshold:
-                merges_skipped += 1
-                continue
+        # SQL exact-title match is always a perfect match (confidence = 1.0);
+        # if threshold exceeds that, skip all candidates at once.
+        if 1.0 < threshold:
+            return AutoMergeResult(merges_skipped=len(candidates))
 
+        for candidate in candidates:
             keep_id = candidate.thing_id
             remove_id = candidate.extra.get("duplicate_thing_id")
             if not remove_id:
