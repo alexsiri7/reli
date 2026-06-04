@@ -154,14 +154,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 log.debug("JWT decode failed for rate-limit key; falling back to IP")
         return f"ip:{self._get_client_ip(request)}"
 
-    def _prune_stale_buckets(self) -> None:
+    def _prune_stale_buckets(self, now: float | None = None) -> None:
+        if now is None:
+            now = time.monotonic()
         """Remove bucket entries inactive for longer than _BUCKET_TTL.
 
         Called at most every _CLEANUP_INTERVAL seconds from dispatch().
         Safe to call concurrently — builds a list of stale keys first,
         then removes them one at a time (no dict mutation during iteration).
         """
-        now = time.monotonic()
         total_pruned = 0
         for buckets in (self._llm_buckets, self._auth_buckets, self._api_buckets):
             stale = [k for k, b in buckets.items() if now - b.last_refill > _BUCKET_TTL]
@@ -186,7 +187,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if now - self._last_cleanup > _CLEANUP_INTERVAL:
             self._last_cleanup = now
             try:
-                self._prune_stale_buckets()
+                self._prune_stale_buckets(now)
             except Exception:
                 log.warning("Bucket pruning failed; will retry after next interval", exc_info=True)
 
