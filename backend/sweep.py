@@ -2308,7 +2308,6 @@ async def auto_merge_duplicates(
     reflect_on_candidates() as llm_insight findings for human review.
     """
     from . import tools as _tools
-    from .config import settings
 
     if not settings.sweep_auto_merge_enabled_bool:
         return AutoMergeResult()
@@ -2325,7 +2324,7 @@ async def auto_merge_duplicates(
 
         # SQL exact-title match is always a perfect match (confidence = 1.0);
         # if threshold exceeds that, skip all candidates at once.
-        if 1.0 < threshold:
+        if threshold > 1.0:
             return AutoMergeResult(merges_skipped=len(candidates))
 
         for candidate in candidates:

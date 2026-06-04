@@ -392,3 +392,24 @@ class TestConfidenceGate:
         assert resp.status_code == 200
         finding_ids = [f["id"] for f in resp.json()["findings"]]
         assert finding_id in finding_ids
+
+
+class TestFindingDefaultTTL:
+    def test_finding_created_with_explicit_expires_at_is_stored(self, client):
+        """POST /api/briefing/findings with expires_at stores and returns it."""
+        expires = (datetime.utcnow() + timedelta(days=7)).isoformat()
+        payload = {
+            "finding_type": "test",
+            "message": "finding with TTL",
+            "priority": 2,
+            "expires_at": expires,
+        }
+        resp = client.post("/api/briefing/findings", json=payload)
+        assert resp.status_code == 201, resp.text
+        data = resp.json()
+        assert data["expires_at"] is not None
+
+    def test_finding_created_without_expires_at_has_null_expires_at(self, client):
+        """POST without expires_at leaves expires_at as null (no auto-default)."""
+        finding = _create_finding(client, message="no TTL finding")
+        assert finding["expires_at"] is None
