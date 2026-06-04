@@ -22,7 +22,7 @@ def upgrade() -> None:
             sa.text(
                 "UPDATE sweep_findings "
                 "SET expires_at = created_at + INTERVAL '30 days' "
-                "WHERE expires_at IS NULL AND dismissed = 0"
+                "WHERE expires_at IS NULL AND dismissed = false"
             )
         )
     else:
