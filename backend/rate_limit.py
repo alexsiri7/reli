@@ -154,7 +154,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 log.debug("JWT decode failed for rate-limit key; falling back to IP")
         return f"ip:{self._get_client_ip(request)}"
 
-    def _prune_stale_buckets(self, now: float) -> None:
+    def _prune_stale_buckets(self, now: float | None = None) -> None:
+        if now is None:
+            now = time.monotonic()
         """Remove bucket entries inactive for longer than _BUCKET_TTL.
 
         Called at most every _CLEANUP_INTERVAL seconds from dispatch().
