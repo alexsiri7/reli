@@ -18,7 +18,7 @@ export function serialiseMorningBriefing(b: MorningBriefing): string {
     lines.push('\nBlockers:')
     c.blockers.forEach(i => lines.push(`  • ${i.title}`))
   }
-  if (c.actions_taken && c.actions_taken.length) {
+  if (c.actions_taken.length) {
     lines.push('\nActions taken:')
     c.actions_taken.forEach(a => lines.push(`  • ${a.description}`))
   }
