@@ -41,6 +41,7 @@ done
 - **Repository**: interstellarai.net  
 - **File**: `ops/cron/pipeline-health-cron.sh`  
 - **Functions Fixed**: `check_deploy_http` (line 982), `check_staging_deploy_http` (line 1031)
+- **Commit**: commit hash not captured at time of documentation (applied 2026-06-06)
 
 ## Validation
 
@@ -48,6 +49,7 @@ done
 - Shell syntax validation (`bash -n`) — run against the patched `pipeline-health-cron.sh`
 - Retry loop correctly breaks on 2xx/3xx responses
 - After 3 failures, issue is still filed (correct behavior for genuine outages)
+- External fix applied in interstellarai.net on 2026-06-06
 
 ## Related Issues
 
