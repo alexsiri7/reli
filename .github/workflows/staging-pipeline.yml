@@ -213,13 +213,18 @@ jobs:
         env:
           RAILWAY_PRODUCTION_URL: ${{ secrets.RAILWAY_PRODUCTION_URL }}
         run: |
+          echo "Waiting 90s for Railway to start the new container..."
+          sleep 90
           echo "Polling ${RAILWAY_PRODUCTION_URL}/healthz ..."
           for i in $(seq 1 20); do
-            if curl -sf --max-time 5 "${RAILWAY_PRODUCTION_URL}/healthz" | grep -q '"status":"ok"'; then
+            HTTP_CODE=$(curl -s -o /tmp/hc_prod_body.txt -w "%{http_code}" --max-time 5 "${RAILWAY_PRODUCTION_URL}/healthz" 2>/dev/null)
+            HTTP_CODE=${HTTP_CODE:-000}
+            BODY=$(cat /tmp/hc_prod_body.txt 2>/dev/null || true)
+            echo "Attempt $i/20: HTTP $HTTP_CODE — ${BODY:0:100}"
+            if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q '"status":"ok"'; then
               echo "Production healthy after attempt $i"
               exit 0
             fi
-            echo "Attempt $i/20 failed, waiting 30s..."
             sleep 30
           done
           echo "Production failed to become healthy after 20 attempts"
