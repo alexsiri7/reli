@@ -1717,6 +1717,12 @@ def _format_active_findings_for_prompt(findings: list[dict]) -> str:
 # Phase 2: LLM reflection
 # ---------------------------------------------------------------------------
 
+# Valid finding types — must mirror the values listed in SWEEP_REFLECTION_SYSTEM prompt
+# and SWEEP_SUPPRESSED_FINDING_TYPES config.
+_ALLOWED_FINDING_TYPES: frozenset[str] = frozenset(
+    {"llm_insight", "lifestyle_wellness", "location_suggestion", "unverified_context"}
+)
+
 SWEEP_REFLECTION_SYSTEM = """\
 You are the Nightly Sweep Analyst for Reli, an AI personal information manager.
 You receive a list of candidate Things that SQL queries flagged for review.
@@ -1858,8 +1864,6 @@ async def reflect_on_candidates(
     # Collect valid thing_ids from candidates for validation
     valid_thing_ids = {c.thing_id for c in candidates}
 
-    # allowed_types must mirror the values listed in SWEEP_REFLECTION_SYSTEM prompt and SWEEP_SUPPRESSED_FINDING_TYPES
-    _allowed_types = frozenset({"llm_insight", "lifestyle_wellness", "location_suggestion", "unverified_context"})
     _suppressed = settings.suppressed_finding_types_set
 
     with Session(_engine_mod.engine) as session:
@@ -1896,7 +1900,7 @@ async def reflect_on_candidates(
 
             # Derive finding_type (LLM may now use granular categories)
             finding_type = str(f.get("finding_type", "llm_insight")).strip()
-            if finding_type not in _allowed_types:
+            if finding_type not in _ALLOWED_FINDING_TYPES:
                 finding_type = "llm_insight"  # coerce unknown values to safe default
 
             # Suppression check

@@ -304,8 +304,8 @@ function StatCard({ label, value, suffix, accent }: { label: string; value: numb
 }
 
 const ACTION_TYPE_CONFIG: Record<string, { icon: string; borderClass: string }> = {
-  merge:   { icon: '🔀', borderClass: 'border-indigo-400' },
-  close:   { icon: '✅', borderClass: 'border-green-400' },
+  merge: { icon: '🔀', borderClass: 'border-indigo-400' },
+  close: { icon: '✅', borderClass: 'border-green-400' },
   dismiss: { icon: '🗑️', borderClass: 'border-surface-variant' },
 }
 
