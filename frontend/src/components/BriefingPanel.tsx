@@ -311,7 +311,7 @@ const ACTION_TYPE_CONFIG: Record<string, { icon: string; borderClass: string }> 
 
 export function ActionTakenCard({ action }: { action: SweepAction }) {
   const config = ACTION_TYPE_CONFIG[action.action_type]
-  const icon = config?.icon ?? '\u26A1'
+  const icon = config?.icon ?? '⚡'
   const borderColor = config?.borderClass ?? 'border-primary'
   return (
     <div className={`bg-surface-container-high rounded-2xl border-l-4 ${borderColor} p-4`}>
