@@ -18,7 +18,7 @@ This is the fifth instance of this false positive:
 
 | Issue | Date | Cause | Fix Applied |
 |-------|------|-------|-------------|
-| #1151 | 2026-06-04 | HTTP 000000 string bug | Fixed in #1153 |
+| #1153 | 2026-06-04 | HTTP 000000 string bug | Fixed in #1153 |
 | #1156 | 2026-06-05 | No retry logic | Added staging wait in #1157 |
 | #1158 | 2026-06-05 | Same pattern | Fixed in #1157 |
 | #1160 | 2026-06-06 | No retry in cron | Added 3×10s retry in #1161 |
