@@ -2320,6 +2320,7 @@ async def auto_merge_duplicates(
     now = datetime.now(timezone.utc)
     merges_executed = 0
     merges_skipped = 0
+    audit_findings: list[SweepFindingRecord] = []
 
     with Session(_engine_mod.engine) as session:
         candidates = find_cross_project_duplicate_effort(session)
@@ -2373,33 +2374,35 @@ async def auto_merge_duplicates(
                 continue
 
             merges_executed += 1
-            finding_id = f"sf-{uuid.uuid4().hex[:8]}"
-            with Session(_engine_mod.engine) as finding_session:
-                finding_session.add(
-                    SweepFindingRecord(
-                        id=finding_id,
-                        thing_id=keep_id,
-                        finding_type="duplicate_auto_merged",
-                        message=(
-                            f"Auto-merged duplicate \"{result['remove_title']}\" "
-                            f"into \"{result['keep_title']}\""
-                        ),
-                        priority=3,
-                        dismissed=False,
-                        created_at=now,
-                        user_id=user_id or None,
-                        confidence=1.0,
-                    )
+            audit_findings.append(
+                SweepFindingRecord(
+                    id=f"sf-{uuid.uuid4().hex[:8]}",
+                    thing_id=keep_id,
+                    finding_type="duplicate_auto_merged",
+                    message=(
+                        f"Auto-merged duplicate \"{result['remove_title']}\" "
+                        f"into \"{result['keep_title']}\""
+                    ),
+                    priority=3,
+                    dismissed=False,
+                    created_at=now,
+                    user_id=user_id or None,
+                    confidence=1.0,
                 )
-                try:
-                    finding_session.commit()
-                except Exception:
-                    logger.warning(
-                        "auto_merge_duplicates: failed to record finding for merge %s→%s",
-                        remove_id,
-                        keep_id,
-                        exc_info=True,
-                    )
+            )
+
+    if audit_findings:
+        with Session(_engine_mod.engine) as audit_session:
+            for finding in audit_findings:
+                audit_session.add(finding)
+            try:
+                audit_session.commit()
+            except Exception:
+                logger.warning(
+                    "auto_merge_duplicates: failed to record %d audit finding(s)",
+                    len(audit_findings),
+                    exc_info=True,
+                )
 
     return AutoMergeResult(merges_executed=merges_executed, merges_skipped=merges_skipped)
 
