@@ -79,11 +79,7 @@ def _ollama_client() -> AsyncOpenAI:
 # Per-model pricing: (input_cost_per_million, output_cost_per_million)
 # Models removed from Requesty / deprecated — must not appear in pricing even if
 # the upstream API still returns them.
-_DEPRECATED_MODELS: frozenset[str] = frozenset(
-    {
-        "google/gemini-3.1-flash-lite-preview",
-    }
-)
+_DEPRECATED_MODELS: frozenset[str] = frozenset({"google/gemini-3.1-flash-lite-preview"})
 
 _DEFAULT_PRICING: dict[str, tuple[float, float]] = {
     "openai/gpt-4o-mini": (0.15, 0.60),
