@@ -48,7 +48,7 @@ jobs:
         run: UV_SYSTEM_PYTHON=1 uv sync --frozen
 
       - name: Upgrade pip to patched version
-        run: uv pip install --system "pip>=26.1"
+        run: uv pip install --system "pip>=26.1.2"
 
       # Audits the installed environment (backend deps + pip-audit's own deps).
       # Replaces `pip-audit -r` which forces a dry-run pip resolve; see #920.
