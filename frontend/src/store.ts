@@ -8,6 +8,7 @@ import { cacheBriefing, getCachedBriefing } from './offline/cache-briefing'
 import { cacheCalendarEvents, getCachedCalendarEvents } from './offline/cache-calendar'
 import { getByKey } from './offline/idb'
 import { mutationFetch } from './offline/mutation-fetch'
+import { readChatStream } from './chat/stream-reader'
 import { parsePreferenceToasts } from './format/preferences'
 import {
   validateResponse,
@@ -37,40 +38,6 @@ import {
 } from './schemas'
 import { z } from 'zod'
 
-// ── Generated types (from Pydantic models via OpenAPI) ────────────────────────
-// Re-exported so existing imports from './store' continue to work.
-export type {
-  ThingType,
-  Thing,
-  Relationship,
-  CallUsage,
-  ModelUsage,
-  ProactiveSurface,
-  FocusRecommendation,
-  ConflictAlert,
-  SweepFinding,
-  LearnedPreference,
-  MorningBriefingItem,
-  MorningBriefingFinding,
-  MorningBriefingContent,
-  MorningBriefing,
-  BriefingPreferences,
-  Nudge,
-  WeeklyBriefingItem,
-  WeeklyBriefingConnection,
-  WeeklyBriefingContent,
-  WeeklyBriefing,
-  ModelSettings,
-  RequestyModel,
-  UserSettings,
-  UserProfileRelationship,
-  UserProfile,
-  MergeSuggestionThing,
-  MergeSuggestion,
-  ConnectionSuggestionThing,
-  ConnectionSuggestion,
-} from './generated/api-types'
-
 import type {
   Thing,
   ThingType,
@@ -92,6 +59,13 @@ import type {
   UserProfile,
   MergeSuggestion,
   ConnectionSuggestion,
+} from './generated/api-types'
+
+export type {
+  Thing,
+  ThingType,
+  ModelUsage,
+  Nudge,
 } from './generated/api-types'
 
 // ── Frontend-only types (not derived from Pydantic models) ────────────────────
@@ -1077,76 +1051,53 @@ export const useStore = create<ReliState>((set, get) => ({
       const reader = res.body?.getReader()
       if (!reader) throw new Error('No response body')
 
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        // Keep the last potentially incomplete line in the buffer
-        buffer = lines.pop() ?? ''
-
-        let eventType = ''
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            eventType = line.slice(7).trim()
-          } else if (line.startsWith('data: ') && eventType) {
-            const data = JSON.parse(line.slice(6))
-
-            if (eventType === 'stage') {
-              const stage = data.stage as 'context' | 'reasoning' | 'response'
-              const status = data.status as 'started' | 'complete'
-              if (status === 'started') {
-                set(state => ({
-                  messages: state.messages.map(m =>
-                    m.streaming ? { ...m, streamingStage: stage } : m,
-                  ),
-                }))
-              }
-            } else if (eventType === 'token') {
-              set(state => ({
-                messages: state.messages.map(m =>
-                  m.streaming ? { ...m, content: m.content + data.text } : m,
-                ),
-              }))
-            } else if (eventType === 'complete') {
-              const chatData = validateResponse(ChatResponseSchema, data, '/chat/stream')
-              const assistantMsg: ChatMessage = {
-                id: `assistant-${Date.now()}`,
-                session_id: get().sessionId,
-                role: 'assistant',
-                content: chatData.reply,
-                applied_changes: chatData.applied_changes ?? null,
-                questions_for_user: chatData.questions_for_user ?? [],
-                prompt_tokens: chatData.usage?.prompt_tokens ?? 0,
-                completion_tokens: chatData.usage?.completion_tokens ?? 0,
-                cost_usd: chatData.usage?.cost_usd ?? 0,
-                model: chatData.usage?.model ?? null,
-                per_call_usage: chatData.usage?.per_call_usage ?? [],
-                timestamp: new Date().toISOString(),
-              }
-              const newToasts = parsePreferenceToasts(chatData.applied_changes)
-              const updates: Partial<ReliState> = {
-                messages: get().messages.map(m => m.streaming ? assistantMsg : m),
-              }
-              if (chatData.session_usage) {
-                updates.sessionStats = chatData.session_usage
-              }
-              if (newToasts.length > 0) {
-                updates.preferenceToasts = [...get().preferenceToasts, ...newToasts]
-              }
-              set(updates as ReliState)
-            } else if (eventType === 'error') {
-              throw new Error(data.message || 'Pipeline error')
-            }
-
-            eventType = ''
+      await readChatStream(reader, {
+        onStage: (stage) => {
+          set(state => ({
+            messages: state.messages.map(m =>
+              m.streaming ? { ...m, streamingStage: stage } : m,
+            ),
+          }))
+        },
+        onToken: (text) => {
+          set(state => ({
+            messages: state.messages.map(m =>
+              m.streaming ? { ...m, content: m.content + text } : m,
+            ),
+          }))
+        },
+        onComplete: (data) => {
+          const chatData = validateResponse(ChatResponseSchema, data, '/chat/stream')
+          const assistantMsg: ChatMessage = {
+            id: `assistant-${Date.now()}`,
+            session_id: get().sessionId,
+            role: 'assistant',
+            content: chatData.reply,
+            applied_changes: chatData.applied_changes ?? null,
+            questions_for_user: chatData.questions_for_user ?? [],
+            prompt_tokens: chatData.usage?.prompt_tokens ?? 0,
+            completion_tokens: chatData.usage?.completion_tokens ?? 0,
+            cost_usd: chatData.usage?.cost_usd ?? 0,
+            model: chatData.usage?.model ?? null,
+            per_call_usage: chatData.usage?.per_call_usage ?? [],
+            timestamp: new Date().toISOString(),
           }
-        }
-      }
+          const newToasts = parsePreferenceToasts(chatData.applied_changes)
+          const updates: Partial<ReliState> = {
+            messages: get().messages.map(m => m.streaming ? assistantMsg : m),
+          }
+          if (chatData.session_usage) {
+            updates.sessionStats = chatData.session_usage
+          }
+          if (newToasts.length > 0) {
+            updates.preferenceToasts = [...get().preferenceToasts, ...newToasts]
+          }
+          set(updates as ReliState)
+        },
+        onError: (message) => {
+          throw new Error(message)
+        },
+      })
 
       // Refresh things in case the pipeline made changes
       get().fetchThings()

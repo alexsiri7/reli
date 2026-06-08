@@ -200,14 +200,21 @@ export const UserProfileSchema = z.object({
 // --- Validation helper ---
 
 /**
- * Validates data against a Zod schema. Logs a warning on mismatch but
- * always returns the original data so the app never crashes from validation.
+ * Validates data against a Zod schema. Returns parsed data on success.
+ * On mismatch: logs an error in dev, a warning in prod, and falls back
+ * to the raw data so the app never crashes from validation.
  */
 export function validateResponse<T>(schema: z.ZodType<T>, data: unknown, endpoint: string): T {
   const result = schema.safeParse(data)
-  if (!result.success) {
+  if (result.success) return result.data
+  if (import.meta.env.DEV) {
+    console.error(
+      `[API Validation] ${endpoint} schema mismatch:`,
+      result.error.issues,
+    )
+  } else {
     console.warn(
-      `[API Validation] Response from ${endpoint} does not match expected schema:`,
+      `[API Validation] ${endpoint} schema mismatch:`,
       result.error.issues,
     )
   }

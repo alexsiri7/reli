@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { DetailPanel } from '../components/DetailPanel'
-import type { Thing, ThingType, Relationship } from '../store'
+import type { Thing, ThingType, Relationship } from '../generated/api-types'
 
 const closeThingDetail = vi.fn()
 const navigateThingDetail = vi.fn()

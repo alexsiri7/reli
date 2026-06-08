@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import type { Thing } from '../store'
+import type { Thing } from '../generated/api-types'
 import { useStore } from '../store'
 import { formatDate, isOverdue, typeIcon } from '../utils'
 

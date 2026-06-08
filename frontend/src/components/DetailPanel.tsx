@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { Relationship, ThingType } from '../store'
+import type { Relationship, ThingType } from '../generated/api-types'
 import { typeIcon, formatTimestamp, formatDate, isOverdue, importanceLabel } from '../utils'
 import { PreferencePatterns } from './PreferencePatterns'
 

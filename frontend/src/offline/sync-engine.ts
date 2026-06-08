@@ -1,6 +1,5 @@
 import { getPendingOps, removePendingOp, type PendingOp } from './pending-ops'
 import { getDB } from './idb'
-import { useStore } from '../store'
 
 const MAX_RETRIES = 3
 
@@ -60,11 +59,11 @@ async function replayOp(op: PendingOp): Promise<boolean> {
  * Replay all pending operations in FIFO order.
  * Called automatically when the browser fires the 'online' event.
  */
-export async function syncPendingOps(): Promise<void> {
+export async function syncPendingOps(userId?: string): Promise<void> {
   if (syncing) return
   syncing = true
 
-  const currentUserId = useStore.getState().currentUser?.id ?? ''
+  const currentUserId = userId ?? ''
   // Only replay ops for the current authenticated user; skip if not logged in.
   // Ops with no user_id (queued before this fix) are never replayed.
   const ops = currentUserId
@@ -127,16 +126,18 @@ export async function syncPendingOps(): Promise<void> {
 /**
  * Install the online event listener to trigger sync automatically.
  * Call once at app startup. Returns a cleanup function.
+ * @param getUserId - callback to resolve the current user ID at sync time
  */
-export function initSyncEngine(): () => void {
-  window.addEventListener('online', syncPendingOps)
+export function initSyncEngine(getUserId: () => string | undefined): () => void {
+  const handler = () => syncPendingOps(getUserId())
+  window.addEventListener('online', handler)
 
   // If already online and there might be queued ops from a previous session, sync now
   if (navigator.onLine) {
-    syncPendingOps()
+    syncPendingOps(getUserId())
   }
 
   return () => {
-    window.removeEventListener('online', syncPendingOps)
+    window.removeEventListener('online', handler)
   }
 }

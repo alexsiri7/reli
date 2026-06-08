@@ -12,7 +12,7 @@ export function OfflineIndicator() {
 
   // Initialize sync engine once and subscribe to sync events
   useEffect(() => {
-    const cleanupSync = initSyncEngine()
+    const cleanupSync = initSyncEngine(() => useStore.getState().currentUser?.id)
 
     // Load initial count
     getPendingCount().then(setPendingCount)
