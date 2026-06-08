@@ -1578,8 +1578,7 @@ def dismiss_stale_findings(user_id: str = "") -> int:
 
     Returns count of findings dismissed.
     """
-    now = datetime.now(timezone.utc)
-    now_iso = now.isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
     total = 0
 
     with Session(_engine_mod.engine) as session:
