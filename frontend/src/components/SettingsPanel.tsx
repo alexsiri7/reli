@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { ModelSettings, UserSettings, UserProfileRelationship, RequestyModel } from '../store'
+import type { ModelSettings, UserSettings, UserProfileRelationship, RequestyModel } from '../generated/api-types'
 import { useTheme, setTheme } from '../hooks/useTheme'
 import { ttsSupported, useAvailableVoices, getStoredVoiceURI, setStoredVoiceURI } from '../hooks/useTTS'
 import { RelationshipMiniGraph } from './RelationshipMiniGraph'

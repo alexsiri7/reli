@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { Nudge } from '../store'
+import type { Nudge } from '../generated/api-types'
 
 const mockDismissNudge = vi.fn()
 const mockStopNudgeType = vi.fn()

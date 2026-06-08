@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { MergeSuggestion } from '../store'
+import type { MergeSuggestion } from '../generated/api-types'
 import { typeIcon } from '../utils'
 
 function MergeCard({ suggestion, onMerge, onDismiss, merging }: {

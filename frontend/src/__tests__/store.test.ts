@@ -7,7 +7,6 @@ const mockThing = {
   title: 'Test Thing',
   type_hint: 'task' as const,
   checkin_date: null,
-  priority: 2,
   importance: 2,
   active: true,
   surface: true,

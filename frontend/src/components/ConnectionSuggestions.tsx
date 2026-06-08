@@ -1,6 +1,6 @@
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
-import type { ConnectionSuggestion } from '../store'
+import type { ConnectionSuggestion } from '../generated/api-types'
 import { typeIcon } from '../utils'
 
 function ConnectionCard({ suggestion, onAccept, onDismiss, onDefer, accepting }: {

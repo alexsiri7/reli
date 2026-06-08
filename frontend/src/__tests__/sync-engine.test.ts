@@ -13,11 +13,6 @@ vi.mock('../offline/idb', () => ({
   getDB: (...args: unknown[]) => mockGetDB(...args),
 }))
 
-vi.mock('../store', () => ({
-  useStore: {
-    getState: () => ({ currentUser: { id: 'user-1' } }),
-  },
-}))
 
 import { syncPendingOps, onSyncEvent } from '../offline/sync-engine'
 import type { PendingOp } from '../offline/idb'
@@ -57,7 +52,7 @@ describe('syncPendingOps', () => {
     const events: string[] = []
     const unsub = onSyncEvent(e => events.push(e.type))
 
-    await syncPendingOps()
+    await syncPendingOps('user-1')
     unsub()
 
     expect(mockRemovePendingOp).toHaveBeenCalledWith(1)
@@ -75,7 +70,7 @@ describe('syncPendingOps', () => {
     const events: string[] = []
     const unsub = onSyncEvent(e => events.push(e.type))
 
-    await syncPendingOps()
+    await syncPendingOps('user-1')
     unsub()
 
     expect(mockRemovePendingOp).toHaveBeenCalledWith(1)
@@ -92,7 +87,7 @@ describe('syncPendingOps', () => {
     const events: { type: string; error?: string }[] = []
     const unsub = onSyncEvent(e => events.push({ type: e.type, error: e.error }))
 
-    await syncPendingOps()
+    await syncPendingOps('user-1')
     unsub()
 
     expect(mockPut).toHaveBeenCalledWith('pendingOps', expect.objectContaining({ retries: 1, status: 'failed' }))
@@ -111,7 +106,7 @@ describe('syncPendingOps', () => {
     const events: { type: string; error?: string }[] = []
     const unsub = onSyncEvent(e => events.push({ type: e.type, error: e.error }))
 
-    await syncPendingOps()
+    await syncPendingOps('user-1')
     unsub()
 
     expect(mockRemovePendingOp).toHaveBeenCalledWith(1)
@@ -128,7 +123,7 @@ describe('syncPendingOps', () => {
     const events: { type: string; error?: string }[] = []
     const unsub = onSyncEvent(e => events.push({ type: e.type, error: e.error }))
 
-    await syncPendingOps()
+    await syncPendingOps('user-1')
     unsub()
 
     // Should only fail once (break on first network error)
@@ -145,7 +140,7 @@ describe('syncPendingOps', () => {
     const events: string[] = []
     const unsub = onSyncEvent(e => events.push(e.type))
 
-    await syncPendingOps()
+    await syncPendingOps('user-1')
     unsub()
 
     expect(mockRemovePendingOp).not.toHaveBeenCalled()
@@ -159,7 +154,7 @@ describe('syncPendingOps', () => {
     const events: string[] = []
     const unsub = onSyncEvent(e => events.push(e.type))
 
-    await syncPendingOps()
+    await syncPendingOps('user-1')
     unsub()
 
     expect(events).not.toContain('sync:start')

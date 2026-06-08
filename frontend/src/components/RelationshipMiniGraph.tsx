@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import { useStore } from '../store'
-import type { UserProfileRelationship } from '../store'
+import type { UserProfileRelationship } from '../generated/api-types'
 
 interface MiniGraphNode {
   id: string
