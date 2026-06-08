@@ -1863,7 +1863,7 @@ async def reflect_on_candidates(
     # Collect valid thing_ids from candidates for validation
     valid_thing_ids = {c.thing_id for c in candidates}
 
-    _suppressed = settings.suppressed_finding_types_set
+    suppressed = settings.suppressed_finding_types_set
 
     with Session(_engine_mod.engine) as session:
         # Pre-fetch Things for context snapshots
@@ -1903,7 +1903,7 @@ async def reflect_on_candidates(
                 finding_type = "llm_insight"  # coerce unknown values to safe default
 
             # Suppression check
-            if finding_type in _suppressed:
+            if finding_type in suppressed:
                 logger.info(
                     "sweep: suppressed finding type=%r message=%.80r",
                     finding_type,
