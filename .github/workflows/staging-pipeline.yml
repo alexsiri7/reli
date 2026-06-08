@@ -137,6 +137,24 @@ jobs:
       - name: Install Playwright browsers
         run: npx --prefix frontend playwright install --with-deps chromium
 
+      - name: Confirm staging readiness before smoke tests
+        env:
+          BASE_URL: ${{ secrets.RAILWAY_STAGING_URL }}
+        run: |
+          echo "Confirming staging is reachable before Playwright smoke tests..."
+          for i in $(seq 1 12); do
+            HTTP_CODE=$(curl -s -o /tmp/smoke_hc.txt -w "%{http_code}" --max-time 10 "${BASE_URL}/healthz" 2>/dev/null || echo "000")
+            BODY=$(cat /tmp/smoke_hc.txt 2>/dev/null || true)
+            echo "Attempt $i/12: HTTP $HTTP_CODE — ${BODY:0:80}"
+            if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q '"status":"ok"'; then
+              echo "Staging confirmed ready"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Staging not reachable after 12 attempts — aborting"
+          exit 1
+
       - name: Run smoke tests against staging
         env:
           BASE_URL: ${{ secrets.RAILWAY_STAGING_URL }}
