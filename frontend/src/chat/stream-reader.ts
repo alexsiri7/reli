@@ -30,7 +30,14 @@ export async function readChatStream(
       if (line.startsWith('event: ')) {
         eventType = line.slice(7).trim()
       } else if (line.startsWith('data: ') && eventType) {
-        const data = JSON.parse(line.slice(6))
+        let data: unknown
+        try {
+          data = JSON.parse(line.slice(6))
+        } catch {
+          callbacks.onError(`Malformed SSE data for event "${eventType}"`)
+          eventType = ''
+          continue
+        }
 
         if (eventType === 'stage') {
           const stage = data.stage as 'context' | 'reasoning' | 'response'
