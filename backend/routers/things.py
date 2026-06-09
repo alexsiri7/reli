@@ -835,7 +835,7 @@ def _parse_rel_row(row: Any) -> Relationship:
         to_thing_id=row.to_thing_id,
         relationship_type=row.relationship_type,
         metadata=meta,
-        created_at=parse_dt(created_at) if isinstance(created_at, str) else (created_at or datetime.min),  # type: ignore[arg-type]
+        created_at=parse_dt(created_at) or datetime.min,  # type: ignore[arg-type]
     )
 
 
