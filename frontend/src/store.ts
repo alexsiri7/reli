@@ -61,12 +61,7 @@ import type {
   ConnectionSuggestion,
 } from './generated/api-types'
 
-export type {
-  Thing,
-  ThingType,
-  ModelUsage,
-  Nudge,
-} from './generated/api-types'
+export type { Thing, ThingType, ModelUsage, Nudge }
 
 // ── Frontend-only types (not derived from Pydantic models) ────────────────────
 
