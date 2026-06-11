@@ -1662,7 +1662,7 @@ def dismiss_stale_findings(user_id: str = "") -> int:
 
         session.commit()
 
-    return int(total)
+    return total
 
 
 def _fetch_active_findings(user_id: str = "") -> list[dict]:
