@@ -28,7 +28,7 @@ This is the seventh instance of this false positive:
 
 ## Solution
 
-Increased the retry window in both `check_deploy_http` and `check_staging_deploy_http` from 3×30s (~80s coverage) to 6×20s (~120s coverage), matching Railway's known 90–120s startup window.
+Increased the retry window in both `check_deploy_http` and `check_staging_deploy_http` from 3×30s (~80s coverage) to 6×20s (~100–160s coverage), matching Railway's known 90–120s startup window. This implements a wider window than the 6×15s previously recommended in RESOLUTION_1162, providing additional margin for slow-start Railway restarts.
 
 ```bash
 # PREVIOUS (80s coverage — 3 attempts × 30s delay)
@@ -38,7 +38,7 @@ for attempt in 1 2 3; do
   [ "$attempt" -lt 3 ] && sleep 30
 done
 
-# NEW (120s coverage — 6 attempts × 20s delay)
+# NEW (~100–160s coverage — 6 attempts × 20s delay, plus up to 10s curl max-time per probe)
 for attempt in 1 2 3 4 5 6; do
   http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$deploy_url" 2>/dev/null)
   http_code=${http_code:-000}
@@ -62,7 +62,7 @@ This issue follows the established false-positive pattern:
 - No application code was changed between the last healthy check and this alert
 - HTTP 000 (no response) is consistent with a transient Railway restart, not a persistent outage
 - Service recovered on its own (consistent with container restart, not a crash loop)
-- After fix: 6 probes at t=0, 30, 60, 90, 120, 150 covers Railway's full startup window
+- After fix: 6 probes spanning t=0–100s (connection refused returns instantly) to t=0–160s (worst case, curl hits the 10s max-time on each attempt). This covers Railway's 90–120s startup window in all realistic cases.
 
 ## Related Issues
 
