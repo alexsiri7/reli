@@ -7,6 +7,9 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Production image
+# Use floating minor tag so security patches land on each rebuild.
+# Run `docker compose build --pull` (or ensure CI uses --pull) to guarantee
+# the latest python:3.12.x base is fetched rather than served from cache.
 FROM python:3.12-slim
 WORKDIR /app
 
