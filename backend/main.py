@@ -50,6 +50,7 @@ from .routers import (  # noqa: E402
     connections,
     feedback,
     focus,
+    gdpr,
     gmail,
     mcp_oauth,
     nudges,
@@ -384,6 +385,7 @@ app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
 app.include_router(connections.router, prefix="/api", dependencies=_api_deps)
 app.include_router(preferences.router, prefix="/api", dependencies=_api_deps)
 app.include_router(think.router, prefix="/api", dependencies=_api_deps)
+app.include_router(gdpr.router, prefix="/api", dependencies=_api_deps)
 
 
 @app.get("/healthz", tags=["health"], summary="Health check", description="Returns service health status.")
