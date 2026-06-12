@@ -111,6 +111,8 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
             .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
             .limit(10_000)
         ).all()
+        if len(all_active) == 10_000:
+            logger.warning("briefing: active-things query hit safety cap (10,000 rows) for user=%s", user_id)
 
         active_ids = [t.id for t in all_active]
 
@@ -130,6 +132,8 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
             if active_ids
             else []
         )
+        if len(rel_rows) == 20_000:
+            logger.warning("briefing: relationships query hit safety cap (20,000 rows) for user=%s", user_id)
 
         # Active (not dismissed, not expired, not snoozed) sweep findings with linked Things
         finding_stmt = (
@@ -162,6 +166,8 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                 | SweepFindingRecord.confidence.is_(None)  # type: ignore[union-attr]
             )
         finding_results = session.exec(finding_stmt.limit(1_000)).all()
+        if len(finding_results) == 1_000:
+            logger.warning("briefing: findings query hit safety cap (1,000 rows) for user=%s", user_id)
 
     # Learned preference Things for "I Noticed" section
     pref_records = sorted(

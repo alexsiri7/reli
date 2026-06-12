@@ -64,6 +64,6 @@ class TestFocusEndpoint:
         data = resp.json()
         ids = [r["thing"]["id"] for r in data["recommendations"]]
         assert overdue["id"] in ids
+        assert normal["id"] in ids
         # Overdue check-in should appear before normal task
-        if normal["id"] in ids:
-            assert ids.index(overdue["id"]) < ids.index(normal["id"])
+        assert ids.index(overdue["id"]) < ids.index(normal["id"])
