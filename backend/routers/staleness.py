@@ -68,6 +68,7 @@ def get_staleness_report(
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             .order_by(ThingRecord.updated_at.asc())  # type: ignore[union-attr]
+            .limit(5_000)
         )
         stale_results = session.exec(stale_stmt).all()
 
@@ -81,6 +82,7 @@ def get_staleness_report(
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             .order_by(ThingRecord.checkin_date.asc())  # type: ignore[union-attr]
+            .limit(5_000)
         )
         overdue_records = session.exec(overdue_stmt).all()
 

@@ -88,18 +88,21 @@ def _compute_recommendations(
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
+            .limit(5_000)
         )  # type: ignore[union-attr, attr-defined]
         thing_records = session.exec(thing_stmt).all()
         thing_ids = [r.id for r in thing_records]
 
         rel_records = (
             session.exec(
-                select(ThingRelationshipRecord).where(
+                select(ThingRelationshipRecord)
+                .where(
                     or_(
                         ThingRelationshipRecord.from_thing_id.in_(thing_ids),
                         ThingRelationshipRecord.to_thing_id.in_(thing_ids),
                     )
                 )
+                .limit(10_000)
             ).all()
             if thing_ids
             else []

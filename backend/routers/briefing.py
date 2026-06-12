@@ -103,10 +103,12 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
     with Session(_engine_mod.engine) as session:
         # All active things (for blocker graph + checkin-due filtering)
         all_active = session.exec(
-            select(ThingRecord).where(
+            select(ThingRecord)
+            .where(
                 ThingRecord.active,
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
+            .limit(10_000)
         ).all()
 
         active_ids = [t.id for t in all_active]
@@ -114,13 +116,15 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
         # Relationships for blocker graph
         rel_rows = (
             session.exec(
-                select(ThingRelationshipRecord).where(
+                select(ThingRelationshipRecord)
+                .where(
                     ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"]),  # type: ignore[union-attr]
                     or_(
                         ThingRelationshipRecord.from_thing_id.in_(active_ids),
                         ThingRelationshipRecord.to_thing_id.in_(active_ids),
                     ),
                 )
+                .limit(20_000)
             ).all()
             if active_ids
             else []
@@ -156,7 +160,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                 (SweepFindingRecord.confidence >= min_conf)
                 | SweepFindingRecord.confidence.is_(None)  # type: ignore[union-attr]
             )
-        finding_results = session.exec(finding_stmt).all()
+        finding_results = session.exec(finding_stmt.limit(1_000)).all()
 
     # Learned preference Things for "I Noticed" section
     pref_records = sorted(
