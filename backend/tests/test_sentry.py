@@ -95,14 +95,14 @@ def test_strip_cookie_breadcrumb_data_is_none():
     assert result == crumb
 
 
-def test_strip_cookie_breadcrumb_no_cookie_passthrough():
-    """_strip_cookie_breadcrumb should pass through breadcrumbs without cookie headers."""
+def test_strip_cookie_breadcrumb_authorization_filtered():
+    """_strip_cookie_breadcrumb should redact Authorization headers to prevent token leaks."""
     from backend.sentry import _strip_cookie_breadcrumb
 
-    crumb = {"data": {"Authorization": "Bearer token"}}
+    crumb = {"data": {"Authorization": "Bearer token", "Content-Type": "application/json"}}
     result = _strip_cookie_breadcrumb(crumb, None)
-    assert result == crumb
-    assert result["data"]["Authorization"] == "Bearer token"
+    assert result["data"]["Authorization"] == "[Filtered]"
+    assert result["data"]["Content-Type"] == "application/json"
 
 
 def test_init_sentry_sets_before_breadcrumb():

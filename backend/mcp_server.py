@@ -750,7 +750,7 @@ class _TokenAuthMiddleware:
                 try:
                     import jwt as _jwt
 
-                    payload = _jwt.decode(provided, secret_key, algorithms=["HS256"])
+                    payload = _jwt.decode(provided, secret_key, algorithms=["HS256"], audience="mcp")
                     authorized = True
                     user_id = payload.get("sub", "")
                     _current_user_id.set(user_id)

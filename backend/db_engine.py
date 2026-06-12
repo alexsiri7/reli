@@ -60,7 +60,7 @@ def user_filter_clause(user_id_column: Any, user_id: str) -> Any:
     """Return a SQLAlchemy filter clause for user-scoped queries.
 
     When *user_id* is empty (auth disabled), returns ``True`` (no filtering).
-    Otherwise returns ``(column == user_id) | (column IS NULL)``.
+    Otherwise returns ``column == user_id`` (strict equality; NULL-owner rows are excluded).
 
     Usage::
 
@@ -71,7 +71,7 @@ def user_filter_clause(user_id_column: Any, user_id: str) -> Any:
     """
     if not user_id:
         return True  # no filter
-    return or_(user_id_column == user_id, user_id_column.is_(None))  # type: ignore[union-attr]
+    return user_id_column == user_id  # type: ignore[union-attr]
 
 
 def like_pattern(value: str) -> str:

@@ -304,12 +304,29 @@ class TestMcpTokenAudience:
     def test_oauth_token_response_has_mcp_audience(self, patched_db):
         """Access tokens from the /oauth/token endpoint must have aud='mcp'."""
         from backend.main import app
-        from backend.oauth_state import cleanup_and_store, mcp_auth_codes
+        from backend.oauth_state import cleanup_and_store, mcp_auth_codes, mcp_registered_clients
         from backend.routers.auth import JWT_ALGORITHM
 
         secret = "test-secret-key-mcp-audience"
         code_verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
         auth_code = "test-auth-code-aud-check"
+
+        # Register the client as a public client (PKCE flow — no secret required)
+        cleanup_and_store(
+            mcp_registered_clients,
+            "test-client-id",
+            {
+                "client_id": "test-client-id",
+                "client_secret": "",
+                "client_name": "test-client",
+                "token_endpoint_auth_method": "none",
+                "redirect_uris": ["https://client.example.com/callback"],
+                "grant_types": ["authorization_code"],
+                "response_types": ["code"],
+                "scope": "mcp",
+                "expires_at": datetime.now(timezone.utc) + timedelta(seconds=600),
+            },
+        )
 
         cleanup_and_store(
             mcp_auth_codes,
