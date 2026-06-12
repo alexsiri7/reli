@@ -109,3 +109,23 @@ class TestSettingsUserEndpoint:
         resp = auth_client.put("/api/settings/user", json={"messages_until_compression": 1})
         assert resp.status_code == 200
         assert resp.json()["messages_until_compression"] == 5
+
+    def test_chat_retention_days_default_and_update(self, auth_client):
+        """GET returns default 0; PUT persists and clamps to 0–3650."""
+        resp = auth_client.get("/api/settings/user")
+        assert resp.status_code == 200
+        assert resp.json()["chat_retention_days"] == 0
+
+        resp = auth_client.put("/api/settings/user", json={"chat_retention_days": 30})
+        assert resp.status_code == 200
+        assert resp.json()["chat_retention_days"] == 30
+
+        # Upper clamp: 9999 → 3650
+        resp = auth_client.put("/api/settings/user", json={"chat_retention_days": 9999})
+        assert resp.status_code == 200
+        assert resp.json()["chat_retention_days"] == 3650
+
+        # Zero is the unlimited sentinel — must survive the clamp unchanged
+        resp = auth_client.put("/api/settings/user", json={"chat_retention_days": 0})
+        assert resp.status_code == 200
+        assert resp.json()["chat_retention_days"] == 0

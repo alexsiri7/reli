@@ -390,19 +390,21 @@ def _maybe_purge_old_messages(user_id: str) -> None:
     """Delete chat messages older than the user's chat_retention_days setting.
 
     Runs as a fire-and-forget background task. Skipped when retention_days is 0
-    (unlimited). Also deletes orphaned chat_message_usage rows for purged messages.
+    or negative (0 means unlimited). Also deletes orphaned chat_message_usage rows
+    for purged messages.
     """
-    from ..routers.settings import get_user_setting
-
     if not user_id:
-        return
-    retention_val = get_user_setting(user_id, "chat_retention_days")
-    retention_days = int(retention_val) if retention_val else 0
-    if retention_days <= 0:
         return
 
     async def _run() -> None:
         try:
+            # Local import avoids circular dependency between chat.py and settings.py
+            from .settings import get_user_setting
+
+            retention_val = get_user_setting(user_id, "chat_retention_days")
+            retention_days = int(retention_val) if retention_val else 0
+            if retention_days <= 0:
+                return
             cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
             with Session(_engine_mod.engine) as session:
                 old_records = session.exec(
@@ -422,6 +424,7 @@ def _maybe_purge_old_messages(user_id: str) -> None:
                 ).all()
                 for u in usage_rows:
                     session.delete(u)
+                session.flush()  # ensure usage rows are deleted before parent rows
                 for r in old_records:
                     session.delete(r)
                 session.commit()
@@ -794,6 +797,7 @@ async def chat_stream(body: ChatRequest, user_id: str = Depends(require_user)) -
 
             # Trigger async summarization if message count threshold reached
             _maybe_trigger_summarization(user_id)
+            _maybe_purge_old_messages(user_id)
             _maybe_auto_title_session(session_id, message)
 
             daily_usage = _compute_daily_usage(user_id)
