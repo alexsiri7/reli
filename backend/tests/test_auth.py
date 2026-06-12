@@ -309,7 +309,7 @@ class TestOAuthAllowlistRejection:
         fake_state = "test-state-value"
         fake_flow_entry = {
             "code_verifier": "fake-code-verifier",
-            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=600),
+            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=60),
         }
 
         mock_flow = MagicMock()
@@ -350,7 +350,7 @@ class TestOAuthCallbackDoesNotLogCode:
         fake_code = "supersecretauthcode123456"
         fake_flow_entry = {
             "code_verifier": "fake-verifier",
-            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=600),
+            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=60),
         }
 
         mock_flow = MagicMock()
