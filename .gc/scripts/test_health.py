@@ -274,12 +274,12 @@ class TestCheckDelivery(unittest.TestCase):
     @patch("os.path.isdir", return_value=True)
     def test_no_commits(self, mock_isdir, mock_output):
         mock_output.side_effect = [
-            "",   # git log (no commits)
-            "3",  # branch count
-            "",   # git log (no commits) -- second rig
-            "0",  # branch count
-            "",   # git log (no commits) -- third rig
-            "0",  # branch count
+            "",                                         # git log (no commits)
+            "  origin/fix-a\n  origin/fix-b\n  origin/fix-c",  # branch -r (3 origin branches)
+            "",                                         # git log (no commits) -- second rig
+            "",                                         # branch -r (no branches)
+            "",                                         # git log (no commits) -- third rig
+            "",                                         # branch -r (no branches)
         ]
         report = health.HealthReport()
         health.check_delivery(report, city="/tmp/fake")
@@ -291,12 +291,12 @@ class TestCheckDelivery(unittest.TestCase):
     def test_with_commits(self, mock_isdir, mock_output):
         mock_output.side_effect = [
             "abc123 fix bug\ndef456 add feature",  # 2 commits
-            "5",                                     # branches
+            "  origin/fix-a\n  origin/fix-b\n  origin/fix-c\n  origin/fix-d\n  origin/fix-e",  # 5 branches
             "abc123 fix bug\ndef456 add feature",    # latest log
             "",                                      # second rig: no commits
-            "0",
+            "",                                      # branch -r (no branches)
             "",                                      # third rig: no commits
-            "0",
+            "",                                      # branch -r (no branches)
         ]
         report = health.HealthReport()
         health.check_delivery(report, city="/tmp/fake")

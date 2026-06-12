@@ -551,13 +551,10 @@ def check_delivery(report: HealthReport, city: str = CITY_ROOT) -> None:
             f'git -C {rig_dir} log --oneline --since="1 hour ago" master'
         )
         commit_count = len(commits_out.splitlines()) if commits_out else 0
-        branches_out = run_cmd_output(
-            f"git -C {rig_dir} branch -r --no-merged master 2>/dev/null | grep -c 'origin/'"
+        raw_branches = run_cmd_output(
+            ["git", "-C", rig_dir, "branch", "-r", "--no-merged", "master"]
         )
-        try:
-            branch_count = int(branches_out)
-        except ValueError:
-            branch_count = 0
+        branch_count = sum(1 for line in raw_branches.splitlines() if "origin/" in line)
 
         if commit_count > 0:
             latest = run_cmd_output(f"git -C {rig_dir} log --oneline -1 master")
@@ -633,11 +630,11 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
             ))
         elif issue_count > 0 and polecats_active == 0 and polecats_very_stale > 0:
             report.warn(f"{rig}: all {polecats_very_stale} polecats hung 60m+ -- probably finished or stuck")
-            kill_cmds = "; ".join(f"tmux -L gc kill-session -t {sn}" for sn in very_stale_names)
-            fixes.append(FixAction(
-                f"{rig}: kill hung polecats so reconciler creates fresh ones",
-                kill_cmds,
-            ))
+            for sn in very_stale_names:
+                fixes.append(FixAction(
+                    f"{rig}: kill hung polecat {sn}",
+                    f"tmux -L gc kill-session -t {sn}",
+                ))
         elif issue_count > 0 and polecats_active == 0 and polecats_stale > 0:
             report.warn(
                 f"{rig}: {issue_count} open issues, all {polecats_stale} polecats stale "
@@ -755,7 +752,7 @@ def _check_orphaned_beads(report: HealthReport, rig: str, rig_dir: str,
 
         if branch:
             has_remote = run_cmd_output(
-                f"git ls-remote --heads origin {branch} | head -1", timeout=10, cwd=rig_dir
+                ["git", "ls-remote", "--heads", "origin", branch], timeout=10, cwd=rig_dir
             )
             if has_remote:
                 r = run_cmd(f'bd update {bead_id} --status=open --assignee=""', timeout=10, cwd=rig_dir)
