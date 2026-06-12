@@ -200,9 +200,7 @@ def delete_message(
             )
         # Delete associated usage records first (FK constraint)
         usage_records = session.exec(
-            select(ChatMessageUsageRecord).where(
-                ChatMessageUsageRecord.chat_message_id == message_id
-            )
+            select(ChatMessageUsageRecord).where(ChatMessageUsageRecord.chat_message_id == message_id)
         ).all()
         for u in usage_records:
             session.delete(u)

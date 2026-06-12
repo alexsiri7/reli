@@ -133,9 +133,7 @@ async def require_user(request: Request) -> str:
 
                 if random.random() < 0.01:
                     now = datetime.now(timezone.utc)
-                    expired = db.exec(
-                        select(RevokedTokenRecord).where(RevokedTokenRecord.expires_at <= now)
-                    ).all()
+                    expired = db.exec(select(RevokedTokenRecord).where(RevokedTokenRecord.expires_at <= now)).all()
                     for row in expired:
                         db.delete(row)
                     if expired:

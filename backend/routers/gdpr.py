@@ -235,10 +235,14 @@ def delete_all_user_data(
 
     # 3. ThingRelationshipRecord (FK → things, no user_id)
     if thing_ids:
-        _delete_where(session, ThingRelationshipRecord, or_(
-            ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
-            ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
-        ))
+        _delete_where(
+            session,
+            ThingRelationshipRecord,
+            or_(
+                ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
+                ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
+            ),
+        )
 
     # 4. SweepFindingRecord (FK → things)
     _delete_where(session, SweepFindingRecord, user_filter_clause(SweepFindingRecord.user_id, user_id))

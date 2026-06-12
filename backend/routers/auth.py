@@ -328,11 +328,13 @@ def logout(request: Request, response: Response) -> dict:
                 exp_ts = payload.get("exp", 0)
                 expires_at = datetime.fromtimestamp(exp_ts, tz=timezone.utc)
                 with Session(_engine_mod.engine) as session:
-                    session.add(RevokedTokenRecord(
-                        jti=jti,
-                        user_id=payload.get("sub", ""),
-                        expires_at=expires_at,
-                    ))
+                    session.add(
+                        RevokedTokenRecord(
+                            jti=jti,
+                            user_id=payload.get("sub", ""),
+                            expires_at=expires_at,
+                        )
+                    )
                     session.commit()
         except Exception:
             pass  # Best-effort; always delete the cookie
