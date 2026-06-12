@@ -118,7 +118,7 @@ jobs:
           context: .
           push: false
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
 
       - name: Build and push image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -130,7 +130,7 @@ jobs:
             ghcr.io/alexsiri7/reli:${{ github.sha }}
             ghcr.io/alexsiri7/reli:latest
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
 
       - name: Prune old GHCR images (keep last 3)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
