@@ -1,3 +1,6 @@
+# reli:allow-destructive-ddl — downgrade drops the revoked_tokens table.
+# Running this in production re-opens a token-replay window for all previously
+# revoked sessions. Only run with explicit operator approval.
 """add revoked_tokens table
 
 Revision ID: q1r2s3t4u5v6

@@ -325,8 +325,8 @@ def logout(request: Request, response: Response) -> dict:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM], audience="web")
             jti = payload.get("jti")
             if jti:
-                exp_ts = payload.get("exp", 0)
-                expires_at = datetime.fromtimestamp(exp_ts, tz=timezone.utc)
+                exp_ts = payload.get("exp")
+                expires_at = datetime.fromtimestamp(exp_ts, tz=timezone.utc) if exp_ts else datetime.now(timezone.utc)
                 with Session(_engine_mod.engine) as session:
                     session.add(
                         RevokedTokenRecord(
@@ -337,6 +337,7 @@ def logout(request: Request, response: Response) -> dict:
                     )
                     session.commit()
         except Exception:
-            pass  # Best-effort; always delete the cookie
+            logger.warning("Failed to record token revocation on logout; cookie will still be cleared", exc_info=True)
+            # Best-effort; always delete the cookie
     response.delete_cookie(key=COOKIE_NAME, path="/")
     return {"status": "logged_out"}
