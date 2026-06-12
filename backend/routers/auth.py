@@ -338,6 +338,5 @@ def logout(request: Request, response: Response) -> dict:
                     session.commit()
         except Exception:
             logger.warning("Failed to record token revocation on logout; cookie will still be cleared", exc_info=True)
-            # Best-effort; always delete the cookie
     response.delete_cookie(key=COOKIE_NAME, path="/")
     return {"status": "logged_out"}
