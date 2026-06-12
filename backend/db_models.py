@@ -547,3 +547,19 @@ class GmailOAuthStateRecord(SQLModel, table=True):
     user_id: str = Field(primary_key=True)
     state: str
     expires_at: float  # Unix epoch
+
+
+# ---------------------------------------------------------------------------
+# Revoked Tokens (SEC-017)
+# ---------------------------------------------------------------------------
+
+
+class RevokedTokenRecord(SQLModel, table=True):
+    """Revoked JWT IDs. Checked on every authenticated request."""
+
+    __tablename__ = "revoked_tokens"
+
+    jti: str = Field(primary_key=True)
+    user_id: str = Field(index=True)
+    revoked_at: datetime = Field(default_factory=_utcnow)
+    expires_at: datetime  # mirrors JWT exp — used for cleanup

@@ -437,3 +437,151 @@ class TestGoogleCallbackGenericError:
         assert resp.json()["detail"] == "Authentication service unavailable"
         mock_logger.error.assert_called_once()
         assert "SECRET_KEY" in mock_logger.error.call_args[0][0]
+
+
+class TestSessionRevocation:
+    """Token revocation via logout."""
+
+    @pytest.fixture()
+    def revocation_client(self, patched_db):
+        """TestClient with SECRET_KEY set on both auth and router modules."""
+        with (
+            patch("backend.auth.SECRET_KEY", "test-secret-key"),
+            patch("backend.routers.auth.SECRET_KEY", "test-secret-key"),
+        ):
+            from backend.main import app
+
+            with TestClient(app) as c:
+                yield c
+
+    def test_logout_revokes_token(self, revocation_client):
+        """After logout, the same JWT should be rejected."""
+        import jwt as _jwt
+
+        from backend.routers.auth import JWT_ALGORITHM, JWT_EXPIRY_SECONDS
+
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        payload = {
+            "sub": "test-user-id",
+            "email": "test@example.com",
+            "aud": "web",
+            "iat": now_ts,
+            "exp": now_ts + JWT_EXPIRY_SECONDS,
+            "jti": "revoke-me-123",
+        }
+        token = _jwt.encode(payload, "test-secret-key", algorithm=JWT_ALGORITHM)
+
+        # Set cookie and verify it works
+        revocation_client.cookies.set("reli_session", token)
+        resp = revocation_client.get("/api/things")
+        assert resp.status_code == 200
+
+        # Logout
+        resp = revocation_client.post("/api/auth/logout")
+        assert resp.status_code == 200
+
+        # Restore the cookie manually and try an authenticated endpoint
+        revocation_client.cookies.set("reli_session", token)
+        resp = revocation_client.get("/api/things")
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "Session revoked"
+
+    def test_logout_without_jti_still_clears_cookie(self, revocation_client):
+        """Tokens without jti (legacy) should still log out without error."""
+        import jwt as _jwt
+
+        payload = {
+            "sub": "test-user-id",
+            "email": "test@example.com",
+            "aud": "web",
+            "exp": 9999999999,
+        }
+        token = _jwt.encode(payload, "test-secret-key", algorithm="HS256")
+        revocation_client.cookies.set("reli_session", token)
+
+        resp = revocation_client.post("/api/auth/logout")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "logged_out"}
+
+    def test_logout_with_malformed_cookie_still_succeeds(self, revocation_client):
+        """Malformed cookie must not prevent logout."""
+        revocation_client.cookies.set("reli_session", "not-a-valid-jwt")
+        resp = revocation_client.post("/api/auth/logout")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "logged_out"}
+
+    def test_revocation_check_db_failure_allows_request(self, revocation_client):
+        """DB failure during revocation check must fail-open (allow the request)."""
+        import jwt as _jwt
+
+        from backend.routers.auth import JWT_ALGORITHM, JWT_EXPIRY_SECONDS
+
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        payload = {
+            "sub": "test-user-id",
+            "email": "test@example.com",
+            "aud": "web",
+            "iat": now_ts,
+            "exp": now_ts + JWT_EXPIRY_SECONDS,
+            "jti": "fail-open-jti",
+        }
+        token = _jwt.encode(payload, "test-secret-key", algorithm=JWT_ALGORITHM)
+        revocation_client.cookies.set("reli_session", token)
+
+        # Patch only the Session used in backend.auth (revocation check), not other routes
+        with patch("backend.auth.Session", side_effect=Exception("DB down")):
+            resp = revocation_client.get("/api/things")
+
+        # Fail-open: request must be allowed, not 401/500
+        assert resp.status_code == 200
+
+    def test_opportunistic_pruning_removes_expired_rows(self, revocation_client):
+        """Expired revocation rows are deleted during the 1% prune pass."""
+        import jwt as _jwt
+
+        import backend.db_engine as _engine_mod
+        from backend.db_models import RevokedTokenRecord
+        from backend.routers.auth import JWT_ALGORITHM, JWT_EXPIRY_SECONDS
+
+        # Seed an expired revocation row
+        past = datetime.now(timezone.utc) - timedelta(hours=1)
+        with Session(_engine_mod.engine) as db:
+            db.add(RevokedTokenRecord(jti="expired-jti", user_id="u1", expires_at=past))
+            db.commit()
+
+        # Build a fresh valid token (different jti — not revoked)
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        payload = {
+            "sub": "test-user-id",
+            "email": "test@example.com",
+            "aud": "web",
+            "iat": now_ts,
+            "exp": now_ts + JWT_EXPIRY_SECONDS,
+            "jti": "live-jti",
+        }
+        token = _jwt.encode(payload, "test-secret-key", algorithm=JWT_ALGORITHM)
+        revocation_client.cookies.set("reli_session", token)
+
+        with patch("backend.auth.random.random", return_value=0.0):  # always prune
+            resp = revocation_client.get("/api/things")
+
+        assert resp.status_code == 200
+
+        with Session(_engine_mod.engine) as db:
+            assert db.get(RevokedTokenRecord, "expired-jti") is None, "Expired row should be pruned"
+
+
+def test_create_jwt_includes_jti():
+    """Tokens issued by _create_jwt must carry a non-empty jti UUID claim."""
+    import uuid
+
+    import jwt as _jwt
+
+    from backend.routers.auth import JWT_ALGORITHM, _create_jwt
+
+    with patch("backend.routers.auth.SECRET_KEY", "test-secret-key"):
+        token = _create_jwt("user-123", "user@example.com")
+
+    payload = _jwt.decode(token, "test-secret-key", algorithms=[JWT_ALGORITHM], audience="web")
+    assert "jti" in payload
+    uuid.UUID(payload["jti"])  # raises ValueError if not a valid UUID

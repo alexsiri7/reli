@@ -18,7 +18,7 @@ from sqlmodel import Session, select
 import backend.db_engine as _engine_mod
 
 from ..config import settings
-from ..db_models import ThingRecord, UserRecord
+from ..db_models import RevokedTokenRecord, ThingRecord, UserRecord
 from ..oauth_state import (
     StoreFullError,
     cleanup_and_get,
@@ -72,6 +72,7 @@ def _create_jwt(user_id: str, email: str, aud: str = "web") -> str:
         "aud": aud,
         "iat": now_ts,
         "exp": now_ts + JWT_EXPIRY_SECONDS,
+        "jti": str(uuid.uuid4()),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGORITHM)
 
@@ -316,7 +317,26 @@ def get_current_user(request: Request) -> dict:
 
 
 @router.post("/logout", summary="Log out")
-def logout(response: Response) -> dict:
-    """Clear the session cookie."""
+def logout(request: Request, response: Response) -> dict:
+    """Clear the session cookie and revoke the JWT server-side."""
+    token = request.cookies.get(COOKIE_NAME)
+    if token and SECRET_KEY:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM], audience="web")
+            jti = payload.get("jti")
+            if jti:
+                exp_ts = payload.get("exp")
+                expires_at = datetime.fromtimestamp(exp_ts, tz=timezone.utc) if exp_ts else datetime.now(timezone.utc)
+                with Session(_engine_mod.engine) as session:
+                    session.add(
+                        RevokedTokenRecord(
+                            jti=jti,
+                            user_id=payload.get("sub", ""),
+                            expires_at=expires_at,
+                        )
+                    )
+                    session.commit()
+        except Exception:
+            logger.warning("Failed to record token revocation on logout; cookie will still be cleared", exc_info=True)
     response.delete_cookie(key=COOKIE_NAME, path="/")
     return {"status": "logged_out"}

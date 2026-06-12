@@ -14,12 +14,18 @@ Two auth methods are supported:
 """
 
 import logging
+import random
 import secrets
+from datetime import datetime, timezone
 
 import jwt
 from fastapi import HTTPException, Request, status
+from sqlmodel import Session, select
+
+import backend.db_engine as _engine_mod
 
 from .config import settings
+from .db_models import RevokedTokenRecord
 
 _log = logging.getLogger(__name__)
 
@@ -114,5 +120,35 @@ async def require_user(request: Request) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid session payload",
         )
+
+    # Check revocation blacklist (only for tokens that carry a jti claim)
+    jti: str = payload.get("jti", "")
+    if jti:
+        try:
+            with Session(_engine_mod.engine) as db:
+                # Prune expired rows opportunistically (low-cost, ~1% of requests)
+                if random.random() < 0.01:
+                    try:
+                        now = datetime.now(timezone.utc)
+                        expired = db.exec(select(RevokedTokenRecord).where(RevokedTokenRecord.expires_at <= now)).all()
+                        for row in expired:
+                            db.delete(row)
+                        if expired:
+                            db.commit()
+                    except Exception:
+                        _log.warning("Revocation prune failed (non-fatal)", exc_info=True)
+                revoked = db.get(RevokedTokenRecord, jti)
+        except Exception:
+            # SECURITY TRADEOFF: fail open to preserve availability during DB outages.
+            # Consequence: a revoked token may pass this check if the DB is unreachable.
+            # The token will still expire naturally (JWT exp claim).
+            revoked = None
+            _log.warning("Revocation check failed; allowing request", exc_info=True)
+
+        if revoked:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session revoked",
+            )
 
     return user_id

@@ -13,7 +13,7 @@ Interactive docs available at `http://localhost:8000/docs` (Swagger UI) when run
 | GET | `/api/auth/google` | Redirect to Google OAuth consent screen |
 | GET | `/api/auth/google/callback` | Handle OAuth callback, set `reli_session` cookie |
 | GET | `/api/auth/me` | Return current user profile |
-| POST | `/api/auth/logout` | Clear session cookie |
+| POST | `/api/auth/logout` | Revoke JWT server-side and clear session cookie |
 
 **`GET /api/auth/me` response:**
 ```json
