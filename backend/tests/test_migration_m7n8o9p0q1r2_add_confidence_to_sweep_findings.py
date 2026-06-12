@@ -14,9 +14,7 @@ class TestConfidenceMigrationUpgrade:
     def test_skips_when_confidence_already_exists(self, mock_sa, mock_op):
         """upgrade() must return early if confidence column is already present."""
         mock_inspector = MagicMock()
-        mock_inspector.get_columns.return_value = [
-            {"name": "id"}, {"name": "message"}, {"name": "confidence"}
-        ]
+        mock_inspector.get_columns.return_value = [{"name": "id"}, {"name": "message"}, {"name": "confidence"}]
         mock_sa.inspect.return_value = mock_inspector
         mock_op.get_bind.return_value = MagicMock()
 
@@ -29,9 +27,7 @@ class TestConfidenceMigrationUpgrade:
     def test_runs_migration_when_confidence_absent(self, mock_sa, mock_op):
         """upgrade() must add confidence column when it is not present."""
         mock_inspector = MagicMock()
-        mock_inspector.get_columns.return_value = [
-            {"name": "id"}, {"name": "message"}, {"name": "priority"}
-        ]
+        mock_inspector.get_columns.return_value = [{"name": "id"}, {"name": "message"}, {"name": "priority"}]
         mock_sa.inspect.return_value = mock_inspector
         mock_op.get_bind.return_value = MagicMock()
         mock_batch_op = MagicMock()

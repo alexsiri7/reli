@@ -162,8 +162,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
         if min_conf > 0.0:
             logger.debug("briefing: applying confidence gate min_confidence=%.2f", min_conf)
             finding_stmt = finding_stmt.where(
-                (SweepFindingRecord.confidence >= min_conf)
-                | SweepFindingRecord.confidence.is_(None)  # type: ignore[union-attr]
+                (SweepFindingRecord.confidence >= min_conf) | SweepFindingRecord.confidence.is_(None)  # type: ignore[union-attr]
             )
         finding_results = session.exec(finding_stmt.limit(1_000)).all()
         if len(finding_results) == 1_000:

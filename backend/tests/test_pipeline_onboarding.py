@@ -1,6 +1,5 @@
 """Tests for pipeline onboarding detection and vector search fallback."""
 
-
 from sqlmodel import Session
 
 import backend.db_engine as _engine_mod

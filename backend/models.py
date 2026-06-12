@@ -366,7 +366,7 @@ class SweepFindingCreate(BaseModel):
         ge=0.0,
         le=1.0,
         description="LLM confidence in this finding (0.0 = speculative, 1.0 = direct evidence). "
-                    "Findings below SWEEP_MIN_CONFIDENCE are excluded from briefings.",
+        "Findings below SWEEP_MIN_CONFIDENCE are excluded from briefings.",
     )
 
 

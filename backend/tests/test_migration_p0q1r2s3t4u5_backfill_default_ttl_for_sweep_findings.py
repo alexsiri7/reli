@@ -28,9 +28,7 @@ class TestBackfillDefaultTTLUpgrade:
 
         mock_conn.execute.side_effect = real_execute
 
-        with patch(
-            "backend.alembic.versions.p0q1r2s3t4u5_backfill_default_ttl_for_sweep_findings.op"
-        ) as mock_op:
+        with patch("backend.alembic.versions.p0q1r2s3t4u5_backfill_default_ttl_for_sweep_findings.op") as mock_op:
             mock_op.get_bind.return_value = mock_conn
             upgrade()
 

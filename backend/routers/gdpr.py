@@ -1,6 +1,7 @@
 """GDPR right-to-erasure and data export endpoints."""
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import or_
@@ -52,29 +53,29 @@ def export_user_data(
 ) -> dict:
     """Export all user data as structured JSON (GDPR data portability)."""
     # Things
-    things = session.exec(
-        select(ThingRecord).where(user_filter_clause(ThingRecord.user_id, user_id))
-    ).all()
+    things = session.exec(select(ThingRecord).where(user_filter_clause(ThingRecord.user_id, user_id))).all()
     thing_ids = [t.id for t in things]
 
     # Thing relationships (no user_id column — filter via thing_ids)
-    relationships = []
+    relationships: list[Any] = []
     if thing_ids:
-        relationships = session.exec(
-            select(ThingRelationshipRecord).where(
-                or_(
-                    ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[union-attr]
-                    ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[union-attr]
+        relationships = list(
+            session.exec(
+                select(ThingRelationshipRecord).where(
+                    or_(
+                        ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
+                        ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
+                    )
                 )
-            )
-        ).all()
+            ).all()
+        )
 
     # Thing embeddings (exclude raw vector — not human-readable PII)
     embeddings = []
     if thing_ids:
         raw_embeddings = session.exec(
             select(ThingEmbeddingRecord).where(
-                ThingEmbeddingRecord.thing_id.in_(thing_ids)  # type: ignore[union-attr]
+                ThingEmbeddingRecord.thing_id.in_(thing_ids)  # type: ignore[attr-defined]
             )
         ).all()
         embeddings = [
@@ -87,18 +88,18 @@ def export_user_data(
         ]
 
     # Chat sessions and history
-    chat_sessions = session.exec(
-        select(ChatSessionRecord).where(ChatSessionRecord.user_id == user_id)
-    ).all()
+    chat_sessions = session.exec(select(ChatSessionRecord).where(ChatSessionRecord.user_id == user_id)).all()
     session_ids = [s.id for s in chat_sessions]
 
-    chat_history: list = []
+    chat_history: list[Any] = []
     if session_ids:
-        chat_history = session.exec(
-            select(ChatHistoryRecord).where(
-                ChatHistoryRecord.session_id.in_(session_ids)  # type: ignore[union-attr]
-            )
-        ).all()
+        chat_history = list(
+            session.exec(
+                select(ChatHistoryRecord).where(
+                    ChatHistoryRecord.session_id.in_(session_ids)  # type: ignore[attr-defined]
+                )
+            ).all()
+        )
 
     # Conversation summaries
     conversation_summaries = session.exec(
@@ -106,9 +107,7 @@ def export_user_data(
     ).all()
 
     # User settings (redact API keys)
-    raw_settings = session.exec(
-        select(UserSettingRecord).where(UserSettingRecord.user_id == user_id)
-    ).all()
+    raw_settings = session.exec(select(UserSettingRecord).where(UserSettingRecord.user_id == user_id)).all()
     settings_data = []
     for s in raw_settings:
         d = s.model_dump()
@@ -118,9 +117,7 @@ def export_user_data(
 
     # Google tokens (redact secrets)
     raw_google_tokens = session.exec(
-        select(GoogleTokenRecord).where(
-            user_filter_clause(GoogleTokenRecord.user_id, user_id)
-        )
+        select(GoogleTokenRecord).where(user_filter_clause(GoogleTokenRecord.user_id, user_id))
     ).all()
     google_tokens_data = []
     for gt in raw_google_tokens:
@@ -134,15 +131,11 @@ def export_user_data(
     sweep_findings = session.exec(
         select(SweepFindingRecord).where(user_filter_clause(SweepFindingRecord.user_id, user_id))
     ).all()
-    sweep_runs = session.exec(
-        select(SweepRunRecord).where(user_filter_clause(SweepRunRecord.user_id, user_id))
-    ).all()
+    sweep_runs = session.exec(select(SweepRunRecord).where(user_filter_clause(SweepRunRecord.user_id, user_id))).all()
     sweep_actions = session.exec(
         select(SweepActionRecord).where(user_filter_clause(SweepActionRecord.user_id, user_id))
     ).all()
-    usage_log = session.exec(
-        select(UsageLogRecord).where(user_filter_clause(UsageLogRecord.user_id, user_id))
-    ).all()
+    usage_log = session.exec(select(UsageLogRecord).where(user_filter_clause(UsageLogRecord.user_id, user_id))).all()
     morning_briefings = session.exec(
         select(MorningBriefingRecord).where(user_filter_clause(MorningBriefingRecord.user_id, user_id))
     ).all()
@@ -150,13 +143,9 @@ def export_user_data(
         select(WeeklyBriefingRecord).where(user_filter_clause(WeeklyBriefingRecord.user_id, user_id))
     ).all()
     connection_suggestions = session.exec(
-        select(ConnectionSuggestionRecord).where(
-            user_filter_clause(ConnectionSuggestionRecord.user_id, user_id)
-        )
+        select(ConnectionSuggestionRecord).where(user_filter_clause(ConnectionSuggestionRecord.user_id, user_id))
     ).all()
-    nudge_dismissals = session.exec(
-        select(NudgeDismissalRecord).where(NudgeDismissalRecord.user_id == user_id)
-    ).all()
+    nudge_dismissals = session.exec(select(NudgeDismissalRecord).where(NudgeDismissalRecord.user_id == user_id)).all()
     nudge_suppressions = session.exec(
         select(NudgeSuppressionRecord).where(NudgeSuppressionRecord.user_id == user_id)
     ).all()
@@ -171,9 +160,7 @@ def export_user_data(
     ).all()
 
     # User record
-    user_record = session.exec(
-        select(UserRecord).where(UserRecord.id == user_id)
-    ).first()
+    user_record = session.exec(select(UserRecord).where(UserRecord.id == user_id)).first()
 
     return {
         "user": user_record.model_dump() if user_record else None,
@@ -213,32 +200,32 @@ def delete_all_user_data(
         )
 
     # Collect IDs needed for junction/child tables
-    things = session.exec(
-        select(ThingRecord).where(user_filter_clause(ThingRecord.user_id, user_id))
-    ).all()
+    things = session.exec(select(ThingRecord).where(user_filter_clause(ThingRecord.user_id, user_id))).all()
     thing_ids = [t.id for t in things]
 
-    chat_sessions = session.exec(
-        select(ChatSessionRecord).where(ChatSessionRecord.user_id == user_id)
-    ).all()
+    chat_sessions = session.exec(select(ChatSessionRecord).where(ChatSessionRecord.user_id == user_id)).all()
     session_ids = [s.id for s in chat_sessions]
 
-    chat_messages: list = []
+    chat_messages: list[Any] = []
     if session_ids:
-        chat_messages = session.exec(
-            select(ChatHistoryRecord).where(
-                ChatHistoryRecord.session_id.in_(session_ids)  # type: ignore[union-attr]
-            )
-        ).all()
+        chat_messages = list(
+            session.exec(
+                select(ChatHistoryRecord).where(
+                    ChatHistoryRecord.session_id.in_(session_ids)  # type: ignore[attr-defined]
+                )
+            ).all()
+        )
     chat_msg_ids = [m.id for m in chat_messages]
 
     # Delete in FK-safe order (children before parents)
+    # r is typed Any because it's reused across heterogeneous delete loops.
+    r: Any
 
     # 1. ChatMessageUsageRecord (FK → chat_history)
     if chat_msg_ids:
         for r in session.exec(
             select(ChatMessageUsageRecord).where(
-                ChatMessageUsageRecord.chat_message_id.in_(chat_msg_ids)  # type: ignore[union-attr]
+                ChatMessageUsageRecord.chat_message_id.in_(chat_msg_ids)  # type: ignore[attr-defined]
             )
         ).all():
             session.delete(r)
@@ -247,7 +234,7 @@ def delete_all_user_data(
     if thing_ids:
         for r in session.exec(
             select(ThingEmbeddingRecord).where(
-                ThingEmbeddingRecord.thing_id.in_(thing_ids)  # type: ignore[union-attr]
+                ThingEmbeddingRecord.thing_id.in_(thing_ids)  # type: ignore[attr-defined]
             )
         ).all():
             session.delete(r)
@@ -257,8 +244,8 @@ def delete_all_user_data(
         for r in session.exec(
             select(ThingRelationshipRecord).where(
                 or_(
-                    ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[union-attr]
-                    ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[union-attr]
+                    ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
+                    ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
                 )
             )
         ).all():
@@ -272,9 +259,7 @@ def delete_all_user_data(
 
     # 5. ConnectionSuggestionRecord (FK → things)
     for r in session.exec(
-        select(ConnectionSuggestionRecord).where(
-            user_filter_clause(ConnectionSuggestionRecord.user_id, user_id)
-        )
+        select(ConnectionSuggestionRecord).where(user_filter_clause(ConnectionSuggestionRecord.user_id, user_id))
     ).all():
         session.delete(r)
 
@@ -297,15 +282,11 @@ def delete_all_user_data(
         session.delete(r)
 
     # 10. ConversationSummaryRecord (FK → users)
-    for r in session.exec(
-        select(ConversationSummaryRecord).where(ConversationSummaryRecord.user_id == user_id)
-    ).all():
+    for r in session.exec(select(ConversationSummaryRecord).where(ConversationSummaryRecord.user_id == user_id)).all():
         session.delete(r)
 
     # 11. UserSettingRecord (FK → users)
-    for r in session.exec(
-        select(UserSettingRecord).where(UserSettingRecord.user_id == user_id)
-    ).all():
+    for r in session.exec(select(UserSettingRecord).where(UserSettingRecord.user_id == user_id)).all():
         session.delete(r)
 
     # 12. GoogleTokenRecord (FK → users)
@@ -315,9 +296,7 @@ def delete_all_user_data(
         session.delete(r)
 
     # 13. Tables with FK → users or standalone user_id
-    for r in session.exec(
-        select(SweepRunRecord).where(user_filter_clause(SweepRunRecord.user_id, user_id))
-    ).all():
+    for r in session.exec(select(SweepRunRecord).where(user_filter_clause(SweepRunRecord.user_id, user_id))).all():
         session.delete(r)
 
     for r in session.exec(
@@ -325,9 +304,7 @@ def delete_all_user_data(
     ).all():
         session.delete(r)
 
-    for r in session.exec(
-        select(UsageLogRecord).where(user_filter_clause(UsageLogRecord.user_id, user_id))
-    ).all():
+    for r in session.exec(select(UsageLogRecord).where(user_filter_clause(UsageLogRecord.user_id, user_id))).all():
         session.delete(r)
 
     for r in session.exec(
@@ -340,14 +317,10 @@ def delete_all_user_data(
     ).all():
         session.delete(r)
 
-    for r in session.exec(
-        select(NudgeDismissalRecord).where(NudgeDismissalRecord.user_id == user_id)
-    ).all():
+    for r in session.exec(select(NudgeDismissalRecord).where(NudgeDismissalRecord.user_id == user_id)).all():
         session.delete(r)
 
-    for r in session.exec(
-        select(NudgeSuppressionRecord).where(NudgeSuppressionRecord.user_id == user_id)
-    ).all():
+    for r in session.exec(select(NudgeSuppressionRecord).where(NudgeSuppressionRecord.user_id == user_id)).all():
         session.delete(r)
 
     for r in session.exec(
@@ -355,22 +328,16 @@ def delete_all_user_data(
     ).all():
         session.delete(r)
 
-    for r in session.exec(
-        select(ThingTypeRecord).where(user_filter_clause(ThingTypeRecord.user_id, user_id))
-    ).all():
+    for r in session.exec(select(ThingTypeRecord).where(user_filter_clause(ThingTypeRecord.user_id, user_id))).all():
         session.delete(r)
 
     # 14. GmailOAuthStateRecord (PK is user_id)
-    gmail_state = session.exec(
-        select(GmailOAuthStateRecord).where(GmailOAuthStateRecord.user_id == user_id)
-    ).first()
+    gmail_state = session.exec(select(GmailOAuthStateRecord).where(GmailOAuthStateRecord.user_id == user_id)).first()
     if gmail_state:
         session.delete(gmail_state)
 
     # 15. UserRecord (last — everything else FK'd to it)
-    user_record = session.exec(
-        select(UserRecord).where(UserRecord.id == user_id)
-    ).first()
+    user_record = session.exec(select(UserRecord).where(UserRecord.id == user_id)).first()
     if user_record:
         session.delete(user_record)
 

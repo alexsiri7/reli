@@ -416,9 +416,7 @@ def _maybe_purge_old_messages(user_id: str) -> None:
                 old_ids = [r.id for r in old_records]
                 # Delete dependent usage rows first (no FK cascade in SQLite)
                 usage_rows = session.exec(
-                    select(ChatMessageUsageRecord).where(
-                        ChatMessageUsageRecord.chat_message_id.in_(old_ids)
-                    )
+                    select(ChatMessageUsageRecord).where(ChatMessageUsageRecord.chat_message_id.in_(old_ids))
                 ).all()
                 for u in usage_rows:
                     session.delete(u)
@@ -427,7 +425,9 @@ def _maybe_purge_old_messages(user_id: str) -> None:
                 session.commit()
                 logger.info(
                     "Purged %d old chat messages for user %s (retention_days=%d)",
-                    len(old_records), user_id, retention_days,
+                    len(old_records),
+                    user_id,
+                    retention_days,
                 )
         except Exception:
             logger.exception("Background chat purge failed for user %s", user_id)

@@ -4,6 +4,7 @@ Revision ID: o9p0q1r2s3t4
 Revises: n8o9p0q1r2s3
 Create Date: 2026-06-04 00:00:00.000000
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -21,13 +22,9 @@ def upgrade() -> None:
     columns = [c["name"] for c in inspector.get_columns("sweep_findings")]
     with op.batch_alter_table("sweep_findings") as batch_op:
         if "context_snapshot" not in columns:
-            batch_op.add_column(
-                sa.Column("context_snapshot", sa.JSON(), nullable=True)
-            )
+            batch_op.add_column(sa.Column("context_snapshot", sa.JSON(), nullable=True))
         if "dismissed_reason" not in columns:
-            batch_op.add_column(
-                sa.Column("dismissed_reason", sa.Text(), nullable=True)
-            )
+            batch_op.add_column(sa.Column("dismissed_reason", sa.Text(), nullable=True))
 
 
 def downgrade() -> None:

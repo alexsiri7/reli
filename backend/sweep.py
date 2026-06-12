@@ -1623,9 +1623,7 @@ def dismiss_stale_findings(user_id: str = "") -> int:
         if findings_with_snapshot:
             snapshot_thing_ids = {f.thing_id for f in findings_with_snapshot}
             thing_by_id = {
-                t.id: t for t in session.exec(
-                    select(ThingRecord).where(ThingRecord.id.in_(snapshot_thing_ids))
-                ).all()
+                t.id: t for t in session.exec(select(ThingRecord).where(ThingRecord.id.in_(snapshot_thing_ids))).all()
             }
             for finding in findings_with_snapshot:
                 thing = thing_by_id.get(finding.thing_id)
@@ -1642,9 +1640,9 @@ def dismiss_stale_findings(user_id: str = "") -> int:
                         snap_dt = datetime.fromisoformat(snap_updated_at).replace(tzinfo=None)
                     except ValueError:
                         logger.warning(
-                            "sweep: skipping context-change check for finding %s — "
-                            "invalid updated_at in snapshot: %r",
-                            finding.id, snap_updated_at,
+                            "sweep: skipping context-change check for finding %s — invalid updated_at in snapshot: %r",
+                            finding.id,
+                            snap_updated_at,
                         )
                         continue
                     thing_updated = thing.updated_at.replace(tzinfo=None)
@@ -1657,7 +1655,10 @@ def dismiss_stale_findings(user_id: str = "") -> int:
                         logger.info(
                             "sweep: auto-dismissed finding %s — Thing %s updated after finding created "
                             "(thing.updated_at=%s, finding.created_at=%s)",
-                            finding.id, finding.thing_id, thing.updated_at, finding.created_at,
+                            finding.id,
+                            finding.thing_id,
+                            thing.updated_at,
+                            finding.created_at,
                         )
                         total += 1
 
@@ -1868,15 +1869,12 @@ async def reflect_on_candidates(
 
     with Session(_engine_mod.engine) as session:
         # Pre-fetch Things for context snapshots
-        thing_ids_in_findings = {
-            f.get("thing_id") for f in raw_findings if isinstance(f, dict) and f.get("thing_id")
-        }
+        thing_ids_in_findings = {f.get("thing_id") for f in raw_findings if isinstance(f, dict) and f.get("thing_id")}
         thing_map: dict[str, ThingRecord] = {}
         if thing_ids_in_findings:
             thing_map = {
-                t.id: t for t in session.exec(
-                    select(ThingRecord).where(ThingRecord.id.in_(thing_ids_in_findings))
-                ).all()
+                t.id: t
+                for t in session.exec(select(ThingRecord).where(ThingRecord.id.in_(thing_ids_in_findings))).all()
             }
 
         for f in raw_findings:
@@ -2369,7 +2367,9 @@ async def auto_merge_duplicates(
             if "error" in result:
                 logger.warning(
                     "auto_merge_duplicates: merge failed %s→%s: %s",
-                    remove_id, keep_id, result["error"],
+                    remove_id,
+                    keep_id,
+                    result["error"],
                 )
                 merges_skipped += 1
                 continue
@@ -2380,10 +2380,7 @@ async def auto_merge_duplicates(
                     id=f"sf-{uuid.uuid4().hex[:8]}",
                     thing_id=keep_id,
                     finding_type="duplicate_auto_merged",
-                    message=(
-                        f"Auto-merged duplicate \"{result['remove_title']}\" "
-                        f"into \"{result['keep_title']}\""
-                    ),
+                    message=(f'Auto-merged duplicate "{result["remove_title"]}" into "{result["keep_title"]}"'),
                     priority=3,
                     dismissed=False,
                     created_at=now,

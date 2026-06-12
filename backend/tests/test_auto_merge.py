@@ -83,9 +83,7 @@ class TestAutoMergeDuplicates:
 
         with Session(_engine_mod.engine) as session:
             findings = session.exec(
-                select(SweepFindingRecord).where(
-                    SweepFindingRecord.finding_type == "duplicate_auto_merged"
-                )
+                select(SweepFindingRecord).where(SweepFindingRecord.finding_type == "duplicate_auto_merged")
             ).all()
         assert len(findings) >= 1
         assert findings[0].confidence == pytest.approx(1.0)
@@ -101,9 +99,7 @@ class TestAutoMergeDuplicates:
         asyncio.run(auto_merge_duplicates(user_id=""))
 
         with Session(_engine_mod.engine) as session:
-            actions = session.exec(
-                select(SweepActionRecord).where(SweepActionRecord.action_type == "merge")
-            ).all()
+            actions = session.exec(select(SweepActionRecord).where(SweepActionRecord.action_type == "merge")).all()
         assert len(actions) >= 1
 
     def test_no_duplicates_returns_zero(self, db):
@@ -136,6 +132,7 @@ class TestAutoMergeDuplicates:
             _insert_task_under_project(conn, "task-b", "Shared work", "proj-b")
 
         from backend import config as _config
+
         monkeypatch.setattr(_config.settings, "SWEEP_AUTO_MERGE_ENABLED", "false")
 
         result = asyncio.run(auto_merge_duplicates(user_id=""))
@@ -150,6 +147,7 @@ class TestAutoMergeDuplicates:
             _insert_task_under_project(conn, "task-b", "Shared work", "proj-b")
 
         from backend import config as _config
+
         monkeypatch.setattr(_config.settings, "SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD", 2.0)
 
         result = asyncio.run(auto_merge_duplicates(user_id=""))
@@ -168,9 +166,7 @@ class TestAutoMergeDuplicates:
             priority=2,
             extra={},  # no duplicate_thing_id
         )
-        monkeypatch.setattr(
-            _sweep, "find_cross_project_duplicate_effort", lambda session: [fake_candidate]
-        )
+        monkeypatch.setattr(_sweep, "find_cross_project_duplicate_effort", lambda session: [fake_candidate])
 
         result = asyncio.run(auto_merge_duplicates(user_id=""))
         assert result.merges_executed == 0

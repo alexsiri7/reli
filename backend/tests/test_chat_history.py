@@ -192,7 +192,6 @@ class TestChatRetentionPurge:
 
     def test_purge_deletes_old_messages(self, client):
         from datetime import timedelta
-        from unittest.mock import patch
 
         from sqlmodel import Session
 
@@ -237,9 +236,7 @@ class TestChatRetentionPurge:
             ).all()
             old_ids = [r.id for r in old_records]
             usage_rows = session.exec(
-                sel(ChatMessageUsageRecord).where(
-                    ChatMessageUsageRecord.chat_message_id.in_(old_ids)
-                )
+                sel(ChatMessageUsageRecord).where(ChatMessageUsageRecord.chat_message_id.in_(old_ids))
             ).all()
             for u in usage_rows:
                 session.delete(u)
