@@ -108,6 +108,7 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                 ThingRecord.active,
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
+            .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
             .limit(10_000)
         ).all()
 
