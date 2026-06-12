@@ -87,7 +87,6 @@ def export_user_data(
         embeddings = [
             {
                 "thing_id": e.thing_id,
-                "content": e.content,
                 "updated_at": e.updated_at.isoformat() if e.updated_at else None,
             }
             for e in raw_embeddings

@@ -30,3 +30,22 @@ class TestUpsertThing:
         with patch("backend.vector_store._embedder", side_effect=Exception("Embedding down")):
             # Should not raise
             upsert_thing({"id": "test-1", "title": "Test Thing"})
+
+    def test_upsert_sql_does_not_reference_content(self):
+        """INSERT SQL must not include content column (removed in r2s3t4u5v6w7)."""
+        captured_sql: list[str] = []
+        mock_session = MagicMock()
+        mock_session.execute.side_effect = lambda stmt, *a, **kw: captured_sql.append(str(stmt))
+
+        with patch("backend.vector_store._embedder", return_value=[[0.1] * 1536]):
+            with patch("backend.vector_store._engine_mod") as mock_engine_mod:
+                mock_engine_mod.engine = MagicMock()
+                with patch("backend.vector_store.Session") as MockSession:
+                    MockSession.return_value.__enter__ = lambda s: mock_session
+                    MockSession.return_value.__exit__ = MagicMock(return_value=False)
+                    upsert_thing({"id": "t1", "title": "Test"})
+
+        assert captured_sql, "session.execute was not called"
+        assert "content" not in captured_sql[0].lower(), (
+            "INSERT SQL must not reference the removed content column"
+        )
