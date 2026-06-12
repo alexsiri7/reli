@@ -533,9 +533,9 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
         <div className={`flex items-center gap-2 mt-1 ${isUser ? 'justify-end' : 'justify-start'} group/actions`}>
           {!isUser && <UsagePill msg={msg} />}
           {!isUser && <SpeakButton msg={msg} speakingId={speakingId} speak={speak} />}
-          {msg.id && (
+          {typeof msg.id === 'number' && (
             <button
-              onClick={() => deleteMessage(sessionId, msg.id as number)}
+              onClick={() => deleteMessage(sessionId, msg.id)}
               className="opacity-0 group-hover/actions:opacity-100 transition-opacity text-on-surface-variant/40 hover:text-error text-xs ml-1"
               title="Delete message"
               aria-label="Delete message"
