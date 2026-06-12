@@ -872,7 +872,8 @@ def _compute_daily_usage(user_id: str = "") -> SessionUsage:
             text(
                 "SELECT COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
                 "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
-                f"FROM usage_log WHERE timestamp >= :today_start{uf_frag}"  # SEC-12: uf_frag from user_filter_text (parameterized)
+                # SEC-12: uf_frag is from user_filter_text (parameterized, not user input)
+                f"FROM usage_log WHERE timestamp >= :today_start{uf_frag}"
             ),
             {"today_start": today_start, **uf_p},
         ).fetchone()
@@ -881,7 +882,8 @@ def _compute_daily_usage(user_id: str = "") -> SessionUsage:
             text(
                 "SELECT model, COALESCE(SUM(prompt_tokens), 0) as pt, COALESCE(SUM(completion_tokens), 0) as ct, "
                 "COUNT(*) as calls, COALESCE(SUM(cost_usd), 0) as cost "
-                f"FROM usage_log WHERE timestamp >= :today_start{uf_frag} "  # SEC-12: uf_frag from user_filter_text (parameterized)
+                # SEC-12: uf_frag is from user_filter_text (parameterized, not user input)
+                f"FROM usage_log WHERE timestamp >= :today_start{uf_frag} "
                 "GROUP BY model ORDER BY cost DESC"
             ),
             {"today_start": today_start, **uf_p},

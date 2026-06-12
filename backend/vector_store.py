@@ -31,6 +31,14 @@ _SQL_WHERE_FRAGMENTS: frozenset[str] = frozenset(
     }
 )
 
+
+def _build_where_sql(clauses: list[str]) -> str:
+    """Validate clauses against the allowlist (SEC-12) and return a WHERE clause string."""
+    unexpected = set(clauses) - _SQL_WHERE_FRAGMENTS
+    if unexpected:
+        raise ValueError(f"SQL injection guard: unexpected WHERE fragment(s) {unexpected}")
+    return ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -317,14 +325,7 @@ def vector_search(
                 where_clauses.append("(t.user_id = :user_id OR t.user_id IS NULL)")
                 params["user_id"] = user_id
 
-            # SEC-12: assert all fragments are server-controlled allowlisted values
-            _unexpected = set(where_clauses) - _SQL_WHERE_FRAGMENTS
-            if _unexpected:
-                raise ValueError(f"SQL injection guard: unexpected WHERE fragment(s) {_unexpected}")
-
-            where_sql = ""
-            if where_clauses:
-                where_sql = "WHERE " + " AND ".join(where_clauses)
+            where_sql = _build_where_sql(where_clauses)
 
             sql = sa_text(
                 f"SELECT e.thing_id "
@@ -374,14 +375,7 @@ def vector_search_with_distances(
             where_clauses.append("(t.user_id = :user_id OR t.user_id IS NULL)")
             params["user_id"] = user_id
 
-        # SEC-12: assert all fragments are server-controlled allowlisted values
-        _unexpected = set(where_clauses) - _SQL_WHERE_FRAGMENTS
-        if _unexpected:
-            raise ValueError(f"SQL injection guard: unexpected WHERE fragment(s) {_unexpected}")
-
-        where_sql = ""
-        if where_clauses:
-            where_sql = "WHERE " + " AND ".join(where_clauses)
+        where_sql = _build_where_sql(where_clauses)
 
         sql = sa_text(
             f"SELECT e.thing_id, e.embedding <=> :embedding AS distance "
