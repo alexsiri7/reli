@@ -1,6 +1,7 @@
 """Preference feedback endpoint."""
 
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,7 +16,9 @@ from ..db_engine import user_filter_clause
 from ..db_models import ThingRecord
 
 router = APIRouter(prefix="/preferences", tags=["preferences"])
+logger = logging.getLogger(__name__)
 
+# 30 s blocks rapid-fire API calls while allowing deliberate re-submissions.
 _FEEDBACK_COOLDOWN_SECONDS = 30
 
 
@@ -81,7 +84,11 @@ def preference_feedback(
                 if (now - last_dt).total_seconds() < _FEEDBACK_COOLDOWN_SECONDS:
                     return {"id": thing_id, "updated": False}
             except (ValueError, TypeError):
-                pass  # malformed timestamp — proceed normally
+                logger.warning(
+                    "preferences: malformed last_feedback_at=%r for thing_id=%s — skipping cooldown",
+                    last_feedback_at,
+                    thing_id,
+                )
 
         if "patterns" in data and isinstance(data["patterns"], list):
             # Communication-style preference: adjust all pattern confidence levels

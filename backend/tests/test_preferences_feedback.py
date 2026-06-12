@@ -1,4 +1,4 @@
-"""Tests for POST /api/preferences/{thing_id}/feedback (SEC-27 deduplication)."""
+"""Tests for POST /api/preferences/{thing_id}/feedback (SEC-27 / issue #1205 deduplication)."""
 
 from __future__ import annotations
 
@@ -54,9 +54,14 @@ class TestPreferenceFeedbackDedup:
 
     def test_second_immediate_feedback_rejected(self, client, preference):
         client.post(f"/api/preferences/{THING_ID}/feedback", json={"accurate": True})
+        # Same payload rejected
         resp = client.post(f"/api/preferences/{THING_ID}/feedback", json={"accurate": True})
         assert resp.status_code == 200
-        assert resp.json()["updated"] is False
+        assert resp.json() == {"id": THING_ID, "updated": False}
+        # Opposite payload also rejected — cooldown is payload-agnostic
+        resp2 = client.post(f"/api/preferences/{THING_ID}/feedback", json={"accurate": False})
+        assert resp2.status_code == 200
+        assert resp2.json() == {"id": THING_ID, "updated": False}
 
     def test_feedback_after_cooldown_accepted(self, client, preference):
         from backend.routers import preferences as pref_mod
@@ -94,6 +99,43 @@ class TestPreferenceFeedbackDedup:
             record = session.get(ThingRecord, THING_ID)
             assert record.data["confidence"] <= 1.0
 
-    def test_not_found_returns_404(self, client, patched_db):
+    def test_not_found_returns_404(self, client):
         resp = client.post("/api/preferences/nonexistent/feedback", json={"accurate": True})
         assert resp.status_code == 404
+
+    @pytest.mark.parametrize("bad_value", ["not-a-date", 123, "", "2026-99-99T00:00:00"])
+    def test_malformed_last_feedback_at_proceeds_normally(self, client, preference, bad_value):
+        # Arrange: store a malformed timestamp directly in the record
+        with Session(_engine_mod.engine) as session:
+            record = session.get(ThingRecord, THING_ID)
+            data = dict(record.data or {})
+            data["last_feedback_at"] = bad_value
+            record.data = data
+            session.add(record)
+            session.commit()
+
+        # Act: submit feedback — should not be blocked by the malformed value
+        resp = client.post(f"/api/preferences/{THING_ID}/feedback", json={"accurate": True})
+
+        # Assert: proceeds normally
+        assert resp.status_code == 200
+        assert resp.json()["updated"] is True
+
+    def test_confidence_not_pumped_below_min(self, client, preference):
+        from backend.routers import preferences as pref_mod
+
+        # Force cooldown elapsed between calls by backdating each time
+        for _ in range(15):
+            past = datetime.now(timezone.utc) - timedelta(seconds=pref_mod._FEEDBACK_COOLDOWN_SECONDS + 1)
+            with Session(_engine_mod.engine) as session:
+                record = session.get(ThingRecord, THING_ID)
+                data = dict(record.data or {})
+                data["last_feedback_at"] = past.isoformat()
+                record.data = data
+                session.add(record)
+                session.commit()
+            client.post(f"/api/preferences/{THING_ID}/feedback", json={"accurate": False})
+
+        with Session(_engine_mod.engine) as session:
+            record = session.get(ThingRecord, THING_ID)
+            assert record.data["confidence"] >= 0.0
