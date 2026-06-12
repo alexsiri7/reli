@@ -774,8 +774,13 @@ def _check_orphaned_beads(report: HealthReport, rig: str, rig_dir: str,
 
 def _check_untracked_branches(report: HealthReport, rig: str, rig_dir: str,
                               repo: str) -> None:
-    unmerged_out = run_cmd_output(
-        f"git -C {rig_dir} branch -r --no-merged master 2>/dev/null | grep 'origin/' | grep -v 'HEAD' | sed 's|.*origin/||'"
+    raw = run_cmd_output(
+        ["git", "-C", rig_dir, "branch", "-r", "--no-merged", "master"],
+    )
+    unmerged_out = "\n".join(
+        line.strip().removeprefix("origin/")
+        for line in raw.splitlines()
+        if "origin/" in line and "HEAD" not in line
     )
     if not unmerged_out:
         return

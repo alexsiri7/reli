@@ -10,12 +10,17 @@ import threading
 import time
 from datetime import datetime
 
-from textual.app import App, ComposeResult
-from textual.containers import Vertical, VerticalScroll
-from textual.widgets import (
-    DataTable, Header, Static, Label, TabbedContent, TabPane,
-)
 from textual import work
+from textual.app import App, ComposeResult
+from textual.containers import VerticalScroll
+from textual.widgets import (
+    DataTable,
+    Header,
+    Label,
+    Static,
+    TabbedContent,
+    TabPane,
+)
 from textual.worker import get_current_worker
 
 CITY_ROOT = "/mnt/ext-fast/gc"
