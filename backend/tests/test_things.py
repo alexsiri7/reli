@@ -631,7 +631,9 @@ class TestSQLLikeOperatorsGuard:
         assert "t.type_hint = :type_hint" in _SQL_WHERE_FRAGMENTS
         assert "(t.user_id = :user_id OR t.user_id IS NULL)" in _SQL_WHERE_FRAGMENTS
 
-    def test_user_filter_text_uses_custom_param_name(self):
+
+class TestUserFilterText:
+    def test_custom_param_name(self):
         from backend.db_engine import user_filter_text
 
         frag, params = user_filter_text("some-user", table_alias="t_from", param_name="uf_uid_from")
@@ -640,7 +642,7 @@ class TestSQLLikeOperatorsGuard:
         assert params["uf_uid_from"] == "some-user"
         assert "uf_uid" not in params  # default name must NOT appear
 
-    def test_user_filter_text_two_aliases_no_param_collision(self):
+    def test_two_aliases_no_param_collision(self):
         from backend.db_engine import user_filter_text
 
         _, p_from = user_filter_text("u1", "t_from", param_name="uf_uid_from")
