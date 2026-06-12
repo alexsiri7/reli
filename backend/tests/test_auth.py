@@ -401,6 +401,7 @@ class TestGoogleLoginGenericError:
             patch("backend.routers.auth.GOOGLE_CLIENT_ID", ""),
             patch("backend.routers.auth.GOOGLE_CLIENT_SECRET", "secret"),
             patch("backend.routers.auth.SECRET_KEY", "key"),
+            patch("backend.routers.auth.logger") as mock_logger,
         ):
             from backend.main import app
 
@@ -411,12 +412,17 @@ class TestGoogleLoginGenericError:
         assert detail == "Authentication service unavailable"
         assert "GOOGLE_CLIENT_ID" not in detail
         assert "GOOGLE_CLIENT_SECRET" not in detail
+        # Verify logger.error was called with the specific missing var (diagnostic preserved server-side)
+        mock_logger.error.assert_called_once()
+        logged_msg = mock_logger.error.call_args[0][0]
+        assert "GOOGLE_CLIENT_ID" in logged_msg
 
     def test_missing_client_secret_returns_generic_error(self, patched_db):
         with (
             patch("backend.routers.auth.GOOGLE_CLIENT_ID", "client-id"),
             patch("backend.routers.auth.GOOGLE_CLIENT_SECRET", ""),
             patch("backend.routers.auth.SECRET_KEY", "key"),
+            patch("backend.routers.auth.logger") as mock_logger,
         ):
             from backend.main import app
 
@@ -426,12 +432,17 @@ class TestGoogleLoginGenericError:
         detail = resp.json()["detail"]
         assert detail == "Authentication service unavailable"
         assert "GOOGLE_CLIENT_SECRET" not in detail
+        # Verify logger.error was called with the specific missing var (diagnostic preserved server-side)
+        mock_logger.error.assert_called_once()
+        logged_msg = mock_logger.error.call_args[0][0]
+        assert "GOOGLE_CLIENT_SECRET" in logged_msg
 
     def test_missing_secret_key_returns_generic_error(self, patched_db):
         with (
             patch("backend.routers.auth.GOOGLE_CLIENT_ID", "client-id"),
             patch("backend.routers.auth.GOOGLE_CLIENT_SECRET", "secret"),
             patch("backend.routers.auth.SECRET_KEY", ""),
+            patch("backend.routers.auth.logger") as mock_logger,
         ):
             from backend.main import app
 
@@ -441,13 +452,20 @@ class TestGoogleLoginGenericError:
         detail = resp.json()["detail"]
         assert detail == "Authentication service unavailable"
         assert "SECRET_KEY" not in detail
+        # Verify logger.error was called with the specific missing var (diagnostic preserved server-side)
+        mock_logger.error.assert_called_once()
+        logged_msg = mock_logger.error.call_args[0][0]
+        assert "SECRET_KEY" in logged_msg
 
 
 class TestGoogleCallbackGenericError:
     """google_callback() must return generic 501 text when SECRET_KEY is missing (CWE-209)."""
 
     def test_missing_secret_key_returns_generic_error(self, patched_db):
-        with patch("backend.routers.auth.SECRET_KEY", ""):
+        with (
+            patch("backend.routers.auth.SECRET_KEY", ""),
+            patch("backend.routers.auth.logger") as mock_logger,
+        ):
             from backend.main import app
 
             with TestClient(app) as client:
@@ -456,3 +474,7 @@ class TestGoogleCallbackGenericError:
         detail = resp.json()["detail"]
         assert detail == "Authentication service unavailable"
         assert "SECRET_KEY" not in detail
+        # Verify logger.error was called with the specific missing var (diagnostic preserved server-side)
+        mock_logger.error.assert_called_once()
+        logged_msg = mock_logger.error.call_args[0][0]
+        assert "SECRET_KEY" in logged_msg
