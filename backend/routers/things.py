@@ -874,17 +874,15 @@ def list_relationships(
     if not thing:
         raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
 
-    user_thing_ids = select(ThingRecord.id).where(
-        user_filter_clause(ThingRecord.user_id, user_id)
-    )
+    user_thing_ids = select(ThingRecord.id).where(user_filter_clause(ThingRecord.user_id, user_id))
     records = session.exec(
         select(ThingRelationshipRecord).where(
             or_(
                 ThingRelationshipRecord.from_thing_id == thing_id,
                 ThingRelationshipRecord.to_thing_id == thing_id,
             ),
-            ThingRelationshipRecord.from_thing_id.in_(user_thing_ids),
-            ThingRelationshipRecord.to_thing_id.in_(user_thing_ids),
+            ThingRelationshipRecord.from_thing_id.in_(user_thing_ids),  # type: ignore[union-attr, attr-defined]
+            ThingRelationshipRecord.to_thing_id.in_(user_thing_ids),  # type: ignore[union-attr, attr-defined]
         )
     ).all()
     return [_record_to_rel(r) for r in records]
