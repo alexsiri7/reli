@@ -162,9 +162,11 @@ def _create_user_thing_sqlmodel(
 def google_login() -> dict:
     """Return the Google OAuth2 authorization URL."""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        raise HTTPException(status_code=501, detail="Google OAuth not configured")
+        logger.error("Google OAuth not configured: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET missing")
+        raise HTTPException(status_code=501, detail="Authentication service unavailable")
     if not SECRET_KEY:
-        raise HTTPException(status_code=501, detail="SECRET_KEY not configured")
+        logger.error("Google OAuth not configured: SECRET_KEY missing")
+        raise HTTPException(status_code=501, detail="Authentication service unavailable")
 
     flow = Flow.from_client_config(_client_config(), scopes=AUTH_SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI

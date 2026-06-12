@@ -362,6 +362,21 @@ class TestMcpTokenAudience:
         assert payload["sub"] == "u-test-001"
 
 
+class TestOAuthAuthorizeGenericError:
+    """SEC-24: misconfiguration errors must not leak env var names."""
+
+    def test_oauth_authorize_returns_generic_error_when_not_configured(self, mcp_client):
+        from backend.config import settings as real_settings
+
+        with patch.object(real_settings, "GOOGLE_CLIENT_ID", ""):
+            response = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=https://x.com/cb")
+        assert response.status_code == 501
+        detail = response.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "GOOGLE_CLIENT_ID" not in detail
+        assert "SECRET_KEY" not in detail
+
+
 class TestValidateClientSecret:
     """Tests for _validate_client_secret (SEC-03)."""
 

@@ -295,6 +295,22 @@ class TestApiTokenWithoutSecretKey:
             assert user_id == "configured-user-99"
 
 
+class TestGoogleLoginGenericError:
+    """SEC-24: misconfiguration errors must not leak env var names."""
+
+    def test_google_login_returns_generic_error_when_not_configured(self, patched_db):
+        with patch("backend.routers.auth.GOOGLE_CLIENT_ID", ""):
+            from backend.main import app
+
+            with TestClient(app) as client:
+                response = client.get("/api/auth/google")
+        assert response.status_code == 501
+        detail = response.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "GOOGLE_CLIENT_ID" not in detail
+        assert "SECRET_KEY" not in detail
+
+
 class TestOAuthAllowlistRejection:
     """Test that OAuth allowlist rejection does not log the user's email (SEC-021)."""
 
