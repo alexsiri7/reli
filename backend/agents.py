@@ -874,8 +874,10 @@ def _build_response_messages(
         f"Briefing mode: {json.dumps(briefing_mode)}"
     )
     if context_things:
+        from .pipeline import _thing_for_llm  # avoid circular import at module level
+        safe_things = [_thing_for_llm(t) if isinstance(t, dict) else t for t in context_things]
         context += (
-            f"\n\nContext Things (use their IDs for referenced_things): {json.dumps(context_things, default=str)}"
+            f"\n\nContext Things (use their IDs for referenced_things): {json.dumps(safe_things, default=str)}"
         )
     if open_questions_by_thing:
         context += (

@@ -108,6 +108,24 @@ def _sql_things_count(session: Session) -> int:
     return result or 0
 
 
+# Fields safe to share with external LLM providers (excludes arbitrary PII in `data`)
+_LLM_THING_FIELDS = {
+    "id", "title", "type_hint", "checkin_date", "importance",
+    "active", "surface", "open_questions", "children_count",
+    "completed_count", "parent_ids", "last_referenced",
+}
+
+
+def _thing_for_llm(thing: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of a Thing dict with PII-bearing fields removed.
+
+    Strips ``data`` (arbitrary structured PII) before the record is
+    serialised into an external-LLM prompt.  The ``data`` field is still
+    used locally for vector embeddings (``vector_store._thing_to_text``).
+    """
+    return {k: v for k, v in thing.items() if k in _LLM_THING_FIELDS}
+
+
 def _fetch_with_family(session: Session, seed_ids: list[str], user_id: str = "") -> list[dict[str, Any]]:
     """Given seed Thing IDs, return those Things plus their parents, children, and related Things via relationships."""
     seen_ids: set[str] = set()
@@ -116,7 +134,7 @@ def _fetch_with_family(session: Session, seed_ids: list[str], user_id: str = "")
     def _add_record(rec: ThingRecord) -> None:
         if rec.id not in seen_ids:
             seen_ids.add(rec.id)
-            results.append(_parse_thing_open_questions(rec.model_dump()))
+            results.append(_thing_for_llm(_parse_thing_open_questions(rec.model_dump())))
 
     for thing_id in seed_ids:
         rec = session.get(ThingRecord, thing_id)
@@ -427,7 +445,7 @@ def _fetch_relevant_things(
         for rec in session.exec(recent_stmt).all():
             if rec.id not in seen_ids:
                 seen_ids.add(rec.id)
-                results.append(_parse_thing_open_questions(rec.model_dump()))
+                results.append(_thing_for_llm(_parse_thing_open_questions(rec.model_dump())))
 
     # -----------------------------------------------------------------------
     # Preference boost: ensure preference Things matching the topic are

@@ -1205,3 +1205,33 @@ class TestCommStylePreferenceStructure:
 
         assert "error" not in result
         assert len(applied["updated"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# PII minimisation
+# ---------------------------------------------------------------------------
+
+
+def test_relevant_things_strip_data_before_llm():
+    """The `data` field must not appear in the user prompt sent to the LLM."""
+    things_with_pii = [
+        {
+            "id": "t1",
+            "title": "Alice",
+            "type_hint": "person",
+            "data": {"email": "alice@example.com", "phone": "555-1234"},
+            "importance": 5,
+            "active": True,
+            "surface": False,
+        }
+    ]
+
+    from backend.pipeline import _thing_for_llm
+
+    safe = [_thing_for_llm(t) for t in things_with_pii]
+    prompt = json.dumps(safe, default=str)
+
+    assert "alice@example.com" not in prompt
+    assert "555-1234" not in prompt
+    assert "t1" in prompt  # id still present
+    assert "Alice" in prompt  # title still present

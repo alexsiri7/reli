@@ -1116,15 +1116,19 @@ async def run_reasoning_agent(
       - applied_changes: what was actually written to the database
       - questions_for_user, priority_question, reasoning_summary, briefing_mode
     """
+    from .pipeline import _thing_for_llm  # avoid circular import at module level
+
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d (%A)")
-    things_json = json.dumps(relevant_things, default=str)
+    safe_things = [_thing_for_llm(t) if isinstance(t, dict) else t for t in relevant_things]
+    things_json = json.dumps(safe_things, default=str)
     user_content = (
         f"Today's date: {today}\n\n"
         f"<user_message>\n{message}\n</user_message>\n\n"
         f"Relevant Things from database:\n{things_json}"
     )
     if warm_context:
-        warm_json = json.dumps(warm_context, default=str)
+        safe_warm = [_thing_for_llm(t) if isinstance(t, dict) else t for t in warm_context]
+        warm_json = json.dumps(safe_warm, default=str)
         user_content += (
             f"\n\nWarm context (Things from recent conversation turns — "
             f"already fetched, no need to call fetch_context unless you need "
