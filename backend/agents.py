@@ -875,7 +875,11 @@ def _build_response_messages(
     )
     if context_things:
         from .pipeline import _thing_for_llm  # avoid circular import at module level
-        safe_things = [_thing_for_llm(t) if isinstance(t, dict) else t for t in context_things]
+        safe_things = [
+            _thing_for_llm(t) if isinstance(t, dict)
+            else (logger.warning("non-dict item in context_things: %s", type(t).__name__) or t)
+            for t in context_things
+        ]
         context += (
             f"\n\nContext Things (use their IDs for referenced_things): {json.dumps(safe_things, default=str)}"
         )

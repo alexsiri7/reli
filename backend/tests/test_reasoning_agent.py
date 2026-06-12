@@ -1213,7 +1213,13 @@ class TestCommStylePreferenceStructure:
 
 
 def test_relevant_things_strip_data_before_llm():
-    """The `data` field must not appear in the user prompt sent to the LLM."""
+    """_thing_for_llm() must exclude PII-bearing fields (e.g. `data`) from its output.
+
+    This is the unit-level contract: the helper that gates all LLM serialisation
+    must not pass `data` field content through. Integration coverage of the
+    full prompt path (run_reasoning_agent, _build_response_messages) is a
+    follow-up gap to fill separately.
+    """
     things_with_pii = [
         {
             "id": "t1",
@@ -1235,3 +1241,67 @@ def test_relevant_things_strip_data_before_llm():
     assert "555-1234" not in prompt
     assert "t1" in prompt  # id still present
     assert "Alice" in prompt  # title still present
+
+
+@pytest.mark.asyncio
+async def test_warm_context_strip_data_before_llm():
+    """PII in warm_context Things must not appear in the reasoning prompt.
+
+    Exercises the warm_context serialisation path in run_reasoning_agent by
+    capturing the prompt string passed to _run_agent_for_text and asserting
+    that PII-bearing ``data`` field content is absent.
+    """
+    things_with_pii = [
+        {
+            "id": "w1",
+            "title": "Bob",
+            "type_hint": "person",
+            "data": {"ssn": "123-45-6789"},
+            "importance": 3,
+            "active": True,
+            "surface": False,
+        }
+    ]
+    captured_prompts: list[str] = []
+
+    mock_tools = [MagicMock() for _ in range(6)]
+    mock_applied = {
+        "created": [],
+        "updated": [],
+        "deleted": [],
+        "merged": [],
+        "relationships_created": [],
+    }
+
+    metadata = {"questions_for_user": [], "reasoning_summary": "ok", "briefing_mode": False}
+
+    async def _capture_and_return(agent, prompt, *args, **kwargs):
+        captured_prompts.append(prompt)
+        return json.dumps(metadata)
+
+    with (
+        patch("backend.reasoning_agent._run_agent_for_text", side_effect=_capture_and_return),
+        patch(
+            "backend.reasoning_agent._make_reasoning_tools",
+            return_value=(mock_tools, mock_applied, {"things": [], "relationships": []}),
+        ),
+        patch("backend.reasoning_agent._make_litellm_model", return_value=MagicMock()),
+        patch("backend.reasoning_agent.LlmAgent"),
+    ):
+
+        from backend.reasoning_agent import run_reasoning_agent
+
+        await run_reasoning_agent(
+            "What do you know about Bob?",
+            [],
+            [],
+            api_key="test-key",
+            user_id="test-user",
+            warm_context=things_with_pii,
+        )
+
+    assert captured_prompts, "prompt was never captured"
+    full_prompt = captured_prompts[0]
+    assert "123-45-6789" not in full_prompt, "'data' PII must be stripped from warm_context before LLM"
+    assert "w1" in full_prompt  # id still present
+    assert "Bob" in full_prompt  # title still present

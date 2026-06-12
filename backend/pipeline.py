@@ -108,20 +108,24 @@ def _sql_things_count(session: Session) -> int:
     return result or 0
 
 
-# Fields safe to share with external LLM providers (excludes arbitrary PII in `data`)
+# Fields safe to share with external LLM providers (excludes arbitrary PII in `data`).
+# Note: children_count/completed_count/parent_ids are router-layer computed fields
+# not present in raw model_dump() results — not listed here.
 _LLM_THING_FIELDS = {
     "id", "title", "type_hint", "checkin_date", "importance",
-    "active", "surface", "open_questions", "children_count",
-    "completed_count", "parent_ids", "last_referenced",
+    "active", "surface", "open_questions", "last_referenced",
 }
 
 
 def _thing_for_llm(thing: dict[str, Any]) -> dict[str, Any]:
-    """Return a copy of a Thing dict with PII-bearing fields removed.
+    """Return a copy of a Thing dict containing only LLM-safe fields.
 
-    Strips ``data`` (arbitrary structured PII) before the record is
-    serialised into an external-LLM prompt.  The ``data`` field is still
-    used locally for vector embeddings (``vector_store._thing_to_text``).
+    Uses an allowlist (``_LLM_THING_FIELDS``) so that any new field added
+    to ThingRecord is excluded from external-LLM prompts by default —
+    including ``data``, which carries arbitrary structured PII.
+
+    The ``data`` field is still used locally for vector embeddings
+    (``vector_store._thing_to_text``).
     """
     return {k: v for k, v in thing.items() if k in _LLM_THING_FIELDS}
 

@@ -1119,7 +1119,11 @@ async def run_reasoning_agent(
     from .pipeline import _thing_for_llm  # avoid circular import at module level
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d (%A)")
-    safe_things = [_thing_for_llm(t) if isinstance(t, dict) else t for t in relevant_things]
+    safe_things = [
+        _thing_for_llm(t) if isinstance(t, dict)
+        else (logger.warning("non-dict item in relevant_things: %s", type(t).__name__) or t)
+        for t in relevant_things
+    ]
     things_json = json.dumps(safe_things, default=str)
     user_content = (
         f"Today's date: {today}\n\n"
@@ -1127,7 +1131,11 @@ async def run_reasoning_agent(
         f"Relevant Things from database:\n{things_json}"
     )
     if warm_context:
-        safe_warm = [_thing_for_llm(t) if isinstance(t, dict) else t for t in warm_context]
+        safe_warm = [
+            _thing_for_llm(t) if isinstance(t, dict)
+            else (logger.warning("non-dict item in warm_context: %s", type(t).__name__) or t)
+            for t in warm_context
+        ]
         warm_json = json.dumps(safe_warm, default=str)
         user_content += (
             f"\n\nWarm context (Things from recent conversation turns — "
