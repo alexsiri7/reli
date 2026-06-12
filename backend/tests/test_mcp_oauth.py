@@ -431,57 +431,24 @@ class TestValidateClientSecret:
 class TestOAuthAuthorizeGenericError:
     """oauth_authorize() must return generic 501 text — no env var names in response (CWE-209)."""
 
-    def test_missing_client_id_returns_generic_error(self, mcp_client):
+    @pytest.mark.parametrize(
+        "client_id,client_secret,secret_key,expected_log_key",
+        [
+            ("", "secret", "key", "GOOGLE_CLIENT_ID"),
+            ("client-id", "", "key", "GOOGLE_CLIENT_SECRET"),
+            ("client-id", "secret", "", "SECRET_KEY"),
+        ],
+    )
+    def test_returns_generic_error(self, mcp_client, client_id, client_secret, secret_key, expected_log_key):
         with (
             patch("backend.routers.mcp_oauth.settings") as mock_settings,
             patch("backend.routers.mcp_oauth.logger") as mock_logger,
         ):
-            mock_settings.GOOGLE_CLIENT_ID = ""
-            mock_settings.GOOGLE_CLIENT_SECRET = "secret"
-            mock_settings.SECRET_KEY = "key"
+            mock_settings.GOOGLE_CLIENT_ID = client_id
+            mock_settings.GOOGLE_CLIENT_SECRET = client_secret
+            mock_settings.SECRET_KEY = secret_key
             resp = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=http://localhost")
         assert resp.status_code == 501
-        detail = resp.json()["detail"]
-        assert detail == "Authentication service unavailable"
-        assert "GOOGLE_CLIENT_ID" not in detail
-        assert "GOOGLE_CLIENT_SECRET" not in detail
-        # Verify logger.error was called with the specific missing var (diagnostic preserved server-side)
+        assert resp.json()["detail"] == "Authentication service unavailable"
         mock_logger.error.assert_called_once()
-        logged_msg = mock_logger.error.call_args[0][0]
-        assert "GOOGLE_CLIENT_ID" in logged_msg
-
-    def test_missing_client_secret_returns_generic_error(self, mcp_client):
-        with (
-            patch("backend.routers.mcp_oauth.settings") as mock_settings,
-            patch("backend.routers.mcp_oauth.logger") as mock_logger,
-        ):
-            mock_settings.GOOGLE_CLIENT_ID = "client-id"
-            mock_settings.GOOGLE_CLIENT_SECRET = ""
-            mock_settings.SECRET_KEY = "key"
-            resp = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=http://localhost")
-        assert resp.status_code == 501
-        detail = resp.json()["detail"]
-        assert detail == "Authentication service unavailable"
-        assert "GOOGLE_CLIENT_SECRET" not in detail
-        # Verify logger.error was called with the specific missing var (diagnostic preserved server-side)
-        mock_logger.error.assert_called_once()
-        logged_msg = mock_logger.error.call_args[0][0]
-        assert "GOOGLE_CLIENT_SECRET" in logged_msg
-
-    def test_missing_secret_key_returns_generic_error(self, mcp_client):
-        with (
-            patch("backend.routers.mcp_oauth.settings") as mock_settings,
-            patch("backend.routers.mcp_oauth.logger") as mock_logger,
-        ):
-            mock_settings.GOOGLE_CLIENT_ID = "client-id"
-            mock_settings.GOOGLE_CLIENT_SECRET = "secret"
-            mock_settings.SECRET_KEY = ""
-            resp = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=http://localhost")
-        assert resp.status_code == 501
-        detail = resp.json()["detail"]
-        assert detail == "Authentication service unavailable"
-        assert "SECRET_KEY" not in detail
-        # Verify logger.error was called with the specific missing var (diagnostic preserved server-side)
-        mock_logger.error.assert_called_once()
-        logged_msg = mock_logger.error.call_args[0][0]
-        assert "SECRET_KEY" in logged_msg
+        assert expected_log_key in mock_logger.error.call_args[0][0]
