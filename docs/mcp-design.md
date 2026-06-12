@@ -39,7 +39,7 @@ Set the `MCP_API_TOKEN` environment variable. Clients send it as a Bearer token.
 
 ### JWT (OAuth flow)
 
-Tokens issued by the OAuth 2.1 flow (see section 10). Validated via `jwt.decode(provided, SECRET_KEY, algorithms=["HS256"])`. The `sub` claim is extracted as the user ID.
+Tokens issued by the OAuth 2.1 flow (see section 10). Validated via `jwt.decode(provided, SECRET_KEY, algorithms=["HS256"], audience="mcp")`. The token must include `aud: "mcp"`. The `sub` claim is extracted as the user ID.
 
 ### Dev mode
 
@@ -181,7 +181,7 @@ The OAuth 2.1 flow for MCP client authentication is implemented in `backend/rout
 | `GET /.well-known/oauth-protected-resource` | RFC 9728 | Protected resource metadata discovery |
 | `GET /.well-known/oauth-authorization-server` | RFC 8414 | Authorization server metadata |
 | `GET /oauth/authorize` | — | Redirect to Google, then back with auth code |
-| `POST /oauth/token` | — | Exchange auth code + PKCE verifier for JWT |
+| `POST /oauth/token` | — | Exchange auth code + PKCE verifier for JWT. Confidential clients (`token_endpoint_auth_method != "none"`) must include `client_secret`; public clients use PKCE only. |
 | `POST /oauth/register` | RFC 7591 | Dynamic client registration |
 
 The flow delegates authentication to Google (the existing auth provider) and issues JWTs that the MCP middleware validates on subsequent requests.

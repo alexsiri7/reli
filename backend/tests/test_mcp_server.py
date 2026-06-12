@@ -1173,6 +1173,37 @@ class TestTokenAuthMiddleware:
         assert "resource_metadata=" in www_auth
         assert "/.well-known/oauth-protected-resource" in www_auth
 
+    def test_jwt_with_wrong_audience_rejected(self) -> None:
+        """Tokens with aud='web' must NOT authorize MCP requests (SEC-02)."""
+        from backend.config import settings
+
+        secret = "jwt-test-secret-32chars-long-ok!"
+        web_token = jwt.encode({"sub": "user-1", "aud": "web"}, secret, algorithm="HS256")
+        client = self._make_client("")
+        original = settings.SECRET_KEY
+        object.__setattr__(settings, "SECRET_KEY", secret)
+        try:
+            resp = client.get("/", headers={"Authorization": f"Bearer {web_token}"})
+        finally:
+            object.__setattr__(settings, "SECRET_KEY", original)
+        assert resp.status_code == 401
+
+    def test_jwt_with_correct_audience_accepted(self) -> None:
+        """Tokens with aud='mcp' must be accepted (SEC-02)."""
+        from backend.config import settings
+
+        secret = "jwt-test-secret-32chars-long-ok!"
+        mcp_token = jwt.encode({"sub": "user-1", "aud": "mcp"}, secret, algorithm="HS256")
+        client = self._make_client("")
+        original = settings.SECRET_KEY
+        object.__setattr__(settings, "SECRET_KEY", secret)
+        try:
+            resp = client.get("/", headers={"Authorization": f"Bearer {mcp_token}"})
+        finally:
+            object.__setattr__(settings, "SECRET_KEY", original)
+        assert resp.status_code == 200
+        assert resp.text == "ok"
+
 
 class TestSessionManagerRestart:
     """Regression test: session manager must restart after a previous run completes.

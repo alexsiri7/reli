@@ -272,12 +272,26 @@ def _issue_token_response(user_id: str, email: str, client_id: str, scope: str) 
     )
 
 
+def _validate_client_secret(client_id: str, client_secret: str) -> None:
+    """Validate client_secret for confidential clients; no-op for public clients."""
+    client = cleanup_and_get(mcp_registered_clients, client_id)
+    if not client:
+        raise HTTPException(status_code=400, detail="Unknown client")
+    auth_method = client.get("token_endpoint_auth_method", "client_secret_post")
+    if auth_method == "none":
+        return  # Public client — no secret required
+    stored_secret = client.get("client_secret", "")
+    if not client_secret or not secrets.compare_digest(client_secret, stored_secret):
+        raise HTTPException(status_code=401, detail="Invalid client credentials")
+
+
 @router.post("/oauth/token", include_in_schema=False)
 async def oauth_token(
     grant_type: str = Form(...),
     code: str = Form(default=""),
     redirect_uri: str = Form(default=""),
     client_id: str = Form(default=""),
+    client_secret: str = Form(default=""),
     code_verifier: str = Form(default=""),
     refresh_token: str = Form(default=""),
 ) -> JSONResponse:
@@ -290,6 +304,9 @@ async def oauth_token(
             raise HTTPException(status_code=400, detail="Invalid or expired refresh_token")
         if datetime.now(timezone.utc) > session["expires_at"]:
             raise HTTPException(status_code=400, detail="Refresh token expired")
+        if not client_id or client_id != session["client_id"]:
+            raise HTTPException(status_code=400, detail="client_id mismatch")
+        _validate_client_secret(client_id, client_secret)
         return _issue_token_response(session["user_id"], session["email"], session["client_id"], session["scope"])
 
     if grant_type != "authorization_code":
@@ -309,6 +326,8 @@ async def oauth_token(
     stored_client_id = session.get("client_id")
     if not stored_client_id or stored_client_id != client_id:
         raise HTTPException(status_code=400, detail="client_id mismatch")
+
+    _validate_client_secret(client_id, client_secret)
 
     if session.get("code_challenge_method") == "S256":
         if not code_verifier:

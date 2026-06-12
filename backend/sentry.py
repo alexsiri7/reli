@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def _strip_cookie_breadcrumb(crumb: dict, hint: dict | None) -> dict | None:
-    """Redact all Cookie/Set-Cookie header values from breadcrumbs.
+    """Redact sensitive header values (Cookie, Set-Cookie, Authorization) from breadcrumbs.
 
     Sentry before_breadcrumb hook: return the crumb to keep it,
     or None to drop it entirely. This implementation always keeps the crumb.
@@ -25,7 +25,7 @@ def _strip_cookie_breadcrumb(crumb: dict, hint: dict | None) -> dict | None:
     if not isinstance(data, dict):
         return crumb
     for key in list(data):
-        if key.lower() in ("cookie", "set-cookie"):
+        if key.lower() in ("cookie", "set-cookie", "authorization"):
             data[key] = "[Filtered]"
     return crumb
 
