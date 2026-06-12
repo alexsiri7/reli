@@ -25,7 +25,7 @@ from sqlmodel import Session, select
 import backend.db_engine as _engine_mod
 
 from .config import settings
-from .db_models import RevokedTokenRecord
+from .db_models import RevokedTokenRecord, UserRecord
 
 _log = logging.getLogger(__name__)
 
@@ -45,12 +45,6 @@ def _resolve_api_token_user() -> str:
     """
     if _API_TOKEN_USER_ID:
         return _API_TOKEN_USER_ID
-
-    from sqlmodel import Session, select
-
-    import backend.db_engine as _engine_mod
-
-    from .db_models import UserRecord
 
     try:
         with Session(_engine_mod.engine) as session:
