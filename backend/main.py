@@ -248,6 +248,10 @@ _TAG_METADATA = [
         "description": "User feedback submission via GitHub Issues.",
     },
     {
+        "name": "gdpr",
+        "description": "GDPR data portability (export) and right-to-erasure (delete-all) endpoints.",
+    },
+    {
         "name": "think",
         "description": "Reasoning-as-a-service: analyze natural language and return structured instructions.",
     },

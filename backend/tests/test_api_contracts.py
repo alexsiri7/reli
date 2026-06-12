@@ -450,6 +450,7 @@ class TestOpenAPIContract:
             "settings",
             "sweep",
             "health",
+            "gdpr",
         ]
         for name in expected:
             assert name in tag_names, f"Tag '{name}' missing from OpenAPI schema"

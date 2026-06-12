@@ -441,6 +441,40 @@ Submit user feedback (creates a GitHub issue).
 
 ---
 
+## GDPR (`/api/gdpr`)
+
+Data portability and right-to-erasure endpoints.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/gdpr/export` | Export all user data as structured JSON |
+| DELETE | `/api/gdpr/delete-all` | Permanently delete all user data and clear session |
+
+### `GET /api/gdpr/export`
+
+Returns a JSON object with all data stored for the authenticated user. Sensitive fields are
+replaced with `"[REDACTED]"`:
+- `settings[].value` where `key` is `requesty_api_key` or `openai_api_key`
+- `google_tokens[].access_token`, `.refresh_token`, `.client_secret`
+- `mcp_refresh_tokens[].refresh_token` (omitted entirely — it's a secret)
+- `mcp_auth_codes[].auth_code` and `.code_challenge` (omitted — secrets)
+- `gmail_oauth_state.state` (omitted — CSRF secret)
+- `embeddings` omits raw vector bytes (only `thing_id`, `content`, `updated_at` included)
+
+**Response top-level keys:** `user`, `things`, `relationships`, `embeddings`, `chat_sessions`,
+`chat_history`, `conversation_summaries`, `settings`, `google_tokens`, `sweep_findings`,
+`sweep_runs`, `sweep_actions`, `usage_log`, `morning_briefings`, `weekly_briefings`,
+`connection_suggestions`, `nudge_dismissals`, `nudge_suppressions`, `merge_history`,
+`thing_types`, `scheduled_tasks`, `mcp_refresh_tokens`, `mcp_auth_codes`, `gmail_oauth_state`
+
+### `DELETE /api/gdpr/delete-all`
+
+**Irreversible.** Permanently deletes all data owned by the authenticated user across every
+table listed above, plus the user record itself. Also clears the `reli_session` cookie, ending
+the session immediately. Returns `200 OK` on success.
+
+---
+
 ## Health & Monitoring
 
 | Method | Path | Auth required | Description |

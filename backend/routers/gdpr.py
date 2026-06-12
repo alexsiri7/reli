@@ -17,6 +17,8 @@ from ..db_models import (
     ConversationSummaryRecord,
     GmailOAuthStateRecord,
     GoogleTokenRecord,
+    McpAuthCodeRecord,
+    McpRefreshTokenRecord,
     MergeHistoryRecord,
     MorningBriefingRecord,
     NudgeDismissalRecord,
@@ -52,6 +54,17 @@ def export_user_data(
     session: Session = Depends(get_session),
 ) -> dict:
     """Export all user data as structured JSON (GDPR data portability)."""
+    try:
+        return _export_user_data_inner(user_id, session)
+    except Exception:
+        logger.exception("GDPR export failed for user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to export user data. Please try again.",
+        )
+
+
+def _export_user_data_inner(user_id: str, session: Session) -> dict:
     # Things
     things = session.exec(select(ThingRecord).where(user_filter_clause(ThingRecord.user_id, user_id))).all()
     thing_ids = [t.id for t in things]
@@ -70,7 +83,7 @@ def export_user_data(
             ).all()
         )
 
-    # Thing embeddings (exclude raw vector — not human-readable PII)
+    # Thing embeddings — omit raw vector (binary/unreadable); include text content instead
     embeddings = []
     if thing_ids:
         raw_embeddings = session.exec(
@@ -159,6 +172,34 @@ def export_user_data(
         select(ScheduledTaskRecord).where(user_filter_clause(ScheduledTaskRecord.user_id, user_id))
     ).all()
 
+    # MCP refresh tokens (omit refresh_token value — it's a secret)
+    mcp_refresh_tokens = [
+        {"user_id": r.user_id, "client_id": r.client_id, "scope": r.scope, "expires_at": r.expires_at}
+        for r in session.exec(select(McpRefreshTokenRecord).where(McpRefreshTokenRecord.user_id == user_id)).all()
+    ]
+
+    # MCP auth codes (omit auth_code + code_challenge — secrets)
+    mcp_auth_codes = [
+        {
+            "user_id": r.user_id,
+            "email": r.email,
+            "client_id": r.client_id,
+            "redirect_uri": r.redirect_uri,
+            "expires_at": r.expires_at,
+        }
+        for r in session.exec(select(McpAuthCodeRecord).where(McpAuthCodeRecord.user_id == user_id)).all()
+    ]
+
+    # Gmail OAuth state (omit state token — CSRF secret)
+    gmail_oauth_state_record = session.exec(
+        select(GmailOAuthStateRecord).where(GmailOAuthStateRecord.user_id == user_id)
+    ).first()
+    gmail_oauth_state = (
+        {"user_id": gmail_oauth_state_record.user_id, "expires_at": gmail_oauth_state_record.expires_at}
+        if gmail_oauth_state_record
+        else None
+    )
+
     # User record
     user_record = session.exec(select(UserRecord).where(UserRecord.id == user_id)).first()
 
@@ -184,6 +225,9 @@ def export_user_data(
         "merge_history": [m.model_dump() for m in merge_history],
         "thing_types": [t.model_dump() for t in thing_types],
         "scheduled_tasks": [t.model_dump() for t in scheduled_tasks],
+        "mcp_refresh_tokens": mcp_refresh_tokens,
+        "mcp_auth_codes": mcp_auth_codes,
+        "gmail_oauth_state": gmail_oauth_state,
     }
 
 
@@ -193,14 +237,8 @@ def delete_all_user_data(
     session: Session = Depends(get_session),
 ) -> Response:
     """Permanently delete all user data (GDPR right to erasure)."""
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot delete-all without authenticated user",
-        )
-
     # Collect IDs needed for junction/child tables
-    things = session.exec(select(ThingRecord).where(user_filter_clause(ThingRecord.user_id, user_id))).all()
+    things = session.exec(select(ThingRecord).where(ThingRecord.user_id == user_id)).all()
     thing_ids = [t.id for t in things]
 
     chat_sessions = session.exec(select(ChatSessionRecord).where(ChatSessionRecord.user_id == user_id)).all()
@@ -221,127 +259,131 @@ def delete_all_user_data(
     # r is typed Any because it's reused across heterogeneous delete loops.
     r: Any
 
-    # 1. ChatMessageUsageRecord (FK → chat_history)
-    if chat_msg_ids:
-        for r in session.exec(
-            select(ChatMessageUsageRecord).where(
-                ChatMessageUsageRecord.chat_message_id.in_(chat_msg_ids)  # type: ignore[attr-defined]
-            )
-        ).all():
-            session.delete(r)
-
-    # 2. ThingEmbeddingRecord (FK → things)
-    if thing_ids:
-        for r in session.exec(
-            select(ThingEmbeddingRecord).where(
-                ThingEmbeddingRecord.thing_id.in_(thing_ids)  # type: ignore[attr-defined]
-            )
-        ).all():
-            session.delete(r)
-
-    # 3. ThingRelationshipRecord (FK → things, no user_id)
-    if thing_ids:
-        for r in session.exec(
-            select(ThingRelationshipRecord).where(
-                or_(
-                    ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
-                    ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
+    try:
+        # 1. ChatMessageUsageRecord (FK → chat_history)
+        if chat_msg_ids:
+            for r in session.exec(
+                select(ChatMessageUsageRecord).where(
+                    ChatMessageUsageRecord.chat_message_id.in_(chat_msg_ids)  # type: ignore[attr-defined]
                 )
-            )
+            ).all():
+                session.delete(r)
+
+        # 2. ThingEmbeddingRecord (FK → things)
+        if thing_ids:
+            for r in session.exec(
+                select(ThingEmbeddingRecord).where(
+                    ThingEmbeddingRecord.thing_id.in_(thing_ids)  # type: ignore[attr-defined]
+                )
+            ).all():
+                session.delete(r)
+
+        # 3. ThingRelationshipRecord (FK → things, no user_id)
+        if thing_ids:
+            for r in session.exec(
+                select(ThingRelationshipRecord).where(
+                    or_(
+                        ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
+                        ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
+                    )
+                )
+            ).all():
+                session.delete(r)
+
+        # 4. SweepFindingRecord (FK → things)
+        for r in session.exec(select(SweepFindingRecord).where(SweepFindingRecord.user_id == user_id)).all():
+            session.delete(r)
+
+        # 5. ConnectionSuggestionRecord (FK → things)
+        for r in session.exec(
+            select(ConnectionSuggestionRecord).where(ConnectionSuggestionRecord.user_id == user_id)
         ).all():
             session.delete(r)
 
-    # 4. SweepFindingRecord (FK → things)
-    for r in session.exec(
-        select(SweepFindingRecord).where(user_filter_clause(SweepFindingRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+        # 6. ScheduledTaskRecord (FK → things, users)
+        for r in session.exec(select(ScheduledTaskRecord).where(ScheduledTaskRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    # 5. ConnectionSuggestionRecord (FK → things)
-    for r in session.exec(
-        select(ConnectionSuggestionRecord).where(user_filter_clause(ConnectionSuggestionRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+        # 7. ThingRecord
+        for r in things:
+            session.delete(r)
 
-    # 6. ScheduledTaskRecord (FK → things, users)
-    for r in session.exec(
-        select(ScheduledTaskRecord).where(user_filter_clause(ScheduledTaskRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+        # 8. ChatHistoryRecord (FK → chat_sessions)
+        for r in chat_messages:
+            session.delete(r)
 
-    # 7. ThingRecord
-    for r in things:
-        session.delete(r)
+        # 9. ChatSessionRecord
+        for r in chat_sessions:
+            session.delete(r)
 
-    # 8. ChatHistoryRecord (FK → chat_sessions)
-    for r in chat_messages:
-        session.delete(r)
+        # 10. ConversationSummaryRecord (FK → users)
+        for r in session.exec(
+            select(ConversationSummaryRecord).where(ConversationSummaryRecord.user_id == user_id)
+        ).all():
+            session.delete(r)
 
-    # 9. ChatSessionRecord
-    for r in chat_sessions:
-        session.delete(r)
+        # 11. UserSettingRecord (FK → users)
+        for r in session.exec(select(UserSettingRecord).where(UserSettingRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    # 10. ConversationSummaryRecord (FK → users)
-    for r in session.exec(select(ConversationSummaryRecord).where(ConversationSummaryRecord.user_id == user_id)).all():
-        session.delete(r)
+        # 12. GoogleTokenRecord (FK → users)
+        for r in session.exec(select(GoogleTokenRecord).where(GoogleTokenRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    # 11. UserSettingRecord (FK → users)
-    for r in session.exec(select(UserSettingRecord).where(UserSettingRecord.user_id == user_id)).all():
-        session.delete(r)
+        # 13. Tables with FK → users or standalone user_id
+        for r in session.exec(select(SweepRunRecord).where(SweepRunRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    # 12. GoogleTokenRecord (FK → users)
-    for r in session.exec(
-        select(GoogleTokenRecord).where(user_filter_clause(GoogleTokenRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+        for r in session.exec(select(SweepActionRecord).where(SweepActionRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    # 13. Tables with FK → users or standalone user_id
-    for r in session.exec(select(SweepRunRecord).where(user_filter_clause(SweepRunRecord.user_id, user_id))).all():
-        session.delete(r)
+        for r in session.exec(select(UsageLogRecord).where(UsageLogRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    for r in session.exec(
-        select(SweepActionRecord).where(user_filter_clause(SweepActionRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+        for r in session.exec(select(MorningBriefingRecord).where(MorningBriefingRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    for r in session.exec(select(UsageLogRecord).where(user_filter_clause(UsageLogRecord.user_id, user_id))).all():
-        session.delete(r)
+        for r in session.exec(select(WeeklyBriefingRecord).where(WeeklyBriefingRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    for r in session.exec(
-        select(MorningBriefingRecord).where(user_filter_clause(MorningBriefingRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+        for r in session.exec(select(NudgeDismissalRecord).where(NudgeDismissalRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    for r in session.exec(
-        select(WeeklyBriefingRecord).where(user_filter_clause(WeeklyBriefingRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+        for r in session.exec(select(NudgeSuppressionRecord).where(NudgeSuppressionRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    for r in session.exec(select(NudgeDismissalRecord).where(NudgeDismissalRecord.user_id == user_id)).all():
-        session.delete(r)
+        for r in session.exec(select(MergeHistoryRecord).where(MergeHistoryRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    for r in session.exec(select(NudgeSuppressionRecord).where(NudgeSuppressionRecord.user_id == user_id)).all():
-        session.delete(r)
+        for r in session.exec(select(ThingTypeRecord).where(ThingTypeRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    for r in session.exec(
-        select(MergeHistoryRecord).where(user_filter_clause(MergeHistoryRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+        # 14. McpRefreshTokenRecord and McpAuthCodeRecord (hold user_id + email PII)
+        for r in session.exec(select(McpRefreshTokenRecord).where(McpRefreshTokenRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    for r in session.exec(select(ThingTypeRecord).where(user_filter_clause(ThingTypeRecord.user_id, user_id))).all():
-        session.delete(r)
+        for r in session.exec(select(McpAuthCodeRecord).where(McpAuthCodeRecord.user_id == user_id)).all():
+            session.delete(r)
 
-    # 14. GmailOAuthStateRecord (PK is user_id)
-    gmail_state = session.exec(select(GmailOAuthStateRecord).where(GmailOAuthStateRecord.user_id == user_id)).first()
-    if gmail_state:
-        session.delete(gmail_state)
+        # 15. GmailOAuthStateRecord (PK is user_id)
+        gmail_state = session.exec(
+            select(GmailOAuthStateRecord).where(GmailOAuthStateRecord.user_id == user_id)
+        ).first()
+        if gmail_state:
+            session.delete(gmail_state)
 
-    # 15. UserRecord (last — everything else FK'd to it)
-    user_record = session.exec(select(UserRecord).where(UserRecord.id == user_id)).first()
-    if user_record:
-        session.delete(user_record)
+        # 16. UserRecord (last — everything else FK'd to it)
+        user_record = session.exec(select(UserRecord).where(UserRecord.id == user_id)).first()
+        if user_record:
+            session.delete(user_record)
 
-    session.commit()
+        session.commit()
+    except Exception:
+        logger.exception("GDPR delete-all failed for user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete user data. No data was deleted. Please try again.",
+        )
 
     logger.info("GDPR delete-all completed for user_id=%s", user_id)
 
