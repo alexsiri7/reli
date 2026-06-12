@@ -10,6 +10,7 @@ Rewrite of health.sh — same checks, same output, same CLI.
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -97,20 +98,21 @@ class HealthReport:
 # Subprocess helpers
 # ---------------------------------------------------------------------------
 
-def run_cmd(cmd: str, timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> subprocess.CompletedProcess:
-    """Run a shell command and return the CompletedProcess."""
+def run_cmd(cmd: list[str] | str, timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> subprocess.CompletedProcess:
+    """Run a command and return the CompletedProcess."""
+    args = cmd if isinstance(cmd, list) else shlex.split(cmd)
     try:
         return subprocess.run(
-            cmd, shell=True, capture_output=True, text=True,
+            args, shell=False, capture_output=True, text=True,
             timeout=timeout, cwd=cwd,
         )
     except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="timeout")
+        return subprocess.CompletedProcess(args, 1, stdout="", stderr="timeout")
     except Exception as e:
-        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr=str(e))
+        return subprocess.CompletedProcess(args, 1, stdout="", stderr=str(e))
 
 
-def run_cmd_output(cmd: str, timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> str:
+def run_cmd_output(cmd: list[str] | str, timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> str:
     """Run a command and return stripped stdout (empty string on failure)."""
     r = run_cmd(cmd, timeout=timeout, cwd=cwd)
     return r.stdout.strip() if r.returncode == 0 else ""
@@ -252,8 +254,10 @@ def check_controller(report: HealthReport, fix: bool) -> None:
 def check_disk(report: HealthReport) -> None:
     """Section 1: Disk usage."""
     report.section("DISK")
-    pct_out = run_cmd_output("df / --output=pcent 2>/dev/null | tail -1")
-    avail_out = run_cmd_output("df -h / --output=avail 2>/dev/null | tail -1")
+    pct_out = run_cmd_output(["df", "/", "--output=pcent"])
+    pct_out = pct_out.splitlines()[-1].strip() if pct_out else ""
+    avail_out = run_cmd_output(["df", "-h", "/", "--output=avail"])
+    avail_out = avail_out.splitlines()[-1].strip() if avail_out else ""
     pct_str = pct_out.strip().replace("%", "").strip()
     avail_str = avail_out.strip()
     try:
@@ -274,18 +278,27 @@ def check_dolt(report: HealthReport, fix: bool, city: str = CITY_ROOT) -> None:
     report.section("DOLT")
 
     # Find dolt PID
-    dolt_pid = run_cmd_output(f"pgrep -f 'dolt sql-server.*{city}' | head -1")
+    dolt_pid = run_cmd_output(["pgrep", "-f", f"dolt sql-server.*{city}"])
+    dolt_pid = dolt_pid.splitlines()[0].strip() if dolt_pid else ""
     if not dolt_pid:
-        dolt_pid = run_cmd_output("pgrep -f 'dolt sql-server.*dolt-config' | head -1")
+        dolt_pid = run_cmd_output(["pgrep", "-f", "dolt sql-server.*dolt-config"])
+        dolt_pid = dolt_pid.splitlines()[0].strip() if dolt_pid else ""
     if not dolt_pid:
         report.fail("Dolt server not running")
         return
 
     # Port and size
-    dolt_port = run_cmd_output(
-        f"ss -tlnp 2>/dev/null | grep 'pid={dolt_pid}' | grep -oP ':\\K\\d+' | head -1"
-    ) or "?"
-    dolt_size = run_cmd_output(f"du -sh {city}/.beads/dolt 2>/dev/null | cut -f1") or "?"
+    _r = run_cmd(["ss", "-tlnp"])
+    dolt_port = "?"
+    if _r.returncode == 0:
+        for _line in _r.stdout.splitlines():
+            if f"pid={dolt_pid}" in _line:
+                _m = re.search(r':(\d+)\s', _line)
+                if _m:
+                    dolt_port = _m.group(1)
+                    break
+    _du_out = run_cmd_output(["du", "-sh", f"{city}/.beads/dolt"])
+    dolt_size = _du_out.split()[0] if _du_out else "?"
 
     info_str = f"PID {dolt_pid}, port {dolt_port}, {dolt_size}"
 
@@ -761,8 +774,13 @@ def _check_orphaned_beads(report: HealthReport, rig: str, rig_dir: str,
 
 def _check_untracked_branches(report: HealthReport, rig: str, rig_dir: str,
                               repo: str) -> None:
-    unmerged_out = run_cmd_output(
-        f"git -C {rig_dir} branch -r --no-merged master 2>/dev/null | grep 'origin/' | grep -v 'HEAD' | sed 's|.*origin/||'"
+    raw = run_cmd_output(
+        ["git", "-C", rig_dir, "branch", "-r", "--no-merged", "master"],
+    )
+    unmerged_out = "\n".join(
+        line.strip().removeprefix("origin/")
+        for line in raw.splitlines()
+        if "origin/" in line and "HEAD" not in line
     )
     if not unmerged_out:
         return
