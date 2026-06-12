@@ -275,6 +275,7 @@ interface ReliState {
   switchChatSession: (sessionId: string) => Promise<void>
   renameChatSession: (sessionId: string, title: string) => Promise<void>
   deleteChatSession: (sessionId: string) => Promise<void>
+  deleteMessage: (sessionId: string, messageId: number) => Promise<void>
   clearError: () => void
   fetchCalendarStatus: () => Promise<void>
   fetchGmailStatus: () => Promise<void>
@@ -1185,6 +1186,16 @@ export const useStore = create<ReliState>((set, get) => ({
           await get().createChatSession()
         }
       }
+    } catch {
+      // ignore
+    }
+  },
+
+  deleteMessage: async (sessionId: string, messageId: number) => {
+    try {
+      const res = await apiFetch(`${BASE}/chat/history/${sessionId}/${messageId}`, { method: 'DELETE' })
+      if (!res.ok) return
+      set(state => ({ messages: state.messages.filter(m => m.id !== messageId) }))
     } catch {
       // ignore
     }

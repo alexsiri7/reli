@@ -174,6 +174,42 @@ def delete_history(session_id: str, user_id: str = Depends(require_user)) -> Non
         session.commit()
 
 
+@router.delete(
+    "/history/{session_id}/{message_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a single chat message",
+)
+def delete_message(
+    session_id: str,
+    message_id: int,
+    user_id: str = Depends(require_user),
+) -> None:
+    """Delete a single chat message and its associated usage records."""
+    with Session(_engine_mod.engine) as session:
+        record = session.exec(
+            select(ChatHistoryRecord).where(
+                ChatHistoryRecord.id == message_id,
+                ChatHistoryRecord.session_id == session_id,
+                user_filter_clause(ChatHistoryRecord.user_id, user_id),
+            )
+        ).first()
+        if not record:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Message '{message_id}' not found in session '{session_id}'",
+            )
+        # Delete associated usage records first (FK constraint)
+        usage_records = session.exec(
+            select(ChatMessageUsageRecord).where(
+                ChatMessageUsageRecord.chat_message_id == message_id
+            )
+        ).all()
+        for u in usage_records:
+            session.delete(u)
+        session.delete(record)
+        session.commit()
+
+
 # ---------------------------------------------------------------------------
 # Chat Sessions CRUD
 # ---------------------------------------------------------------------------
