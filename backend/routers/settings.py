@@ -39,6 +39,7 @@ _VALID_KEYS = {
     "interaction_style",
     "briefing_preferences",
     "messages_until_compression",
+    "chat_retention_days",
 }
 
 # Keys whose values are encrypted at rest
@@ -81,6 +82,7 @@ class UserSettings(BaseModel):
     proactivity_level: str = "medium"
     interaction_style: str = "auto"
     messages_until_compression: int = 20
+    chat_retention_days: int = 0
 
 
 class UserSettingsUpdate(BaseModel):
@@ -99,6 +101,7 @@ class UserSettingsUpdate(BaseModel):
     proactivity_level: str | None = None
     interaction_style: str | None = None
     messages_until_compression: int | None = None
+    chat_retention_days: int | None = None
 
 
 class RequestyModel(BaseModel):
@@ -429,6 +432,9 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
     compression_val = user_settings.get("messages_until_compression")
     messages_until_compression = int(compression_val) if compression_val else 20
 
+    retention_val = user_settings.get("chat_retention_days")
+    chat_retention_days = int(retention_val) if retention_val else 0
+
     return UserSettings(
         requesty_api_key=_mask(_decrypt_setting(user_settings.get("requesty_api_key", ""))),
         openai_api_key=_mask(_decrypt_setting(user_settings.get("openai_api_key", ""))),
@@ -445,6 +451,7 @@ def get_user_settings_endpoint(user_id: str = Depends(require_user)) -> UserSett
         proactivity_level=user_settings.get("proactivity_level", "medium"),
         interaction_style=user_settings.get("interaction_style", "auto"),
         messages_until_compression=messages_until_compression,
+        chat_retention_days=chat_retention_days,
     )
 
 
@@ -471,6 +478,8 @@ def update_user_settings(
                     val = str(max(1, min(int(val), 365)))
                 elif field_name == "messages_until_compression":
                     val = str(max(5, min(int(val), 100)))
+                elif field_name == "chat_retention_days":
+                    val = str(max(0, min(int(val), 3650)))  # 0 = unlimited, max 10 years
                 elif field_name == "proactivity_level":
                     if str(val) not in _VALID_PROACTIVITY:
                         continue
