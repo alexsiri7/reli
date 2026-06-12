@@ -433,3 +433,139 @@ def test_embedding_stringification():
         if row.get("embedding") is not None:
             row["embedding"] = str(row["embedding"])
     assert rows[0]["embedding"] == "[0.1, 0.2, 0.3]"
+
+
+# ---------------------------------------------------------------------------
+# SQL injection guard — allowlist constant
+# ---------------------------------------------------------------------------
+
+
+class TestThingsAllowlistGuard:
+    def test_updatable_columns_allowlist_is_defined(self):
+        from backend.agents import _THINGS_UPDATABLE_COLUMNS
+
+        # Must contain the known updatable columns
+        assert "title" in _THINGS_UPDATABLE_COLUMNS
+        assert "type_hint" in _THINGS_UPDATABLE_COLUMNS
+        assert "checkin_date" in _THINGS_UPDATABLE_COLUMNS
+        assert "importance" in _THINGS_UPDATABLE_COLUMNS
+        assert "active" in _THINGS_UPDATABLE_COLUMNS
+        assert "surface" in _THINGS_UPDATABLE_COLUMNS
+        assert "data" in _THINGS_UPDATABLE_COLUMNS
+        assert "open_questions" in _THINGS_UPDATABLE_COLUMNS
+        assert "updated_at" in _THINGS_UPDATABLE_COLUMNS
+        # Must NOT contain non-update columns
+        assert "id" not in _THINGS_UPDATABLE_COLUMNS
+        assert "created_at" not in _THINGS_UPDATABLE_COLUMNS
+        assert "user_id" not in _THINGS_UPDATABLE_COLUMNS
+
+    def test_allowlist_is_frozenset(self):
+        from backend.agents import _THINGS_UPDATABLE_COLUMNS
+
+        assert isinstance(_THINGS_UPDATABLE_COLUMNS, frozenset)
+
+
+# ---------------------------------------------------------------------------
+# SQL injection guard — behavioral tests
+# ---------------------------------------------------------------------------
+
+
+def _insert_thing_for_guard(conn, title):
+    """Insert a minimal Thing and return its id."""
+    import uuid
+
+    thing_id = str(uuid.uuid4())
+    conn.execute(
+        """INSERT INTO things (id, title, type_hint, importance, active, surface,
+           created_at, updated_at)
+           VALUES (?, ?, 'task', 2, 1, 1, datetime('now'), datetime('now'))""",
+        (thing_id, title),
+    )
+    return thing_id
+
+
+class TestSQLInjectionGuard:
+    def test_update_path_rejects_unexpected_column(self, patched_db, db, monkeypatch):
+        """Guard must fire when an unexpected column reaches the UPDATE path.
+
+        The update path only populates `fields` from known keys, so we patch
+        _THINGS_UPDATABLE_COLUMNS to empty to simulate a future code path that
+        adds a key the allowlist does not cover.
+        """
+        import backend.agents as agents_mod
+        from backend.agents import apply_storage_changes
+
+        with db() as conn:
+            thing_id = _insert_thing_for_guard(conn, "Test")
+            conn.commit()
+
+        # Empty allowlist forces any column in `fields` to be unexpected
+        monkeypatch.setattr(agents_mod, "_THINGS_UPDATABLE_COLUMNS", frozenset())
+
+        with db() as conn:
+            with pytest.raises(ValueError, match="SQL injection guard"):
+                apply_storage_changes(
+                    {"update": [{"id": thing_id, "changes": {"title": "x"}}]},
+                    conn=conn,
+                )
+
+    def test_update_path_allows_valid_columns(self, patched_db, db):
+        """Update path must succeed when all columns are in the allowlist."""
+        from backend.agents import apply_storage_changes
+
+        with db() as conn:
+            thing_id = _insert_thing_for_guard(conn, "Original")
+            conn.commit()
+
+        with db() as conn:
+            result = apply_storage_changes(
+                {"update": [{"id": thing_id, "changes": {"title": "Updated"}}]},
+                conn=conn,
+            )
+        assert any(t["id"] == thing_id for t in result["updated"])
+
+    def test_merge_path_rejects_unexpected_column(self, patched_db, db, monkeypatch):
+        """Guard must fire when an unexpected column reaches the merge UPDATE path.
+
+        Same approach: patch _THINGS_UPDATABLE_COLUMNS to empty so any key in `mf`
+        (e.g. "data") is treated as unexpected.
+        """
+        import uuid
+
+        import backend.agents as agents_mod
+        from backend.agents import apply_storage_changes
+
+        keep_id = str(uuid.uuid4())
+        remove_id = str(uuid.uuid4())
+        with db() as conn:
+            conn.execute(
+                """INSERT INTO things (id, title, type_hint, importance, active, surface,
+                   created_at, updated_at)
+                   VALUES (?, 'Alice', 'task', 2, 1, 1, datetime('now'), datetime('now'))""",
+                (keep_id,),
+            )
+            conn.execute(
+                """INSERT INTO things (id, title, type_hint, importance, active, surface,
+                   created_at, updated_at)
+                   VALUES (?, 'Bob', 'task', 2, 1, 1, datetime('now'), datetime('now'))""",
+                (remove_id,),
+            )
+            conn.commit()
+
+        # Empty allowlist forces any column in `mf` to be unexpected
+        monkeypatch.setattr(agents_mod, "_THINGS_UPDATABLE_COLUMNS", frozenset())
+
+        with db() as conn:
+            with pytest.raises(ValueError, match="SQL injection guard"):
+                apply_storage_changes(
+                    {
+                        "merge": [
+                            {
+                                "keep_id": keep_id,
+                                "remove_id": remove_id,
+                                "merged_data": {"some_key": "value"},
+                            }
+                        ]
+                    },
+                    conn=conn,
+                )
