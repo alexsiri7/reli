@@ -115,4 +115,40 @@ async def require_user(request: Request) -> str:
             detail="Invalid session payload",
         )
 
+    # Check revocation blacklist (only for tokens that carry a jti claim)
+    jti: str = payload.get("jti", "")
+    if jti:
+        from datetime import datetime, timezone
+
+        from sqlmodel import Session, select
+
+        import backend.db_engine as _engine_mod
+
+        from .db_models import RevokedTokenRecord
+
+        try:
+            with Session(_engine_mod.engine) as db:
+                # Prune expired rows opportunistically (low-cost, ~1% of requests)
+                import random
+
+                if random.random() < 0.01:
+                    now = datetime.now(timezone.utc)
+                    expired = db.exec(
+                        select(RevokedTokenRecord).where(RevokedTokenRecord.expires_at <= now)
+                    ).all()
+                    for row in expired:
+                        db.delete(row)
+                    if expired:
+                        db.commit()
+                revoked = db.get(RevokedTokenRecord, jti)
+        except Exception:
+            revoked = None
+            _log.warning("Revocation check failed; allowing request", exc_info=True)
+
+        if revoked:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session revoked",
+            )
+
     return user_id

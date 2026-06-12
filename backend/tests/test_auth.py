@@ -437,3 +437,68 @@ class TestGoogleCallbackGenericError:
         assert resp.json()["detail"] == "Authentication service unavailable"
         mock_logger.error.assert_called_once()
         assert "SECRET_KEY" in mock_logger.error.call_args[0][0]
+
+
+class TestSessionRevocation:
+    """Token revocation via logout."""
+
+    @pytest.fixture()
+    def revocation_client(self, patched_db):
+        """TestClient with SECRET_KEY set on both auth and router modules."""
+        with (
+            patch("backend.auth.SECRET_KEY", "test-secret-key"),
+            patch("backend.routers.auth.SECRET_KEY", "test-secret-key"),
+        ):
+            from backend.main import app
+
+            with TestClient(app) as c:
+                yield c
+
+    def test_logout_revokes_token(self, revocation_client):
+        """After logout, the same JWT should be rejected."""
+        import jwt as _jwt
+
+        from backend.routers.auth import JWT_ALGORITHM, JWT_EXPIRY_SECONDS
+
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        payload = {
+            "sub": "test-user-id",
+            "email": "test@example.com",
+            "aud": "web",
+            "iat": now_ts,
+            "exp": now_ts + JWT_EXPIRY_SECONDS,
+            "jti": "revoke-me-123",
+        }
+        token = _jwt.encode(payload, "test-secret-key", algorithm=JWT_ALGORITHM)
+
+        # Set cookie and verify it works
+        revocation_client.cookies.set("reli_session", token)
+        resp = revocation_client.get("/api/things")
+        assert resp.status_code == 200
+
+        # Logout
+        resp = revocation_client.post("/api/auth/logout")
+        assert resp.status_code == 200
+
+        # Restore the cookie manually and try an authenticated endpoint
+        revocation_client.cookies.set("reli_session", token)
+        resp = revocation_client.get("/api/things")
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "Session revoked"
+
+    def test_logout_without_jti_still_clears_cookie(self, revocation_client):
+        """Tokens without jti (legacy) should still log out without error."""
+        import jwt as _jwt
+
+        payload = {
+            "sub": "test-user-id",
+            "email": "test@example.com",
+            "aud": "web",
+            "exp": 9999999999,
+        }
+        token = _jwt.encode(payload, "test-secret-key", algorithm="HS256")
+        revocation_client.cookies.set("reli_session", token)
+
+        resp = revocation_client.post("/api/auth/logout")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "logged_out"}
