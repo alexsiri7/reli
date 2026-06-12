@@ -630,3 +630,102 @@ class TestSQLLikeOperatorsGuard:
         assert "t.active = true" in _SQL_WHERE_FRAGMENTS
         assert "t.type_hint = :type_hint" in _SQL_WHERE_FRAGMENTS
         assert "(t.user_id = :user_id OR t.user_id IS NULL)" in _SQL_WHERE_FRAGMENTS
+
+    def test_user_filter_text_uses_custom_param_name(self):
+        from backend.db_engine import user_filter_text
+
+        frag, params = user_filter_text("some-user", table_alias="t_from", param_name="uf_uid_from")
+        assert ":uf_uid_from" in frag
+        assert "uf_uid_from" in params
+        assert params["uf_uid_from"] == "some-user"
+        assert "uf_uid" not in params  # default name must NOT appear
+
+    def test_user_filter_text_two_aliases_no_param_collision(self):
+        from backend.db_engine import user_filter_text
+
+        _, p_from = user_filter_text("u1", "t_from", param_name="uf_uid_from")
+        _, p_to = user_filter_text("u1", "t_to", param_name="uf_uid_to")
+        merged = {**p_from, **p_to}
+        assert len(merged) == 2  # no key collision
+        assert "uf_uid_from" in merged
+        assert "uf_uid_to" in merged
+
+
+class TestListRelationshipsUserIsolation:
+    def test_other_user_cannot_see_relationships(self, patched_db):
+        """User B must get 404, not see User A's relationships.
+
+        Manages ``app.dependency_overrides`` directly (sequential, not simultaneous)
+        to avoid the shared-dict conflict documented in conftest._make_authenticated_client.
+        """
+        from backend.auth import require_user
+        from backend.main import app
+
+        def _as_user(uid: str) -> TestClient:
+            app.dependency_overrides[require_user] = lambda: uid
+            return TestClient(app)
+
+        try:
+            with _as_user("user-a") as user_a:
+                t1 = user_a.post("/api/things", json={"title": "A Thing 1"}).json()
+                t2 = user_a.post("/api/things", json={"title": "A Thing 2"}).json()
+                rel = user_a.post(
+                    "/api/things/relationships",
+                    json={"from_thing_id": t1["id"], "to_thing_id": t2["id"], "relationship_type": "related_to"},
+                )
+                assert rel.status_code == 201
+
+            with _as_user("other-user") as other:
+                resp = other.get(f"/api/things/{t1['id']}/relationships")
+                assert resp.status_code == 404
+        finally:
+            app.dependency_overrides.pop(require_user, None)
+
+    def test_user_sees_own_relationships(self, user_a_client):
+        """User A can still see their own relationships after the fix."""
+        t1 = user_a_client.post("/api/things", json={"title": "My Thing 1"}).json()
+        t2 = user_a_client.post("/api/things", json={"title": "My Thing 2"}).json()
+        user_a_client.post(
+            "/api/things/relationships",
+            json={"from_thing_id": t1["id"], "to_thing_id": t2["id"], "relationship_type": "related_to"},
+        )
+
+        resp = user_a_client.get(f"/api/things/{t1['id']}/relationships")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+
+class TestProfileRelationshipsUserIsolation:
+    def test_profile_relationships_include_own_things(self, user_a_client):
+        """User A's profile returns their own related things after the fix."""
+        # The /me endpoint filters on surface=False — person Things must be created with surface=false
+        profile_a = user_a_client.post(
+            "/api/things", json={"title": "User A", "type_hint": "person", "surface": False}
+        ).json()
+        task_a = user_a_client.post("/api/things", json={"title": "Task A"}).json()
+        user_a_client.post(
+            "/api/things/relationships",
+            json={"from_thing_id": profile_a["id"], "to_thing_id": task_a["id"], "relationship_type": "owns"},
+        )
+
+        resp = user_a_client.get("/api/things/me")
+        assert resp.status_code == 200
+        related_ids = [r["related_thing_id"] for r in resp.json()["relationships"]]
+        assert task_a["id"] in related_ids
+
+    def test_profile_not_found_for_user_without_person_thing(self, patched_db):
+        """User with no profile Thing gets 404, not another user's profile.
+
+        Uses patched_db directly to avoid the simultaneous fixture conflict
+        described in conftest._make_authenticated_client.
+        """
+        from backend.auth import require_user
+        from backend.main import app
+
+        try:
+            app.dependency_overrides[require_user] = lambda: "other-user"
+            with TestClient(app) as other:
+                resp = other.get("/api/things/me")
+                assert resp.status_code == 404
+        finally:
+            app.dependency_overrides.pop(require_user, None)
