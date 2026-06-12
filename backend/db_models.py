@@ -449,7 +449,6 @@ class ThingEmbeddingRecord(SQLModel, table=True):
 
     thing_id: str = Field(primary_key=True, foreign_key="things.id")
     embedding: Any = Field(sa_column=Column(Vector(1536), nullable=False))
-    content: str = Field(default="", sa_column_kwargs={"server_default": "''"})
     updated_at: datetime = Field(default_factory=_utcnow, sa_column_kwargs={"server_default": _TS_DEFAULT})
 
 
