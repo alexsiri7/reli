@@ -166,17 +166,15 @@ def upsert_thing(thing: dict[str, Any]) -> None:
             # Use raw SQL for INSERT ON CONFLICT (upsert)
             session.execute(
                 sa_text(
-                    "INSERT INTO thing_embeddings (thing_id, embedding, content, updated_at) "
-                    "VALUES (:thing_id, :embedding, :content, :updated_at) "
+                    "INSERT INTO thing_embeddings (thing_id, embedding, updated_at) "
+                    "VALUES (:thing_id, :embedding, :updated_at) "
                     "ON CONFLICT (thing_id) DO UPDATE SET "
                     "embedding = EXCLUDED.embedding, "
-                    "content = EXCLUDED.content, "
                     "updated_at = EXCLUDED.updated_at"
                 ),
                 {
                     "thing_id": thing["id"],
                     "embedding": str(embedding),
-                    "content": text,
                     "updated_at": datetime.now(timezone.utc),
                 },
             )
@@ -255,17 +253,15 @@ def reindex_all(user_id: str = "") -> int:
             for tid, embedding, text in zip(thing_ids, embeddings, texts):
                 session.execute(
                     sa_text(
-                        "INSERT INTO thing_embeddings (thing_id, embedding, content, updated_at) "
-                        "VALUES (:thing_id, :embedding, :content, :updated_at) "
+                        "INSERT INTO thing_embeddings (thing_id, embedding, updated_at) "
+                        "VALUES (:thing_id, :embedding, :updated_at) "
                         "ON CONFLICT (thing_id) DO UPDATE SET "
                         "embedding = EXCLUDED.embedding, "
-                        "content = EXCLUDED.content, "
                         "updated_at = EXCLUDED.updated_at"
                     ),
                     {
                         "thing_id": tid,
                         "embedding": str(embedding),
-                        "content": text,
                         "updated_at": now,
                     },
                 )
