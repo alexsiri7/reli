@@ -46,6 +46,12 @@ _REDACTED_SETTING_KEYS = {"requesty_api_key", "openai_api_key"}
 _REDACTED_GOOGLE_FIELDS = {"access_token", "refresh_token", "client_secret"}
 
 
+def _delete_where(session: Session, model: type, clause: Any) -> None:
+    """Delete all records of `model` matching `clause`."""
+    for r in session.exec(select(model).where(clause)).all():
+        session.delete(r)
+
+
 @router.get("/export")
 def export_user_data(
     user_id: str = Depends(require_user),
@@ -218,56 +224,30 @@ def delete_all_user_data(
     chat_msg_ids = [m.id for m in chat_messages]
 
     # Delete in FK-safe order (children before parents)
-    # r is typed Any because it's reused across heterogeneous delete loops.
-    r: Any
 
     # 1. ChatMessageUsageRecord (FK → chat_history)
     if chat_msg_ids:
-        for r in session.exec(
-            select(ChatMessageUsageRecord).where(
-                ChatMessageUsageRecord.chat_message_id.in_(chat_msg_ids)  # type: ignore[attr-defined]
-            )
-        ).all():
-            session.delete(r)
+        _delete_where(session, ChatMessageUsageRecord, ChatMessageUsageRecord.chat_message_id.in_(chat_msg_ids))  # type: ignore[attr-defined]
 
     # 2. ThingEmbeddingRecord (FK → things)
     if thing_ids:
-        for r in session.exec(
-            select(ThingEmbeddingRecord).where(
-                ThingEmbeddingRecord.thing_id.in_(thing_ids)  # type: ignore[attr-defined]
-            )
-        ).all():
-            session.delete(r)
+        _delete_where(session, ThingEmbeddingRecord, ThingEmbeddingRecord.thing_id.in_(thing_ids))  # type: ignore[attr-defined]
 
     # 3. ThingRelationshipRecord (FK → things, no user_id)
     if thing_ids:
-        for r in session.exec(
-            select(ThingRelationshipRecord).where(
-                or_(
-                    ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
-                    ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
-                )
-            )
-        ).all():
-            session.delete(r)
+        _delete_where(session, ThingRelationshipRecord, or_(
+            ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
+            ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
+        ))
 
     # 4. SweepFindingRecord (FK → things)
-    for r in session.exec(
-        select(SweepFindingRecord).where(user_filter_clause(SweepFindingRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+    _delete_where(session, SweepFindingRecord, user_filter_clause(SweepFindingRecord.user_id, user_id))
 
     # 5. ConnectionSuggestionRecord (FK → things)
-    for r in session.exec(
-        select(ConnectionSuggestionRecord).where(user_filter_clause(ConnectionSuggestionRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+    _delete_where(session, ConnectionSuggestionRecord, user_filter_clause(ConnectionSuggestionRecord.user_id, user_id))
 
     # 6. ScheduledTaskRecord (FK → things, users)
-    for r in session.exec(
-        select(ScheduledTaskRecord).where(user_filter_clause(ScheduledTaskRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+    _delete_where(session, ScheduledTaskRecord, user_filter_clause(ScheduledTaskRecord.user_id, user_id))
 
     # 7. ThingRecord
     for r in things:
@@ -282,54 +262,24 @@ def delete_all_user_data(
         session.delete(r)
 
     # 10. ConversationSummaryRecord (FK → users)
-    for r in session.exec(select(ConversationSummaryRecord).where(ConversationSummaryRecord.user_id == user_id)).all():
-        session.delete(r)
+    _delete_where(session, ConversationSummaryRecord, ConversationSummaryRecord.user_id == user_id)
 
     # 11. UserSettingRecord (FK → users)
-    for r in session.exec(select(UserSettingRecord).where(UserSettingRecord.user_id == user_id)).all():
-        session.delete(r)
+    _delete_where(session, UserSettingRecord, UserSettingRecord.user_id == user_id)
 
     # 12. GoogleTokenRecord (FK → users)
-    for r in session.exec(
-        select(GoogleTokenRecord).where(user_filter_clause(GoogleTokenRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
+    _delete_where(session, GoogleTokenRecord, user_filter_clause(GoogleTokenRecord.user_id, user_id))
 
     # 13. Tables with FK → users or standalone user_id
-    for r in session.exec(select(SweepRunRecord).where(user_filter_clause(SweepRunRecord.user_id, user_id))).all():
-        session.delete(r)
-
-    for r in session.exec(
-        select(SweepActionRecord).where(user_filter_clause(SweepActionRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
-
-    for r in session.exec(select(UsageLogRecord).where(user_filter_clause(UsageLogRecord.user_id, user_id))).all():
-        session.delete(r)
-
-    for r in session.exec(
-        select(MorningBriefingRecord).where(user_filter_clause(MorningBriefingRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
-
-    for r in session.exec(
-        select(WeeklyBriefingRecord).where(user_filter_clause(WeeklyBriefingRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
-
-    for r in session.exec(select(NudgeDismissalRecord).where(NudgeDismissalRecord.user_id == user_id)).all():
-        session.delete(r)
-
-    for r in session.exec(select(NudgeSuppressionRecord).where(NudgeSuppressionRecord.user_id == user_id)).all():
-        session.delete(r)
-
-    for r in session.exec(
-        select(MergeHistoryRecord).where(user_filter_clause(MergeHistoryRecord.user_id, user_id))
-    ).all():
-        session.delete(r)
-
-    for r in session.exec(select(ThingTypeRecord).where(user_filter_clause(ThingTypeRecord.user_id, user_id))).all():
-        session.delete(r)
+    _delete_where(session, SweepRunRecord, user_filter_clause(SweepRunRecord.user_id, user_id))
+    _delete_where(session, SweepActionRecord, user_filter_clause(SweepActionRecord.user_id, user_id))
+    _delete_where(session, UsageLogRecord, user_filter_clause(UsageLogRecord.user_id, user_id))
+    _delete_where(session, MorningBriefingRecord, user_filter_clause(MorningBriefingRecord.user_id, user_id))
+    _delete_where(session, WeeklyBriefingRecord, user_filter_clause(WeeklyBriefingRecord.user_id, user_id))
+    _delete_where(session, NudgeDismissalRecord, NudgeDismissalRecord.user_id == user_id)
+    _delete_where(session, NudgeSuppressionRecord, NudgeSuppressionRecord.user_id == user_id)
+    _delete_where(session, MergeHistoryRecord, user_filter_clause(MergeHistoryRecord.user_id, user_id))
+    _delete_where(session, ThingTypeRecord, user_filter_clause(ThingTypeRecord.user_id, user_id))
 
     # 14. GmailOAuthStateRecord (PK is user_id)
     gmail_state = session.exec(select(GmailOAuthStateRecord).where(GmailOAuthStateRecord.user_id == user_id)).first()

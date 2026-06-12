@@ -83,13 +83,7 @@ def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str,
                 try:
                     result = await func(*args, **kwargs)
                 except Exception as exc:
-                    logger.exception(
-                        "Tool %s crashed: %s (args=%s kwargs=%s)",
-                        func.__name__,
-                        exc,
-                        args,
-                        kwargs,
-                    )
+                    logger.exception("Tool %s crashed: %s", func.__name__, exc)
                     span.set_status(trace.StatusCode.ERROR, str(exc))
                     span.record_exception(exc)
                     return {"error": f"Tool {func.__name__} failed: {exc}"}
@@ -128,13 +122,7 @@ def _traced_tool(func: Callable[..., dict[str, Any]]) -> Callable[..., dict[str,
             try:
                 result = func(*args, **kwargs)
             except Exception as exc:
-                logger.exception(
-                    "Tool %s crashed: %s (args=%s kwargs=%s)",
-                    func.__name__,
-                    exc,
-                    args,
-                    kwargs,
-                )
+                logger.exception("Tool %s crashed: %s", func.__name__, exc)
                 span.set_status(trace.StatusCode.ERROR, str(exc))
                 span.record_exception(exc)
                 return {"error": f"Tool {func.__name__} failed: {exc}"}
@@ -1166,8 +1154,8 @@ async def run_reasoning_agent(
                 f"Surface relevant alerts in your reasoning_summary if they relate "
                 f"to the user's message or the Things in context."
             )
-    except Exception:
-        pass  # Non-critical — don't break chat if detection fails
+    except Exception as exc:
+        logger.debug("Conflict detection skipped: %s", exc)  # Non-critical — don't break chat if detection fails
 
     # -- Ollama fallback (unchanged — uses JSON blob + apply_storage_changes) --
     if OLLAMA_MODEL:
