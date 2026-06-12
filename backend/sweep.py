@@ -2394,8 +2394,7 @@ async def auto_merge_duplicates(
 
     if audit_findings:
         with Session(_engine_mod.engine) as audit_session:
-            for finding in audit_findings:
-                audit_session.add(finding)
+            audit_session.add_all(audit_findings)
             try:
                 audit_session.commit()
             except Exception:
