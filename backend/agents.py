@@ -82,7 +82,7 @@ def _ollama_client() -> AsyncOpenAI:
 _DEPRECATED_MODELS: frozenset[str] = frozenset({"google/gemini-3.1-flash-lite-preview"})
 
 # Columns that may appear in a dynamic UPDATE … SET clause for the things table.
-# Guard against accidental SQL injection if future code adds user-controlled keys.
+# Guard against SQL injection from LLM-generated keys; defense-in-depth for future paths too.
 _THINGS_UPDATABLE_COLUMNS: frozenset[str] = frozenset(
     {"title", "type_hint", "checkin_date", "importance", "active", "surface", "data", "open_questions", "updated_at"}
 )
@@ -432,6 +432,14 @@ def apply_storage_changes(
                 merge_fields["checkin_date"] = item["checkin_date"]
             if merge_fields:
                 merge_fields["updated_at"] = now
+                _unexpected = set(merge_fields) - _THINGS_UPDATABLE_COLUMNS
+                if _unexpected:
+                    logger.warning(
+                        "SQL injection guard: unexpected column(s) %s rejected for thing_id=%s",
+                        _unexpected,
+                        existing["id"],
+                    )
+                    raise ValueError(f"SQL injection guard: unexpected column(s) {_unexpected}")
                 set_clause = ", ".join(f"{k} = ?" for k in merge_fields)
                 values = list(merge_fields.values()) + [existing["id"]]
                 conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
@@ -511,6 +519,12 @@ def apply_storage_changes(
 
         _unexpected = set(fields) - _THINGS_UPDATABLE_COLUMNS
         if _unexpected:
+            logger.warning(
+                "SQL injection guard: unexpected column(s) %s rejected for thing_id=%s user_id=%s",
+                _unexpected,
+                thing_id,
+                user_id,
+            )
             raise ValueError(f"SQL injection guard: unexpected column(s) {_unexpected}")
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [thing_id]
@@ -586,6 +600,12 @@ def apply_storage_changes(
             mf["updated_at"] = now
             _unexpected = set(mf) - _THINGS_UPDATABLE_COLUMNS
             if _unexpected:
+                logger.warning(
+                    "SQL injection guard: unexpected column(s) %s rejected in merge keep_id=%s user_id=%s",
+                    _unexpected,
+                    keep_id,
+                    user_id,
+                )
                 raise ValueError(f"SQL injection guard: unexpected column(s) {_unexpected}")
             set_clause = ", ".join(f"{k} = ?" for k in mf)
             values = list(mf.values()) + [keep_id]
