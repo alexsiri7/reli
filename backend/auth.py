@@ -60,6 +60,19 @@ def _resolve_api_token_user() -> str:
         return ""
 
 
+def _prune_expired_revocations(db: Session) -> None:
+    """Delete expired rows from the revocation table (non-fatal; called opportunistically)."""
+    try:
+        now = datetime.now(timezone.utc)
+        expired = db.exec(select(RevokedTokenRecord).where(RevokedTokenRecord.expires_at <= now)).all()
+        for row in expired:
+            db.delete(row)
+        if expired:
+            db.commit()
+    except Exception:
+        _log.warning("Revocation prune failed (non-fatal)", exc_info=True)
+
+
 async def require_user(request: Request) -> str:
     """FastAPI dependency that validates the session cookie and returns user_id.
 
@@ -120,17 +133,8 @@ async def require_user(request: Request) -> str:
     if jti:
         try:
             with Session(_engine_mod.engine) as db:
-                # Prune expired rows opportunistically (low-cost, ~1% of requests)
                 if random.random() < 0.01:
-                    try:
-                        now = datetime.now(timezone.utc)
-                        expired = db.exec(select(RevokedTokenRecord).where(RevokedTokenRecord.expires_at <= now)).all()
-                        for row in expired:
-                            db.delete(row)
-                        if expired:
-                            db.commit()
-                    except Exception:
-                        _log.warning("Revocation prune failed (non-fatal)", exc_info=True)
+                    _prune_expired_revocations(db)
                 revoked = db.get(RevokedTokenRecord, jti)
         except Exception:
             # SECURITY TRADEOFF: fail open to preserve availability during DB outages.
