@@ -310,6 +310,35 @@ class TestGoogleLoginGenericError:
         assert "GOOGLE_CLIENT_ID" not in detail
         assert "SECRET_KEY" not in detail
 
+    def test_google_login_returns_generic_error_when_client_secret_missing(self, patched_db):
+        with (
+            patch("backend.routers.auth.GOOGLE_CLIENT_ID", "set-client-id"),
+            patch("backend.routers.auth.GOOGLE_CLIENT_SECRET", ""),
+        ):
+            from backend.main import app
+
+            with TestClient(app) as client:
+                response = client.get("/api/auth/google")
+        assert response.status_code == 501
+        detail = response.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "GOOGLE_CLIENT_SECRET" not in detail
+
+    def test_google_login_returns_generic_error_when_secret_key_missing(self, patched_db):
+        with (
+            patch("backend.routers.auth.GOOGLE_CLIENT_ID", "set-client-id"),
+            patch("backend.routers.auth.GOOGLE_CLIENT_SECRET", "set-client-secret"),
+            patch("backend.routers.auth.SECRET_KEY", ""),
+        ):
+            from backend.main import app
+
+            with TestClient(app) as client:
+                response = client.get("/api/auth/google")
+        assert response.status_code == 501
+        detail = response.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "SECRET_KEY" not in detail
+
 
 class TestOAuthAllowlistRejection:
     """Test that OAuth allowlist rejection does not log the user's email (SEC-021)."""

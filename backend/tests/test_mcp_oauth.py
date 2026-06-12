@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -365,16 +366,47 @@ class TestMcpTokenAudience:
 class TestOAuthAuthorizeGenericError:
     """SEC-24: misconfiguration errors must not leak env var names."""
 
-    def test_oauth_authorize_returns_generic_error_when_not_configured(self, mcp_client):
+    def test_oauth_authorize_returns_generic_error_when_not_configured(self, mcp_client, caplog):
         from backend.config import settings as real_settings
 
         with patch.object(real_settings, "GOOGLE_CLIENT_ID", ""):
-            response = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=https://x.com/cb")
+            with caplog.at_level(logging.ERROR, logger="backend.routers.mcp_oauth"):
+                response = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=https://x.com/cb")
         assert response.status_code == 501
         detail = response.json()["detail"]
         assert detail == "Authentication service unavailable"
         assert "GOOGLE_CLIENT_ID" not in detail
         assert "SECRET_KEY" not in detail
+        assert "GOOGLE_CLIENT_ID" in caplog.text
+
+    def test_oauth_authorize_returns_generic_error_when_client_secret_missing(self, mcp_client):
+        from backend.config import settings as real_settings
+
+        with (
+            patch.object(real_settings, "GOOGLE_CLIENT_ID", "set-client-id"),
+            patch.object(real_settings, "GOOGLE_CLIENT_SECRET", ""),
+        ):
+            response = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=https://x.com/cb")
+        assert response.status_code == 501
+        detail = response.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "GOOGLE_CLIENT_SECRET" not in detail
+
+    def test_oauth_authorize_returns_generic_error_when_secret_key_missing(self, mcp_client, caplog):
+        from backend.config import settings as real_settings
+
+        with (
+            patch.object(real_settings, "GOOGLE_CLIENT_ID", "set-client-id"),
+            patch.object(real_settings, "GOOGLE_CLIENT_SECRET", "set-client-secret"),
+            patch.object(real_settings, "SECRET_KEY", ""),
+        ):
+            with caplog.at_level(logging.ERROR, logger="backend.routers.mcp_oauth"):
+                response = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=https://x.com/cb")
+        assert response.status_code == 501
+        detail = response.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "SECRET_KEY" not in detail
+        assert "SECRET_KEY" in caplog.text
 
 
 class TestValidateClientSecret:
