@@ -1154,8 +1154,8 @@ async def run_reasoning_agent(
                 f"Surface relevant alerts in your reasoning_summary if they relate "
                 f"to the user's message or the Things in context."
             )
-    except Exception:
-        pass  # Non-critical — don't break chat if detection fails
+    except Exception as exc:
+        logger.debug("Conflict detection skipped: %s", exc)  # Non-critical — don't break chat if detection fails
 
     # -- Ollama fallback (unchanged — uses JSON blob + apply_storage_changes) --
     if OLLAMA_MODEL:

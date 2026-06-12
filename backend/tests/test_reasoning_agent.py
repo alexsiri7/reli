@@ -836,6 +836,44 @@ class TestToolCatchallErrorHandling:
         assert "failed" in result["error"]
 
 
+class TestTracedToolNoPIIInLogs:
+    """Regression: tool crash logs must not contain args/kwargs (PII guard)."""
+
+    def test_sync_crash_log_excludes_args(self, caplog):
+        import logging
+
+        from backend.reasoning_agent import _traced_tool
+
+        def leaky_tool(user_title: str = "", secret: str = "") -> dict:
+            raise RuntimeError("boom")
+
+        wrapped = _traced_tool(leaky_tool)
+        with caplog.at_level(logging.ERROR, logger="backend.reasoning_agent"):
+            result = wrapped(user_title="Alice's SSN", secret="hunter2")
+
+        assert "error" in result
+        for record in caplog.records:
+            assert "Alice's SSN" not in record.getMessage()
+            assert "hunter2" not in record.getMessage()
+
+    @pytest.mark.asyncio
+    async def test_async_crash_log_excludes_kwargs(self, caplog):
+        import logging
+
+        from backend.reasoning_agent import _traced_tool
+
+        async def leaky_async_tool(payload: str = "") -> dict:
+            raise RuntimeError("async boom")
+
+        wrapped = _traced_tool(leaky_async_tool)
+        with caplog.at_level(logging.ERROR, logger="backend.reasoning_agent"):
+            result = await wrapped(payload="sensitive data 42")
+
+        assert "error" in result
+        for record in caplog.records:
+            assert "sensitive data 42" not in record.getMessage()
+
+
 # ---------------------------------------------------------------------------
 # thought_signature helpers (GH #158 / Sentry RELI-ZO-5)
 # ---------------------------------------------------------------------------
