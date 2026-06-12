@@ -48,7 +48,7 @@ COOKIE_NAME = "reli_session"
 _pending_flows: dict[str, dict] = {}
 _PENDING_FLOW_TTL_SECONDS = 600  # 10 minutes
 
-MCP_AUTH_CODE_TTL_SECONDS = 60 * 10  # 10 minutes
+MCP_AUTH_CODE_TTL_SECONDS = 60  # 60 seconds (IETF RFC 6819 §4.1.1)
 
 
 def _client_config() -> dict:
