@@ -391,3 +391,68 @@ class TestOAuthCallbackDoesNotLogCode:
         assert fake_code[:20] not in caplog.text, (
             f"Authorization code prefix appeared in logs — CWE-532 regression: {caplog.text!r}"
         )
+
+
+class TestGoogleLoginGenericError:
+    """google_login() must return generic 501 text — no env var names in response (CWE-209)."""
+
+    def test_missing_client_id_returns_generic_error(self, patched_db):
+        with (
+            patch("backend.routers.auth.GOOGLE_CLIENT_ID", ""),
+            patch("backend.routers.auth.GOOGLE_CLIENT_SECRET", "secret"),
+            patch("backend.routers.auth.SECRET_KEY", "key"),
+        ):
+            from backend.main import app
+
+            with TestClient(app) as client:
+                resp = client.get("/api/auth/google")
+        assert resp.status_code == 501
+        detail = resp.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "GOOGLE_CLIENT_ID" not in detail
+        assert "GOOGLE_CLIENT_SECRET" not in detail
+
+    def test_missing_client_secret_returns_generic_error(self, patched_db):
+        with (
+            patch("backend.routers.auth.GOOGLE_CLIENT_ID", "client-id"),
+            patch("backend.routers.auth.GOOGLE_CLIENT_SECRET", ""),
+            patch("backend.routers.auth.SECRET_KEY", "key"),
+        ):
+            from backend.main import app
+
+            with TestClient(app) as client:
+                resp = client.get("/api/auth/google")
+        assert resp.status_code == 501
+        detail = resp.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "GOOGLE_CLIENT_SECRET" not in detail
+
+    def test_missing_secret_key_returns_generic_error(self, patched_db):
+        with (
+            patch("backend.routers.auth.GOOGLE_CLIENT_ID", "client-id"),
+            patch("backend.routers.auth.GOOGLE_CLIENT_SECRET", "secret"),
+            patch("backend.routers.auth.SECRET_KEY", ""),
+        ):
+            from backend.main import app
+
+            with TestClient(app) as client:
+                resp = client.get("/api/auth/google")
+        assert resp.status_code == 501
+        detail = resp.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "SECRET_KEY" not in detail
+
+
+class TestGoogleCallbackGenericError:
+    """google_callback() must return generic 501 text when SECRET_KEY is missing (CWE-209)."""
+
+    def test_missing_secret_key_returns_generic_error(self, patched_db):
+        with patch("backend.routers.auth.SECRET_KEY", ""):
+            from backend.main import app
+
+            with TestClient(app) as client:
+                resp = client.get("/api/auth/google/callback?code=x&state=y")
+        assert resp.status_code == 501
+        detail = resp.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "SECRET_KEY" not in detail

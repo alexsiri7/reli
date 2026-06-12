@@ -426,3 +426,41 @@ class TestValidateClientSecret:
         self._register_client("conf-client3", "correct-secret", "client_secret_post")
         # Should not raise
         _validate_client_secret("conf-client3", "correct-secret")
+
+
+class TestOAuthAuthorizeGenericError:
+    """oauth_authorize() must return generic 501 text — no env var names in response (CWE-209)."""
+
+    def test_missing_client_id_returns_generic_error(self, mcp_client):
+        with patch("backend.routers.mcp_oauth.settings") as mock_settings:
+            mock_settings.GOOGLE_CLIENT_ID = ""
+            mock_settings.GOOGLE_CLIENT_SECRET = "secret"
+            mock_settings.SECRET_KEY = "key"
+            resp = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=http://localhost")
+        assert resp.status_code == 501
+        detail = resp.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "GOOGLE_CLIENT_ID" not in detail
+        assert "GOOGLE_CLIENT_SECRET" not in detail
+
+    def test_missing_client_secret_returns_generic_error(self, mcp_client):
+        with patch("backend.routers.mcp_oauth.settings") as mock_settings:
+            mock_settings.GOOGLE_CLIENT_ID = "client-id"
+            mock_settings.GOOGLE_CLIENT_SECRET = ""
+            mock_settings.SECRET_KEY = "key"
+            resp = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=http://localhost")
+        assert resp.status_code == 501
+        detail = resp.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "GOOGLE_CLIENT_SECRET" not in detail
+
+    def test_missing_secret_key_returns_generic_error(self, mcp_client):
+        with patch("backend.routers.mcp_oauth.settings") as mock_settings:
+            mock_settings.GOOGLE_CLIENT_ID = "client-id"
+            mock_settings.GOOGLE_CLIENT_SECRET = "secret"
+            mock_settings.SECRET_KEY = ""
+            resp = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=http://localhost")
+        assert resp.status_code == 501
+        detail = resp.json()["detail"]
+        assert detail == "Authentication service unavailable"
+        assert "SECRET_KEY" not in detail
