@@ -360,3 +360,69 @@ class TestMcpTokenAudience:
         payload = pyjwt.decode(access_token, secret, algorithms=[JWT_ALGORITHM], audience="mcp")
         assert payload["aud"] == "mcp"
         assert payload["sub"] == "u-test-001"
+
+
+class TestValidateClientSecret:
+    """Tests for _validate_client_secret (SEC-03)."""
+
+    def _register_client(self, client_id: str, secret: str, auth_method: str) -> None:
+        from backend.oauth_state import cleanup_and_store, mcp_registered_clients
+
+        cleanup_and_store(
+            mcp_registered_clients,
+            client_id,
+            {
+                "client_id": client_id,
+                "client_secret": secret,
+                "client_name": "test",
+                "token_endpoint_auth_method": auth_method,
+                "redirect_uris": ["https://example.com/cb"],
+                "grant_types": ["authorization_code"],
+                "response_types": ["code"],
+                "scope": "mcp",
+                "expires_at": datetime.now(timezone.utc) + timedelta(seconds=600),
+            },
+        )
+
+    def test_unknown_client_returns_400(self, patched_db):
+        from fastapi import HTTPException
+
+        from backend.routers.mcp_oauth import _validate_client_secret
+
+        with pytest.raises(HTTPException) as exc:
+            _validate_client_secret("nonexistent-client", "any-secret")
+        assert exc.value.status_code == 400
+
+    def test_public_client_skips_secret_check(self, patched_db):
+        from backend.routers.mcp_oauth import _validate_client_secret
+
+        self._register_client("pub-client", "", "none")
+        # Should not raise even with empty secret
+        _validate_client_secret("pub-client", "")
+
+    def test_confidential_client_rejects_wrong_secret(self, patched_db):
+        from fastapi import HTTPException
+
+        from backend.routers.mcp_oauth import _validate_client_secret
+
+        self._register_client("conf-client", "correct-secret", "client_secret_post")
+        with pytest.raises(HTTPException) as exc:
+            _validate_client_secret("conf-client", "wrong-secret")
+        assert exc.value.status_code == 401
+
+    def test_confidential_client_rejects_missing_secret(self, patched_db):
+        from fastapi import HTTPException
+
+        from backend.routers.mcp_oauth import _validate_client_secret
+
+        self._register_client("conf-client2", "correct-secret", "client_secret_post")
+        with pytest.raises(HTTPException) as exc:
+            _validate_client_secret("conf-client2", "")
+        assert exc.value.status_code == 401
+
+    def test_confidential_client_accepts_correct_secret(self, patched_db):
+        from backend.routers.mcp_oauth import _validate_client_secret
+
+        self._register_client("conf-client3", "correct-secret", "client_secret_post")
+        # Should not raise
+        _validate_client_secret("conf-client3", "correct-secret")

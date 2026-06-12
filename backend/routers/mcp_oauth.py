@@ -280,7 +280,8 @@ def _validate_client_secret(client_id: str, client_secret: str) -> None:
     auth_method = client.get("token_endpoint_auth_method", "client_secret_post")
     if auth_method == "none":
         return  # Public client — no secret required
-    if not client_secret or not secrets.compare_digest(client_secret, client["client_secret"]):
+    stored_secret = client.get("client_secret", "")
+    if not client_secret or not secrets.compare_digest(client_secret, stored_secret):
         raise HTTPException(status_code=401, detail="Invalid client credentials")
 
 
