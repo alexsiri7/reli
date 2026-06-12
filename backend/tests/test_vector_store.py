@@ -2,7 +2,32 @@
 
 from unittest.mock import MagicMock, patch
 
-from backend.vector_store import upsert_thing, vector_search
+import pytest
+
+from backend.vector_store import _build_where_sql, upsert_thing, vector_search
+
+
+class TestBuildWhereSql:
+    """Unit tests for _build_where_sql SEC-12 guard (all three code paths)."""
+
+    def test_empty_clauses_returns_empty_string(self):
+        assert _build_where_sql([]) == ""
+
+    def test_single_valid_clause(self):
+        result = _build_where_sql(["t.active = true"])
+        assert result == "WHERE t.active = true"
+
+    def test_multiple_valid_clauses(self):
+        result = _build_where_sql(["t.active = true", "t.type_hint = :type_hint"])
+        assert result == "WHERE t.active = true AND t.type_hint = :type_hint"
+
+    def test_rejects_unexpected_fragment(self):
+        with pytest.raises(ValueError, match="SQL injection guard"):
+            _build_where_sql(["1=1; DROP TABLE things--"])
+
+    def test_rejects_mix_of_valid_and_invalid(self):
+        with pytest.raises(ValueError, match="SQL injection guard"):
+            _build_where_sql(["t.active = true", "EVIL CLAUSE"])
 
 
 class TestVectorSearch:
