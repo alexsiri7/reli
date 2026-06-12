@@ -1,8 +1,16 @@
 """Tests for chat history endpoints."""
 
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from sqlmodel import Session
+from sqlmodel import select as sel
+
+import backend.db_engine as _engine_mod
+from backend.db_models import ChatHistoryRecord, ChatMessageUsageRecord
+from backend.routers.chat import _maybe_purge_old_messages
 
 
 def _append(client: TestClient, session_id: str, role: str, content: str, **kwargs) -> dict:
@@ -195,49 +203,36 @@ class TestChatRetentionPurge:
     asyncio.sleep(0) inside run_until_complete.
     """
 
+    @staticmethod
+    def _run_purge(user_id: str, retention: str) -> None:
+        async def _drive():
+            _maybe_purge_old_messages(user_id)
+            await asyncio.sleep(0)
+
+        with patch("backend.routers.settings.get_user_setting", return_value=retention):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(_drive())
+            finally:
+                loop.close()
+
     def test_purge_deletes_old_messages(self, patched_db):
-        import asyncio
-        from datetime import timedelta
-        from unittest.mock import patch
-
-        from sqlmodel import Session
-        from sqlmodel import select as sel
-
-        import backend.db_engine as _engine_mod
-        from backend.db_models import ChatHistoryRecord
-        from backend.routers.chat import _maybe_purge_old_messages
-
         user_id = "test-user-retention"
-
-        # Insert a message with an old timestamp directly
         old_ts = datetime.now(timezone.utc) - timedelta(days=400)
+
         with Session(_engine_mod.engine) as session:
             session.add(ChatHistoryRecord(
-                session_id="purge-sess",
-                role="user",
-                content="Old message",
-                user_id=user_id,
-                timestamp=old_ts,
+                session_id="purge-sess", role="user", content="Old message",
+                user_id=user_id, timestamp=old_ts,
             ))
-            # Insert a recent message
             session.add(ChatHistoryRecord(
-                session_id="purge-sess",
-                role="user",
-                content="Recent message",
-                user_id=user_id,
-                timestamp=datetime.now(timezone.utc),
+                session_id="purge-sess", role="user", content="Recent message",
+                user_id=user_id, timestamp=datetime.now(timezone.utc),
             ))
             session.commit()
 
-        # Call the real function with retention=365 and drain the event loop
-        with patch("backend.routers.settings.get_user_setting", return_value="365"):
-            async def _drive():
-                _maybe_purge_old_messages(user_id)
-                await asyncio.sleep(0)
+        self._run_purge(user_id, "365")
 
-            asyncio.get_event_loop().run_until_complete(_drive())
-
-        # The old message should be gone; recent should remain
         with Session(_engine_mod.engine) as session:
             records = session.exec(
                 sel(ChatHistoryRecord).where(ChatHistoryRecord.user_id == user_id)
@@ -247,38 +242,18 @@ class TestChatRetentionPurge:
         assert "Recent message" in contents
 
     def test_purge_skipped_when_retention_zero(self, patched_db):
-        import asyncio
-        from datetime import timedelta
-        from unittest.mock import patch
-
-        from sqlmodel import Session
-        from sqlmodel import select as sel
-
-        import backend.db_engine as _engine_mod
-        from backend.db_models import ChatHistoryRecord
-        from backend.routers.chat import _maybe_purge_old_messages
-
         user_id = "test-user-retention-zero"
-
-        # Insert an old message that should NOT be deleted when retention=0
         old_ts = datetime.now(timezone.utc) - timedelta(days=400)
+
         with Session(_engine_mod.engine) as session:
             session.add(ChatHistoryRecord(
-                session_id="no-purge-sess",
-                role="user",
-                content="Stay forever",
-                user_id=user_id,
-                timestamp=old_ts,
+                session_id="no-purge-sess", role="user", content="Stay forever",
+                user_id=user_id, timestamp=old_ts,
             ))
             session.commit()
 
         # retention=0 means unlimited — no messages should be deleted
-        with patch("backend.routers.settings.get_user_setting", return_value="0"):
-            async def _drive():
-                _maybe_purge_old_messages(user_id)
-                await asyncio.sleep(0)
-
-            asyncio.get_event_loop().run_until_complete(_drive())
+        self._run_purge(user_id, "0")
 
         with Session(_engine_mod.engine) as session:
             records = session.exec(
@@ -287,37 +262,18 @@ class TestChatRetentionPurge:
         assert any(r.content == "Stay forever" for r in records)
 
     def test_purge_skipped_when_retention_negative(self, patched_db):
-        import asyncio
-        from datetime import timedelta
-        from unittest.mock import patch
-
-        from sqlmodel import Session
-        from sqlmodel import select as sel
-
-        import backend.db_engine as _engine_mod
-        from backend.db_models import ChatHistoryRecord
-        from backend.routers.chat import _maybe_purge_old_messages
-
         user_id = "test-user-retention-negative"
-
         old_ts = datetime.now(timezone.utc) - timedelta(days=400)
+
         with Session(_engine_mod.engine) as session:
             session.add(ChatHistoryRecord(
-                session_id="neg-purge-sess",
-                role="user",
-                content="Stay forever negative",
-                user_id=user_id,
-                timestamp=old_ts,
+                session_id="neg-purge-sess", role="user", content="Stay forever negative",
+                user_id=user_id, timestamp=old_ts,
             ))
             session.commit()
 
         # Negative retention (guard: <= 0) — no messages should be deleted
-        with patch("backend.routers.settings.get_user_setting", return_value="-1"):
-            async def _drive():
-                _maybe_purge_old_messages(user_id)
-                await asyncio.sleep(0)
-
-            asyncio.get_event_loop().run_until_complete(_drive())
+        self._run_purge(user_id, "-1")
 
         with Session(_engine_mod.engine) as session:
             records = session.exec(
@@ -326,45 +282,23 @@ class TestChatRetentionPurge:
         assert any(r.content == "Stay forever negative" for r in records)
 
     def test_purge_also_deletes_usage_rows(self, patched_db):
-        import asyncio
-        from datetime import timedelta
-        from unittest.mock import patch
-
-        from sqlmodel import Session
-        from sqlmodel import select as sel
-
-        import backend.db_engine as _engine_mod
-        from backend.db_models import ChatHistoryRecord, ChatMessageUsageRecord
-        from backend.routers.chat import _maybe_purge_old_messages
-
         user_id = "test-user-usage-purge"
         old_ts = datetime.now(timezone.utc) - timedelta(days=400)
 
         with Session(_engine_mod.engine) as session:
             msg = ChatHistoryRecord(
-                session_id="purge-usage-sess",
-                role="user",
-                content="Old msg with usage",
-                user_id=user_id,
-                timestamp=old_ts,
+                session_id="purge-usage-sess", role="user", content="Old msg with usage",
+                user_id=user_id, timestamp=old_ts,
             )
             session.add(msg)
             session.flush()
             session.add(ChatMessageUsageRecord(
-                chat_message_id=msg.id,
-                model="test-model",
-                input_tokens=10,
-                output_tokens=5,
+                chat_message_id=msg.id, model="test-model", input_tokens=10, output_tokens=5,
             ))
             session.commit()
             msg_id = msg.id
 
-        with patch("backend.routers.settings.get_user_setting", return_value="365"):
-            async def _drive():
-                _maybe_purge_old_messages(user_id)
-                await asyncio.sleep(0)
-
-            asyncio.get_event_loop().run_until_complete(_drive())
+        self._run_purge(user_id, "365")
 
         with Session(_engine_mod.engine) as session:
             orphans = session.exec(
@@ -375,10 +309,6 @@ class TestChatRetentionPurge:
         assert orphans == [], "Usage rows must be purged alongside their parent messages"
 
     def test_purge_function_skips_when_no_user(self):
-        from unittest.mock import patch
-
-        from backend.routers.chat import _maybe_purge_old_messages
-
         # Should return immediately without calling get_user_setting
         with patch("backend.routers.settings.get_user_setting") as mock_get:
             _maybe_purge_old_messages("")
