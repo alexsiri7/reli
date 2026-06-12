@@ -1,10 +1,12 @@
 """Preference feedback endpoint."""
 
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import Session, select
 
 import backend.db_engine as _engine_mod
@@ -14,6 +16,10 @@ from ..db_engine import user_filter_clause
 from ..db_models import ThingRecord
 
 router = APIRouter(prefix="/preferences", tags=["preferences"])
+logger = logging.getLogger(__name__)
+
+# 30 s blocks rapid-fire API calls while allowing deliberate re-submissions.
+_FEEDBACK_COOLDOWN_SECONDS = 30
 
 
 class PreferenceFeedback(BaseModel):
@@ -70,6 +76,20 @@ def preference_feedback(
         if not isinstance(data, dict):
             data = {}
 
+        # Deduplication: ignore feedback submitted within the cooldown window
+        last_feedback_at = data.get("last_feedback_at")
+        if last_feedback_at:
+            try:
+                last_dt = datetime.fromisoformat(last_feedback_at)
+                if (now - last_dt).total_seconds() < _FEEDBACK_COOLDOWN_SECONDS:
+                    return {"id": thing_id, "updated": False}
+            except (ValueError, TypeError):
+                logger.warning(
+                    "preferences: malformed last_feedback_at=%r for thing_id=%s — skipping cooldown",
+                    last_feedback_at,
+                    thing_id,
+                )
+
         if "patterns" in data and isinstance(data["patterns"], list):
             # Communication-style preference: adjust all pattern confidence levels
             for p in data["patterns"]:
@@ -90,7 +110,9 @@ def preference_feedback(
             # No confidence field — initialize it
             data["confidence"] = 0.6 if body.accurate else 0.3
 
+        data["last_feedback_at"] = now.isoformat()
         record.data = data
+        flag_modified(record, "data")
         record.updated_at = now
         session.add(record)
         session.commit()
