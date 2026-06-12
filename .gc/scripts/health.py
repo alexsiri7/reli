@@ -100,16 +100,16 @@ class HealthReport:
 
 def run_cmd(cmd: list[str] | str, timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> subprocess.CompletedProcess:
     """Run a command and return the CompletedProcess."""
-    args = cmd if isinstance(cmd, list) else shlex.split(cmd)
     try:
+        args = cmd if isinstance(cmd, list) else shlex.split(cmd)
         return subprocess.run(
             args, shell=False, capture_output=True, text=True,
             timeout=timeout, cwd=cwd,
         )
     except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(args, 1, stdout="", stderr="timeout")
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="timeout")
     except Exception as e:
-        return subprocess.CompletedProcess(args, 1, stdout="", stderr=str(e))
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr=str(e))
 
 
 def run_cmd_output(cmd: list[str] | str, timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> str:
@@ -258,8 +258,8 @@ def check_disk(report: HealthReport) -> None:
     pct_out = pct_out.splitlines()[-1].strip() if pct_out else ""
     avail_out = run_cmd_output(["df", "-h", "/", "--output=avail"])
     avail_out = avail_out.splitlines()[-1].strip() if avail_out else ""
-    pct_str = pct_out.strip().replace("%", "").strip()
-    avail_str = avail_out.strip()
+    pct_str = pct_out.replace("%", "").strip()
+    avail_str = avail_out
     try:
         pct = int(pct_str)
     except ValueError:
@@ -293,7 +293,7 @@ def check_dolt(report: HealthReport, fix: bool, city: str = CITY_ROOT) -> None:
     if _r.returncode == 0:
         for _line in _r.stdout.splitlines():
             if f"pid={dolt_pid}" in _line:
-                _m = re.search(r':(\d+)\s', _line)
+                _m = re.search(r':(\d+)', _line)
                 if _m:
                     dolt_port = _m.group(1)
                     break

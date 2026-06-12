@@ -502,5 +502,115 @@ class TestGetRepoSlug(unittest.TestCase):
         self.assertEqual(health.get_repo_slug("/tmp/rig"), "")
 
 
+class TestRunCmdDispatch(unittest.TestCase):
+    @patch("subprocess.run")
+    def test_list_args_passed_directly(self, mock_run):
+        mock_run.return_value = _cp(stdout="ok")
+        health.run_cmd(["echo", "hello"])
+        mock_run.assert_called_once()
+        call_args, call_kwargs = mock_run.call_args
+        self.assertEqual(call_args[0], ["echo", "hello"])
+        self.assertFalse(call_kwargs.get("shell", True))
+
+    @patch("subprocess.run")
+    def test_string_arg_is_split(self, mock_run):
+        mock_run.return_value = _cp(stdout="ok")
+        health.run_cmd("echo hello")
+        mock_run.assert_called_once()
+        call_args, call_kwargs = mock_run.call_args
+        self.assertEqual(call_args[0], ["echo", "hello"])
+        self.assertFalse(call_kwargs.get("shell", True))
+
+    @patch("subprocess.run")
+    def test_shell_false_for_list(self, mock_run):
+        mock_run.return_value = _cp(stdout="ok")
+        health.run_cmd(["ls", "-la"])
+        _, call_kwargs = mock_run.call_args
+        self.assertFalse(call_kwargs.get("shell", True))
+
+
+class TestCheckDiskMultiline(unittest.TestCase):
+    @patch("health.run_cmd_output")
+    def test_disk_ok_multiline_output(self, mock_output):
+        # Simulate real df output: header line + data line
+        mock_output.side_effect = ["Pcent\n  42%", "Avail\n  100G"]
+        report = health.HealthReport()
+        health.check_disk(report)
+        self.assertEqual(report.problems, 0)
+        oks = [r for r in report.results if r.level == "ok"]
+        self.assertTrue(any("42%" in o.message for o in oks))
+
+    @patch("health.run_cmd_output")
+    def test_disk_warn_multiline_output(self, mock_output):
+        mock_output.side_effect = ["Pcent\n  91%", "Avail\n  10G"]
+        report = health.HealthReport()
+        health.check_disk(report)
+        self.assertEqual(report.problems, 1)
+        warns = [r for r in report.results if r.level == "warn"]
+        self.assertEqual(len(warns), 1)
+
+
+class TestCheckDoltPortParsing(unittest.TestCase):
+    @patch("health.run_cmd")
+    @patch("health.run_cmd_output")
+    @patch("pathlib.Path.is_dir", return_value=False)
+    @patch("pathlib.Path.is_file", return_value=False)
+    def test_dolt_port_extracted_from_ss(self, mock_isfile, mock_isdir, mock_output, mock_run):
+        mock_output.side_effect = ["12345", "1.5G"]
+        ss_line = 'LISTEN 0 128 0.0.0.0:3306 0.0.0.0:* users:(("dolt",pid=12345,fd=7))'
+        mock_run.side_effect = [
+            _cp(stdout=ss_line),   # ss -tlnp
+            _cp(stdout="[]"),      # bd list
+        ]
+        report = health.HealthReport()
+        health.check_dolt(report, fix=False, city="/tmp/fake-city")
+        self.assertEqual(report.problems, 0)
+        oks = [r for r in report.results if r.level == "ok"]
+        self.assertTrue(any("3306" in o.message for o in oks))
+
+    @patch("health.run_cmd")
+    @patch("health.run_cmd_output")
+    @patch("pathlib.Path.is_dir", return_value=False)
+    @patch("pathlib.Path.is_file", return_value=False)
+    def test_dolt_port_fallback_when_ss_fails(self, mock_isfile, mock_isdir, mock_output, mock_run):
+        mock_output.side_effect = ["12345", "1.5G"]
+        mock_run.side_effect = [
+            _cp(returncode=1, stdout=""),  # ss -tlnp fails
+            _cp(stdout="[]"),              # bd list
+        ]
+        report = health.HealthReport()
+        health.check_dolt(report, fix=False, city="/tmp/fake-city")
+        self.assertEqual(report.problems, 0)
+        oks = [r for r in report.results if r.level == "ok"]
+        self.assertTrue(any("?" in o.message for o in oks))
+
+
+class TestCheckUntrackedBranches(unittest.TestCase):
+    @patch("health.run_cmd")
+    @patch("health.bd_list", return_value=[])
+    @patch("health.run_cmd_output")
+    def test_strips_origin_prefix(self, mock_output, mock_bd, mock_run):
+        mock_output.return_value = (
+            "  origin/fix-bug\n"
+            "  origin/HEAD -> origin/master\n"
+            "  origin/feature-xyz"
+        )
+        mock_run.return_value = _cp(stdout="")
+        report = health.HealthReport()
+        health._check_untracked_branches(report, "reli", "/tmp/rigs/reli", "owner/reli")
+        warns = [r for r in report.results if r.level == "warn"]
+        self.assertTrue(len(warns) > 0)
+        for w in warns:
+            self.assertNotIn("HEAD", w.message)
+            self.assertNotIn("origin/", w.message)
+
+    @patch("health.bd_list", return_value=[])
+    @patch("health.run_cmd_output", return_value="")
+    def test_empty_branch_list_no_problems(self, mock_output, mock_bd):
+        report = health.HealthReport()
+        health._check_untracked_branches(report, "reli", "/tmp/rigs/reli", "owner/reli")
+        self.assertEqual(report.problems, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

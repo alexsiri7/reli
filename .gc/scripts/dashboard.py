@@ -39,8 +39,8 @@ ISSUES_INTERVAL = 60
 # ── helpers ──────────────────────────────────────────────────────────────
 
 def run(cmd, cwd=None, timeout=10):
-    args = cmd if isinstance(cmd, list) else shlex.split(cmd)
     try:
+        args = cmd if isinstance(cmd, list) else shlex.split(cmd)
         r = subprocess.run(args, shell=False, capture_output=True, text=True,
                            cwd=cwd, timeout=timeout)
         return r.stdout.strip()
