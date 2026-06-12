@@ -85,8 +85,8 @@ def like_pattern(value: str) -> str:
     return f"%{escaped}%"
 
 
-# SQL LIKE operators that may appear in dynamic queries.
-# Guard against SQL injection if future code ever routes user input here.
+# SQL LIKE operators allowed in dynamic queries.
+# Callers must validate _like against this set before SQL construction (SEC-12).
 _SQL_LIKE_OPERATORS: frozenset[str] = frozenset({"LIKE", "ILIKE"})
 
 
@@ -94,6 +94,10 @@ def user_filter_text(user_id: str, table_alias: str = "", param_name: str = "uf_
     """Return a text()-compatible SQL WHERE fragment and params dict for user filtering.
 
     Uses ``:param`` style placeholders for use with ``session.execute(text(...))``.
+
+    Raises:
+        ValueError: If ``table_alias`` is non-empty and not a safe SQL identifier
+            (i.e. does not match ``[A-Za-z_][A-Za-z0-9_]*``). SEC-12 injection guard.
     """
     if not user_id:
         return "", {}

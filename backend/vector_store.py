@@ -20,8 +20,8 @@ from .db_models import ThingEmbeddingRecord, ThingRecord
 
 logger = logging.getLogger(__name__)
 
-# SQL WHERE fragments that may appear in dynamic vector-search queries.
-# Guard against SQL injection if future code ever routes user input here.
+# SQL WHERE fragments allowed in dynamic vector-search queries.
+# Callers must validate where_clauses against this set before SQL construction (SEC-12).
 # SEC-12: any new clause must be added to this allowlist explicitly.
 _SQL_WHERE_FRAGMENTS: frozenset[str] = frozenset({
     "t.active = true",
@@ -289,6 +289,21 @@ def vector_search(
     (or Things with no user_id for backward compatibility).
     Returns an empty list on any error so callers can fall back to SQL.
     """
+    # Build WHERE clauses before the try block so the SEC-12 guard propagates to caller
+    # rather than being swallowed by the broad except Exception below.
+    _pre_where_clauses: list[str] = []
+    if active_only:
+        _pre_where_clauses.append("t.active = true")
+    if type_hint:
+        _pre_where_clauses.append("t.type_hint = :type_hint")
+    if user_id:
+        _pre_where_clauses.append("(t.user_id = :user_id OR t.user_id IS NULL)")
+
+    # SEC-12: assert all fragments are server-controlled allowlisted values
+    _unexpected = set(_pre_where_clauses) - _SQL_WHERE_FRAGMENTS
+    if _unexpected:
+        raise ValueError(f"SQL injection guard: unexpected WHERE fragment(s) {_unexpected}")
+
     try:
         with Session(_engine_mod.engine) as session:
             total = session.exec(select(func.count()).select_from(ThingEmbeddingRecord)).one()
@@ -303,26 +318,17 @@ def vector_search(
         seen_set: set[str] = set()
 
         for query_embedding in query_embeddings:
-            # Build dynamic SQL with filters
-            where_clauses = []
+            # Build dynamic SQL with filters (clauses already validated above)
+            where_clauses = list(_pre_where_clauses)
             params: dict[str, Any] = {
                 "embedding": str(query_embedding),
                 "limit": n_results,
             }
 
-            if active_only:
-                where_clauses.append("t.active = true")
             if type_hint:
-                where_clauses.append("t.type_hint = :type_hint")
                 params["type_hint"] = type_hint
             if user_id:
-                where_clauses.append("(t.user_id = :user_id OR t.user_id IS NULL)")
                 params["user_id"] = user_id
-
-            # SEC-12: assert all fragments are server-controlled allowlisted values
-            _unexpected = set(where_clauses) - _SQL_WHERE_FRAGMENTS
-            if _unexpected:
-                raise ValueError(f"SQL injection guard: unexpected WHERE fragment(s) {_unexpected}")
 
             where_sql = ""
             if where_clauses:
@@ -361,25 +367,31 @@ def vector_search_with_distances(
 
     Used by connection_sweep for distance-threshold filtering.
     """
+    # Build WHERE clauses before the try block so the SEC-12 guard propagates to caller
+    # rather than being swallowed by the broad except Exception below.
+    _pre_where_clauses: list[str] = []
+    if active_only:
+        _pre_where_clauses.append("t.active = true")
+    if user_id:
+        _pre_where_clauses.append("(t.user_id = :user_id OR t.user_id IS NULL)")
+
+    # SEC-12: assert all fragments are server-controlled allowlisted values
+    _unexpected = set(_pre_where_clauses) - _SQL_WHERE_FRAGMENTS
+    if _unexpected:
+        raise ValueError(f"SQL injection guard: unexpected WHERE fragment(s) {_unexpected}")
+
     try:
         query_embedding = _embedder([query])[0]
 
-        where_clauses = []
+        # Use pre-validated clauses; parameters built inside try where I/O may fail
+        where_clauses = list(_pre_where_clauses)
         params: dict[str, Any] = {
             "embedding": str(query_embedding),
             "limit": n_results,
         }
 
-        if active_only:
-            where_clauses.append("t.active = true")
         if user_id:
-            where_clauses.append("(t.user_id = :user_id OR t.user_id IS NULL)")
             params["user_id"] = user_id
-
-        # SEC-12: assert all fragments are server-controlled allowlisted values
-        _unexpected = set(where_clauses) - _SQL_WHERE_FRAGMENTS
-        if _unexpected:
-            raise ValueError(f"SQL injection guard: unexpected WHERE fragment(s) {_unexpected}")
 
         where_sql = ""
         if where_clauses:
