@@ -433,3 +433,33 @@ def test_embedding_stringification():
         if row.get("embedding") is not None:
             row["embedding"] = str(row["embedding"])
     assert rows[0]["embedding"] == "[0.1, 0.2, 0.3]"
+
+
+# ---------------------------------------------------------------------------
+# SQL injection guard — allowlist constant
+# ---------------------------------------------------------------------------
+
+
+class TestThingsAllowlistGuard:
+    def test_updatable_columns_allowlist_is_defined(self):
+        from backend.agents import _THINGS_UPDATABLE_COLUMNS
+
+        # Must contain the known updatable columns
+        assert "title" in _THINGS_UPDATABLE_COLUMNS
+        assert "type_hint" in _THINGS_UPDATABLE_COLUMNS
+        assert "checkin_date" in _THINGS_UPDATABLE_COLUMNS
+        assert "importance" in _THINGS_UPDATABLE_COLUMNS
+        assert "active" in _THINGS_UPDATABLE_COLUMNS
+        assert "surface" in _THINGS_UPDATABLE_COLUMNS
+        assert "data" in _THINGS_UPDATABLE_COLUMNS
+        assert "open_questions" in _THINGS_UPDATABLE_COLUMNS
+        assert "updated_at" in _THINGS_UPDATABLE_COLUMNS
+        # Must NOT contain non-update columns
+        assert "id" not in _THINGS_UPDATABLE_COLUMNS
+        assert "created_at" not in _THINGS_UPDATABLE_COLUMNS
+        assert "user_id" not in _THINGS_UPDATABLE_COLUMNS
+
+    def test_allowlist_is_frozenset(self):
+        from backend.agents import _THINGS_UPDATABLE_COLUMNS
+
+        assert isinstance(_THINGS_UPDATABLE_COLUMNS, frozenset)

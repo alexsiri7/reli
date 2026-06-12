@@ -81,6 +81,12 @@ def _ollama_client() -> AsyncOpenAI:
 # the upstream API still returns them.
 _DEPRECATED_MODELS: frozenset[str] = frozenset({"google/gemini-3.1-flash-lite-preview"})
 
+# Columns that may appear in a dynamic UPDATE … SET clause for the things table.
+# Guard against accidental SQL injection if future code adds user-controlled keys.
+_THINGS_UPDATABLE_COLUMNS: frozenset[str] = frozenset(
+    {"title", "type_hint", "checkin_date", "importance", "active", "surface", "data", "open_questions", "updated_at"}
+)
+
 _DEFAULT_PRICING: dict[str, tuple[float, float]] = {
     "openai/gpt-4o-mini": (0.15, 0.60),
     "openai/gpt-4o": (2.50, 10.00),
@@ -503,6 +509,9 @@ def apply_storage_changes(
             continue
         fields["updated_at"] = now
 
+        _unexpected = set(fields) - _THINGS_UPDATABLE_COLUMNS
+        if _unexpected:
+            raise ValueError(f"SQL injection guard: unexpected column(s) {_unexpected}")
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [thing_id]
         conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
@@ -575,6 +584,9 @@ def apply_storage_changes(
         # Update the primary Thing
         if mf:
             mf["updated_at"] = now
+            _unexpected = set(mf) - _THINGS_UPDATABLE_COLUMNS
+            if _unexpected:
+                raise ValueError(f"SQL injection guard: unexpected column(s) {_unexpected}")
             set_clause = ", ".join(f"{k} = ?" for k in mf)
             values = list(mf.values()) + [keep_id]
             conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
