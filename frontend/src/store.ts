@@ -1194,10 +1194,11 @@ export const useStore = create<ReliState>((set, get) => ({
   deleteMessage: async (sessionId: string, messageId: number) => {
     try {
       const res = await apiFetch(`${BASE}/chat/history/${sessionId}/${messageId}`, { method: 'DELETE' })
-      if (!res.ok) return
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       set(state => ({ messages: state.messages.filter(m => m.id !== messageId) }))
-    } catch {
-      // ignore
+    } catch (e) {
+      // Destructive action: surface the error so the user knows the delete failed
+      set({ error: String(e) })
     }
   },
 

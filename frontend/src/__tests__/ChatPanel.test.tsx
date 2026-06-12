@@ -27,6 +27,7 @@ const mockStore = {
   hasMoreHistory: false,
   sendMessage: vi.fn(),
   fetchOlderMessages: vi.fn(),
+  deleteMessage: vi.fn(),
   sessionStats: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, api_calls: 0, cost_usd: 0, per_model: [] },
   registerChatInputFocus: vi.fn(),
   seedFromGoogle: vi.fn().mockResolvedValue({ count: 0 }),
@@ -339,6 +340,47 @@ describe('ChatPanel', () => {
     expect(screen.queryByText('SECRET BRIEFING SEED CONTENT')).not.toBeInTheDocument()
     expect(screen.getByText('visible user message')).toBeInTheDocument()
     expect(screen.getByText('visible assistant reply')).toBeInTheDocument()
+    mockStore.messages = []
+  })
+})
+
+describe('ChatPanel: delete message button', () => {
+  it('calls deleteMessage when delete button is clicked', () => {
+    mockStore.deleteMessage = vi.fn()
+    mockStore.sessionId = 'sess-del'
+    mockStore.messages = [
+      {
+        id: 99,
+        session_id: 'sess-del',
+        role: 'assistant',
+        content: 'deletable message',
+        applied_changes: null,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:00:00Z',
+      },
+    ]
+    render(<ChatPanel />)
+    const btn = screen.getByRole('button', { name: 'Delete message' })
+    fireEvent.click(btn)
+    expect(mockStore.deleteMessage).toHaveBeenCalledWith('sess-del', 99)
+    mockStore.messages = []
+    mockStore.sessionId = ''
+  })
+
+  it('does not render delete button when message has no id', () => {
+    mockStore.messages = [
+      {
+        id: undefined as unknown as number,
+        session_id: 'sess-1',
+        role: 'assistant',
+        content: 'no id message',
+        applied_changes: null,
+        questions_for_user: [],
+        timestamp: '2026-01-01T12:00:00Z',
+      },
+    ]
+    render(<ChatPanel />)
+    expect(screen.queryByRole('button', { name: 'Delete message' })).not.toBeInTheDocument()
     mockStore.messages = []
   })
 })

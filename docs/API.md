@@ -141,6 +141,7 @@ The primary interface to Reli's multi-agent pipeline.
 | GET | `/api/chat/sessions` | List chat sessions (most-recent first) |
 | GET | `/api/chat/history/{session_id}` | Get paginated chat history |
 | DELETE | `/api/chat/history/{session_id}` | Clear chat history for a session |
+| DELETE | `/api/chat/history/{session_id}/{message_id}` | Delete a single chat message |
 | POST | `/api/chat/migrate-session` | Move history to a new session ID |
 | POST | `/api/chat/append-message` | Manually append a message to history |
 | GET | `/api/chat/stats/today` | Today's usage stats (tokens, cost) |

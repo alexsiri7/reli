@@ -326,6 +326,42 @@ describe('store: continueInChat', () => {
   })
 })
 
+describe('store: deleteMessage', () => {
+  const mockMsg = {
+    id: 42,
+    session_id: 'sess-1',
+    role: 'assistant' as const,
+    content: 'to delete',
+    applied_changes: null,
+    questions_for_user: [],
+    timestamp: '2026-01-01T00:00:00Z',
+  }
+
+  it('removes the message from state on success', async () => {
+    useStore.setState({ messages: [mockMsg] })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
+    await useStore.getState().deleteMessage('sess-1', 42)
+    expect(useStore.getState().messages).toHaveLength(0)
+    expect(useStore.getState().error).toBeNull()
+  })
+
+  it('sets error and leaves messages unchanged when DELETE returns non-ok', async () => {
+    useStore.setState({ messages: [mockMsg] })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
+    await useStore.getState().deleteMessage('sess-1', 42)
+    expect(useStore.getState().messages).toHaveLength(1)
+    expect(useStore.getState().error).toMatch(/404/)
+  })
+
+  it('sets error and leaves messages unchanged on network failure', async () => {
+    useStore.setState({ messages: [mockMsg] })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    await useStore.getState().deleteMessage('sess-1', 42)
+    expect(useStore.getState().messages).toHaveLength(1)
+    expect(useStore.getState().error).toMatch(/Failed to fetch/)
+  })
+})
+
 describe('serialiseMorningBriefing', () => {
   it('includes date and summary', () => {
     const result = serialiseMorningBriefing({

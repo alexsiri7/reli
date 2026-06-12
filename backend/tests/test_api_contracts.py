@@ -260,6 +260,38 @@ class TestChatHistoryContract:
         resp = client.delete(f"/api/chat/history/other-session/{msg['id']}")
         assert resp.status_code == 404
 
+    def test_delete_single_message_forbidden_for_other_user(self, other_client, patched_db):
+        """DELETE returns 404 when the authenticated user does not own the message."""
+        # Insert a record owned by "user-a" directly to avoid sharing dependency_overrides
+        from datetime import datetime, timezone
+
+        import backend.db_engine as engine_module
+        from backend.db_models import ChatHistoryRecord
+        from sqlmodel import Session
+
+        now = datetime.now(timezone.utc)
+        with Session(engine_module.engine) as db_session:
+            record = ChatHistoryRecord(
+                session_id="ownership-sess",
+                role="user",
+                content="user A's message",
+                user_id="user-a",
+                applied_changes=None,
+            )
+            db_session.add(record)
+            db_session.commit()
+            db_session.refresh(record)
+            msg_id = record.id
+
+        # "other-user" tries to delete user-a's message — must get 404
+        resp = other_client.delete(f"/api/chat/history/ownership-sess/{msg_id}")
+        assert resp.status_code == 404
+
+        # Confirm message still exists in DB
+        with Session(engine_module.engine) as db_session:
+            still_there = db_session.get(ChatHistoryRecord, msg_id)
+            assert still_there is not None
+
 
 # ===========================================================================
 # Contract tests — Chat Pipeline endpoint

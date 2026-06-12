@@ -529,7 +529,7 @@ function MessageBubble({ msg, speakingId, speak }: { msg: ChatMessage; speakingI
           </div>
         )}
 
-        {/* Usage + speak row */}
+        {/* Usage, speak, and per-message actions row */}
         <div className={`flex items-center gap-2 mt-1 ${isUser ? 'justify-end' : 'justify-start'} group/actions`}>
           {!isUser && <UsagePill msg={msg} />}
           {!isUser && <SpeakButton msg={msg} speakingId={speakingId} speak={speak} />}
