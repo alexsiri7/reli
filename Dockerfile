@@ -18,12 +18,12 @@ RUN groupadd --gid 1000 reli && \
 COPY --from=ghcr.io/astral-sh/uv:0.11.13 /uv /usr/local/bin/uv
 
 # Install Python dependencies from lock file
-# psycopg2 (source) requires libpq-dev + gcc at build time; libpq5 at runtime
+# psycopg2 (source) requires libpq-dev gcc libc6-dev at build time; libpq5 at runtime
 COPY pyproject.toml uv.lock ./
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libpq-dev gcc && \
+    apt-get install -y --no-install-recommends libpq-dev gcc libc6-dev && \
     UV_SYSTEM_PYTHON=1 uv sync --frozen --no-dev && \
-    apt-get purge -y libpq-dev gcc && \
+    apt-get purge -y libpq-dev gcc libc6-dev && \
     apt-get install -y --no-install-recommends libpq5 gosu && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
