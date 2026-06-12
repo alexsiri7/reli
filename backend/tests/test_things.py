@@ -569,3 +569,64 @@ class TestSQLInjectionGuard:
                     },
                     conn=conn,
                 )
+
+
+# ---------------------------------------------------------------------------
+# SEC-12 SQL fragment guards — LIKE operators, table_alias, WHERE fragments
+# ---------------------------------------------------------------------------
+
+
+class TestSQLLikeOperatorsGuard:
+    def test_like_operators_is_frozenset(self):
+        from backend.db_engine import _SQL_LIKE_OPERATORS
+
+        assert isinstance(_SQL_LIKE_OPERATORS, frozenset)
+
+    def test_like_operators_contains_expected_values(self):
+        from backend.db_engine import _SQL_LIKE_OPERATORS
+
+        assert _SQL_LIKE_OPERATORS == {"LIKE", "ILIKE"}
+
+    def test_user_filter_text_rejects_unsafe_alias(self):
+        from backend.db_engine import user_filter_text
+
+        with pytest.raises(ValueError, match="SQL injection guard"):
+            user_filter_text("some-user", table_alias="t; DROP TABLE things--")
+
+    def test_user_filter_text_rejects_alias_with_dot(self):
+        from backend.db_engine import user_filter_text
+
+        with pytest.raises(ValueError, match="SQL injection guard"):
+            user_filter_text("some-user", table_alias="t.evil")
+
+    def test_user_filter_text_accepts_valid_alias_t(self):
+        from backend.db_engine import user_filter_text
+
+        frag, params = user_filter_text("some-user", table_alias="t")
+        assert "t.user_id" in frag
+        assert params["uf_uid"] == "some-user"
+
+    def test_user_filter_text_accepts_empty_alias(self):
+        from backend.db_engine import user_filter_text
+
+        frag, params = user_filter_text("some-user", table_alias="")
+        assert "user_id" in frag
+        assert "t." not in frag  # no prefix when empty
+
+    def test_user_filter_text_accepts_alphanumeric_alias(self):
+        from backend.db_engine import user_filter_text
+
+        frag, _ = user_filter_text("some-user", table_alias="things_123")
+        assert "things_123.user_id" in frag
+
+    def test_where_fragments_is_frozenset(self):
+        from backend.vector_store import _SQL_WHERE_FRAGMENTS
+
+        assert isinstance(_SQL_WHERE_FRAGMENTS, frozenset)
+
+    def test_where_fragments_contains_expected_values(self):
+        from backend.vector_store import _SQL_WHERE_FRAGMENTS
+
+        assert "t.active = true" in _SQL_WHERE_FRAGMENTS
+        assert "t.type_hint = :type_hint" in _SQL_WHERE_FRAGMENTS
+        assert "(t.user_id = :user_id OR t.user_id IS NULL)" in _SQL_WHERE_FRAGMENTS

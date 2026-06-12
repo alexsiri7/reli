@@ -15,7 +15,7 @@ import backend.db_engine as _engine_mod
 
 from ..auth import require_user
 from ..config import settings
-from ..db_engine import get_session, like_pattern, parse_dt, user_filter_clause, user_filter_text
+from ..db_engine import _SQL_LIKE_OPERATORS, get_session, like_pattern, parse_dt, user_filter_clause, user_filter_text
 from ..db_models import MergeHistoryRecord as MergeHistoryDBRecord
 from ..db_models import ThingRecord, ThingRelationshipRecord
 from ..models import (
@@ -203,9 +203,9 @@ def search_things(
     filters = uf_frag
     params: dict[str, Any] = {**uf_p, "pattern": pattern, "qlimit": limit}
     if active_only:
-        filters += " AND t.active = true"
+        filters += " AND t.active = true"  # SEC-12: server-controlled literal
     if type_hint:
-        filters += " AND t.type_hint = :type_hint"
+        filters += " AND t.type_hint = :type_hint"  # SEC-12: value is parameterized (:type_hint)
         params["type_hint"] = type_hint
 
     # Postgres (Supabase backend) needs ILIKE for case-insensitive matching;
@@ -215,6 +215,10 @@ def search_things(
     _like = "ILIKE" if _is_pg else "LIKE"
     _t_data = "t.data::text" if _is_pg else "CAST(t.data AS TEXT)"
     _m_data = "m.data::text" if _is_pg else "CAST(m.data AS TEXT)"
+
+    # SEC-12: guard SQL operator against non-allowlisted values
+    if _like not in _SQL_LIKE_OPERATORS:
+        raise ValueError(f"SQL injection guard: unexpected LIKE operator {_like!r}")
 
     with Session(_engine_mod.engine) as sess:
         # Phase 1: Direct matches on title, type_hint, and data

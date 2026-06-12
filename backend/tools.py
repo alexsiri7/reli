@@ -765,9 +765,9 @@ def search_things(
         filters = uf_frag
         params: dict[str, Any] = {**uf_params, "pattern": pattern, "lim": limit}
         if active_only:
-            filters += " AND t.active = true"
+            filters += " AND t.active = true"  # SEC-12: server-controlled literal
         if type_hint:
-            filters += " AND t.type_hint = :type_hint"
+            filters += " AND t.type_hint = :type_hint"  # SEC-12: value is parameterized (:type_hint)
             params["type_hint"] = type_hint
 
         # Phase 1: Direct matches on title, type_hint, and data

@@ -20,6 +20,15 @@ from .db_models import ThingEmbeddingRecord, ThingRecord
 
 logger = logging.getLogger(__name__)
 
+# SQL WHERE fragments that may appear in dynamic vector-search queries.
+# Guard against SQL injection if future code ever routes user input here.
+# SEC-12: any new clause must be added to this allowlist explicitly.
+_SQL_WHERE_FRAGMENTS: frozenset[str] = frozenset({
+    "t.active = true",
+    "t.type_hint = :type_hint",
+    "(t.user_id = :user_id OR t.user_id IS NULL)",
+})
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -310,6 +319,11 @@ def vector_search(
                 where_clauses.append("(t.user_id = :user_id OR t.user_id IS NULL)")
                 params["user_id"] = user_id
 
+            # SEC-12: assert all fragments are server-controlled allowlisted values
+            _unexpected = set(where_clauses) - _SQL_WHERE_FRAGMENTS
+            if _unexpected:
+                raise ValueError(f"SQL injection guard: unexpected WHERE fragment(s) {_unexpected}")
+
             where_sql = ""
             if where_clauses:
                 where_sql = "WHERE " + " AND ".join(where_clauses)
@@ -361,6 +375,11 @@ def vector_search_with_distances(
         if user_id:
             where_clauses.append("(t.user_id = :user_id OR t.user_id IS NULL)")
             params["user_id"] = user_id
+
+        # SEC-12: assert all fragments are server-controlled allowlisted values
+        _unexpected = set(where_clauses) - _SQL_WHERE_FRAGMENTS
+        if _unexpected:
+            raise ValueError(f"SQL injection guard: unexpected WHERE fragment(s) {_unexpected}")
 
         where_sql = ""
         if where_clauses:
