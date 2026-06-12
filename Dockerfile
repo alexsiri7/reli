@@ -18,8 +18,15 @@ RUN groupadd --gid 1000 reli && \
 COPY --from=ghcr.io/astral-sh/uv:0.11.13 /uv /usr/local/bin/uv
 
 # Install Python dependencies from lock file
+# psycopg2 (source) requires libpq-dev gcc libc6-dev at build time; libpq5 at runtime
 COPY pyproject.toml uv.lock ./
-RUN UV_SYSTEM_PYTHON=1 uv sync --frozen --no-dev
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libpq-dev gcc libc6-dev && \
+    UV_SYSTEM_PYTHON=1 uv sync --frozen --no-dev && \
+    apt-get purge -y libpq-dev gcc libc6-dev && \
+    apt-get install -y --no-install-recommends libpq5 gosu && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
 
 # Add the virtualenv created by uv sync to PATH so uvicorn and python
 # resolve to the venv's binaries rather than the (empty) system install.
@@ -52,8 +59,6 @@ chown -R reli:reli /app/data 2>/dev/null || true
 mkdir -p /app/backend/chroma_db && chown reli:reli /app/backend/chroma_db 2>/dev/null || true
 exec gosu reli "$@"
 ENTRY
-
-RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 8000
 
