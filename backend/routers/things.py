@@ -128,6 +128,8 @@ def get_user_thing(
     thing_id = thing.id
 
     # Fetch relationships with resolved titles using raw SQL for the complex JOIN
+    uf_frag_from, uf_p_from = user_filter_text(user_id, "t_from", param_name="uf_uid_from")
+    uf_frag_to, uf_p_to = user_filter_text(user_id, "t_to", param_name="uf_uid_to")
     rel_rows = session.execute(
         text(
             "SELECT r.id, r.relationship_type, r.from_thing_id, r.to_thing_id, "
@@ -137,9 +139,9 @@ def get_user_thing(
             " FROM thing_relationships r "
             " LEFT JOIN things t_from ON r.from_thing_id = t_from.id "
             " LEFT JOIN things t_to ON r.to_thing_id = t_to.id "
-            " WHERE r.from_thing_id = :tid OR r.to_thing_id = :tid"
+            f" WHERE (r.from_thing_id = :tid OR r.to_thing_id = :tid){uf_frag_from}{uf_frag_to}"
         ),
-        {"tid": thing_id},
+        {"tid": thing_id, **uf_p_from, **uf_p_to},
     ).fetchall()
 
     relationships = [
@@ -872,12 +874,17 @@ def list_relationships(
     if not thing:
         raise HTTPException(status_code=404, detail=f"Thing '{thing_id}' not found")
 
+    user_thing_ids = select(ThingRecord.id).where(
+        user_filter_clause(ThingRecord.user_id, user_id)
+    )
     records = session.exec(
         select(ThingRelationshipRecord).where(
             or_(
                 ThingRelationshipRecord.from_thing_id == thing_id,
                 ThingRelationshipRecord.to_thing_id == thing_id,
-            )
+            ),
+            ThingRelationshipRecord.from_thing_id.in_(user_thing_ids),
+            ThingRelationshipRecord.to_thing_id.in_(user_thing_ids),
         )
     ).all()
     return [_record_to_rel(r) for r in records]
