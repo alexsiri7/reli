@@ -23,11 +23,13 @@ logger = logging.getLogger(__name__)
 # SQL WHERE fragments that may appear in dynamic vector-search queries.
 # Guard against SQL injection if future code ever routes user input here.
 # SEC-12: any new clause must be added to this allowlist explicitly.
-_SQL_WHERE_FRAGMENTS: frozenset[str] = frozenset({
-    "t.active = true",
-    "t.type_hint = :type_hint",
-    "(t.user_id = :user_id OR t.user_id IS NULL)",
-})
+_SQL_WHERE_FRAGMENTS: frozenset[str] = frozenset(
+    {
+        "t.active = true",
+        "t.type_hint = :type_hint",
+        "(t.user_id = :user_id OR t.user_id IS NULL)",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Config
