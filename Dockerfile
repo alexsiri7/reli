@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Production image
-FROM python:3.12.8-slim
+FROM python:3.12-slim
 WORKDIR /app
 
 # Create non-root user
