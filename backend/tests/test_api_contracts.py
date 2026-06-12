@@ -244,6 +244,22 @@ class TestChatHistoryContract:
         assert isinstance(msg["timestamp"], str)
         assert ISO_DATE_RE.match(msg["timestamp"])
 
+    def test_delete_single_message_returns_204(self, client):
+        """DELETE /api/chat/history/{session_id}/{message_id} removes one message."""
+        msg = _create_chat_message(client, "del-single-sess", "user", "to delete")
+        msg_id = msg["id"]
+        resp = client.delete(f"/api/chat/history/del-single-sess/{msg_id}")
+        assert resp.status_code == 204
+        # Confirm it's gone
+        history = client.get("/api/chat/history/del-single-sess").json()
+        assert all(m["id"] != msg_id for m in history)
+
+    def test_delete_single_message_404_for_wrong_session(self, client):
+        """DELETE returns 404 when session_id does not match the message."""
+        msg = _create_chat_message(client, "del-wrong-sess", "user", "belongs here")
+        resp = client.delete(f"/api/chat/history/other-session/{msg['id']}")
+        assert resp.status_code == 404
+
 
 # ===========================================================================
 # Contract tests — Chat Pipeline endpoint
