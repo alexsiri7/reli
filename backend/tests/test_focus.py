@@ -55,8 +55,7 @@ class TestFocusEndpoint:
     def test_focus_overdue_checkin_boosts_score(self, client):
         past = (date.today() - timedelta(days=3)).isoformat()
         overdue = _create_thing(
-            client, "Overdue check-in task", type_hint="task", importance=2,
-            checkin_date=f"{past}T09:00:00"
+            client, "Overdue check-in task", type_hint="task", importance=2, checkin_date=f"{past}T09:00:00"
         )
         normal = _create_thing(client, "Normal task", type_hint="task", importance=2)
         resp = client.get("/api/focus?limit=10")

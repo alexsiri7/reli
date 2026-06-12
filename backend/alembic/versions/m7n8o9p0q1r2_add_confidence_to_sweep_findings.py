@@ -4,6 +4,7 @@ Revision ID: m7n8o9p0q1r2
 Revises: l6m7n8o9p0q1
 Create Date: 2026-06-03 00:00:00.000000
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -22,9 +23,7 @@ def upgrade() -> None:
     if "confidence" in columns:
         return  # idempotency guard
     with op.batch_alter_table("sweep_findings") as batch_op:
-        batch_op.add_column(
-            sa.Column("confidence", sa.Float(), nullable=True, server_default="0.5")
-        )
+        batch_op.add_column(sa.Column("confidence", sa.Float(), nullable=True, server_default="0.5"))
 
 
 def downgrade() -> None:

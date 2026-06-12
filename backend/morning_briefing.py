@@ -103,7 +103,9 @@ def record_sweep_action(
     except Exception:
         logger.warning(
             "record_sweep_action: failed to persist %s action %s",
-            action_type, action_id, exc_info=True,
+            action_type,
+            action_id,
+            exc_info=True,
         )
         return
     logger.info("Sweep action recorded: %s %s", action_type, action_id)
@@ -230,8 +232,7 @@ def generate_morning_briefing(
         if min_conf > 0.0:
             logger.debug("morning_briefing: applying confidence gate min_confidence=%.2f", min_conf)
             finding_stmt = finding_stmt.where(
-                (SweepFindingRecord.confidence >= min_conf)
-                | SweepFindingRecord.confidence.is_(None)  # type: ignore[union-attr]
+                (SweepFindingRecord.confidence >= min_conf) | SweepFindingRecord.confidence.is_(None)  # type: ignore[union-attr]
             )
         finding_rows = session.execute(finding_stmt).fetchall()
 

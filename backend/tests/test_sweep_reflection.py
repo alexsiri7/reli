@@ -296,16 +296,18 @@ class TestReflectOnCandidates:
     async def test_suppressed_finding_type_not_written_to_db(self, patched_db, db):
         """LLM emitting a suppressed finding_type must not write it to the DB."""
         candidates = [_make_candidate()]
-        llm_response = json.dumps({
-            "findings": [
-                {
-                    "thing_id": None,
-                    "finding_type": "lifestyle_wellness",
-                    "message": "drink more water",
-                    "priority": 2,
-                }
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "findings": [
+                    {
+                        "thing_id": None,
+                        "finding_type": "lifestyle_wellness",
+                        "message": "drink more water",
+                        "priority": 2,
+                    }
+                ]
+            }
+        )
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await reflect_on_candidates(candidates)
 
@@ -319,16 +321,18 @@ class TestReflectOnCandidates:
     async def test_unknown_finding_type_coerced_to_llm_insight(self, patched_db, db):
         """Unknown finding_type from LLM is coerced to 'llm_insight' and persisted."""
         candidates = [_make_candidate()]
-        llm_response = json.dumps({
-            "findings": [
-                {
-                    "thing_id": None,
-                    "finding_type": "totally_made_up_type",
-                    "message": "some finding",
-                    "priority": 2,
-                }
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "findings": [
+                    {
+                        "thing_id": None,
+                        "finding_type": "totally_made_up_type",
+                        "message": "some finding",
+                        "priority": 2,
+                    }
+                ]
+            }
+        )
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await reflect_on_candidates(candidates)
 
@@ -342,13 +346,15 @@ class TestReflectOnCandidates:
     async def test_mixed_batch_only_unsuppressed_persisted(self, patched_db, db):
         """Mixed batch: suppressed types skipped, llm_insight type persisted."""
         candidates = [_make_candidate()]
-        llm_response = json.dumps({
-            "findings": [
-                {"thing_id": None, "finding_type": "lifestyle_wellness", "message": "skipped 1", "priority": 2},
-                {"thing_id": None, "finding_type": "location_suggestion", "message": "skipped 2", "priority": 2},
-                {"thing_id": None, "finding_type": "llm_insight", "message": "kept insight", "priority": 1},
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "findings": [
+                    {"thing_id": None, "finding_type": "lifestyle_wellness", "message": "skipped 1", "priority": 2},
+                    {"thing_id": None, "finding_type": "location_suggestion", "message": "skipped 2", "priority": 2},
+                    {"thing_id": None, "finding_type": "llm_insight", "message": "kept insight", "priority": 1},
+                ]
+            }
+        )
         with patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response):
             result = await reflect_on_candidates(candidates)
 
@@ -364,16 +370,20 @@ class TestReflectOnCandidates:
         from backend import config as cfg_module
 
         candidates = [_make_candidate()]
-        llm_response = json.dumps({
-            "findings": [
-                {"thing_id": None, "finding_type": "lifestyle_wellness", "message": "wellness note", "priority": 2},
-            ]
-        })
+        llm_response = json.dumps(
+            {
+                "findings": [
+                    {"thing_id": None, "finding_type": "lifestyle_wellness", "message": "wellness note", "priority": 2},
+                ]
+            }
+        )
         with (
             patch("backend.agents._chat", new_callable=AsyncMock, return_value=llm_response),
             patch.object(
-                type(cfg_module.settings), "suppressed_finding_types_set",
-                new_callable=PropertyMock, return_value=frozenset()
+                type(cfg_module.settings),
+                "suppressed_finding_types_set",
+                new_callable=PropertyMock,
+                return_value=frozenset(),
             ),
         ):
             result = await reflect_on_candidates(candidates)
@@ -389,12 +399,15 @@ class TestReflectOnCandidates:
 
 class TestConfidenceClamping:
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("bad_conf,expected", [
-        ("high", 0.5),   # non-numeric string → default
-        (None, 0.5),     # explicit null → default
-        (1.5, 1.0),      # over max → clamped to 1.0
-        (-0.2, 0.0),     # below min → clamped to 0.0
-    ])
+    @pytest.mark.parametrize(
+        "bad_conf,expected",
+        [
+            ("high", 0.5),  # non-numeric string → default
+            (None, 0.5),  # explicit null → default
+            (1.5, 1.0),  # over max → clamped to 1.0
+            (-0.2, 0.0),  # below min → clamped to 0.0
+        ],
+    )
     async def test_confidence_clamped_or_defaulted(self, patched_db, bad_conf, expected):
         """Non-numeric or out-of-range confidence values are sanitised before persistence."""
         candidates = [_make_candidate()]

@@ -47,12 +47,8 @@ def upgrade() -> None:
         "as 'uq_thing_types_name' before dropping it."
     )
 
-    with op.batch_alter_table(
-        "thing_types", recreate="always", naming_convention=naming_convention
-    ) as batch_op:
-        batch_op.add_column(
-            sa.Column("user_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True)
-        )
+    with op.batch_alter_table("thing_types", recreate="always", naming_convention=naming_convention) as batch_op:
+        batch_op.add_column(sa.Column("user_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True))
         batch_op.drop_constraint("uq_thing_types_name", type_="unique")
         batch_op.create_unique_constraint("uq_thing_types_user_id_name", ["user_id", "name"])
 

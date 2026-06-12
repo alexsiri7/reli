@@ -83,9 +83,7 @@ class TestContextChangeDismissal:
         count = dismiss_stale_findings()
 
         with db() as conn:
-            row = conn.execute(
-                "SELECT dismissed, dismissed_reason FROM sweep_findings WHERE id = 'sf-ctx1'"
-            ).fetchone()
+            row = conn.execute("SELECT dismissed, dismissed_reason FROM sweep_findings WHERE id = 'sf-ctx1'").fetchone()
         assert count == 1
         assert row["dismissed"] == 1
         assert row["dismissed_reason"] == "context_changed"
@@ -114,9 +112,7 @@ class TestContextChangeDismissal:
         assert count == 0
 
         with db() as conn:
-            row = conn.execute(
-                "SELECT dismissed FROM sweep_findings WHERE id = 'sf-ctx2'"
-            ).fetchone()
+            row = conn.execute("SELECT dismissed FROM sweep_findings WHERE id = 'sf-ctx2'").fetchone()
         assert row["dismissed"] == 0
 
     def test_no_snapshot_not_dismissed_by_context_check(self, patched_db, db):
@@ -138,9 +134,7 @@ class TestContextChangeDismissal:
         assert count == 0
 
         with db() as conn:
-            row = conn.execute(
-                "SELECT dismissed FROM sweep_findings WHERE id = 'sf-no-snap'"
-            ).fetchone()
+            row = conn.execute("SELECT dismissed FROM sweep_findings WHERE id = 'sf-no-snap'").fetchone()
         assert row["dismissed"] == 0
 
     def test_expired_finding_dismissed_with_reason(self, patched_db, db):
@@ -153,9 +147,7 @@ class TestContextChangeDismissal:
         count = dismiss_stale_findings()
 
         with db() as conn:
-            row = conn.execute(
-                "SELECT dismissed, dismissed_reason FROM sweep_findings WHERE id = 'sf-exp'"
-            ).fetchone()
+            row = conn.execute("SELECT dismissed, dismissed_reason FROM sweep_findings WHERE id = 'sf-exp'").fetchone()
         assert count == 1
         assert row["dismissed"] == 1
         assert row["dismissed_reason"] == "expired"
@@ -169,9 +161,7 @@ class TestContextChangeDismissal:
         count = dismiss_stale_findings()
 
         with db() as conn:
-            row = conn.execute(
-                "SELECT dismissed, dismissed_reason FROM sweep_findings WHERE id = 'sf-dead'"
-            ).fetchone()
+            row = conn.execute("SELECT dismissed, dismissed_reason FROM sweep_findings WHERE id = 'sf-dead'").fetchone()
         assert count == 1
         assert row["dismissed"] == 1
         assert row["dismissed_reason"] == "linked_thing_inactive"
@@ -208,7 +198,5 @@ class TestContextChangeDismissal:
         assert count == 0  # thing updated at T-3, finding created at T-1 — no dismissal
 
         with db() as conn:
-            row = conn.execute(
-                "SELECT dismissed FROM sweep_findings WHERE id = 'sf-order'"
-            ).fetchone()
+            row = conn.execute("SELECT dismissed FROM sweep_findings WHERE id = 'sf-order'").fetchone()
         assert row["dismissed"] == 0

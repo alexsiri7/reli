@@ -577,6 +577,7 @@ def merge_things(
         # future calibration.
         try:
             from .morning_briefing import record_sweep_action as _record_action
+
             _record_action(
                 user_id=user_id,
                 action_type="merge",
@@ -588,7 +589,9 @@ def merge_things(
         except Exception:
             logger.warning(
                 "merge_things: failed to record sweep action for merge %s→%s",
-                remove_id, keep_id, exc_info=True,
+                remove_id,
+                keep_id,
+                exc_info=True,
             )
 
         # 6. Re-embed

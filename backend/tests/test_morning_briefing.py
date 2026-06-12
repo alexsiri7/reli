@@ -304,14 +304,16 @@ class TestMorningBriefingActionsTaken:
 
         old_time = datetime.now(timezone.utc) - timedelta(hours=25)
         with Session(engine_mod.engine) as session:
-            session.add(SweepActionRecord(
-                id="sa-old",
-                user_id=None,
-                action_type="merge",
-                description="Old action",
-                confidence=0.5,
-                created_at=old_time,
-            ))
+            session.add(
+                SweepActionRecord(
+                    id="sa-old",
+                    user_id=None,
+                    action_type="merge",
+                    description="Old action",
+                    confidence=0.5,
+                    created_at=old_time,
+                )
+            )
             session.commit()
 
         resp = client.get("/api/briefing/morning")
