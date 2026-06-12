@@ -1622,10 +1622,11 @@ def dismiss_stale_findings(user_id: str = "") -> int:
         findings_with_snapshot = session.exec(stmt_with_snapshot).all()
         if findings_with_snapshot:
             snapshot_thing_ids = {f.thing_id for f in findings_with_snapshot}
-            current_things = session.exec(
-                select(ThingRecord).where(ThingRecord.id.in_(snapshot_thing_ids))
-            ).all()
-            thing_by_id = {t.id: t for t in current_things}
+            thing_by_id = {
+                t.id: t for t in session.exec(
+                    select(ThingRecord).where(ThingRecord.id.in_(snapshot_thing_ids))
+                ).all()
+            }
             for finding in findings_with_snapshot:
                 thing = thing_by_id.get(finding.thing_id)
                 if not thing:
@@ -1872,10 +1873,11 @@ async def reflect_on_candidates(
         }
         thing_map: dict[str, ThingRecord] = {}
         if thing_ids_in_findings:
-            things_in_map = session.exec(
-                select(ThingRecord).where(ThingRecord.id.in_(thing_ids_in_findings))
-            ).all()
-            thing_map = {t.id: t for t in things_in_map}
+            thing_map = {
+                t.id: t for t in session.exec(
+                    select(ThingRecord).where(ThingRecord.id.in_(thing_ids_in_findings))
+                ).all()
+            }
 
         for f in raw_findings:
             if not isinstance(f, dict):

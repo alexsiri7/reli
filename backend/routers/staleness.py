@@ -1,5 +1,6 @@
 """Staleness & neglect detection endpoint -- batch summary for notifications."""
 
+import logging
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
@@ -21,6 +22,8 @@ from ..models import (
 from ..sweep import _parse_date_value
 from .settings import get_user_stale_threshold
 from .things import _record_to_thing
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/staleness", tags=["staleness"])
 
@@ -68,8 +71,11 @@ def get_staleness_report(
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             .order_by(ThingRecord.updated_at.asc())  # type: ignore[union-attr]
+            .limit(5_000)
         )
         stale_results = session.exec(stale_stmt).all()
+        if len(stale_results) == 5_000:
+            logger.warning("staleness: stale-things query hit safety cap (5,000 rows) for user=%s", user_id)
 
         # Overdue checkins
         overdue_stmt = (
@@ -81,8 +87,11 @@ def get_staleness_report(
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             .order_by(ThingRecord.checkin_date.asc())  # type: ignore[union-attr]
+            .limit(5_000)
         )
         overdue_records = session.exec(overdue_stmt).all()
+        if len(overdue_records) == 5_000:
+            logger.warning("staleness: overdue-checkins query hit safety cap (5,000 rows) for user=%s", user_id)
 
     stale_items: list[StaleItem] = []
     neglected_count = 0

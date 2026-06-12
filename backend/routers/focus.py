@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date, datetime
 from typing import Any
@@ -18,6 +19,8 @@ from ..google_calendar import fetch_upcoming_events
 from ..google_calendar import is_connected as calendar_connected
 from ..models import FocusRecommendation, FocusResponse, Thing
 from .things import _record_to_thing
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/focus", tags=["focus"])
 
@@ -88,22 +91,29 @@ def _compute_recommendations(
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
+            .limit(5_000)
         )  # type: ignore[union-attr, attr-defined]
         thing_records = session.exec(thing_stmt).all()
+        if len(thing_records) == 5_000:
+            logger.warning("focus: things query hit safety cap (5,000 rows) for user=%s", user_id)
         thing_ids = [r.id for r in thing_records]
 
         rel_records = (
             session.exec(
-                select(ThingRelationshipRecord).where(
+                select(ThingRelationshipRecord)
+                .where(
                     or_(
                         ThingRelationshipRecord.from_thing_id.in_(thing_ids),
                         ThingRelationshipRecord.to_thing_id.in_(thing_ids),
                     )
                 )
+                .limit(10_000)
             ).all()
             if thing_ids
             else []
         )
+        if len(rel_records) == 10_000:
+            logger.warning("focus: relationships query hit safety cap (10,000 rows) for user=%s", user_id)
 
     things = [_record_to_thing(r) for r in thing_records]
     thing_map: dict[str, Thing] = {t.id: t for t in things}

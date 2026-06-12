@@ -103,28 +103,37 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
     with Session(_engine_mod.engine) as session:
         # All active things (for blocker graph + checkin-due filtering)
         all_active = session.exec(
-            select(ThingRecord).where(
+            select(ThingRecord)
+            .where(
                 ThingRecord.active,
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
+            .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
+            .limit(10_000)
         ).all()
+        if len(all_active) == 10_000:
+            logger.warning("briefing: active-things query hit safety cap (10,000 rows) for user=%s", user_id)
 
         active_ids = [t.id for t in all_active]
 
         # Relationships for blocker graph
         rel_rows = (
             session.exec(
-                select(ThingRelationshipRecord).where(
+                select(ThingRelationshipRecord)
+                .where(
                     ThingRelationshipRecord.relationship_type.in_(["blocks", "depends-on"]),  # type: ignore[union-attr]
                     or_(
                         ThingRelationshipRecord.from_thing_id.in_(active_ids),
                         ThingRelationshipRecord.to_thing_id.in_(active_ids),
                     ),
                 )
+                .limit(20_000)
             ).all()
             if active_ids
             else []
         )
+        if len(rel_rows) == 20_000:
+            logger.warning("briefing: relationships query hit safety cap (20,000 rows) for user=%s", user_id)
 
         # Active (not dismissed, not expired, not snoozed) sweep findings with linked Things
         finding_stmt = (
@@ -156,7 +165,9 @@ def get_briefing(as_of: date | None = None, user_id: str = Depends(require_user)
                 (SweepFindingRecord.confidence >= min_conf)
                 | SweepFindingRecord.confidence.is_(None)  # type: ignore[union-attr]
             )
-        finding_results = session.exec(finding_stmt).all()
+        finding_results = session.exec(finding_stmt.limit(1_000)).all()
+        if len(finding_results) == 1_000:
+            logger.warning("briefing: findings query hit safety cap (1,000 rows) for user=%s", user_id)
 
     # Learned preference Things for "I Noticed" section
     pref_records = sorted(
