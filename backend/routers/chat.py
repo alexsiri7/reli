@@ -137,7 +137,7 @@ def append_message(body: ChatMessageCreate, user_id: str = Depends(require_user)
             select(ChatSessionRecord).where(ChatSessionRecord.id == body.session_id)
         ).first()
         if existing_session:
-            if existing_session.user_id != user_id:
+            if existing_session.user_id and existing_session.user_id != user_id:
                 raise HTTPException(status_code=403, detail="Forbidden")
             existing_session.last_active_at = now
             session.add(existing_session)
@@ -299,7 +299,7 @@ def migrate_session(body: MigrateSessionRequest, user_id: str = Depends(require_
         # Verify both sessions belong to the current user
         for sid in (body.old_session_id, body.new_session_id):
             sess_rec = session.get(ChatSessionRecord, sid)
-            if sess_rec and sess_rec.user_id != user_id:
+            if sess_rec and sess_rec.user_id and sess_rec.user_id != user_id:
                 raise HTTPException(status_code=403, detail="Forbidden")
 
         # Migrate chat history
@@ -577,7 +577,7 @@ def _persist_exchange(
     with Session(_engine_mod.engine) as session:
         existing_session = session.exec(select(ChatSessionRecord).where(ChatSessionRecord.id == session_id)).first()
         if existing_session:
-            if existing_session.user_id != user_id:
+            if existing_session.user_id and existing_session.user_id != user_id:
                 # Session belongs to another user — do not update it, create a new one instead
                 existing_session = None
             else:

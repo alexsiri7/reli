@@ -248,7 +248,7 @@ class TestCreateThingTool:
         from backend.tools import create_thing as raw_create
 
         # Create the first thing
-        raw_create(title="Test Thing", data_json='{"notes": "old"}', user_id="test-user")
+        raw_create(title="Test Thing", data_json='{"notes": "old"}')
 
         from backend.reasoning_agent import _make_reasoning_tools
 
