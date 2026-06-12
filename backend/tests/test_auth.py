@@ -391,3 +391,49 @@ class TestOAuthCallbackDoesNotLogCode:
         assert fake_code[:20] not in caplog.text, (
             f"Authorization code prefix appeared in logs — CWE-532 regression: {caplog.text!r}"
         )
+
+
+class TestGoogleLoginGenericError:
+    """google_login() must return generic 501 text — no env var names in response (CWE-209)."""
+
+    @pytest.mark.parametrize(
+        "client_id,client_secret,secret_key,expected_log_key",
+        [
+            ("", "secret", "key", "GOOGLE_CLIENT_ID"),
+            ("client-id", "", "key", "GOOGLE_CLIENT_SECRET"),
+            ("client-id", "secret", "", "SECRET_KEY"),
+        ],
+    )
+    def test_returns_generic_error(self, patched_db, client_id, client_secret, secret_key, expected_log_key):
+        with (
+            patch("backend.routers.auth.GOOGLE_CLIENT_ID", client_id),
+            patch("backend.routers.auth.GOOGLE_CLIENT_SECRET", client_secret),
+            patch("backend.routers.auth.SECRET_KEY", secret_key),
+            patch("backend.routers.auth.logger") as mock_logger,
+        ):
+            from backend.main import app
+
+            with TestClient(app) as client:
+                resp = client.get("/api/auth/google")
+        assert resp.status_code == 501
+        assert resp.json()["detail"] == "Authentication service unavailable"
+        mock_logger.error.assert_called_once()
+        assert expected_log_key in mock_logger.error.call_args[0][0]
+
+
+class TestGoogleCallbackGenericError:
+    """google_callback() must return generic 501 text when SECRET_KEY is missing (CWE-209)."""
+
+    def test_missing_secret_key_returns_generic_error(self, patched_db):
+        with (
+            patch("backend.routers.auth.SECRET_KEY", ""),
+            patch("backend.routers.auth.logger") as mock_logger,
+        ):
+            from backend.main import app
+
+            with TestClient(app) as client:
+                resp = client.get("/api/auth/google/callback?code=x&state=y")
+        assert resp.status_code == 501
+        assert resp.json()["detail"] == "Authentication service unavailable"
+        mock_logger.error.assert_called_once()
+        assert "SECRET_KEY" in mock_logger.error.call_args[0][0]

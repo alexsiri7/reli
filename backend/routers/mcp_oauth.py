@@ -184,9 +184,11 @@ def oauth_authorize(
 ) -> RedirectResponse:
     """Receive MCP client OAuth params, start Google login, redirect back with auth code."""
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
-        raise HTTPException(status_code=501, detail="Google OAuth not configured")
+        logger.error("MCP OAuth not configured: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET missing")
+        raise HTTPException(status_code=501, detail="Authentication service unavailable")
     if not settings.SECRET_KEY:
-        raise HTTPException(status_code=501, detail="SECRET_KEY not configured")
+        logger.error("MCP OAuth not configured: SECRET_KEY missing")
+        raise HTTPException(status_code=501, detail="Authentication service unavailable")
     if response_type != "code":
         raise HTTPException(status_code=400, detail="Only response_type=code is supported")
     if code_challenge_method != "S256":

@@ -426,3 +426,29 @@ class TestValidateClientSecret:
         self._register_client("conf-client3", "correct-secret", "client_secret_post")
         # Should not raise
         _validate_client_secret("conf-client3", "correct-secret")
+
+
+class TestOAuthAuthorizeGenericError:
+    """oauth_authorize() must return generic 501 text — no env var names in response (CWE-209)."""
+
+    @pytest.mark.parametrize(
+        "client_id,client_secret,secret_key,expected_log_key",
+        [
+            ("", "secret", "key", "GOOGLE_CLIENT_ID"),
+            ("client-id", "", "key", "GOOGLE_CLIENT_SECRET"),
+            ("client-id", "secret", "", "SECRET_KEY"),
+        ],
+    )
+    def test_returns_generic_error(self, mcp_client, client_id, client_secret, secret_key, expected_log_key):
+        with (
+            patch("backend.routers.mcp_oauth.settings") as mock_settings,
+            patch("backend.routers.mcp_oauth.logger") as mock_logger,
+        ):
+            mock_settings.GOOGLE_CLIENT_ID = client_id
+            mock_settings.GOOGLE_CLIENT_SECRET = client_secret
+            mock_settings.SECRET_KEY = secret_key
+            resp = mcp_client.get("/oauth/authorize?client_id=x&redirect_uri=http://localhost")
+        assert resp.status_code == 501
+        assert resp.json()["detail"] == "Authentication service unavailable"
+        mock_logger.error.assert_called_once()
+        assert expected_log_key in mock_logger.error.call_args[0][0]
