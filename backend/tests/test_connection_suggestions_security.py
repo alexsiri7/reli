@@ -53,7 +53,7 @@ def _create_suggestion(
 class TestAcceptSuggestionOwnership:
     """Verify that accept_suggestion enforces Thing ownership."""
 
-    def test_accept_suggestion_cross_user_thing_rejected(self, user_a_client, patched_db):
+    def test_accept_suggestion_cross_user_thing_rejected(self, user_a_client):
         """Accepting a suggestion whose Things belong to another user must return 404."""
         with Session(_engine_mod.engine) as session:
             thing_a = _create_thing(session, user_id="other-user", title="Other's Thing A")
@@ -99,6 +99,7 @@ class TestAcceptSuggestionOwnership:
             thing_a_id = thing_a.id
             thing_b_id = thing_b.id
 
+        # TODO: simplify once DetachedInstanceError at connections.py:145 is fixed
         saved = app.dependency_overrides.get(require_user)
         app.dependency_overrides[require_user] = lambda: "user-a"
         try:
@@ -119,3 +120,45 @@ class TestAcceptSuggestionOwnership:
 
             rec = session.get(ConnectionSuggestionRecord, sug_id)
             assert rec.status == "accepted"
+
+    def test_accept_suggestion_only_from_thing_cross_user_rejected(self, user_a_client):
+        """Accepting a suggestion where only from_thing belongs to another user must return 404."""
+        with Session(_engine_mod.engine) as session:
+            from_thing = _create_thing(session, user_id="other-user", title="Other's Thing")
+            to_thing = _create_thing(session, user_id="user-a", title="My Thing")
+            suggestion = _create_suggestion(
+                session,
+                from_thing_id=from_thing.id,
+                to_thing_id=to_thing.id,
+                user_id="user-a",
+            )
+            sug_id = suggestion.id
+
+        resp = user_a_client.post(f"/api/connections/suggestions/{sug_id}/accept")
+        assert resp.status_code == 404
+        assert "no longer exists" in resp.json()["detail"]
+
+        with Session(_engine_mod.engine) as session:
+            rels = session.exec(select(ThingRelationshipRecord)).all()
+            assert len(rels) == 0
+
+    def test_accept_suggestion_only_to_thing_cross_user_rejected(self, user_a_client):
+        """Accepting a suggestion where only to_thing belongs to another user must return 404."""
+        with Session(_engine_mod.engine) as session:
+            from_thing = _create_thing(session, user_id="user-a", title="My Thing")
+            to_thing = _create_thing(session, user_id="other-user", title="Other's Thing")
+            suggestion = _create_suggestion(
+                session,
+                from_thing_id=from_thing.id,
+                to_thing_id=to_thing.id,
+                user_id="user-a",
+            )
+            sug_id = suggestion.id
+
+        resp = user_a_client.post(f"/api/connections/suggestions/{sug_id}/accept")
+        assert resp.status_code == 404
+        assert "no longer exists" in resp.json()["detail"]
+
+        with Session(_engine_mod.engine) as session:
+            rels = session.exec(select(ThingRelationshipRecord)).all()
+            assert len(rels) == 0

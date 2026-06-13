@@ -105,6 +105,7 @@ def accept_suggestion(
         if rec.status != "pending" and rec.status != "deferred":
             raise HTTPException(status_code=400, detail=f"Suggestion is already {rec.status}")
 
+        # Ownership check: only resolve Things belonging to the current user (SEC-08)
         from_thing = session.exec(
             select(ThingRecord).where(
                 ThingRecord.id == rec.from_thing_id,
