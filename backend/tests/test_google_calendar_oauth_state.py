@@ -7,8 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.oauth_state import MAX_ENTRIES_PER_DICT, StoreFullError, cleanup_and_store
-
 
 def _make_flow(state: str = "test-state", code_verifier: str = "verifier"):
     flow = MagicMock()
