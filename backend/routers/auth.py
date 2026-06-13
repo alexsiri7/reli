@@ -322,7 +322,7 @@ def logout(request: Request, response: Response) -> dict:
     token = request.cookies.get(COOKIE_NAME)
     if token and SECRET_KEY:
         try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM], audience="web")
+            payload = _decode_jwt(token)
             jti = payload.get("jti")
             if jti:
                 exp_ts = payload.get("exp")

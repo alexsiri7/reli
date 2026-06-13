@@ -285,14 +285,10 @@ def delete_all_user_data(
     _delete_where(session, ThingTypeRecord, user_filter_clause(ThingTypeRecord.user_id, user_id))
 
     # 14. GmailOAuthStateRecord (PK is user_id)
-    gmail_state = session.exec(select(GmailOAuthStateRecord).where(GmailOAuthStateRecord.user_id == user_id)).first()
-    if gmail_state:
-        session.delete(gmail_state)
+    _delete_where(session, GmailOAuthStateRecord, GmailOAuthStateRecord.user_id == user_id)
 
     # 15. UserRecord (last — everything else FK'd to it)
-    user_record = session.exec(select(UserRecord).where(UserRecord.id == user_id)).first()
-    if user_record:
-        session.delete(user_record)
+    _delete_where(session, UserRecord, UserRecord.id == user_id)
 
     session.commit()
 
