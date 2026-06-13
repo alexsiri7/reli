@@ -89,6 +89,8 @@ def like_pattern(value: str) -> str:
 # Guard against SQL injection if future code ever routes user input here.
 _SQL_LIKE_OPERATORS: frozenset[str] = frozenset({"LIKE", "ILIKE"})
 
+_TABLE_ALIAS_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
 
 def user_filter_text(user_id: str, table_alias: str = "", param_name: str = "uf_uid") -> tuple[str, dict]:
     """Return a text()-compatible SQL WHERE fragment and params dict for user filtering.
@@ -97,7 +99,7 @@ def user_filter_text(user_id: str, table_alias: str = "", param_name: str = "uf_
     """
     if not user_id:
         return "", {}
-    if table_alias and not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', table_alias):
+    if table_alias and not _TABLE_ALIAS_RE.match(table_alias):
         raise ValueError(f"SQL injection guard: unsafe table_alias {table_alias!r}")
     prefix = f"{table_alias}." if table_alias else ""
     return f" AND ({prefix}user_id = :{param_name} OR {prefix}user_id IS NULL)", {param_name: user_id}

@@ -105,8 +105,19 @@ def accept_suggestion(
         if rec.status != "pending" and rec.status != "deferred":
             raise HTTPException(status_code=400, detail=f"Suggestion is already {rec.status}")
 
-        from_thing = session.get(ThingRecord, rec.from_thing_id)
-        to_thing = session.get(ThingRecord, rec.to_thing_id)
+        # Ownership check: only resolve Things belonging to the current user (SEC-08)
+        from_thing = session.exec(
+            select(ThingRecord).where(
+                ThingRecord.id == rec.from_thing_id,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+        ).first()
+        to_thing = session.exec(
+            select(ThingRecord).where(
+                ThingRecord.id == rec.to_thing_id,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+        ).first()
         if not from_thing or not to_thing:
             raise HTTPException(status_code=404, detail="One of the Things no longer exists")
 
