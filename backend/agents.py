@@ -87,6 +87,15 @@ _THINGS_UPDATABLE_COLUMNS: frozenset[str] = frozenset(
     {"title", "type_hint", "checkin_date", "importance", "active", "surface", "data", "open_questions", "updated_at"}
 )
 
+def _assert_safe_columns(fields: dict, context: str = "") -> None:
+    """Raise ValueError if *fields* contains any key not in _THINGS_UPDATABLE_COLUMNS."""
+    unexpected = set(fields) - _THINGS_UPDATABLE_COLUMNS
+    if unexpected:
+        ctx = f" {context}" if context else ""
+        logger.warning("SQL injection guard: unexpected column(s) %s rejected%s", unexpected, ctx)
+        raise ValueError(f"SQL injection guard: unexpected column(s) {unexpected}")
+
+
 _DEFAULT_PRICING: dict[str, tuple[float, float]] = {
     "openai/gpt-4o-mini": (0.15, 0.60),
     "openai/gpt-4o": (2.50, 10.00),
@@ -432,14 +441,7 @@ def apply_storage_changes(
                 merge_fields["checkin_date"] = item["checkin_date"]
             if merge_fields:
                 merge_fields["updated_at"] = now
-                _unexpected = set(merge_fields) - _THINGS_UPDATABLE_COLUMNS
-                if _unexpected:
-                    logger.warning(
-                        "SQL injection guard: unexpected column(s) %s rejected for thing_id=%s",
-                        _unexpected,
-                        existing["id"],
-                    )
-                    raise ValueError(f"SQL injection guard: unexpected column(s) {_unexpected}")
+                _assert_safe_columns(merge_fields, f"for thing_id={existing['id']}")
                 set_clause = ", ".join(f"{k} = ?" for k in merge_fields)
                 values = list(merge_fields.values()) + [existing["id"]]
                 conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
@@ -517,15 +519,7 @@ def apply_storage_changes(
             continue
         fields["updated_at"] = now
 
-        _unexpected = set(fields) - _THINGS_UPDATABLE_COLUMNS
-        if _unexpected:
-            logger.warning(
-                "SQL injection guard: unexpected column(s) %s rejected for thing_id=%s user_id=%s",
-                _unexpected,
-                thing_id,
-                user_id,
-            )
-            raise ValueError(f"SQL injection guard: unexpected column(s) {_unexpected}")
+        _assert_safe_columns(fields, f"for thing_id={thing_id} user_id={user_id}")
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [thing_id]
         conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
@@ -598,15 +592,7 @@ def apply_storage_changes(
         # Update the primary Thing
         if mf:
             mf["updated_at"] = now
-            _unexpected = set(mf) - _THINGS_UPDATABLE_COLUMNS
-            if _unexpected:
-                logger.warning(
-                    "SQL injection guard: unexpected column(s) %s rejected in merge keep_id=%s user_id=%s",
-                    _unexpected,
-                    keep_id,
-                    user_id,
-                )
-                raise ValueError(f"SQL injection guard: unexpected column(s) {_unexpected}")
+            _assert_safe_columns(mf, f"in merge keep_id={keep_id} user_id={user_id}")
             set_clause = ", ".join(f"{k} = ?" for k in mf)
             values = list(mf.values()) + [keep_id]
             conn.execute(f"UPDATE things SET {set_clause} WHERE id = ?", values)
