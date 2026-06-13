@@ -59,7 +59,11 @@ class TestThingUpdateLimits:
 class TestChatRequestLimits:
     def test_message_too_long(self) -> None:
         with pytest.raises(ValidationError, match="string_too_long|max_length"):
-            ChatRequest(session_id="s", message="x" * 10_001)
+            ChatRequest(session_id="s", message="x" * 5001)
+
+    def test_message_at_limit_is_valid(self) -> None:
+        req = ChatRequest(session_id="s", message="x" * 5000)
+        assert len(req.message) == 5000
 
     def test_session_id_too_long(self) -> None:
         with pytest.raises(ValidationError, match="string_too_long|max_length"):

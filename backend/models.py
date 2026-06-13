@@ -245,8 +245,8 @@ class ChatRequest(BaseModel):
     message: str = Field(
         ...,
         min_length=1,
-        max_length=10_000,
-        description="User message text (max 10 000 chars)",
+        max_length=5000,
+        description="User message text (max 5 000 chars)",
         examples=["What tasks are due this week?"],
     )
     mode: str = Field(
