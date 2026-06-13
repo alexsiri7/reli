@@ -292,9 +292,10 @@ _mcp_allowed_origins: set[str] = (
     else set(_default_origins)
 )
 
-# MCP endpoints must accept cross-origin requests from any MCP client.
-# Use a separate CORS middleware for those paths, and the restrictive
-# one for everything else.
+# MCP OAuth / well-known endpoints use a separate CORS middleware that
+# reflects origins from the allowlist only. Non-browser clients (no Origin
+# header) pass through unaffected. The general CORSMiddleware handles all
+# other paths.
 _MCP_CORS_PREFIXES = ("/oauth/", "/.well-known/", "/mcp")
 
 
@@ -320,7 +321,7 @@ class _MCPCorsMiddleware(BaseHTTPMiddleware):
             allow_origin: str | None = origin
         elif origin:
             # Origin header present but not in allowlist — block the CORS request.
-            logger.debug("MCP CORS: origin %r not in allowlist, blocking", origin)
+            logger.info("MCP CORS: origin %r not in allowlist, blocking", origin)
             allow_origin = None
         else:
             # No Origin header (non-browser client) — no CORS header needed.

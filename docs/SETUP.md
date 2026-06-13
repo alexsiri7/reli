@@ -206,7 +206,7 @@ Both data stores contain production data. Handle with care.
 | `SUPABASE_URL` | No | — | Supabase project URL |
 | `SUPABASE_KEY` | No | — | Supabase anon/service key |
 | `CORS_ORIGINS` | No | — | Comma-separated extra origins allowed on standard API endpoints (e.g. `https://reli.example.com`) |
-| `MCP_CORS_ORIGINS` | No | — | Comma-separated origins allowed on MCP/OAuth endpoints (e.g. `https://claude.ai`); if empty, the wildcard `*` is used for all origins (no credentials) |
+| `MCP_CORS_ORIGINS` | No | — | Comma-separated origins allowed on MCP/OAuth endpoints (e.g. `https://claude.ai`); if empty, only localhost origins are allowed by default. Set this for any external MCP client (Claude Desktop, IDE extensions). |
 | `SWEEP_MIN_CONFIDENCE` | No | `0.5` | Minimum confidence score (0.0–1.0) for sweep findings to appear in briefings. Set to `0.0` to disable the gate and show all findings. |
 | `SWEEP_AUTO_MERGE_ENABLED` | No | `true` | Set to `false` to disable autonomous exact-match duplicate merging. Merges are still detected and logged when disabled. |
 | `SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD` | No | `0.95` | Minimum confidence score (0.0–1.0) for a duplicate pair to be auto-merged. Currently only exact-title cross-project duplicates are candidates. |

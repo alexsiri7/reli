@@ -139,8 +139,7 @@ class TestMcpOAuthCors:
             "/oauth/token",
             headers={"Access-Control-Request-Method": "POST"},  # no Origin header
         )
-        acao = resp.headers.get("access-control-allow-origin", "")
-        assert acao == ""
+        assert resp.headers.get("access-control-allow-origin") is None
 
     def test_unlisted_origin_gets_no_cors_header_by_default(self, mcp_client):
         """An unknown origin must not receive Access-Control-Allow-Origin in default config."""
@@ -169,13 +168,47 @@ class TestMcpOAuthCors:
         assert result == {"https://claude.ai", "https://example.com"}
 
     def test_mcp_cors_origins_whitespace_only_yields_empty_set(self, monkeypatch):
-        """A whitespace-only MCP_CORS_ORIGINS must produce an empty set (wildcard mode)."""
+        """A whitespace-only MCP_CORS_ORIGINS produces an empty allowed set (block-all, not wildcard)."""
         import backend.config as cfg_module
 
         monkeypatch.setenv("MCP_CORS_ORIGINS", "   ")
         new_settings = cfg_module.Settings()
         result = {o.strip() for o in new_settings.MCP_CORS_ORIGINS.split(",") if o.strip()}
         assert result == set()
+        # An empty parsed set means no origins are permitted — NOT a wildcard fallback.
+
+    def test_whitespace_only_mcp_cors_origins_blocks_all(self, mcp_client, monkeypatch):
+        """Whitespace-only MCP_CORS_ORIGINS sets an empty allowlist — all origins are blocked."""
+        import backend.main as main_module
+
+        monkeypatch.setattr(main_module, "_mcp_allowed_origins", set())
+        resp = mcp_client.options(
+            "/oauth/token",
+            headers={"Origin": "https://any.example.com", "Access-Control-Request-Method": "POST"},
+        )
+        assert resp.headers.get("access-control-allow-origin") is None
+
+    @pytest.mark.parametrize("origin", ["http://localhost:5173", "http://localhost:3000"])
+    def test_default_localhost_origins_allowed(self, mcp_client, origin):
+        """Both default localhost origins must be reflected on preflight requests."""
+        resp = mcp_client.options(
+            "/oauth/token",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert resp.status_code == 204
+        assert resp.headers.get("access-control-allow-origin") == origin
+
+    def test_unlisted_origin_gets_no_cors_header_on_get(self, mcp_client):
+        """Non-OPTIONS request from unlisted origin must not receive ACAO header."""
+        resp = mcp_client.get(
+            "/.well-known/oauth-authorization-server",
+            headers={"Origin": "https://evil.example.com"},
+        )
+        assert resp.status_code == 200
+        assert resp.headers.get("access-control-allow-origin") is None
 
     def test_api_route_does_not_get_permissive_cors(self, mcp_client):
         """Non-OAuth routes should NOT allow arbitrary origins."""
