@@ -133,6 +133,10 @@ def _make_app(llm_rpm: int = 3, auth_rpm: int = 5, api_rpm: int = 5) -> FastAPI:
     def auth_me():
         return JSONResponse({"user": None})
 
+    @app.post("/oauth/token")
+    def oauth_token():
+        return JSONResponse({"access_token": "tok"})
+
     @app.get("/healthz")
     def health():
         return JSONResponse({"status": "ok"})
@@ -354,6 +358,23 @@ class TestAuthRateLimit:
             assert res.status_code == 200
         res = client.get("/api/auth/me")
         assert res.status_code == 429
+
+    def test_oauth_token_uses_auth_bucket(self):
+        """/oauth/token uses auth_rpm bucket, not api_rpm."""
+        app = _make_app(auth_rpm=2, api_rpm=100)
+        client = TestClient(app)
+        for _ in range(2):
+            res = client.post("/oauth/token")
+            assert res.status_code == 200
+        res = client.post("/oauth/token")
+        assert res.status_code == 429
+
+    def test_oauth_token_rate_limit_header(self):
+        """X-RateLimit-Limit reflects auth_rpm for /oauth/token."""
+        app = _make_app(auth_rpm=7, api_rpm=100)
+        client = TestClient(app)
+        res = client.post("/oauth/token")
+        assert res.headers["X-RateLimit-Limit"] == "7"
 
 
 # ---------------------------------------------------------------------------
