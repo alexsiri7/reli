@@ -76,12 +76,15 @@ def test_cleanup_and_store_purges_expired_before_insert(patched_db):
     assert cleanup_and_get(mcp_oauth_sessions, "new") is not None
 
 
-def test_cleanup_and_store_rejects_when_full(patched_db, monkeypatch):
+def test_cleanup_and_store_rejects_when_full(patched_db):
+    from backend.db_models import McpOAuthSessionRecord
+    from backend.oauth_state import _Store
+
     _cap = 5
-    monkeypatch.setattr("backend.oauth_state.MAX_ENTRIES_PER_DICT", _cap)
+    small_store = _Store(model=McpOAuthSessionRecord, pk_field="server_state", max_entries=_cap)
     for i in range(_cap):
         cleanup_and_store(
-            mcp_oauth_sessions,
+            small_store,
             str(i),
             {
                 "client_state": "cs",
@@ -96,7 +99,7 @@ def test_cleanup_and_store_rejects_when_full(patched_db, monkeypatch):
         )
     with pytest.raises(StoreFullError):
         cleanup_and_store(
-            mcp_oauth_sessions,
+            small_store,
             "overflow",
             {
                 "client_state": "cs",
@@ -111,13 +114,16 @@ def test_cleanup_and_store_rejects_when_full(patched_db, monkeypatch):
         )
 
 
-def test_cleanup_and_store_allows_insert_after_evicting_expired(patched_db, monkeypatch):
+def test_cleanup_and_store_allows_insert_after_evicting_expired(patched_db):
     """Fill to capacity with expired entries; insert should succeed after purge."""
+    from backend.db_models import McpOAuthSessionRecord
+    from backend.oauth_state import _Store
+
     _cap = 5
-    monkeypatch.setattr("backend.oauth_state.MAX_ENTRIES_PER_DICT", _cap)
+    small_store = _Store(model=McpOAuthSessionRecord, pk_field="server_state", max_entries=_cap)
     for i in range(_cap):
         cleanup_and_store(
-            mcp_oauth_sessions,
+            small_store,
             str(i),
             {
                 "client_state": "cs",
@@ -131,7 +137,7 @@ def test_cleanup_and_store_allows_insert_after_evicting_expired(patched_db, monk
             },
         )
     cleanup_and_store(
-        mcp_oauth_sessions,
+        small_store,
         "fresh",
         {
             "client_state": "ok",
@@ -144,7 +150,7 @@ def test_cleanup_and_store_allows_insert_after_evicting_expired(patched_db, monk
             "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
         },
     )
-    result = cleanup_and_get(mcp_oauth_sessions, "fresh")
+    result = cleanup_and_get(small_store, "fresh")
     assert result is not None
     assert result["client_state"] == "ok"
 
@@ -622,12 +628,45 @@ def test_pop_is_atomic_double_pop_returns_none(patched_db):
     assert second is None
 
 
-def test_store_full_raises_at_cap_two(patched_db, monkeypatch):
+def test_registered_clients_store_has_reduced_cap(patched_db):
+    """mcp_registered_clients max_entries is 100, not the global 10_000."""
+    assert mcp_registered_clients.max_entries == 100
+
+
+def test_store_max_entries_override(patched_db):
+    """A _Store with max_entries=2 raises StoreFullError on the 3rd insert."""
+    from backend.oauth_state import McpOAuthSessionRecord, _Store
+
+    small_store = _Store(
+        model=McpOAuthSessionRecord,
+        pk_field="server_state",
+        max_entries=2,
+    )
+    base = {
+        "client_state": "cs",
+        "redirect_uri": "http://x",
+        "code_challenge": "cc",
+        "code_challenge_method": "S256",
+        "client_id": "cid",
+        "scope": "mcp",
+        "google_code_verifier": "gv",
+        "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+    }
+    cleanup_and_store(small_store, "k1", base)
+    cleanup_and_store(small_store, "k2", base)
+    with pytest.raises(StoreFullError):
+        cleanup_and_store(small_store, "k3", base)
+
+
+def test_store_full_raises_at_cap_two(patched_db):
     """StoreFullError fires when cap is set to 2 and a 3rd entry is stored."""
-    monkeypatch.setattr("backend.oauth_state.MAX_ENTRIES_PER_DICT", 2)
+    from backend.db_models import McpOAuthSessionRecord
+    from backend.oauth_state import _Store
+
+    small_store = _Store(model=McpOAuthSessionRecord, pk_field="server_state", max_entries=2)
     for i in range(2):
         cleanup_and_store(
-            mcp_oauth_sessions,
+            small_store,
             f"cap2-{i}",
             {
                 "client_state": "cs",
@@ -642,7 +681,7 @@ def test_store_full_raises_at_cap_two(patched_db, monkeypatch):
         )
     with pytest.raises(StoreFullError):
         cleanup_and_store(
-            mcp_oauth_sessions,
+            small_store,
             "cap2-overflow",
             {
                 "client_state": "cs",

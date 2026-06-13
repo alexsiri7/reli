@@ -15,6 +15,7 @@ Configurable via environment variables:
 - ``RATE_LIMIT_ENABLED``: "true" (default) or "false"
 - ``RATE_LIMIT_LLM_RPM``: requests per minute for LLM endpoints (default: 30)
 - ``RATE_LIMIT_AUTH_RPM``: requests per minute for auth endpoints (default: 10)
+- ``RATE_LIMIT_REG_RPM``: requests per minute for /oauth/register (default: 5)
 - ``RATE_LIMIT_API_RPM``: requests per minute for general API (default: 60)
 """
 
@@ -47,9 +48,11 @@ _AUTH_PATHS = {
     "/api/auth/me",
     "/api/logout",
     "/oauth/authorize",
-    "/oauth/register",
     "/oauth/token",
 }
+
+# Registration endpoint — separate, stricter bucket to limit store-exhaustion attacks.
+_REGISTRATION_PATHS = {"/oauth/register"}
 
 
 @dataclass
@@ -95,6 +98,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         *,
         llm_rpm: int = 30,
         auth_rpm: int = 10,
+        reg_rpm: int = 5,
         api_rpm: int = 60,
         enabled: bool = True,
         trusted_proxy_cidrs: str = "",
@@ -103,6 +107,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.enabled = enabled
         self.llm_rpm = llm_rpm
         self.auth_rpm = auth_rpm
+        self.reg_rpm = reg_rpm
         self.api_rpm = api_rpm
         # Parse CIDR strings into network objects once at startup
         self._trusted_networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
@@ -117,6 +122,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Separate buckets for LLM, auth, and general API, keyed by user id or IP
         self._llm_buckets: dict[str, _Bucket] = _make_bucket_store(llm_rpm)
         self._auth_buckets: dict[str, _Bucket] = _make_bucket_store(auth_rpm)
+        self._reg_buckets: dict[str, _Bucket] = _make_bucket_store(reg_rpm)
         self._api_buckets: dict[str, _Bucket] = _make_bucket_store(api_rpm)
         self._last_cleanup: float = time.monotonic()
 
@@ -163,7 +169,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if now is None:
             now = time.monotonic()
         total_pruned = 0
-        for buckets in (self._llm_buckets, self._auth_buckets, self._api_buckets):
+        for buckets in (self._llm_buckets, self._auth_buckets, self._reg_buckets, self._api_buckets):
             stale = [k for k, b in buckets.items() if now - b.last_refill > _BUCKET_TTL]
             for k in stale:
                 del buckets[k]
@@ -194,6 +200,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if path in _LLM_PATHS:
             bucket = self._llm_buckets[key]
             limit = self.llm_rpm
+        elif path in _REGISTRATION_PATHS:
+            bucket = self._reg_buckets[key]
+            limit = self.reg_rpm
         elif path in _AUTH_PATHS:
             bucket = self._auth_buckets[key]
             limit = self.auth_rpm
@@ -235,6 +244,7 @@ def get_rate_limit_config() -> dict:
         "enabled": s.rate_limit_enabled_bool,
         "llm_rpm": max(1, s.RATE_LIMIT_LLM_RPM),
         "auth_rpm": max(1, s.RATE_LIMIT_AUTH_RPM),
+        "reg_rpm": max(1, s.RATE_LIMIT_REG_RPM),
         "api_rpm": max(1, s.RATE_LIMIT_API_RPM),
         "trusted_proxy_cidrs": s.RATE_LIMIT_TRUSTED_PROXY_CIDRS,
     }
