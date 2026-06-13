@@ -289,7 +289,7 @@ _all_origins = _default_origins + _extra_origins
 _mcp_allowed_origins: set[str] = (
     {o.strip() for o in _app_settings.MCP_CORS_ORIGINS.split(",") if o.strip()}
     if _app_settings.MCP_CORS_ORIGINS
-    else set()
+    else set(_default_origins)
 )
 
 # MCP endpoints must accept cross-origin requests from any MCP client.
@@ -301,8 +301,10 @@ _MCP_CORS_PREFIXES = ("/oauth/", "/.well-known/", "/mcp")
 class _MCPCorsMiddleware(BaseHTTPMiddleware):
     """CORS for MCP OAuth / well-known endpoints.
 
-    If MCP_CORS_ORIGINS is configured, only those origins are reflected.
-    Otherwise, the wildcard '*' is used (no credential exposure).
+    Reflects the origin for requests from origins in _mcp_allowed_origins.
+    Requests with an Origin not in the allowlist receive no CORS headers (browser
+    access blocked). Requests without an Origin header (non-browser clients) pass
+    through unaffected.
     """
 
     async def dispatch(  # type: ignore[override]
@@ -314,28 +316,29 @@ class _MCPCorsMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         origin = request.headers.get("origin", "")
-        if _mcp_allowed_origins and origin in _mcp_allowed_origins:
-            allow_origin = origin
+        if origin in _mcp_allowed_origins:
+            allow_origin: str | None = origin
+        elif origin:
+            # Origin header present but not in allowlist — block the CORS request.
+            logger.debug("MCP CORS: origin %r not in allowlist, blocking", origin)
+            allow_origin = None
         else:
-            # Unlisted origins get safe wildcard, not a rejection.
-            # MCP_CORS_ORIGINS enables credential-compatible reflection for listed
-            # origins; all other origins (including unconfigured/wildcard mode) still
-            # get '*' so any MCP client can connect without credentials.
-            if _mcp_allowed_origins and origin:
-                logger.debug("MCP CORS: origin %r not in allowlist, using wildcard", origin)
-            allow_origin = "*"
+            # No Origin header (non-browser client) — no CORS header needed.
+            allow_origin = None
 
         if request.method == "OPTIONS":
             resp = StarletteResponse(status_code=204)
-            resp.headers["Access-Control-Allow-Origin"] = allow_origin
-            resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-            resp.headers["Access-Control-Allow-Headers"] = "content-type, authorization"
-            resp.headers["Access-Control-Max-Age"] = "600"
+            if allow_origin is not None:
+                resp.headers["Access-Control-Allow-Origin"] = allow_origin
+                resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+                resp.headers["Access-Control-Allow-Headers"] = "content-type, authorization"
+                resp.headers["Access-Control-Max-Age"] = "600"
             resp.headers["Vary"] = "Origin"
             return resp
 
         response = await call_next(request)
-        response.headers["Access-Control-Allow-Origin"] = allow_origin
+        if allow_origin is not None:
+            response.headers["Access-Control-Allow-Origin"] = allow_origin
         response.headers["Vary"] = "Origin"
         return response
 
