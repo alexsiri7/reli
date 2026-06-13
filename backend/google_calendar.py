@@ -2,7 +2,6 @@
 
 import json
 import logging
-import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -18,6 +17,7 @@ import backend.db_engine as _engine_mod
 
 from .config import settings
 from .db_models import GoogleTokenRecord
+from .oauth_state import StoreFullError, cleanup_and_pop, cleanup_and_store
 from .token_encryption import decrypt_or_plaintext, encrypt
 
 logger = logging.getLogger(__name__)
@@ -29,9 +29,9 @@ GOOGLE_CLIENT_ID = settings.GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET = settings.GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI = settings.GOOGLE_REDIRECT_URI
 
-# PKCE state storage: state -> code_verifier (single-process, in-memory)
-_pending_flows: dict[str, str] = {}
-_pending_flows_lock = threading.Lock()
+# PKCE state storage: state -> {code_verifier, expires_at} (bounded, TTL-enforced)
+_pending_flows: dict[str, dict] = {}
+_PENDING_FLOW_TTL_SECONDS = 600  # 10 minutes
 
 
 def _client_config() -> dict:
@@ -61,9 +61,19 @@ def get_auth_url() -> str:
         include_granted_scopes="true",
         prompt="consent",
     )
-    # Store PKCE code_verifier for the callback
-    with _pending_flows_lock:
-        _pending_flows[state] = flow.code_verifier or ""
+    # Store PKCE code_verifier for the callback (bounded dict with TTL)
+    try:
+        cleanup_and_store(
+            _pending_flows,
+            state,
+            {
+                "code_verifier": flow.code_verifier or "",
+                "expires_at": datetime.now(timezone.utc) + timedelta(seconds=_PENDING_FLOW_TTL_SECONDS),
+            },
+        )
+    except StoreFullError:
+        logger.warning("google_calendar: pending flows store full, rejecting calendar auth")
+        raise ValueError("Server is at capacity; try again later")
     return str(auth_url)
 
 
@@ -76,9 +86,9 @@ def exchange_code(code: str, state: str = "", user_id: str = "") -> Credentials:
     flow.redirect_uri = GOOGLE_REDIRECT_URI
 
     # Restore PKCE code_verifier from the auth request
-    with _pending_flows_lock:
-        code_verifier = _pending_flows.pop(state, None)
-    if code_verifier is None:
+    flow_entry = cleanup_and_pop(_pending_flows, state)
+    code_verifier = flow_entry["code_verifier"] if flow_entry else None
+    if not code_verifier:
         raise ValueError("Invalid or expired OAuth state")
     flow.code_verifier = code_verifier
 
