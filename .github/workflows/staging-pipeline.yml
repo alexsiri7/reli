@@ -95,7 +95,7 @@ jobs:
           sleep 90
           echo "Polling ${RAILWAY_STAGING_URL}/healthz ..."
           for i in $(seq 1 20); do
-            HTTP_CODE=$(curl -s -o /tmp/hc_body.txt -w "%{http_code}" --max-time 5 "${RAILWAY_STAGING_URL}/healthz" 2>/dev/null)
+            HTTP_CODE=$(curl -s -o /tmp/hc_body.txt -w "%{http_code}" --max-time 5 "${RAILWAY_STAGING_URL}/healthz" 2>/dev/null || true)
             HTTP_CODE=${HTTP_CODE:-000}
             BODY=$(cat /tmp/hc_body.txt 2>/dev/null || true)
             echo "Attempt $i/20: HTTP $HTTP_CODE — ${BODY:0:100}"
@@ -143,7 +143,7 @@ jobs:
         run: |
           echo "Confirming staging is reachable before Playwright smoke tests..."
           for i in $(seq 1 12); do
-            HTTP_CODE=$(curl -s -o /tmp/smoke_hc.txt -w "%{http_code}" --max-time 10 "${BASE_URL}/healthz" 2>/dev/null)
+            HTTP_CODE=$(curl -s -o /tmp/smoke_hc.txt -w "%{http_code}" --max-time 10 "${BASE_URL}/healthz" 2>/dev/null || true)
             HTTP_CODE=${HTTP_CODE:-000}
             BODY=$(cat /tmp/smoke_hc.txt 2>/dev/null || true)
             echo "Attempt $i/12: HTTP $HTTP_CODE — ${BODY:0:80}"
@@ -236,7 +236,7 @@ jobs:
           sleep 90
           echo "Polling ${RAILWAY_PRODUCTION_URL}/healthz ..."
           for i in $(seq 1 20); do
-            HTTP_CODE=$(curl -s -o /tmp/hc_prod_body.txt -w "%{http_code}" --max-time 5 "${RAILWAY_PRODUCTION_URL}/healthz" 2>/dev/null)
+            HTTP_CODE=$(curl -s -o /tmp/hc_prod_body.txt -w "%{http_code}" --max-time 5 "${RAILWAY_PRODUCTION_URL}/healthz" 2>/dev/null || true)
             HTTP_CODE=${HTTP_CODE:-000}
             BODY=$(cat /tmp/hc_prod_body.txt 2>/dev/null || true)
             echo "Attempt $i/20: HTTP $HTTP_CODE — ${BODY:0:100}"
