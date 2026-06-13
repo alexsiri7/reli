@@ -41,8 +41,6 @@ _LLM_PATHS = {"/api/chat", "/api/chat/stream", "/api/sweep/run", "/api/sweep/gap
 
 # Auth paths (login, OAuth flows) — rated separately to prevent credential-abuse.
 # Default: stricter than general API (auth_rpm=10 vs api_rpm=60).
-# NOTE: /oauth/token is intentionally excluded — MCP token refresh needs
-# separate investigation before a rate limit is applied.
 _AUTH_PATHS = {
     "/api/auth/google",
     "/api/auth/google/callback",
@@ -50,6 +48,7 @@ _AUTH_PATHS = {
     "/api/logout",
     "/oauth/authorize",
     "/oauth/register",
+    "/oauth/token",
 }
 
 
