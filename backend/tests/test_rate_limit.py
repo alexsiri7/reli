@@ -70,11 +70,13 @@ class TestGetConfig:
         monkeypatch.delenv("RATE_LIMIT_ENABLED", raising=False)
         monkeypatch.delenv("RATE_LIMIT_LLM_RPM", raising=False)
         monkeypatch.delenv("RATE_LIMIT_AUTH_RPM", raising=False)
+        monkeypatch.delenv("RATE_LIMIT_REG_RPM", raising=False)
         monkeypatch.delenv("RATE_LIMIT_API_RPM", raising=False)
         config = get_rate_limit_config()
         assert config["enabled"] is True
         assert config["llm_rpm"] == 30
         assert config["auth_rpm"] == 10
+        assert config["reg_rpm"] == 5
         assert config["api_rpm"] == 60
 
     def test_disabled(self, monkeypatch: pytest.MonkeyPatch):
@@ -85,10 +87,12 @@ class TestGetConfig:
     def test_custom_limits(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("RATE_LIMIT_LLM_RPM", "5")
         monkeypatch.setenv("RATE_LIMIT_AUTH_RPM", "3")
+        monkeypatch.setenv("RATE_LIMIT_REG_RPM", "3")
         monkeypatch.setenv("RATE_LIMIT_API_RPM", "30")
         config = get_rate_limit_config()
         assert config["llm_rpm"] == 5
         assert config["auth_rpm"] == 3
+        assert config["reg_rpm"] == 3
         assert config["api_rpm"] == 30
 
 
@@ -97,9 +101,9 @@ class TestGetConfig:
 # ---------------------------------------------------------------------------
 
 
-def _make_app(llm_rpm: int = 3, auth_rpm: int = 5, api_rpm: int = 5) -> FastAPI:
+def _make_app(llm_rpm: int = 3, auth_rpm: int = 5, reg_rpm: int = 5, api_rpm: int = 5) -> FastAPI:
     app = FastAPI()
-    app.add_middleware(RateLimitMiddleware, llm_rpm=llm_rpm, auth_rpm=auth_rpm, api_rpm=api_rpm, enabled=True)
+    app.add_middleware(RateLimitMiddleware, llm_rpm=llm_rpm, auth_rpm=auth_rpm, reg_rpm=reg_rpm, api_rpm=api_rpm, enabled=True)
 
     @app.get("/api/things")
     def list_things():
@@ -136,6 +140,10 @@ def _make_app(llm_rpm: int = 3, auth_rpm: int = 5, api_rpm: int = 5) -> FastAPI:
     @app.post("/oauth/token")
     def oauth_token():
         return JSONResponse({"access_token": "tok"})
+
+    @app.post("/oauth/register")
+    def oauth_register():
+        return JSONResponse({"client_id": "test"}, status_code=201)
 
     @app.get("/healthz")
     def health():
@@ -375,6 +383,47 @@ class TestAuthRateLimit:
         client = TestClient(app)
         res = client.post("/oauth/token")
         assert res.headers["X-RateLimit-Limit"] == "7"
+
+
+class TestRegistrationRateLimit:
+    def test_oauth_register_uses_reg_bucket(self):
+        """/oauth/register uses reg_rpm bucket, not auth_rpm."""
+        app = _make_app(reg_rpm=2, auth_rpm=100, api_rpm=100)
+        client = TestClient(app)
+        for _ in range(2):
+            res = client.post("/oauth/register", json={})
+            assert res.status_code == 201
+        res = client.post("/oauth/register", json={})
+        assert res.status_code == 429
+
+    def test_oauth_register_rate_limit_header(self):
+        """X-RateLimit-Limit reflects reg_rpm for /oauth/register."""
+        app = _make_app(reg_rpm=7, auth_rpm=3, api_rpm=100)
+        client = TestClient(app)
+        res = client.post("/oauth/register", json={})
+        assert res.headers["X-RateLimit-Limit"] == "7"
+
+    def test_oauth_register_does_not_consume_auth_bucket(self):
+        """/oauth/register exhaustion does not block /oauth/token (separate buckets)."""
+        app = _make_app(reg_rpm=1, auth_rpm=100, api_rpm=100)
+        client = TestClient(app)
+        # exhaust registration bucket
+        client.post("/oauth/register", json={})
+        res = client.post("/oauth/register", json={})
+        assert res.status_code == 429
+        # auth bucket unaffected
+        res = client.post("/oauth/token")
+        assert res.status_code == 200
+
+    def test_get_rate_limit_config_includes_reg_rpm(self, monkeypatch):
+        monkeypatch.delenv("RATE_LIMIT_REG_RPM", raising=False)
+        config = get_rate_limit_config()
+        assert config["reg_rpm"] == 5
+
+    def test_get_rate_limit_config_custom_reg_rpm(self, monkeypatch):
+        monkeypatch.setenv("RATE_LIMIT_REG_RPM", "2")
+        config = get_rate_limit_config()
+        assert config["reg_rpm"] == 2
 
 
 # ---------------------------------------------------------------------------

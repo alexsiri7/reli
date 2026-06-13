@@ -57,6 +57,7 @@ class _Store:
     model: type
     pk_field: str
     json_fields: frozenset[str] = field(default_factory=frozenset)
+    max_entries: int = MAX_ENTRIES_PER_DICT
 
 
 # Store handles — callers import these by name exactly as before.
@@ -66,6 +67,7 @@ mcp_registered_clients = _Store(
     model=McpRegisteredClientRecord,
     pk_field="client_id",
     json_fields=_JSON_LIST_FIELDS,
+    max_entries=100,
 )
 mcp_refresh_tokens = _Store(model=McpRefreshTokenRecord, pk_field="refresh_token")
 gmail_oauth_states = _Store(model=GmailOAuthStateRecord, pk_field="user_id")
@@ -195,8 +197,8 @@ def _db_cleanup_and_store(store: _Store, key: str, value: dict) -> None:
         _purge_expired(session, store)
         count_stmt = select(func.count()).select_from(store.model)  # type: ignore[arg-type]
         live_count = session.exec(count_stmt).one()
-        if live_count >= MAX_ENTRIES_PER_DICT:
-            raise StoreFullError(f"OAuth state store is full ({MAX_ENTRIES_PER_DICT} entries)")
+        if live_count >= store.max_entries:
+            raise StoreFullError(f"OAuth state store is full ({store.max_entries} entries)")
 
         kwargs = _dict_to_kwargs(store, key, value)
         existing = session.get(store.model, key)
