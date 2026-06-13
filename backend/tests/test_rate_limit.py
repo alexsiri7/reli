@@ -504,7 +504,7 @@ class TestBucketPruning:
         mock_prune.assert_called_once()
 
     def test_prune_removes_stale_buckets_in_all_dicts(self, monkeypatch: pytest.MonkeyPatch):
-        """_prune_stale_buckets removes stale entries from all three bucket dicts."""
+        """_prune_stale_buckets removes stale entries from all four bucket dicts."""
         import time as time_mod
 
         import backend.rate_limit as rl_mod
@@ -513,11 +513,12 @@ class TestBucketPruning:
         monkeypatch.setattr(time_mod, "monotonic", lambda: fake_time[0])
         monkeypatch.setattr(rl_mod, "_BUCKET_TTL", 60.0)
 
-        mw = RateLimitMiddleware(app=FastAPI(), api_rpm=5, llm_rpm=3, auth_rpm=5)
+        mw = RateLimitMiddleware(app=FastAPI(), api_rpm=5, llm_rpm=3, auth_rpm=5, reg_rpm=5)
         stale_bucket = _Bucket(tokens=1.0, max_tokens=1.0, refill_rate=1.0 / 60.0, last_refill=fake_time[0])
 
         mw._llm_buckets["llm_key"] = stale_bucket
         mw._auth_buckets["auth_key"] = stale_bucket
+        mw._reg_buckets["reg_key"] = stale_bucket
         mw._api_buckets["api_key"] = stale_bucket
 
         fake_time[0] += 61.0
@@ -525,6 +526,7 @@ class TestBucketPruning:
 
         assert len(mw._llm_buckets) == 0, "llm_buckets not pruned"
         assert len(mw._auth_buckets) == 0, "auth_buckets not pruned"
+        assert len(mw._reg_buckets) == 0, "reg_buckets not pruned"
         assert len(mw._api_buckets) == 0, "api_buckets not pruned"
 
     def test_dispatch_does_not_retrigger_cleanup_within_interval(self, monkeypatch: pytest.MonkeyPatch):

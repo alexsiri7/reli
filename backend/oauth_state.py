@@ -67,14 +67,14 @@ mcp_registered_clients = _Store(
     model=McpRegisteredClientRecord,
     pk_field="client_id",
     json_fields=_JSON_LIST_FIELDS,
-    max_entries=100,
+    max_entries=100,  # intentionally small — limits DoS blast radius; legitimate clients rarely exceed ~10
 )
 mcp_refresh_tokens = _Store(model=McpRefreshTokenRecord, pk_field="refresh_token")
 gmail_oauth_states = _Store(model=GmailOAuthStateRecord, pk_field="user_id")
 
 
 class StoreFullError(Exception):
-    """Raised when a bounded store exceeds MAX_ENTRIES_PER_DICT after cleanup."""
+    """Raised when a bounded store exceeds its ``max_entries`` cap after expiry cleanup."""
 
 
 # ---------------------------------------------------------------------------

@@ -1,9 +1,10 @@
 """In-memory rate limiting middleware for FastAPI.
 
 Uses a simple token-bucket algorithm per user (via JWT) with IP fallback.
-Three tiers:
+Four tiers:
 - **LLM endpoints** (chat, sweep): strict limits to prevent cost amplification
-- **Auth endpoints** (login, OAuth): stricter-than-API limits to prevent abuse
+- **Registration endpoint** (/oauth/register): strictest limits to prevent store-exhaustion DoS
+- **Auth endpoints** (login, OAuth): stricter-than-API limits to prevent credential abuse
 - **General API**: more lenient limits for normal usage
 
 When a valid JWT session cookie is present the ``sub`` claim is used as the
@@ -156,7 +157,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 if sub:
                     return f"user:{sub}"
             except Exception:
-                log.debug("JWT decode failed for rate-limit key; falling back to IP")
+                log.warning("JWT decode failed for rate-limit key; falling back to IP", exc_info=True)
         return f"ip:{self._get_client_ip(request)}"
 
     def _prune_stale_buckets(self, now: float | None = None) -> None:
