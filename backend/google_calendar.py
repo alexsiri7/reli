@@ -29,7 +29,8 @@ GOOGLE_CLIENT_ID = settings.GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET = settings.GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI = settings.GOOGLE_REDIRECT_URI
 
-# PKCE state storage: state -> {code_verifier, expires_at} (bounded, TTL-enforced)
+# PKCE state storage: state -> {code_verifier, expires_at}
+# Bounded by oauth_state.MAX_ENTRIES_PER_DICT; TTL set by _PENDING_FLOW_TTL_SECONDS.
 _pending_flows: dict[str, dict] = {}
 _PENDING_FLOW_TTL_SECONDS = 600  # 10 minutes
 
@@ -85,7 +86,8 @@ def exchange_code(code: str, state: str = "", user_id: str = "") -> Credentials:
     flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI
 
-    # Restore PKCE code_verifier from the auth request
+    # Restore PKCE code_verifier; also purges any other expired entries from the store.
+    # Returns None if the state was never stored, already consumed, or past its TTL.
     flow_entry = cleanup_and_pop(_pending_flows, state)
     code_verifier = flow_entry["code_verifier"] if flow_entry else None
     if not code_verifier:
