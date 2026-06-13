@@ -159,7 +159,7 @@ class Settings(BaseSettings):
 
     # --- CORS ---
     CORS_ORIGINS: str = ""  # Comma-separated extra origins (e.g. https://reli.interstellarai.net)
-    MCP_CORS_ORIGINS: str = ""  # Comma-separated origins allowed on MCP/OAuth endpoints; empty = use wildcard (*)
+    MCP_CORS_ORIGINS: str = ""  # Comma-separated origins allowed on MCP/OAuth endpoints; empty = localhost defaults only
 
     # --- Sentry ---
     SENTRY_DSN: str = ""
