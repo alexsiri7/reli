@@ -2,7 +2,7 @@
 # To update dependencies: edit pyproject.toml then run `uv lock`.
 fastapi>=0.137.0
 uvicorn[standard]>=0.48.0
-pydantic>=2.7.0
+pydantic>=2.13.4
 pydantic-settings>=2.14.1
 openai>=2.41.1
 python-dotenv>=1.0.0
