@@ -99,6 +99,35 @@ class TestPreferenceFeedbackDedup:
             record = session.get(ThingRecord, THING_ID)
             assert record.data["confidence"] <= 1.0
 
+    def test_positive_feedback_advances_pattern_confidence(self, client, patched_db):
+        """Positive feedback on a pattern-style preference advances confidence from 'emerging' to 'moderate'."""
+        import json
+
+        now = datetime.now(timezone.utc)
+        with Session(_engine_mod.engine) as session:
+            session.add(
+                ThingRecord(
+                    id="pref-pattern",
+                    title="Pattern Pref",
+                    type_hint="preference",
+                    active=True,
+                    user_id=USER_ID,
+                    created_at=now,
+                    updated_at=now,
+                    data={"patterns": [{"confidence": "emerging", "observations": 1, "pattern": "test"}]},
+                )
+            )
+            session.commit()
+
+        resp = client.post("/api/preferences/pref-pattern/feedback", json={"accurate": True})
+        assert resp.status_code == 200
+        assert resp.json()["updated"] is True
+
+        with Session(_engine_mod.engine) as session:
+            record = session.get(ThingRecord, "pref-pattern")
+            data = record.data if isinstance(record.data, dict) else json.loads(record.data)
+            assert data["patterns"][0]["confidence"] == "moderate"
+
     def test_not_found_returns_404(self, client):
         resp = client.post("/api/preferences/nonexistent/feedback", json={"accurate": True})
         assert resp.status_code == 404

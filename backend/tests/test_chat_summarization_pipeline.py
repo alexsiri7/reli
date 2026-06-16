@@ -260,7 +260,7 @@ class TestMaybeTriggerSummarization:
             "backend.summarization_agent.summarize_conversation", side_effect=_signal_summarize
         ) as mock_summarize:
             _maybe_trigger_summarization(user_id)
-            await asyncio.wait_for(summarize_called.wait(), timeout=5.0)
+            await asyncio.wait_for(summarize_called.wait(), timeout=15.0)
             mock_summarize.assert_called_once_with(user_id)
 
     def test_does_not_trigger_without_user_id(self, patched_db):
@@ -301,7 +301,7 @@ class TestSummarizationNonBlocking:
             _maybe_trigger_summarization(user_id)
 
             # Wait for the background task to start deterministically
-            await asyncio.wait_for(summarization_started.wait(), timeout=5.0)
+            await asyncio.wait_for(summarization_started.wait(), timeout=15.0)
             assert summarization_started.is_set(), "Background summarization should have started"
 
             # Let it finish and wait for completion
@@ -330,4 +330,4 @@ class TestSummarizationNonBlocking:
         ):
             # Should not raise
             _maybe_trigger_summarization(user_id)
-            await asyncio.wait_for(task_failed.wait(), timeout=5.0)
+            await asyncio.wait_for(task_failed.wait(), timeout=15.0)

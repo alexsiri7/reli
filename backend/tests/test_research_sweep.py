@@ -29,13 +29,16 @@ def _fresh_db(patched_db):
 # ---------------------------------------------------------------------------
 
 
+_FIXED_NOW = datetime(2026, 6, 16, 12, 0, tzinfo=timezone.utc)
+
+
 def _make_thing(
     importance: int = 1,
     research_ts: str | None = None,
     updated_at: datetime | None = None,
 ) -> ThingRecord:
     """Build an in-memory ThingRecord for unit testing pure helpers."""
-    now = datetime.now(timezone.utc)
+    now = _FIXED_NOW
     data: dict = {}
     if research_ts:
         data["research"] = {"timestamp": research_ts}

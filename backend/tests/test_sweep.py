@@ -4,6 +4,8 @@ import json
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
+from freezegun import freeze_time
+
 import pytest
 from sqlmodel import Session
 
@@ -89,6 +91,7 @@ def _insert_relationship(conn, rel_id: str, from_id: str, to_id: str, rel_type: 
 # ---------------------------------------------------------------------------
 
 
+@freeze_time("2026-06-16")
 class TestApproachingDates:
     def test_checkin_date_within_window(self, patched_db, db):
         today = date.today()

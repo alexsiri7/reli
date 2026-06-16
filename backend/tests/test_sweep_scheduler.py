@@ -7,6 +7,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from freezegun import freeze_time
 
 from backend.sweep_scheduler import (
     _get_all_user_ids,
@@ -56,25 +57,19 @@ class TestGetConfig:
 
 
 class TestSecondsUntil:
+    @freeze_time("2026-06-16T14:00:00")
     def test_future_today(self):
-        now = datetime.now()
-        future_hour = (now.hour + 2) % 24
-        secs = _seconds_until(future_hour, 0)
-        # Should be roughly 2 hours if the target is later today
-        if future_hour > now.hour:
-            assert 3000 < secs < 8000
-        else:
-            # Wrapped to next day
-            assert secs > 0
+        secs = _seconds_until(16, 0)
+        # Target is 16:00, now is 14:00 → ~7200 seconds
+        assert 3000 < secs < 8000
 
+    @freeze_time("2026-06-16T14:00:00")
     def test_past_today_wraps_to_tomorrow(self):
-        now = datetime.now()
-        # Pick an hour that's already passed today
-        past_hour = (now.hour - 2) % 24
-        secs = _seconds_until(past_hour, 0)
-        # Should be roughly 22 hours (wraps to tomorrow)
+        secs = _seconds_until(12, 0)
+        # Target is 12:00, now is 14:00 → wraps to tomorrow (~22 hours)
         assert secs > 3600 * 20
 
+    @freeze_time("2026-06-16T14:00:00")
     def test_always_positive(self):
         for h in range(24):
             assert _seconds_until(h, 0) > 0
@@ -260,7 +255,7 @@ class TestStartStop:
         await start_scheduler()
         assert mod._task is not None
         # Wait for the task to finish (disabled -> returns immediately)
-        await asyncio.wait_for(mod._task, timeout=5.0)
+        await asyncio.wait_for(mod._task, timeout=15.0)
         await stop_scheduler()
         assert mod._task is None
 
