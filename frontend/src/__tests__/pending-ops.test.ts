@@ -12,8 +12,8 @@ describe('pending-ops', () => {
     await queueOperation('/a', 'POST')
     await queueOperation('/b', 'POST')
     const ops = await getPendingOps()
-    expect(ops[0].url).toBe('/a')
-    expect(ops[1].url).toBe('/b')
+    expect(ops[0]!.url).toBe('/a')
+    expect(ops[1]!.url).toBe('/b')
   })
 
   it('removePendingOp removes only the target op', async () => {
@@ -22,7 +22,7 @@ describe('pending-ops', () => {
     await removePendingOp(id1)
     const remaining = await getPendingOps()
     expect(remaining).toHaveLength(1)
-    expect(remaining[0].url).toBe('/second')
+    expect(remaining[0]!.url).toBe('/second')
   })
 
   it('clearPendingOps removes all', async () => {
