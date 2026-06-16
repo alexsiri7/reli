@@ -42,3 +42,41 @@ class TestAcceptOwnershipCheck:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "accepted"
+        assert data["from_thing"]["title"] == "From Thing"
+        assert data["to_thing"]["title"] == "To Thing"
+
+
+class TestDismissOwnershipCheck:
+    def test_dismiss_succeeds_when_user_owns_both_things(self, user_a_client, db):
+        """User A can dismiss a suggestion — verifies session-scope fix returns valid data."""
+        _seed(db, owner_from="user-a", owner_to="user-a")
+        resp = user_a_client.post("/api/connections/suggestions/sug-1/dismiss")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "dismissed"
+        assert data["from_thing"]["title"] == "From Thing"
+        assert data["to_thing"]["title"] == "To Thing"
+
+    def test_dismiss_404_when_suggestion_not_owned(self, user_a_client, db):
+        """User A cannot dismiss a suggestion belonging to another user."""
+        _seed(db, owner_from="other-user", owner_to="other-user")
+        resp = user_a_client.post("/api/connections/suggestions/sug-1/dismiss")
+        assert resp.status_code == 404
+
+
+class TestDeferOwnershipCheck:
+    def test_defer_succeeds_when_user_owns_both_things(self, user_a_client, db):
+        """User A can defer a suggestion — verifies session-scope fix returns valid data."""
+        _seed(db, owner_from="user-a", owner_to="user-a")
+        resp = user_a_client.post("/api/connections/suggestions/sug-1/defer")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "deferred"
+        assert data["from_thing"]["title"] == "From Thing"
+        assert data["to_thing"]["title"] == "To Thing"
+
+    def test_defer_404_when_suggestion_not_owned(self, user_a_client, db):
+        """User A cannot defer a suggestion belonging to another user."""
+        _seed(db, owner_from="other-user", owner_to="other-user")
+        resp = user_a_client.post("/api/connections/suggestions/sug-1/defer")
+        assert resp.status_code == 404
