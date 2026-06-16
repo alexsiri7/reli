@@ -142,8 +142,10 @@ def accept_suggestion(
         session.add(rec)
         session.commit()
         session.refresh(rec)
+        session.refresh(from_thing)
+        session.refresh(to_thing)
 
-    return _record_to_suggestion(rec, from_thing, to_thing)
+        return _record_to_suggestion(rec, from_thing, to_thing)
 
 
 @router.post(

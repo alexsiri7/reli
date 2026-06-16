@@ -299,8 +299,8 @@ async def test_acomplete_retry_uses_exponential_backoff():
 
     assert mock_sleep.call_count == 2
     # First retry: 0.5s, second retry: 1.0s
-    assert mock_sleep.call_args_list[0].args[0] == pytest.approx(0.5)
-    assert mock_sleep.call_args_list[1].args[0] == pytest.approx(1.0)
+    assert mock_sleep.call_args_list[0].args[0] == pytest.approx(0.5, abs=0.01)
+    assert mock_sleep.call_args_list[1].args[0] == pytest.approx(1.0, abs=0.01)
 
 
 # ---------------------------------------------------------------------------

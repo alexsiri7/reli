@@ -2,6 +2,8 @@
 
 from datetime import date, timedelta
 
+from freezegun import freeze_time
+
 
 def _create_thing(
     client, title: str, importance: int = 2, checkin_date: str | None = None, data: dict | None = None
@@ -293,6 +295,7 @@ class TestMorningBriefingActionsTaken:
         assert actions[0]["confidence"] == 0.8
         assert actions[0]["description"] == "Merged 'Dentist' into 'Appointments'"
 
+    @freeze_time("2026-06-16T12:00:00Z")
     def test_action_older_than_24h_excluded(self, patched_db, client):
         """Actions older than 24 hours are excluded from the briefing."""
         from datetime import datetime, timedelta, timezone
@@ -302,7 +305,7 @@ class TestMorningBriefingActionsTaken:
         import backend.db_engine as engine_mod
         from backend.db_models import SweepActionRecord
 
-        old_time = datetime.now(timezone.utc) - timedelta(hours=25)
+        old_time = datetime(2026, 6, 15, 11, 0, tzinfo=timezone.utc)
         with Session(engine_mod.engine) as session:
             session.add(
                 SweepActionRecord(

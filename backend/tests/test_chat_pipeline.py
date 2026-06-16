@@ -209,7 +209,7 @@ class TestChatPipeline:
                 )
                 # The reasoning agent should have been called with non-empty history
                 call_args = mock_reason.call_args
-                history_arg = call_args[0][1]  # positional arg index 1
+                history_arg = call_args.args[1]  # positional arg: history
                 assert len(history_arg) > 0
 
     async def test_chat_ignores_unknown_delete_ids(self, async_client):

@@ -30,7 +30,14 @@ export async function readChatStream(
       if (line.startsWith('event: ')) {
         eventType = line.slice(7).trim()
       } else if (line.startsWith('data: ') && eventType) {
-        const data = JSON.parse(line.slice(6))
+        let data: Record<string, unknown>
+        try {
+          data = JSON.parse(line.slice(6))
+        } catch {
+          callbacks.onError(`Malformed JSON in ${eventType} event`)
+          eventType = ''
+          continue
+        }
 
         if (eventType === 'stage') {
           const stage = data.stage as 'context' | 'reasoning' | 'response'
@@ -39,11 +46,11 @@ export async function readChatStream(
             callbacks.onStage(stage)
           }
         } else if (eventType === 'token') {
-          callbacks.onToken(data.text)
+          callbacks.onToken(data.text as string)
         } else if (eventType === 'complete') {
           callbacks.onComplete(data)
         } else if (eventType === 'error') {
-          callbacks.onError(data.message || 'Pipeline error')
+          callbacks.onError((data.message as string) || 'Pipeline error')
         }
 
         eventType = ''
