@@ -179,10 +179,13 @@ def dismiss_suggestion(
         session.commit()
         session.refresh(rec)
 
-    if not from_thing or not to_thing:
-        raise HTTPException(status_code=404, detail="Thing not found")
+        if not from_thing or not to_thing:
+            raise HTTPException(status_code=404, detail="Thing not found")
 
-    return _record_to_suggestion(rec, from_thing, to_thing)
+        session.refresh(from_thing)
+        session.refresh(to_thing)
+
+        return _record_to_suggestion(rec, from_thing, to_thing)
 
 
 @router.post(
@@ -214,7 +217,10 @@ def defer_suggestion(
         session.commit()
         session.refresh(rec)
 
-    if not from_thing or not to_thing:
-        raise HTTPException(status_code=404, detail="Thing not found")
+        if not from_thing or not to_thing:
+            raise HTTPException(status_code=404, detail="Thing not found")
 
-    return _record_to_suggestion(rec, from_thing, to_thing)
+        session.refresh(from_thing)
+        session.refresh(to_thing)
+
+        return _record_to_suggestion(rec, from_thing, to_thing)
