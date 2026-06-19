@@ -91,6 +91,11 @@ def find_connection_candidates(
             thing_stmt = thing_stmt.where(user_filter_clause(ThingRecord.user_id, user_id))
         thing_stmt = thing_stmt.order_by(desc(ThingRecord.updated_at)).limit(MAX_THINGS_PER_SWEEP)
         things = session.exec(thing_stmt).all()
+        if len(things) >= MAX_THINGS_PER_SWEEP:
+            logger.warning(
+                "Connection sweep capped at %d Things (some may be skipped)",
+                MAX_THINGS_PER_SWEEP,
+            )
         thing_ids = [t.id for t in things]
 
         # Build set of existing relationships (both directions) and parent pairs in one query
