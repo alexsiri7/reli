@@ -17,7 +17,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from sqlmodel import Session, or_, select
+from sqlmodel import Session, desc, or_, select
 
 import backend.db_engine as _engine_mod
 
@@ -37,6 +37,9 @@ MAX_DISTANCE = 0.35
 
 # Maximum number of candidate pairs to send to LLM
 MAX_LLM_CANDIDATES = 30
+
+# Maximum number of active Things to load per sweep to prevent OOM on memory-constrained hosts
+MAX_THINGS_PER_SWEEP = 500
 
 
 @dataclass
@@ -86,8 +89,7 @@ def find_connection_candidates(
         thing_stmt = select(ThingRecord).where(ThingRecord.active)
         if user_id:
             thing_stmt = thing_stmt.where(user_filter_clause(ThingRecord.user_id, user_id))
-        # Limit to 500 Things per sweep to prevent OOM on memory-constrained hosts
-        thing_stmt = thing_stmt.limit(500)
+        thing_stmt = thing_stmt.order_by(desc(ThingRecord.updated_at)).limit(MAX_THINGS_PER_SWEEP)
         things = session.exec(thing_stmt).all()
         thing_ids = [t.id for t in things]
 

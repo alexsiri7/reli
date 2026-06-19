@@ -1613,3 +1613,48 @@ class TestConnectionSweepUserScoping:
             with TestClient(app) as client:
                 response = client.post("/api/sweep/connections")
         assert response.status_code in (401, 403)
+
+    def test_find_connection_candidates_limits_things_loaded(self, patched_db, db):
+        """find_connection_candidates must not process more than MAX_THINGS_PER_SWEEP Things.
+
+        Regression test: the .limit(MAX_THINGS_PER_SWEEP) guard must remain in place.
+        Inserting more Things than the cap and counting vector_search_with_distances
+        calls verifies the cap is enforced at the DB query level.
+        """
+        import uuid
+        from unittest.mock import patch as _patch
+
+        from backend.connection_sweep import MAX_THINGS_PER_SWEEP, find_connection_candidates
+
+        over_limit = MAX_THINGS_PER_SWEEP + 100
+
+        with db() as conn:
+            for i in range(over_limit):
+                thing_id = f"limit-thing-{i}"
+                conn.execute(
+                    """INSERT INTO things
+                       (id, title, type_hint, importance, checkin_date, active, surface,
+                        data, open_questions, created_at, updated_at, user_id)
+                       VALUES (?, ?, NULL, 2, NULL, 1, 1, NULL, NULL, '2026-01-01', '2026-01-01', 'u-limit')""",
+                    (thing_id, f"Limit Thing {i}"),
+                )
+
+        call_count: dict = {"n": 0}
+
+        def counting_vector_search(query, n_results, active_only, user_id):
+            call_count["n"] += 1
+            return []
+
+        with (
+            _patch("backend.vector_store.vector_count", return_value=over_limit),
+            _patch(
+                "backend.vector_store.vector_search_with_distances",
+                side_effect=counting_vector_search,
+            ),
+        ):
+            find_connection_candidates(user_id="u-limit")
+
+        assert call_count["n"] <= MAX_THINGS_PER_SWEEP, (
+            f"Expected at most {MAX_THINGS_PER_SWEEP} Things processed, "
+            f"got {call_count['n']} — the query limit guard may have been removed."
+        )
