@@ -86,6 +86,8 @@ def find_connection_candidates(
         thing_stmt = select(ThingRecord).where(ThingRecord.active)
         if user_id:
             thing_stmt = thing_stmt.where(user_filter_clause(ThingRecord.user_id, user_id))
+        # Limit to 500 Things per sweep to prevent OOM on memory-constrained hosts
+        thing_stmt = thing_stmt.limit(500)
         things = session.exec(thing_stmt).all()
         thing_ids = [t.id for t in things]
 
