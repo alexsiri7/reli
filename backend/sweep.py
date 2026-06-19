@@ -2380,7 +2380,7 @@ async def auto_merge_duplicates(
                     id=f"sf-{uuid.uuid4().hex[:8]}",
                     thing_id=keep_id,
                     finding_type="duplicate_auto_merged",
-                    message=(f'Auto-merged duplicate "{result["remove_title"]}" into "{result["keep_title"]}"'),
+                    message=f'Auto-merged duplicate "{result["remove_title"]}" into "{result["keep_title"]}"',
                     priority=3,
                     dismissed=False,
                     created_at=now,
@@ -2391,8 +2391,7 @@ async def auto_merge_duplicates(
 
     if audit_findings:
         with Session(_engine_mod.engine) as audit_session:
-            for finding in audit_findings:
-                audit_session.add(finding)
+            audit_session.add_all(audit_findings)
             try:
                 audit_session.commit()
             except Exception:
