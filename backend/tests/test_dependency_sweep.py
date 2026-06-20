@@ -13,6 +13,7 @@ from sqlmodel import Session, select
 import backend.db_engine as _engine_mod
 from backend.db_models import ConnectionSuggestionRecord, SweepFindingRecord
 from backend.dependency_sweep import (
+    MAX_THINGS_PER_DEPENDENCY_SWEEP,
     DependencyCluster,
     _format_cluster_for_llm,
     find_dependency_clusters,
@@ -124,8 +125,6 @@ class TestFindDependencyClusters:
 
     def test_limits_things_loaded(self, db):
         """Regression test for OOM (#1251): dependency_sweep must cap loaded Things."""
-        from backend.dependency_sweep import MAX_THINGS_PER_DEPENDENCY_SWEEP
-
         # Insert MAX_THINGS_PER_DEPENDENCY_SWEEP + 100 active Things
         for i in range(MAX_THINGS_PER_DEPENDENCY_SWEEP + 100):
             _insert_thing(db, f"Thing {i}")
