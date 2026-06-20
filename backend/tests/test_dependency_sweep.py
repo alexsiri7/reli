@@ -136,6 +136,10 @@ class TestFindDependencyClusters:
             mock_logger.warning.assert_called_once()
             assert "capped at" in str(mock_logger.warning.call_args)
 
+        # Liveness check: function must complete and return a list (no OOM/hang)
+        result = find_dependency_clusters(user_id="")
+        assert isinstance(result, list)
+
 
 class TestFormatClusterForLlm:
     def test_format_cluster_includes_deadline(self):
