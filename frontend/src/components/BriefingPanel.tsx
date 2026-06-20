@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../store'
 import { serialiseMorningBriefing } from '../format/briefing'
 import type { SweepFinding, LearnedPreference } from '../generated/api-types'
-import type { BriefingItem, CalendarEvent } from '../store'
+import type { BriefingItem, CalendarEvent } from '../types'
 import type { SweepAction } from '../generated/api-types'
 import { NudgeBanner } from './NudgeBanner'
 

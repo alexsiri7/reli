@@ -1,4 +1,4 @@
-import type { CalendarEvent } from '../store'
+import type { CalendarEvent } from '../types'
 import { setCacheEntry, getCacheEntry } from './idb'
 
 const CACHE_KEY = 'calendarEvents'

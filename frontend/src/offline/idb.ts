@@ -182,6 +182,11 @@ export async function deletePendingOp(id: number): Promise<void> {
   return db.delete('pendingOps', id)
 }
 
+export async function countPendingOps(): Promise<number> {
+  const db = await getDB()
+  return db.count('pendingOps')
+}
+
 export async function clearPendingOps(): Promise<void> {
   const db = await getDB()
   return db.clear('pendingOps')

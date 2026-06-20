@@ -1,4 +1,4 @@
-import type { AppliedChanges } from '../store'
+import type { AppliedChanges } from '../types'
 
 export function preferenceConfidenceLabel(data: unknown): string {
   if (!data || typeof data !== 'object') return ''

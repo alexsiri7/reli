@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { DueTodayRow, TodayEventRow, FindingCard } from '../components/BriefingPanel'
 import type { SweepFinding, Thing } from '../generated/api-types'
-import type { BriefingItem, CalendarEvent } from '../store'
+import type { BriefingItem, CalendarEvent } from '../types'
 
 const mockItem: BriefingItem = {
   thing: { id: 'thing-1', title: 'Write proposal', active: true } as BriefingItem['thing'],

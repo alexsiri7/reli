@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { CalendarSection } from '../components/CalendarSection'
-import type { CalendarEvent, CalendarStatus } from '../store'
+import type { CalendarEvent, CalendarStatus } from '../types'
 
 const fetchCalendarStatus = vi.fn()
 const fetchCalendarEvents = vi.fn()
