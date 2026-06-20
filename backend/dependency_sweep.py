@@ -16,7 +16,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
-from sqlmodel import Session, or_, select
+from sqlmodel import Session, desc, or_, select
 
 import backend.db_engine as _engine_mod
 
@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 MAX_CLUSTER_SIZE = 20  # Max Things per LLM cluster
 MAX_CLUSTERS_PER_SWEEP = 10  # Max clusters per sweep run
+MAX_THINGS_PER_DEPENDENCY_SWEEP = 500  # Max active Things to load per sweep to prevent OOM on memory-constrained hosts
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -77,11 +78,17 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
     relationships.
     """
     with Session(_engine_mod.engine) as session:
-        # Get all active Things
+        # Get all active Things (limited to prevent OOM on memory-constrained hosts)
         thing_stmt = select(ThingRecord).where(ThingRecord.active == True)  # noqa: E712 — SQLAlchemy requires == for column comparisons; `is True` evaluates in Python, not SQL
         if user_id:
             thing_stmt = thing_stmt.where(user_filter_clause(ThingRecord.user_id, user_id))
+        thing_stmt = thing_stmt.order_by(desc(ThingRecord.updated_at)).limit(MAX_THINGS_PER_DEPENDENCY_SWEEP)
         things = session.exec(thing_stmt).all()
+        if len(things) >= MAX_THINGS_PER_DEPENDENCY_SWEEP:
+            logger.warning(
+                "dependency_sweep: active Things capped at %d — some Things will not be included in this sweep cycle",
+                MAX_THINGS_PER_DEPENDENCY_SWEEP,
+            )
         thing_map = {
             t.id: {
                 "id": t.id,

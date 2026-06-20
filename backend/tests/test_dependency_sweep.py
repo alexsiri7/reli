@@ -122,6 +122,20 @@ class TestFindDependencyClusters:
         clusters = find_dependency_clusters()
         assert len(clusters) == 0
 
+    def test_limits_things_loaded(self, db):
+        """Regression test for OOM (#1251): dependency_sweep must cap loaded Things."""
+        from backend.dependency_sweep import MAX_THINGS_PER_DEPENDENCY_SWEEP
+
+        # Insert MAX_THINGS_PER_DEPENDENCY_SWEEP + 100 active Things
+        for i in range(MAX_THINGS_PER_DEPENDENCY_SWEEP + 100):
+            _insert_thing(db, f"Thing {i}")
+
+        with patch("backend.dependency_sweep.logger") as mock_logger:
+            find_dependency_clusters(user_id="")
+            # Warning must be logged when limit is hit
+            mock_logger.warning.assert_called_once()
+            assert "capped at" in str(mock_logger.warning.call_args)
+
 
 class TestFormatClusterForLlm:
     def test_format_cluster_includes_deadline(self):
