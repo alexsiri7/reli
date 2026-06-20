@@ -298,7 +298,7 @@ class TestMorningBriefingActionsTaken:
     @freeze_time("2026-06-16T12:00:00Z")
     def test_action_older_than_24h_excluded(self, patched_db, client):
         """Actions older than 24 hours are excluded from the briefing."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timezone
 
         from sqlmodel import Session
 

@@ -13,6 +13,7 @@ from sqlmodel import Session, select
 import backend.db_engine as _engine_mod
 from backend.db_models import ConnectionSuggestionRecord, SweepFindingRecord
 from backend.dependency_sweep import (
+    MAX_THINGS_PER_DEPENDENCY_SWEEP,
     DependencyCluster,
     _format_cluster_for_llm,
     find_dependency_clusters,
@@ -121,6 +122,22 @@ class TestFindDependencyClusters:
 
         clusters = find_dependency_clusters()
         assert len(clusters) == 0
+
+    def test_limits_things_loaded(self, db):
+        """Regression test for OOM (#1251): dependency_sweep must cap loaded Things."""
+        # Insert MAX_THINGS_PER_DEPENDENCY_SWEEP + 100 active Things
+        for i in range(MAX_THINGS_PER_DEPENDENCY_SWEEP + 100):
+            _insert_thing(db, f"Thing {i}")
+
+        with patch("backend.dependency_sweep.logger") as mock_logger:
+            find_dependency_clusters(user_id="")
+            # Warning must be logged when limit is hit
+            mock_logger.warning.assert_called_once()
+            assert "capped at" in str(mock_logger.warning.call_args)
+
+        # Liveness check: function must complete and return a list (no OOM/hang)
+        result = find_dependency_clusters(user_id="")
+        assert isinstance(result, list)
 
 
 class TestFormatClusterForLlm:
