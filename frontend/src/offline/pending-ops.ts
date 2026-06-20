@@ -1,6 +1,7 @@
 import {
   enqueuePendingOp,
   getAllPendingOps,
+  countPendingOps,
   deletePendingOp,
   type PendingOp,
 } from './idb'
@@ -45,6 +46,5 @@ export async function removePendingOp(id: number): Promise<void> {
  * Get the number of pending operations.
  */
 export async function getPendingCount(): Promise<number> {
-  const ops = await getAllPendingOps()
-  return ops.length
+  return countPendingOps()
 }

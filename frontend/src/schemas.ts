@@ -172,10 +172,6 @@ export const SessionStatsSchema = z.object({
   per_model: z.array(ModelUsageSchema),
 })
 
-export const HealthResponseSchema = z.object({
-  status: z.string(),
-})
-
 export const AuthUserSchema = z.object({
   id: z.string(),
   email: z.string(),
