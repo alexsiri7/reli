@@ -4,9 +4,8 @@ import json
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
-from freezegun import freeze_time
-
 import pytest
+from freezegun import freeze_time
 from sqlmodel import Session
 
 import backend.db_engine as _engine_mod
@@ -1621,7 +1620,6 @@ class TestConnectionSweepUserScoping:
         Inserting more Things than the cap and counting vector_search_with_distances
         calls verifies the cap is enforced at the DB query level.
         """
-        import uuid
         from unittest.mock import patch as _patch
 
         from backend.connection_sweep import MAX_THINGS_PER_SWEEP, find_connection_candidates

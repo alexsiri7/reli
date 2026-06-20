@@ -1,6 +1,5 @@
 """Tests for accept_suggestion cross-user ownership check."""
 
-import json
 from datetime import datetime, timezone
 
 
