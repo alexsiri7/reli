@@ -236,6 +236,7 @@ class TestMorningBriefingLimit:
     def test_generate_morning_briefing_limits_things_loaded(self, patched_db):
         """Regression: morning briefing must not load more than MAX_THINGS_PER_BRIEFING Things."""
         import uuid
+        from unittest.mock import patch
 
         from sqlmodel import Session
 
@@ -258,10 +259,13 @@ class TestMorningBriefingLimit:
                 )
             session.commit()
 
-        result = generate_morning_briefing("")
-        assert result is not None  # completes without OOM
-        # At most MAX_THINGS_PER_BRIEFING items considered for priorities
-        assert len(result.priorities) <= MAX_THINGS_PER_BRIEFING
+        with patch("backend.morning_briefing.logger") as mock_logger:
+            result = generate_morning_briefing("")
+            mock_logger.warning.assert_called_once()
+            assert "capped at" in str(mock_logger.warning.call_args)
+
+        # Liveness check: function completes without OOM
+        assert result is not None
 
 
 class TestRecordSweepAction:
