@@ -194,7 +194,7 @@ def generate_morning_briefing(
             .limit(MAX_THINGS_PER_BRIEFING)
         )  # type: ignore[union-attr]
         thing_rows = session.exec(thing_stmt).all()
-        if len(thing_rows) >= MAX_THINGS_PER_BRIEFING:
+        if len(thing_rows) == MAX_THINGS_PER_BRIEFING:
             logger.warning(
                 "morning_briefing: capped at %d Things (some may be excluded from briefing)",
                 MAX_THINGS_PER_BRIEFING,

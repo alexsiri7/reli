@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 MAX_CLUSTER_SIZE = 20  # Max Things per LLM cluster
 MAX_CLUSTERS_PER_SWEEP = 10  # Max clusters per sweep run
-MAX_THINGS_PER_DEPENDENCY_SWEEP = 500  # Max active Things to load per sweep to prevent OOM on memory-constrained hosts
+MAX_THINGS_PER_DEPENDENCY_SWEEP = 500  # OOM cap: max active Things to load per sweep
 
 # ---------------------------------------------------------------------------
 # Dataclasses
