@@ -288,12 +288,16 @@ jobs:
           DEP_ID=$(printf '{"ref":"%s","environment":"production","auto_merge":false,"required_contexts":[]}' "$DEPLOY_SHA" | \
             gh api "repos/${{ github.repository }}/deployments" \
             --input - \
-            --jq '.id') || { echo "ERROR: Failed to create GitHub deployment record"; exit 1; }
+            --jq '.id | select(. != null)') || {
+              echo "::warning::Failed to create GitHub deployment record — API error"
+              exit 0
+            }
           if [ -z "$DEP_ID" ]; then
-            echo "ERROR: DEP_ID is empty — deployment record not created"
-            exit 1
+            echo "::warning::DEP_ID is empty — GitHub deployment record not created"
+            exit 0
           fi
           gh api "repos/${{ github.repository }}/deployments/$DEP_ID/statuses" \
             -f state="$STATE" \
             -f environment="production" \
-            -f description="Deploy $DEPLOY_RESULT at ${DEPLOY_SHA:0:7}"
+            -f description="Deploy $DEPLOY_RESULT at ${DEPLOY_SHA:0:7}" || \
+            echo "::warning::Failed to set deployment status — status record may be incomplete"
