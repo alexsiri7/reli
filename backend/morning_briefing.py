@@ -49,6 +49,8 @@ _ONESHOT_KEYS = {
     "date",
 }
 
+MAX_THINGS_PER_BRIEFING = 500
+
 
 def _parse_date(value: object) -> date | None:
     if isinstance(value, str):
@@ -181,7 +183,7 @@ def generate_morning_briefing(
     findings_list: list[MorningBriefingFinding] = []
 
     with Session(_engine_mod.engine) as session:
-        # Fetch active things
+        # Fetch active things — capped to prevent OOM on memory-constrained hosts
         thing_stmt = (
             select(ThingRecord)
             .where(
@@ -189,8 +191,14 @@ def generate_morning_briefing(
                 user_filter_clause(ThingRecord.user_id, user_id),
             )
             .order_by(ThingRecord.importance.asc(), ThingRecord.updated_at.desc())
+            .limit(MAX_THINGS_PER_BRIEFING)
         )  # type: ignore[union-attr]
         thing_rows = session.exec(thing_stmt).all()
+        if len(thing_rows) >= MAX_THINGS_PER_BRIEFING:
+            logger.warning(
+                "morning_briefing: capped at %d Things (some may be excluded from briefing)",
+                MAX_THINGS_PER_BRIEFING,
+            )
         thing_ids = [r.id for r in thing_rows]
 
         # Fetch relationships for blocking analysis

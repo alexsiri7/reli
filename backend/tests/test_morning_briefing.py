@@ -232,6 +232,38 @@ class TestMorningBriefingConfidenceGate:
         assert "high confidence morning finding" in finding_msgs
 
 
+class TestMorningBriefingLimit:
+    def test_generate_morning_briefing_limits_things_loaded(self, patched_db):
+        """Regression: morning briefing must not load more than MAX_THINGS_PER_BRIEFING Things."""
+        import uuid
+
+        from sqlmodel import Session
+
+        import backend.db_engine as engine_mod
+        from backend.db_models import ThingRecord
+        from backend.morning_briefing import MAX_THINGS_PER_BRIEFING, generate_morning_briefing
+
+        over_limit = MAX_THINGS_PER_BRIEFING + 100
+
+        with Session(engine_mod.engine) as session:
+            for i in range(over_limit):
+                session.add(
+                    ThingRecord(
+                        id=str(uuid.uuid4()),
+                        title=f"Thing {i}",
+                        active=True,
+                        user_id="",
+                        importance=3,
+                    )
+                )
+            session.commit()
+
+        result = generate_morning_briefing("")
+        assert result is not None  # completes without OOM
+        # At most MAX_THINGS_PER_BRIEFING items considered for priorities
+        assert len(result.priorities) <= MAX_THINGS_PER_BRIEFING
+
+
 class TestRecordSweepAction:
     def test_creates_db_row(self, patched_db):
         """record_sweep_action persists a SweepActionRecord to the DB."""
