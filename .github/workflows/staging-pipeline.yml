@@ -165,8 +165,10 @@ jobs:
     name: Deploy to production
     runs-on: ubuntu-latest
     needs: [deploy-staging, staging-e2e]
+    environment: production
     permissions:
       contents: read
+      deployments: write
     steps:
       - uses: actions/checkout@v6
 
@@ -272,3 +274,30 @@ jobs:
             -H "Title: ${{ github.event.repository.name }} landed in prod" \
             -H "Tags: tada" \
             -d "$body" "ntfy.sh/$NTFY_TOPIC" || true
+
+      - name: Record production deployment on GitHub
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_SHA: ${{ needs.deploy-staging.outputs.deploy_sha }}
+          DEPLOY_RESULT: ${{ job.status }}
+        run: |
+          STATE="success"
+          [ "$DEPLOY_RESULT" != "success" ] && STATE="failure"
+          # DEPLOY_SHA is a 40-char hex SHA; no JSON-special chars, so printf interpolation is safe
+          DEP_ID=$(printf '{"ref":"%s","environment":"production","auto_merge":false,"required_contexts":[]}' "$DEPLOY_SHA" | \
+            gh api "repos/${{ github.repository }}/deployments" \
+            --input - \
+            --jq '.id | select(. != null)') || {
+              echo "::warning::Failed to create GitHub deployment record — API error"
+              exit 0
+            }
+          if [ -z "$DEP_ID" ]; then
+            echo "::warning::DEP_ID is empty — GitHub deployment record not created"
+            exit 0
+          fi
+          gh api "repos/${{ github.repository }}/deployments/$DEP_ID/statuses" \
+            -f state="$STATE" \
+            -f environment="production" \
+            -f description="Deploy $DEPLOY_RESULT at ${DEPLOY_SHA:0:7}" || \
+            echo "::warning::Failed to set deployment status — status record may be incomplete"
