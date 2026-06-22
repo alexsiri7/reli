@@ -1,9 +1,17 @@
 """Tests for weekly_briefing helpers."""
 
-import pytest
+import json
+import logging
+import uuid
+from datetime import date, timedelta
 
+import pytest
+from sqlmodel import Session
+
+import backend.db_engine as engine_mod
+from backend.db_models import ThingRecord
 from backend.models import WeeklyBriefingItem
-from backend.weekly_briefing import _urgency_sort_key
+from backend.weekly_briefing import MAX_THINGS_PER_BRIEFING, _urgency_sort_key, generate_weekly_briefing
 
 
 def _make_item(detail: str | None = None) -> WeeklyBriefingItem:
@@ -48,16 +56,6 @@ class TestUrgencySortKey:
 class TestWeeklyBriefingLimit:
     def test_generate_weekly_briefing_limits_things_loaded(self, patched_db):
         """Regression: weekly briefing must not load more than MAX_THINGS_PER_BRIEFING Things."""
-        import json
-        import uuid
-        from datetime import date, timedelta
-
-        from sqlmodel import Session
-
-        import backend.db_engine as engine_mod
-        from backend.db_models import ThingRecord
-        from backend.weekly_briefing import MAX_THINGS_PER_BRIEFING, generate_weekly_briefing
-
         over_limit = MAX_THINGS_PER_BRIEFING + 50
         # Give every record a deadline within 7 days so active_rows feeds upcoming (1 entry per thing).
         soon = (date.today() + timedelta(days=3)).isoformat()
@@ -83,15 +81,6 @@ class TestWeeklyBriefingLimit:
 
     def test_warning_emitted_when_capped(self, patched_db, caplog):
         """Warning is logged when active Things reach the cap."""
-        import logging
-        import uuid
-
-        from sqlmodel import Session
-
-        import backend.db_engine as engine_mod
-        from backend.db_models import ThingRecord
-        from backend.weekly_briefing import MAX_THINGS_PER_BRIEFING, generate_weekly_briefing
-
         with Session(engine_mod.engine) as session:
             for i in range(MAX_THINGS_PER_BRIEFING):
                 session.add(ThingRecord(id=str(uuid.uuid4()), title=f"T{i}", active=True))
