@@ -1,9 +1,17 @@
 """Tests for weekly_briefing helpers."""
 
-import pytest
+import json
+import logging
+import uuid
+from datetime import date, timedelta
 
+import pytest
+from sqlmodel import Session
+
+import backend.db_engine as engine_mod
+from backend.db_models import ThingRecord
 from backend.models import WeeklyBriefingItem
-from backend.weekly_briefing import _urgency_sort_key
+from backend.weekly_briefing import MAX_THINGS_PER_BRIEFING, _urgency_sort_key, generate_weekly_briefing
 
 
 def _make_item(detail: str | None = None) -> WeeklyBriefingItem:
@@ -43,3 +51,42 @@ class TestUrgencySortKey:
             "Deadline in 2d",
             "Birthday in 5d",
         ]
+
+
+class TestWeeklyBriefingLimit:
+    def test_generate_weekly_briefing_limits_things_loaded(self, patched_db):
+        """Regression: weekly briefing must not load more than MAX_THINGS_PER_BRIEFING Things."""
+        over_limit = MAX_THINGS_PER_BRIEFING + 50
+        # Give every record a deadline within 7 days so active_rows feeds upcoming (1 entry per thing).
+        soon = (date.today() + timedelta(days=3)).isoformat()
+
+        with Session(engine_mod.engine) as session:
+            for i in range(over_limit):
+                session.add(
+                    ThingRecord(
+                        id=str(uuid.uuid4()),
+                        title=f"Thing {i}",
+                        active=True,
+                        data=json.dumps({"deadline": soon}),
+                    )
+                )
+            session.commit()
+
+        # Should not OOM or raise — limit must have been applied at the query level
+        result = generate_weekly_briefing(user_id="")
+        # upcoming is populated 1-to-1 from active_rows (one deadline per thing via `break`).
+        # Without the .limit() cap, len(upcoming) would approach over_limit.
+        # With the cap applied it must be <= MAX_THINGS_PER_BRIEFING.
+        assert len(result.upcoming) <= MAX_THINGS_PER_BRIEFING
+
+    def test_warning_emitted_when_capped(self, patched_db, caplog):
+        """Warning is logged when active Things reach the cap."""
+        with Session(engine_mod.engine) as session:
+            for i in range(MAX_THINGS_PER_BRIEFING):
+                session.add(ThingRecord(id=str(uuid.uuid4()), title=f"T{i}", active=True))
+            session.commit()
+
+        with caplog.at_level(logging.WARNING, logger="backend.weekly_briefing"):
+            generate_weekly_briefing(user_id="")
+
+        assert any("capped at" in r.message for r in caplog.records)

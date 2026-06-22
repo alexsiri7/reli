@@ -31,6 +31,8 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+MAX_THINGS_PER_BRIEFING = 500
+
 
 def _s(n: int) -> str:
     return "s" if n != 1 else ""
@@ -127,11 +129,21 @@ def generate_weekly_briefing(
         completed_rows = session.exec(completed_stmt).all()
 
         # All active things (for upcoming deadlines and open questions)
-        active_stmt = select(ThingRecord).where(
-            ThingRecord.active,
-            user_filter_clause(ThingRecord.user_id, user_id),
+        # Capped to prevent OOM on memory-constrained hosts — same cap as morning_briefing
+        active_stmt = (
+            select(ThingRecord)
+            .where(
+                ThingRecord.active,
+                user_filter_clause(ThingRecord.user_id, user_id),
+            )
+            .limit(MAX_THINGS_PER_BRIEFING)
         )
         active_rows = session.exec(active_stmt).all()
+        if len(active_rows) >= MAX_THINGS_PER_BRIEFING:
+            logger.warning(
+                "weekly_briefing: capped at %d Things (some may be excluded from digest)",
+                MAX_THINGS_PER_BRIEFING,
+            )
 
         # New connections created in lookback window
         FromThing = aliased(ThingRecord)
