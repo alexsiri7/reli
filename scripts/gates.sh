@@ -50,7 +50,7 @@ run_test() {
     fi
 
     echo "=== Test (backend) ==="
-    if ! python3 -m pytest backend/tests/ -x --tb=short --cov=backend --cov-fail-under=70; then
+    if ! uv run pytest backend/tests/ -x --tb=short --cov=backend --cov-fail-under=70; then
         echo "FAILED: backend tests"
         failed=1
     fi
