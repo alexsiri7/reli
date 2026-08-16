@@ -1,4 +1,4 @@
-# Resolution of Issue #1283
+# Resolution of Issue #1282
 
 **Date**: 2026-08-16  
 **Issue**: Deploy down: https://reli.interstellarai.net returning HTTP 000  
@@ -6,7 +6,7 @@
 
 ## Summary
 
-Issue #1283 was a false positive from the `pipeline-health-cron.sh` monitoring script. The cron detected `HTTP 000` (connection refused) at 2026-07-04 03:01:55 UTC across all retry attempts. This is consistent with a Railway container restart exceeding the 6×20s (~100–160s) retry window — no actual application outage occurred.
+Issue #1282 was a false positive from the `pipeline-health-cron.sh` monitoring script. The cron detected `HTTP 000` (connection refused) at 2026-07-03 03:01:54 UTC across all retry attempts. This is consistent with a Railway container restart exceeding the 6×20s (~100–160s) retry window — no actual application outage occurred.
 
 ## Problem
 
@@ -14,7 +14,7 @@ The `check_deploy_http` function in `pipeline-health-cron.sh` (interstellarai.ne
 
 ## Pattern
 
-This is the ninth instance of this false positive:
+This is the eighth instance of this false positive:
 
 | Issue | Date | Cause | Fix Applied |
 |-------|------|-------|-------------|
@@ -25,15 +25,14 @@ This is the ninth instance of this false positive:
 | #1162 | 2026-06-07 | Retry window too short (3×10s) | Documented in RESOLUTION_1162 |
 | #1178/#1179 | 2026-06-10 | Staging pre-flight pattern | Fixed in #1178/#1180 |
 | #1181 | 2026-06-11 | Retry window still too short (3×30s) | Fixed to 6×20s |
-| #1282 | 2026-07-03 | Retry window still too short (6×20s) | Documented in RESOLUTION_1282 |
-| #1283 | 2026-07-04 | Retry window still too short (6×20s) | This resolution |
+| #1282 | 2026-07-03 | Retry window still too short (6×20s) | This resolution |
 
 ## Evidence
 
-- **No code changes on July 3-4 2026** that would trigger a deployment or cause a startup failure.
-- **Detection at 03:01 UTC** - no deployment was in progress.
-- **HTTP 000 = connection refused** - consistent with Railway container restart (port not yet bound), not a crash loop or config error.
-- Service recovered on its own - consistent with transient restart, not a persistent outage.
+- **No code changes on July 3 2026** that would trigger a deployment or cause a startup failure.
+- **Detection at 03:01 UTC** — no deployment was in progress.
+- **HTTP 000 = connection refused** — consistent with Railway container restart (port not yet bound), not a crash loop or config error.
+- Service recovered on its own — consistent with transient restart, not a persistent outage.
 
 ## Solution
 
@@ -70,5 +69,5 @@ done
 - Issue #1162 — retry window too short (3×10s)
 - Issue #1178/#1179 — staging pre-flight pattern
 - Issue #1181 — retry window too short (3×30s), fixed to 6×20s
-- Issue #1282 — same pattern (6×20s retry insufficient for July 3 restart)
+- Issue #1283 — same pattern (6×20s retry insufficient for July 4 restart)
 - Issue #1285 — same pattern (6×20s retry insufficient for July 6 restart)

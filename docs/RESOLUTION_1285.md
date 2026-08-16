@@ -14,7 +14,7 @@ The `check_deploy_http` function in `pipeline-health-cron.sh` (interstellarai.ne
 
 ## Pattern
 
-This is the ninth instance of this false positive:
+This is the tenth instance of this false positive:
 
 | Issue | Date | Cause | Fix Applied |
 |-------|------|-------|-------------|
@@ -25,6 +25,7 @@ This is the ninth instance of this false positive:
 | #1162 | 2026-06-07 | Retry window too short (3×10s) | Documented in RESOLUTION_1162 |
 | #1178/#1179 | 2026-06-10 | Staging pre-flight pattern | Fixed in #1178/#1180 |
 | #1181 | 2026-06-11 | Retry window still too short (3×30s) | Fixed to 6×20s |
+| #1282 | 2026-07-03 | Retry window still too short (6×20s) | Documented in RESOLUTION_1282 |
 | #1283 | 2026-07-04 | Retry window still too short (6×20s) | Documented in RESOLUTION_1283 |
 | #1285 | 2026-07-06 | Retry window still too short (6×20s) | This resolution |
 
@@ -70,5 +71,6 @@ done
 - Issue #1162 — retry window too short (3×10s)
 - Issue #1178/#1179 — staging pre-flight pattern
 - Issue #1181 — retry window too short (3×30s), fixed to 6×20s
+- Issue #1282 — same pattern (6×20s retry insufficient for July 3 restart)
 - Issue #1283 — same pattern (6×20s retry insufficient for July 4 restart)
 - Issue #1285 — this issue (6×20s retry insufficient; recommend 12×20s)
