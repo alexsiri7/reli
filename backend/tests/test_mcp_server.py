@@ -1281,10 +1281,10 @@ class TestMcpStartupFailure:
         @asynccontextmanager
         async def _failing_run():
             raise RuntimeError("Simulated MCP transport startup failure")
-            yield  # noqa: unreachable — required by asynccontextmanager
+            yield  # noqa: F704
 
-        from backend.mcp_server import mcp as _mcp_server
         from backend.main import app
+        from backend.mcp_server import mcp as _mcp_server
 
         sm = _mcp_server._session_manager
         assert sm is not None, "Session manager must exist"
@@ -1334,10 +1334,10 @@ class TestMcpStartupFailure:
         @asynccontextmanager
         async def _failing_run():
             raise RuntimeError("Simulated MCP failure")
-            yield  # noqa: unreachable
+            yield  # noqa: F704
 
-        from backend.mcp_server import mcp as _mcp_server
         from backend.main import app
+        from backend.mcp_server import mcp as _mcp_server
 
         sm = _mcp_server._session_manager
         assert sm is not None
