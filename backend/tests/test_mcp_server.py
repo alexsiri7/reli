@@ -1281,10 +1281,10 @@ class TestMcpStartupFailure:
         @asynccontextmanager
         async def _failing_run():
             raise RuntimeError("Simulated MCP transport startup failure")
-            yield  # noqa: unreachable — required by asynccontextmanager
+            yield  # noqa: F704
 
-        from backend.mcp_server import mcp as _mcp_server
         from backend.main import app
+        from backend.mcp_server import mcp as _mcp_server
 
         sm = _mcp_server._session_manager
         assert sm is not None, "Session manager must exist"
@@ -1298,6 +1298,34 @@ class TestMcpStartupFailure:
                     f"App failed to start in degraded mode: {resp.status_code}"
                 )
 
+    def test_app_starts_when_session_manager_lacks_has_started(self, patched_db) -> None:
+        """When _has_started attribute is missing (mcp 2.x), app must not crash.
+
+        Regression for GH#1314: mcp 2.0.0 removed _has_started from
+        StreamableHTTPSessionManager. The direct attribute read at
+        backend/main.py:130 raised AttributeError outside the try/except guard,
+        crashing the lifespan before yield was reached.
+        """
+        from backend.main import app
+        from backend.mcp_server import mcp as _mcp_server
+
+        sm = _mcp_server._session_manager
+        assert sm is not None
+
+        # Simulate mcp 2.x: mark the manager as started but remove _has_started
+        sm._has_started = True
+        del sm._has_started  # Remove to simulate mcp 2.x API
+
+        try:
+            with TestClient(app) as client:
+                resp = client.get("/healthz")
+                assert resp.status_code == 200, (
+                    f"App crashed when _has_started attribute was missing: {resp.status_code}"
+                )
+        finally:
+            # Restore for subsequent tests
+            sm._has_started = False
+
     def test_mcp_startup_failure_is_logged(self, patched_db) -> None:
         """Exception during MCP startup must be logged at EXCEPTION level."""
         from contextlib import asynccontextmanager
@@ -1306,10 +1334,10 @@ class TestMcpStartupFailure:
         @asynccontextmanager
         async def _failing_run():
             raise RuntimeError("Simulated MCP failure")
-            yield  # noqa: unreachable
+            yield  # noqa: F704
 
-        from backend.mcp_server import mcp as _mcp_server
         from backend.main import app
+        from backend.mcp_server import mcp as _mcp_server
 
         sm = _mcp_server._session_manager
         assert sm is not None
