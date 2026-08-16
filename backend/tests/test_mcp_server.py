@@ -1259,3 +1259,86 @@ class TestSessionManagerRestart:
             assert resp.status_code != 500, (
                 f"MCP returned 500 — session manager task group was not restarted. Response: {resp.text}"
             )
+
+
+class TestMcpStartupFailure:
+    """Regression: app must survive MCP session manager startup exceptions.
+
+    Re: GH#1296 — cold-boot HTTP 000 errors when MCP session_manager.run()
+    raises during startup. The lifespan must catch the exception and yield
+    in degraded mode so uvicorn continues serving other routes.
+    """
+
+    def test_app_starts_in_degraded_mode_when_mcp_fails(self, patched_db) -> None:
+        """When session_manager.__aenter__() raises, the app must still serve requests.
+
+        Regression for GH#1296: if the except branch does not yield, uvicorn hangs
+        on cold boot and Railway returns HTTP 000.
+        """
+        from contextlib import asynccontextmanager
+        from unittest.mock import patch
+
+        @asynccontextmanager
+        async def _failing_run():
+            raise RuntimeError("Simulated MCP transport startup failure")
+            yield  # noqa: unreachable — required by asynccontextmanager
+
+        from backend.mcp_server import mcp as _mcp_server
+        from backend.main import app
+
+        sm = _mcp_server._session_manager
+        assert sm is not None, "Session manager must exist"
+        sm._has_started = False
+
+        with patch.object(sm, "run", return_value=_failing_run()):
+            # App must start without hanging, and /healthz must return 200.
+            with TestClient(app) as client:
+                resp = client.get("/healthz")
+                assert resp.status_code == 200, (
+                    f"App failed to start in degraded mode: {resp.status_code}"
+                )
+
+    def test_mcp_startup_failure_is_logged(self, patched_db) -> None:
+        """Exception during MCP startup must be logged at EXCEPTION level."""
+        from contextlib import asynccontextmanager
+        from unittest.mock import patch
+
+        @asynccontextmanager
+        async def _failing_run():
+            raise RuntimeError("Simulated MCP failure")
+            yield  # noqa: unreachable
+
+        from backend.mcp_server import mcp as _mcp_server
+        from backend.main import app
+
+        sm = _mcp_server._session_manager
+        assert sm is not None
+        sm._has_started = False
+
+        with patch.object(sm, "run", return_value=_failing_run()):
+            with patch("backend.main.logger") as mock_logger:
+                with TestClient(app):
+                    pass
+
+                mock_logger.exception.assert_called()
+                logged_msgs = [str(call[0][0]) for call in mock_logger.exception.call_args_list]
+                assert any("MCP session manager failed to start" in msg for msg in logged_msgs), (
+                    f"Expected MCP startup failure log message, got: {logged_msgs}"
+                )
+
+    def test_dockerfile_healthcheck_start_period(self) -> None:
+        """Regression: HEALTHCHECK start-period must be >= 60s for Railway cold boot.
+
+        Re: GH#1296 — 10s was too short for Alembic migrations + MCP startup.
+        """
+        import pathlib
+        import re
+
+        dockerfile = pathlib.Path(__file__).parent.parent.parent / "Dockerfile"
+        content = dockerfile.read_text()
+        match = re.search(r"--start-period=(\d+)s", content)
+        assert match, "HEALTHCHECK --start-period not found in Dockerfile"
+        assert int(match.group(1)) >= 60, (
+            f"HEALTHCHECK start-period is {match.group(1)}s — must be >= 60s for Railway cold boot "
+            "(see GH#1296)"
+        )
