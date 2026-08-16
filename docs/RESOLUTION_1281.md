@@ -27,9 +27,9 @@ This is the ninth instance of this false positive:
 | #1181 | 2026-06-11 | Retry window still too short (3×30s) | Fixed to 6×20s |
 | #1280 | 2026-07-01 | Retry window still too short (6×20s) | Documented in RESOLUTION_1280 |
 | #1281 | 2026-07-02 | Retry window still too short (6×20s) | This resolution |
-| #1283 | 2026-07-04 | Same pattern (6×20s retry insufficient for July 4 restart) | This resolution |
-| #1284 | 2026-07-05 | Same pattern (6×20s retry insufficient for July 5 restart) | This resolution |
-| #1285 | 2026-07-06 | Same pattern (6×20s retry insufficient for July 6 restart) | This resolution |
+| #1283 | 2026-07-04 | Same pattern (6×20s retry insufficient for July 4 restart) | Documented in RESOLUTION_1283 |
+| #1284 | 2026-07-05 | Same pattern (6×20s retry insufficient for July 5 restart) | Documented in RESOLUTION_1284 |
+| #1285 | 2026-07-06 | Same pattern (6×20s retry insufficient for July 6 restart) | Documented in RESOLUTION_1285 |
 
 ## Evidence
 

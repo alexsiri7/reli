@@ -36,7 +36,7 @@ This is the eighth instance of this false positive:
 
 ## Solution
 
-Increase the retry window in `pipeline-health-cron.sh` (interstellarai.net repo) from 6×20s (~160s coverage) to 12×20s (~360s coverage). This covers Railway worst-case restarts with significant margin.
+Increase the retry window in `pipeline-health-cron.sh` (interstellarai.net repo) from 6×20s (~160s coverage) to 12×20s (~220–340s coverage). This covers Railway worst-case restarts with significant margin.
 
 ```bash
 # PREVIOUS — #1181 fix (~160s coverage — 6 attempts × 20s delay)
@@ -47,7 +47,7 @@ for attempt in 1 2 3 4 5 6; do
   [ "$attempt" -lt 6 ] && sleep 20
 done
 
-# RECOMMENDED (~360s coverage — 12 attempts × 20s delay)
+# RECOMMENDED (~220–340s coverage — 12 attempts × 20s delay)
 for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
   http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$deploy_url" 2>/dev/null)
   http_code=${http_code:-000}
