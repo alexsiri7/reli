@@ -130,6 +130,18 @@ def _thing_for_llm(thing: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in thing.items() if k in _LLM_THING_FIELDS}
 
 
+def _safe_things_for_llm(things: list[Any], label: str) -> list[Any]:
+    """Filter a list of Things through ``_thing_for_llm``, warning on non-dict items."""
+    result: list[Any] = []
+    for t in things:
+        if isinstance(t, dict):
+            result.append(_thing_for_llm(t))
+        else:
+            logger.warning("non-dict item in %s: %s", label, type(t).__name__)
+            result.append(t)
+    return result
+
+
 def _fetch_with_family(session: Session, seed_ids: list[str], user_id: str = "") -> list[dict[str, Any]]:
     """Given seed Thing IDs, return those Things plus their parents, children, and related Things via relationships."""
     seen_ids: set[str] = set()
