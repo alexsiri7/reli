@@ -30,7 +30,7 @@ dependencies = [
     "sqlmodel>=0.0.38",
     "alembic>=1.18.5",
     "psycopg2>=2.9.0",
-    "mcp>=1.28.1",
+    "mcp>=1.28.1,<2.0.0",
     "strawberry-graphql>=0.316.0",
 ]
 
