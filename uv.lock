@@ -233,7 +233,7 @@ wheels = [
 
 [[package]]
 name = "arize-phoenix"
-version = "20.2.1"
+version = "19.21.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aioitertools" },
@@ -280,7 +280,6 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "scipy" },
     { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "sqlglot" },
     { name = "starlette" },
     { name = "strawberry-graphql" },
     { name = "tqdm" },
@@ -288,9 +287,9 @@ dependencies = [
     { name = "uvicorn" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/55/ed/b77d60bd6867b34a261f59c568ff021d6891b8eeb4a8010dc3a0eb757d8b/arize_phoenix-20.2.1.tar.gz", hash = "sha256:0a73ecb2289983b614e8710a15b033a9a439a401c16d23dcaa9c0386c6ac93f5", size = 7363112, upload-time = "2026-08-14T20:56:51.861Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8d/38/834150393bb605d851ef401310b059bcb8c98b9001d4815e1cdd53cbdb1b/arize_phoenix-19.21.0.tar.gz", hash = "sha256:6dc7bc6078b2b5f82a32c0110397696a4a16eb5cd693e2662ca901d00a4bf28e", size = 7545601, upload-time = "2026-08-10T18:50:33.266Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8d/85/3814d0d8f5db3b66fb1cb0c99903b4514e24c847907c8a29dcd358548cb6/arize_phoenix-20.2.1-py3-none-any.whl", hash = "sha256:bfbbeab489fc10f4920ef3a8258d2b5ec4354a9779ee7e02ec14c3f1b8dcd66b", size = 7773532, upload-time = "2026-08-14T20:56:49.331Z" },
+    { url = "https://files.pythonhosted.org/packages/01/9b/0c69b55f351ff62f7335eb36812d1d880c2ae9d40518dc2d65a4a2a387ca/arize_phoenix-19.21.0-py3-none-any.whl", hash = "sha256:f19bca2a344aca0d7cbe53702591eb172e16255af711e5e9c236b33d4777586e", size = 7939868, upload-time = "2026-08-10T18:50:30.83Z" },
 ]
 
 [[package]]
@@ -4236,7 +4235,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.5" },
-    { name = "arize-phoenix", specifier = ">=17.27.0" },
+    { name = "arize-phoenix", specifier = ">=17.27.0,<20.0.0" },
     { name = "cryptography", specifier = ">=48.0.0" },
     { name = "fastapi", specifier = ">=0.138.1" },
     { name = "google-adk", specifier = ">=2.1.0" },
@@ -4244,7 +4243,7 @@ requires-dist = [
     { name = "google-auth", specifier = ">=2.54.0" },
     { name = "google-auth-oauthlib", specifier = ">=1.2.0" },
     { name = "litellm", specifier = ">=1.86.2" },
-    { name = "mcp", specifier = ">=1.28.1" },
+    { name = "mcp", specifier = ">=1.28.1,<2.0.0" },
     { name = "openai", specifier = ">=2.44.0" },
     { name = "openinference-instrumentation-google-adk", specifier = ">=0.1.15" },
     { name = "opentelemetry-api", specifier = ">=1.20.0" },
@@ -4725,15 +4724,6 @@ wheels = [
 [package.optional-dependencies]
 asyncio = [
     { name = "greenlet" },
-]
-
-[[package]]
-name = "sqlglot"
-version = "30.15.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/58/fb/c43bfdc662bd6fcdf93158f9239b975ac01b775cfcb56015913fee9b95e2/sqlglot-30.15.0.tar.gz", hash = "sha256:fe5412f4da61075f532d3de2482144bf7139028980a37bbd79fb016c49dc2dbe", size = 5973319, upload-time = "2026-08-04T17:37:12.831Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/32/28/f1e99aca0c23e2406dc8727555476647d58c2d6315d7d8101dffbb2cbc0f/sqlglot-30.15.0-py3-none-any.whl", hash = "sha256:594da0bc9d020edfb9982fd56b61dc93483cb24edca5ed1b3bb17937ba9b59bc", size = 731813, upload-time = "2026-08-04T17:37:11.48Z" },
 ]
 
 [[package]]

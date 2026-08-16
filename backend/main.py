@@ -337,15 +337,9 @@ class _MCPCorsMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         origin = request.headers.get("origin", "")
-        if origin in _mcp_allowed_origins:
-            allow_origin: str | None = origin
-        elif origin:
-            # Origin header present but not in allowlist — block the CORS request.
+        allow_origin: str | None = origin if origin in _mcp_allowed_origins else None
+        if origin and allow_origin is None:
             logger.debug("MCP CORS: origin %r not in allowlist, blocking", origin)
-            allow_origin = None
-        else:
-            # No Origin header (non-browser client) — no CORS header needed.
-            allow_origin = None
 
         if request.method == "OPTIONS":
             resp = StarletteResponse(status_code=204)
