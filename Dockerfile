@@ -65,7 +65,9 @@ ENTRY
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+# 60 s gives Railway cold boots (Alembic migrations + MCP startup) time to complete
+# before Docker begins probing. Total time-to-unhealthy on genuine crash: ≤150 s.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\",\"8000\")}/healthz')" || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]

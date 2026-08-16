@@ -137,8 +137,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
                 sm._has_started = False
                 sm._run_lock = _anyio.Lock()
-            async with _mcp_server.session_manager.run():
+            # Guard startup exceptions so the app starts in degraded mode if MCP
+            # transport fails (GH#1296: cold-boot HTTP 000 on Railway).
+            # We call __aenter__/__aexit__ directly to avoid wrapping the yield
+            # inside the try block — a yield inside try/except can produce a
+            # double-yield when __aexit__ raises during shutdown, which causes
+            # asynccontextmanager to raise RuntimeError: generator didn't stop.
+            _mcp_cm = _mcp_server.session_manager.run()
+            try:
+                await _mcp_cm.__aenter__()
+            except Exception:
+                logger.exception(
+                    "MCP session manager failed to start — serving without MCP transport."
+                )
                 yield
+            else:
+                try:
+                    yield
+                finally:
+                    # Best-effort cleanup; log but don't re-raise so shutdown completes.
+                    try:
+                        await _mcp_cm.__aexit__(None, None, None)
+                    except Exception:
+                        logger.exception("MCP session manager failed to stop cleanly.")
         else:
             yield
     await stop_scheduler()
