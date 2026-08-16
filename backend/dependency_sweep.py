@@ -84,7 +84,7 @@ def find_dependency_clusters(user_id: str = "") -> list[DependencyCluster]:
             thing_stmt = thing_stmt.where(user_filter_clause(ThingRecord.user_id, user_id))
         thing_stmt = thing_stmt.order_by(desc(ThingRecord.updated_at)).limit(MAX_THINGS_PER_DEPENDENCY_SWEEP)
         things = session.exec(thing_stmt).all()
-        if len(things) == MAX_THINGS_PER_DEPENDENCY_SWEEP:
+        if len(things) >= MAX_THINGS_PER_DEPENDENCY_SWEEP:
             logger.warning(
                 "dependency_sweep: active Things capped at %d — some Things will not be included in this sweep cycle",
                 MAX_THINGS_PER_DEPENDENCY_SWEEP,
