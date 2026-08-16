@@ -279,11 +279,9 @@ def _validate_client_secret(client_id: str, client_secret: str) -> None:
     client = cleanup_and_get(mcp_registered_clients, client_id)
     if not client:
         raise HTTPException(status_code=400, detail="Unknown client")
-    auth_method = client.get("token_endpoint_auth_method", "client_secret_post")
-    if auth_method == "none":
+    if client.get("token_endpoint_auth_method", "client_secret_post") == "none":
         return  # Public client — no secret required
-    stored_secret = client.get("client_secret", "")
-    if not client_secret or not secrets.compare_digest(client_secret, stored_secret):
+    if not client_secret or not secrets.compare_digest(client_secret, client.get("client_secret", "")):
         raise HTTPException(status_code=401, detail="Invalid client credentials")
 
 

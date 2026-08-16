@@ -224,10 +224,11 @@ def _db_cleanup_and_pop(store: _Store, key: str) -> dict | None:
     with Session(_engine_module.engine) as session:
         _purge_expired(session, store)
         record = session.get(store.model, key)
-        result = None
-        if record is not None:
-            result = _record_to_dict(record, store)
-            session.delete(record)
+        if record is None:
+            session.commit()
+            return None
+        result = _record_to_dict(record, store)
+        session.delete(record)
         session.commit()
         return result
 
