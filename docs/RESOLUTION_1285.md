@@ -6,7 +6,7 @@
 
 ## Summary
 
-Issue #1285 was a false positive from the `pipeline-health-cron.sh` monitoring script. The cron detected `HTTP 000` (connection refused) at 2026-07-06 03:01:55 UTC across all retry attempts. This is consistent with a Railway container restart exceeding the 6×20s (~160s) retry window — no actual application outage occurred.
+Issue #1285 was a false positive from the `pipeline-health-cron.sh` monitoring script. The cron detected `HTTP 000` (connection refused) at 2026-07-06 03:01:55 UTC across all retry attempts. This is consistent with a Railway container restart exceeding the 6×20s (~100–160s) retry window — no actual application outage occurred.
 
 ## Problem
 
@@ -51,7 +51,9 @@ done
 for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
   http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$deploy_url" 2>/dev/null)
   http_code=${http_code:-000}
-  ...
+  if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 400 ] 2>/dev/null; then
+    break
+  fi
   [ "$attempt" -lt 12 ] && sleep 20
 done
 ```
