@@ -20,8 +20,14 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.server import TransportSecuritySettings
+try:
+    from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.server import TransportSecuritySettings
+except ModuleNotFoundError as _mcp_err:
+    raise RuntimeError(
+        "mcp>=1.0.0 is required (mcp.server.fastmcp is missing). "
+        "Run: pip install 'mcp>=1.28.1' to upgrade from a pre-1.0 installation."
+    ) from _mcp_err
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
