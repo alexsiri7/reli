@@ -312,8 +312,8 @@ def list_things(
     things = [_record_to_thing(r) for r in records]
 
     # Compute child stats and parent_ids from parent-of relationships
-    thing_ids = [t.id for t in things]
-    if thing_ids:
+    if things:
+        thing_ids = [t.id for t in things]
         from collections import defaultdict
 
         from sqlalchemy import case as sa_case
