@@ -29,7 +29,7 @@ dependencies = [
     "supabase>=2.0.0",
     "sqlmodel>=0.0.39",
     "alembic>=1.18.5",
-    "psycopg2>=2.9.0",
+    "psycopg2>=2.9.12",
     "mcp>=1.28.1,<2.0.0",
     "strawberry-graphql>=0.316.0",
 ]
