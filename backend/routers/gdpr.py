@@ -65,16 +65,14 @@ def export_user_data(
     # Thing relationships (no user_id column — filter via thing_ids)
     relationships: list[Any] = []
     if thing_ids:
-        relationships = list(
-            session.exec(
-                select(ThingRelationshipRecord).where(
-                    or_(
-                        ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
-                        ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
-                    )
+        relationships = session.exec(
+            select(ThingRelationshipRecord).where(
+                or_(
+                    ThingRelationshipRecord.from_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
+                    ThingRelationshipRecord.to_thing_id.in_(thing_ids),  # type: ignore[attr-defined]
                 )
-            ).all()
-        )
+            )
+        ).all()
 
     # Thing embeddings (exclude raw vector — not human-readable PII)
     embeddings = []
@@ -98,13 +96,11 @@ def export_user_data(
 
     chat_history: list[Any] = []
     if session_ids:
-        chat_history = list(
-            session.exec(
-                select(ChatHistoryRecord).where(
-                    ChatHistoryRecord.session_id.in_(session_ids)  # type: ignore[attr-defined]
-                )
-            ).all()
-        )
+        chat_history = session.exec(
+            select(ChatHistoryRecord).where(
+                ChatHistoryRecord.session_id.in_(session_ids)  # type: ignore[attr-defined]
+            )
+        ).all()
 
     # Conversation summaries
     conversation_summaries = session.exec(
@@ -213,13 +209,11 @@ def delete_all_user_data(
 
     chat_messages: list[Any] = []
     if session_ids:
-        chat_messages = list(
-            session.exec(
-                select(ChatHistoryRecord).where(
-                    ChatHistoryRecord.session_id.in_(session_ids)  # type: ignore[attr-defined]
-                )
-            ).all()
-        )
+        chat_messages = session.exec(
+            select(ChatHistoryRecord).where(
+                ChatHistoryRecord.session_id.in_(session_ids)  # type: ignore[attr-defined]
+            )
+        ).all()
     chat_msg_ids = [m.id for m in chat_messages]
 
     # Delete in FK-safe order (children before parents)

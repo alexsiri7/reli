@@ -1869,7 +1869,7 @@ async def reflect_on_candidates(
 
     with Session(_engine_mod.engine) as session:
         # Pre-fetch Things for context snapshots
-        thing_ids_in_findings = {f.get("thing_id") for f in raw_findings if isinstance(f, dict) and f.get("thing_id")}
+        thing_ids_in_findings = {tid for f in raw_findings if isinstance(f, dict) and (tid := f.get("thing_id"))}
         thing_map: dict[str, ThingRecord] = {}
         if thing_ids_in_findings:
             thing_map = {

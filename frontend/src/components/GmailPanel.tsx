@@ -116,10 +116,12 @@ export function GmailPanel() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- checkStatus is a useCallback that fetches then sets state; standard async-effect pattern
     checkStatus()
   }, [checkStatus])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetchMessages is a useCallback that fetches then sets state; standard async-effect pattern
     if (status?.connected) fetchMessages()
   }, [status?.connected, fetchMessages])
 
