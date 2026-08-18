@@ -116,12 +116,10 @@ export function GmailPanel() {
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkStatus()
   }, [checkStatus])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (status?.connected) fetchMessages()
   }, [status?.connected, fetchMessages])
 

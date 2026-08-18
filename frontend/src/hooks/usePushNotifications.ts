@@ -72,10 +72,8 @@ export function usePushNotifications() {
 
   // Keep a ref so interval callbacks always see latest prefs/permission
   const prefsRef = useRef(prefs)
-  // eslint-disable-next-line react-hooks/refs
   prefsRef.current = prefs
   const permissionRef = useRef(permission)
-  // eslint-disable-next-line react-hooks/refs
   permissionRef.current = permission
 
   // ── Permission request ─────────────────────────────────────────────────────
@@ -152,6 +150,7 @@ export function usePushNotifications() {
     check() // run immediately on data change
     const id = setInterval(check, 60_000)
     return () => clearInterval(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendarEvents])
 
   // ── Urgent task (findings) notifications ──────────────────────────────────
