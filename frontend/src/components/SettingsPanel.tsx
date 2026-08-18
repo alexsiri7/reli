@@ -1100,6 +1100,7 @@ function ModelPicker({
   const flatIds = useMemo(() => grouped.flatMap(([, ids]) => ids), [grouped])
 
   // Reset to first item on open, to -1 on close; reset on search change
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: sync derived UI state (focus index) from props; no cascade risk
   useEffect(() => { setFocusedIndex(open ? 0 : -1) }, [search, open])
   // Scroll focused row into view
   useEffect(() => {

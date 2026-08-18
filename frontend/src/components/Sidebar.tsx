@@ -616,6 +616,7 @@ export function Sidebar() {
 
   // Keep local open state in sync with store (Cmd+B drives the store)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: sync local state from store; no cascade risk
     setIsOpenLocal(sidebarOpen)
   }, [sidebarOpen])
 
