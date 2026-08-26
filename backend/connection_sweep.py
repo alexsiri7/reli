@@ -160,12 +160,8 @@ def find_connection_candidates(
                 continue
             seen_pairs.add(pair)
 
-            # Skip if already connected
-            if pair in existing_rels or (pair[1], pair[0]) in existing_rels:
-                continue
-            if pair in existing_suggestions or (pair[1], pair[0]) in existing_suggestions:
-                continue
-            if pair in parent_pairs or (pair[1], pair[0]) in parent_pairs:
+            # Skip if already connected (sets contain both directions)
+            if pair in existing_rels or pair in existing_suggestions or pair in parent_pairs:
                 continue
 
             # Check distance threshold
