@@ -45,7 +45,7 @@ This is the sixteenth instance of this false positive:
 
 ## Solution
 
-Increase the retry window in `pipeline-health-cron.sh` (interstellarai.net repo) from 3x30s (~90s coverage) to 12x20s (~240-340s coverage). This covers Railway worst-case restarts with significant margin. Also add retry logic to `check_staging_deploy_http` (line 1042) which currently has zero retry logic.
+Increase the retry window in `pipeline-health-cron.sh` (interstellarai.net repo) from 3x30s (~90s coverage) to 12x20s (~240s coverage). This covers Railway worst-case restarts with significant margin. Also add retry logic to `check_staging_deploy_http` (line 1042) which currently has zero retry logic.
 
 **Repository for fix**: `interstellarai.net` (not `reli`)  
 **File**: `ops/cron/pipeline-health-cron.sh`  
