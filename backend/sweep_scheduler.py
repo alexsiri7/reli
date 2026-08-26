@@ -113,6 +113,23 @@ def _log_run(
         session.commit()
 
 
+async def _run_weekly_briefing_for_user(user_id: str, user_label: str) -> None:
+    """Generate weekly briefing on Mondays."""
+    if datetime.now().weekday() != 0:  # 0 = Monday
+        return
+    try:
+        from .weekly_briefing import generate_weekly_briefing, store_weekly_briefing
+
+        async with asyncio.timeout(300):
+            weekly_content = await asyncio.to_thread(generate_weekly_briefing, user_id)
+            await asyncio.to_thread(store_weekly_briefing, user_id, weekly_content)
+        logger.info("Weekly briefing generated for user %s", user_label)
+    except TimeoutError:
+        logger.error("Weekly briefing timed out for user %s (300s limit)", user_label)
+    except Exception:
+        logger.exception("Failed to generate weekly briefing for user %s", user_label)
+
+
 async def _run_dependency_sweep_for_user(user_id: str, user_label: str) -> None:
     """Run the dependency detection sweep for one user, logging results."""
     from .dependency_sweep import run_dependency_sweep
@@ -216,18 +233,7 @@ async def _run_sweep_for_user(user_id: str) -> None:
                 logger.exception("Failed to generate morning briefing for user %s", user_label)
 
             # Generate weekly briefing on Mondays
-            try:
-                if datetime.now().weekday() == 0:  # 0 = Monday
-                    from .weekly_briefing import generate_weekly_briefing, store_weekly_briefing
-
-                    async with asyncio.timeout(300):
-                        weekly_content = await asyncio.to_thread(generate_weekly_briefing, user_id)
-                        await asyncio.to_thread(store_weekly_briefing, user_id, weekly_content)
-                    logger.info("Weekly briefing generated for user %s (no sweep candidates)", user_label)
-            except TimeoutError:
-                logger.error("Weekly briefing timed out for user %s (300s limit)", user_label)
-            except Exception:
-                logger.exception("Failed to generate weekly briefing for user %s", user_label)
+            await _run_weekly_briefing_for_user(user_id, user_label)
             return
 
         async with asyncio.timeout(300):
@@ -349,18 +355,7 @@ async def _run_sweep_for_user(user_id: str) -> None:
             logger.exception("Failed to generate morning briefing for user %s", user_label)
 
         # Generate weekly briefing on Mondays
-        try:
-            if datetime.now().weekday() == 0:  # 0 = Monday
-                from .weekly_briefing import generate_weekly_briefing, store_weekly_briefing
-
-                async with asyncio.timeout(300):
-                    weekly_content = await asyncio.to_thread(generate_weekly_briefing, user_id)
-                    await asyncio.to_thread(store_weekly_briefing, user_id, weekly_content)
-                logger.info("Weekly briefing generated for user %s", user_label)
-        except TimeoutError:
-            logger.error("Weekly briefing timed out for user %s (300s limit)", user_label)
-        except Exception:
-            logger.exception("Failed to generate weekly briefing for user %s", user_label)
+        await _run_weekly_briefing_for_user(user_id, user_label)
     except Exception as exc:
         logger.exception("Sweep failed for user %s", user_id)
         _log_run(

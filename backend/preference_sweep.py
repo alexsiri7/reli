@@ -337,9 +337,7 @@ async def aggregate_preference_patterns(
                 old_confidence = existing_data.get("confidence", 0.5)
 
                 # Merge evidence (keep last 10)
-                old_evidence = existing_data.get("evidence", [])
-                merged_evidence = old_evidence + evidence
-                merged_evidence = merged_evidence[-10:]
+                merged_evidence = (existing_data.get("evidence", []) + evidence)[-10:]
 
                 updated_data = {
                     **existing_data,
