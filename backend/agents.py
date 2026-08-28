@@ -87,6 +87,7 @@ _THINGS_UPDATABLE_COLUMNS: frozenset[str] = frozenset(
     {"title", "type_hint", "checkin_date", "importance", "active", "surface", "data", "open_questions", "updated_at"}
 )
 
+
 def _assert_safe_columns(fields: dict, context: str = "") -> None:
     """Raise ValueError if *fields* contains any key not in _THINGS_UPDATABLE_COLUMNS."""
     unexpected = set(fields) - _THINGS_UPDATABLE_COLUMNS
@@ -861,6 +862,7 @@ def _build_response_messages(
     )
     if context_things:
         from .pipeline import _safe_things_for_llm  # avoid circular import at module level
+
         context += (
             f"\n\nContext Things (use their IDs for referenced_things): "
             f"{json.dumps(_safe_things_for_llm(context_things, 'context_things'), default=str)}"

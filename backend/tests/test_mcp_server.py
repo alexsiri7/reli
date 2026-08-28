@@ -1294,9 +1294,7 @@ class TestMcpStartupFailure:
             # App must start without hanging, and /healthz must return 200.
             with TestClient(app) as client:
                 resp = client.get("/healthz")
-                assert resp.status_code == 200, (
-                    f"App failed to start in degraded mode: {resp.status_code}"
-                )
+                assert resp.status_code == 200, f"App failed to start in degraded mode: {resp.status_code}"
 
     def test_app_starts_when_session_manager_lacks_has_started(self, patched_db) -> None:
         """When _has_started attribute is missing (mcp 2.x), app must not crash.
@@ -1367,6 +1365,5 @@ class TestMcpStartupFailure:
         match = re.search(r"--start-period=(\d+)s", content)
         assert match, "HEALTHCHECK --start-period not found in Dockerfile"
         assert int(match.group(1)) >= 60, (
-            f"HEALTHCHECK start-period is {match.group(1)}s — must be >= 60s for Railway cold boot "
-            "(see GH#1296)"
+            f"HEALTHCHECK start-period is {match.group(1)}s — must be >= 60s for Railway cold boot (see GH#1296)"
         )

@@ -104,7 +104,7 @@ class TestAcceptSuggestionOwnership:
         app.dependency_overrides[require_user] = lambda: "user-a"
         try:
             with TestClient(app, raise_server_exceptions=False) as c:
-                resp = c.post(f"/api/connections/suggestions/{sug_id}/accept")
+                c.post(f"/api/connections/suggestions/{sug_id}/accept")
         finally:
             if saved is None:
                 app.dependency_overrides.pop(require_user, None)

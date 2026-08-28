@@ -89,7 +89,7 @@ def like_pattern(value: str) -> str:
 # Guard against SQL injection if future code ever routes user input here.
 _SQL_LIKE_OPERATORS: frozenset[str] = frozenset({"LIKE", "ILIKE"})
 
-_TABLE_ALIAS_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+_TABLE_ALIAS_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def user_filter_text(user_id: str, table_alias: str = "", param_name: str = "uf_uid") -> tuple[str, dict]:

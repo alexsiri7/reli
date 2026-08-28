@@ -103,7 +103,9 @@ class TestGetConfig:
 
 def _make_app(llm_rpm: int = 3, auth_rpm: int = 5, reg_rpm: int = 5, api_rpm: int = 5) -> FastAPI:
     app = FastAPI()
-    app.add_middleware(RateLimitMiddleware, llm_rpm=llm_rpm, auth_rpm=auth_rpm, reg_rpm=reg_rpm, api_rpm=api_rpm, enabled=True)
+    app.add_middleware(
+        RateLimitMiddleware, llm_rpm=llm_rpm, auth_rpm=auth_rpm, reg_rpm=reg_rpm, api_rpm=api_rpm, enabled=True
+    )
 
     @app.get("/api/things")
     def list_things():
