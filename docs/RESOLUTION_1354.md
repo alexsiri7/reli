@@ -10,7 +10,7 @@ Issue #1354 was a false positive from the `pipeline-health-cron.sh` monitoring s
 
 ## Problem
 
-The `check_deploy_http` function in `pipeline-health-cron.sh` (interstellarai.net repo, `ops/cron/pipeline-health-cron.sh:993-999`) uses 3 retry attempts with 30s sleep (~90s coverage). Railway container restarts can take ~240s. The previously recommended 6×20s and 12×20s fixes have not been applied — the deployed code still uses the original 3×30s retry.
+The `check_deploy_http` function in `pipeline-health-cron.sh` (interstellarai.net repo, `ops/cron/pipeline-health-cron.sh:993-999`) uses 3 retry attempts with 30s sleep (~90s coverage). Railway container restarts can take ~240s. The previously recommended 6×20s fix (from issue #1181, 120s coverage) was not applied; subsequent incidents showed 120s was itself insufficient for Railway worst-case restarts, leading to the current recommendation of 12×20s (240s coverage). The deployed code still uses the original 3×30s retry.
 
 ## Pattern
 
