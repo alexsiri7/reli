@@ -1288,7 +1288,6 @@ async def test_warm_context_strip_data_before_llm():
         patch("backend.reasoning_agent._make_litellm_model", return_value=MagicMock()),
         patch("backend.reasoning_agent.LlmAgent"),
     ):
-
         from backend.reasoning_agent import run_reasoning_agent
 
         await run_reasoning_agent(

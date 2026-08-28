@@ -39,6 +39,7 @@ def _build_where_sql(clauses: list[str]) -> str:
         raise ValueError(f"SQL injection guard: unexpected WHERE fragment(s) {unexpected}")
     return ("WHERE " + " AND ".join(clauses)) if clauses else ""
 
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------

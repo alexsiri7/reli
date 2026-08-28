@@ -112,8 +112,15 @@ def _sql_things_count(session: Session) -> int:
 # Note: children_count/completed_count/parent_ids are router-layer computed fields
 # not present in raw model_dump() results — not listed here.
 _LLM_THING_FIELDS = {
-    "id", "title", "type_hint", "checkin_date", "importance",
-    "active", "surface", "open_questions", "last_referenced",
+    "id",
+    "title",
+    "type_hint",
+    "checkin_date",
+    "importance",
+    "active",
+    "surface",
+    "open_questions",
+    "last_referenced",
 }
 
 

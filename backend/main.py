@@ -125,9 +125,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         app.state.httpx_client = client
-        sm = getattr(_mcp_server, '_session_manager', None)
+        sm = getattr(_mcp_server, "_session_manager", None)
         if sm is not None:
-            if getattr(sm, '_has_started', False):
+            if getattr(sm, "_has_started", False):
                 # The session manager's run() is one-shot per instance. After it exits
                 # (e.g., hot-reload, uvicorn worker restart, or test teardown), _has_started
                 # remains True and _task_group is None. Reset the one-shot state so we can
@@ -147,9 +147,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             try:
                 await _mcp_cm.__aenter__()
             except Exception:
-                logger.exception(
-                    "MCP session manager failed to start — serving without MCP transport."
-                )
+                logger.exception("MCP session manager failed to start — serving without MCP transport.")
                 yield
             else:
                 try:

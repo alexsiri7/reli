@@ -71,6 +71,4 @@ class TestUpsertThing:
                     upsert_thing({"id": "t1", "title": "Test"})
 
         assert captured_sql, "session.execute was not called"
-        assert "content" not in captured_sql[0].lower(), (
-            "INSERT SQL must not reference the removed content column"
-        )
+        assert "content" not in captured_sql[0].lower(), "INSERT SQL must not reference the removed content column"

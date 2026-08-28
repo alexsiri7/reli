@@ -14,15 +14,22 @@ def _seed(db, owner_from: str, owner_to: str) -> None:
                 (uid, f"{uid}@test.com", f"g-{uid}", uid),
             )
         conn.execute(
-            "INSERT INTO things (id, title, user_id, active, surface, created_at, updated_at) VALUES (?, ?, ?, 1, 1, ?, ?)",
+            "INSERT INTO things"
+            " (id, title, user_id, active, surface, created_at, updated_at)"
+            " VALUES (?, ?, ?, 1, 1, ?, ?)",
             ("t-from", "From Thing", owner_from, now, now),
         )
         conn.execute(
-            "INSERT INTO things (id, title, user_id, active, surface, created_at, updated_at) VALUES (?, ?, ?, 1, 1, ?, ?)",
+            "INSERT INTO things"
+            " (id, title, user_id, active, surface, created_at, updated_at)"
+            " VALUES (?, ?, ?, 1, 1, ?, ?)",
             ("t-to", "To Thing", owner_to, now, now),
         )
         conn.execute(
-            "INSERT INTO connection_suggestions (id, from_thing_id, to_thing_id, suggested_relationship_type, reason, status, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO connection_suggestions"
+            " (id, from_thing_id, to_thing_id, suggested_relationship_type,"
+            " reason, status, user_id, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             ("sug-1", "t-from", "t-to", "related-to", "test", "pending", owner_from, now),
         )
 
