@@ -492,7 +492,6 @@ def _fetch_relevant_things(
         )
     if not pref_ids:
         # SQL fallback for preference Things
-        pref_seen: set[str] = set()
         for query in search_queries[:3]:
             pattern = like_pattern(query)
             pref_stmt2 = select(ThingRecord.id).where(
@@ -507,8 +506,7 @@ def _fetch_relevant_things(
                 pref_stmt2 = pref_stmt2.where(ThingRecord.active)
             pref_stmt2 = pref_stmt2.order_by(ThingRecord.updated_at.desc()).limit(10)  # type: ignore[union-attr]
             for row in session.execute(pref_stmt2).fetchall():
-                if row.id not in pref_seen:
-                    pref_seen.add(row.id)
+                if row.id not in set(pref_ids):
                     pref_ids.append(row.id)
 
     if pref_ids:
