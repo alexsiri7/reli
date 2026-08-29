@@ -40,10 +40,8 @@ export async function readChatStream(
         }
 
         if (eventType === 'stage') {
-          const stage = data.stage as 'context' | 'reasoning' | 'response'
-          const status = data.status as 'started' | 'complete'
-          if (status === 'started') {
-            callbacks.onStage(stage)
+          if (data.status === 'started') {
+            callbacks.onStage(data.stage as 'context' | 'reasoning' | 'response')
           }
         } else if (eventType === 'token') {
           callbacks.onToken(data.text as string)

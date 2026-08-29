@@ -129,15 +129,11 @@ export async function syncPendingOps(userId?: string): Promise<void> {
  * @param getUserId - callback to resolve the current user ID at sync time
  */
 export function initSyncEngine(getUserId: () => string | undefined): () => void {
-  const handler = () => syncPendingOps(getUserId())
-  window.addEventListener('online', handler)
+  const sync = () => syncPendingOps(getUserId())
+  window.addEventListener('online', sync)
 
   // If already online and there might be queued ops from a previous session, sync now
-  if (navigator.onLine) {
-    syncPendingOps(getUserId())
-  }
+  if (navigator.onLine) sync()
 
-  return () => {
-    window.removeEventListener('online', handler)
-  }
+  return () => window.removeEventListener('online', sync)
 }
