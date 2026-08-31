@@ -1,12 +1,10 @@
-import { apiFetch } from './api'
+import { apiFetch, BASE } from './api'
 import { readChatStream } from './chat/stream-reader'
 import { parsePreferenceToasts } from './format/preferences'
 import { validateResponse, ChatResponseSchema } from './schemas'
 import type { ChatMessage, StreamingStage } from './types'
 import type { ReliState } from './store'
-import { z } from 'zod'
-
-const BASE = '/api'
+import type { z } from 'zod'
 
 export interface SendMessageDeps {
   set: (partial: Partial<ReliState> | ((state: ReliState) => Partial<ReliState>)) => void
