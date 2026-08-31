@@ -2317,7 +2317,6 @@ async def auto_merge_duplicates(
 
     threshold = settings.SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD
     now = datetime.now(timezone.utc)
-    merges_executed = 0
     merges_skipped = 0
     audit_findings: list[SweepFindingRecord] = []
 
@@ -2374,7 +2373,6 @@ async def auto_merge_duplicates(
                 merges_skipped += 1
                 continue
 
-            merges_executed += 1
             audit_findings.append(
                 SweepFindingRecord(
                     id=f"sf-{uuid.uuid4().hex[:8]}",
@@ -2401,7 +2399,7 @@ async def auto_merge_duplicates(
                     exc_info=True,
                 )
 
-    return AutoMergeResult(merges_executed=merges_executed, merges_skipped=merges_skipped)
+    return AutoMergeResult(merges_executed=len(audit_findings), merges_skipped=merges_skipped)
 
 
 # ---------------------------------------------------------------------------
