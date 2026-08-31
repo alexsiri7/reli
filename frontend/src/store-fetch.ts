@@ -1,5 +1,6 @@
 import { apiFetch } from './api'
 import { validateResponse } from './schemas'
+import type { ReliState } from './store'
 import type { z } from 'zod'
 
 const BASE = '/api'
@@ -11,9 +12,9 @@ const BASE = '/api'
 export function simpleFetch<T>(
   endpoint: string,
   schema: z.ZodType<T>,
-  dataKey: string,
-  loadingKey?: string,
-): (set: (partial: Record<string, unknown>) => void) => Promise<void> {
+  dataKey: keyof ReliState,
+  loadingKey?: keyof ReliState,
+): (set: (partial: Partial<ReliState>) => void) => Promise<void> {
   return async (set) => {
     if (loadingKey) set({ [loadingKey]: true })
     try {

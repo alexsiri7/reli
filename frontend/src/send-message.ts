@@ -9,7 +9,7 @@ import { z } from 'zod'
 const BASE = '/api'
 
 export interface SendMessageDeps {
-  set: (partial: Record<string, unknown> | ((state: ReliState) => Record<string, unknown>)) => void
+  set: (partial: Partial<ReliState> | ((state: ReliState) => Partial<ReliState>)) => void
   get: () => ReliState
 }
 
@@ -118,7 +118,7 @@ export async function executeSendMessage(text: string, { set, get }: SendMessage
         const chatData = validateResponse(ChatResponseSchema, data, '/chat/stream')
         const assistantMsg = buildAssistantMessage(chatData, get().sessionId)
         const newToasts = parsePreferenceToasts(chatData.applied_changes)
-        const updates: Record<string, unknown> = {
+        const updates: Partial<ReliState> = {
           messages: get().messages.map((m: ChatMessage) => m.streaming ? assistantMsg : m),
         }
         if (chatData.session_usage) {
