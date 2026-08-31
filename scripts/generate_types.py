@@ -43,6 +43,7 @@ EXPORTED_MODELS: dict[str, str] = {
     "ModelUsage": "ModelUsage",
     "SessionUsage": "SessionUsage",
     "SweepFinding": "SweepFinding",
+    "SweepAction": "SweepAction",
     "LearnedPreference": "LearnedPreference",
     "BriefingItem": "BriefingItem",
     "BriefingResponse": "BriefingResponse",

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type Thing, type CalendarEvent } from '../store'
+import { useStore } from '../store'
+import type { Thing, CalendarEvent } from '../types'
 import { typeIcon } from '../utils'
 
 type ViewMode = 'week' | 'month'

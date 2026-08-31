@@ -1,15 +1,11 @@
 import { create } from 'zustand'
 import { apiFetch } from './api'
 import { setTheme as applyTheme } from './hooks/useTheme'
-import { cacheThings, getCachedThings } from './offline/cache-things'
-import { cacheThingTypes, getCachedThingTypes } from './offline/cache-thing-types'
-import { cacheRelationships, getCachedRelationships } from './offline/cache-relationships'
-import { cacheBriefing, getCachedBriefing } from './offline/cache-briefing'
-import { cacheCalendarEvents, getCachedCalendarEvents } from './offline/cache-calendar'
+import { cacheThings, getCachedThings, cacheThingTypes, getCachedThingTypes, cacheRelationships, getCachedRelationships, cacheBriefing, getCachedBriefing, cacheCalendarEvents, getCachedCalendarEvents } from './offline/cache'
 import { getByKey } from './offline/idb'
 import { mutationFetch } from './offline/mutation-fetch'
-import { readChatStream } from './chat/stream-reader'
-import { parsePreferenceToasts } from './format/preferences'
+import { simpleFetch } from './store-fetch'
+import { executeSendMessage } from './send-message'
 import {
   validateResponse,
   ThingSchema,
@@ -20,7 +16,6 @@ import {
   ProactiveSurfaceSchema,
   FocusResponseSchema,
   ChatMessageSchema,
-  ChatResponseSchema,
   SessionStatsSchema,
   CalendarStatusSchema,
   GmailStatusSchema,
@@ -58,14 +53,6 @@ import type {
   ConnectionSuggestion,
 } from './generated/api-types'
 
-// Re-export all shared types from types.ts so existing `import { useStore, type Foo } from './store'` still works
-export type {
-  Thing, ThingType, ModelUsage, Nudge, TypeHint,
-  ChatSession, WebSearchResult, ContextThing, GmailMessage, ReferencedThing,
-  AppliedChanges, BriefingItem, BriefingStats, CalendarEvent, CalendarStatus,
-  GmailStatus, InteractionStyle, ChatMode, StreamingStage, SessionStats,
-  ChatMessage, AuthUser,
-} from './types'
 
 import type {
   AuthUser, BriefingItem, BriefingStats, CalendarEvent, CalendarStatus,
@@ -73,7 +60,7 @@ import type {
   Nudge, SessionStats,
 } from './types'
 
-interface ReliState {
+export interface ReliState {
   currentUser: AuthUser | null
   authChecked: boolean
   fetchCurrentUser: () => Promise<void>
@@ -413,30 +400,9 @@ export const useStore = create<ReliState>((set, get) => ({
   weeklyBriefing: null,
   weeklyBriefingLoading: false,
 
-  fetchMorningBriefing: async () => {
-    set({ morningBriefingLoading: true })
-    try {
-      const res = await apiFetch(`${BASE}/briefing/morning`)
-      if (!res.ok) return
-      const data = validateResponse(MorningBriefingSchema, await res.json(), '/briefing/morning')
-      set({ morningBriefing: data })
-    } catch {
-      // best-effort
-    } finally {
-      set({ morningBriefingLoading: false })
-    }
-  },
+  fetchMorningBriefing: () => simpleFetch('/briefing/morning', MorningBriefingSchema, 'morningBriefing', 'morningBriefingLoading')(set),
 
-  fetchBriefingPreferences: async () => {
-    try {
-      const res = await apiFetch(`${BASE}/briefing/preferences`)
-      if (!res.ok) return
-      const data = validateResponse(BriefingPreferencesSchema, await res.json(), '/briefing/preferences')
-      set({ briefingPreferences: data })
-    } catch {
-      // best-effort
-    }
-  },
+  fetchBriefingPreferences: () => simpleFetch('/briefing/preferences', BriefingPreferencesSchema, 'briefingPreferences')(set),
 
   updateBriefingPreferences: async (prefs: BriefingPreferences) => {
     try {
@@ -875,128 +841,7 @@ export const useStore = create<ReliState>((set, get) => ({
     }
   },
 
-  sendMessage: async (text: string) => {
-    const userMsg: ChatMessage = {
-      id: `local-${Date.now()}`,
-      session_id: get().sessionId,
-      role: 'user',
-      content: text,
-      applied_changes: null,
-      questions_for_user: [],
-      timestamp: new Date().toISOString(),
-    }
-    const placeholderMsg: ChatMessage = {
-      id: `pending-${Date.now()}`,
-      session_id: get().sessionId,
-      role: 'assistant',
-      content: '',
-      applied_changes: null,
-      questions_for_user: [],
-      timestamp: new Date().toISOString(),
-      streaming: true,
-      streamingStage: 'context',
-    }
-
-    set(state => ({
-      messages: [...state.messages, userMsg, placeholderMsg],
-      chatLoading: true,
-    }))
-
-    try {
-      const res = await apiFetch(`${BASE}/chat/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: get().sessionId, message: text, mode: get().chatMode }),
-      })
-      if (res.status === 429) {
-        const { retry_after: rawRetryAfter = 60 } = await res.json().catch((err) => {
-          console.warn('[chat] Failed to parse 429 body, defaulting retry_after to 60', err)
-          return {}
-        })
-        const retry_after = Number(rawRetryAfter) || 60
-        const unit = retry_after === 1 ? 'second' : 'seconds'
-        set(state => ({
-          messages: state.messages.map(m =>
-            m.streaming
-              ? { ...m, content: `Too many requests — please wait ${retry_after} ${unit} before sending another message.`, streaming: false, streamingStage: null }
-              : m,
-          ),
-        }))
-        return
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
-      const reader = res.body?.getReader()
-      if (!reader) throw new Error('No response body')
-
-      await readChatStream(reader, {
-        onStage: (stage) => {
-          set(state => ({
-            messages: state.messages.map(m =>
-              m.streaming ? { ...m, streamingStage: stage } : m,
-            ),
-          }))
-        },
-        onToken: (text) => {
-          set(state => ({
-            messages: state.messages.map(m =>
-              m.streaming ? { ...m, content: m.content + text } : m,
-            ),
-          }))
-        },
-        onComplete: (data) => {
-          const chatData = validateResponse(ChatResponseSchema, data, '/chat/stream')
-          const assistantMsg: ChatMessage = {
-            id: `assistant-${Date.now()}`,
-            session_id: get().sessionId,
-            role: 'assistant',
-            content: chatData.reply,
-            applied_changes: chatData.applied_changes ?? null,
-            questions_for_user: chatData.questions_for_user ?? [],
-            prompt_tokens: chatData.usage?.prompt_tokens ?? 0,
-            completion_tokens: chatData.usage?.completion_tokens ?? 0,
-            cost_usd: chatData.usage?.cost_usd ?? 0,
-            model: chatData.usage?.model ?? null,
-            per_call_usage: chatData.usage?.per_call_usage ?? [],
-            timestamp: new Date().toISOString(),
-          }
-          const newToasts = parsePreferenceToasts(chatData.applied_changes)
-          const updates: Partial<ReliState> = {
-            messages: get().messages.map(m => m.streaming ? assistantMsg : m),
-          }
-          if (chatData.session_usage) {
-            updates.sessionStats = chatData.session_usage
-          }
-          if (newToasts.length > 0) {
-            updates.preferenceToasts = [...get().preferenceToasts, ...newToasts]
-          }
-          set(updates as ReliState)
-        },
-        onError: (message) => {
-          throw new Error(message)
-        },
-      })
-
-      // Refresh things in case the pipeline made changes
-      get().fetchThings()
-      get().fetchBriefing()
-      get().fetchProactiveSurfaces()
-      get().fetchFocusRecommendations()
-      get().fetchConflictAlerts()
-      get().fetchChatSessions()
-    } catch (e) {
-      set(state => ({
-        messages: state.messages.map(m =>
-          m.streaming
-            ? { ...m, content: m.content || 'Error communicating with server.', streaming: false, streamingStage: null }
-            : m,
-        ),
-        error: String(e),
-      }))
-    } finally {
-      set({ chatLoading: false })
-    }
-  },
+  sendMessage: (text: string) => executeSendMessage(text, { set, get }),
 
   fetchChatSessions: async () => {
     set({ chatSessionsLoading: true })
@@ -1226,33 +1071,9 @@ export const useStore = create<ReliState>((set, get) => ({
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
 
-  fetchModelSettings: async () => {
-    set({ settingsLoading: true })
-    try {
-      const res = await apiFetch(`${BASE}/settings`)
-      if (!res.ok) return
-      const data = validateResponse(ModelSettingsSchema, await res.json(), '/settings')
-      set({ modelSettings: data })
-    } catch {
-      // ignore
-    } finally {
-      set({ settingsLoading: false })
-    }
-  },
+  fetchModelSettings: () => simpleFetch('/settings', ModelSettingsSchema, 'modelSettings', 'settingsLoading')(set),
 
-  fetchAvailableModels: async () => {
-    set({ modelsLoading: true })
-    try {
-      const res = await apiFetch(`${BASE}/settings/models`)
-      if (!res.ok) return
-      const data = validateResponse(z.array(RequestyModelSchema), await res.json(), '/settings/models')
-      set({ availableModels: data })
-    } catch {
-      // ignore
-    } finally {
-      set({ modelsLoading: false })
-    }
-  },
+  fetchAvailableModels: () => simpleFetch('/settings/models', z.array(RequestyModelSchema), 'availableModels', 'modelsLoading')(set),
 
   updateModelSettings: async (settings: Partial<ModelSettings>) => {
     try {
@@ -1347,19 +1168,7 @@ export const useStore = create<ReliState>((set, get) => ({
   mergeSuggestionsLoading: false,
   mergeInProgress: false,
 
-  fetchMergeSuggestions: async () => {
-    set({ mergeSuggestionsLoading: true })
-    try {
-      const res = await apiFetch(`${BASE}/things/merge-suggestions?limit=10`)
-      if (!res.ok) return
-      const data: MergeSuggestion[] = validateResponse(z.array(MergeSuggestionSchema), await res.json(), '/things/merge-suggestions')
-      set({ mergeSuggestions: data })
-    } catch {
-      // best-effort
-    } finally {
-      set({ mergeSuggestionsLoading: false })
-    }
-  },
+  fetchMergeSuggestions: () => simpleFetch('/things/merge-suggestions?limit=10', z.array(MergeSuggestionSchema), 'mergeSuggestions', 'mergeSuggestionsLoading')(set),
 
   executeMerge: async (keepId: string, removeId: string) => {
     set({ mergeInProgress: true })
@@ -1400,19 +1209,7 @@ export const useStore = create<ReliState>((set, get) => ({
   connectionSuggestionsLoading: false,
   connectionAcceptInProgress: false,
 
-  fetchConnectionSuggestions: async () => {
-    set({ connectionSuggestionsLoading: true })
-    try {
-      const res = await apiFetch(`${BASE}/connections/suggestions?status=pending&limit=10`)
-      if (!res.ok) return
-      const data: ConnectionSuggestion[] = validateResponse(z.array(ConnectionSuggestionSchema), await res.json(), '/connections/suggestions')
-      set({ connectionSuggestions: data })
-    } catch {
-      // best-effort
-    } finally {
-      set({ connectionSuggestionsLoading: false })
-    }
-  },
+  fetchConnectionSuggestions: () => simpleFetch('/connections/suggestions?status=pending&limit=10', z.array(ConnectionSuggestionSchema), 'connectionSuggestions', 'connectionSuggestionsLoading')(set),
 
   acceptConnectionSuggestion: async (id: string, relationshipType?: string) => {
     set({ connectionAcceptInProgress: true })
