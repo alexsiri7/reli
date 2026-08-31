@@ -40,7 +40,7 @@ This is the second instance of this specific false positive type (lag threshold 
 ## Solution
 
 Increase the lag detection threshold in `pipeline-health-cron.sh` (interstellarai.net repo) from 15 minutes to 45 minutes. This covers:
-- CI duration: ~20 minutes
+- CI duration: ~19 minutes
 - Staging pipeline duration: ~5 minutes
 - Buffer: ~20 minutes
 
