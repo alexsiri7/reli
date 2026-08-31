@@ -138,6 +138,18 @@ export interface SweepFinding {
   snoozed_until: string | null
   confidence: number
   thing: Thing | null
+  context_snapshot: Record<string, unknown> | null
+  dismissed_reason: string | null
+}
+
+export interface SweepAction {
+  id: string
+  action_type: string
+  description: string
+  confidence: number
+  thing_id: string | null
+  secondary_thing_id: string | null
+  created_at: string
 }
 
 export interface LearnedPreference {
@@ -207,16 +219,7 @@ export interface MorningBriefingFinding {
   priority: number
   thing_id: string | null
   thing_title: string | null
-}
-
-export interface SweepAction {
-  id: string
-  action_type: string
-  description: string
   confidence: number
-  thing_id: string | null
-  secondary_thing_id: string | null
-  created_at: string
 }
 
 export interface MorningBriefingContent {
@@ -373,6 +376,7 @@ export interface UserSettings {
   proactivity_level: string
   interaction_style: string
   messages_until_compression: number
+  chat_retention_days: number
 }
 
 export interface RequestyModel {
@@ -525,6 +529,18 @@ export const SweepFindingSchema = z.object({
   snoozed_until: z.string().nullable().default(null),
   confidence: z.number().default(0.5),
   thing: ThingSchema.nullable().default(null),
+  context_snapshot: z.record(z.string(), z.unknown()).nullable().default(null),
+  dismissed_reason: z.string().nullable().default(null),
+})
+
+export const SweepActionSchema = z.object({
+  id: z.string(),
+  action_type: z.string(),
+  description: z.string(),
+  confidence: z.number().default(0.5),
+  thing_id: z.string().nullable().default(null),
+  secondary_thing_id: z.string().nullable().default(null),
+  created_at: z.string(),
 })
 
 export const LearnedPreferenceSchema = z.object({
@@ -594,16 +610,7 @@ export const MorningBriefingFindingSchema = z.object({
   priority: z.number(),
   thing_id: z.string().nullable().default(null),
   thing_title: z.string().nullable().default(null),
-})
-
-export const SweepActionSchema = z.object({
-  id: z.string(),
-  action_type: z.string(),
-  description: z.string(),
   confidence: z.number().default(0.5),
-  thing_id: z.string().nullable().default(null),
-  secondary_thing_id: z.string().nullable().default(null),
-  created_at: z.string(),
 })
 
 export const MorningBriefingContentSchema = z.object({
@@ -760,6 +767,7 @@ export const UserSettingsSchema = z.object({
   proactivity_level: z.string().default("medium"),
   interaction_style: z.string().default("auto"),
   messages_until_compression: z.number().default(20),
+  chat_retention_days: z.number().default(0),
 })
 
 export const RequestyModelSchema = z.object({

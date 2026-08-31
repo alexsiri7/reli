@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useStore, type CalendarEvent } from '../store'
+import { useStore } from '../store'
+import type { CalendarEvent } from '../types'
 
 function formatEventTime(event: CalendarEvent): string {
   if (event.all_day) return 'All day'

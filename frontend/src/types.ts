@@ -1,5 +1,6 @@
 // ── Shared frontend types ────────────────────────────────────────────────────
-// Types used across components, offline modules, and the store.
+// Frontend-enriched types. These extend/replace generated interfaces when the
+// frontend needs fields (streaming, id unions) not in the backend.
 // Extracted from store.ts so consumers don't depend on the Zustand store module.
 
 import type {

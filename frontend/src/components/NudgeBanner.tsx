@@ -1,4 +1,5 @@
-import { useStore, type Nudge } from '../store'
+import { useStore } from '../store'
+import type { Nudge } from '../types'
 import { typeIcon } from '../utils'
 
 interface NudgeBannerProps {

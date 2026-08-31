@@ -114,6 +114,8 @@ const mockFinding: SweepFinding = {
   confidence: 0.8,
   expires_at: null,
   created_at: '2026-03-01T10:00:00Z',
+  context_snapshot: null,
+  dismissed_reason: null,
 }
 
 describe('FindingCard', () => {

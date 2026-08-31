@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { useStore, type Thing } from '../store'
+import { useStore } from '../store'
+import type { Thing } from '../types'
 import { typeIcon } from '../utils'
 
 /** Returns the platform-appropriate modifier label. */

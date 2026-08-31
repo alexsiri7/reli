@@ -1,5 +1,18 @@
 import { z } from 'zod'
 
+// ── Schema layering strategy ────────────────────────────────────────────────────
+// generated/api-types.ts — auto-generated schemas from Pydantic models (source of truth)
+// schemas.ts (this file) — re-exports generated schemas + defines frontend overrides
+// types.ts — hand-written TypeScript interfaces for frontend-only concepts
+//
+// Schemas OVERRIDDEN here (with rationale):
+// - ChatMessageSchema: id is number|string (streaming uses string IDs), adds per_call_usage
+// - ChatResponseSchema: frontend-specific envelope with session_usage
+// - BriefingItemSchema: thing uses ThingSchema (stricter than backend's dict)
+// - BriefingResponseSchema: composed from above overrides
+// - UserProfileRelationshipSchema: stricter z.enum for direction
+// ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ──
+
 // ── Re-exported from generated (auto-generated from Pydantic models) ──────────
 export {
   ThingTypeSchema,
