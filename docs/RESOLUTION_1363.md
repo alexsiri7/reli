@@ -23,7 +23,7 @@ This is the nineteenth instance of this false positive:
 | #1158 | 2026-06-05 | Same pattern | Fixed in #1157 |
 | #1160 | 2026-06-06 | No retry in cron | Added 3×10s retry in #1161 |
 | #1162 | 2026-06-07 | Retry window too short (3×10s) | Documented in RESOLUTION_1162 |
-| #1178/#1179 | 2026-06-10 | Staging pre-flight pattern | Fixed in #1178/#1180 |
+| #1178/#1179 | 2026-06-10 | Staging pre-flight pattern | Fixed in #1180 |
 | #1181 | 2026-06-11 | Retry window still too short (3×30s) | Documented as fixed to 6×20s (never applied) |
 | #1280 | 2026-07-01 | Retry window too short (3×30s) | Documented in RESOLUTION_1280 |
 | #1281 | 2026-07-02 | Retry window too short (3×30s) | Documented in RESOLUTION_1281 |
