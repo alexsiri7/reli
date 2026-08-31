@@ -1,7 +1,13 @@
 import { create } from 'zustand'
 import { apiFetch } from './api'
 import { setTheme as applyTheme } from './hooks/useTheme'
-import { cacheThings, getCachedThings, cacheThingTypes, getCachedThingTypes, cacheRelationships, getCachedRelationships, cacheBriefing, getCachedBriefing, cacheCalendarEvents, getCachedCalendarEvents } from './offline/cache'
+import {
+  cacheThings, getCachedThings,
+  cacheThingTypes, getCachedThingTypes,
+  cacheRelationships, getCachedRelationships,
+  cacheBriefing, getCachedBriefing,
+  cacheCalendarEvents, getCachedCalendarEvents,
+} from './offline/cache'
 import { getByKey } from './offline/idb'
 import { mutationFetch } from './offline/mutation-fetch'
 import { simpleFetch } from './store-fetch'
@@ -52,7 +58,6 @@ import type {
   MergeSuggestion,
   ConnectionSuggestion,
 } from './generated/api-types'
-
 
 import type {
   AuthUser, BriefingItem, BriefingStats, CalendarEvent, CalendarStatus,
