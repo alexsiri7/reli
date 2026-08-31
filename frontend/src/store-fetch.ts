@@ -1,9 +1,7 @@
-import { apiFetch } from './api'
+import { apiFetch, BASE } from './api'
 import { validateResponse } from './schemas'
 import type { ReliState } from './store'
 import type { z } from 'zod'
-
-const BASE = '/api'
 
 /**
  * Creates a best-effort fetch action for the Zustand store.

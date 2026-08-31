@@ -4,6 +4,8 @@
  * Redirects to login on 401 responses.
  */
 
+export const BASE = '/api'
+
 export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const res = await fetch(input, { ...init, credentials: 'same-origin' })
   if (res.status === 401 && !String(input).includes('/api/auth/')) {

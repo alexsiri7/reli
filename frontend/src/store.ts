@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { apiFetch } from './api'
+import { apiFetch, BASE } from './api'
 import { setTheme as applyTheme } from './hooks/useTheme'
 import {
   cacheThings, getCachedThings,
@@ -283,8 +283,6 @@ const LEGACY_SESSION_KEY = 'reli-session-id'
 function getLegacySessionId(): string | null {
   return localStorage.getItem(LEGACY_SESSION_KEY)
 }
-
-const BASE = '/api'
 
 async function fetchThingDetailWithFallback(
   id: string,
