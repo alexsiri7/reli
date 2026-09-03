@@ -15,7 +15,7 @@ The `check_deploy_http` function in `pipeline-health-cron.sh` (interstellarai.ne
 ## Pattern
 
 This is the twenty-first instance of this false positive (HTTP 000 / retry-window pattern only —
-issues #1358 and #1361 track a separate lag-detection alert type):
+issues #1358 and #1361 track a separate lag-detection alert type; #1178/#1179 counted as one event):
 
 | Issue | Date | Cause | Fix Applied |
 |-------|------|-------|-------------|
