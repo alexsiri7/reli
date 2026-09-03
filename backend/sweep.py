@@ -2317,8 +2317,7 @@ async def auto_merge_duplicates(
 
     threshold = settings.SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD
     now = datetime.now(timezone.utc)
-    merges_executed = 0
-    merges_skipped = 0
+    outcome = AutoMergeResult()
     audit_findings: list[SweepFindingRecord] = []
 
     with Session(_engine_mod.engine) as session:
@@ -2335,21 +2334,21 @@ async def auto_merge_duplicates(
             keep_id = candidate.thing_id
             remove_id = candidate.extra.get("duplicate_thing_id")
             if not remove_id:
-                merges_skipped += 1
+                outcome.merges_skipped += 1
                 continue
 
             # Resolve keep/remove: keep the older Thing (earlier created_at)
             keep_rec = session.get(ThingRecord, keep_id)
             remove_rec = session.get(ThingRecord, remove_id)
             if not keep_rec or not remove_rec:
-                merges_skipped += 1
+                outcome.merges_skipped += 1
                 continue
             # Swap if remove_rec is actually older
             if remove_rec.created_at < keep_rec.created_at:
                 keep_id, remove_id = remove_id, keep_id
 
             try:
-                result = _tools.merge_things(
+                merge_result = _tools.merge_things(
                     keep_id=keep_id,
                     remove_id=remove_id,
                     merged_data_json="{}",
@@ -2361,26 +2360,26 @@ async def auto_merge_duplicates(
                     remove_id,
                     keep_id,
                 )
-                merges_skipped += 1
+                outcome.merges_skipped += 1
                 continue
 
-            if "error" in result:
+            if "error" in merge_result:
                 logger.warning(
                     "auto_merge_duplicates: merge failed %s→%s: %s",
                     remove_id,
                     keep_id,
-                    result["error"],
+                    merge_result["error"],
                 )
-                merges_skipped += 1
+                outcome.merges_skipped += 1
                 continue
 
-            merges_executed += 1
+            outcome.merges_executed += 1
             audit_findings.append(
                 SweepFindingRecord(
                     id=f"sf-{uuid.uuid4().hex[:8]}",
                     thing_id=keep_id,
                     finding_type="duplicate_auto_merged",
-                    message=f'Auto-merged duplicate "{result["remove_title"]}" into "{result["keep_title"]}"',
+                    message=f'Auto-merged duplicate "{merge_result["remove_title"]}" into "{merge_result["keep_title"]}"',
                     priority=3,
                     dismissed=False,
                     created_at=now,
@@ -2401,7 +2400,7 @@ async def auto_merge_duplicates(
                     exc_info=True,
                 )
 
-    return AutoMergeResult(merges_executed=merges_executed, merges_skipped=merges_skipped)
+    return outcome
 
 
 # ---------------------------------------------------------------------------

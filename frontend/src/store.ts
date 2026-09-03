@@ -403,9 +403,9 @@ export const useStore = create<ReliState>((set, get) => ({
   weeklyBriefing: null,
   weeklyBriefingLoading: false,
 
-  fetchMorningBriefing: () => simpleFetch('/briefing/morning', MorningBriefingSchema, 'morningBriefing', 'morningBriefingLoading')(set),
+  fetchMorningBriefing: () => simpleFetch('/briefing/morning', MorningBriefingSchema, 'morningBriefing', set, 'morningBriefingLoading'),
 
-  fetchBriefingPreferences: () => simpleFetch('/briefing/preferences', BriefingPreferencesSchema, 'briefingPreferences')(set),
+  fetchBriefingPreferences: () => simpleFetch('/briefing/preferences', BriefingPreferencesSchema, 'briefingPreferences', set),
 
   updateBriefingPreferences: async (prefs: BriefingPreferences) => {
     try {
@@ -1074,9 +1074,9 @@ export const useStore = create<ReliState>((set, get) => ({
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
 
-  fetchModelSettings: () => simpleFetch('/settings', ModelSettingsSchema, 'modelSettings', 'settingsLoading')(set),
+  fetchModelSettings: () => simpleFetch('/settings', ModelSettingsSchema, 'modelSettings', set, 'settingsLoading'),
 
-  fetchAvailableModels: () => simpleFetch('/settings/models', z.array(RequestyModelSchema), 'availableModels', 'modelsLoading')(set),
+  fetchAvailableModels: () => simpleFetch('/settings/models', z.array(RequestyModelSchema), 'availableModels', set, 'modelsLoading'),
 
   updateModelSettings: async (settings: Partial<ModelSettings>) => {
     try {
@@ -1171,7 +1171,7 @@ export const useStore = create<ReliState>((set, get) => ({
   mergeSuggestionsLoading: false,
   mergeInProgress: false,
 
-  fetchMergeSuggestions: () => simpleFetch('/things/merge-suggestions?limit=10', z.array(MergeSuggestionSchema), 'mergeSuggestions', 'mergeSuggestionsLoading')(set),
+  fetchMergeSuggestions: () => simpleFetch('/things/merge-suggestions?limit=10', z.array(MergeSuggestionSchema), 'mergeSuggestions', set, 'mergeSuggestionsLoading'),
 
   executeMerge: async (keepId: string, removeId: string) => {
     set({ mergeInProgress: true })
@@ -1212,7 +1212,7 @@ export const useStore = create<ReliState>((set, get) => ({
   connectionSuggestionsLoading: false,
   connectionAcceptInProgress: false,
 
-  fetchConnectionSuggestions: () => simpleFetch('/connections/suggestions?status=pending&limit=10', z.array(ConnectionSuggestionSchema), 'connectionSuggestions', 'connectionSuggestionsLoading')(set),
+  fetchConnectionSuggestions: () => simpleFetch('/connections/suggestions?status=pending&limit=10', z.array(ConnectionSuggestionSchema), 'connectionSuggestions', set, 'connectionSuggestionsLoading'),
 
   acceptConnectionSuggestion: async (id: string, relationshipType?: string) => {
     set({ connectionAcceptInProgress: true })
