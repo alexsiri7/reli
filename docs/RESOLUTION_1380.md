@@ -7,9 +7,9 @@
 ## Summary
 
 Issue #1380 was a false positive from the `pipeline-health-cron.sh` monitoring script.
-The cron detected that main (`c4ee3f00`, committed 2026-09-03T04:47:43Z) had been ahead
+The cron detected that main (`c4ee3f0`, committed 2026-09-03T04:47:43Z) had been ahead
 of production for ~117768s (~32.7 hours). However, the Staging → Production Pipeline for
-`c4ee3f00` completed successfully on 2026-09-03T05:14:46Z (run 33717768717) — all three
+`c4ee3f0` completed successfully on 2026-09-03T05:14:46Z (run 33717768717) — all three
 stages passed (deploy-staging, staging-e2e, deploy-production). Production was deployed
 on Sep 3, not "lagging".
 
@@ -49,15 +49,22 @@ Two fixes needed in `interstellarai.net/ops/cron/pipeline-health-cron.sh`:
 1. **Existing fix (HTTP 000 type)**: Increase retry window from 3×30s to 12×20s (~240s)
 2. **Existing fix (lag threshold type)**: Increase `LAG_THRESHOLD_SECONDS` from 900 to 2700
 3. **New fix (stale SHA detection)**: When querying GitHub deployments for "latest prod deploy",
-   skip any records with `in_progress` status and select the most-recent `success` record only:
+   skip any records with `in_progress` status and select the most-recent `success` record only.
+   Fetch deployment statuses and verify `state=success` before treating a deployment record
+   as "the latest prod deploy":
    ```bash
-   # Query latest successful deployment only — skip in_progress orphans
-   LATEST=$(gh api "repos/$REPO/deployments?environment=production&per_page=10" \
-     --jq '[.[] | select(.statuses_url)] | .[0]')
-   # Then check its status
+   # Fetch deployments, then for each find the latest with state=success
+   DEPLOYMENTS=$(gh api "repos/$REPO/deployments?environment=production&per_page=10" --jq '.[].id')
+   LATEST_SUCCESS_ID=""
+   for DEP_ID in $DEPLOYMENTS; do
+     STATUS=$(gh api "repos/$REPO/deployments/$DEP_ID/statuses" --jq '.[0].state')
+     if [ "$STATUS" = "success" ]; then
+       LATEST_SUCCESS_ID=$DEP_ID
+       break
+     fi
+   done
+   # LATEST_SUCCESS_ID now holds the most recent successful deployment
    ```
-   Or more specifically, filter by fetching deployment statuses and verifying state=success
-   before treating a deployment record as "the latest prod deploy".
 
 **Repository for fix**: `interstellarai.net` (not `reli`)
 **File**: `ops/cron/pipeline-health-cron.sh`
