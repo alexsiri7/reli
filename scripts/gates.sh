@@ -17,7 +17,7 @@ cd "$(git rev-parse --show-toplevel)"
 run_setup() {
     echo "=== Setup ==="
     cd frontend && npm ci --legacy-peer-deps && cd ..
-    pip install -q -r backend/requirements.txt 2>/dev/null || true
+    uv pip install -q -r backend/requirements.txt 2>/dev/null || true
 }
 
 run_lint() {

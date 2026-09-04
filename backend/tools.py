@@ -576,9 +576,9 @@ def merge_things(
         # are duplicates before calling this function); not 1.0 to leave room for
         # future calibration.
         try:
-            from .morning_briefing import record_sweep_action as _record_action
+            from .morning_briefing import record_sweep_action
 
-            _record_action(
+            record_sweep_action(
                 user_id=user_id,
                 action_type="merge",
                 description=f"Merged '{remove_title}' into '{keep_rec.title}'",
