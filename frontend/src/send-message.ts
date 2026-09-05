@@ -12,6 +12,7 @@ export interface SendMessageDeps {
 }
 
 export function buildOptimisticMessages(sessionId: string, text: string): [ChatMessage, ChatMessage] {
+  const timestamp = new Date().toISOString()
   const userMsg: ChatMessage = {
     id: `local-${Date.now()}`,
     session_id: sessionId,
@@ -19,7 +20,7 @@ export function buildOptimisticMessages(sessionId: string, text: string): [ChatM
     content: text,
     applied_changes: null,
     questions_for_user: [],
-    timestamp: new Date().toISOString(),
+    timestamp,
   }
   const placeholderMsg: ChatMessage = {
     id: `pending-${Date.now()}`,
@@ -28,7 +29,7 @@ export function buildOptimisticMessages(sessionId: string, text: string): [ChatM
     content: '',
     applied_changes: null,
     questions_for_user: [],
-    timestamp: new Date().toISOString(),
+    timestamp,
     streaming: true,
     streamingStage: 'context',
   }
