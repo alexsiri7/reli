@@ -6,7 +6,7 @@
 
 ## Summary
 
-Issue #1382 was a false positive from the `pipeline-health-cron.sh` monitoring script. The cron detected `HTTP 000` (connection refused) at 2026-09-05 03:02:01 UTC across all 3 retry attempts. This is consistent with a Railway container restart exceeding the 3×30s (~90s) retry window — no actual application outage occurred. This is the twenty-first instance of this false positive pattern.
+Issue #1382 was a false positive from the `pipeline-health-cron.sh` monitoring script. The cron detected `HTTP 000` (connection refused) at 2026-09-05 03:02:01 UTC across all 3 retry attempts. This is consistent with a Railway container restart exceeding the 3×30s (~90s) retry window — no actual application outage occurred. This is the twenty-second instance of this false positive pattern.
 
 ## Problem
 
@@ -14,7 +14,7 @@ The `check_deploy_http` function in `pipeline-health-cron.sh` (interstellarai.ne
 
 ## Pattern
 
-This is the twenty-first instance of this false positive (HTTP 000 / retry-window pattern):
+This is the twenty-second instance of this false positive (HTTP 000 / retry-window pattern):
 
 | Issue | Date | Cause | Fix Applied |
 |-------|------|-------|-------------|
@@ -62,7 +62,7 @@ for attempt in 1 2 3; do
   [ "$attempt" -lt 3 ] && sleep 30
 done
 
-# REQUIRED — 12×20s (~240s coverage — matches Railway worst-case restart)
+# REQUIRED — 12 attempts × 20s sleep (~220s sleep / ~340s wall-clock — matches Railway worst-case restart)
 for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
   http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$deploy_url" 2>/dev/null)
   http_code=${http_code:-000}
@@ -84,4 +84,4 @@ done
 - Issue #1162 — retry window too short (3×10s)
 - Issue #1181 — retry window too short (3×30s), documented as fixed to 6×20s but never applied
 - Issues #1280–#1285 — same pattern (retry insufficient)
-- Issues #1338–#1380 — same pattern (20 prior instances)
+- Issues #1338–#1378 — same pattern (retry window too short)
