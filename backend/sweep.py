@@ -902,7 +902,12 @@ def find_information_gaps(
     for row in minimal_rows:
         created = row.created_at
         # Normalize to string for safe comparison (works with both naive and aware)
-        created_str = created.isoformat() if isinstance(created, datetime) else str(created) if created else None
+        if isinstance(created, datetime):
+            created_str = created.isoformat()
+        elif created:
+            created_str = str(created)
+        else:
+            created_str = None
         if created_str and created_str > minimal_cutoff_str:
             continue
         type_hint = row.type_hint or "Thing"
