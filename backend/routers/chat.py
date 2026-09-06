@@ -704,13 +704,9 @@ def _persist_exchange(
 
         # Insert per-call usage into chat_message_usage for structured retrieval
         num_calls = len(usage.calls)
-        stage_labels: list[str | None] = []
-        if num_calls >= 1:
-            for _ in range(max(0, num_calls - 1)):
-                stage_labels.append("reasoning")
-            stage_labels.append("response")
-        while len(stage_labels) < num_calls:
-            stage_labels.append(None)
+        stage_labels: list[str | None] = (
+            ["reasoning"] * (num_calls - 1) + ["response"] if num_calls >= 1 else []
+        )
         for i, call in enumerate(usage.calls):
             stage = stage_labels[i] if i < len(stage_labels) else None
             usage_record = ChatMessageUsageRecord(

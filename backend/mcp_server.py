@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import secrets
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any
 
@@ -45,12 +46,9 @@ logger = logging.getLogger(__name__)
 
 # Allow the production host through MCP's DNS rebinding protection.
 # Derive from RELI_BASE_URL or GOOGLE_AUTH_REDIRECT_URI.
-_RELI_HOST = os.environ.get("RELI_BASE_URL", "").replace("https://", "").replace("http://", "").rstrip("/")
+_RELI_HOST = urlparse(os.environ.get("RELI_BASE_URL", "")).netloc
 if not _RELI_HOST:
-    _redirect_uri = os.environ.get("GOOGLE_AUTH_REDIRECT_URI", "")
-    if _redirect_uri:
-        _redirect_parts = _redirect_uri.split("/")
-        _RELI_HOST = _redirect_parts[2] if len(_redirect_parts) > 2 else ""
+    _RELI_HOST = urlparse(os.environ.get("GOOGLE_AUTH_REDIRECT_URI", "")).netloc
 _allowed_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
 if _RELI_HOST:
     _allowed_hosts.append(_RELI_HOST)
