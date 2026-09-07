@@ -1,7 +1,7 @@
 ---
 created: '2026-06-03'
 github_issue: null
-id: '015'
+id: '016'
 status: draft
 title: Sweep agent mode (cleanup mandate)
 updated: '2026-06-03'
