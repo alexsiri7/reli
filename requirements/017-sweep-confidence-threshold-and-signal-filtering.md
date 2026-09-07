@@ -1,7 +1,7 @@
 ---
 created: '2026-06-03'
 github_issue: null
-id: '015'
+id: '017'
 status: draft
 title: Sweep confidence threshold and signal filtering
 updated: '2026-06-03'
