@@ -1,0 +1,796 @@
+# Canonical requirements spec. IDs are permanent — never renumber or reuse; append new ones.
+#
+# Reverse-engineered from the codebase (routers, models, test suite, merged PRs) on 2026-09-07.
+# Statements use EARS style and describe what the system verifiably does today, EXCEPT where a
+# behavior looked accidental — those are captured as the intended behavior with the discrepancy
+# flagged in notes. Needs human review before becoming canon.
+meta:
+  project: reli
+  prefix: RELI
+  ported: 2026-09-07
+
+requirements:
+  # ---------------------------------------------------------------------------
+  # Knowledge graph: Things, relationships, types
+  # ---------------------------------------------------------------------------
+  - id: RELI-001
+    title: Universal Thing storage
+    statement: "When a client creates or updates a Thing via /api/things, the system shall persist it with a required title (1-500 chars), optional type_hint (≤100 chars), importance 0-4 (default 2), optional checkin_date, active and surface flags (default true), a data JSON object (≤100,000 bytes serialized), and up to 100 open_questions of ≤2000 chars each, rejecting any out-of-bounds field with HTTP 422."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "POST /api/things with valid body returns 201 and the persisted Thing"
+      - "POST /api/things with empty title, title >500 chars, or importance outside 0-4 returns 422"
+      - "data JSON serializing to >100,000 bytes is rejected with 422"
+    notes: "PATCH treats null the same as omitted, so checkin_date/data/open_questions cannot be cleared via the API; the frontend snoozeThing sends checkin_date: null expecting a clear, which silently no-ops — suspected bug, not canonized."
+
+  - id: RELI-002
+    title: Typed Thing relationships
+    statement: "When a client creates a relationship between two Things, the system shall verify both endpoints exist and are visible to the user (404 otherwise), reject self-relationships with 422, and store a typed directed edge (relationship_type ≤100 chars) that can be listed per Thing and deleted by id."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "POST /api/things/relationships referencing a nonexistent or other-user Thing returns 404"
+      - "POST with from_thing_id == to_thing_id returns 422"
+      - "GET /api/things/{id}/relationships lists edges in both directions; DELETE /api/things/relationships/{rel_id} removes one"
+
+  - id: RELI-003
+    title: Thing text search
+    statement: "When a client calls GET /api/things/search with a non-blank query, the system shall return Things matching the query against title, type_hint, or data (SQL LIKE/ILIKE with %, _, and \\ treated literally), ranking direct matches before relationship-connected matches, newest first within rank, with limit 1-200 (default 50); a blank query shall return an empty list."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "Searching a literal '%' matches only Things containing '%' rather than all Things"
+      - "A Thing related to a direct match appears in results after all direct matches"
+      - "GET /api/things/search?q= (blank) returns []"
+    notes: "REST search is pure SQL — semantic/vector search is used only on the agent retrieval path, contrary to what SRS FR-4/FR-5 imply for the search endpoint."
+
+  - id: RELI-004
+    title: Knowledge graph view
+    statement: "When a client requests GET /api/things/graph, the system shall return the user's active Things as nodes (with icons joined from thing_types) and only those relationships whose two endpoints are both active nodes as edges."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "Edges referencing an inactive or deleted Thing are excluded from the response"
+      - "Node icon reflects the matching thing_type's icon"
+
+  - id: RELI-005
+    title: Embedding lifecycle
+    statement: "When a Thing is created, updated, or merged, the system shall re-embed it (title weighted, type, data fields, related-Thing titles) as a background task; when a Thing is deleted, its embedding shall be removed; POST /api/things/reindex shall re-embed all of the user's Things and report the count."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "Create/update/delete via /api/things enqueue the corresponding vector-store background task"
+      - "POST /api/things/reindex returns {reindexed: n} equal to the user's Thing count"
+    notes: "Embeddings use text-embedding-3-small via Requesty with per-text Ollama nomic-embed-text fallback on any error."
+
+  - id: RELI-006
+    title: Thing merge
+    statement: "When a client merges two Things via POST /api/things/merge, the system shall shallow-merge data with the kept Thing winning key conflicts, union open_questions, re-point all relationships from the removed Thing to the kept one, delete resulting self-loops, hard-delete the removed Thing, and record a merge-history entry; keep_id == remove_id shall be rejected with 422 and missing ids with 404."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "After merge, relationships formerly attached to remove_id reference keep_id and no self-loop edges remain"
+      - "GET /api/things/merge-history lists the merge; DELETE /api/things/merge-history/{id} removes the record (404 cross-user)"
+      - "Merging a Thing into itself returns 422"
+    notes: "No undo/unmerge exists; merge_history.merged_data is snapshotted AFTER mutation (post-merge state) and merge_history.expires_at is never written — both suspected defects if restore was intended (PR #981 added the TTL column)."
+
+  - id: RELI-007
+    title: Custom Thing Types
+    statement: "When a user manages Thing Types via /api/thing-types, the system shall scope custom types per user with (user, name) uniqueness (duplicate → 409), expose system types (no owner) read-only to all users (writes to them → 404), and default the icon to a pin emoji when omitted."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "Two different users can each create a type with the same name; the same user creating it twice gets 409"
+      - "PATCH/DELETE on a system (ownerless) type returns 404 while GET succeeds"
+    notes: "The 12 default types (task, note, project, ... preference) are seeded only in the test fixture — no production seeding path exists, so a fresh deploy has zero types and null graph icons. Suspected regression from the init_db removal; the intended behavior (defaults exist) is assumed here but not implemented."
+
+  - id: RELI-008
+    title: User profile Thing
+    statement: "When a new user signs in for the first time, the system shall create a non-surfaced person-type Thing as the user's anchor node with no PII in its data field, and GET /api/things/me shall return that Thing together with its relationships resolved to titles and directions."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "After first sign-in a Thing with type_hint 'person' and surface=false exists for the user, with data null"
+      - "GET /api/things/me returns 404 when no profile Thing exists"
+
+  # ---------------------------------------------------------------------------
+  # Chat pipeline
+  # ---------------------------------------------------------------------------
+  - id: RELI-009
+    title: Two-stage agent pipeline
+    statement: "When a user sends a chat message, the system shall process it through a reasoning stage (tool-calling LLM agent that retrieves context and applies storage changes as tool side effects) followed by a response stage (natural-language reply grounded in the changes actually applied), returning the reply, applied_changes, and questions_for_user."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "POST /api/chat returns {session_id, reply, applied_changes, questions_for_user}"
+      - "SSE stream emits stage events for exactly the stages 'reasoning' and 'response', each with started and complete"
+    notes: "Docs (ARCHITECTURE.md, README) still describe a 3/4-stage pipeline with a separate context stage; in code the context agent is a tool of the reasoning agent. Docs are stale, code behavior is canonized."
+
+  - id: RELI-010
+    title: Storage-change column allowlist
+    statement: "When the reasoning agent proposes Thing updates, the system shall reject (raise, not apply) any update touching a column outside the fixed allowlist {title, type_hint, checkin_date, importance, active, surface, data, open_questions, updated_at}; user_id shall never be updatable through the agent path."
+    category: non-functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "An update containing an injection payload or unexpected column raises a SQL-injection-guard ValueError and applies nothing"
+      - "An update containing user_id is rejected; every allowlisted column is accepted"
+
+  - id: RELI-011
+    title: Reasoning agent tool set
+    statement: "While processing a chat message, the reasoning agent shall have exactly these tools: fetch_context, chat_history, context_agent, create_thing, update_thing, delete_thing, merge_things, create_relationship, calendar_create_event, calendar_update_event, and schedule_task, each executing user-scoped and recording into applied_changes."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "The registered tool list on the reasoning agent matches the 11 names above"
+      - "Tool calls against another user's Thing return an error dict and modify nothing"
+
+  - id: RELI-012
+    title: Entity reuse and possessive dedup
+    statement: "When the reasoning agent creates a Thing, the system shall first reuse an existing active Thing with the same title (case-insensitive); for entity types (person, place, event, concept, reference, preference), when a companion relationship of the same type already links the source to an existing entity, the system shall reuse that entity (renaming it to the more specific title) instead of creating a duplicate."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "Saying 'my sister Sarah' when a 'sister' relationship already exists reuses the existing Thing and creates no duplicate relationship"
+      - "A different relationship type does not trigger reuse; non-entity types skip relationship-based dedup"
+      - "Chained possessives ('my sister's husband Bob') resolve NEW: placeholders across the batch"
+    notes: "The exact-title dedup SELECT is not user-scoped even though the function receives user_id — potential cross-tenant reuse; intended behavior (user-scoped dedup) canonized here, discrepancy flagged."
+
+  - id: RELI-013
+    title: Surface defaults by type
+    statement: "When a Thing is created through the agent tools without an explicit surface value, the system shall default surface to false for entity types (person, place, event, concept, reference, preference) and true for all other types, so entities do not clutter check-in views."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "create_thing with type_hint 'person' yields surface=false; with no type or an unknown custom type yields surface=true"
+      - "An explicit surface=false is honored regardless of type"
+
+  - id: RELI-014
+    title: Chat sessions
+    statement: "When a user manages chat sessions, the system shall create sessions with 201 (default title 'New chat', optional origin ≤100 chars), reject duplicate ids with 409, list sessions most-recently-active first with message counts, and delete a session with 204 cascading its history."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "GET /api/chat/sessions is ordered by last_active_at descending and includes message_count"
+      - "Creating a session with an existing id returns 409; deleting a nonexistent one returns 404"
+
+  - id: RELI-015
+    title: Chat history pagination
+    statement: "When a client requests GET /api/chat/history/{session_id}, the system shall return the most recent messages in chronological order with limit 1-500 (default 50) and support cursor pagination via before (ids strictly less than the cursor) with no overlap between pages; individual messages shall be deletable (204), returning 404 for a message outside the given session."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "With 10 messages and limit=3, the first page is the last 3 messages in chronological order"
+      - "Successive pages via before share no message ids"
+      - "DELETE /api/chat/history/{session}/{id} returns 204, and 404 when the message belongs to another session"
+
+  - id: RELI-016
+    title: Chat streaming contract
+    statement: "When a client uses POST /api/chat/stream, the system shall emit SSE events of exactly four types — stage {stage,status}, token {text}, complete (exactly one, always last, carrying the full ChatResponse), and error {message} — with all token events falling between response-started and response-complete, the reassembled tokens persisted as the assistant message, and internal exception details never leaked in error events."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "Event stream ends with exactly one complete event; concatenated token texts equal the persisted reply"
+      - "An agent exception yields an error event containing generic 'internal error' text, not the exception message"
+
+  - id: RELI-017
+    title: Chat input limits
+    statement: "When a chat message is submitted, the system shall reject messages over 5000 chars or empty (422) on the pipeline endpoints, and messages over 100,000 chars on the manual history-append endpoint, with session ids limited to 200 chars and roles restricted to user/assistant/system."
+    category: non-functional
+    priority: must
+    status: active
+    source: "PR #1231"
+    acceptance:
+      - "POST /api/chat with a 5001-char message returns 422; 5000 chars is accepted"
+      - "POST /api/chat/history with an invalid role returns 422"
+
+  - id: RELI-018
+    title: Rolling conversation summarization
+    statement: "When a user's un-summarized message count reaches the compression threshold (default 20, per-user override clamped to 5-100), the system shall generate a rolling cross-session summary asynchronously (fire-and-forget, failures never break the chat response) and thereafter prepend it as a system message ahead of the messages since the summary when building pipeline context."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "Summarization is invoked exactly once when the 20th un-summarized message arrives and not at 5"
+      - "A summarization exception does not fail the chat request"
+      - "History fed to the pipeline starts with '[Conversation summary]' when a summary exists"
+    notes: "Suspected bug not canonized: without a summary, _fetch_history takes the OLDEST 2×context_window messages (ORDER BY timestamp ASC + LIMIT) despite its docstring claiming the most recent N; the truncation branch is untested. Intended behavior is most-recent-N."
+
+  - id: RELI-019
+    title: LLM cost accounting
+    statement: "When any pipeline stage calls an LLM, the system shall record model, token counts, and cost per call, and GET /api/chat/stats/today shall aggregate today's prompt/completion tokens, api_calls, and cost (rounded to 6 dp) grouped per model ordered by cost."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "Chat responses include usage with total_cost_usd, prompt_tokens, completion_tokens"
+      - "stats/today per_model rows sum to the day's totals"
+    notes: "Session auto-titling calls the Anthropic SDK directly with a hardcoded model, bypassing the LLM gateway, per-user keys, and usage logging — suspected defect; auto-title spend is invisible to stats. Not canonized."
+
+  - id: RELI-020
+    title: Chat retention purge
+    statement: "When the per-user chat_retention_days setting is greater than zero, the system shall delete chat messages (and their usage rows) older than the retention window as a background task; a value of zero or less shall mean unlimited retention."
+    category: functional
+    priority: should
+    status: active
+    source: "PR #1213"
+    acceptance:
+      - "With chat_retention_days=30, messages older than 30 days are purged on subsequent activity"
+      - "With chat_retention_days=0, no purge occurs"
+
+  - id: RELI-021
+    title: New-user onboarding mode
+    statement: "When a user with zero surfaced active Things sends a chat message, the system shall run the pipeline in onboarding mode (welcome, elicit current work, proactively create Things, ask 2-3 follow-ups); a user with at least one surfaced active Thing shall not receive onboarding behavior."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "is_new_user is true iff count(surface AND active Things)==0; inactive Things do not count"
+      - "Deactivating a user's only Thing returns them to onboarding mode"
+
+  - id: RELI-022
+    title: Planning mode
+    statement: "When a chat request specifies mode 'planning', the system shall use the planning system prompt — breaking vague goals into a project Thing with task children, importance-ranked, with checkin dates and open questions; only 'normal' and 'planning' shall be valid modes."
+    category: functional
+    priority: may
+    status: active
+    source: back-ported
+    acceptance:
+      - "mode outside {normal, planning} is rejected; default is normal"
+      - "Planning mode selects the planning system prompt (with the user's interaction-style overlay appended)"
+
+  - id: RELI-023
+    title: Preference learning and feedback
+    statement: "When a user gives feedback on a preference Thing via POST /api/preferences/{id}/feedback, the system shall adjust confidence asymmetrically (accurate: +0.1 capped at 1.0; not accurate: -0.15 floored at 0.0; unset confidence initializes to 0.6/0.3), ignore repeat feedback within a 30-second cooldown, and target only active preference-type Things owned by the user (404 otherwise)."
+    category: functional
+    priority: must
+    status: active
+    source: "PR #1208"
+    acceptance:
+      - "15 consecutive accurate votes clamp confidence at 1.0; 15 negative votes clamp at 0.0"
+      - "A second vote within 30s returns {updated: false} regardless of payload"
+      - "Feedback on a non-preference or other-user Thing returns 404"
+    notes: "Four incompatible confidence vocabularies coexist (sweep: emerging/established/strong; feedback+API contract: emerging/moderate/strong; MCP tool accepts all four). _confidence_text_down('established') drops two levels to 'emerging' — suspected bug, not canonized; a single canonical scale needs a human decision."
+
+  - id: RELI-024
+    title: Personality adaptation
+    statement: "While generating a response, the system shall append the user's learned personality patterns (from active preference Things) as an overlay instructing the response agent, and apply the user's interaction_style (auto, coach, or consultant; default auto) as a prompt overlay; users with no learned patterns shall get no overlay."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "Patterns from multiple preference Things are aggregated; inactive Things and malformed rows are skipped"
+      - "interaction_style outside {auto, coach, consultant} is rejected by the settings API"
+
+  # ---------------------------------------------------------------------------
+  # Briefings and proactive surfaces
+  # ---------------------------------------------------------------------------
+  - id: RELI-025
+    title: Daily briefing
+    statement: "When a user requests GET /api/briefing, the system shall rank active Things due for check-in (checkin_date ≤ end of day) by composite score ((4 - importance) × urgency), returning the top item as the_one_thing, the next 5 as secondary, the rest as parking_lot, plus active sweep findings (excluding dismissed, expired, snoozed, suppressed-type, and below-confidence-threshold findings) and at most 5 learned preferences."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "the_one_thing is the highest composite-score item or null when nothing is due"
+      - "secondary contains at most 5 items; learned_preferences at most 5 with confidence_label in {emerging, moderate, strong}"
+      - "Dismissed, expired, and snoozed findings never appear"
+
+  - id: RELI-026
+    title: Pre-generated morning briefing
+    statement: "When the nightly sweep runs, the system shall pre-generate a per-user morning briefing (summary, priorities, overdue, blockers, findings, stats) retrievable via GET /api/briefing/morning, including autonomous sweep actions taken in the past 24 hours under actions_taken."
+    category: functional
+    priority: should
+    status: active
+    source: "PR #1145"
+    acceptance:
+      - "GET /api/briefing/morning returns the stored briefing for the current date"
+      - "A merge performed by the sweep in the last 24h appears in actions_taken with action_type 'merge' and a confidence value"
+    notes: "The morning-briefing findings query applies the confidence gate but NOT the suppressed-type filter that the daily briefing applies — asymmetry looks accidental and is not canonized; both briefings are intended to filter suppressed types."
+
+  - id: RELI-027
+    title: Weekly briefing
+    statement: "When the nightly sweep runs on a Monday, the system shall generate a per-user weekly briefing covering the ISO week: completed Things (up to 20), upcoming items, new connections (deduped by pair), preferences learned, and up to 5 open questions, with summary text and counts."
+    category: functional
+    priority: may
+    status: active
+    source: back-ported
+    acceptance:
+      - "Weekly briefing generation occurs only when weekday == Monday"
+      - "completed lists inactive Things updated within the week bounds, capped at 20"
+
+  - id: RELI-028
+    title: Focus recommendations
+    statement: "When a user requests GET /api/focus, the system shall return up to limit (default 10, max 50) recommendations scored additively from importance, deadline proximity, check-in status, unblocking value, and staleness, with overdue check-ins outranking ordinary tasks."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "A Thing with an overdue check-in scores above an otherwise-equal task without one"
+      - "limit is validated 1-50"
+
+  - id: RELI-029
+    title: Staleness report
+    statement: "When a user requests GET /api/staleness, the system shall classify active Things not updated within the threshold (query param 1-365 days, else per-user setting, default 14) as stale, escalate to neglected when importance ≤ 1 or active children exist, list overdue check-ins with days overdue, and report counts where total = stale + neglected + overdue."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "Inactive Things are excluded; stale and neglected are mutually exclusive"
+      - "?stale_days=3 reclassifies accordingly; default threshold is 14 days"
+
+  - id: RELI-030
+    title: Conflict detection
+    statement: "When a user requests GET /api/conflicts, the system shall detect blocking chains (severity escalating from info to critical as the blocked deadline approaches within the window, default 14 days), schedule overlaps between related Things (warning), and deadline conflicts where a dependency is due after its dependent (critical when the gap exceeds 3 days), filtered by the user's proactivity_level (off/low/medium/high) and scoped to the requesting user's Things."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "A Thing blocked by an active Thing with a deadline ≤3 days away yields a critical blocking_chain alert"
+      - "proactivity_level=off returns []; low returns only critical"
+      - "No alert ever includes another user's Thing"
+    notes: "SUSPECTED BUG: conflict_detector.py currently applies no user_id filter in any query, so alerts can leak other users' Thing titles. The user-scoped behavior stated here is the intent (consistent with staleness/focus/proactive); the leak must be fixed, not canonized."
+
+  - id: RELI-031
+    title: Proactive dates and nudges
+    statement: "When a user requests /api/proactive or /api/nudges, the system shall surface Things whose data contains recognized date keys within the window (proactive default 7 days; nudges limited to 3 per day and dates ≤7 days away, recurring dates rolled forward yearly), and shall support per-day idempotent dismissal of a nudge and permanently stopping a nudge type — the stop also recording a preference Thing capturing the user's dislike."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "GET /api/nudges returns at most 3 nudges, none for dates more than 7 days away"
+      - "POST /api/nudges/{id}/stop suppresses the type and upserts a 'Prefers fewer date-based reminders' preference Thing"
+
+  # ---------------------------------------------------------------------------
+  # Sweep subsystem
+  # ---------------------------------------------------------------------------
+  - id: RELI-032
+    title: Nightly sweep scheduling
+    statement: "While the application is running with SWEEP_ENABLED (default true), the system shall run the nightly sweep daily at the configured local time (default 03:00), bound each sweep phase by a 300-second timeout, process due scheduled tasks every 15 minutes, and log each run's status, candidate/finding counts, and LLM cost to sweep_runs."
+    category: functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "Sweep does not re-trigger within the same minute (61s post-run sleep)"
+      - "GET /api/sweep/runs lists runs with status in {running, completed, failed}"
+    notes: "The manual POST /api/sweep/run executes a different phase set (includes research + personality aggregation; omits stale dismissal, auto-merge, dependency sweep, briefings) than the nightly loop — divergence looks unintended and is left un-canonized."
+
+  - id: RELI-033
+    title: Sweep gap and pattern detection
+    statement: "When the nightly sweep runs for a user, the system shall collect candidates including dates approaching within 7 days, Things stale for 14+ days, check-ins overdue beyond a 1-day grace, broad Things (project/event/goal, importance ≤2) lacking subtasks, open questions stale for 14 days (pruned), and suspicious mutation bursts (5+ deletes in 24h), deduplicating per (thing, finding_type)."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "A Thing with checkin_date 8 days out produces no approaching_date candidate; 6 days out does"
+      - "Candidates are deduped keeping the highest-priority entry per (thing_id, finding_type)"
+
+  - id: RELI-034
+    title: Finding confidence and category gating
+    statement: "When LLM-generated sweep findings are surfaced, the system shall include a confidence score (clamped to 0.0-1.0, defaulting to 0.5 on invalid values), suppress findings below SWEEP_MIN_CONFIDENCE (default 0.5), and suppress the configured low-value categories (default lifestyle_wellness, location_suggestion, unverified_context) at both write and read time."
+    category: functional
+    priority: must
+    status: active
+    source: "PR #1143, PR #1144"
+    acceptance:
+      - "A finding with confidence 0.4 does not appear in GET /api/briefing under the default threshold"
+      - "Findings of the three default suppressed types are excluded from the briefing response"
+
+  - id: RELI-035
+    title: Finding lifecycle and auto-dismissal
+    statement: "When the nightly sweep starts for a user, the system shall auto-dismiss findings whose linked Thing is inactive (reason linked_thing_inactive), whose expires_at has passed (reason expired), or whose linked Thing changed materially after both the context snapshot and the finding's creation (reason context_changed); LLM findings shall carry expires_at only when the model supplies a 1-30 day window."
+    category: functional
+    priority: must
+    status: active
+    source: "PR #1147"
+    acceptance:
+      - "A finding on a Thing later marked inactive is dismissed with dismissed_reason 'linked_thing_inactive' on the next sweep"
+      - "A finding without a context snapshot is never dismissed for context change; a Thing updated before the finding's creation does not trigger dismissal"
+      - "Users can dismiss and snooze findings via PATCH .../dismiss and POST .../snooze"
+    notes: "Requirement 015-finding-lifecycle envisioned a default TTL; in code findings with no LLM-supplied window never expire (the 30-day backfill migration was one-time). Whether a standing default TTL is required needs a human decision."
+
+  - id: RELI-036
+    title: Autonomous duplicate merge
+    statement: "When the nightly sweep finds active Things with exactly identical titles in different projects and SWEEP_AUTO_MERGE_ENABLED is true (default), the system shall merge them automatically keeping the older Thing, record a sweep action and an audit finding (duplicate_auto_merged, confidence 1.0), and surface the action in the next morning briefing; same-project duplicates and semantic near-duplicates shall never be auto-merged."
+    category: functional
+    priority: should
+    status: active
+    source: "PR #1146"
+    acceptance:
+      - "Two same-titled tasks under different projects are merged with the older created_at kept"
+      - "Two same-titled tasks under the same project are not merged"
+      - "SWEEP_AUTO_MERGE_ENABLED=false results in zero merges"
+    notes: "SUSPECTED BUGS not canonized: (1) the duplicate query has no user filter, so identically-titled Things of two different users can be destructively cross-merged — intended behavior is per-user only; (2) SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD (default 0.95) is inert since candidates are fixed at confidence 1.0."
+
+  - id: RELI-037
+    title: Connection suggestions
+    statement: "When the connection sweep finds semantically similar Things (cosine distance ≤0.35, LLM-confirmed with confidence ≥0.6), the system shall queue connection suggestions the user can accept (creating the relationship, only after verifying the user owns both Things — 404 otherwise), dismiss, or defer via /api/connections."
+    category: functional
+    priority: should
+    status: active
+    source: "PR #1228"
+    acceptance:
+      - "Accepting a suggestion referencing another user's Thing returns 404 and creates no relationship"
+      - "Suggestions below 0.6 LLM confidence are not queued"
+    notes: "A known DetachedInstanceError 500 occurs on the accept happy path AFTER the relationship commits (documented in tests as a workaround) — response-shape assertion deferred until fixed."
+
+  - id: RELI-038
+    title: Dependency and research sweeps
+    statement: "When the respective sweep runs, the system shall detect implicit dependencies between related Things via LLM (clusters ≤20, ≤10 clusters/run, confidence ≥0.6, findings expiring in 7 days), and shall research Things with open questions (≤10 lookups/run, skipping Things researched within 7 days unless changed, skipping importance 3-4) via web/Gmail/calendar lookups, recording findings."
+    category: functional
+    priority: may
+    status: active
+    source: back-ported
+    acceptance:
+      - "Dependency findings carry expires_at ≈ now+7 days; low-confidence (<0.6) proposals are discarded"
+      - "POST /api/sweep/research returns things_researched, findings_created, lookups_executed and per-finding details"
+
+  - id: RELI-039
+    title: Sweep action audit
+    statement: "When the sweep (or an agent tool) performs an autonomous merge, the system shall record a sweep action (id sa-…, action_type in {merge, close, dismiss}, description, confidence, involved Thing ids, timestamp) in a way that cannot roll back the underlying action if audit writing fails."
+    category: non-functional
+    priority: should
+    status: active
+    source: "PR #1145"
+    acceptance:
+      - "merge_things writes a SweepActionRecord with action_type 'merge' referencing both Things"
+      - "An audit-write failure is logged and swallowed; the merge itself persists"
+
+  # ---------------------------------------------------------------------------
+  # Integrations
+  # ---------------------------------------------------------------------------
+  - id: RELI-040
+    title: Google Calendar integration
+    statement: "When a user connects Google Calendar (OAuth with PKCE, calendar.events scope, 10-minute one-shot state), the system shall list upcoming events (1-100 results, 1-30 days ahead), let the agent create and update events via tools (linking events to Things through data.calendar_event_id), prefetch upcoming events as pipeline context, and delete all stored tokens on disconnect; calendar endpoints shall fail cleanly when not connected."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "calendar_update_event on a Thing without calendar_event_id returns an error directing to calendar_create_event"
+      - "update_event patches only provided fields (get-then-put); API failures return empty results, not exceptions"
+      - "DELETE /api/calendar/disconnect removes the user's calendar token records"
+    notes: "routers/calendar.py docstring still says read-only; the granted scope is read+write. POST /calendar/seed has no idempotency guard (duplicate Things on re-run) — flagged, not canonized."
+
+  - id: RELI-041
+    title: Gmail read-only integration
+    statement: "When a user connects Gmail, the system shall request only the gmail.readonly scope and expose message listing (Gmail query syntax, 1-100 results), single-message and thread reads, and disconnect (204); unconnected access shall return 401 and unconfigured deployments 501."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "The OAuth scope list contains exactly gmail.readonly; no send/modify/delete endpoint exists"
+      - "GET /api/gmail/messages without a connection returns 401"
+
+  - id: RELI-042
+    title: Web search
+    statement: "When the research sweep decides a web lookup is warranted and Google Custom Search is configured (API key + CX), the system shall query the fixed Custom Search endpoint (≤10 results, 10s timeout) and store only title, URL, and snippet — never fetching arbitrary result URLs; when unconfigured or on API error it shall return no results rather than fail."
+    category: functional
+    priority: may
+    status: active
+    source: back-ported
+    acceptance:
+      - "google_search returns [] when unconfigured, on HTTP error, and on network error"
+      - "No code path fetches a searched URL's content"
+
+  - id: RELI-043
+    title: In-app feedback to GitHub
+    statement: "When a user submits feedback via POST /api/feedback, the system shall create a GitHub issue (category-mapped label, first-line title ≤80 chars, CRLF-stripped context) with an optional screenshot (base64 ≤5 MiB, upload failure non-fatal), never include the internal user_id in the issue, and return 501 when the GitHub token/repo are unconfigured and 502 on GitHub API failure."
+    category: functional
+    priority: may
+    status: active
+    source: back-ported
+    acceptance:
+      - "The created issue body contains browser and page context but not the requesting user_id"
+      - "screenshot_base64 over 5,242,880 chars is rejected; exactly at the limit is accepted"
+
+  - id: RELI-044
+    title: MCP intelligence service
+    statement: "When an MCP client connects to /mcp (streamable HTTP, DNS-rebinding-protected) with a valid bearer credential, the system shall expose the knowledge graph as tools (search, CRUD, relationships, briefing, preferences, conflicts, mutations, scheduling, think) plus prompt resources, with all tool limits clamped server-side; delete_thing over MCP shall soft-delete (deactivate) only."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "MCP delete_thing sets active=false and returns the Thing; no MCP tool except merge_things hard-deletes a record"
+      - "search_things limit is clamped to 1-200; get_conflicts window to 1-90"
+      - "A JWT with aud 'web' is rejected at /mcp; aud 'mcp' is accepted"
+    notes: "create_relationship's metadata parameter is accepted and silently dropped (pinned by a test) — a live API lie to MCP clients, flagged for fixing rather than canonized."
+
+  - id: RELI-045
+    title: MCP OAuth 2.1 authorization
+    statement: "When an MCP client authorizes, the system shall support RFC 8414/9728 discovery, dynamic client registration (redirect URIs restricted to https or localhost-http, 30-day TTL, capacity-capped), authorization code flow with mandatory S256 PKCE, 60-second single-use auth codes bound to the issuing client, rotated 30-day refresh tokens, and 7-day access tokens with audience 'mcp' — with all OAuth state persisted in the database."
+    category: non-functional
+    priority: should
+    status: active
+    source: "PR #1102, PR #1129, PR #1219"
+    acceptance:
+      - "Registration with redirect_uri http://evil.com or javascript: returns 400"
+      - "Token exchange with a mismatched code_verifier, redirect_uri, or client_id returns 400; reusing an auth code fails"
+      - "Discovery advertises only S256 as code_challenge_method"
+    notes: "Suspected bug: the refresh token is consumed (popped) before secret/expiry validation, so one bad request destroys a client's valid refresh token."
+
+  - id: RELI-046
+    title: MCP mutation journal
+    statement: "When any mutating tool operation executes (create, update, delete, merge, relationship delete), the system shall append an audit row to mcp_mutations capturing operation, acting client, thing id, and before/after snapshots, retrievable via the get_mutations tool (scoped to the caller, newest first)."
+    category: non-functional
+    priority: should
+    status: active
+    source: "PR #1018"
+    acceptance:
+      - "merge_things writes both a merge_things_delete and a merge_things_update journal row"
+      - "get_mutations returns only rows for the calling user (or ownerless rows), ordered by occurred_at descending"
+
+  # ---------------------------------------------------------------------------
+  # Security & privacy (non-functional)
+  # ---------------------------------------------------------------------------
+  - id: RELI-047
+    title: Google OAuth sign-in with JWT sessions
+    statement: "When a user signs in, the system shall authenticate via Google OAuth (openid/email/profile scopes, PKCE, 10-minute one-shot state) and establish a session as a reli_session JWT cookie (HS256; claims sub, email, aud=web, int iat/exp, jti; 7-day expiry; HttpOnly; SameSite=Lax; Secure by default), optionally restricting sign-ups to an ALLOWED_EMAILS allowlist."
+    category: non-functional
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "The session cookie is HttpOnly, SameSite=Lax, path=/, max_age 604800, with exp-iat == 604800 as integers"
+      - "A token with aud 'mcp' presented as a web cookie yields 401"
+      - "An email outside ALLOWED_EMAILS is redirected to /?error=invite_only and no session is created"
+
+  - id: RELI-048
+    title: Session enforcement and revocation
+    statement: "When any /api route other than /api/auth/* is requested without a valid session (or valid RELI_API_TOKEN bearer), the system shall respond 401 with a condition-specific detail (Not authenticated / Session expired / Invalid session / Session revoked); POST /api/auth/logout shall record the token's jti server-side so the token is rejected thereafter, and shall always clear the cookie and return 200."
+    category: non-functional
+    priority: must
+    status: active
+    source: "PR #1221"
+    acceptance:
+      - "A revoked token yields 401 'Session revoked' on subsequent use"
+      - "/healthz, /api/auth/*, /oauth/*, and static assets are reachable without a session"
+      - "OAuth misconfiguration returns generic 501 bodies with specifics only in server logs"
+    notes: "Revocation deliberately fails open on DB error (documented tradeoff); auth can be disabled wholesale via AUTH_DISABLED for single-user dev, in which case row filtering is also disabled — this coupling is dangerous and worth an explicit design review."
+
+  - id: RELI-049
+    title: Per-user data isolation
+    statement: "When an authenticated user requests any resource, the system shall scope every query by user_id, presenting another user's resource as nonexistent (404) rather than forbidden, and creating zero side effects on cross-user write attempts; agent/MCP tools shall return an error dict and modify nothing."
+    category: non-functional
+    priority: must
+    status: active
+    source: "PR #1227"
+    acceptance:
+      - "GET/PATCH/DELETE on another user's Thing, session, or merge-history record returns 404 with the row unchanged"
+      - "Cross-user tool calls (update/delete/merge/relationships) return {error: Unauthorized} and write nothing"
+    notes: "Rows with NULL user_id are intentionally visible to all users (system data); however data created in auth-disabled mode also becomes NULL-owned and thus globally visible once auth is enabled — flagged. Known exceptions to 404 (403 on chat history append/migrate) are grandfathered."
+
+  - id: RELI-050
+    title: Rate limiting
+    statement: "When request volume exceeds the per-user (or per-IP) token-bucket limit for its tier — LLM endpoints 30/min, OAuth client registration 5/min, auth endpoints 10/min, all other API 60/min (env-overridable) — the system shall respond 429 with Retry-After, and shall attach X-RateLimit-Limit and X-RateLimit-Remaining headers to successful responses; X-Forwarded-For shall be trusted only from configured proxy CIDRs, and /healthz and assets shall be exempt."
+    category: non-functional
+    priority: must
+    status: active
+    source: "PR #1098, PR #1230"
+    acceptance:
+      - "The 31st chat request within a minute returns 429 with a Retry-After header and JSON retry_after"
+      - "X-RateLimit-Limit reflects the tier-specific limit; spoofed X-Forwarded-For from an untrusted peer is ignored"
+    notes: "Suspected bug: the auth tier lists '/api/logout' but the real route is '/api/auth/logout', so logout falls into the 60/min general bucket instead of the intended 10/min auth tier."
+
+  - id: RELI-051
+    title: Security headers and CSP
+    statement: "When any HTTP response is served, the system shall include X-Content-Type-Options nosniff, X-Frame-Options DENY, HSTS (max-age 63072000, includeSubDomains), Referrer-Policy strict-origin-when-cross-origin, a restrictive Permissions-Policy, and a Content-Security-Policy restricted to 'self' (plus Google avatar images) that never contains 'unsafe-inline'; while running in production, OpenAPI/Swagger/ReDoc shall be unreachable."
+    category: non-functional
+    priority: must
+    status: active
+    source: "PR #982, PR #1094"
+    acceptance:
+      - "All six headers are present with the pinned values on every response; CSP contains no 'unsafe-inline'"
+      - "With RAILWAY_ENVIRONMENT_NAME or PRODUCTION set, /openapi.json, /docs, and /redoc are 404"
+
+  - id: RELI-052
+    title: Secrets encrypted at rest
+    statement: "When Google OAuth tokens or per-user API keys are stored, the system shall encrypt them with Fernet (key from TOKEN_ENCRYPTION_KEY, else a 0600-permission key file in DATA_DIR), transparently re-encrypting legacy plaintext on read; while running in production, the system shall refuse to fall back to a /tmp key file and fail startup instead."
+    category: non-functional
+    priority: must
+    status: active
+    source: "PR #983"
+    acceptance:
+      - "Stored access/refresh tokens, client secrets, and requesty/openai API keys are not readable as plaintext in the DB"
+      - "In production with no TOKEN_ENCRYPTION_KEY and unwritable DATA_DIR, startup raises rather than using /tmp"
+
+  - id: RELI-053
+    title: PII minimization
+    statement: "The system shall keep PII (email, google_id) out of Thing.data (storing identity only on the user record), exclude the free-form data field from Thing payloads sent to external LLM providers, redact secrets from GDPR exports, exclude PII and user content from Sentry (id-only user context, cookie/authorization breadcrumbs filtered, send_default_pii off) and from logs (no emails, OAuth codes, or internal user ids in feedback issues)."
+    category: non-functional
+    priority: must
+    status: active
+    source: "PR #1226, PR #1103, PR #994"
+    acceptance:
+      - "Thing dicts serialized for LLM prompts contain no data field"
+      - "New users' profile Things have data null; the PII-scrub migration removes email/google_id keys from legacy rows"
+      - "Sentry user context contains only {id}; feedback issues never contain the user_id"
+
+  - id: RELI-054
+    title: GDPR export and erasure
+    statement: "When a user requests GET /api/gdpr/export, the system shall return all of their data across every table with API keys and OAuth tokens redacted and raw embedding vectors excluded; when a user requests DELETE /api/gdpr/delete-all, the system shall delete all of their rows in FK-safe order in a single transaction, clear the session cookie, and refuse (403) when no authenticated user exists."
+    category: functional
+    priority: must
+    status: active
+    source: "PR #1214"
+    acceptance:
+      - "Export contains things, chat history, settings, findings, briefings, etc., with token fields as '[REDACTED]'"
+      - "delete-all in auth-disabled mode returns 403 and deletes nothing"
+    notes: "No test file covers the GDPR router despite its blast radius — highest-priority test gap. delete_cookie omits path='/', so the clear may not match the session cookie."
+
+  - id: RELI-055
+    title: Bounded queries and payloads
+    statement: "When handling any request, the system shall enforce per-field size limits on all writable models (title 500, message 5000, JSON blobs 100 KB, screenshot 5 MiB) and cap unbounded reads (briefing things 10k, relationships 20k, findings 1k, merge candidates 200, sweep queries 500) so that no single request or nightly job can exhaust memory."
+    category: non-functional
+    priority: must
+    status: active
+    source: "PR #1207, PR #1249, PR #1252, PR #1254, PR #1257"
+    acceptance:
+      - "Each documented Pydantic bound rejects out-of-range input with 422 at the API layer"
+      - "Briefing/sweep queries apply their row caps and log a warning when hit"
+
+  - id: RELI-056
+    title: Migration safety
+    statement: "When the application starts, the system shall run Alembic migrations to head automatically; when a pending migration contains destructive DDL (drop table/column/index/constraint, TRUNCATE, DELETE FROM), the system shall refuse to run it unless the migration opts in via the '# reli:allow-destructive-ddl' marker or ALLOW_DESTRUCTIVE_DDL is set."
+    category: non-functional
+    priority: must
+    status: active
+    source: "PR #1111"
+    acceptance:
+      - "A pending migration with op.drop_table and no marker raises DestructiveDDLFound naming the revision"
+      - "The same migration with the marker comment runs, logging the opt-in"
+    notes: "Suspected weakness: a migration failure at startup (including a DDL-guard rejection) is swallowed and falls back to create_all, so the guard does not actually block startup. The stated intent (block destructive DDL) is canonized; the fallback needs review."
+
+  - id: RELI-057
+    title: Health and metrics endpoints
+    statement: "The system shall expose an unauthenticated /healthz returning {status: ok, service: reli}, an authenticated /api/health reporting degraded status when the database is unreachable plus uptime and vector/request stats, and an authenticated Prometheus /metrics endpoint whose path labels are normalized to a fixed prefix set to bound cardinality."
+    category: non-functional
+    priority: must
+    status: active
+    source: "PR #985"
+    acceptance:
+      - "/healthz returns 200 without a session; /metrics returns 401 without one"
+      - "/api/health reports status 'degraded' when SELECT 1 fails"
+      - "Unknown paths appear in metrics under the label /other"
+
+  # ---------------------------------------------------------------------------
+  # Frontend & offline
+  # ---------------------------------------------------------------------------
+  - id: RELI-058
+    title: Single-page app with landing page
+    statement: "When an unauthenticated visitor loads the site, the system shall render a public landing page with Google sign-in; when authenticated, the SPA shall present list/graph/calendar main views with chat and briefing panels (three-tab layout on mobile at 390px widths), and any API 401 outside /api/auth/* shall trigger a session re-check that returns the user to the landing page."
+    category: functional
+    priority: must
+    status: active
+    source: "PR #1058"
+    acceptance:
+      - "Unauthenticated / shows 'Sign in with Google' with zero uncaught page errors and no failed static assets (smoke test)"
+      - "A 401 on a data fetch clears currentUser without a hard navigation; 401 on /api/auth/* does not loop"
+
+  - id: RELI-059
+    title: Offline support
+    statement: "While the browser is offline, the system shall serve reads for Things, types, relationships, briefing, and calendar from IndexedDB/service-worker caches (stale-while-revalidate, 24h), queue the supported mutations (Thing update, snooze, finding dismiss) as pending operations returning synthetic 202, and on reconnect replay them FIFO scoped to the logged-in user, discarding on 4xx and retrying 5xx up to 3 times."
+    category: functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "Offline fetch failures fall back to cached data only when navigator.onLine is false"
+      - "Queued ops belonging to a different user are never replayed; a network error during replay stops the loop"
+      - "Chat endpoints are network-only (never cached)"
+    notes: "No conflict detection exists on replay (blind last-write overwrite), and only 3 mutation types are offline-capable; a 4xx replay is surfaced to the UI as success (sync:op-ok) — misleading, flagged for review."
+
+  - id: RELI-060
+    title: Visual and smoke regression gates
+    statement: "When frontend changes are made, the system shall maintain Playwright screenshot baselines (desktop 1280x720, mobile 390x844, dark desktop) and a staging smoke suite asserting /healthz, HTML delivery, auth-gating of API endpoints (401/403), and zero console errors; backend and frontend shall pass the unified gates script (lint, typecheck, test, build)."
+    category: non-functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "npm run test:screenshots passes against committed snapshots; scripts/gates.sh runs ruff, mypy, pytest, eslint, tsc, vitest, and the build"
+      - "Smoke: GET /api/things?limit=1 unauthenticated returns 401 or 403"
+
+  - id: RELI-061
+    title: Frontend/backend type contract
+    statement: "When backend response models change, the system shall regenerate frontend TypeScript interfaces and Zod schemas from the OpenAPI schema (checked by generate_types.py --check), and API contract tests shall pin response shapes — nullable fields present-and-null, data as a dict not a JSON string, ISO date strings, and briefing confidence labels in {emerging, moderate, strong}."
+    category: non-functional
+    priority: should
+    status: active
+    source: back-ported
+    acceptance:
+      - "python scripts/generate_types.py --check passes (generated file is fresh)"
+      - "test_api_contracts.py shape assertions pass for Things, chat, briefing, calendar, and health"
+
+  # ---------------------------------------------------------------------------
+  # Constraints
+  # ---------------------------------------------------------------------------
+  - id: RELI-062
+    title: Platform stack
+    statement: "The system shall run as a Python ≥3.11 (3.12 container) FastAPI backend serving a Vite-built React 19 SPA from the same origin, storing data in SQLite (WAL, foreign keys, 5s busy timeout) or Postgres/Supabase (pool sized for free tier) selected by DATABASE_URL/STORAGE_BACKEND, with embeddings in pgvector/ChromaDB."
+    category: constraint
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "The backend serves frontend/dist via StaticFiles with a traversal-safe SPA fallback"
+      - "SQLite connections apply WAL, foreign_keys=ON, and busy_timeout=5000"
+    notes: "STORAGE_BACKEND and DATABASE_URL can silently disagree (e.g. Postgres URL with sqlite backend leaves search case-sensitive) — flagged; a startup cross-check is the intended behavior."
+
+  - id: RELI-063
+    title: LLM gateway and model configuration
+    statement: "When any pipeline stage calls an LLM, the system shall route through the Requesty OpenAI-compatible gateway with per-stage models resolved as per-user setting > environment variable > config.yaml (config.yaml required at startup), retry only 404/429/503 errors up to 4 attempts with exponential backoff (0.5s..8s cap), and support an optional local Ollama model for cheap stages."
+    category: constraint
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "A missing config.yaml or missing llm.models keys fails startup with a clear error"
+      - "A 429 is retried up to 4 total attempts with 0.5s/1s/2s backoff; a non-retryable error is attempted exactly once"
+      - "PUT /api/settings overrides context/reasoning/response models per user"
+
+  - id: RELI-064
+    title: Deployment pipeline
+    statement: "When a PR merges to main, the system shall deploy via GitHub Actions to Railway staging, run E2E smoke tests against staging, and only then promote to production; the container shall run as a non-root user with a /healthz-based healthcheck honoring Railway's PORT, and shall never modify the persistent data volume during build or startup beyond additive migrations."
+    category: constraint
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "Staging pipeline gates production promotion on smoke-test success"
+      - "docker compose build does not touch the mounted data volume"
+
+  - id: RELI-065
+    title: Production configuration hard requirements
+    statement: "While running in production (RAILWAY_ENVIRONMENT_NAME or PRODUCTION set), the system shall fail startup when SECRET_KEY or REQUESTY_API_KEY is missing, treat any such environment as production for docs-disabling and key-fallback purposes, and outside production shall require explicit AUTH_DISABLED=true to run without credentials."
+    category: constraint
+    priority: must
+    status: active
+    source: back-ported
+    acceptance:
+      - "Production startup without SECRET_KEY raises; dev startup without SECRET_KEY and RELI_API_TOKEN raises unless AUTH_DISABLED=true"
