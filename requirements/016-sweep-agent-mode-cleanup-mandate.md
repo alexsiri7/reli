@@ -1,10 +1,10 @@
 ---
 created: '2026-06-03'
-github_issue: null
+github_issue: 1139
 id: '016'
-status: draft
+status: done
 title: Sweep agent mode (cleanup mandate)
-updated: '2026-06-03'
+updated: '2026-09-08'
 ---
 
 ## Why
@@ -17,4 +17,5 @@ High-confidence sweep findings — duplicate Things, obviously-done sub-tasks, s
 
 ## Issues
 
-_None yet._
+- #1139 — Auto-execute high-confidence duplicate Thing merges
+- #1140 — Add sweep action summary to daily briefing
