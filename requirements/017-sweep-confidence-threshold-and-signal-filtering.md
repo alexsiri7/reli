@@ -1,10 +1,10 @@
 ---
 created: '2026-06-03'
-github_issue: null
+github_issue: 1141
 id: '017'
-status: draft
+status: done
 title: Sweep confidence threshold and signal filtering
-updated: '2026-06-03'
+updated: '2026-09-08'
 ---
 
 ## Why
@@ -17,4 +17,5 @@ The sweep applies a minimum confidence threshold before surfacing a finding. Low
 
 ## Issues
 
-_None yet._
+- #1141 — Add confidence scoring to findings with minimum threshold gate
+- #1142 — Add category suppression config for low-value finding types

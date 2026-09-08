@@ -1,10 +1,10 @@
 ---
 created: '2026-06-03'
-github_issue: null
+github_issue: 1137
 id: '015'
-status: draft
+status: done
 title: Finding lifecycle and expiry
-updated: '2026-06-03'
+updated: '2026-09-08'
 ---
 
 ## Why
@@ -17,4 +17,5 @@ Each finding carries a context snapshot or TTL at creation time. On subsequent s
 
 ## Issues
 
-_None yet._
+- #1137 — Add context snapshot and TTL to finding schema
+- #1138 — Re-validate findings on sweep; auto-dismiss stale ones
