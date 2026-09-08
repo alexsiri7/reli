@@ -87,28 +87,69 @@ describe('store: snoozeThing', () => {
   })
 })
 
+/** Build a real streaming Response emitting the SSE events readChatStream expects. */
+function sseResponse(events: Array<{ event: string; data: unknown }>): Response {
+  const encoder = new TextEncoder()
+  const body = events.map(e => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`).join('')
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(body))
+      controller.close()
+    },
+  })
+  return new Response(stream, { status: 200 })
+}
+
 describe('store: sendMessage', () => {
-  it('adds user and assistant messages', async () => {
-    const savedMsg = {
-      id: 'saved-1',
-      session_id: 'test',
-      role: 'assistant' as const,
-      content: 'Got it!',
-      applied_changes: null,
-      timestamp: '2026-01-01T00:00:00Z',
+  it('adds user and assistant messages, stores session usage, and parses a preference toast', async () => {
+    const preferenceThing = {
+      id: 'pref-1',
+      title: 'Prefers concise replies',
+      type_hint: 'preference',
+      data: JSON.stringify({ confidence: 0.8 }),
+    }
+    const sessionUsage = {
+      prompt_tokens: 10,
+      completion_tokens: 5,
+      total_tokens: 15,
+      api_calls: 1,
+      cost_usd: 0.001,
+      per_model: [],
     }
 
     vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })  // persist user
-      .mockResolvedValueOnce({ ok: true, json: async () => savedMsg }) // persist assistant
-      .mockResolvedValue({ ok: true, json: async () => [] }), // fetchThings + fetchBriefing
+      .mockResolvedValueOnce(sseResponse([
+        { event: 'stage', data: { stage: 'context', status: 'started' } },
+        { event: 'token', data: { text: 'Got it!' } },
+        {
+          event: 'complete',
+          data: {
+            reply: 'Got it!',
+            applied_changes: { created: [preferenceThing] },
+            questions_for_user: [],
+            session_usage: sessionUsage,
+          },
+        },
+      ])) // chat/stream
+      .mockResolvedValue({ ok: true, json: async () => [] }), // fetchThings + fetchBriefing etc.
     )
 
     await useStore.getState().sendMessage('hello')
 
     const messages = useStore.getState().messages
-    expect(messages.some(m => m.role === 'user' && m.content === 'hello')).toBe(true)
-    expect(messages.some(m => m.role === 'assistant')).toBe(true)
+    const userMsg = messages.find(m => m.role === 'user')
+    const assistantMsg = messages.find(m => m.role === 'assistant')
+    expect(userMsg?.content).toBe('hello')
+    // Final content comes from the streamed/completed response, not the empty placeholder
+    expect(assistantMsg?.content).toBe('Got it!')
+    expect(assistantMsg?.streaming).toBeFalsy()
+    expect(useStore.getState().sessionStats).toEqual(sessionUsage)
+    expect(useStore.getState().preferenceToasts).toHaveLength(1)
+    expect(useStore.getState().preferenceToasts[0]).toMatchObject({
+      title: 'Prefers concise replies',
+      confidenceLabel: 'strong',
+      action: 'created',
+    })
     expect(useStore.getState().chatLoading).toBe(false)
   })
 })
