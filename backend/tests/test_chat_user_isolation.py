@@ -138,7 +138,44 @@ class TestMigrateSessionIsolation:
             assert usage.session_id == new_session_id
 
 
+def _post_chat_as_user_a_to_session(session_id: str, message: str):
+    """POST /api/chat authenticated as "user-a", with agents mocked. Never raises on 5xx."""
+    from backend.auth import require_user
+    from backend.main import app
+
+    saved = app.dependency_overrides.get(require_user)
+    app.dependency_overrides[require_user] = lambda: "user-a"
+    try:
+        with TestClient(app, raise_server_exceptions=False) as c:
+            with (
+                patch("backend.pipeline.run_reasoning_agent", new=AsyncMock(return_value=_MOCK_REASONING_RESULT)),
+                patch("backend.pipeline.run_response_agent", new=AsyncMock(return_value=ResponseResult(text="hi"))),
+            ):
+                return c.post("/api/chat", json={"session_id": session_id, "message": message})
+    finally:
+        if saved is None:
+            app.dependency_overrides.pop(require_user, None)
+        else:
+            app.dependency_overrides[require_user] = saved
+
+
 class TestChatExchangeCrossUserSessionId:
+    def test_posting_to_another_users_session_id_does_not_corrupt_it(self, patched_db):
+        """POST /api/chat as user A with a session_id owned by user B must not touch B's data,
+        regardless of whether the request itself succeeds."""
+        victim_session_id = _seed_session_for_user("other-user", "Victim's chat")
+        victim_history_id = _seed_chat_history("other-user", victim_session_id, "Victim's message")
+
+        _post_chat_as_user_a_to_session(victim_session_id, "hijack attempt")
+
+        with Session(_engine_mod.engine) as session:
+            victim_session = session.get(ChatSessionRecord, victim_session_id)
+            assert victim_session.user_id == "other-user"
+            victim_history = session.exec(
+                select(ChatHistoryRecord).where(ChatHistoryRecord.session_id == victim_session_id)
+            ).all()
+            assert {h.id for h in victim_history} == {victim_history_id}
+
     @pytest.mark.xfail(
         reason=(
             "_persist_exchange (chat.py:664-677) detects a session_id owned by another "
@@ -148,38 +185,13 @@ class TestChatExchangeCrossUserSessionId:
         ),
         strict=False,
     )
-    def test_posting_to_another_users_session_id_does_not_corrupt_it(self, patched_db):
-        """POST /api/chat as user A with a session_id owned by user B must not touch B's data.
+    def test_posting_to_another_users_session_id_succeeds_with_a_forked_session(self, patched_db):
+        """The endpoint should still return 200 by forking a new session for user A.
 
-        Today this crashes (see xfail reason) rather than cleanly forking a new session for A.
-        """
+        Today it 500s instead (see xfail reason)."""
         victim_session_id = _seed_session_for_user("other-user", "Victim's chat")
-        victim_history_id = _seed_chat_history("other-user", victim_session_id, "Victim's message")
+        _seed_chat_history("other-user", victim_session_id, "Victim's message")
 
-        from backend.auth import require_user
-        from backend.main import app
-
-        saved = app.dependency_overrides.get(require_user)
-        app.dependency_overrides[require_user] = lambda: "user-a"
-        try:
-            with TestClient(app, raise_server_exceptions=False) as c:
-                with (
-                    patch("backend.pipeline.run_reasoning_agent", new=AsyncMock(return_value=_MOCK_REASONING_RESULT)),
-                    patch("backend.pipeline.run_response_agent", new=AsyncMock(return_value=ResponseResult(text="hi"))),
-                ):
-                    resp = c.post("/api/chat", json={"session_id": victim_session_id, "message": "hijack attempt"})
-        finally:
-            if saved is None:
-                app.dependency_overrides.pop(require_user, None)
-            else:
-                app.dependency_overrides[require_user] = saved
+        resp = _post_chat_as_user_a_to_session(victim_session_id, "hijack attempt")
 
         assert resp.status_code == 200
-
-        with Session(_engine_mod.engine) as session:
-            victim_session = session.get(ChatSessionRecord, victim_session_id)
-            assert victim_session.user_id == "other-user"
-            victim_history = session.exec(
-                select(ChatHistoryRecord).where(ChatHistoryRecord.session_id == victim_session_id)
-            ).all()
-            assert {h.id for h in victim_history} == {victim_history_id}
