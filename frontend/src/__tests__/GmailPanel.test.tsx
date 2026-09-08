@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 
 let fetchMock: ReturnType<typeof vi.fn>
 
@@ -11,10 +11,14 @@ beforeEach(() => {
 import { GmailPanel } from '../components/GmailPanel'
 
 describe('GmailPanel', () => {
-  it('shows checking state initially', () => {
+  it('shows checking state initially', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({ connected: false, email: null }) })
-    render(<GmailPanel />)
-    expect(screen.getByText('Checking Gmail...')).toBeInTheDocument()
+    act(() => {
+      render(<GmailPanel />)
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Checking Gmail...')).toBeInTheDocument()
+    })
   })
 
   it('renders nothing when gmail is not configured (501)', async () => {
@@ -90,7 +94,9 @@ describe('GmailPanel', () => {
     })
 
     fetchMock.mockResolvedValueOnce({ ok: true })
-    fireEvent.click(screen.getByText('Disconnect'))
+    await act(async () => {
+      fireEvent.click(screen.getByText('Disconnect'))
+    })
 
     await waitFor(() => {
       expect(screen.getByText('Connect Gmail')).toBeInTheDocument()
@@ -148,7 +154,9 @@ describe('GmailPanel', () => {
     })
 
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(fullMsg) })
-    fireEvent.click(screen.getByText('Hello'))
+    await act(async () => {
+      fireEvent.click(screen.getByText('Hello'))
+    })
 
     await waitFor(() => {
       expect(screen.getByText('Full email body content')).toBeInTheDocument()

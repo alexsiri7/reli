@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import GraphView from '../components/GraphView'
 
 vi.mock('react-force-graph-2d', () => ({
@@ -36,42 +36,58 @@ beforeEach(() => {
 
 describe('GraphView', () => {
   it('renders List and Graph tabs', () => {
-    render(<GraphView />)
+    act(() => {
+      render(<GraphView />)
+    })
     expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Graph' })).toBeInTheDocument()
   })
 
   it('calls setMainView("list") when List tab is clicked', () => {
-    render(<GraphView />)
-    fireEvent.click(screen.getByRole('button', { name: 'List' }))
+    act(() => {
+      render(<GraphView />)
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'List' }))
+    })
     expect(setMainView).toHaveBeenCalledWith('list')
   })
 
   it('Graph tab is styled as active (has border-b-2 class)', () => {
-    render(<GraphView />)
+    act(() => {
+      render(<GraphView />)
+    })
     const graphTab = screen.getByRole('button', { name: 'Graph' })
     expect(graphTab).toHaveClass('border-b-2')
   })
 
   it('List tab is styled as inactive (has text-on-surface-variant class)', () => {
-    render(<GraphView />)
+    act(() => {
+      render(<GraphView />)
+    })
     const listTab = screen.getByRole('button', { name: 'List' })
     expect(listTab).toHaveClass('text-on-surface-variant')
   })
 
   it('Graph tab has aria-current="page"', () => {
-    render(<GraphView />)
+    act(() => {
+      render(<GraphView />)
+    })
     const graphTab = screen.getByRole('button', { name: 'Graph' })
     expect(graphTab).toHaveAttribute('aria-current', 'page')
   })
 
   it('nav has accessible label "View switcher"', () => {
-    render(<GraphView />)
+    act(() => {
+      render(<GraphView />)
+    })
     expect(screen.getByRole('navigation', { name: 'View switcher' })).toBeInTheDocument()
   })
 
   it('shows loading state without hiding the tab header', () => {
-    render(<GraphView />)
+    act(() => {
+      render(<GraphView />)
+    })
     expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Graph' })).toBeInTheDocument()
   })

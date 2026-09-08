@@ -117,22 +117,36 @@ describe('store: sendMessage', () => {
       per_model: [],
     }
 
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(sseResponse([
-        { event: 'stage', data: { stage: 'context', status: 'started' } },
-        { event: 'token', data: { text: 'Got it!' } },
-        {
-          event: 'complete',
-          data: {
-            reply: 'Got it!',
-            applied_changes: { created: [preferenceThing] },
-            questions_for_user: [],
-            session_usage: sessionUsage,
-          },
+    const mockFetch = vi.fn().mockResolvedValueOnce(sseResponse([
+      { event: 'stage', data: { stage: 'context', status: 'started' } },
+      { event: 'token', data: { text: 'Got it!' } },
+      {
+        event: 'complete',
+        data: {
+          reply: 'Got it!',
+          applied_changes: { created: [preferenceThing] },
+          questions_for_user: [],
+          session_usage: sessionUsage,
         },
-      ])) // chat/stream
-      .mockResolvedValue({ ok: true, json: async () => [] }), // fetchThings + fetchBriefing etc.
-    )
+      },
+    ])) // chat/stream
+
+    mockFetch.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: async () => {
+        if (typeof url === 'string') {
+          if (url.includes('/briefing')) return { the_one_thing: null, secondary: [] }
+          if (url.includes('/focus')) return { recommendations: [], calendar_active: false }
+          if (url.includes('/things')) return []
+          if (url.includes('/surfaces')) return []
+          if (url.includes('/conflict')) return { conflicts: [] }
+          if (url.includes('/sessions')) return []
+        }
+        return {}
+      },
+    }))
+
+    vi.stubGlobal('fetch', mockFetch)
 
     await useStore.getState().sendMessage('hello')
 
