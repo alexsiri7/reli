@@ -1,5 +1,6 @@
 """Tests for vector_store.py — semantic search fallback behavior."""
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -50,11 +51,17 @@ class TestVectorSearch:
 
 
 class TestUpsertThing:
-    def test_logs_error_on_embedder_failure(self):
+    def test_logs_error_on_embedder_failure(self, caplog):
         """When embedding call fails, upsert_thing logs error but doesn't raise."""
         with patch("backend.vector_store._embedder", side_effect=Exception("Embedding down")):
-            # Should not raise
-            upsert_thing({"id": "test-1", "title": "Test Thing"})
+            with caplog.at_level(logging.ERROR, logger="backend.vector_store"):
+                upsert_thing({"id": "test-1", "title": "Test Thing"})  # should not raise
+
+        assert any(
+            "pgvector upsert failed" in r.message and "test-1" in r.message
+            for r in caplog.records
+            if r.levelno == logging.ERROR
+        )
 
     def test_upsert_sql_does_not_reference_content(self):
         """INSERT SQL must not include content column (removed in r2s3t4u5v6w7)."""

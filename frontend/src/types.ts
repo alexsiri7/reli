@@ -50,7 +50,7 @@ export interface ReferencedThing {
 }
 
 export interface AppliedChanges {
-  created?: { id: string; title: string; type_hint?: string }[]
+  created?: { id: string; title: string; type_hint?: string; [key: string]: unknown }[]
   updated?: { id: string; title: string; [key: string]: unknown }[]
   deleted?: string[]
   context_things?: ContextThing[]

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { Sidebar } from '../components/Sidebar'
 
 type Thing = {
@@ -749,10 +749,11 @@ describe('Sidebar: completed tasks display', () => {
     expect(screen.getByText('Finish report')).toBeInTheDocument()
     const checkbox = screen.getByLabelText('Mark task done')
 
-    fireEvent.click(checkbox)
-
-    // Advance past the 600ms animation delay
-    await vi.advanceTimersByTimeAsync(700)
+    await act(async () => {
+      fireEvent.click(checkbox)
+      // Advance past the 600ms animation delay
+      await vi.advanceTimersByTimeAsync(700)
+    })
 
     expect(updateThing).toHaveBeenCalledWith(expect.any(String), { active: false })
 

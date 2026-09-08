@@ -356,6 +356,37 @@ async function interceptApi(
 /** Shared snapshot options — tolerate minor sub-pixel rendering differences */
 const SNAPSHOT_OPTS = { maxDiffPixelRatio: 0.02 }
 
+/** Wait until `selector`'s bounding box is unchanged across two animation frames. */
+async function waitForLayoutStable(page: Page, selector: string, timeout = 5_000) {
+  await page.waitForFunction(
+    sel => {
+      const el = document.querySelector(sel)
+      if (!el) return false
+      const rect = el.getBoundingClientRect()
+      const key = '__reli_layout_check__'
+      const prev = (window as unknown as Record<string, unknown>)[key] as
+        | { sel: string; top: number; left: number; width: number; height: number }
+        | undefined
+      ;(window as unknown as Record<string, unknown>)[key] = {
+        sel,
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+      }
+      if (!prev || prev.sel !== sel) return false
+      return (
+        prev.top === rect.top &&
+        prev.left === rect.left &&
+        prev.width === rect.width &&
+        prev.height === rect.height
+      )
+    },
+    selector,
+    { polling: 'raf', timeout }
+  )
+}
+
 async function waitForApp(page: Page) {
   // App renders aside in both desktop and mobile layout divs; wait for first one
   await page.waitForSelector('aside', { timeout: 20_000 })
@@ -368,7 +399,7 @@ async function waitForApp(page: Page) {
     }`,
   })
   // Let layout settle
-  await page.waitForTimeout(500)
+  await waitForLayoutStable(page, 'aside')
 }
 
 test.describe('Visual regression – reli frontend', () => {
@@ -554,7 +585,7 @@ test.describe('Visual regression – reli frontend', () => {
         transition-duration: 0s !important;
       }`,
       })
-      await page.waitForTimeout(500)
+      await waitForLayoutStable(page, 'nav.fixed.bottom-0')
       await waitForBriefingData(page)
       await expect(page).toHaveScreenshot('briefing-panel-populated-mobile.png', {
         ...SNAPSHOT_OPTS, animations: 'disabled',

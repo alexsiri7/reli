@@ -155,20 +155,24 @@ class TestReliThinkMcpTool:
             "questions_for_user": ["What kind of task?"],
             "reasoning_summary": "Need clarification.",
         }
-        asyncio.run(reli_think(message="Do the thing", context="User is busy today"))
+        result = asyncio.run(reli_think(message="Do the thing", context="User is busy today"))
         mock_agent.assert_called_once_with(
             message="Do the thing",
             context="User is busy today",
         )
+        assert result["questions_for_user"] == ["What kind of task?"]
+        assert result["reasoning_summary"] == "Need clarification."
 
     @patch("backend.reasoning_agent.run_think_agent", new_callable=AsyncMock)
     def test_reli_think_no_context(self, mock_agent: AsyncMock) -> None:
         mock_agent.return_value = {"instructions": [], "questions_for_user": [], "reasoning_summary": ""}
-        asyncio.run(reli_think(message="Hello"))
+        result = asyncio.run(reli_think(message="Hello"))
         mock_agent.assert_called_once_with(
             message="Hello",
             context="",
         )
+        assert result["questions_for_user"] == []
+        assert result["reasoning_summary"] == ""
 
 
 # ---------------------------------------------------------------------------
