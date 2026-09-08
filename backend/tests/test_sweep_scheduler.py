@@ -6,6 +6,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 from freezegun import freeze_time
 
 from backend.sweep_scheduler import (
@@ -245,6 +246,32 @@ class TestRunSweep:
 
 
 class TestStartStop:
+    @pytest_asyncio.fixture(autouse=True)
+    async def _isolate_scheduler_globals(self):
+        """Reset ``_task`` and ``_task_scheduled`` so tests never see a leaked
+        background task started (and never cleaned up) by another test."""
+        import backend.sweep_scheduler as mod
+
+        async def _cancel(task: asyncio.Task[None] | None) -> None:
+            if task is not None and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+        await _cancel(mod._task)
+        await _cancel(mod._task_scheduled)
+        mod._task = None
+        mod._task_scheduled = None
+
+        yield
+
+        await _cancel(mod._task)
+        await _cancel(mod._task_scheduled)
+        mod._task = None
+        mod._task_scheduled = None
+
     @pytest.mark.asyncio
     async def test_start_creates_task(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("SWEEP_ENABLED", "false")
