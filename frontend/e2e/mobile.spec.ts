@@ -102,6 +102,37 @@ async function interceptApi(
 
 const SNAPSHOT_OPTS = { maxDiffPixelRatio: 0.02 }
 
+/** Wait until `selector`'s bounding box is unchanged across two animation frames. */
+async function waitForLayoutStable(page: Page, selector: string, timeout = 5_000) {
+  await page.waitForFunction(
+    sel => {
+      const el = document.querySelector(sel)
+      if (!el) return false
+      const rect = el.getBoundingClientRect()
+      const key = '__reli_layout_check__'
+      const prev = (window as unknown as Record<string, unknown>)[key] as
+        | { sel: string; top: number; left: number; width: number; height: number }
+        | undefined
+      ;(window as unknown as Record<string, unknown>)[key] = {
+        sel,
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+      }
+      if (!prev || prev.sel !== sel) return false
+      return (
+        prev.top === rect.top &&
+        prev.left === rect.left &&
+        prev.width === rect.width &&
+        prev.height === rect.height
+      )
+    },
+    selector,
+    { polling: 'raf', timeout }
+  )
+}
+
 async function waitForApp(page: Page) {
   // On mobile, wait for the tab bar to appear (always visible when authenticated)
   await page.waitForSelector('nav.fixed.bottom-0', { timeout: 20_000 })
@@ -112,7 +143,7 @@ async function waitForApp(page: Page) {
       transition-duration: 0s !important;
     }`,
   })
-  await page.waitForTimeout(500)
+  await waitForLayoutStable(page, 'nav.fixed.bottom-0')
 }
 
 test.describe('Visual regression – mobile 390×844', () => {
@@ -123,7 +154,8 @@ test.describe('Visual regression – mobile 390×844', () => {
 
     // Navigate to the Things tab
     await page.click('nav.fixed.bottom-0 button:has-text("Things")')
-    await page.waitForTimeout(300)
+    // Desktop and mobile layouts both mount a Sidebar; :visible filters to the one actually shown
+    await page.waitForSelector('p:visible:has-text("Review pull request for auth module")')
 
     await expect(page).toHaveScreenshot('mobile-things-tab-populated.png', {
       ...SNAPSHOT_OPTS,
@@ -139,7 +171,8 @@ test.describe('Visual regression – mobile 390×844', () => {
 
     // Switch to chat tab
     await page.click('nav.fixed.bottom-0 button:has-text("Chat")')
-    await page.waitForTimeout(300)
+    // Desktop and mobile layouts both mount a ChatPanel; :visible filters to the one actually shown
+    await page.waitForSelector('[class*="rounded-2xl"]:visible')
 
     await expect(page).toHaveScreenshot('mobile-chat-tab-with-messages.png', {
       ...SNAPSHOT_OPTS,
@@ -165,6 +198,10 @@ test.describe('Visual regression – mobile 390×844', () => {
       children_count: 0,
       completed_count: 0,
     }
+    await interceptApi(page, { things: true })
+    // Registered after interceptApi so this specific mock takes priority over
+    // its generic `/api/briefing` route (Playwright runs the latest-registered
+    // handler first).
     await page.route('**/api/briefing', route =>
       route.fulfill({
         json: {
@@ -183,13 +220,13 @@ test.describe('Visual regression – mobile 390×844', () => {
         status: 200,
       })
     )
-    await interceptApi(page, { things: true })
     await page.goto('/')
     await waitForApp(page)
 
     // Navigate to the Briefing tab
     await page.click('nav.fixed.bottom-0 button:has-text("Briefing")')
-    await page.waitForTimeout(300)
+    // Desktop and mobile layouts both mount a BriefingPanel; :visible filters to the one actually shown
+    await page.waitForSelector('h3:visible:has-text("Finish the auth module refactor")')
 
     await expect(page).toHaveScreenshot('mobile-briefing-tab-populated.png', {
       ...SNAPSHOT_OPTS,
