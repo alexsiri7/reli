@@ -1,8 +1,8 @@
 ---
 created: '2026-09-10'
-github_issue: null
+github_issue: 1406
 id: 018
-status: draft
+status: idea
 title: Reli as an MCP-first PA service (vision v4)
 updated: '2026-09-10'
 ---
@@ -32,4 +32,12 @@ Explicitly not in scope: any LLM call originating inside the Reli service, a cha
 
 ## Issues
 
-_None yet._
+- #1406 — Export the current Reli graph before anything is discarded
+- #1407 — Land vision v4 and rewrite CLAUDE.md for the rebuild
+- #1408 — New data layer: Things, relationships and mutations journal on Postgres
+- #1409 — MCP tools over the new schema
+- #1410 — User model: #User anchor and evidence-linked preference Things
+- #1411 — MCP prompts: the hats and the preference-capture convention
+- #1412 — Calendar and Gmail readers for check-in resolution
+- #1413 — Scheduled task prompts: resolution pass, learning pass, morning conversation
+- #1414 — Read-only web view: tree, Thing detail with history, and the user model
