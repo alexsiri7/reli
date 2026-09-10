@@ -21,13 +21,14 @@ from backend.google_client import (
 API_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
 
 CLIENT_SECRET = "s3cret-client-secret"
+REFRESH_TOKEN = "s3cret-refresh-token"
 
 
 @pytest.fixture()
 def configured(monkeypatch):
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "client-id.apps.googleusercontent.com")
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", CLIENT_SECRET)
-    monkeypatch.setattr(settings, "GOOGLE_REFRESH_TOKEN", "refresh-token")
+    monkeypatch.setattr(settings, "GOOGLE_REFRESH_TOKEN", REFRESH_TOKEN)
 
 
 @pytest.fixture(autouse=True)
@@ -202,3 +203,29 @@ def test_an_api_error_leaks_neither_the_access_token_nor_the_client_secret(confi
     assert "500" in message
     assert "super-secret-access-token" not in message
     assert CLIENT_SECRET not in message
+
+
+def test_a_refused_refresh_leaks_neither_the_client_secret_nor_the_refresh_token(configured, transport):
+    """The refresh POST is the one request that carries both secrets, and its generic failure
+    branch echoes Google's answer — so it must echo `error` and nothing else Google sent back."""
+
+    def handler(request):
+        return httpx.Response(
+            400,
+            json={
+                "error": "unauthorized_client",
+                "error_description": f"client_secret={CLIENT_SECRET} refresh_token={REFRESH_TOKEN}",
+            },
+        )
+
+    transport(handler)
+
+    with pytest.raises(GoogleAuthFailed) as raised:
+        get_json(API_URL, {"q": "invoice"})
+
+    message = str(raised.value)
+    assert "400" in message
+    assert "unauthorized_client" in message
+    assert "invalid_grant" not in message
+    assert CLIENT_SECRET not in message
+    assert REFRESH_TOKEN not in message
