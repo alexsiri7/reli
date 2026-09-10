@@ -25,7 +25,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install Python dependencies
-        run: UV_SYSTEM_PYTHON=1 uv sync --frozen
+        run: UV_SYSTEM_PYTHON=1 uv sync --locked
 
       - name: Setup
         run: ./scripts/gates.sh setup
@@ -51,7 +51,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install Python dependencies
-        run: UV_SYSTEM_PYTHON=1 uv sync --frozen
+        run: UV_SYSTEM_PYTHON=1 uv sync --locked
 
       - name: Setup
         run: ./scripts/gates.sh setup

@@ -37,7 +37,7 @@ jobs:
         run: uv pip install --system pip-audit
 
       - name: Install backend dependencies
-        run: UV_SYSTEM_PYTHON=1 uv sync --frozen
+        run: UV_SYSTEM_PYTHON=1 uv sync --locked
 
       - name: Upgrade pip to patched version
         run: uv pip install --system "pip>=26.1.2"

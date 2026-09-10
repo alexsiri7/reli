@@ -17,8 +17,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATES = REPO_ROOT / "scripts" / "gates.sh"
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
+DEPENDABOT = REPO_ROOT / ".github" / "dependabot.yml"
 
 BACKGROUNDED = re.compile(r"(?<![&>])&(?![&>])")
+UV_SYNC = re.compile(r"uv sync[^\n&|;]*")
 BARE_WAIT = re.compile(r"(?:^|[;&|]|\bthen\b|\bdo\b)\s*wait\s*(?:$|[;&|\n])", re.MULTILINE)
 
 # What `gates.sh` needs on PATH before it reaches a stage. Every venv tool goes through
@@ -118,3 +120,29 @@ def test_the_scan_covers_both_workflow_extensions(tmp_path, extension):
     )
 
     assert _backgrounding_steps(_workflow_run_steps(tmp_path)) == [f"deploy{extension}:Lint & Typecheck"]
+
+
+def _uv_sync_invocations() -> list[tuple[str, str]]:
+    """Every dependency install CI performs — the workflow steps plus the gate script they call."""
+    sources = _workflow_run_steps() + [(GATES.name, GATES.read_text())]
+    return [(name, match.group().strip()) for name, script in sources for match in UV_SYNC.finditer(script)]
+
+
+def test_there_are_installs_to_scan():
+    assert len(_uv_sync_invocations()) >= 4
+
+
+def test_every_ci_install_rejects_a_lockfile_that_pyproject_has_outgrown():
+    """#1432: `--frozen` installs `uv.lock` whatever `pyproject.toml` now says, so a dependabot
+    bump that raises a constraint without relocking ships the old version green."""
+    offenders = [f"{name}: {command}" for name, command in _uv_sync_invocations() if "--locked" not in command]
+    assert offenders == [], f"these installs accept a stale lockfile: {offenders}"
+
+
+def test_dependabot_bumps_the_lockfile_alongside_pyproject():
+    """The `pip` ecosystem edits `pyproject.toml` alone (#1422, #1427); `uv` relocks with it, so the
+    installs above stay green through a bump instead of failing on drift dependabot cannot fix."""
+    ecosystems = {update["package-ecosystem"] for update in yaml.safe_load(DEPENDABOT.read_text())["updates"]}
+
+    assert "uv" in ecosystems
+    assert "pip" not in ecosystems, "the pip ecosystem raises pyproject-only bumps that leave uv.lock behind"
