@@ -111,60 +111,10 @@ jobs:
     outputs:
       deploy_sha: ${{ steps.sha.outputs.sha }}
 
-  staging-e2e:
-    name: Staging E2E smoke tests
-    runs-on: ubuntu-latest
-    needs: deploy-staging
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Node 20
-        uses: actions/setup-node@v7
-        with:
-          node-version: "20"
-
-      - name: Cache node_modules
-        uses: actions/cache@v6
-        with:
-          path: frontend/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install dependencies
-        run: npm --prefix frontend ci --legacy-peer-deps
-
-      - name: Install Playwright browsers
-        run: npx --prefix frontend playwright install --with-deps chromium
-
-      - name: Confirm staging readiness before smoke tests
-        env:
-          BASE_URL: ${{ secrets.RAILWAY_STAGING_URL }}
-        run: |
-          echo "Confirming staging is reachable before Playwright smoke tests..."
-          for i in $(seq 1 12); do
-            HTTP_CODE=$(curl -s -o /tmp/smoke_hc.txt -w "%{http_code}" --max-time 10 "${BASE_URL}/healthz" 2>/dev/null || true)
-            HTTP_CODE=${HTTP_CODE:-000}
-            BODY=$(cat /tmp/smoke_hc.txt 2>/dev/null || true)
-            echo "Attempt $i/12: HTTP $HTTP_CODE — ${BODY:0:80}"
-            if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q '"status":"ok"'; then
-              echo "Staging confirmed ready"
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "Staging not reachable after 12 attempts — aborting"
-          exit 1
-
-      - name: Run smoke tests against staging
-        env:
-          BASE_URL: ${{ secrets.RAILWAY_STAGING_URL }}
-        run: npm --prefix frontend run test:smoke
-
   deploy-production:
     name: Deploy to production
     runs-on: ubuntu-latest
-    needs: [deploy-staging, staging-e2e]
+    needs: [deploy-staging]
     environment: production
     permissions:
       contents: read

@@ -4,7 +4,7 @@ Reli is the memory and the obligations layer that lets Claude act as a complete 
 
 The goal is a PA that says "bring a change of clothes today, you have that event tonight" or "it's Saturday morning — your energy contract expires next month, want me to find a better deal?" — one that understands your life context, your schedule, your routines, and the right moment to act.
 
-Reli is being rebuilt. How it works, Vision and Tech Stack below describe the shape it is moving to, not the application currently in this tree.
+Reli is being rebuilt. The data layer below is what exists today; the MCP surface, the user model and the read-only view are still ahead.
 
 ## How it works
 
@@ -22,62 +22,55 @@ For how Reli compares to related projects, see [comparisons](docs/comparisons.md
 
 ## Tech Stack
 
-**Backend:** Python 3.12, FastAPI, Uvicorn, Pydantic
-**Frontend:** React 19, TypeScript, Vite, Tailwind CSS — a read-only view over the graph
+**Backend:** Python 3.12, FastAPI, Uvicorn, Pydantic, SQLModel
+**Frontend:** a read-only view over the graph — not yet built
 **Storage:** Postgres
 **Interface:** MCP — every write goes through an MCP client; there is no public API
-**Integrations:** Google Calendar, Gmail
+**Integrations:** Google Calendar, Gmail — not yet rewritten; `reference/oauth/` holds the pre-rebuild code
 **Infrastructure:** Docker, Cloudflare Tunnel, GitHub Actions CI, Railway (staging + production deploy)
 
-The rebuild is in progress. The setup, configuration and testing sections below describe the application currently in this tree.
+Today the service is the data layer and a health check. The MCP tools that reach it are the next issue.
 
 ## Setup
 
 ### Prerequisites
 
 - Python 3.11+
-- Node.js 20+
-- Docker and Docker Compose (for production)
+- Docker and Docker Compose — for the database, the test suite and production
 
 ### 1. Clone and install dependencies
 
 ```bash
 git clone https://github.com/alexsiri7/reli.git
 cd reli
-
-# Backend
-pip install -r backend/requirements.txt
-
-# Frontend
-cd frontend && npm ci --legacy-peer-deps && cd ..
+uv sync --frozen
 ```
 
-### 2. Configure environment
+### 2. Start a database and point the app at it
+
+`DATABASE_URL` is required and has no default — the service refuses to start without it rather than
+silently using an empty database.
 
 ```bash
 cp .env.example .env
+docker compose --profile localdb up -d postgres
 ```
 
-Edit `.env` and set at minimum:
+Then set in `.env`:
 
-- `REQUESTY_API_KEY` — Get from [requesty.ai](https://requesty.ai)
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — For Google OAuth login
-- `GOOGLE_SEARCH_API_KEY` / `GOOGLE_SEARCH_CX` — Enable web search in chat
-- `SECRET_KEY` — JWT signing key
+```
+DATABASE_URL=postgresql://reli:reli@localhost:5432/reli
+```
 
-Optional:
-- `OLLAMA_MODEL` — Use a local LLM for the context agent (reduces API costs)
-- `CLOUDFLARE_TUNNEL_TOKEN` — Expose the app publicly via Cloudflare Tunnel
+Optional: `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `LOG_LEVEL`.
 
 ### 3. Run in development
 
 ```bash
-# Start the backend
 uvicorn backend.main:app --reload --port 8000
-
-# In another terminal, start the frontend dev server
-cd frontend && npm run dev
 ```
+
+Startup applies `alembic upgrade head`; a migration failure fails the boot.
 
 ### 4. Run with Docker (production)
 
@@ -85,60 +78,37 @@ cd frontend && npm run dev
 docker compose up -d
 ```
 
-The app is available at `http://localhost:8000`. Data persists in `./data/` via a Docker volume mount.
-
-## Configuration
-
-`config.yaml` controls model selection for each pipeline stage:
-
-```yaml
-llm:
-  base_url: https://router.requesty.ai/v1
-  models:
-    context: google/gemini-2.5-flash-lite
-    reasoning: google/gemini-3-flash-preview
-    response: google/gemini-2.5-flash-lite
-
-embedding:
-  model: text-embedding-3-small
-```
-
-Models can also be overridden via environment variables (`REQUESTY_MODEL`, `REQUESTY_REASONING_MODEL`, `REQUESTY_RESPONSE_MODEL`).
+The health check is at `http://localhost:8000/healthz`. Data lives in Postgres, not on the
+container filesystem.
 
 ## Testing
 
 ```bash
 ./scripts/gates.sh              # All gates
-./scripts/gates.sh test          # Backend (pytest) + Frontend (vitest)
-./scripts/gates.sh lint          # Backend (ruff) + Frontend (eslint)
-./scripts/gates.sh typecheck     # Backend (mypy) + Frontend (tsc)
+./scripts/gates.sh test         # pytest, with coverage
+./scripts/gates.sh lint         # ruff check + ruff format --check
+./scripts/gates.sh typecheck    # mypy
 ```
+
+The suite starts a throwaway `postgres:16-alpine` via testcontainers and runs the baseline migration
+against it, so it needs a working Docker daemon. Set `RELI_TEST_DATABASE_URL` to use an existing
+database instead.
 
 ## Project Structure
 
-The layout below is the repository as it stands today, mid-rebuild; `docs/vision.md` describes the shape it is moving to.
-
 ```
 backend/
-  main.py              # FastAPI app, static file serving
-  agents.py            # Agent pipeline (superseded by the rebuild)
-  database.py          # SQLite schema, migrations, queries
-  vector_store.py      # ChromaDB embeddings
-  models.py            # Pydantic models
-  config.py            # Settings from env + config.yaml
-  routers/             # API route modules
-    chat.py            # /api/chat — main conversation endpoint
-    things.py          # /api/things — CRUD for Things
-    auth.py            # /api/auth — Google OAuth
-    calendar.py        # /api/calendar — Google Calendar
-    gmail.py           # /api/gmail — Gmail integration
-    settings.py        # /api/settings
-    sweep.py           # /api/sweep — nightly analysis
-frontend/
-  src/                 # React app (TypeScript)
+  main.py              # FastAPI app — /healthz only; reads and writes arrive over MCP
+  db_models.py         # things, relationships, journal, and the enums
+  service.py           # the only write path; every mutation is journalled
+  queries.py           # the indexed queries: due_for_checkin, stale, by_tag, blocked, related, children
+  config.py            # settings from the environment
+  db_engine.py         # the Postgres engine and session factory
+  alembic/versions/    # the v4 baseline migration
+  tests/
+reference/oauth/       # pre-rebuild Google OAuth/Calendar/Gmail code — not built, not shipped
 docs/                  # Vision, architecture, and design documents
-config.yaml            # Model configuration
-docker-compose.yml     # Production deployment
-Dockerfile             # Multi-stage build (Node + Python)
+docker-compose.yml     # Production deployment, plus a localdb profile for development
+Dockerfile             # Python image
 scripts/gates.sh       # Quality gate runner
 ```

@@ -1,12 +1,3 @@
-# Stage 1: Build frontend
-FROM node:22-slim AS frontend-build
-WORKDIR /app/frontend
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --legacy-peer-deps && npm rebuild rolldown
-COPY frontend/ ./
-RUN npm run build
-
-# Stage 2: Production image
 # Use floating minor tag so security patches land on each rebuild.
 # Run `docker compose build --pull` (or ensure CI uses --pull) to guarantee
 # the latest python:3.12.x base is fetched rather than served from cache.
@@ -34,39 +25,20 @@ RUN apt-get update && \
 # Add the virtualenv created by uv sync to PATH so uvicorn and python
 # resolve to the venv's binaries rather than the (empty) system install.
 ENV PATH="/app/.venv/bin:$PATH"
-ENV OAUTHLIB_RELAX_TOKEN_SCOPE=1
 
-# Copy config
-COPY config.yaml ./config.yaml
 COPY alembic.ini ./alembic.ini
-
-# Copy backend and prompts
 COPY backend/ ./backend/
-COPY prompts/ ./prompts/
 
-# Copy frontend build from stage 1
-COPY --from=frontend-build /app/frontend/dist/ ./frontend/dist/
-
-# Create data & chroma_db directories with correct ownership
-# chroma_db: defensive — chromadb was removed in the pgvector migration but
-# cached Docker layers or transitive deps could still try to initialise it.
-RUN mkdir -p /app/data /app/backend/chroma_db && \
-    chown reli:reli /app/data /app/backend/chroma_db
-
-# Entrypoint fixes bind-mount permissions then drops to non-root
+# Entrypoint drops to non-root
 COPY --chmod=755 <<'ENTRY' /app/entrypoint.sh
 #!/bin/sh
-# Fix ownership of bind-mounted data dir (runs as root initially)
-chown -R reli:reli /app/data 2>/dev/null || true
-# Ensure chroma_db dir is writable (defensive — chromadb removed in pgvector migration)
-mkdir -p /app/backend/chroma_db && chown reli:reli /app/backend/chroma_db 2>/dev/null || true
 exec gosu reli "$@"
 ENTRY
 
 EXPOSE 8000
 
-# 60 s gives Railway cold boots (Alembic migrations + MCP startup) time to complete
-# before Docker begins probing. Total time-to-unhealthy on genuine crash: ≤150 s.
+# 60 s gives Railway cold boots (Alembic migrations) time to complete before
+# Docker begins probing. Total time-to-unhealthy on genuine crash: ≤150 s.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\",\"8000\")}/healthz')" || exit 1
 

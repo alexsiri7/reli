@@ -1,491 +1,58 @@
-"""Reli FastAPI application entry point."""
+"""Reli FastAPI application entry point.
+
+Reli is a data service, not an application: the graph is reached over MCP and the judgement happens
+in Claude. The only HTTP route is the health check the deploy pipeline polls.
+"""
 
 import logging
-import os
 import pathlib
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-# Google OAuth returns scopes in expanded URI form; set once at startup.
-os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+from fastapi import FastAPI
 
-import httpx
+from .config import settings
+from .sentry import init_sentry
 
-from .config import settings as _app_settings  # noqa: E402 — must load before other backend imports
-
-# Configure logging — LOG_LEVEL env var controls verbosity (default: INFO)
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=getattr(logging, _app_settings.LOG_LEVEL.upper(), logging.INFO),
+    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 
-from .sentry import init_sentry  # noqa: E402
-
 init_sentry()
 
-from .tracing import init_tracing  # noqa: E402
-
-init_tracing()
-
-from fastapi import Depends, FastAPI, Request  # noqa: E402
-from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import FileResponse, RedirectResponse  # noqa: E402
-from fastapi.staticfiles import StaticFiles  # noqa: E402
-from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
-from starlette.responses import Response as StarletteResponse  # noqa: E402
-
-from .auth import COOKIE_NAME, JWT_ALGORITHM, SECRET_KEY, require_user  # noqa: E402
-from .db_engine import engine as _db_engine  # noqa: E402
-from .mcp_server import create_mcp_asgi_app  # noqa: E402
-from .metrics import MetricsMiddleware, metrics_response  # noqa: E402
-from .rate_limit import RateLimitMiddleware, get_rate_limit_config  # noqa: E402
-from .response_metrics import ResponseMetricsMiddleware, metrics_store  # noqa: E402
-from .routers import (  # noqa: E402
-    auth,
-    briefing,
-    calendar,
-    chat,
-    conflicts,
-    connections,
-    feedback,
-    focus,
-    gdpr,
-    gmail,
-    mcp_oauth,
-    nudges,
-    preferences,
-    proactive,
-    settings,
-    staleness,
-    sweep,
-    thing_types,
-    things,
-    think,
-)
-from .sentry import set_sentry_user  # noqa: E402
-from .sweep_scheduler import start_scheduler, stop_scheduler  # noqa: E402
-from .tracing import shutdown_tracing  # noqa: E402
-
-_FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
+_ALEMBIC_INI = pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    from .config import settings as _settings
+    """Bring the schema to head before serving.
 
-    if not _settings.SECRET_KEY and not _settings.RELI_API_TOKEN:
-        logger.warning(
-            "AUTH IS DISABLED — SECRET_KEY and RELI_API_TOKEN are both unset. "
-            "All user data is publicly accessible. Set AUTH_DISABLED=true explicitly if intentional."
-        )
-
-    init_tracing()
-
-    # Run Alembic migrations to ensure schema is up-to-date.
+    A migration failure propagates and the boot fails. There is deliberately no ``create_all``
+    fallback: the journal's append-only trigger lives in the migration and not in the ORM metadata,
+    so a schema built from metadata would be a silently mutable journal.
+    """
     from alembic import command as alembic_command
     from alembic.config import Config as AlembicConfig
 
-    _alembic_ini = pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
-    _migration_ok = False
-    if _alembic_ini.exists():
-        try:
-            _alembic_cfg = AlembicConfig(str(_alembic_ini))
-            alembic_command.upgrade(_alembic_cfg, "head")
-            logger.info("Alembic migrations applied successfully.")
-            _migration_ok = True
-        except Exception:
-            logger.exception("Alembic migration failed — checking schema state.")
-    else:
-        logger.warning(
-            "alembic.ini not found at %s — skipping migrations; will attempt create_all fallback.",
-            _alembic_ini,
-        )
+    alembic_command.upgrade(AlembicConfig(str(_ALEMBIC_INI)), "head")
+    logger.info("Alembic migrations applied successfully.")
+    yield
 
-    # Fallback: if migrations failed or alembic.ini was missing, use create_all to
-    # ensure the schema exists so the app can start. On a live DB this is safe —
-    # SQLAlchemy emits CREATE TABLE IF NOT EXISTS for each table.
-    if not _migration_ok:
-        from sqlmodel import SQLModel as _SQLModel
-
-        try:
-            _SQLModel.metadata.create_all(_db_engine)
-            logger.info("Schema created via SQLModel.metadata.create_all fallback.")
-        except Exception:
-            logger.exception(
-                "create_all fallback also failed — app starting in degraded state. "
-                "Ensure /api/health readiness probes are configured."
-            )
-    await start_scheduler()
-
-    # Start MCP session manager (required for streamable HTTP transport).
-    # When mounted as a sub-app, Starlette's lifespan doesn't trigger,
-    # so we run the session manager from the main app's lifespan.
-    from .mcp_server import mcp as _mcp_server
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        app.state.httpx_client = client
-        sm = getattr(_mcp_server, "_session_manager", None)
-        if sm is not None:
-            if getattr(sm, "_has_started", False):
-                # The session manager's run() is one-shot per instance. After it exits
-                # (e.g., hot-reload, uvicorn worker restart, or test teardown), _has_started
-                # remains True and _task_group is None. Reset the one-shot state so we can
-                # call run() again on the same instance — the ASGI handler holds a reference
-                # to this object, so creating a new instance would leave the handler broken.
-                import anyio as _anyio
-
-                sm._has_started = False
-                sm._run_lock = _anyio.Lock()
-            # Guard startup exceptions so the app starts in degraded mode if MCP
-            # transport fails (GH#1296: cold-boot HTTP 000 on Railway).
-            # We call __aenter__/__aexit__ directly to avoid wrapping the yield
-            # inside the try block — a yield inside try/except can produce a
-            # double-yield when __aexit__ raises during shutdown, which causes
-            # asynccontextmanager to raise RuntimeError: generator didn't stop.
-            _mcp_cm = _mcp_server.session_manager.run()
-            try:
-                await _mcp_cm.__aenter__()
-            except Exception:
-                logger.exception("MCP session manager failed to start — serving without MCP transport.")
-                yield
-            else:
-                try:
-                    yield
-                finally:
-                    # Best-effort cleanup; log but don't re-raise so shutdown completes.
-                    try:
-                        await _mcp_cm.__aexit__(None, None, None)
-                    except Exception:
-                        logger.exception("MCP session manager failed to stop cleanly.")
-        else:
-            yield
-    await stop_scheduler()
-    shutdown_tracing()
-
-
-_CSP = (
-    "default-src 'self'; "
-    "script-src 'self'; "
-    "style-src 'self'; "
-    "img-src 'self' data: blob: https://*.googleusercontent.com; "
-    "connect-src 'self'; "
-    "font-src 'self'; "
-    "frame-ancestors 'none'"
-)
-
-
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Add standard security headers to every response."""
-
-    async def dispatch(  # type: ignore[override]
-        self, request: Request, call_next: Callable[[Request], Awaitable[StarletteResponse]]
-    ) -> StarletteResponse:
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
-        response.headers["Content-Security-Policy"] = _CSP
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        return response
-
-
-class SentryUserContextMiddleware(BaseHTTPMiddleware):
-    """Set Sentry user context from JWT session cookie on each request."""
-
-    async def dispatch(  # type: ignore[override]
-        self, request: Request, call_next: Callable[[Request], Awaitable[StarletteResponse]]
-    ) -> StarletteResponse:
-        token = request.cookies.get(COOKIE_NAME)
-        if token and SECRET_KEY:
-            try:
-                import jwt as pyjwt
-
-                payload = pyjwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM], audience="web")
-                set_sentry_user(payload.get("sub", ""))
-            except Exception:
-                logger.debug("Failed to decode JWT for Sentry context", exc_info=True)
-        return await call_next(request)
-
-
-_TAG_METADATA = [
-    {
-        "name": "auth",
-        "description": "Google OAuth2 login, JWT session management, and user profile.",
-    },
-    {
-        "name": "things",
-        "description": "CRUD operations for Things — the universal data model (tasks, notes, projects, ideas, goals).",
-    },
-    {
-        "name": "thing-types",
-        "description": "Manage custom Thing Types with icons and colors.",
-    },
-    {
-        "name": "chat",
-        "description": "Multi-agent chat pipeline and chat history management.",
-    },
-    {
-        "name": "briefing",
-        "description": "Daily briefing: checkin-due Things and sweep findings.",
-    },
-    {
-        "name": "gmail",
-        "description": "Gmail read-only integration: OAuth2 connection and message access.",
-    },
-    {
-        "name": "calendar",
-        "description": "Google Calendar read-only integration: OAuth2 connection and upcoming events.",
-    },
-    {
-        "name": "proactive",
-        "description": "Proactive surfaces — Things with upcoming time-relevant dates.",
-    },
-    {
-        "name": "settings",
-        "description": "Application settings: LLM model configuration via Requesty.",
-    },
-    {
-        "name": "sweep",
-        "description": "Nightly sweep: SQL candidate collection and LLM-powered reflection.",
-    },
-    {
-        "name": "focus",
-        "description": "Focus recommendations: prioritized Things with reasoning explanations.",
-    },
-    {
-        "name": "connections",
-        "description": "Auto-connect: suggested relationships between semantically similar Things.",
-    },
-    {
-        "name": "staleness",
-        "description": "Staleness & neglect detection: batch summary of stale and neglected items.",
-    },
-    {
-        "name": "feedback",
-        "description": "User feedback submission via GitHub Issues.",
-    },
-    {
-        "name": "think",
-        "description": "Reasoning-as-a-service: analyze natural language and return structured instructions.",
-    },
-    {
-        "name": "health",
-        "description": "Health check endpoint.",
-    },
-]
-
-# NOTE: module-level bool — evaluated once at import time. Tests that assert
-# docs-disable behavior must use importlib.reload(backend.main) after patching
-# env vars; simple monkeypatch.setenv alone will not take effect.
-_is_production = bool(os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("PRODUCTION"))
 
 app = FastAPI(
     title="Reli API",
     description=(
-        "Reli is a conversation-driven personal information manager. "
-        "All data is stored locally in SQLite. "
-        "The Universal Thing model represents tasks, notes, projects, ideas, and goals.\n\n"
-        "## Authentication\n\n"
-        "Most endpoints require a valid JWT session cookie (`reli_session`). "
-        "Obtain one by completing the Google OAuth2 flow via `/api/auth/google`."
+        "Reli stores Things, the relationships between them, and an append-only journal of every "
+        "mutation. Reads and writes arrive over MCP; this HTTP surface serves only the health check."
     ),
     version="0.1.0",
     lifespan=lifespan,
-    openapi_tags=_TAG_METADATA,
-    docs_url=None if _is_production else "/docs",
-    redoc_url=None if _is_production else "/redoc",
-    openapi_url=None if _is_production else "/openapi.json",
 )
-
-_default_origins = ["http://localhost:5173", "http://localhost:3000"]
-_extra_origins = (
-    [o.strip() for o in _app_settings.CORS_ORIGINS.split(",") if o.strip()] if _app_settings.CORS_ORIGINS else []
-)
-_all_origins = _default_origins + _extra_origins
-
-_mcp_allowed_origins: set[str] = (
-    {o.strip() for o in _app_settings.MCP_CORS_ORIGINS.split(",") if o.strip()}
-    if _app_settings.MCP_CORS_ORIGINS
-    else set(_default_origins)
-)
-
-# MCP endpoints must accept cross-origin requests from any MCP client.
-# Use a separate CORS middleware for those paths, and the restrictive
-# one for everything else.
-_MCP_CORS_PREFIXES = ("/oauth/", "/.well-known/", "/mcp")
-
-
-class _MCPCorsMiddleware(BaseHTTPMiddleware):
-    """CORS for MCP OAuth / well-known endpoints.
-
-    Reflects the origin for requests from origins in _mcp_allowed_origins.
-    Requests with an Origin not in the allowlist receive no CORS headers (browser
-    access blocked). Requests without an Origin header (non-browser clients) pass
-    through unaffected.
-    """
-
-    async def dispatch(  # type: ignore[override]
-        self, request: Request, call_next: Callable[[Request], Awaitable[StarletteResponse]]
-    ) -> StarletteResponse:
-        path = request.url.path
-        is_mcp = any(path.startswith(p) for p in _MCP_CORS_PREFIXES)
-        if not is_mcp:
-            return await call_next(request)
-
-        origin = request.headers.get("origin", "")
-        allow_origin: str | None = origin if origin in _mcp_allowed_origins else None
-        if origin and allow_origin is None:
-            logger.debug("MCP CORS: origin %r not in allowlist, blocking", origin)
-
-        if request.method == "OPTIONS":
-            resp = StarletteResponse(status_code=204)
-            if allow_origin is not None:
-                resp.headers["Access-Control-Allow-Origin"] = allow_origin
-                resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-                resp.headers["Access-Control-Allow-Headers"] = "content-type, authorization"
-                resp.headers["Access-Control-Max-Age"] = "600"
-            resp.headers["Vary"] = "Origin"
-            return resp
-
-        response = await call_next(request)
-        if allow_origin is not None:
-            response.headers["Access-Control-Allow-Origin"] = allow_origin
-        response.headers["Vary"] = "Origin"
-        return response
-
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_all_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Added after CORSMiddleware so it runs FIRST (LIFO order).
-# Intercepts MCP OAuth paths before the restrictive CORSMiddleware.
-app.add_middleware(_MCPCorsMiddleware)
-
-app.add_middleware(SecurityHeadersMiddleware)
-_rl_config = get_rate_limit_config()
-app.add_middleware(RateLimitMiddleware, **_rl_config)
-app.add_middleware(ResponseMetricsMiddleware)
-app.add_middleware(MetricsMiddleware)
-app.add_middleware(SentryUserContextMiddleware)
-
-# Auth routes are public (login/callback/logout)
-app.include_router(auth.router, prefix="/api")
-
-# MCP OAuth routes — public, no prefix (/.well-known/..., /oauth/authorize, /oauth/token)
-app.include_router(mcp_oauth.router)
-
-# All other /api routes require a valid JWT session
-_api_deps = [Depends(require_user)]
-
-app.include_router(things.router, prefix="/api", dependencies=_api_deps)
-app.include_router(thing_types.router, prefix="/api", dependencies=_api_deps)
-app.include_router(briefing.router, prefix="/api", dependencies=_api_deps)
-app.include_router(chat.router, prefix="/api", dependencies=_api_deps)
-app.include_router(gmail.router, prefix="/api", dependencies=_api_deps)
-app.include_router(calendar.router, prefix="/api", dependencies=_api_deps)
-app.include_router(nudges.router, prefix="/api", dependencies=_api_deps)
-app.include_router(proactive.router, prefix="/api", dependencies=_api_deps)
-app.include_router(conflicts.router, prefix="/api", dependencies=_api_deps)
-app.include_router(settings.router, prefix="/api", dependencies=_api_deps)
-app.include_router(sweep.router, prefix="/api", dependencies=_api_deps)
-app.include_router(focus.router, prefix="/api", dependencies=_api_deps)
-app.include_router(staleness.router, prefix="/api", dependencies=_api_deps)
-app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
-app.include_router(connections.router, prefix="/api", dependencies=_api_deps)
-app.include_router(preferences.router, prefix="/api", dependencies=_api_deps)
-app.include_router(think.router, prefix="/api", dependencies=_api_deps)
-app.include_router(gdpr.router, prefix="/api", dependencies=_api_deps)
 
 
 @app.get("/healthz", tags=["health"], summary="Health check", description="Returns service health status.")
 def health() -> dict[str, str]:
     """Returns service health status."""
     return {"status": "ok", "service": "reli"}
-
-
-@app.get("/api/health", tags=["health"])
-def health_detailed(user_id: str = Depends(require_user)) -> dict:
-    """Detailed health check with DB, pgvector, and performance metrics."""
-    from sqlalchemy import text
-
-    from .db_engine import engine as _db_engine
-    from .vector_store import vector_count
-
-    # DB status
-    db_ok = False
-    try:
-        with _db_engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        db_ok = True
-    except Exception:
-        logger.warning("Health check: DB connection failed", exc_info=True)
-
-    # pgvector status (uses the same DB connection)
-    vector_ok = False
-    vec_count = 0
-    try:
-        vec_count = vector_count()
-        vector_ok = True
-    except Exception:
-        logger.warning("Health check: pgvector query failed", exc_info=True)
-
-    avg_ms = metrics_store.avg_response_time_ms()
-
-    return {
-        "status": "ok" if db_ok else "degraded",
-        "service": "reli",
-        "uptime_seconds": round(metrics_store.uptime_seconds(), 1),
-        "db_connected": db_ok,
-        "chromadb_connected": vector_ok,  # kept for API backward compat
-        "vector_count": vec_count,
-        "avg_response_time_ms": round(avg_ms, 2) if avg_ms is not None else None,
-        "recent_request_count": metrics_store.request_count(),
-    }
-
-
-@app.get("/metrics", tags=["monitoring"], include_in_schema=False, dependencies=[Depends(require_user)])
-def metrics() -> StarletteResponse:
-    return metrics_response()
-
-
-# MCP server — Streamable HTTP transport, mounted at /mcp
-# Protected by MCP_API_TOKEN bearer token (empty = dev/open mode)
-app.mount("/mcp", create_mcp_asgi_app(_app_settings.MCP_API_TOKEN))
-
-
-# Redirect bare /mcp to /mcp/ so the mount catches it
-# (Starlette mount only matches /mcp/... not bare /mcp)
-# Use mcp_oauth._base_url() rather than request.url to avoid http:// scheme
-# when the app is running behind a TLS-terminating reverse proxy.
-@app.api_route("/mcp", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
-def mcp_redirect(request: Request) -> RedirectResponse:
-    return RedirectResponse(url=f"{mcp_oauth._base_url()}/mcp/", status_code=307)
-
-
-# Serve React SPA (only when the built dist directory exists)
-if _FRONTEND_DIST.is_dir():
-    app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
-
-    _RESOLVED_DIST = _FRONTEND_DIST.resolve()
-
-    @app.get("/{full_path:path}", include_in_schema=False)
-    def spa_fallback(full_path: str) -> FileResponse:
-        if full_path:
-            # Reject null bytes and absolute paths (pathlib treats /foo as root)
-            if "\x00" in full_path or full_path.startswith("/"):
-                return FileResponse(_RESOLVED_DIST / "index.html")
-            # Strip path traversal segments before joining
-            clean = pathlib.PurePosixPath(full_path)
-            if ".." in clean.parts:
-                return FileResponse(_RESOLVED_DIST / "index.html")
-            static_file = (_RESOLVED_DIST / full_path).resolve()
-            if static_file.is_relative_to(_RESOLVED_DIST) and static_file.is_file():
-                return FileResponse(static_file)
-        return FileResponse(_RESOLVED_DIST / "index.html")

@@ -1,230 +1,85 @@
-"""Shared pytest fixtures for backend tests."""
+"""Shared pytest fixtures for backend tests.
+
+The schema is Postgres-specific — JSONB, a GIN index, native enums and a PL/pgSQL trigger — so the
+tests run against a real Postgres brought up by testcontainers, migrated with ``alembic upgrade
+head`` rather than ``SQLModel.metadata.create_all``. That is what makes the migration itself, and
+not just the ORM models, the thing under test.
+
+Set ``RELI_TEST_DATABASE_URL`` to run against an existing database instead of starting a container.
+"""
 
 import os
-from collections.abc import Generator
-from pathlib import Path
-from unittest.mock import patch
+from collections.abc import Generator, Iterator
 
 import pytest
-import pytest_asyncio
 from fastapi.testclient import TestClient
-from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
+from sqlmodel import Session
 
-# Disable rate limiting for all tests (except test_rate_limit.py which uses its own app)
-os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
-
-# Prevent test errors from polluting production Sentry (re-icdi)
+# Keep test failures out of the production Sentry project.
 os.environ.setdefault("SENTRY_DSN", "")
 
-# Force auth to disabled in tests: prevent production .env credentials from
-# being loaded by pydantic-settings when tests run from the rig directory.
-# test_auth.py patches backend.auth.SECRET_KEY directly for auth-enabled tests.
-os.environ["SECRET_KEY"] = ""
-os.environ["RELI_API_TOKEN"] = ""
-os.environ.setdefault("AUTH_DISABLED", "true")
 
-# ---------------------------------------------------------------------------
-# Database fixtures
-# ---------------------------------------------------------------------------
+@pytest.fixture(scope="session")
+def postgres_url() -> Iterator[str]:
+    """A Postgres to test against: the one named in the environment, or a throwaway container."""
+    configured = os.environ.get("RELI_TEST_DATABASE_URL")
+    if configured:
+        yield configured
+        return
 
+    from testcontainers.community.postgres import PostgresContainer
 
-@pytest.fixture()
-def tmp_db_path(tmp_path: Path) -> Path:
-    """Return a path to a fresh temporary SQLite database."""
-    return tmp_path / "test_reli.db"
+    with PostgresContainer("postgres:16-alpine", driver="psycopg2") as container:
+        yield container.get_connection_url()
 
 
-@pytest.fixture()
-def patched_db(tmp_db_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Patch the ORM database module to use a temp SQLite file.
+@pytest.fixture(scope="session")
+def migrated_db(postgres_url: str) -> Iterator[str]:
+    """Point the app at the test database and bring it to head."""
+    from alembic import command as alembic_command
+    from alembic.config import Config as AlembicConfig
 
-    Creates tables via ``SQLModel.metadata.create_all()`` (Alembic is not
-    used in tests).  Tests that need raw ``sqlite3`` access should also
-    request the ``db`` fixture, which wraps the same temp DB path.
-    """
-    from sqlmodel import Session, SQLModel, create_engine
+    from backend import config as config_module
+    from backend import db_engine
 
-    import backend.db_engine as engine_module
-    from backend.db_engine import json_serializer
+    # Mutate the settings singleton rather than rebinding it: backend.db_engine and
+    # backend/alembic/env.py hold a reference to this object, taken at import time.
+    os.environ["DATABASE_URL"] = postgres_url
+    config_module.settings.DATABASE_URL = postgres_url
+    db_engine.reset_engine()
 
-    # Create a SQLModel engine for the temp DB
-    test_engine = create_engine(
-        f"sqlite:///{tmp_db_path}",
-        connect_args={"check_same_thread": False},
-        json_serializer=json_serializer,
-    )
-    SQLModel.metadata.create_all(test_engine)
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    alembic_command.upgrade(AlembicConfig(os.path.join(repo_root, "alembic.ini")), "head")
 
-    # Seed default thing types (replaces legacy _seed_thing_types from init_db)
-    from backend.db_models import ThingTypeRecord
+    yield postgres_url
 
-    _DEFAULT_THING_TYPES = [
-        ("task", "\U0001f4cb"),
-        ("note", "\U0001f4dd"),
-        ("project", "\U0001f4c1"),
-        ("idea", "\U0001f4a1"),
-        ("goal", "\U0001f3af"),
-        ("journal", "\U0001f4d3"),
-        ("person", "\U0001f464"),
-        ("place", "\U0001f4cd"),
-        ("event", "\U0001f4c5"),
-        ("concept", "\U0001f9e0"),
-        ("reference", "\U0001f517"),
-        ("preference", "\u2699\ufe0f"),
-    ]
-    with Session(test_engine) as session:
-        for name, icon in _DEFAULT_THING_TYPES:
-            session.add(ThingTypeRecord(id=name, name=name, icon=icon, user_id=None))  # system type: visible to all
-        session.commit()
-
-    monkeypatch.setattr(engine_module, "engine", test_engine)
-
-    # Override get_session to use the test engine
-    def _test_get_session():
-        with Session(test_engine) as session:
-            yield session
-
-    monkeypatch.setattr(engine_module, "get_session", _test_get_session)
-
-    yield tmp_db_path
-
-    # Dispose the test engine to release all connections
-    test_engine.dispose()
+    db_engine.reset_engine()
 
 
 @pytest.fixture()
-def db(patched_db: Path):
-    """Raw sqlite3 context manager pointing at the test database.
+def session(migrated_db: str) -> Generator[Session, None, None]:
+    """A session against the migrated database, left empty of Things for the next test.
 
-    Drop-in replacement for the deleted ``backend.database.db()`` import.
-    Tests use ``with db() as conn: ...`` identically.
+    Teardown deletes Things and relationships without journalling, which no application code path
+    may do — it is fixture teardown, which is why ``test_architecture.py`` excludes this directory.
+    The ``journal`` rows stay: the append-only trigger refuses to delete them, and every journal
+    assertion is written as a delta so accumulated entries are harmless.
     """
-    import sqlite3
-    from contextlib import contextmanager
+    from backend.db_engine import get_engine
 
-    @contextmanager
-    def _db():
-        conn = sqlite3.connect(str(patched_db), timeout=5)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        try:
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+    with Session(get_engine()) as db_session:
+        yield db_session
 
-    return _db
-
-
-# ---------------------------------------------------------------------------
-# Vector store mock
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def mock_vector_store():
-    """Mock vector store to avoid requiring a real pgvector/Postgres instance.
-
-    Patches both the source module and the imported symbols in each router,
-    since background tasks hold references to the imported names.
-    """
-    with (
-        patch("backend.vector_store.upsert_thing", return_value=None),
-        patch("backend.vector_store.delete_thing", return_value=None),
-        patch("backend.vector_store.vector_count", return_value=0),
-        patch("backend.vector_store.vector_search", return_value=[]),
-        patch("backend.routers.auth.upsert_thing", return_value=None),
-        patch("backend.routers.things.upsert_thing", return_value=None) as mock_upsert,
-        patch("backend.routers.things.vs_delete", return_value=None) as mock_delete,
-        patch("backend.pipeline.vector_count", return_value=0) as mock_count,
-        patch("backend.pipeline.vector_search", return_value=[]) as mock_search,
-    ):
-        yield {
-            "upsert": mock_upsert,
-            "delete": mock_delete,
-            "count": mock_count,
-            "search": mock_search,
-        }
-
-
-# ---------------------------------------------------------------------------
-# FastAPI test clients
-# ---------------------------------------------------------------------------
+    with Session(get_engine()) as cleanup:
+        cleanup.execute(text("DELETE FROM relationships"))
+        cleanup.execute(text("DELETE FROM things"))
+        cleanup.commit()
 
 
 @pytest.fixture()
-def client(patched_db) -> Generator[TestClient, None, None]:
-    """Synchronous TestClient with temp DB and mocked vector store.
-
-    Auth is bypassed because SECRET_KEY is empty in tests, so require_user()
-    returns '' (unauthenticated passthrough for local dev).
-    """
+def client(migrated_db: str) -> Iterator[TestClient]:
     from backend.main import app
 
-    with TestClient(app) as c:
-        yield c
-
-
-def _make_authenticated_client(patched_db, user_id: str) -> Generator[TestClient, None, None]:
-    """Create a TestClient with ``require_user`` overridden to return *user_id*.
-
-    Because ``user_filter_clause`` treats an empty ``user_id`` as "no filter",
-    cross-user isolation tests require both parties to have distinct, non-empty
-    user identities.  This helper is the single source of truth for that pattern.
-
-    NOTE: ``app.dependency_overrides`` is a shared dict on the FastAPI singleton.
-    Callers must never hold two overrides for the same key simultaneously — yield
-    one client at a time and restore the override in the finally block.
-    """
-    from backend.auth import require_user
-    from backend.main import app
-
-    saved = app.dependency_overrides.get(require_user)
-    app.dependency_overrides[require_user] = lambda: user_id
-    try:
-        with TestClient(app) as c:
-            yield c
-    finally:
-        if saved is None:
-            app.dependency_overrides.pop(require_user, None)
-        else:
-            app.dependency_overrides[require_user] = saved
-
-
-@pytest.fixture()
-def other_client(patched_db) -> Generator[TestClient, None, None]:
-    """Synchronous TestClient authenticated as ``"other-user"`` (User B).
-
-    Use alongside ``user_a_client`` to verify user-isolation invariants: that
-    User B cannot read or modify User A's records.
-
-    Do **not** combine this fixture with ``client`` (auth-disabled, user_id=``""``)
-    — empty user_id bypasses ``user_filter_clause`` by design. Both parties must
-    have distinct, non-empty user_ids for isolation to be enforced.
-    """
-    yield from _make_authenticated_client(patched_db, "other-user")
-
-
-@pytest.fixture()
-def user_a_client(patched_db) -> Generator[TestClient, None, None]:
-    """Synchronous TestClient authenticated as ``"user-a"`` (User A).
-
-    Pair with ``other_client`` for cross-user isolation tests.
-    """
-    yield from _make_authenticated_client(patched_db, "user-a")
-
-
-@pytest_asyncio.fixture()
-async def async_client(patched_db) -> AsyncClient:
-    """Async HTTPX client for async endpoint tests."""
-    from backend.main import app
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as ac:
-        yield ac
+    with TestClient(app) as test_client:
+        yield test_client
