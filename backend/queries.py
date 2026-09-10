@@ -409,5 +409,5 @@ def user_model(
     return [
         Preference(thing=thing, evidence=evidence[thing.id])
         for thing in preferences
-        if thing.id in evidence and thing.notes.get("scope", "").strip()
+        if thing.id in evidence and (thing.notes.get("scope") or "").strip()
     ]
