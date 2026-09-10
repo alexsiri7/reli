@@ -26,6 +26,12 @@ _HEADERS = ("From", "To", "Subject", "Date")
 # the reason a broad query cannot turn one tool call into a hundred requests.
 MAX_RESULTS = 25
 
+# Calendar costs one GET per page instead, so its request size is not the caller's cap: a page
+# sized to `limit` can be spent entirely on the padding days :func:`find_events` asks for. The
+# ceiling is what stops one tool call from walking a pathologically dense calendar forever.
+_CALENDAR_PAGE_SIZE = 250
+_CALENDAR_PAGE_LIMIT = 4
+
 _DESCRIPTION_LIMIT = 500
 
 
@@ -61,10 +67,18 @@ def find_events(
 ) -> list[dict[str, Any]]:
     """Calendar events between ``since`` and ``until`` inclusive, earliest first, summarised.
 
-    All-day events come back as a bare date in the calendar's own timezone, which Reli does not
-    store, so a UTC-midnight window can miss one sitting on either boundary. The request is
-    therefore made a day wider on each side and the results filtered back by their local date.
+    Google bounds and orders by UTC instant; a Reli window is a pair of local dates. An all-day
+    event carries a bare date in the calendar's own timezone, which Reli does not store, and an
+    early-morning event east of UTC starts the previous day in UTC — either can sit outside a
+    UTC-midnight window it belongs in. The request is therefore made a day wider on each side and
+    the results filtered back by their local date.
+
+    That widening is why the request is paged rather than capped at ``limit``: a busy padding day
+    would fill a ``limit``-sized page with events outside the window and starve it. Pages are
+    walked until ``limit`` in-window events are found, Google runs out of them, or the page ceiling
+    is reached.
     """
+    capped = min(limit, MAX_RESULTS)
     params: dict[str, Any] = {
         "timeMin": _utc_midnight(since - timedelta(days=1)),
         # timeMax is exclusive, so covering `until + 1 day` takes a bound of `until + 2 days`.
@@ -73,15 +87,23 @@ def find_events(
         # orderBy=startTime requires singleEvents, which also expands a recurrence into the
         # occurrences a resolution question is actually about.
         "orderBy": "startTime",
-        "maxResults": min(limit, MAX_RESULTS),
+        "maxResults": _CALENDAR_PAGE_SIZE,
     }
     if query:
         params["q"] = query
 
-    payload = get_json(_CALENDAR_EVENTS, params)
-    items: list[dict[str, Any]] = payload.get("items") or []
+    events: list[dict[str, Any]] = []
+    for _ in range(_CALENDAR_PAGE_LIMIT):
+        payload = get_json(_CALENDAR_EVENTS, params)
+        items: list[dict[str, Any]] = payload.get("items") or []
+        events.extend(_event_summary(item) for item in items if _within(item, since, until))
 
-    return [_event_summary(item) for item in items if _within(item, since, until)]
+        page_token: str | None = payload.get("nextPageToken")
+        if len(events) >= capped or not page_token:
+            break
+        params["pageToken"] = page_token
+
+    return events[:capped]
 
 
 def check_occurred(description: str, since: date, until: date, limit: int = 10) -> dict[str, Any]:

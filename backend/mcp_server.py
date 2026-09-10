@@ -482,7 +482,9 @@ def find_correspondence(
 
 
 @reli_mcp.tool()
-def find_events(since: date, until: date, query: str | None = None, limit: int = 25) -> list[dict[str, Any]]:
+def find_events(
+    since: date, until: date, query: str | None = None, limit: int = google_readers.MAX_RESULTS
+) -> list[dict[str, Any]]:
     """Read the user's primary calendar over a date range and summarise what is on it.
 
     Read-only: this cannot create, move, cancel or respond to an event. Recurring events are

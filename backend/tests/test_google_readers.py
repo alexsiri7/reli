@@ -6,7 +6,7 @@ issue's "both integrations are read-only".
 """
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -16,7 +16,14 @@ import pytest
 from backend import google_client
 from backend.config import settings
 from backend.google_client import TOKEN_URL
-from backend.google_readers import MAX_RESULTS, check_occurred, find_correspondence, find_events
+from backend.google_readers import (
+    _CALENDAR_PAGE_LIMIT,
+    _CALENDAR_PAGE_SIZE,
+    MAX_RESULTS,
+    check_occurred,
+    find_correspondence,
+    find_events,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "google"
 
@@ -68,6 +75,44 @@ def google(monkeypatch):
 
     monkeypatch.setattr(google_client, "_http_client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
     return type("Google", (), {"seen": seen, "responses": responses})()
+
+
+@pytest.fixture()
+def paging_calendar(monkeypatch):
+    """A Calendar that truncates at ``maxResults`` and pages, the way Google's own does.
+
+    The shared ``google`` fixture returns a whole fixture file in one page regardless of the cap,
+    which is exactly the behaviour that hid the starvation this fixture exists to reproduce.
+    """
+    seen: list[httpx.Request] = []
+
+    def install(events):
+        def handler(request):
+            if str(request.url) == TOKEN_URL:
+                return httpx.Response(200, json={"access_token": "access-token", "expires_in": 3600})
+
+            seen.append(request)
+            if request.url.path.startswith("/gmail/"):
+                return httpx.Response(200, json={"resultSizeEstimate": 0})
+
+            query = _query(request)
+            start = int(query.get("pageToken", 0))
+            page = events[start : start + int(query["maxResults"])]
+            body = {"items": page}
+            if start + len(page) < len(events):
+                body["nextPageToken"] = str(start + len(page))
+            return httpx.Response(200, json=body)
+
+        monkeypatch.setattr(google_client, "_http_client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+        return seen
+
+    return install
+
+
+def _all_day(event_id, day):
+    """An all-day event as Calendar returns one: bare dates, and an exclusive end."""
+    ends = (date.fromisoformat(day) + timedelta(days=1)).isoformat()
+    return {"id": event_id, "summary": event_id, "start": {"date": day}, "end": {"date": ends}}
 
 
 def _api_requests(google, prefix):
@@ -226,6 +271,54 @@ def test_an_event_without_attendees_reports_nobody(google):
     assert events[0]["location"] is None
 
 
+# --- Calendar paging ------------------------------------------------------
+
+
+def test_a_busy_padding_day_does_not_starve_the_window(paging_calendar):
+    """The window is widened by a day on each side, and Google truncates before Reli filters.
+
+    A day of events just outside the window must not consume the whole answer: what the caller
+    asked about is inside it.
+    """
+    padding = [_all_day(f"padding-{n}", "2026-09-06") for n in range(_CALENDAR_PAGE_SIZE + 5)]
+    seen = paging_calendar([*padding, _all_day("real-event-in-window", "2026-09-08")])
+
+    events = find_events(since=SINCE, until=UNTIL)
+
+    assert [event["id"] for event in events] == ["real-event-in-window"]
+    assert len(seen) == 2
+
+
+def test_check_occurred_sees_an_event_a_busy_padding_day_would_have_hidden(paging_calendar):
+    """check_occurred composes find_events, so the starvation would silently zero event_count."""
+    padding = [_all_day(f"padding-{n}", "2026-09-06") for n in range(_CALENDAR_PAGE_SIZE + 5)]
+    paging_calendar([*padding, _all_day("real-event-in-window", "2026-09-08")])
+
+    result = check_occurred("quarterly review", since=SINCE, until=UNTIL)
+
+    assert result["event_count"] == 1
+    assert [event["id"] for event in result["events"]] == ["real-event-in-window"]
+
+
+def test_paging_stops_as_soon_as_the_window_is_filled(paging_calendar):
+    in_window = [_all_day(f"in-window-{n}", "2026-09-08") for n in range(10)]
+    seen = paging_calendar([*in_window, _all_day("unreached", "2026-09-08")])
+
+    events = find_events(since=SINCE, until=UNTIL, limit=3)
+
+    assert [event["id"] for event in events] == ["in-window-0", "in-window-1", "in-window-2"]
+    assert len(seen) == 1
+
+
+def test_paging_gives_up_at_the_page_ceiling(paging_calendar):
+    """A calendar dense enough to page forever costs a bounded number of requests, not all of them."""
+    padding = [_all_day(f"padding-{n}", "2026-09-06") for n in range(_CALENDAR_PAGE_SIZE * (_CALENDAR_PAGE_LIMIT + 2))]
+    seen = paging_calendar(padding)
+
+    assert find_events(since=SINCE, until=UNTIL) == []
+    assert len(seen) == _CALENDAR_PAGE_LIMIT
+
+
 # --- check_occurred -------------------------------------------------------
 
 
@@ -256,13 +349,13 @@ def test_check_occurred_caps_each_source_separately(google):
     """The cap the tool docstring promises is per source, and the composed call is what a
     resolution pass actually makes."""
     google.responses["messages"] = {"messages": [{"id": f"id-{n}", "threadId": "t"} for n in range(40)]}
+    google.responses["events"] = {"items": [_all_day(f"event-{n}", "2026-09-08") for n in range(40)]}
 
     result = check_occurred("quarterly review", since=SINCE, until=UNTIL, limit=100)
 
     assert result["message_count"] == MAX_RESULTS
-    assert result["event_count"] <= MAX_RESULTS
+    assert result["event_count"] == MAX_RESULTS
     assert len(_api_requests(google, "/gmail/v1/users/me/messages/")) == MAX_RESULTS
-    assert _query(_api_requests(google, "/calendar/v3/calendars/primary/events")[0])["maxResults"] == str(MAX_RESULTS)
 
 
 def test_check_occurred_reads_both_sources_over_the_same_window(google):
