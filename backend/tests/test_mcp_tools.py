@@ -10,22 +10,25 @@ import asyncio
 import json
 import uuid
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import get_args
 
 import pytest
 from sqlalchemy import text
 
-from backend import mcp_server
+from backend import google_readers, mcp_server
 from backend.config import settings
 from backend.db_models import RelationshipType
 from backend.mcp_server import (
     McpActor,
     archive_thing,
     blocked,
+    check_occurred,
     children,
     create_thing,
     due_for_checkin,
+    find_correspondence,
+    find_events,
     find_things,
     get_related,
     get_thing,
@@ -52,7 +55,12 @@ TOOL_NAMES = {
     "blocked",
     "children",
     "get_thing_history",
+    "find_correspondence",
+    "find_events",
+    "check_occurred",
 }
+
+GOOGLE_TOOLS = {"find_correspondence", "find_events", "check_occurred"}
 
 WRITING_TOOLS = {"create_thing", "update_thing", "archive_thing", "relate", "unrelate"}
 
@@ -87,13 +95,33 @@ def _tool_schemas():
 # --- The surface -----------------------------------------------------------
 
 
-def test_the_exposed_tools_are_exactly_the_thirteen():
+def test_the_exposed_tools_are_exactly_the_sixteen():
     assert set(_tool_schemas()) == TOOL_NAMES
 
 
 def test_hard_delete_is_not_exposed():
     """#1409: there is no hard delete via MCP. service.delete_thing stays in-process only."""
     assert "delete_thing" not in _tool_schemas()
+
+
+@pytest.mark.parametrize("tool_name", sorted(GOOGLE_TOOLS))
+def test_the_google_tools_take_no_actor(tool_name):
+    """They read Gmail and Calendar and touch no Thing, so no read can look like a write."""
+    assert "actor" not in _tool_schemas()[tool_name]["properties"]
+
+
+def test_the_google_tools_journal_nothing(tools, monkeypatch):
+    """Journalling a read would put entries in the learning pass's only input that no one made."""
+    monkeypatch.setattr(google_readers, "find_correspondence", lambda **kwargs: [])
+    monkeypatch.setattr(google_readers, "find_events", lambda **kwargs: [])
+    monkeypatch.setattr(google_readers, "check_occurred", lambda **kwargs: {})
+    before = _journal_count(tools)
+
+    find_correspondence("dentist")
+    find_events(since=date(2026, 9, 7), until=date(2026, 9, 9))
+    check_occurred("dentist", since=date(2026, 9, 7), until=date(2026, 9, 9))
+
+    assert _journal_count(tools) == before
 
 
 @pytest.mark.parametrize("tool_name", sorted(WRITING_TOOLS))

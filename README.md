@@ -26,10 +26,10 @@ For how Reli compares to related projects, see [comparisons](docs/comparisons.md
 **Frontend:** a read-only view over the graph — not yet built
 **Storage:** Postgres
 **Interface:** MCP — every write goes through an MCP client; there is no public API
-**Integrations:** Google Calendar, Gmail — not yet rewritten; `reference/oauth/` holds the pre-rebuild code
+**Integrations:** Google Calendar and Gmail, read-only — `backend/google_client.py` and `backend/google_readers.py`; `reference/oauth/` holds the pre-rebuild code, not reused
 **Infrastructure:** Docker, Cloudflare Tunnel, GitHub Actions CI, Railway (staging + production deploy)
 
-Today the service is the data layer, the MCP tools over it at `/mcp`, and a health check. The user model and the scheduled passes are the next issues.
+Today the service is the data layer, the MCP tools over it at `/mcp` — including the read-only Calendar and Gmail readers — and a health check. The user model and the scheduled passes are the next issues.
 
 ## Setup
 

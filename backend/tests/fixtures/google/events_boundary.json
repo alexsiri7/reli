@@ -1,0 +1,46 @@
+{
+  "kind": "calendar#events",
+  "timeZone": "Europe/Madrid",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "before-the-window",
+      "status": "confirmed",
+      "summary": "Dropped off the dry cleaning",
+      "start": {
+        "dateTime": "2026-09-06T18:00:00+02:00",
+        "timeZone": "Europe/Madrid"
+      },
+      "end": {
+        "dateTime": "2026-09-06T18:30:00+02:00",
+        "timeZone": "Europe/Madrid"
+      }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "on-the-until-boundary",
+      "status": "confirmed",
+      "summary": "Flight to Lisbon",
+      "start": {
+        "date": "2026-09-09"
+      },
+      "end": {
+        "date": "2026-09-10"
+      }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "after-the-window",
+      "status": "confirmed",
+      "summary": "Dentist",
+      "start": {
+        "dateTime": "2026-09-10T09:00:00+02:00",
+        "timeZone": "Europe/Madrid"
+      },
+      "end": {
+        "dateTime": "2026-09-10T09:45:00+02:00",
+        "timeZone": "Europe/Madrid"
+      }
+    }
+  ]
+}
