@@ -4,7 +4,7 @@ Reli is the memory and the obligations layer that lets Claude act as a complete 
 
 The goal is a PA that says "bring a change of clothes today, you have that event tonight" or "it's Saturday morning — your energy contract expires next month, want me to find a better deal?" — one that understands your life context, your schedule, your routines, and the right moment to act.
 
-Reli is being rebuilt. The three sections that follow describe the shape it is moving to, not the application currently in this tree.
+Reli is being rebuilt. How it works, Vision and Tech Stack below describe the shape it is moving to, not the application currently in this tree.
 
 ## How it works
 
