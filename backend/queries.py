@@ -13,9 +13,9 @@ from typing import Literal, NamedTuple
 
 from sqlalchemy import Table, text
 from sqlalchemy.dialects.postgresql import array
-from sqlmodel import Session, SQLModel, col, select
+from sqlmodel import Session, SQLModel, col, or_, select
 
-from .db_models import RelationshipRecord, RelationshipType, ThingRecord
+from .db_models import JournalRecord, RelationshipRecord, RelationshipType, ThingRecord
 
 _THINGS: Table = SQLModel.metadata.tables["things"]
 _TAGS = _THINGS.c["tags"]
@@ -178,5 +178,84 @@ def children(session: Session, thing_id: uuid.UUID) -> list[ThingRecord]:
             col(RelationshipRecord.relationship_type) == RelationshipType.CHILD_OF,
         )
         .order_by(col(ThingRecord.priority).desc())
+    )
+    return list(session.exec(statement).all())
+
+
+def relationships_for(session: Session, thing_id: uuid.UUID) -> list[RelationshipRecord]:
+    """Every edge touching a Thing, in either direction, oldest first.
+
+    Both halves are returned because an edge is as much a fact about its target as about its
+    source; :class:`~backend.db_models.RelationshipType` says which reading applies to each type.
+    """
+    statement = (
+        select(RelationshipRecord)
+        .where(
+            or_(
+                col(RelationshipRecord.source_thing_id) == thing_id,
+                col(RelationshipRecord.target_thing_id) == thing_id,
+            )
+        )
+        .order_by(col(RelationshipRecord.created_at).asc(), col(RelationshipRecord.id).asc())
+    )
+    return list(session.exec(statement).all())
+
+
+def find_things(
+    session: Session,
+    *,
+    tags: Sequence[str] | None = None,
+    match: Literal["any", "all"] = "any",
+    active: bool | None = True,
+    checkin_from: date | None = None,
+    checkin_to: date | None = None,
+    priority_min: float | None = None,
+    priority_max: float | None = None,
+    limit: int = 100,
+) -> list[ThingRecord]:
+    """Things matching every filter that was given, most important first.
+
+    An empty or omitted *tags* means "no tag filter" and returns Things regardless of their tags —
+    the opposite of :func:`by_tag`, which reads an empty *tags* as "matches none of no tags" and
+    returns nothing. The two differ because this is the general listing query, where omitting a
+    filter must not empty the result, and ``by_tag`` answers one question about specific tags.
+
+    ``active=None`` drops the active filter and returns archived Things alongside live ones.
+    """
+    conditions = []
+    if tags:
+        wanted = list(tags)
+        conditions.append(_TAGS.contains(wanted) if match == "all" else _TAGS.has_any(array(wanted)))
+    if active is not None:
+        conditions.append(col(ThingRecord.active).is_(active))
+    if checkin_from is not None:
+        conditions.append(col(ThingRecord.checkin_date) >= checkin_from)
+    if checkin_to is not None:
+        conditions.append(col(ThingRecord.checkin_date) <= checkin_to)
+    if priority_min is not None:
+        conditions.append(col(ThingRecord.priority) >= priority_min)
+    if priority_max is not None:
+        conditions.append(col(ThingRecord.priority) <= priority_max)
+
+    statement = (
+        select(ThingRecord)
+        .where(*conditions)
+        .order_by(col(ThingRecord.priority).desc(), col(ThingRecord.title).asc())
+        .limit(limit)
+    )
+    return list(session.exec(statement).all())
+
+
+def history(session: Session, entity_id: uuid.UUID, limit: int = 200) -> list[JournalRecord]:
+    """The journal entries for one entity, oldest first.
+
+    Ordered by ``id`` rather than ``occurred_at``: two mutations inside one transaction share a
+    timestamp, and the sequence is the point of the journal.
+    """
+    statement = (
+        select(JournalRecord)
+        .where(col(JournalRecord.entity_id) == entity_id)
+        .order_by(col(JournalRecord.id).asc())
+        .limit(limit)
     )
     return list(session.exec(statement).all())
