@@ -31,7 +31,7 @@ jobs:
         run: ./scripts/gates.sh setup
 
       - name: Lint & Typecheck
-        run: ./scripts/gates.sh lint & ./scripts/gates.sh typecheck & wait
+        run: ./scripts/gates.sh lint typecheck
 
   test:
     name: Test

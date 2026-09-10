@@ -10,7 +10,7 @@
 # Examples:
 #   ./scripts/gates.sh              # Run everything
 #   ./scripts/gates.sh lint test    # Run only lint and test
-set -euo pipefail
+set -Eeuo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -48,20 +48,15 @@ if [ $# -eq 0 ]; then
     STAGES=(setup lint typecheck test build)
 fi
 
-FAILED=0
+# Report the failure from an ERR trap rather than `if ! run_${stage}`: calling a function in a
+# condition context disables errexit inside it, so a failing first command (ruff check) would be
+# masked by a passing second one (ruff format --check).
+trap 'echo "FAILED: ${stage:-}"; echo "=== Gates FAILED ==="; exit 1' ERR
+
 for stage in "${STAGES[@]}"; do
-    if ! "run_${stage}"; then
-        echo "FAILED: ${stage}"
-        FAILED=1
-        break
-    fi
+    "run_${stage}"
     echo "PASSED: ${stage}"
     echo ""
 done
 
-if [ $FAILED -eq 0 ]; then
-    echo "=== All gates passed ==="
-else
-    echo "=== Gates FAILED ==="
-    exit 1
-fi
+echo "=== All gates passed ==="
