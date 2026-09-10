@@ -20,6 +20,8 @@ Non-negotiables from `docs/vision.md`. They hold even when a bead description or
 - No derived state without evidence links. No confidence floats.
 - The frontend never writes, with one exception: rejecting a preference.
 
+These rules bind new work; the merged code has not been migrated to them yet. Hierarchy is stored today under the `parent-of`/`child-of` relationship literals (`backend/mcp_server.py`, `backend/routers/things.py`, the sweeps), so query the live schema by the names it actually uses. The existing Alembic history still carries the confidence floats the fourth rule forbids (`sweep_findings.confidence`, and the `confidence` columns in `backend/db_models.py`). Reconciling both with these rules is the Postgres schema work in #1408, not something to do by renaming things in passing.
+
 ## Deployment
 
 The app runs in Docker. After merging code changes, the container must be rebuilt:
@@ -40,7 +42,7 @@ These commands still deploy the application currently in the tree. The rebuild r
 
 The legacy SQLite (`data/reli.db`) and ChromaDB (`backend/chroma_db/`) data are superseded. The owner holds an offline export of the legacy graph outside this repository — the repo is public, so the export is not here and must not be committed or recreated here.
 
-The rebuild starts the Postgres schema from a clean baseline migration. That baseline is allowed to define the schema outright; it is not held to the additive-only rule, and it does not need to preserve or migrate the legacy tables.
+The rebuild starts the Postgres schema from a clean baseline migration. That baseline is allowed to define the schema outright; it is not held to the additive-only rule, and it does not need to preserve or migrate the legacy tables. Clean baseline does not mean unstarted: the current Alembic history already runs against Postgres and carries pre-v4 debt, including the confidence-float columns, so the baseline has to drop that debt deliberately rather than inherit it.
 
 From that baseline forward, the additive-only rule applies:
 

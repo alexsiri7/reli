@@ -4,6 +4,8 @@ Reli is the memory and the obligations layer that lets Claude act as a complete 
 
 The goal is a PA that says "bring a change of clothes today, you have that event tonight" or "it's Saturday morning — your energy contract expires next month, want me to find a better deal?" — one that understands your life context, your schedule, your routines, and the right moment to act.
 
+Reli is being rebuilt. The three sections that follow describe the shape it is moving to, not the application currently in this tree.
+
 ## How it works
 
 Everything you tell Reli — tasks, notes, ideas, people, projects — becomes a **Thing** in your personal knowledge graph. Things are tagged, linked by typed relationships, and enriched over time. Each Thing can carry a check-in date, which is Reli's record that something needs verifying by then.
@@ -27,7 +29,7 @@ For how Reli compares to related projects, see [comparisons](docs/comparisons.md
 **Integrations:** Google Calendar, Gmail
 **Infrastructure:** Docker, Cloudflare Tunnel, GitHub Actions CI, Railway (staging + production deploy)
 
-The rebuild is in progress: the sections below still document the application currently in this tree.
+The rebuild is in progress. The setup, configuration and testing sections below describe the application currently in this tree.
 
 ## Setup
 
