@@ -7,31 +7,12 @@ configuration at import time — ``get_engine`` resolves it on first use — so 
 
 from __future__ import annotations
 
-import json
-import uuid
 from collections.abc import Generator
-from datetime import date, datetime
-from typing import Any
 
 from sqlalchemy import Engine
 from sqlmodel import Session, create_engine
 
 from .config import settings
-
-
-def _json_default(obj: Any) -> Any:
-    """Serialize the types the journal's ``before``/``after`` snapshots carry but ``json`` cannot."""
-    if isinstance(obj, datetime | date):
-        return obj.isoformat()
-    if isinstance(obj, uuid.UUID):
-        return str(obj)
-    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
-
-
-def json_serializer(value: Any) -> str:
-    """Drop-in replacement for ``json.dumps`` used by SQLAlchemy engines."""
-    return json.dumps(value, default=_json_default)
-
 
 _engine: Engine | None = None
 
@@ -43,7 +24,6 @@ def get_engine() -> Engine:
         _engine = create_engine(
             settings.database_url,
             echo=False,
-            json_serializer=json_serializer,
             pool_size=3,
             max_overflow=2,
             pool_pre_ping=True,
