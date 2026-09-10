@@ -1,137 +1,163 @@
-# Vision
+# Reli — Vision
 
-Reli is an attempt to push the concept of a personal AI assistant to its limits. Not a chatbot with memory bolted on, but a system that genuinely models you and gets better over time.
+**Version 4.0 · September 2026 · Supersedes v3.0 (April 2025) and the current `docs/vision.md`**
 
-## A system that models you
+---
 
-The core insight is that a PA's value comes from understanding the person it serves. Reli builds this understanding through three mechanisms:
+## 1. What Reli is
 
-**The knowledge graph.** Everything Reli knows is stored as typed Things with relationships. People, events, tasks, preferences, patterns — all linked. This structure is what allows Reli to reason across domains: "your dentist is near the restaurant you're going to Thursday."
+Reli is the memory and the obligations layer that lets Claude act as a complete personal assistant.
 
-**Preference learning.** Every interaction is a data point. Explicit corrections ("I hate morning meetings") create immediate preferences. Implicit patterns (you keep rescheduling mornings) are detected over time. Preferences are first-class Things with confidence levels:
+It is a service, not a product. It does no reasoning of its own, holds no conversation, and has one user. Its job is to hold everything worth remembering about that user's life, track what needs checking and when, and learn how the user actually operates — so that any Claude session, interactive or scheduled, starts already knowing. It has a web view for reading and navigating what it holds, and nothing else.
 
-- **Emerging** — first observation, a hypothesis
-- **Moderate** — 2-3 observations, gaining confidence
-- **Strong** — 4+ observations, reliable pattern
+The completeness test is:
 
-Preferences can conflict ("prefers working alone" but "always invites Tom to brainstorms"). Context determines which applies — that's fine. They evolve, and the user can see and edit them.
+> **MCP + claude.ai + crons = a complete PA.**
 
-**Personality adaptation.** Reli's communication style itself is learnable. How verbose to be, whether to use bullet points or prose, how often to ask clarifying questions, how proactive to be with suggestions. New users get a sensible default. Long-term users get a PA that communicates the way they prefer.
+If those three together don't cover it, it's a gap in Reli. If Reli is doing something those three could do better, Reli shouldn't be doing it.
 
-### Signals that drive learning
+## 2. What went wrong last time
 
-| Signal type | Example | Effect |
-|------------|---------|--------|
-| Positive | User follows a suggestion, says "thanks" | Strengthen the approach used |
-| Negative | User says "too much detail", ignores suggestion | Weaken that approach |
-| Explicit correction | "Don't use emoji" / "Be more concise" | Immediate strong preference |
-| Implicit correction | User consistently edits Thing titles after creation | Naming patterns don't match expectations |
-| Behavioral | User reads briefings but ignores staleness alerts | Briefings valued, staleness alerts aren't |
+This section exists so the next rebuild doesn't repeat the last one. It is not history for its own sake — each failure maps to a rule below.
 
-## Concerns
+**Reli grew its own brain.** A three-stage agent pipeline (Context → Reasoning → Response) was built inside the service, so every interaction paid for a second, weaker model to reason about data that a stronger model was already holding in context. The chat UI that pipeline served went essentially unused; the real interface turned out to be Claude via MCP.
 
-Reli's domain intelligence is modular. A **concern** is an area of life that Reli monitors on your behalf:
+**Proactivity became inference instead of data.** The original spec made `checkin_date` the mechanism for proactive attention — a date, a query, a result. The implementation replaced it with an LLM sweep that read everything and emitted "findings." Findings floated free of the facts that produced them, so nothing could tell a live finding from a dead one. The only three requirements that ever drove work in this repo were the cleanup: finding lifecycle and expiry, a sweep cleanup mandate, and confidence thresholds. All three were fixing a problem created by the shape of the data.
 
-- **Health** — knows "dentist every 6 months" is worth tracking, searches your calendar/email to find when you last went, asks you about it when appropriate
-- **Finance** — watches for contract expiry dates, suggests renegotiation at the right time
-- **Travel** — checks visa requirements when you book a flight to a new country
+**Confidence was a number instead of evidence.** A preference carrying `confidence: 0.7` and no link to what caused it cannot be audited, corrected, or falsified. It can only be decayed by an algorithm guessing on the user's behalf.
 
-Each concern has a lifecycle:
+**The vision doc was a manifesto.** Nine thousand words describing Concerns, multi-channel delivery, personality adaptation, memory layers and a learning flywheel — none of it small enough to build to, so the build went its own way. This document is deliberately shorter and deliberately says no more often than yes.
 
-1. **Initialize** — scan email, calendar, and existing Things to build an understanding of where you stand in this domain. Surface open questions ("when did you last go to the dentist?")
-2. **Watch** — react to new inputs that match this domain (a billing email, a calendar appointment, a conversation mention) rather than polling everything. Update Things and questions as new information arrives.
+## 3. Principles
 
-The user doesn't teach Reli everything from scratch — the concern provides the domain framework (what matters, what cadences to track, what questions to ask), and Reli fills it in with *your* specifics.
+1. **No model inside Reli.** Reli is deterministic: storage, queries, and a journal. Every judgement call happens in Claude — interactively via MCP, or in a scheduled headless session. Reli can be fully tested without recording a single LLM interaction.
+2. **Proactivity is a query, not an inference.** What needs attention is answerable from `checkin_date`, staleness and tags. Reasoning is applied to the result, never used to produce it.
+3. **Every claim links to its evidence.** A preference, an inference, a derived state — each carries relationships to the Things and journal entries that support it. Nothing free-floating.
+4. **The journal is the training data.** Every mutation is recorded, attributed and kept. It is not only an audit trail; it is the only source of implicit learning.
+5. **Reli holds obligations, Claude discharges them.** A check-in is Reli's record that something needs verifying. Verifying it is Claude's job, and mostly happens without the user.
+6. **Silence is the goal.** A loop Claude closed without telling the user is the best outcome. The briefing is what's left over, not a report of activity.
+7. **One user, one instance, no accounts.** Multi-user, sharing and public release are out of scope until the single-user case is genuinely complete.
 
-Concerns also connect to the preference system. A health concern might start by asking lots of questions, but over time it learns what you care about (dental, exercise) and what you ignore (sleep tracking suggestions), and adjusts.
+## 4. The layers
 
-## The nightly sweep
+### 4.1 Reli — the data service
 
-The sweep is Reli's planning session. It's not a cleanup job — it's when Reli *thinks* about your life.
+Python/FastAPI over Postgres. No LLM dependency. Four things live here:
 
-**What the sweep does:**
+**Things.** The universal entity, carried forward from v3.0 substantially unchanged: `title`, `description`, `notes` (a slug → markdown dictionary), `tags`, `urls`, `checkin_date`, `priority`, `active`, timestamps. Meaning emerges from tags and relationships rather than a type column. JSONB gives the schemaless flexibility the original spec wanted from MongoDB, without a second database technology.
 
-- **Coordinates concerns** — checks if any watched conditions have triggered across all active concerns
-- **Calendar lookahead** — what's coming this week that needs preparation or attention?
-- **Gap detection** — "you mentioned a conference but never said which days"
-- **Pattern aggregation** — "you've rescheduled 3 morning meetings this month" → strengthen "avoids mornings" preference
-- **Briefing assembly** — prioritized by urgency and your patterns, not just chronological
+**Relationships.** Typed, directional links between Things: `ChildOf`, `Blocks`, `RelatedTo`, `EvidenceFor`, `References`. Hierarchy is a `ChildOf` relationship and nothing else — `parent_id` does not exist. Two competing hierarchies is what made the last schema unsound.
 
-**What the sweep doesn't do:**
+**Queries.** Not just CRUD. The service answers the questions proactivity actually needs: what is due for check-in, what has gone stale, what is tagged `#NeedsInput`, what is blocked, what relates to this. These are indexed queries, not searches.
 
-- Run every concern fully every night. Once a concern is initialized and stable, it waits for relevant updates before resurfacing.
-- Replace real-time learning. The reasoning agent catches obvious signals during conversation. The sweep catches subtler patterns across many interactions.
+**The mutations journal.** Append-only. Every create, update, relate and delete, with actor (user, interactive Claude, cron), timestamp, and before/after state. Present from the first migration — retrofitting it means permanently losing the history that makes learning possible.
 
-The sweep output is a briefing — delivered through whatever channel makes sense (web UI, Telegram, email). Not just "here's your calendar" but "here's what needs your attention, across all the domains you care about."
+### 4.2 MCP — the only way in
 
-## Memory layers
+Every action goes through MCP. Nothing writes to Reli except an MCP client, and there is no public API.
 
-Reli maintains three layers of memory:
+**Tools** cover the Things, relationships and queries above.
 
-| Layer | Storage | Purpose |
-|-------|---------|---------|
-| **Long-term** | Things DB (knowledge graph) | Persistent structured knowledge — people, events, preferences, relationships |
-| **Short-term** | Rolling conversation summary | Compressed conversation context for continuity across sessions |
-| **Task context** | Context agent retrieval | Only what's needed for the current request |
+**Prompts** carry the PA behaviour — what to capture, when to set a check-in, how to name things, when to record a preference. This is what makes Claude behave as a PA without Reli owning a model. The operational "hats" from the original spec become prompts rather than backend modes: daily planning, project planning, review.
 
-The knowledge graph is long-term memory. The rolling conversation summary captures flow, intent, and recent decisions without duplicating what's already stored as Things. The context agent retrieves only what's relevant per request.
+**Resources** expose the current user model, scoped, so a session loads the preferences relevant to what it's doing.
 
-This means conversations can go indefinitely without context window issues, while maintaining continuity ("last time you mentioned wanting to move the trip...").
+### 4.3 Scheduled Claude — the proactive half
 
-## MCP: intelligence as a service
+Nothing runs on a schedule inside Reli. Proactivity is a set of Claude scheduled tasks with Reli's MCP attached, each a saved prompt on a cadence. The reasoning is done by a good model, and its output is ordinary Things that can be read, corrected and deleted.
 
-Reli's value isn't tied to its chat UI. Through MCP (Model Context Protocol), any agent can tap into Reli's intelligence:
+Three tasks, in order, each depending on what the one before it wrote.
 
-- **Prompts** that encode PA behavior — how to create Things, track preferences, handle relationships
-- **Schema** contracts — what a Thing looks like, how confidence tracking works, what relationship types exist
-- **Retrieval** — search the knowledge graph for relevant Things given any context
-- **The accumulated user model** — preferences, patterns, and relationships that make any calling agent smarter about *you*
+**1. Resolution pass** (overnight). Walk everything due for check-in and try to settle each one without the user. A check-in on "book flights for holiday X" is discharged by finding the confirmation in Gmail and marking it done — the user never hears about it. What can't be resolved, or needs a decision, is written up as a briefing Thing for the day.
 
-The key architectural decision: the calling agent (Claude Code, a Telegram bot, a voice assistant) does its own reasoning using Reli's prompts and data. Reli provides the intelligence substrate — the structured knowledge, the learned preferences, the domain framework from concerns — but doesn't force an extra LLM call. The client's model follows Reli's prompts to act as a PA.
+**2. Learning pass** (overnight). Read the journal since the last run and look for behavioural patterns: check-in dates repeatedly pushed from Mondays, Claude-generated titles the user consistently rewrites, whole tag families never touched. Write what it finds as preference Things, evidence-linked.
 
-This means your PA knowledge follows you across every tool you use. Claude Code knows your scheduling preferences. A Telegram bot knows your health concerns. A voice assistant knows your travel patterns. All from the same knowledge graph.
+**3. Morning conversation** (waking hours). Claude opens a chat and tells the user about their day. It does not redo the resolution pass — it reads the briefing Thing that already exists and presents it, shaped by scheduling and communication preferences from the user model.
 
-### Data integrity
+The third task is different in kind from the first two, and that difference matters. The overnight passes are silent and their output is data. The morning task produces a **conversation the user can answer**, and that makes it the densest source of explicit signal in the whole system: Claude is asking about precisely the residue that needed a human, and the replies are decisions. "Push that to next week." "Drop it, that's dead." "Why do you keep asking me about this?"
 
-When multiple clients write to the same knowledge graph, there's a risk of corruption — a lesser model might misinterpret the schema and make destructive updates. The current approach is to keep a mutations journal (append-only log of all changes) so the sweep can audit and roll back bad changes. A validation layer (where changes are proposed and reviewed before committing) is a future consideration for multi-user scenarios.
+So the morning conversation is bidirectional and must write back as it goes — check-in dates moved, Things closed, preferences recorded mid-conversation per section 5. A morning chat that only reports is a notification with extra steps.
 
-## Multi-channel delivery
+It also carries two jobs from the user model: disclosing notable preferences the learning pass derived overnight, and putting conflicting preferences to the user for a ruling. Both are one line each, in a conversation already happening, and both are why the system needs no review queue anywhere.
 
-The web UI is one interface. Reli's proactive intelligence should reach you where you are:
+It also becomes the primary delivery channel for the briefing, which demotes ntfy to what it's actually good at: time-sensitive things that can't wait for tomorrow morning.
 
-- **Telegram bot** — morning briefings, quick questions, proactive nudges ("bring a change of clothes today")
-- **Claude Code** via MCP — development context ("what did I decide about the auth rewrite?")
-- **Email** — weekly summaries or time-sensitive alerts
+The scheduling mechanism is claude.ai itself — a scheduled task is an ordinary Claude session on the same MCP connection, with the same access as an interactive one. There is no service account, no second set of credentials, and no separate write limits. The only thing distinguishing a scheduled session from an interactive one is the actor recorded in the journal, which is what lets the learning pass tell "the user did this" from "Claude did this."
 
-The intelligence is decoupled from delivery. Adding a new channel means connecting to Reli's API/MCP, not rebuilding the PA logic.
+That leaves reliability as the one thing to verify before building on it: whether claude.ai scheduled tasks genuinely run unattended, or whether a headless Claude Code routine is needed instead, following the pattern already working for overnight development work. A PA that silently stops running is worse than no PA, so whichever it is needs to fail loudly.
 
-Integration with projects like [OpenClaw](https://github.com/openclaw/openclaw) (a multi-channel AI assistant framework supporting 23+ messaging platforms) could provide broad delivery coverage without building each channel integration from scratch. The security model would need evaluation, but architecturally Reli's MCP server would be a natural fit as an OpenClaw skill/tool.
+### 4.4 The read view
 
-## External source ingestion
+A web frontend for looking at the graph and moving around it. React/TypeScript, served by the same container.
 
-Conversation is one input channel. Reli also learns from:
+It reads and does not write. No chat panel, no create or edit affordances, no action buttons. Everything that changes state goes through Claude via MCP, which keeps a single write path and means the journal has one story to tell about who did what.
 
-- **Google Calendar** — schedule, recurring patterns, time preferences
-- **Gmail** — confirmations, receipts, appointments, contracts
-- **Documents** — anything you feed it
+What it is for is the original spec's section 2.5 — visual verification for trust. Chat can tell you what Claude did; it cannot show you the shape of what you have. Three views cover that:
 
-These sources feed the knowledge graph. Concerns know what to look for in each source: a health concern scans for appointment confirmations, a finance concern watches for billing emails and contract renewals.
+- **Tree.** Hierarchy via `ChildOf`, expandable, showing title and key tags.
+- **Thing detail.** Everything on one Thing — notes, tags, urls, check-in date, and its relationships as navigable links. Where "how did this get here" gets answered, so this view also surfaces the Thing's journal history.
+- **The user model.** Every preference, its scope, and the evidence behind it. This is the view that makes preferences correctable rather than mysterious — you can follow a preference back to the four moments that produced it.
 
-## The learning flywheel
+Rejecting a preference is the one exception to read-only, and it should be the only button in the app.
 
-Everything connects into a reinforcing loop:
+The frontend consumes a small set of read-only HTTP endpoints, not MCP. Mirroring the query layer is enough; it does not need its own API surface.
 
-```
-Real-time (every interaction):
-  Reasoning agent -> extracts preferences + generates questions
-                                    |
-Background (nightly sweep):
-  Sweep -> coordinates concerns, detects gaps, aggregates patterns
-  Sweep -> generates briefing with questions + insights
-                                    |
-Next interaction:
-  Context agent -> retrieves Things + preferences + open questions
-  Reasoning agent -> acts with full knowledge of who you are
-```
+## 5. The user model
 
-Interactions produce preferences. Preferences improve context. Better context produces better interactions. The system compounds — a month of use produces a deeply personalized PA that a fresh install can't match.
+This is the part that makes Reli more than a queryable notebook. A Things database with no model of its owner is a markdown vault with a nicer API.
+
+**Structure.** A single `#User` Thing acts as an anchor. Each preference is its own Thing related to it — not a field inside it. A preference needs its own evidence links, its own tags and its own history, and one blob would make them unqueryable and force a full rewrite on every update.
+
+**Evidence over confidence.** A preference carries `EvidenceFor` relationships to the specific Things and journal entries that produced it. Strength is a count you can read, not a float you maintain. "Prefers deep work 9–11am" shows its four occasions; if three are from March and the job changed in June, that is visible on inspection rather than something a decay function has to guess at.
+
+**Scope.** Preferences declare what they apply to — which hat, which tags, which domain. Six months in there will be many, and loading all of them into every session is both expensive and useless. Daily planning should pull scheduling preferences and not naming conventions.
+
+**Two sources.**
+
+- *Explicit*, mid-conversation. Claude writes a preference the moment it notices one, not in an end-of-session summary — a closed tab is a lost signal. The convention is encoded in the MCP prompts.
+- *Implicit*, from the journal. The learning pass. This is the "without being told" requirement, and it cannot come from conversation at all, because a scheduled job cannot read claude.ai sessions. It can only come from observed behaviour.
+
+**No approval queue.** A preference the learning pass derives goes live immediately. It is not held provisional, and the user is not asked to confirm it. This is the behaviour of a PA who notices you never take meetings before ten and simply stops booking them — the noticing is the job, and routing every observation back for sign-off would turn "self-learning" into a chore and defeat the point. Correctness is handled after the fact, by correction, not before it, by permission.
+
+The morning conversation mentions notable new preferences as it goes, one line, in a conversation already happening. That is disclosure, not approval.
+
+**Conflicts go to the morning conversation.** Two preferences that genuinely contradict — "prefers working alone" against "always invites Tom to brainstorms" — are not resolved by the system picking a winner or by a merge rule. Both are held, and the conflict is raised with the user in the daily chat, which is exactly the kind of residue that conversation exists to clear. The answer is usually context rather than a contradiction, and that context becomes the scope on one or both.
+
+**Correctability.** The user can see any preference and the evidence behind it, and can reject it. Rejection is itself journalled, and a rejected preference is not re-derived.
+
+## 6. Check-ins
+
+`checkin_date` is Claude's obligation, not the user's to-do date.
+
+It means: *by this date, establish whether this is still true.* Whether that requires the user depends entirely on what Claude finds. Most check-ins should die quietly — resolved against Calendar, Gmail, or another Thing's state.
+
+Consequently, Calendar and Gmail are not enrichment features to be added once the core works. They are the substrate that lets check-ins resolve without the user, which is the entire difference between a PA and a task list. They arrive early.
+
+Deadlines, where they matter, live in `notes` as context. The check-in date is about attention, not obligation to the outside world.
+
+## 7. Non-goals
+
+Explicitly not being built, and not to be added without revisiting this document:
+
+- A chat panel, or any write path through the frontend. claude.ai is where things happen; the web view is for looking.
+- Any LLM call originating inside the Reli service.
+- Multi-user, authentication beyond single-user access control, sharing, or public availability.
+- A findings table, confidence decay algorithms, or any derived-state store that doesn't link to its evidence.
+- Vector search. For one user's Things, `checkin_date`, tags and Postgres full-text are sufficient, and dropping ChromaDB removes a stateful component from the deployment.
+- Concerns as modular domain monitors. The idea is sound and may return, but it is a layer on top of a working core, not part of it.
+- Delivery channels beyond the morning conversation and ntfy. Telegram, email digests and voice are all deferred.
+- Personality adaptation — Reli learning how to talk. Claude's own tone handling covers this.
+
+## 8. Deployment
+
+Unchanged, and reused wholesale: Docker, Railway (staging and production), Cloudflare Tunnel, GitHub Actions CI, `scripts/gates.sh` for test, lint and typecheck gates. The database becomes Postgres. The frontend is rebuilt as a read-only view against the new schema — the existing React app assumed a chat-first application and a data model that no longer exists.
+
+## 9. What done looks like
+
+Not feature completion — behaviour:
+
+- A week passes in which Claude closes several loops the user never hears about.
+- The morning briefing is short, and everything on it genuinely needs a person.
+- A new claude.ai session already knows how the user works, without being told.
+- The user reads a preference they never stated, and it's right.
+- Nothing in the graph can be pointed at and asked "where did this come from?" without an answer.

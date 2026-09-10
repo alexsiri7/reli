@@ -1,58 +1,33 @@
 # Reli
 
-Reli is a personal AI assistant that builds a structured model of who you are and uses it to be genuinely helpful. It stores knowledge as "Things" in a knowledge graph, learns your preferences and patterns over time, and proactively surfaces what matters — not just when you ask, but when you need it.
+Reli is the memory and the obligations layer that lets Claude act as a complete personal assistant. It stores knowledge as "Things" in a knowledge graph, tracks what needs checking and when, and learns how you actually operate — so that any Claude session, interactive or scheduled, starts already knowing.
 
 The goal is a PA that says "bring a change of clothes today, you have that event tonight" or "it's Saturday morning — your energy contract expires next month, want me to find a better deal?" — one that understands your life context, your schedule, your routines, and the right moment to act.
 
 ## How it works
 
-Everything you tell Reli — tasks, notes, ideas, people, projects — becomes a **Thing** in your personal knowledge graph. Things are typed, linked by relationships, and enriched over time. Ask Reli to remember something, and it figures out what to create, update, or connect. Ask it a question, and it searches your graph to answer.
+Everything you tell Reli — tasks, notes, ideas, people, projects — becomes a **Thing** in your personal knowledge graph. Things are tagged, linked by typed relationships, and enriched over time. Each Thing can carry a check-in date, which is Reli's record that something needs verifying by then.
 
-Reli also learns *how you operate*. Preferences like "avoids morning meetings" or "does venue-before-budget when planning events" are tracked as first-class Things with confidence levels that strengthen or decay based on your behavior.
+Reli also learns *how you operate*. Preferences like "avoids morning meetings" or "does venue-before-budget when planning events" are tracked as first-class Things, each linked to the specific evidence that produced it.
 
-Every message flows through a multi-stage agent pipeline:
-
-```
-User Message
-    |
-    v
-+------------------+
-| Context Agent    |  Searches your knowledge graph for relevant Things
-+--------+---------+
-         v
-+------------------+
-| Reasoning Agent  |  Decides what to create/update/link, extracts preferences
-+--------+---------+
-         v
-+------------------+
-| Validator        |  Applies changes to the database
-+--------+---------+
-         v
-+------------------+
-| Response Agent   |  Responds naturally, shaped by your learned preferences
-+------------------+
-```
+Reli does no reasoning of its own. Every judgement call happens in Claude — interactively over MCP, or in a scheduled session — and Reli stores the result, journalling every mutation with the actor that made it.
 
 ## Vision
 
-Reli aims to be a true personal assistant — one that models you, manages your **concerns**, and gets better over time. See the [vision document](docs/vision.md) for the full picture, including:
-
-- **Concerns** — modular domains of life (health, finance, travel) that Reli monitors on your behalf
-- **The learning flywheel** — how every interaction makes Reli smarter about you
-- **The nightly sweep** — Reli's planning session: gap detection, pattern aggregation, briefings
-- **MCP** — Reli as an intelligence service that any AI tool can tap into
-- **Multi-channel delivery** — Telegram, Claude Code, email — the intelligence isn't tied to one UI
+Reli is a service, not a product: MCP + claude.ai + scheduled tasks together should cover the whole job of a PA. See the [vision document](docs/vision.md) for the full picture — the layers, the user model, what check-ins mean, and what is deliberately not being built.
 
 For how Reli compares to related projects, see [comparisons](docs/comparisons.md).
 
 ## Tech Stack
 
 **Backend:** Python 3.12, FastAPI, Uvicorn, Pydantic
-**Frontend:** React 19, TypeScript, Vite, Tailwind CSS, Zustand
-**Storage:** SQLite or Postgres/Supabase (data), ChromaDB (vector embeddings)
-**LLM Gateway:** Requesty (OpenAI-compatible, routes to multiple providers)
-**Integrations:** Google Calendar, Gmail, Google Search (all optional)
+**Frontend:** React 19, TypeScript, Vite, Tailwind CSS — a read-only view over the graph
+**Storage:** Postgres
+**Interface:** MCP — every write goes through an MCP client; there is no public API
+**Integrations:** Google Calendar, Gmail
 **Infrastructure:** Docker, Cloudflare Tunnel, GitHub Actions CI, Railway (staging + production deploy)
+
+The rebuild is in progress: the sections below still document the application currently in this tree.
 
 ## Setup
 
@@ -139,10 +114,12 @@ Models can also be overridden via environment variables (`REQUESTY_MODEL`, `REQU
 
 ## Project Structure
 
+The layout below is the repository as it stands today, mid-rebuild; `docs/vision.md` describes the shape it is moving to.
+
 ```
 backend/
   main.py              # FastAPI app, static file serving
-  agents.py            # Multi-stage agent pipeline
+  agents.py            # Agent pipeline (superseded by the rebuild)
   database.py          # SQLite schema, migrations, queries
   vector_store.py      # ChromaDB embeddings
   models.py            # Pydantic models
