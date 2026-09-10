@@ -11,6 +11,7 @@ import json
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from typing import get_args
 
 import pytest
 from sqlalchemy import text
@@ -19,6 +20,7 @@ from backend import mcp_server
 from backend.config import settings
 from backend.db_models import RelationshipType
 from backend.mcp_server import (
+    McpActor,
     archive_thing,
     blocked,
     children,
@@ -100,7 +102,7 @@ def test_every_writing_tool_requires_an_actor(tool_name):
     schema = _tool_schemas()[tool_name]
 
     assert "actor" in schema["required"]
-    assert schema["properties"]["actor"]["enum"] == ["claude_interactive", "claude_scheduled"]
+    assert schema["properties"]["actor"]["enum"] == [actor.value for actor in get_args(McpActor)]
 
 
 # --- Writes and their journal entries --------------------------------------
@@ -218,6 +220,19 @@ def test_find_things_filters_and_returns_json_safe_dicts(tools):
 
     assert [t["title"] for t in found] == ["wanted"]
     assert json.loads(json.dumps(found))
+
+
+def test_find_things_omitting_active_returns_only_live_things(tools):
+    """The tool declares its own active default: an unfiltered listing must not leak archived Things."""
+    live = create_thing(actor="claude_interactive", title="live")
+    archived = create_thing(actor="claude_interactive", title="archived")
+    archive_thing(actor="claude_interactive", thing_id=uuid.UUID(archived["id"]))
+
+    found = find_things()
+
+    assert [t["title"] for t in found] == ["live"]
+    assert [t["id"] for t in found] == [live["id"]]
+    assert sorted(t["title"] for t in find_things(active=None)) == ["archived", "live"]
 
 
 def test_get_related_reports_depth_and_edge_type(tools):

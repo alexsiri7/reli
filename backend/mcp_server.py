@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # ``Actor.USER`` is absent on purpose: per docs/vision.md the frontend never writes, and the one
 # exception — rejecting a preference — arrives over HTTP in #1414, not over MCP. #1410 widens this
 # alias if the preference tools need it; there is one place to widen.
-McpActor = Literal["claude_interactive", "claude_scheduled"]
+McpActor = Literal[Actor.CLAUDE_INTERACTIVE, Actor.CLAUDE_SCHEDULED]
 
 
 def _actor(actor: McpActor) -> Actor:
