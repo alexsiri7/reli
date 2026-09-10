@@ -19,15 +19,17 @@ run_setup() {
     uv sync --frozen
 }
 
+# Tools live in the uv-managed venv created by `setup`. CI never activates it, so invoke them
+# through `uv run` (like the test stage) instead of relying on them being on PATH.
 run_lint() {
     echo "=== Lint ==="
-    ruff check backend/
-    ruff format --check backend/
+    uv run ruff check backend/
+    uv run ruff format --check backend/
 }
 
 run_typecheck() {
     echo "=== Typecheck ==="
-    mypy backend/
+    uv run mypy backend/
 }
 
 # Needs a Docker daemon: the suite starts a throwaway Postgres via testcontainers.

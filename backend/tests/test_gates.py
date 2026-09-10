@@ -21,11 +21,19 @@ BARE_WAIT = re.compile(r"(?:^|[;&|]|\bthen\b|\bdo\b)\s*wait\s*(?:$|[;&|\n])", re
 
 
 def _ruff_stub(tmp_path: Path, failing_subcommand: str) -> Path:
-    """A `ruff` on PATH that fails only for the given subcommand."""
+    """A `uv` on PATH whose `uv run ruff <subcommand>` fails only for the given subcommand.
+
+    The gate invokes tools through `uv run`, which puts the real venv first on PATH, so a bare
+    `ruff` stub would be shadowed; stubbing `uv` itself is the only seam.
+    """
     stub_dir = tmp_path / "bin"
     stub_dir.mkdir()
-    stub = stub_dir / "ruff"
-    stub.write_text(f'#!/usr/bin/env bash\n[ "$1" = "{failing_subcommand}" ] && exit 1\nexit 0\n')
+    stub = stub_dir / "uv"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        f'[ "$1" = run ] && [ "$2" = ruff ] && [ "$3" = "{failing_subcommand}" ] && exit 1\n'
+        "exit 0\n"
+    )
     stub.chmod(0o755)
     return stub_dir
 
