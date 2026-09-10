@@ -9,7 +9,7 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "python-dotenv>=1.2.3",
     "sentry-sdk[fastapi]>=2.68.1",
-    "sqlmodel>=0.0.39",
+    "sqlmodel>=0.0.42",
     "alembic>=1.19.2",
     "psycopg2>=2.9.12",
     # Upper bound is deliberate: mcp 2.x is a different API surface.
