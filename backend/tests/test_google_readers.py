@@ -252,6 +252,19 @@ def test_check_occurred_returns_no_verdict(google):
     assert not [key for key, value in result.items() if isinstance(value, bool)]
 
 
+def test_check_occurred_caps_each_source_separately(google):
+    """The cap the tool docstring promises is per source, and the composed call is what a
+    resolution pass actually makes."""
+    google.responses["messages"] = {"messages": [{"id": f"id-{n}", "threadId": "t"} for n in range(40)]}
+
+    result = check_occurred("quarterly review", since=SINCE, until=UNTIL, limit=100)
+
+    assert result["message_count"] == MAX_RESULTS
+    assert result["event_count"] <= MAX_RESULTS
+    assert len(_api_requests(google, "/gmail/v1/users/me/messages/")) == MAX_RESULTS
+    assert _query(_api_requests(google, "/calendar/v3/calendars/primary/events")[0])["maxResults"] == str(MAX_RESULTS)
+
+
 def test_check_occurred_reads_both_sources_over_the_same_window(google):
     check_occurred("quarterly review", since=SINCE, until=UNTIL)
 

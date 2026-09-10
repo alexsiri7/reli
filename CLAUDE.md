@@ -59,8 +59,9 @@ A Google credential lives in exactly three environment variables and nowhere els
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`. The access token derived from
 them is held in process memory by `backend/google_client.py` and is never persisted — not to disk,
 not to Postgres, not to the journal. Nothing under `backend/` writes a credential anywhere, and
-`test_the_google_modules_never_persist_a_credential` fails the build if that changes. That is the
-answer to #938: a token file cannot be left behind by code that never writes one.
+`test_the_google_modules_never_persist_a_credential` fails the build if either module gains a file
+write or a database import. That is the answer to #938: a token file cannot be left behind by code
+that never writes one.
 
 The scopes granted are `gmail.readonly` and `calendar.readonly`, listed in `SCOPES` in
 `backend/google_client.py`. Widening them is a visible edit to that tuple and needs an issue that
