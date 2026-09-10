@@ -12,6 +12,8 @@ dependencies = [
     "sqlmodel>=0.0.39",
     "alembic>=1.19.2",
     "psycopg2>=2.9.12",
+    # Upper bound is deliberate: mcp 2.x is a different API surface.
+    "mcp>=1.26.0,<2.0.0",
 ]
 
 [dependency-groups]

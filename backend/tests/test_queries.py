@@ -5,7 +5,17 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import text
 
 from backend.db_models import Actor, RelationshipType
-from backend.queries import blocked, by_tag, children, due_for_checkin, related, stale
+from backend.queries import (
+    blocked,
+    by_tag,
+    children,
+    due_for_checkin,
+    find_things,
+    history,
+    related,
+    relationships_for,
+    stale,
+)
 from backend.service import create_thing, relate, update_thing
 
 TODAY = date(2026, 9, 10)
@@ -278,3 +288,128 @@ def test_children_ignores_other_relationship_types(session):
     )
 
     assert children(session, parent.id) == []
+
+
+# --- relationships_for -----------------------------------------------------
+
+
+def test_relationships_for_returns_edges_in_both_directions(session):
+    middle = _thing(session, "middle")
+    other = _thing(session, "other")
+    elsewhere = _thing(session, "elsewhere")
+    outgoing = relate(
+        session,
+        actor=Actor.USER,
+        source_thing_id=middle.id,
+        target_thing_id=other.id,
+        relationship_type=RelationshipType.CHILD_OF,
+    )
+    incoming = relate(
+        session,
+        actor=Actor.USER,
+        source_thing_id=other.id,
+        target_thing_id=middle.id,
+        relationship_type=RelationshipType.BLOCKS,
+    )
+    relate(
+        session,
+        actor=Actor.USER,
+        source_thing_id=other.id,
+        target_thing_id=elsewhere.id,
+        relationship_type=RelationshipType.RELATED_TO,
+    )
+
+    assert {edge.id for edge in relationships_for(session, middle.id)} == {outgoing.id, incoming.id}
+
+
+def test_relationships_for_an_unconnected_thing_is_empty(session):
+    lonely = _thing(session, "lonely")
+
+    assert relationships_for(session, lonely.id) == []
+
+
+# --- find_things -----------------------------------------------------------
+
+
+def test_find_things_with_no_filters_returns_active_things_unlike_by_tag(session):
+    _thing(session, "untagged")
+    _thing(session, "tagged", tags=["work"])
+
+    assert sorted(_titles(find_things(session))) == ["tagged", "untagged"]
+    assert by_tag(session, []) == []
+
+
+def test_find_things_filters_by_tag(session):
+    _thing(session, "both", tags=["work", "urgent"])
+    _thing(session, "one", tags=["work"])
+    _thing(session, "neither", tags=["home"])
+
+    assert sorted(_titles(find_things(session, tags=["work"]))) == ["both", "one"]
+    assert _titles(find_things(session, tags=["work", "urgent"], match="all")) == ["both"]
+
+
+def test_find_things_filters_by_active(session):
+    live = _thing(session, "live")
+    archived = _thing(session, "archived")
+    update_thing(session, actor=Actor.USER, thing_id=archived.id, active=False)
+
+    assert _titles(find_things(session)) == ["live"]
+    assert _titles(find_things(session, active=False)) == ["archived"]
+    assert sorted(_titles(find_things(session, active=None))) == ["archived", "live"]
+    assert live.title == "live"
+
+
+def test_find_things_filters_by_checkin_range(session):
+    _thing(session, "early", checkin_date=TODAY - timedelta(days=5))
+    _thing(session, "middle", checkin_date=TODAY)
+    _thing(session, "late", checkin_date=TODAY + timedelta(days=5))
+    _thing(session, "undated")
+
+    found = find_things(session, checkin_from=TODAY - timedelta(days=1), checkin_to=TODAY + timedelta(days=1))
+
+    assert _titles(found) == ["middle"]
+
+
+def test_find_things_filters_by_priority_range(session):
+    _thing(session, "low", priority=1.0)
+    _thing(session, "mid", priority=5.0)
+    _thing(session, "high", priority=9.0)
+
+    assert _titles(find_things(session, priority_min=4.0)) == ["high", "mid"]
+    assert _titles(find_things(session, priority_min=4.0, priority_max=6.0)) == ["mid"]
+
+
+def test_find_things_composes_filters_and_honours_limit(session):
+    _thing(session, "wanted", tags=["work"], priority=9.0, checkin_date=TODAY)
+    _thing(session, "wrong tag", tags=["home"], priority=9.0, checkin_date=TODAY)
+    _thing(session, "too low", tags=["work"], priority=1.0, checkin_date=TODAY)
+    _thing(session, "also wanted", tags=["work"], priority=8.0, checkin_date=TODAY)
+
+    found = find_things(session, tags=["work"], priority_min=5.0, checkin_to=TODAY)
+
+    assert _titles(found) == ["wanted", "also wanted"]
+    assert _titles(find_things(session, tags=["work"], priority_min=5.0, limit=1)) == ["wanted"]
+
+
+# --- history ---------------------------------------------------------------
+
+
+def test_history_returns_one_things_entries_oldest_first(session):
+    thing = _thing(session, "traced")
+    other = _thing(session, "untraced")
+    update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=thing.id, title="renamed")
+
+    entries = history(session, thing.id)
+
+    assert [(e.operation.value, e.actor.value) for e in entries] == [
+        ("create", "user"),
+        ("update", "claude_interactive"),
+    ]
+    assert [e.entity_id for e in history(session, other.id)] == [other.id]
+
+
+def test_history_honours_limit(session):
+    thing = _thing(session, "busy")
+    update_thing(session, actor=Actor.USER, thing_id=thing.id, title="second")
+
+    assert len(history(session, thing.id, limit=1)) == 1

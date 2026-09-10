@@ -19,5 +19,7 @@ Nothing here is imported, linted, typechecked or copied into the Docker image â€
 It targets the schema the #1408 baseline migration drops (`users`, `google_tokens`,
 `gmail_oauth_states`, `revoked_tokens`, the multi-user `user_id` columns) and the settings
 `backend/config.py` no longer defines. #1412 rewrites the Calendar and Gmail readers against the new
-data layer; #1409 decides what the MCP surface needs of the auth half. Read it for the OAuth flow
-and the token handling, do not reuse it wholesale.
+data layer. #1409 has since answered the auth half: `/mcp` takes a static bearer token
+(`MCP_API_TOKEN`), so none of this is needed for the MCP surface â€” a full authorization server
+would be its own issue. Read it for the OAuth flow and the token handling, do not reuse it
+wholesale.

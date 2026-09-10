@@ -35,6 +35,10 @@ docker compose build && docker compose up -d
 `DATABASE_URL` must be set in the environment — there is no default, and the service refuses to
 start without it rather than silently using an empty database.
 
+`MCP_API_TOKEN` is the bearer token for `/mcp`. It is human-provisioned: agents cannot mint it. An
+empty value is not a dev-mode bypass — `/mcp` answers 401 to every request and logs a warning at
+startup, while `/healthz` stays green so a missing secret cannot roll a deploy back.
+
 The container runs `alembic upgrade head` on startup. A migration failure now fails the boot: there
 is no `create_all` fallback, because a schema built from ORM metadata would omit the journal's
 append-only trigger.
@@ -100,5 +104,7 @@ Creating documentation that claims success on an action you cannot perform is a 
 - Writes: `backend/service.py` — the only module that may mutate a Thing; every function journals
 - Reads: `backend/queries.py` — the indexed queries
 - Retained reference, not built or shipped: `reference/oauth/` (see its README)
-- HTTP: `backend/main.py` serves `/healthz` and nothing else; reads and writes arrive over MCP
+- MCP: `backend/mcp_server.py` — the thirteen tools wrapping `service.py` and `queries.py`; every
+  writing tool takes a required `actor`, and hard delete is not exposed
+- HTTP: `backend/main.py` serves `/healthz` and mounts the MCP streamable-HTTP app at `/mcp`
 - Docker service name: `reli` (not `app`)

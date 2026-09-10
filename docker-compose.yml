@@ -8,6 +8,9 @@ services:
       # No default: an unset DATABASE_URL must fail the boot, not silently bind the
       # service to the local `postgres` container instead of the real database.
       - DATABASE_URL=${DATABASE_URL}
+      # Defaulted, not required: an unset token closes /mcp with a 401 and leaves /healthz
+      # green, which is better than refusing to boot and rolling the deploy back.
+      - MCP_API_TOKEN=${MCP_API_TOKEN:-}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
