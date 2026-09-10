@@ -71,6 +71,14 @@ def _related_dict(found: queries.RelatedThing) -> dict[str, Any]:
     }
 
 
+def _history_dict(found: queries.History) -> dict[str, Any]:
+    return {
+        "entries": [_journal_dict(entry) for entry in found.entries],
+        "total": found.total,
+        "truncated": found.truncated,
+    }
+
+
 reli_mcp = FastMCP(
     "Reli",
     instructions=(
@@ -431,23 +439,25 @@ def children(thing_id: uuid.UUID) -> list[dict[str, Any]]:
 
 
 @reli_mcp.tool()
-def get_thing_history(thing_id: uuid.UUID, limit: int = 200) -> list[dict[str, Any]]:
-    """How a Thing got to its current state: its journal entries, oldest first.
+def get_thing_history(thing_id: uuid.UUID, limit: int = 200) -> dict[str, Any]:
+    """How a Thing got to its current state: its most recent journal entries, oldest first.
 
     Only entries recorded against the Thing itself. Relating and unrelating are journalled against
     the *relationship*, so they do not appear here — use get_thing or get_related for the edges as
-    they stand now. An id with no entries returns an empty list.
+    they stand now. An id with no entries returns no entries and a total of zero.
 
     Args:
         thing_id: The Thing to trace.
-        limit: How many entries to return at most.
+        limit: How many entries to return at most; the newest this many are the ones returned.
 
     Returns:
-        One entry per mutation, each with the actor, the operation, and the before and after
-        snapshots.
+        {"entries": [...], "total": N, "truncated": bool} — one entry per mutation, each with the
+        actor, the operation, and the before and after snapshots; ``total`` is how many entries the
+        Thing has in all. ``truncated`` is true when older entries were left out, and a larger
+        ``limit`` reaches them.
     """
     with _session() as session:
-        return [_journal_dict(entry) for entry in queries.history(session, thing_id, limit)]
+        return _history_dict(queries.history(session, thing_id, limit))
 
 
 # --- Google reads (Calendar and Gmail) -------------------------------------

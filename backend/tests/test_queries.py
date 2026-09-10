@@ -399,17 +399,25 @@ def test_history_returns_one_things_entries_oldest_first(session):
     other = _thing(session, "untraced")
     update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=thing.id, title="renamed")
 
-    entries = history(session, thing.id)
+    result = history(session, thing.id)
 
-    assert [(e.operation.value, e.actor.value) for e in entries] == [
+    assert [(e.operation.value, e.actor.value) for e in result.entries] == [
         ("create", "user"),
         ("update", "claude_interactive"),
     ]
-    assert [e.entity_id for e in history(session, other.id)] == [other.id]
+    assert result.total == 2
+    assert result.truncated is False
+    assert [e.entity_id for e in history(session, other.id).entries] == [other.id]
 
 
-def test_history_honours_limit(session):
+def test_history_keeps_the_newest_entries_and_flags_truncation(session):
     thing = _thing(session, "busy")
-    update_thing(session, actor=Actor.USER, thing_id=thing.id, title="second")
+    for version in range(6):
+        update_thing(session, actor=Actor.USER, thing_id=thing.id, title=f"v{version}")
 
-    assert len(history(session, thing.id, limit=1)) == 1
+    result = history(session, thing.id, limit=2)
+
+    assert [e.after["title"] for e in result.entries] == ["v4", "v5"]
+    assert [e.id for e in result.entries] == sorted(e.id for e in result.entries)
+    assert result.total == 7
+    assert result.truncated is True

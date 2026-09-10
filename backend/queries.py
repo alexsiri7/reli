@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Literal, NamedTuple
 
-from sqlalchemy import Table, text
+from sqlalchemy import Table, func, text
 from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, SQLModel, col, or_, select
@@ -28,6 +28,18 @@ class RelatedThing(NamedTuple):
     thing: ThingRecord
     depth: int
     relationship_type: RelationshipType
+
+
+class History(NamedTuple):
+    """A window onto one entity's journal, with ``total`` so a capped answer cannot pass for a whole one."""
+
+    entries: list[JournalRecord]
+    total: int
+
+    @property
+    def truncated(self) -> bool:
+        """Whether older entries were left out of this window."""
+        return self.total > len(self.entries)
 
 
 def _tagged(tags: Sequence[str], match: Literal["any", "all"]) -> ColumnElement[bool]:
@@ -250,16 +262,19 @@ def find_things(
     return list(session.exec(statement).all())
 
 
-def history(session: Session, entity_id: uuid.UUID, limit: int = 200) -> list[JournalRecord]:
-    """The journal entries for one entity, oldest first.
+def history(session: Session, entity_id: uuid.UUID, limit: int = 200) -> History:
+    """The most recent *limit* journal entries for one entity, oldest first within that window.
+
+    The window is taken from the newest end: a Thing with more entries than *limit* loses its
+    oldest, never the state it is in now. ``total`` is every entry the entity has, so a caller that
+    got a capped answer can see that it did and ask again with a wider *limit*.
 
     Ordered by ``id`` rather than ``occurred_at``: two mutations inside one transaction share a
     timestamp, and the sequence is the point of the journal.
     """
-    statement = (
-        select(JournalRecord)
-        .where(col(JournalRecord.entity_id) == entity_id)
-        .order_by(col(JournalRecord.id).asc())
-        .limit(limit)
-    )
-    return list(session.exec(statement).all())
+    condition = col(JournalRecord.entity_id) == entity_id
+    newest_first = session.exec(
+        select(JournalRecord).where(condition).order_by(col(JournalRecord.id).desc()).limit(limit)
+    ).all()
+    total = session.exec(select(func.count()).select_from(JournalRecord).where(condition)).one()
+    return History(entries=list(reversed(newest_first)), total=total)

@@ -335,15 +335,18 @@ def test_get_thing_history_traces_one_thing_oldest_first(tools):
     other = create_thing(actor="claude_interactive", title="untraced")
     update_thing(actor="claude_interactive", thing_id=uuid.UUID(thing["id"]), title="renamed")
 
-    entries = get_thing_history(uuid.UUID(thing["id"]))
+    result = get_thing_history(uuid.UUID(thing["id"]))
 
+    entries = result["entries"]
     assert [(e["operation"], e["actor"]) for e in entries] == [
         ("create", "claude_scheduled"),
         ("update", "claude_interactive"),
     ]
     assert entries[1]["before"]["title"] == "traced"
-    assert [e["entity_id"] for e in get_thing_history(uuid.UUID(other["id"]))] == [other["id"]]
-    assert json.loads(json.dumps(entries))
+    assert result["total"] == 2
+    assert result["truncated"] is False
+    assert [e["entity_id"] for e in get_thing_history(uuid.UUID(other["id"]))["entries"]] == [other["id"]]
+    assert json.loads(json.dumps(result))
 
 
 def test_get_thing_history_excludes_relationship_entries(tools):
@@ -356,7 +359,19 @@ def test_get_thing_history_excludes_relationship_entries(tools):
         relationship_type=RelationshipType.REFERENCES,
     )
 
-    assert [e["operation"] for e in get_thing_history(uuid.UUID(source["id"]))] == ["create"]
+    assert [e["operation"] for e in get_thing_history(uuid.UUID(source["id"]))["entries"]] == ["create"]
+
+
+def test_get_thing_history_reports_the_newest_window_and_its_truncation(tools):
+    thing = create_thing(actor="claude_interactive", title="busy")
+    for version in range(6):
+        update_thing(actor="claude_interactive", thing_id=uuid.UUID(thing["id"]), title=f"v{version}")
+
+    result = get_thing_history(uuid.UUID(thing["id"]), limit=2)
+
+    assert [e["after"]["title"] for e in result["entries"]] == ["v4", "v5"]
+    assert result["total"] == 7
+    assert result["truncated"] is True
 
 
 # --- Transport and auth ----------------------------------------------------
