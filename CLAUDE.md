@@ -22,6 +22,14 @@ Non-negotiables from `docs/vision.md`. They hold even when a bead description or
 
 The merged code now follows these rules: #1408 deleted the LLM pipeline, replaced the schema and made hierarchy a `ChildOf` relationship. The five relationship-type literals are defined once, in `RelationshipType` in `backend/db_models.py` — use them, do not invent a sixth without an issue that asks for it.
 
+The user model (#1410) follows from the same rules. Preferences are Things tagged `#Preference`,
+anchored to the single `#User` Thing at `USER_ANCHOR_ID` by a `RelatedTo` edge running anchor →
+preference. Evidence is an `EvidenceFor` edge from a Thing, so a journal entry becomes evidence only
+once a Thing tagged `#Observation` carrying `notes["journal_entry_id"]` stands for it — a
+relationship cannot point at anything but a Thing. Strength is the count of those edges; there is no
+confidence anywhere and none may be added. `McpActor` was deliberately **not** widened with
+`Actor.USER`: `reject_preference` over MCP records the Claude session that relayed the rejection.
+
 ## Deployment
 
 The app runs in Docker. After merging code changes, the container must be rebuilt:
@@ -131,11 +139,13 @@ Creating documentation that claims success on an action you cannot perform is a 
 - Backend: `backend/` (FastAPI, Python) — the whole service
 - Schema: `backend/db_models.py` — `things`, `relationships`, `journal`, and the enums
 - Writes: `backend/service.py` — the only module that may mutate a Thing; every function journals
-- Reads: `backend/queries.py` — the indexed queries
+- Reads: `backend/queries.py` — the indexed queries, including `user_model`
 - Retained reference, not built or shipped: `reference/oauth/` (see its README)
-- MCP: `backend/mcp_server.py` — the sixteen tools wrapping `service.py`, `queries.py` and
+- MCP: `backend/mcp_server.py` — the twenty tools wrapping `service.py`, `queries.py` and
   `google_readers.py`; every writing tool takes a required `actor`, and hard delete is not exposed.
-  The three Google tools take no `actor` and journal nothing, because they mutate nothing
+  The three Google tools take no `actor` and journal nothing, because they mutate nothing. The four
+  user-model tools are `record_preference`, `add_preference_evidence`, `reject_preference` and
+  `get_user_model`; the same model is also served as the `reli://user-model` resource
 - Google reads: `backend/google_readers.py` — `find_correspondence`, `find_events`,
   `check_occurred`; read-only and summarising, and they return evidence rather than a verdict
 - Google credentials and transport: `backend/google_client.py` — the only module that reads the

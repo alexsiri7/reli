@@ -18,9 +18,10 @@ from sqlalchemy import text
 
 from backend import google_readers, mcp_server
 from backend.config import settings
-from backend.db_models import RelationshipType
+from backend.db_models import Actor, RelationshipType
 from backend.mcp_server import (
     McpActor,
+    add_preference_evidence,
     archive_thing,
     blocked,
     check_occurred,
@@ -33,6 +34,9 @@ from backend.mcp_server import (
     get_related,
     get_thing,
     get_thing_history,
+    get_user_model,
+    record_preference,
+    reject_preference,
     relate,
     reli_mcp,
     stale,
@@ -58,11 +62,24 @@ TOOL_NAMES = {
     "find_correspondence",
     "find_events",
     "check_occurred",
+    "record_preference",
+    "add_preference_evidence",
+    "reject_preference",
+    "get_user_model",
 }
 
 GOOGLE_TOOLS = {"find_correspondence", "find_events", "check_occurred"}
 
-WRITING_TOOLS = {"create_thing", "update_thing", "archive_thing", "relate", "unrelate"}
+WRITING_TOOLS = {
+    "create_thing",
+    "update_thing",
+    "archive_thing",
+    "relate",
+    "unrelate",
+    "record_preference",
+    "add_preference_evidence",
+    "reject_preference",
+}
 
 
 @pytest.fixture()
@@ -95,7 +112,7 @@ def _tool_schemas():
 # --- The surface -----------------------------------------------------------
 
 
-def test_the_exposed_tools_are_exactly_the_sixteen():
+def test_the_exposed_tools_are_exactly_the_twenty():
     assert set(_tool_schemas()) == TOOL_NAMES
 
 
@@ -372,6 +389,117 @@ def test_get_thing_history_reports_the_newest_window_and_its_truncation(tools):
     assert [e["after"]["title"] for e in result["entries"]] == ["v4", "v5"]
     assert result["total"] == 7
     assert result["truncated"] is True
+
+
+# --- The user model --------------------------------------------------------
+
+
+def _resource_json(uri):
+    (content,) = asyncio.run(reli_mcp.read_resource(uri))
+    return json.loads(content.content)
+
+
+def test_reject_preference_cannot_claim_the_user_made_the_decision():
+    """Over MCP the honest actor is the Claude session that relayed the rejection, not the user."""
+    assert Actor.USER.value not in _tool_schemas()["reject_preference"]["properties"]["actor"]["enum"]
+
+
+def test_record_preference_over_mcp_returns_the_preference_with_its_evidence(tools):
+    evidence = create_thing(actor=Actor.CLAUDE_INTERACTIVE, title="declined a 9am meeting")
+
+    recorded = record_preference(
+        actor=Actor.CLAUDE_INTERACTIVE,
+        title="Prefers deep work 9-11am",
+        scope="scheduling",
+        evidence_ids=[uuid.UUID(evidence["id"])],
+    )
+
+    assert recorded["scope"] == "scheduling"
+    assert recorded["evidence_count"] == 1
+    assert recorded["rejected"] is False
+    assert [thing["id"] for thing in recorded["evidence"]] == [evidence["id"]]
+
+
+def test_add_preference_evidence_over_mcp_returns_the_reinforced_preference(tools):
+    evidence = create_thing(actor=Actor.CLAUDE_INTERACTIVE, title="declined a 9am meeting")
+    recorded = record_preference(
+        actor=Actor.CLAUDE_INTERACTIVE,
+        title="Prefers deep work 9-11am",
+        scope="scheduling",
+        evidence_ids=[uuid.UUID(evidence["id"])],
+    )
+    more = create_thing(actor=Actor.CLAUDE_INTERACTIVE, title="moved standup to noon")
+
+    reinforced = add_preference_evidence(
+        actor=Actor.CLAUDE_SCHEDULED,
+        preference_id=uuid.UUID(recorded["thing"]["id"]),
+        evidence_id=uuid.UUID(more["id"]),
+    )
+
+    assert reinforced["evidence_count"] == 2
+
+
+def test_reject_preference_over_mcp_hides_it_from_the_default_model(tools):
+    evidence = create_thing(actor=Actor.CLAUDE_INTERACTIVE, title="declined a 9am meeting")
+    recorded = record_preference(
+        actor=Actor.CLAUDE_INTERACTIVE,
+        title="Prefers deep work 9-11am",
+        scope="scheduling",
+        evidence_ids=[uuid.UUID(evidence["id"])],
+    )
+
+    rejected = reject_preference(actor=Actor.CLAUDE_INTERACTIVE, preference_id=uuid.UUID(recorded["thing"]["id"]))
+
+    assert rejected["rejected"] is True
+    assert get_user_model()["preferences"] == []
+    assert len(get_user_model(include_rejected=True)["preferences"]) == 1
+
+
+def test_the_user_model_is_exposed_as_a_resource_scoped_and_unscoped():
+    resources = {str(resource.uri) for resource in asyncio.run(reli_mcp.list_resources())}
+    templates = {template.uriTemplate for template in asyncio.run(reli_mcp.list_resource_templates())}
+
+    assert "reli://user-model" in resources
+    assert "reli://user-model/{scope}" in templates
+
+
+def test_the_user_model_resource_returns_the_same_payload_as_the_tool(tools):
+    evidence = create_thing(actor=Actor.CLAUDE_INTERACTIVE, title="declined a 9am meeting")
+    record_preference(
+        actor=Actor.CLAUDE_INTERACTIVE,
+        title="Prefers deep work 9-11am",
+        scope="scheduling",
+        evidence_ids=[uuid.UUID(evidence["id"])],
+    )
+
+    assert _resource_json("reli://user-model") == get_user_model()
+
+
+def test_the_user_model_resource_filters_by_scope(tools):
+    evidence = create_thing(actor=Actor.CLAUDE_INTERACTIVE, title="declined a 9am meeting")
+    for title, scope in (("Prefers deep work 9-11am", "scheduling"), ("Names projects by outcome", "naming")):
+        record_preference(
+            actor=Actor.CLAUDE_INTERACTIVE,
+            title=title,
+            scope=scope,
+            evidence_ids=[uuid.UUID(evidence["id"])],
+        )
+
+    scoped = _resource_json("reli://user-model/scheduling")
+
+    assert [preference["thing"]["title"] for preference in scoped["preferences"]] == ["Prefers deep work 9-11am"]
+
+
+def test_no_user_model_payload_carries_a_confidence_score(tools):
+    evidence = create_thing(actor=Actor.CLAUDE_INTERACTIVE, title="declined a 9am meeting")
+    record_preference(
+        actor=Actor.CLAUDE_INTERACTIVE,
+        title="Prefers deep work 9-11am",
+        scope="scheduling",
+        evidence_ids=[uuid.UUID(evidence["id"])],
+    )
+
+    assert "confidence" not in json.dumps(get_user_model())
 
 
 # --- Transport and auth ----------------------------------------------------

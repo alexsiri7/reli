@@ -4,7 +4,7 @@ Reli is the memory and the obligations layer that lets Claude act as a complete 
 
 The goal is a PA that says "bring a change of clothes today, you have that event tonight" or "it's Saturday morning — your energy contract expires next month, want me to find a better deal?" — one that understands your life context, your schedule, your routines, and the right moment to act.
 
-Reli is being rebuilt. The data layer and the MCP tools over it are what exists today; the user model and the read-only view are still ahead.
+Reli is being rebuilt. The data layer, the MCP tools over it and the user model are what exists today; the read-only view is still ahead.
 
 ## How it works
 
@@ -29,7 +29,7 @@ For how Reli compares to related projects, see [comparisons](docs/comparisons.md
 **Integrations:** Google Calendar and Gmail, read-only — `backend/google_client.py` and `backend/google_readers.py`; `reference/oauth/` holds the pre-rebuild code, not reused
 **Infrastructure:** Docker, Cloudflare Tunnel, GitHub Actions CI, Railway (staging + production deploy)
 
-Today the service is the data layer, the MCP tools over it at `/mcp` — including the read-only Calendar and Gmail readers — and a health check. The user model and the scheduled passes are the next issues.
+Today the service is the data layer, the MCP tools over it at `/mcp` — including the read-only Calendar and Gmail readers and the user model — and a health check. The scheduled passes and the read-only view are the next issues.
 
 ## Setup
 
@@ -106,7 +106,7 @@ backend/
   mcp_server.py        # the MCP tools; every write takes an actor, no hard delete
   db_models.py         # things, relationships, journal, and the enums
   service.py           # the only write path; every mutation is journalled
-  queries.py           # the indexed queries: due_for_checkin, stale, by_tag, blocked, related, children, find_things
+  queries.py           # the indexed queries: due_for_checkin, stale, by_tag, blocked, related, children, find_things, user_model
   config.py            # settings from the environment
   db_engine.py         # the Postgres engine and session factory
   alembic/versions/    # the v4 baseline migration
