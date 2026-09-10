@@ -58,8 +58,17 @@ cannot resolve a pre-v4 revision recorded in the database:
 psql "$DATABASE_URL" -c 'DROP TABLE IF EXISTS alembic_version'
 ```
 
-There is no frontend to build. The read-only view described in `docs/vision.md` lands in a later
-issue; update this section when it does.
+`WEB_UI_PASSWORD` is the HTTP Basic password for the web view at `/` and the `/api` routes behind
+it. Human-provisioned like `MCP_API_TOKEN`: agents cannot mint it, and an empty value is not a
+dev-mode bypass — `/` and `/api` answer 401 to every request and log a warning at startup, while
+`/healthz` stays green so a missing secret cannot roll a deploy back. `/mcp` is exempt from this
+check; its own bearer check still decides.
+
+The frontend is built inside the image: the Dockerfile's `frontend-build` stage runs `npm ci` and
+`npm run build`, and the python stage copies `frontend/dist` in. `docker compose build` therefore
+rebuilds the web view too — there is nothing to build separately. The backend serves the bundle only
+when `frontend/dist` is present, so a local `uvicorn` run without one still serves `/api`; use
+`npm --prefix frontend run dev` for the view in development.
 
 ## Google credentials
 
@@ -119,9 +128,25 @@ issues list to see if your work maps to an existing feature issue.
 
 ## Screenshot Tests (Visual Regression)
 
-**Gone.** #1408 deleted `frontend/` and its screenshot suite. There is no visual regression gate,
-and nothing to update snapshots for. Rewrite this section — and the coverage strategy behind it —
-when the read-only view lands.
+#1414 rebuilt `frontend/` and its screenshot suite. The specs live in `frontend/e2e/views.spec.ts`,
+one per view, and the committed snapshots in `frontend/e2e/views.spec.ts-snapshots/`.
+
+**Every `/api` response is stubbed** with `page.route` from `frontend/e2e/fixtures.ts`. No database,
+no backend, no clock: a screenshot test is a view test, and the API contract is proven by
+`backend/tests/test_api.py` instead. A spec that reaches for a real server is the wrong fix.
+
+**Snapshots are only valid from the pinned Playwright container**, whose tag matches the
+`@playwright/test` version in `frontend/package.json` exactly. CI runs the `frontend` job in that
+same `container:`. Never regenerate on a developer's host — the host's fonts render different pixels
+and the diff means nothing:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/work -w /work/frontend \
+  mcr.microsoft.com/playwright:v1.63.0-noble npx playwright test --update-snapshots
+```
+
+Bumping `@playwright/test` means bumping the tag in that command and in `.github/workflows/ci.yml`
+together, and regenerating.
 
 ## Railway Token Rotation
 
@@ -150,5 +175,12 @@ Creating documentation that claims success on an action you cannot perform is a 
   `check_occurred`; read-only and summarising, and they return evidence rather than a verdict
 - Google credentials and transport: `backend/google_client.py` — the only module that reads the
   credential and the only one that reaches a Google API, always with a `GET`
-- HTTP: `backend/main.py` serves `/healthz` and mounts the MCP streamable-HTTP app at `/mcp`
+- HTTP: `backend/main.py` serves `/healthz`, includes the `/api` router, mounts the MCP
+  streamable-HTTP app at `/mcp`, and mounts the frontend bundle **last** — its catch-all answers
+  every unmatched path, so anything mounted after it would be dead
+- Web view API: `backend/api.py` — the five `/api` routes, their response models, the Basic-auth
+  middleware and the SPA mount. Read-only apart from `POST /api/preferences/{id}/reject`, the only
+  place `Actor.USER` is used
+- Frontend: `frontend/` — Vite + React + TypeScript. Three views in `frontend/src/views/`, the
+  `/api` types mirrored in `frontend/src/api.ts`, screenshot tests in `frontend/e2e/`
 - Docker service name: `reli` (not `app`)

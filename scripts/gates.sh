@@ -5,11 +5,12 @@
 # Usage:
 #   ./scripts/gates.sh [STAGE...]
 #
-# Stages: setup, lint, typecheck, test, build
-# No args = run all stages in order.
+# Stages: setup, lint, typecheck, test, build, frontend
+# No args = run every stage but `frontend`, which needs node and a browser.
 # Examples:
-#   ./scripts/gates.sh              # Run everything
+#   ./scripts/gates.sh              # Run setup, lint, typecheck, test and build
 #   ./scripts/gates.sh lint test    # Run only lint and test
+#   ./scripts/gates.sh frontend     # Run the web view's gates (node + Playwright)
 set -Eeuo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
@@ -42,6 +43,21 @@ run_test() {
 run_build() {
     echo "=== Build (Docker) ==="
     docker build -t reli:gate-check .
+}
+
+# Deliberately absent from the no-arg default: it needs node and a browser, and making those a hard
+# dependency of every local gate run is a wider blast radius than the web view earns. CI runs it as
+# its own job, inside the Playwright container the snapshots were generated in.
+run_frontend() {
+    echo "=== Frontend ==="
+    (
+        cd frontend
+        npm ci
+        npm run lint
+        npm run typecheck
+        npm run build
+        npx playwright test
+    )
 }
 
 # If no args, run all stages

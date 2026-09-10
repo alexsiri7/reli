@@ -1,6 +1,10 @@
 .git
 .gitignore
 node_modules
+# Not gitignore semantics: a slash-free pattern matches the context root only, so the frontend's
+# own node_modules needs saying separately or the node build stage copies it in.
+**/node_modules
+frontend/dist
 __pycache__
 *.pyc
 .env*

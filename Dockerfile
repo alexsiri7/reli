@@ -1,3 +1,14 @@
+# The web view is built here and copied into the runtime image, so one container serves the API and
+# the frontend — docs/vision.md §4.4. Playwright's browsers are never needed in an image that only
+# serves the bundle, and downloading them would add hundreds of megabytes to the build.
+FROM node:22-slim AS frontend-build
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 # Use floating minor tag so security patches land on each rebuild.
 # Run `docker compose build --pull` (or ensure CI uses --pull) to guarantee
 # the latest python:3.12.x base is fetched rather than served from cache.
@@ -28,6 +39,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 COPY alembic.ini ./alembic.ini
 COPY backend/ ./backend/
+COPY --from=frontend-build /frontend/dist ./frontend/dist
 
 # Entrypoint drops to non-root
 COPY --chmod=755 <<'ENTRY' /app/entrypoint.sh
