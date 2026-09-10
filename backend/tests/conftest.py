@@ -77,8 +77,14 @@ def session(migrated_db: str) -> Generator[Session, None, None]:
         cleanup.commit()
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def client(migrated_db: str) -> Iterator[TestClient]:
+    """The app with its real lifespan, entered once for the whole session.
+
+    Session scope is not negotiable: the lifespan starts the MCP session manager, which the SDK
+    allows to run only once per ``FastMCP`` instance, and ``backend.main`` builds exactly one at
+    import. A second ``TestClient(app)`` raises in lifespan and takes every later test with it.
+    """
     from backend.main import app
 
     with TestClient(app) as test_client:

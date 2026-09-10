@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     # --- Database ---
     DATABASE_URL: str = ""
 
+    # --- MCP ---
+    # Bearer token for the /mcp endpoint. Human-provisioned: an empty value closes /mcp with a
+    # 401 rather than opening it, and never stops the boot — /healthz must stay green so a
+    # missing secret does not roll the deploy back.
+    MCP_API_TOKEN: str = ""
+
     # --- Logging ---
     LOG_LEVEL: str = "INFO"
 
