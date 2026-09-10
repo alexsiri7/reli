@@ -13,6 +13,7 @@ from typing import Literal, NamedTuple
 
 from sqlalchemy import Table, text
 from sqlalchemy.dialects.postgresql import array
+from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, SQLModel, col, or_, select
 
 from .db_models import JournalRecord, RelationshipRecord, RelationshipType, ThingRecord
@@ -27,6 +28,12 @@ class RelatedThing(NamedTuple):
     thing: ThingRecord
     depth: int
     relationship_type: RelationshipType
+
+
+def _tagged(tags: Sequence[str], match: Literal["any", "all"]) -> ColumnElement[bool]:
+    """The tag condition both tag-filtering queries run, so a change to it cannot reach only one."""
+    wanted = list(tags)
+    return _TAGS.contains(wanted) if match == "all" else _TAGS.has_any(array(wanted))
 
 
 def due_for_checkin(session: Session, as_of: date) -> list[ThingRecord]:
@@ -62,9 +69,7 @@ def by_tag(
     if not tags:
         return []
 
-    wanted = list(tags)
-    condition = _TAGS.contains(wanted) if match == "all" else _TAGS.has_any(array(wanted))
-    statement = select(ThingRecord).where(condition).order_by(col(ThingRecord.priority).desc())
+    statement = select(ThingRecord).where(_tagged(tags, match)).order_by(col(ThingRecord.priority).desc())
     return list(session.exec(statement).all())
 
 
@@ -224,8 +229,7 @@ def find_things(
     """
     conditions = []
     if tags:
-        wanted = list(tags)
-        conditions.append(_TAGS.contains(wanted) if match == "all" else _TAGS.has_any(array(wanted)))
+        conditions.append(_tagged(tags, match))
     if active is not None:
         conditions.append(col(ThingRecord.active).is_(active))
     if checkin_from is not None:
