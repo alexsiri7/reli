@@ -95,6 +95,20 @@ def test_record_preference_anchors_the_preference_and_links_every_piece_of_evide
     assert {source for source, _ in _edges(session, preference.id, RelationshipType.EVIDENCE_FOR)} == {one.id, two.id}
 
 
+def test_record_preference_preserves_the_scopes_case_and_strips_only_whitespace(session):
+    evidence = _thing(session, "declined a 9am meeting")
+    preference = record_preference(
+        session,
+        actor=Actor.CLAUDE_INTERACTIVE,
+        title="Prefers deep work 9-11am",
+        scope="  Scheduling  ",
+        evidence_ids=[evidence.id],
+    )
+
+    assert preference.notes["scope"] == "Scheduling"
+    assert [found.scope for found in user_model(session, scope="scheduling")] == ["Scheduling"]
+
+
 def test_record_preference_refuses_an_empty_evidence_list(session):
     before = _journal_count(session)
 
@@ -289,6 +303,45 @@ def test_user_model_is_empty_before_any_preference_is_recorded(session):
 
 def test_user_model_ignores_a_preference_thing_not_linked_to_the_anchor(session):
     _thing(session, "not anchored", tags=[PREFERENCE_TAG], notes={"scope": "scheduling"})
+
+    assert user_model(session) == []
+
+
+def test_user_model_ignores_an_anchored_preference_thing_with_no_evidence(session):
+    """``create_thing`` and ``relate`` are public, so the shape is expressible without the evidence."""
+    get_or_create_user_anchor(session, actor=Actor.CLAUDE_SCHEDULED)
+    unbacked = _thing(session, "invented out of nowhere", tags=[PREFERENCE_TAG], notes={"scope": "scheduling"})
+    relate(
+        session,
+        actor=Actor.CLAUDE_SCHEDULED,
+        source_thing_id=USER_ANCHOR_ID,
+        target_thing_id=unbacked.id,
+        relationship_type=RelationshipType.RELATED_TO,
+    )
+
+    assert user_model(session) == []
+    assert user_model(session, include_rejected=True) == []
+
+
+def test_user_model_ignores_an_anchored_preference_thing_with_no_scope(session):
+    """The same door: a preference nobody can scope is not loadable, so the read leaves it out."""
+    get_or_create_user_anchor(session, actor=Actor.CLAUDE_SCHEDULED)
+    scopeless = _thing(session, "applies to nothing in particular", tags=[PREFERENCE_TAG])
+    observation = _thing(session, "declined a 9am meeting")
+    relate(
+        session,
+        actor=Actor.CLAUDE_SCHEDULED,
+        source_thing_id=USER_ANCHOR_ID,
+        target_thing_id=scopeless.id,
+        relationship_type=RelationshipType.RELATED_TO,
+    )
+    relate(
+        session,
+        actor=Actor.CLAUDE_SCHEDULED,
+        source_thing_id=observation.id,
+        target_thing_id=scopeless.id,
+        relationship_type=RelationshipType.EVIDENCE_FOR,
+    )
 
     assert user_model(session) == []
 

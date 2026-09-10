@@ -45,7 +45,10 @@ class RelationshipType(str, Enum):
     - ``Blocks`` — the **source is the blocked** Thing and the target is what blocks it, so
       ``blocked()`` returns the sources of ``Blocks`` edges whose target is still active.
     - ``EvidenceFor`` — the source is the evidence, pointing at the Thing it supports.
-    - ``RelatedTo``, ``References`` — direction is not pinned; no query depends on it yet.
+    - ``RelatedTo`` — the type does not pin a direction, but a query may: ``user_model`` follows
+      ``RelatedTo`` from the ``#User`` anchor to the preference, so that edge's direction is
+      load-bearing wherever a preference is anchored.
+    - ``References`` — direction is not pinned; no query depends on it yet.
     """
 
     CHILD_OF = "ChildOf"

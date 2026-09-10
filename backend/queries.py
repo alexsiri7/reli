@@ -63,7 +63,7 @@ class Preference(NamedTuple):
 
     @property
     def scope(self) -> str | None:
-        """What the preference applies to; ``None`` only if something wrote one without a scope."""
+        """What the preference applies to; never ``None`` in a :func:`user_model` row, which requires it."""
         return self.thing.notes.get("scope")
 
     @property
@@ -367,8 +367,12 @@ def user_model(
 ) -> list[Preference]:
     """The user's preferences, each with the evidence behind it, most important first.
 
-    Preferences are the ``#Preference`` Things the ``#User`` anchor points at, so a graph with no
-    anchor has no edges and returns an empty list — which is why a read never creates the anchor.
+    A preference is a ``#Preference`` Thing the ``#User`` anchor points at that carries a scope and
+    at least one piece of evidence, so a graph with no anchor has no edges and returns an empty list
+    — which is why a read never creates the anchor. Scope and evidence are floors on the read, not
+    only on :func:`backend.service.record_preference`: the shape is a tag plus an edge type, both
+    writable through ``create_thing`` and ``relate``, and an evidence-less preference passing for a
+    recorded one is the confidence float this design exists to avoid.
 
     *scope* matches exactly, case aside: ``scheduling`` and ``scheduling-preferences`` are different
     scopes, because there is no text search anywhere in Reli. There is deliberately no limit —
@@ -384,6 +388,7 @@ def user_model(
         col(RelationshipRecord.source_thing_id) == USER_ANCHOR_ID,
         col(RelationshipRecord.relationship_type) == RelationshipType.RELATED_TO,
         _tagged([PREFERENCE_TAG], "all"),
+        func.btrim(_NOTES["scope"].astext) != "",
     ]
     if scope is not None:
         conditions.append(func.lower(_NOTES["scope"].astext) == scope.strip().lower())
@@ -400,4 +405,4 @@ def user_model(
     preferences = list(session.exec(statement).all())
 
     evidence = _evidence_by_preference(session, [preference.id for preference in preferences])
-    return [Preference(thing=thing, evidence=evidence.get(thing.id, [])) for thing in preferences]
+    return [Preference(thing=thing, evidence=evidence[thing.id]) for thing in preferences if thing.id in evidence]
