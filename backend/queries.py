@@ -16,10 +16,19 @@ from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, SQLModel, col, or_, select
 
-from .db_models import JournalRecord, RelationshipRecord, RelationshipType, ThingRecord
+from .db_models import (
+    PREFERENCE_TAG,
+    REJECTED_TAG,
+    USER_ANCHOR_ID,
+    JournalRecord,
+    RelationshipRecord,
+    RelationshipType,
+    ThingRecord,
+)
 
 _THINGS: Table = SQLModel.metadata.tables["things"]
 _TAGS = _THINGS.c["tags"]
+_NOTES = _THINGS.c["notes"]
 
 
 class RelatedThing(NamedTuple):
@@ -40,6 +49,32 @@ class History(NamedTuple):
     def truncated(self) -> bool:
         """Whether older entries were left out of this window."""
         return self.total > len(self.entries)
+
+
+class Preference(NamedTuple):
+    """A preference Thing with the evidence pointing at it.
+
+    Strength is ``evidence_count`` — the number of ``EvidenceFor`` edges, read off the edges
+    themselves. There is no stored number, so there is nothing that can drift from what it counts.
+    """
+
+    thing: ThingRecord
+    evidence: list[ThingRecord]
+
+    @property
+    def scope(self) -> str | None:
+        """What the preference applies to; never ``None`` in a :func:`user_model` row, which requires it."""
+        return self.thing.notes.get("scope")
+
+    @property
+    def rejected(self) -> bool:
+        """Whether the user has rejected it. Rejected preferences stay readable."""
+        return REJECTED_TAG in self.thing.tags
+
+    @property
+    def evidence_count(self) -> int:
+        """How many Things support this preference."""
+        return len(self.evidence)
 
 
 def _tagged(tags: Sequence[str], match: Literal["any", "all"]) -> ColumnElement[bool]:
@@ -278,3 +313,101 @@ def history(session: Session, entity_id: uuid.UUID, limit: int = 200) -> History
     ).all()
     total = session.exec(select(func.count()).select_from(JournalRecord).where(condition)).one()
     return History(entries=list(reversed(newest_first)), total=total)
+
+
+def _evidence_by_preference(
+    session: Session, preference_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, list[ThingRecord]]:
+    """The evidence Things for each preference, in the order the evidence was attached.
+
+    Two statements rather than one tuple-returning select: the edges carry the order, the Things
+    carry the content, and joining them in Python keeps both ``session.exec`` calls returning a
+    single model.
+    """
+    if not preference_ids:
+        return {}
+
+    edges = session.exec(
+        select(RelationshipRecord)
+        .where(
+            col(RelationshipRecord.target_thing_id).in_(preference_ids),
+            col(RelationshipRecord.relationship_type) == RelationshipType.EVIDENCE_FOR,
+        )
+        .order_by(col(RelationshipRecord.created_at).asc(), col(RelationshipRecord.id).asc())
+    ).all()
+    if not edges:
+        return {}
+
+    sources = {edge.source_thing_id for edge in edges}
+    things = {
+        thing.id: thing for thing in session.exec(select(ThingRecord).where(col(ThingRecord.id).in_(sources))).all()
+    }
+
+    found: dict[uuid.UUID, list[ThingRecord]] = {}
+    for edge in edges:
+        thing = things.get(edge.source_thing_id)
+        if thing is not None:
+            found.setdefault(edge.target_thing_id, []).append(thing)
+    return found
+
+
+def evidence_for(session: Session, thing_id: uuid.UUID) -> list[ThingRecord]:
+    """The Things supporting *thing_id*, in the order they were attached to it.
+
+    The sources of ``EvidenceFor`` edges pointing at it, which is how strength is counted.
+    """
+    return _evidence_by_preference(session, [thing_id]).get(thing_id, [])
+
+
+def user_model(
+    session: Session,
+    *,
+    scope: str | None = None,
+    include_rejected: bool = False,
+) -> list[Preference]:
+    """The user's preferences, each with the evidence behind it, most important first.
+
+    A preference is a ``#Preference`` Thing the ``#User`` anchor points at that carries a scope and
+    at least one piece of evidence, so a graph with no anchor has no edges and returns an empty list
+    — which is why a read never creates the anchor. Scope and evidence are floors on the read, not
+    only on :func:`backend.service.record_preference`: the shape is a tag plus an edge type, both
+    writable through ``create_thing`` and ``relate``, and an evidence-less preference passing for a
+    recorded one is the confidence float this design exists to avoid. Both floors are applied in
+    Python, so a blank scope is blank by the same ``str.strip()`` the write path rejects it with —
+    SQL's ``btrim`` would let a tab through.
+
+    *scope* matches exactly, case aside: ``scheduling`` and ``scheduling-preferences`` are different
+    scopes, because there is no text search anywhere in Reli. There is deliberately no limit —
+    scope is the mechanism for loading what a session needs rather than everything.
+
+    Rejected preferences are left out unless *include_rejected*, so the learning pass can ask for
+    them and check it is not re-deriving ground the user already refused.
+
+    ``notes->>'scope'`` is not indexed; the ``#Preference`` tag filter hits the existing GIN index
+    first, and one user's preferences are a handful of rows.
+    """
+    conditions = [
+        col(RelationshipRecord.source_thing_id) == USER_ANCHOR_ID,
+        col(RelationshipRecord.relationship_type) == RelationshipType.RELATED_TO,
+        _tagged([PREFERENCE_TAG], "all"),
+    ]
+    if scope is not None:
+        conditions.append(func.lower(_NOTES["scope"].astext) == scope.strip().lower())
+    if not include_rejected:
+        conditions.append(~_TAGS.contains([REJECTED_TAG]))
+
+    statement = (
+        select(ThingRecord)
+        .distinct()
+        .join(RelationshipRecord, col(RelationshipRecord.target_thing_id) == col(ThingRecord.id))
+        .where(*conditions)
+        .order_by(col(ThingRecord.priority).desc(), col(ThingRecord.title).asc())
+    )
+    preferences = list(session.exec(statement).all())
+
+    evidence = _evidence_by_preference(session, [preference.id for preference in preferences])
+    return [
+        Preference(thing=thing, evidence=evidence[thing.id])
+        for thing in preferences
+        if thing.id in evidence and (thing.notes.get("scope") or "").strip()
+    ]

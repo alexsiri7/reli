@@ -45,7 +45,10 @@ class RelationshipType(str, Enum):
     - ``Blocks`` — the **source is the blocked** Thing and the target is what blocks it, so
       ``blocked()`` returns the sources of ``Blocks`` edges whose target is still active.
     - ``EvidenceFor`` — the source is the evidence, pointing at the Thing it supports.
-    - ``RelatedTo``, ``References`` — direction is not pinned; no query depends on it yet.
+    - ``RelatedTo`` — the type does not pin a direction, but a query may: ``user_model`` follows
+      ``RelatedTo`` from the ``#User`` anchor to the preference, so that edge's direction is
+      load-bearing wherever a preference is anchored.
+    - ``References`` — direction is not pinned; no query depends on it yet.
     """
 
     CHILD_OF = "ChildOf"
@@ -75,6 +78,24 @@ class RelationshipTypeText(TypeDecorator[RelationshipType]):
         if value is None:
             return None
         return RelationshipType(value)
+
+
+# The user model's literals live here for the same reason ``RelationshipType`` does: one home, read
+# by both the write path (``backend.service``) and the read path (``backend.queries``), so the two
+# layers cannot drift and ``queries`` never has to import from ``service``.
+
+#: The single ``#User`` anchor every preference hangs off. A fixed primary key is what makes it
+#: single — there is no second anchor to create, only a row that is there or is not.
+USER_ANCHOR_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+USER_TAG = "#User"
+PREFERENCE_TAG = "#Preference"
+REJECTED_TAG = "#Rejected"
+
+#: A relationship can only point at a Thing, so a journal entry becomes evidence by being wrapped in
+#: a Thing tagged ``#Observation`` carrying ``notes["journal_entry_id"]``. The learning pass (#1413)
+#: is what writes them; the convention is fixed here so it cannot be re-decided there.
+OBSERVATION_TAG = "#Observation"
 
 
 class Actor(str, Enum):

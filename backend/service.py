@@ -9,12 +9,18 @@ outside this module may construct or mutate ``ThingRecord`` / ``RelationshipReco
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, or_, select
 
 from .db_models import (
+    PREFERENCE_TAG,
+    REJECTED_TAG,
+    USER_ANCHOR_ID,
+    USER_TAG,
     Actor,
     EntityType,
     JournalRecord,
@@ -29,8 +35,12 @@ __all__ = [
     "EntityType",
     "Operation",
     "ThingNotFound",
+    "add_preference_evidence",
     "create_thing",
     "delete_thing",
+    "get_or_create_user_anchor",
+    "record_preference",
+    "reject_preference",
     "relate",
     "unrelate",
     "update_thing",
@@ -77,7 +87,7 @@ def _require_thing(session: Session, thing_id: uuid.UUID) -> ThingRecord:
     return thing
 
 
-def create_thing(
+def _insert_thing(
     session: Session,
     *,
     actor: Actor,
@@ -89,10 +99,17 @@ def create_thing(
     checkin_date: date | None = None,
     priority: float = 0.0,
     active: bool = True,
+    thing_id: uuid.UUID | None = None,
 ) -> ThingRecord:
-    """Create a Thing and journal it as one ``create`` entry with no ``before``."""
+    """Add a Thing and its journal entry without committing, so several mutations can share one.
+
+    Every public function in this module still commits; this half exists for the ones that must
+    write more than one row or not write at all.
+    """
     now = datetime.now(UTC)
     thing = ThingRecord(
+        # An explicit ``id=None`` would defeat the field's default_factory, so pass one or neither.
+        **({"id": thing_id} if thing_id is not None else {}),
         title=title,
         description=description,
         notes=notes if notes is not None else {},
@@ -114,6 +131,35 @@ def create_thing(
         entity_id=thing.id,
         before=None,
         after=_snapshot(thing),
+    )
+    return thing
+
+
+def create_thing(
+    session: Session,
+    *,
+    actor: Actor,
+    title: str,
+    description: str | None = None,
+    notes: dict[str, str] | None = None,
+    tags: list[str] | None = None,
+    urls: dict[str, str] | None = None,
+    checkin_date: date | None = None,
+    priority: float = 0.0,
+    active: bool = True,
+) -> ThingRecord:
+    """Create a Thing and journal it as one ``create`` entry with no ``before``."""
+    thing = _insert_thing(
+        session,
+        actor=actor,
+        title=title,
+        description=description,
+        notes=notes,
+        tags=tags,
+        urls=urls,
+        checkin_date=checkin_date,
+        priority=priority,
+        active=active,
     )
     session.commit()
     session.refresh(thing)
@@ -224,7 +270,7 @@ def delete_thing(session: Session, *, actor: Actor, thing_id: uuid.UUID) -> None
     session.commit()
 
 
-def relate(
+def _insert_relationship(
     session: Session,
     *,
     actor: Actor,
@@ -233,14 +279,7 @@ def relate(
     relationship_type: RelationshipType,
     context: str | None = None,
 ) -> RelationshipRecord:
-    """Create a relationship and journal it as one ``relate`` entry.
-
-    See :class:`~backend.db_models.RelationshipType` for what source and target mean per type.
-
-    Raises ``ValueError`` for a type outside the five, before any statement is issued, so callers
-    that resolve the type from outside the process get the offending value back rather than a
-    constraint violation.
-    """
+    """Add a relationship and its journal entry without committing. See :func:`_insert_thing`."""
     relationship = RelationshipRecord(
         source_thing_id=source_thing_id,
         target_thing_id=target_thing_id,
@@ -258,6 +297,34 @@ def relate(
         entity_id=relationship.id,
         before=None,
         after=_snapshot(relationship),
+    )
+    return relationship
+
+
+def relate(
+    session: Session,
+    *,
+    actor: Actor,
+    source_thing_id: uuid.UUID,
+    target_thing_id: uuid.UUID,
+    relationship_type: RelationshipType,
+    context: str | None = None,
+) -> RelationshipRecord:
+    """Create a relationship and journal it as one ``relate`` entry.
+
+    See :class:`~backend.db_models.RelationshipType` for what source and target mean per type.
+
+    Raises ``ValueError`` for a type outside the five, before any statement is issued, so callers
+    that resolve the type from outside the process get the offending value back rather than a
+    constraint violation.
+    """
+    relationship = _insert_relationship(
+        session,
+        actor=actor,
+        source_thing_id=source_thing_id,
+        target_thing_id=target_thing_id,
+        relationship_type=relationship_type,
+        context=context,
     )
     session.commit()
     session.refresh(relationship)
@@ -283,3 +350,169 @@ def unrelate(session: Session, *, actor: Actor, relationship_id: uuid.UUID) -> N
         after=None,
     )
     session.commit()
+
+
+# --- The user model --------------------------------------------------------
+
+
+def get_or_create_user_anchor(session: Session, *, actor: Actor) -> ThingRecord:
+    """The single ``#User`` Thing every preference hangs off, created on first use.
+
+    Created lazily rather than at boot: a startup write has no honest actor to attribute, and it
+    would put a journal entry nobody made into the learning pass's only input. Reads never create
+    it — :func:`backend.queries.user_model` on a graph without an anchor simply has no edges to
+    follow.
+    """
+    anchor = session.get(ThingRecord, USER_ANCHOR_ID)
+    if anchor is not None:
+        return anchor
+
+    try:
+        anchor = _insert_thing(
+            session,
+            actor=actor,
+            thing_id=USER_ANCHOR_ID,
+            title="User",
+            description="The anchor every preference hangs off.",
+            tags=[USER_TAG],
+        )
+        session.commit()
+    except IntegrityError:
+        # Two concurrent first writes both miss the get above; the primary key makes the loser fail
+        # rather than create a second anchor, so the loser reads the winner's row.
+        session.rollback()
+        anchor = session.get(ThingRecord, USER_ANCHOR_ID)
+        if anchor is None:
+            raise
+        return anchor
+
+    session.refresh(anchor)
+    return anchor
+
+
+def record_preference(
+    session: Session,
+    *,
+    actor: Actor,
+    title: str,
+    scope: str,
+    evidence_ids: Sequence[uuid.UUID],
+) -> ThingRecord:
+    """Record a preference as its own Thing, anchored to ``#User`` and linked to its evidence.
+
+    Evidence is required: a preference nobody can trace back to specific moments is the confidence
+    float this design exists to avoid. Every evidence id is a **Thing** id — a relationship can only
+    point at a Thing, so a journal entry becomes evidence by being wrapped in a Thing tagged
+    ``#Observation`` carrying ``notes["journal_entry_id"]``.
+
+    The anchor edge runs anchor → preference as a ``RelatedTo``; each evidence edge runs evidence →
+    preference as an ``EvidenceFor``. ``RelationshipType`` leaves ``RelatedTo``'s direction unpinned,
+    so it is pinned here because :func:`backend.queries.user_model` follows it.
+
+    The preference Thing and all of its edges are written in one transaction, so a failure part-way
+    cannot leave behind the evidence-less preference this function refuses to create.
+    """
+    scope = scope.strip()
+    if not scope:
+        raise ValueError("a preference must declare the scope it applies to")
+
+    wanted = list(dict.fromkeys(evidence_ids))
+    if not wanted:
+        raise ValueError("a preference with no evidence is not recordable")
+    for evidence_id in wanted:
+        _require_thing(session, evidence_id)
+
+    anchor = get_or_create_user_anchor(session, actor=actor)
+
+    preference = _insert_thing(
+        session,
+        actor=actor,
+        title=title,
+        notes={"scope": scope},
+        tags=[PREFERENCE_TAG],
+    )
+    _insert_relationship(
+        session,
+        actor=actor,
+        source_thing_id=anchor.id,
+        target_thing_id=preference.id,
+        relationship_type=RelationshipType.RELATED_TO,
+    )
+    for evidence_id in wanted:
+        _insert_relationship(
+            session,
+            actor=actor,
+            source_thing_id=evidence_id,
+            target_thing_id=preference.id,
+            relationship_type=RelationshipType.EVIDENCE_FOR,
+        )
+
+    session.commit()
+    session.refresh(preference)
+    return preference
+
+
+def _require_preference(session: Session, preference_id: uuid.UUID) -> ThingRecord:
+    """A Thing that is not a preference exists, so ``ThingNotFound`` would be a lie."""
+    preference = _require_thing(session, preference_id)
+    if PREFERENCE_TAG not in preference.tags:
+        raise ValueError(f"Thing {preference_id} is not tagged {PREFERENCE_TAG}")
+    return preference
+
+
+def add_preference_evidence(
+    session: Session,
+    *,
+    actor: Actor,
+    preference_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+) -> ThingRecord:
+    """Link one more piece of evidence to an existing preference, for when it is reinforced.
+
+    Returns the preference rather than the edge: the reinforced preference and its new strength are
+    what the caller asked about.
+
+    Idempotent, and not as a nicety: strength *is* the count of these edges, so adding the same
+    evidence twice would silently overstate the preference. Evidence already linked leaves the
+    preference untouched and journals nothing.
+    """
+    preference = _require_preference(session, preference_id)
+    _require_thing(session, evidence_id)
+    if evidence_id == preference.id:
+        raise ValueError("a preference cannot be its own evidence")
+
+    already_linked = session.exec(
+        select(RelationshipRecord).where(
+            RelationshipRecord.source_thing_id == evidence_id,
+            RelationshipRecord.target_thing_id == preference.id,
+            RelationshipRecord.relationship_type == RelationshipType.EVIDENCE_FOR,
+        )
+    ).first()
+    if already_linked is None:
+        relate(
+            session,
+            actor=actor,
+            source_thing_id=evidence_id,
+            target_thing_id=preference.id,
+            relationship_type=RelationshipType.EVIDENCE_FOR,
+        )
+    return preference
+
+
+def reject_preference(session: Session, *, actor: Actor, preference_id: uuid.UUID) -> ThingRecord:
+    """Tag a preference ``#Rejected`` and journal who rejected it.
+
+    The preference is not archived and not deleted: a rejected preference stays readable, both so
+    the user can see it and so the learning pass can check it before deriving the same ground again.
+    Rejecting an already-rejected preference changes nothing and journals nothing.
+    """
+    preference = _require_preference(session, preference_id)
+    if REJECTED_TAG in preference.tags:
+        return preference
+
+    return update_thing(
+        session,
+        actor=actor,
+        thing_id=preference.id,
+        tags=[*preference.tags, REJECTED_TAG],
+    )

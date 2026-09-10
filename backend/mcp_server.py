@@ -29,13 +29,26 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from . import google_readers, queries, service
 from .config import settings
 from .db_engine import get_engine
-from .db_models import Actor, JournalRecord, RelationshipRecord, RelationshipType, ThingRecord
+from .db_models import (
+    OBSERVATION_TAG,
+    PREFERENCE_TAG,
+    REJECTED_TAG,
+    USER_TAG,
+    Actor,
+    JournalRecord,
+    RelationshipRecord,
+    RelationshipType,
+    ThingRecord,
+)
 
 logger = logging.getLogger(__name__)
 
-# ``Actor.USER`` is absent on purpose: per docs/vision.md the frontend never writes, and the one
-# exception — rejecting a preference — arrives over HTTP in #1414, not over MCP. #1410 widens this
-# alias if the preference tools need it; there is one place to widen.
+# ``Actor.USER`` is absent on purpose: per docs/vision.md the frontend never writes. #1410 did not
+# widen this — over MCP, ``reject_preference`` records the Claude session that relayed the
+# rejection, which is what actually happened, and widening would let any MCP caller stamp a
+# mutation as a user decision. That distinction is the learning pass's only signal for "the user
+# decided" against "Claude did". A rejection attributed to ``Actor.USER`` arrives in #1414 by
+# calling ``service.reject_preference`` directly, which takes any actor.
 McpActor = Literal[Actor.CLAUDE_INTERACTIVE, Actor.CLAUDE_SCHEDULED]
 
 
@@ -71,6 +84,16 @@ def _related_dict(found: queries.RelatedThing) -> dict[str, Any]:
     }
 
 
+def _preference_dict(preference: queries.Preference) -> dict[str, Any]:
+    return {
+        "thing": _thing_dict(preference.thing),
+        "scope": preference.scope,
+        "rejected": preference.rejected,
+        "evidence": [_thing_dict(thing) for thing in preference.evidence],
+        "evidence_count": preference.evidence_count,
+    }
+
+
 def _history_dict(found: queries.History) -> dict[str, Any]:
     return {
         "entries": [_journal_dict(entry) for entry in found.entries],
@@ -94,6 +117,15 @@ reli_mcp = FastMCP(
         "user decided from what Claude did, so it must be honest. "
         "Nothing is ever hard-deleted here — archive_thing retires a Thing and get_thing_history "
         "shows how it got that way. "
+        f"Reli also holds a model of its user: a single Thing tagged {USER_TAG} anchors "
+        f"preferences, each its own Thing tagged {PREFERENCE_TAG} with a scope and the "
+        "EvidenceFor edges that support it. Strength is the count of that evidence — there is no "
+        "confidence score anywhere, and none may be added. Record a preference the moment you "
+        "notice one, with record_preference, rather than in an end-of-session summary; reinforce "
+        "an existing one with add_preference_evidence. A journal entry is evidence once a "
+        f"{OBSERVATION_TAG} Thing holding its journal_entry_id stands for it, because an edge can "
+        f"only point at a Thing. reject_preference tags a preference {REJECTED_TAG}; read the "
+        "model with get_user_model, or load reli://user-model as context without a call. "
         "find_correspondence, find_events and check_occurred are read-only lookups into the user's "
         "Gmail and Calendar, there to settle a check-in without asking the user. They return "
         "evidence; what it means is yours to decide."
@@ -458,6 +490,142 @@ def get_thing_history(thing_id: uuid.UUID, limit: int = 200) -> dict[str, Any]:
     """
     with _session() as session:
         return _history_dict(queries.history(session, thing_id, limit))
+
+
+# --- The user model --------------------------------------------------------
+
+
+def _user_model_payload(scope: str | None = None, include_rejected: bool = False) -> dict[str, Any]:
+    """One shape for the tool and both resources, so they cannot answer differently."""
+    with _session() as session:
+        preferences = queries.user_model(session, scope=scope, include_rejected=include_rejected)
+        return {"scope": scope, "preferences": [_preference_dict(preference) for preference in preferences]}
+
+
+@reli_mcp.tool()
+def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: list[uuid.UUID]) -> dict[str, Any]:
+    """Record something you have learned about the user as its own Thing, with its evidence.
+
+    Write one the moment you notice it — a closed tab is a lost signal. Evidence is **required**: a
+    preference nobody can trace back to specific moments is not recordable. Every evidence id is a
+    Thing id; if what you are citing is a journal entry, create a Thing tagged #Observation with
+    notes.journal_entry_id first and cite that.
+
+    Strength is the number of pieces of evidence, so there is nothing to score and nothing to decay.
+
+    Before recording, call get_user_model(include_rejected=true) and check you are not re-deriving
+    something the user already rejected.
+
+    Args:
+        actor: 'claude_interactive' or 'claude_scheduled'. Required.
+        title: The preference stated plainly — "Prefers deep work 9-11am".
+        scope: What it applies to — a short, consistent label like 'scheduling' or 'naming'.
+            get_user_model matches it exactly (case aside), so reuse the labels already in the model.
+        evidence_ids: The Things that support it. At least one.
+
+    Returns:
+        The preference with its scope, its evidence and the count of it.
+    """
+    with _session() as session:
+        thing = service.record_preference(
+            session,
+            actor=_actor(actor),
+            title=title,
+            scope=scope,
+            evidence_ids=evidence_ids,
+        )
+        return _preference_dict(queries.Preference(thing=thing, evidence=queries.evidence_for(session, thing.id)))
+
+
+@reli_mcp.tool()
+def add_preference_evidence(actor: McpActor, preference_id: uuid.UUID, evidence_id: uuid.UUID) -> dict[str, Any]:
+    """Link one more piece of evidence to a preference the user has just reinforced.
+
+    Adding the same evidence twice changes nothing: strength is the count of these links, so a
+    repeat would overstate the preference rather than confirm it.
+
+    Args:
+        actor: 'claude_interactive' or 'claude_scheduled'. Required.
+        preference_id: The preference being reinforced.
+        evidence_id: The Thing that reinforces it. Not the preference itself.
+
+    Returns:
+        The preference with its evidence and its new count.
+    """
+    with _session() as session:
+        thing = service.add_preference_evidence(
+            session,
+            actor=_actor(actor),
+            preference_id=preference_id,
+            evidence_id=evidence_id,
+        )
+        return _preference_dict(queries.Preference(thing=thing, evidence=queries.evidence_for(session, thing.id)))
+
+
+@reli_mcp.tool()
+def reject_preference(actor: McpActor, preference_id: uuid.UUID) -> dict[str, Any]:
+    """Tag a preference #Rejected when the user says it is wrong, and journal the rejection.
+
+    The preference stays in the graph and stays readable, so the user can see what was rejected and
+    so it is not derived again. Rejecting one twice changes nothing.
+
+    Args:
+        actor: 'claude_interactive' or 'claude_scheduled'. Required — this records who performed
+            the rejection, which is you, relaying it.
+        preference_id: The preference the user rejected.
+
+    Returns:
+        The rejected preference, with its evidence still attached.
+    """
+    with _session() as session:
+        thing = service.reject_preference(session, actor=_actor(actor), preference_id=preference_id)
+        return _preference_dict(queries.Preference(thing=thing, evidence=queries.evidence_for(session, thing.id)))
+
+
+@reli_mcp.tool()
+def get_user_model(scope: str | None = None, include_rejected: bool = False) -> dict[str, Any]:
+    """What Reli knows about the user: their preferences and the evidence behind each one.
+
+    Pass a scope to load what this session needs rather than everything — 'scheduling' for daily
+    planning, not naming conventions. Matching is exact apart from case, so use the scope labels
+    already in the model.
+
+    Args:
+        scope: Only preferences declaring this scope; omitted returns all of them.
+        include_rejected: Include preferences the user has rejected. Pass true before deriving a
+            new preference, so you can see what has already been refused.
+
+    Returns:
+        {"scope": ..., "preferences": [...]} — each preference with its scope, whether it is
+        rejected, its evidence and the count of it. There is no confidence score.
+    """
+    return _user_model_payload(scope=scope, include_rejected=include_rejected)
+
+
+@reli_mcp.resource(
+    "reli://user-model",
+    name="user-model",
+    description="Every preference Reli holds about the user, with the evidence behind each one.",
+    mime_type="application/json",
+)
+def user_model_resource() -> dict[str, Any]:
+    """The whole user model, loadable as context without a tool call.
+
+    Rejected preferences are left out: a resource is ambient context, and what the user refused is
+    not what they prefer. get_user_model(include_rejected=true) is where they are visible.
+    """
+    return _user_model_payload()
+
+
+@reli_mcp.resource(
+    "reli://user-model/{scope}",
+    name="user-model-scoped",
+    description="The user's preferences for one scope, with the evidence behind each one.",
+    mime_type="application/json",
+)
+def scoped_user_model_resource(scope: str) -> dict[str, Any]:
+    """One scope of the user model, for a session that only needs part of it."""
+    return _user_model_payload(scope=scope)
 
 
 # --- Google reads (Calendar and Gmail) -------------------------------------
