@@ -4,7 +4,7 @@ Reli is the memory and the obligations layer that lets Claude act as a complete 
 
 The goal is a PA that says "bring a change of clothes today, you have that event tonight" or "it's Saturday morning — your energy contract expires next month, want me to find a better deal?" — one that understands your life context, your schedule, your routines, and the right moment to act.
 
-Reli is being rebuilt. The data layer below is what exists today; the MCP surface, the user model and the read-only view are still ahead.
+Reli is being rebuilt. The data layer and the MCP tools over it are what exists today; the user model and the read-only view are still ahead.
 
 ## How it works
 
@@ -29,7 +29,7 @@ For how Reli compares to related projects, see [comparisons](docs/comparisons.md
 **Integrations:** Google Calendar, Gmail — not yet rewritten; `reference/oauth/` holds the pre-rebuild code
 **Infrastructure:** Docker, Cloudflare Tunnel, GitHub Actions CI, Railway (staging + production deploy)
 
-Today the service is the data layer and a health check. The MCP tools that reach it are the next issue.
+Today the service is the data layer, the MCP tools over it at `/mcp`, and a health check. The user model and the scheduled passes are the next issues.
 
 ## Setup
 
@@ -50,6 +50,9 @@ uv sync --frozen
 
 `DATABASE_URL` is required and has no default — the service refuses to start without it rather than
 silently using an empty database.
+
+`MCP_API_TOKEN` is the bearer token for `/mcp`. Leaving it empty does not open the endpoint: every
+request gets a 401 until it is set.
 
 ```bash
 cp .env.example .env
@@ -78,8 +81,9 @@ Startup applies `alembic upgrade head`; a migration failure fails the boot.
 docker compose up -d
 ```
 
-The health check is at `http://localhost:8000/healthz`. Data lives in Postgres, not on the
-container filesystem.
+The health check is at `http://localhost:8000/healthz` and the MCP endpoint at
+`http://localhost:8000/mcp`, which requires `Authorization: Bearer $MCP_API_TOKEN`. Data lives in
+Postgres, not on the container filesystem.
 
 ## Testing
 
@@ -98,10 +102,11 @@ database instead.
 
 ```
 backend/
-  main.py              # FastAPI app — /healthz only; reads and writes arrive over MCP
+  main.py              # FastAPI app — /healthz, and the MCP app mounted at /mcp
+  mcp_server.py        # the MCP tools; every write takes an actor, no hard delete
   db_models.py         # things, relationships, journal, and the enums
   service.py           # the only write path; every mutation is journalled
-  queries.py           # the indexed queries: due_for_checkin, stale, by_tag, blocked, related, children
+  queries.py           # the indexed queries: due_for_checkin, stale, by_tag, blocked, related, children, find_things
   config.py            # settings from the environment
   db_engine.py         # the Postgres engine and session factory
   alembic/versions/    # the v4 baseline migration

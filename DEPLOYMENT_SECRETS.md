@@ -56,3 +56,14 @@ The staging-pipeline.yml workflow uses these secrets in:
 - E2E smoke tests (line 109)
 
 See `.github/workflows/staging-pipeline.yml` for full workflow details.
+
+## Deploy-environment variables (not GitHub Actions secrets)
+
+These are read by the running container, not by the workflow, so they belong in the deploy
+environment (Railway variables, or the host's `.env` for docker compose) rather than in
+`Settings → Secrets and variables → Actions`.
+
+| Variable | Purpose | Notes |
+|---|---|---|
+| `DATABASE_URL` | Postgres connection string | Required. The service refuses to start without it. |
+| `MCP_API_TOKEN` | Bearer token for the MCP endpoint at `/mcp` | Human-provisioned. An empty value is not a dev-mode bypass: `/mcp` answers 401 to every request, `/healthz` stays green, and a warning is logged at startup. The same value goes in the claude.ai connector. |

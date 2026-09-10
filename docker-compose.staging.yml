@@ -12,6 +12,7 @@ services:
       - "127.0.0.1:8001:8000"
     environment:
       - DATABASE_URL=${STAGING_DATABASE_URL:?STAGING_DATABASE_URL must be set for staging}
+      - MCP_API_TOKEN=${MCP_API_TOKEN:-}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=staging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
