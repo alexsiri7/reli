@@ -372,7 +372,9 @@ def user_model(
     — which is why a read never creates the anchor. Scope and evidence are floors on the read, not
     only on :func:`backend.service.record_preference`: the shape is a tag plus an edge type, both
     writable through ``create_thing`` and ``relate``, and an evidence-less preference passing for a
-    recorded one is the confidence float this design exists to avoid.
+    recorded one is the confidence float this design exists to avoid. Both floors are applied in
+    Python, so a blank scope is blank by the same ``str.strip()`` the write path rejects it with —
+    SQL's ``btrim`` would let a tab through.
 
     *scope* matches exactly, case aside: ``scheduling`` and ``scheduling-preferences`` are different
     scopes, because there is no text search anywhere in Reli. There is deliberately no limit —
@@ -388,7 +390,6 @@ def user_model(
         col(RelationshipRecord.source_thing_id) == USER_ANCHOR_ID,
         col(RelationshipRecord.relationship_type) == RelationshipType.RELATED_TO,
         _tagged([PREFERENCE_TAG], "all"),
-        func.btrim(_NOTES["scope"].astext) != "",
     ]
     if scope is not None:
         conditions.append(func.lower(_NOTES["scope"].astext) == scope.strip().lower())
@@ -405,4 +406,8 @@ def user_model(
     preferences = list(session.exec(statement).all())
 
     evidence = _evidence_by_preference(session, [preference.id for preference in preferences])
-    return [Preference(thing=thing, evidence=evidence[thing.id]) for thing in preferences if thing.id in evidence]
+    return [
+        Preference(thing=thing, evidence=evidence[thing.id])
+        for thing in preferences
+        if thing.id in evidence and thing.notes.get("scope", "").strip()
+    ]

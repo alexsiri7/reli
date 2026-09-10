@@ -49,6 +49,15 @@ def _edges(session, thing_id, relationship_type):
     ).all()
 
 
+#: Every scope ``str.strip()`` treats as blank. SQL's single-argument ``btrim`` trims only the ASCII
+#: space, so the read path has to judge blankness the way the write path does.
+blank_scopes = pytest.mark.parametrize(
+    "scope",
+    [" ", "\t", "\n", "\r", "\v", "\f", "\u00a0", " \t\n"],
+    ids=["space", "tab", "newline", "return", "vtab", "formfeed", "nbsp", "mixed"],
+)
+
+
 def _preference(session, title="Prefers deep work 9-11am", scope="scheduling", evidence=1):
     evidence_ids = [_thing(session, f"{title} evidence {n}").id for n in range(evidence)]
     return record_preference(
@@ -140,7 +149,8 @@ def test_record_preference_refuses_unknown_evidence(session):
     assert user_model(session) == []
 
 
-def test_record_preference_refuses_a_blank_scope(session):
+@blank_scopes
+def test_record_preference_refuses_a_blank_scope(session, scope):
     evidence = _thing(session, "declined a 9am meeting")
 
     with pytest.raises(ValueError):
@@ -148,7 +158,7 @@ def test_record_preference_refuses_a_blank_scope(session):
             session,
             actor=Actor.CLAUDE_INTERACTIVE,
             title="Prefers deep work",
-            scope="   ",
+            scope=scope,
             evidence_ids=[evidence.id],
         )
 
@@ -344,6 +354,31 @@ def test_user_model_ignores_an_anchored_preference_thing_with_no_scope(session):
     )
 
     assert user_model(session) == []
+
+
+@blank_scopes
+def test_user_model_ignores_an_anchored_preference_thing_whose_scope_is_only_whitespace(session, scope):
+    """The read rejects every blank the write path rejects, not only the ones ``btrim`` would catch."""
+    get_or_create_user_anchor(session, actor=Actor.CLAUDE_SCHEDULED)
+    scopeless = _thing(session, "scoped to whitespace", tags=[PREFERENCE_TAG], notes={"scope": scope})
+    observation = _thing(session, "declined a 9am meeting")
+    relate(
+        session,
+        actor=Actor.CLAUDE_SCHEDULED,
+        source_thing_id=USER_ANCHOR_ID,
+        target_thing_id=scopeless.id,
+        relationship_type=RelationshipType.RELATED_TO,
+    )
+    relate(
+        session,
+        actor=Actor.CLAUDE_SCHEDULED,
+        source_thing_id=observation.id,
+        target_thing_id=scopeless.id,
+        relationship_type=RelationshipType.EVIDENCE_FOR,
+    )
+
+    assert user_model(session) == []
+    assert user_model(session, include_rejected=True) == []
 
 
 def test_user_model_returns_a_preference_once_however_many_anchor_edges_it_has(session):
