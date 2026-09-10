@@ -16,7 +16,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 run_setup() {
     echo "=== Setup ==="
-    uv sync --frozen
+    uv sync --locked
 }
 
 # Tools live in the uv-managed venv created by `setup`. CI never activates it, so invoke them
