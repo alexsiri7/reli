@@ -10,6 +10,16 @@ If you discover a bug, improvement, or issue outside your bead's scope:
 
 **Why:** Out-of-scope changes break unrelated tests, cause MR rejections, and waste cycles.
 
+## Architectural rules
+
+Non-negotiables from `docs/vision.md`. They hold even when a bead description or an existing code path suggests otherwise.
+
+- No LLM call originates inside the Reli service. If a task seems to need one, that is a design error — send mail to mayor rather than adding an LLM dependency.
+- `parent_id` does not exist. Hierarchy is a `ChildOf` relationship.
+- Every mutation writes a journal entry. A code path that changes a Thing without journalling is a bug.
+- No derived state without evidence links. No confidence floats.
+- The frontend never writes, with one exception: rejecting a preference.
+
 ## Deployment
 
 The app runs in Docker. After merging code changes, the container must be rebuilt:
@@ -24,27 +34,21 @@ docker compose build && docker compose up -d
 
 Frontend has a peer dependency conflict — always use `--legacy-peer-deps` with npm.
 
+These commands still deploy the application currently in the tree. The rebuild replaces the frontend with a read-only view and the database with Postgres, so the frontend build step and the volume layout will change — update this section when that lands, not before. Do not guess at commands for a frontend that does not exist yet.
+
 ## Database Safety Policy
 
-Reli stores user data in two places — both contain production data that must be protected.
+The legacy SQLite (`data/reli.db`) and ChromaDB (`backend/chroma_db/`) data are superseded. The owner holds an offline export of the legacy graph outside this repository — the repo is public, so the export is not here and must not be committed or recreated here.
 
-### SQLite (`data/reli.db`)
+The rebuild starts the Postgres schema from a clean baseline migration. That baseline is allowed to define the schema outright; it is not held to the additive-only rule, and it does not need to preserve or migrate the legacy tables.
 
-1. **NEVER delete or recreate the database file.** The Docker volume mounts `./data:/app/data` — the DB persists across container rebuilds.
-2. **Schema changes must use additive SQL migrations** (`ALTER TABLE`, `CREATE TABLE IF NOT EXISTS`). See `backend/database.py` for the existing migration pattern. Never use destructive DDL (`DROP TABLE`, `DROP COLUMN`) without a data migration plan. When a destructive operation is intentional and data is preserved, add `# reli:allow-destructive-ddl` as a top-level comment in the migration file to opt in per-migration (preferred over the global `ALLOW_DESTRUCTIVE_DDL=true` env override).
-3. **Test migrations on a copy first** — copy `reli.db` and run your migration against the copy before committing.
-4. **Never hard-code a different DB path** — the path is set by `DATA_DIR` env var (defaults to `backend/`). Production uses `/app/data` inside the container.
+From that baseline forward, the additive-only rule applies:
 
-### ChromaDB (`backend/chroma_db/`)
+1. **Schema changes are additive migrations** (`ALTER TABLE`, `CREATE TABLE IF NOT EXISTS`). Destructive DDL (`DROP TABLE`, `DROP COLUMN`) needs a data migration plan. When a destructive operation is intentional and the data is preserved, add `# reli:allow-destructive-ddl` as a top-level comment in the migration file to opt in per-migration (preferred over the global `ALLOW_DESTRUCTIVE_DDL=true` env override).
+2. **Test migrations against a copy first**, never against the live database.
+3. **Never hard-code a connection string or DB path** — it comes from the environment.
 
-1. **NEVER delete the `chroma_db/` directory.** It contains vector embeddings for user data.
-2. Collection deletions require explicit justification and should preserve the data elsewhere first.
-
-### What's safe
-
-- The Dockerfile does NOT touch the database on startup (it only runs uvicorn).
-- `docker compose build` is safe — it rebuilds the image without affecting the mounted `data/` volume.
-- `init_db()` in `database.py` uses `IF NOT EXISTS` — safe to call repeatedly.
+Post-baseline data is production data again: once the new schema holds real Things, deleting or recreating the database is off the table.
 
 ## GitHub Issue Linking
 
@@ -61,17 +65,9 @@ issues list to see if your work maps to an existing feature issue.
 
 ## Screenshot Tests (Visual Regression)
 
-Screenshot tests ensure agents can assess UI quality. They live in `frontend/e2e/visual.spec.ts`.
+**Suspended.** The frontend is being rebuilt as the read-only view described in `docs/vision.md`, so the screens `frontend/e2e/visual.spec.ts` covers are going away. Do not update snapshots to make the suite pass, and do not treat its failures as a signal about your change.
 
-**Coverage strategy**: one screenshot per screen × {desktop 1280×720, mobile 390×844, dark-desktop 1280×720}. No loading states, no error states — just the normal populated view with mock data.
-
-**When your changes affect the UI:**
-1. Run `npm --prefix frontend run test:screenshots`
-2. If tests fail (expected after UI changes), run `npm --prefix frontend run test:screenshots:update`
-3. **Visually inspect every updated PNG** in `frontend/e2e/visual.spec.ts-snapshots/` — you are multimodal, read the image files and confirm the UI looks correct
-4. Commit the updated screenshots alongside your code changes
-
-**If you skip step 3, you are shipping blind.** The screenshots are the visual contract — updating them without inspection defeats the purpose.
+Rewrite this section — and the coverage strategy behind it — once the read-only view exists.
 
 ## Railway Token Rotation
 
