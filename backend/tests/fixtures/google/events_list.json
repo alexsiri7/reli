@@ -1,0 +1,39 @@
+{
+  "kind": "calendar#events",
+  "summary": "owner@example.test",
+  "timeZone": "Europe/Madrid",
+  "updated": "2026-09-06T11:04:22.113Z",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "6a7b8c9d0e1f2g3h",
+      "status": "confirmed",
+      "htmlLink": "https://www.google.com/calendar/event?eid=NmE3YjhjOWQwZTFm",
+      "created": "2026-08-30T09:12:00.000Z",
+      "updated": "2026-09-01T07:41:13.482Z",
+      "summary": "Quarterly review",
+      "description": "Agenda: review the quarterly numbers, agree the launch date, and decide who owns the migration. Agenda: review the quarterly numbers, agree the launch date, and decide who owns the migration. Agenda: review the quarterly numbers, agree the launch date, and decide who owns the migration. Agenda: review the quarterly numbers, agree the launch date, and decide who owns the migration. Agenda: review the quarterly numbers, agree the launch date, and decide who owns the migration. Agenda: review the quarterly numbers, agree the launch date, and decide who owns the migration. Agenda: review the quarterly numbers, agree the launch date, and decide who owns the migration. Agenda: review the quarterly numbers, agree the launch date, and decide who owns the migration. ",
+      "location": "Sala 2, Calle Example 1, Madrid",
+      "start": {
+        "dateTime": "2026-09-08T09:30:00+02:00",
+        "timeZone": "Europe/Madrid"
+      },
+      "end": {
+        "dateTime": "2026-09-08T10:30:00+02:00",
+        "timeZone": "Europe/Madrid"
+      },
+      "attendees": [
+        {
+          "email": "cfo@example.test",
+          "responseStatus": "accepted"
+        },
+        {
+          "email": "owner@example.test",
+          "self": true,
+          "responseStatus": "tentative"
+        }
+      ],
+      "eventType": "default"
+    }
+  ]
+}

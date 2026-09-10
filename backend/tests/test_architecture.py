@@ -45,3 +45,17 @@ def test_records_are_constructed_only_by_the_service_layer(record):
         if path.name not in WRITERS and pattern.search(path.read_text())
     ]
     assert offenders == [], f"{record} is constructed outside the service layer by {offenders}"
+
+
+GOOGLE_MODULES = ("google_client.py", "google_readers.py")
+
+# #938 was a Gmail token left on disk after a migration. What keeps it from recurring is that the
+# code holding a Google credential has no way to write one down.
+CREDENTIAL_SINKS = ("open(", ".write_text(", ".write_bytes(", "json.dump(", "sqlmodel", "db_engine", "db_models")
+
+
+@pytest.mark.parametrize("module", GOOGLE_MODULES)
+def test_the_google_modules_never_persist_a_credential(module):
+    source = (BACKEND / module).read_text()
+
+    assert [sink for sink in CREDENTIAL_SINKS if sink in source] == []
