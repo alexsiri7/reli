@@ -28,7 +28,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from . import queries, service
 from .config import settings
 from .db_engine import get_engine
-from .db_models import Actor, RelationshipType, ThingRecord
+from .db_models import Actor, JournalRecord, RelationshipRecord, RelationshipType, ThingRecord
 
 logger = logging.getLogger(__name__)
 
@@ -49,17 +49,17 @@ def _session() -> Iterator[Session]:
         yield session
 
 
-def _thing_dict(thing: Any) -> dict[str, Any]:
+def _thing_dict(thing: ThingRecord) -> dict[str, Any]:
     """Render a record the way ``service._snapshot`` does, so tool output and the journal agree."""
-    return dict(thing.model_dump(mode="json"))
+    return thing.model_dump(mode="json")
 
 
-def _relationship_dict(relationship: Any) -> dict[str, Any]:
-    return dict(relationship.model_dump(mode="json"))
+def _relationship_dict(relationship: RelationshipRecord) -> dict[str, Any]:
+    return relationship.model_dump(mode="json")
 
 
-def _journal_dict(entry: Any) -> dict[str, Any]:
-    return dict(entry.model_dump(mode="json"))
+def _journal_dict(entry: JournalRecord) -> dict[str, Any]:
+    return entry.model_dump(mode="json")
 
 
 def _related_dict(found: queries.RelatedThing) -> dict[str, Any]:
@@ -460,7 +460,7 @@ class _BearerTokenMiddleware:
         self._app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] not in ("http", "websocket"):
+        if scope["type"] != "http":
             await self._app(scope, receive, send)
             return
 

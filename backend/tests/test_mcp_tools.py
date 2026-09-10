@@ -10,7 +10,7 @@ import asyncio
 import json
 import uuid
 from contextlib import contextmanager
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -238,11 +238,14 @@ def test_get_related_reports_depth_and_edge_type(tools):
 
 
 def test_due_for_checkin_defaults_to_today(tools):
-    create_thing(actor="claude_interactive", title="due", checkin_date=date.today())
-    create_thing(actor="claude_interactive", title="later", checkin_date=date.today() + timedelta(days=7))
+    # The tool's "today" is UTC, so the fixture's must be too, or this flakes either side of
+    # local midnight in any offset timezone.
+    today = datetime.now(UTC).date()
+    create_thing(actor="claude_interactive", title="due", checkin_date=today)
+    create_thing(actor="claude_interactive", title="later", checkin_date=today + timedelta(days=7))
 
     assert [t["title"] for t in due_for_checkin()] == ["due"]
-    assert sorted(t["title"] for t in due_for_checkin(as_of=date.today() + timedelta(days=7))) == ["due", "later"]
+    assert sorted(t["title"] for t in due_for_checkin(as_of=today + timedelta(days=7))) == ["due", "later"]
 
 
 def test_stale_counts_days_of_silence(tools):
