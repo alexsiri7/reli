@@ -9,15 +9,6 @@ updates:
     assignees:
       - "alexsiri7"
 
-  - package-ecosystem: "npm"
-    directory: "/frontend"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-    assignees:
-      - "alexsiri7"
-
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

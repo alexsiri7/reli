@@ -1,6 +1,8 @@
 # Staging environment — runs alongside production on the same host.
 # Port 8001 to avoid conflicts with production (port 8000).
-# Isolated data directory to keep staging and production databases separate.
+# Its own Postgres and its own volume, so staging never touches production data.
+# STAGING_DATABASE_URL is a distinct variable from production's DATABASE_URL for
+# that reason: both files read the same .env on this host.
 
 services:
   reli-staging:
@@ -8,29 +10,31 @@ services:
     container_name: reli-staging
     ports:
       - "127.0.0.1:8001:8000"
-    volumes:
-      - ./data-staging:/app/data
     environment:
-      - REQUESTY_API_KEY=${REQUESTY_API_KEY}
-      - MODEL_NAME=${MODEL_NAME:-google/gemini-2.0-flash-exp}
-      - EMBED_MODEL=${EMBED_MODEL:-text-embedding-3-small}
-      - GOOGLE_SEARCH_API_KEY=${GOOGLE_SEARCH_API_KEY:-}
-      - GOOGLE_SEARCH_CX=${GOOGLE_SEARCH_CX:-}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      - DATA_DIR=/app/data
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
-      - GOOGLE_AUTH_REDIRECT_URI=${GOOGLE_AUTH_REDIRECT_URI:-}
-      - RELI_BASE_URL=${RELI_BASE_URL:-}
-      - SECRET_KEY=${SECRET_KEY:-}
-      - RELI_API_TOKEN=${RELI_API_TOKEN:?RELI_API_TOKEN must be set for staging}
+      - DATABASE_URL=${STAGING_DATABASE_URL:?STAGING_DATABASE_URL must be set for staging}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=staging
-      - PHOENIX_ENABLED=${PHOENIX_ENABLED:-false}
-      - PHOENIX_ENDPOINT=${PHOENIX_ENDPOINT:-http://phoenix:6006/v1/traces}
-      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-reli-staging}
-      - DATABASE_URL=${DATABASE_URL:-}
-      - OAUTHLIB_RELAX_TOKEN_SCOPE=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
     restart: unless-stopped
+
+  postgres-staging:
+    image: postgres:16-alpine
+    container_name: reli-postgres-staging
+    environment:
+      - POSTGRES_USER=reli
+      - POSTGRES_PASSWORD=${STAGING_POSTGRES_PASSWORD:?STAGING_POSTGRES_PASSWORD must be set for staging}
+      - POSTGRES_DB=reli_staging
+    volumes:
+      - reli-postgres-staging:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reli -d reli_staging"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  reli-postgres-staging:

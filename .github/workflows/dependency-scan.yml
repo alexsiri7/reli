@@ -5,14 +5,10 @@ on:
     branches: [main]
     paths:
       - "uv.lock"
-      - "frontend/package.json"
-      - "frontend/package-lock.json"
   pull_request:
     branches: [main]
     paths:
       - "uv.lock"
-      - "frontend/package.json"
-      - "frontend/package-lock.json"
   schedule:
     - cron: "0 6 * * 1" # Weekly on Monday at 06:00 UTC
 
@@ -31,10 +27,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      # pip's resolver cannot solve the backend's AI/observability graph:
-      # pip 25.1+ hits ResolutionTooDeep, pip <25.1 hits ResolutionImpossible,
-      # and `pip-audit -r` triggers the same dry-run resolve. uv's
-      # pubgrub-based resolver solves it in ~25s. See #920.
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -54,22 +46,3 @@ jobs:
       # Replaces `pip-audit -r` which forces a dry-run pip resolve; see #920.
       - name: Run pip-audit
         run: pip-audit
-
-  node-audit:
-    name: Node.js dependency audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Node 20
-        uses: actions/setup-node@v7
-        with:
-          node-version: "20"
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci --legacy-peer-deps
-
-      - name: Run npm audit
-        working-directory: frontend
-        run: npm audit --audit-level=high

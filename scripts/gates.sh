@@ -16,56 +16,30 @@ cd "$(git rev-parse --show-toplevel)"
 
 run_setup() {
     echo "=== Setup ==="
-    cd frontend && npm ci --legacy-peer-deps && cd ..
-    uv pip install -q -r backend/requirements.txt 2>/dev/null || true
+    uv sync --frozen
 }
 
 run_lint() {
-    echo "=== Lint (backend) ==="
+    echo "=== Lint ==="
     ruff check backend/
     ruff format --check backend/
-
-    echo "=== Lint (frontend) ==="
-    cd frontend && npx eslint . && cd ..
 }
 
 run_typecheck() {
-    echo "=== Typecheck (frontend) ==="
-    cd frontend && npx tsc -b && cd ..
-
-    echo "=== Typecheck (backend) ==="
+    echo "=== Typecheck ==="
     mypy backend/
-
-    echo "=== Generated types fresh check ==="
-    cd frontend && npm run check:types-fresh && cd ..
 }
 
+# Needs a Docker daemon: the suite starts a throwaway Postgres via testcontainers.
+# Set RELI_TEST_DATABASE_URL to run against an existing database instead.
 run_test() {
-    local failed=0
-
-    echo "=== Test (frontend) ==="
-    if ! (cd frontend && npx vitest run); then
-        echo "FAILED: frontend tests"
-        failed=1
-    fi
-
-    echo "=== Test (backend) ==="
-    if ! uv run pytest backend/tests/ -x --tb=short --cov=backend --cov-fail-under=70; then
-        echo "FAILED: backend tests"
-        failed=1
-    fi
-
-    return $failed
+    echo "=== Test ==="
+    uv run pytest backend/tests/ -x --tb=short --cov=backend --cov-fail-under=70
 }
 
 run_build() {
     echo "=== Build (Docker) ==="
     docker build -t reli:gate-check .
-}
-
-run_screenshots() {
-    echo "=== Screenshots (visual regression) ==="
-    cd frontend && npm run test:screenshots && cd ..
 }
 
 # If no args, run all stages

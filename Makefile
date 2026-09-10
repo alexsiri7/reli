@@ -1,26 +1,17 @@
-.PHONY: test test-backend test-frontend install install-backend install-frontend build build-frontend dev
+.PHONY: test test-backend install install-backend build dev
 
-test: test-backend test-frontend
+test: test-backend
 
 test-backend:
-	cd backend && pip install -q -r requirements.txt -r requirements-dev.txt && pytest tests/ -v
+	uv run pytest backend/tests/
 
-test-frontend:
-	cd frontend && npm ci --legacy-peer-deps --silent && npm run test -- --run
-
-install: install-backend install-frontend
+install: install-backend
 
 install-backend:
-	pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+	uv sync --frozen
 
-install-frontend:
-	cd frontend && npm install --legacy-peer-deps
-
-build-frontend:
-	cd frontend && npm ci --legacy-peer-deps && npm run build
-
-build: build-frontend
-	docker-compose build
+build:
+	docker compose build
 
 dev:
 	uvicorn backend.main:app --reload --port 8000
