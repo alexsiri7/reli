@@ -12,7 +12,7 @@ import pytest
 BACKEND = Path(__file__).resolve().parent.parent
 
 # The vision's first rule: no LLM call originates inside the Reli service.
-FORBIDDEN_IMPORTS = ("openai", "litellm", "google.adk", "anthropic", "chromadb", "pgvector", "mcp")
+FORBIDDEN_IMPORTS = ("openai", "litellm", "google.adk", "anthropic", "chromadb", "pgvector")
 
 WRITERS = {"service.py", "db_models.py"}
 

@@ -134,6 +134,9 @@ def related(
     Edges are followed in **both** directions: a Thing's neighbourhood includes what points at it,
     not only what it points at. The origin is never returned, and a Thing already on the path is
     not revisited, so cycles terminate. ``types=None`` traverses every relationship type.
+
+    A Thing reached by several edges is returned once, at its shortest depth; which of the tying
+    edges supplies ``relationship_type`` is unspecified. Pass *types* to make that deterministic.
     """
     if depth < 1:
         return []
