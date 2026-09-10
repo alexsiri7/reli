@@ -13,7 +13,7 @@ dependencies = [
     "alembic>=1.19.2",
     "psycopg2>=2.9.12",
     # Upper bound is deliberate: mcp 2.x is a different API surface.
-    "mcp>=1.26.0,<2.0.0",
+    "mcp>=2.2.0,<3.0.0",
     # Direct: backend/google_client.py talks to Google's REST APIs over it.
     "httpx>=0.28.1",
 ]
