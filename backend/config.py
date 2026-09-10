@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     # missing secret does not roll the deploy back.
     MCP_API_TOKEN: str = ""
 
+    # --- Google (read-only Calendar and Gmail) ---
+    # Human-provisioned, exactly like MCP_API_TOKEN: a person runs
+    # scripts/google_oauth_grant.py once and pastes the refresh token here. Empty defaults keep an
+    # unconfigured deploy booting — only the three Google tools fail, and they say what to set.
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REFRESH_TOKEN: str = ""
+
     # --- Logging ---
     LOG_LEVEL: str = "INFO"
 
