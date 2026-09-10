@@ -155,6 +155,22 @@ def test_has_children_is_false_when_every_child_is_archived(client, session):
     assert client.get(f"/api/things?parent={parent.id}").json()["things"] == []
 
 
+def test_a_child_of_an_archived_parent_returns_to_the_top_level(client, session):
+    """Archiving a parent must not strand its children: an inactive parent claims nothing.
+
+    The parent has dropped out of the tree, so a child still counted as claimed would appear at no
+    level at all and be reachable only by pasting a URL.
+    """
+    parent = _thing(session, "Retired project")
+    child = _thing(session, "Still worth doing")
+    _relate(session, parent, child, RelationshipType.CHILD_OF)
+    update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=parent.id, active=False)
+
+    titles = [thing["title"] for thing in client.get("/api/things").json()["things"]]
+
+    assert titles == ["Still worth doing"]
+
+
 def test_a_parent_query_returns_exactly_that_things_children(client, session):
     parent = _thing(session, "Rebuild Reli")
     other_parent = _thing(session, "Unrelated project")

@@ -291,9 +291,10 @@ def tree_level(
 ) -> list[TreeNode]:
     """One level of the ``ChildOf`` tree: the children of *parent_id*, or the top level without it.
 
-    The top level is the active Things that are **not** the target of any ``ChildOf`` edge, so a
-    Thing appears there exactly when nothing claims it as a child. *exclude_tags* drops Things
-    carrying any of them, which is how the tree keeps the user-model machinery out of itself.
+    The top level is the active Things no **active** Thing claims as a child. An archived parent
+    claims nothing: it has itself dropped out of the tree, so a child still counted against it would
+    appear at no level at all. *exclude_tags* drops Things carrying any of them, which is how the
+    tree keeps the user-model machinery out of itself.
 
     Only active Things are returned, at both levels, and each node carries the count of its active
     children so the caller knows whether expanding it will show anything.
@@ -303,8 +304,14 @@ def tree_level(
         conditions.append(~_tagged(exclude_tags, "any"))
 
     if parent_id is None:
-        claimed = select(col(RelationshipRecord.target_thing_id)).where(
-            col(RelationshipRecord.relationship_type) == RelationshipType.CHILD_OF
+        parent = _THINGS.alias("parent")
+        claimed = (
+            select(col(RelationshipRecord.target_thing_id))
+            .join(parent, parent.c["id"] == col(RelationshipRecord.source_thing_id))
+            .where(
+                col(RelationshipRecord.relationship_type) == RelationshipType.CHILD_OF,
+                parent.c["active"].is_(True),
+            )
         )
         statement = select(ThingRecord).where(*conditions, col(ThingRecord.id).not_in(claimed))
     else:
