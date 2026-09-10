@@ -167,10 +167,14 @@ def _session() -> Iterator[Session]:
 
 
 def _summary(node: queries.TreeNode) -> ThingSummary:
+    thing = node.thing
     return ThingSummary(
-        **ThingOut.model_validate(node.thing).model_dump(
-            include={"id", "title", "tags", "priority", "active", "checkin_date"}
-        ),
+        id=thing.id,
+        title=thing.title,
+        tags=thing.tags,
+        priority=thing.priority,
+        active=thing.active,
+        checkin_date=thing.checkin_date,
         has_children=node.child_count > 0,
     )
 
