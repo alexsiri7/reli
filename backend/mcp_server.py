@@ -1,8 +1,9 @@
 """The MCP surface: the only way into the graph.
 
-Every tool here is a thin wrapper over :mod:`backend.service` (writes) or :mod:`backend.queries`
-(reads). No judgement happens in this module and no model is called from it — the tools hand
-Claude the graph and Claude decides what it means.
+Every tool here is a thin wrapper over :mod:`backend.service` (writes), :mod:`backend.queries`
+(graph reads) or :mod:`backend.google_readers` (Calendar and Gmail reads). No judgement happens in
+this module and no model is called from it — the tools hand Claude the graph and Claude decides
+what it means.
 
 Writing tools take ``actor`` as a required argument with no default, so a write cannot reach the
 journal attributed to a guess: a call that omits it fails argument validation before any tool body
@@ -25,7 +26,7 @@ from sqlmodel import Session
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from . import queries, service
+from . import google_readers, queries, service
 from .config import settings
 from .db_engine import get_engine
 from .db_models import Actor, JournalRecord, RelationshipRecord, RelationshipType, ThingRecord
@@ -84,7 +85,10 @@ reli_mcp = FastMCP(
         "session is an unattended scheduled task. The distinction is what lets Reli tell what the "
         "user decided from what Claude did, so it must be honest. "
         "Nothing is ever hard-deleted here — archive_thing retires a Thing and get_thing_history "
-        "shows how it got that way."
+        "shows how it got that way. "
+        "find_correspondence, find_events and check_occurred are read-only lookups into the user's "
+        "Gmail and Calendar, there to settle a check-in without asking the user. They return "
+        "evidence; what it means is yours to decide."
     ),
     # Mounted at /mcp by backend.main, so the SDK's own default of "/mcp" would serve /mcp/mcp.
     streamable_http_path="/",
@@ -444,6 +448,81 @@ def get_thing_history(thing_id: uuid.UUID, limit: int = 200) -> list[dict[str, A
     """
     with _session() as session:
         return [_journal_dict(entry) for entry in queries.history(session, thing_id, limit)]
+
+
+# --- Google reads (Calendar and Gmail) -------------------------------------
+
+
+@reli_mcp.tool()
+def find_correspondence(
+    query: str,
+    since: date | None = None,
+    until: date | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Search the user's Gmail and summarise what matched.
+
+    Read-only: this cannot send, reply, draft, label or delete. Each result is a summary —
+    sender, recipient, subject, date, Gmail's own snippet and the labels. Message bodies are
+    never fetched, so a snippet is all the text there is.
+
+    Every result costs a separate request to Gmail, so ``limit`` is capped at 25: a broad query is
+    not free.
+
+    Args:
+        query: Gmail search syntax, the same as the search box — words, from:, subject:, has:.
+        since: Only messages on or after this date. Inclusive.
+        until: Only messages on or before this date. Inclusive.
+        limit: How many messages to summarise at most, capped at 25.
+
+    Returns:
+        The matching messages, newest first.
+    """
+    return google_readers.find_correspondence(query=query, since=since, until=until, limit=limit)
+
+
+@reli_mcp.tool()
+def find_events(since: date, until: date, query: str | None = None, limit: int = 25) -> list[dict[str, Any]]:
+    """Read the user's primary calendar over a date range and summarise what is on it.
+
+    Read-only: this cannot create, move, cancel or respond to an event. Recurring events are
+    expanded into their individual occurrences. Each result is a summary — title, start, end,
+    status, location, how many people were invited, and how the user themselves responded.
+
+    Args:
+        since: First day of the window. Inclusive.
+        until: Last day of the window. Inclusive.
+        query: Free-text filter over the events; omitted returns everything in the window.
+        limit: How many events to return at most, capped at 25.
+
+    Returns:
+        The events in the window, earliest first.
+    """
+    return google_readers.find_events(since=since, until=until, query=query, limit=limit)
+
+
+@reli_mcp.tool()
+def check_occurred(description: str, since: date, until: date, limit: int = 10) -> dict[str, Any]:
+    """Gather what Calendar and Gmail hold about something, so you can judge whether it happened.
+
+    Read-only, and deliberately verdict-free: it returns the events and messages it found plus
+    their counts, and nothing that says yes or no. **Judging whether the thing happened is your
+    job** — an empty result can mean it did not happen, or that it left no trace, and only you can
+    tell those apart from the rest of the conversation. If you record a conclusion in the graph,
+    record what you concluded it from.
+
+    Gmail costs one request per message, so ``limit`` is capped at 25 per source.
+
+    Args:
+        description: What to look for, in the user's own words — searched in both sources.
+        since: First day of the window. Inclusive.
+        until: Last day of the window. Inclusive.
+        limit: How many results to gather from each source, capped at 25.
+
+    Returns:
+        The window, the matching events and messages, and a count of each.
+    """
+    return google_readers.check_occurred(description=description, since=since, until=until, limit=limit)
 
 
 # --- Transport -------------------------------------------------------------
