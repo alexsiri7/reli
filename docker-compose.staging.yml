@@ -13,6 +13,10 @@ services:
     environment:
       - DATABASE_URL=${STAGING_DATABASE_URL:?STAGING_DATABASE_URL must be set for staging}
       - MCP_API_TOKEN=${MCP_API_TOKEN:-}
+      # Defaulted-empty like MCP_API_TOKEN: an unset Google credential must not fail a boot.
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN:-}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=staging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}

@@ -53,6 +53,34 @@ psql "$DATABASE_URL" -c 'DROP TABLE IF EXISTS alembic_version'
 There is no frontend to build. The read-only view described in `docs/vision.md` lands in a later
 issue; update this section when it does.
 
+## Google credentials
+
+A Google credential lives in exactly three environment variables and nowhere else:
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`. The access token derived from
+them is held in process memory by `backend/google_client.py` and is never persisted — not to disk,
+not to Postgres, not to the journal. Nothing under `backend/` writes a credential anywhere, and
+`test_the_google_modules_never_persist_a_credential` fails the build if that changes. That is the
+answer to #938: a token file cannot be left behind by code that never writes one.
+
+The scopes granted are `gmail.readonly` and `calendar.readonly`, listed in `SCOPES` in
+`backend/google_client.py`. Widening them is a visible edit to that tuple and needs an issue that
+asks for it.
+
+**Agents cannot perform the consent step.** It requires a human signed in to the Google account, in
+the same class as `MCP_API_TOKEN` and `RAILWAY_TOKEN`. Do not claim a credential is provisioned.
+
+Runbook — when the Google tools start raising `GoogleAuthFailed`, the grant has been revoked or has
+expired, and a human re-runs the one-time consent:
+
+```bash
+export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...
+uv run python scripts/google_oauth_grant.py
+```
+
+It prints a refresh token and stores nothing. Replace `GOOGLE_REFRESH_TOKEN` with it and restart.
+Leaving all three unset is safe: the boot succeeds, `/healthz` stays green, the graph tools work,
+and only the three Google tools fail — with a message naming what to set.
+
 ## Database Safety Policy
 
 The legacy SQLite (`data/reli.db`) and ChromaDB (`backend/chroma_db/`) data are superseded. The owner holds an offline export of the legacy graph outside this repository — the repo is public, so the export is not here and must not be committed or recreated here.
@@ -104,7 +132,12 @@ Creating documentation that claims success on an action you cannot perform is a 
 - Writes: `backend/service.py` — the only module that may mutate a Thing; every function journals
 - Reads: `backend/queries.py` — the indexed queries
 - Retained reference, not built or shipped: `reference/oauth/` (see its README)
-- MCP: `backend/mcp_server.py` — the thirteen tools wrapping `service.py` and `queries.py`; every
-  writing tool takes a required `actor`, and hard delete is not exposed
+- MCP: `backend/mcp_server.py` — the sixteen tools wrapping `service.py`, `queries.py` and
+  `google_readers.py`; every writing tool takes a required `actor`, and hard delete is not exposed.
+  The three Google tools take no `actor` and journal nothing, because they mutate nothing
+- Google reads: `backend/google_readers.py` — `find_correspondence`, `find_events`,
+  `check_occurred`; read-only and summarising, and they return evidence rather than a verdict
+- Google credentials and transport: `backend/google_client.py` — the only module that reads the
+  credential and the only one that reaches a Google API, always with a `GET`
 - HTTP: `backend/main.py` serves `/healthz` and mounts the MCP streamable-HTTP app at `/mcp`
 - Docker service name: `reli` (not `app`)
