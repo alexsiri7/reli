@@ -3,9 +3,14 @@
 Built onto a fresh ``FastAPI()`` with ``auth.router`` and ``mcp_oauth.router``, ``auth._session``
 (the one session both routers run in) bound to the fixture session, and the Basic check applied — so
 every request below also proves the exemption. Google is ``httpx.MockTransport`` throughout; nothing opens a socket.
+
+The two racing tests use ``racing_client`` instead, which leaves ``auth._session`` opening one
+session per request: a single connection cannot race itself.
 """
 
 import secrets
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlsplit
@@ -15,11 +20,21 @@ import jwt
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import func
+from sqlmodel import Session, select
 
 from backend import api, auth, google_login, mcp_oauth
 from backend.config import settings
+from backend.db_engine import get_engine
 from backend.google_login import s256_challenge
-from backend.oauth_state import cleanup_and_get, cleanup_and_store, mcp_auth_codes, mcp_oauth_sessions
+from backend.oauth_state import (
+    McpRefreshTokenRecord,
+    cleanup_and_get,
+    cleanup_and_store,
+    mcp_auth_codes,
+    mcp_oauth_sessions,
+    mcp_refresh_tokens,
+)
 
 SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
 CLIENT_ID = "client-id.apps.googleusercontent.com"
@@ -50,6 +65,41 @@ def client(session, monkeypatch, sign_in_settings):
     app.include_router(mcp_oauth.router)
     api.add_web_view_auth(app)
     return TestClient(app, follow_redirects=False)
+
+
+@pytest.fixture()
+def racing_client(session, sign_in_settings):
+    """The same app on the production ``auth._session``, so two requests run on two connections."""
+    app = FastAPI()
+    app.include_router(auth.router)
+    app.include_router(mcp_oauth.router)
+    api.add_web_view_auth(app)
+    return TestClient(app, follow_redirects=False)
+
+
+def _racing_peek(monkeypatch, store):
+    """Hold both racing requests after they have peeked *store*, so both reach the consume together.
+
+    Only the peek of *store* waits: ``_validate_client_secret`` peeks the client store on the same
+    path, and an unconditional barrier would fire twice per request. Returns the function that
+    puts the real peek back, for a request after the race.
+    """
+    barrier = threading.Barrier(2, timeout=5)
+    real_peek = mcp_oauth.cleanup_and_get
+
+    def peek_then_wait(session, peeked, key):
+        found = real_peek(session, peeked, key)
+        if peeked is store:
+            barrier.wait()
+        return found
+
+    monkeypatch.setattr(mcp_oauth, "cleanup_and_get", peek_then_wait)
+    return lambda: monkeypatch.setattr(mcp_oauth, "cleanup_and_get", real_peek)
+
+
+def _race(client, requests):
+    with ThreadPoolExecutor(len(requests)) as pool:
+        return list(pool.map(lambda send: send(client), requests))
 
 
 def _register(client, auth_method="none", redirect_uris=(CLIENT_REDIRECT,)):
@@ -422,6 +472,86 @@ def test_a_refresh_token_rotates(client, session):
     replay = _refresh(client, first["refresh_token"], registered["client_id"])
     assert replay.status_code == 400
     assert replay.json()["error"] == "invalid_grant"
+
+
+def test_a_refresh_token_family_starts_at_the_code_exchange_and_survives_rotation(client, session):
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    first = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
+    second = _refresh(client, first["refresh_token"], registered["client_id"]).json()
+
+    consumed = cleanup_and_get(session, mcp_refresh_tokens, first["refresh_token"])
+    live = cleanup_and_get(session, mcp_refresh_tokens, second["refresh_token"])
+
+    assert consumed is not None and live is not None
+    assert consumed["family_id"] == live["family_id"]
+    assert consumed["consumed_at"] is not None
+    assert live["consumed_at"] is None
+
+    other_code = _seed_code(session, registered["client_id"], "verifier", code="other-code")
+    other = _token(client, code=other_code, client_id=registered["client_id"], code_verifier="verifier").json()
+    other_row = cleanup_and_get(session, mcp_refresh_tokens, other["refresh_token"])
+    assert other_row is not None
+    assert other_row["family_id"] != live["family_id"]
+
+
+def test_a_replayed_refresh_token_revokes_its_whole_family(client, session):
+    """OAuth 2.1 §4.3.1: a rotated-away token presented again means it leaked, and the live one may have too."""
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    first = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
+    second = _refresh(client, first["refresh_token"], registered["client_id"]).json()
+    third = _refresh(client, second["refresh_token"], registered["client_id"]).json()
+
+    replay = _refresh(client, first["refresh_token"], registered["client_id"])
+
+    assert replay.status_code == 400
+    assert replay.json()["error"] == "invalid_grant"
+    assert "re-authorise" in replay.json()["error_description"]
+    live = _refresh(client, third["refresh_token"], registered["client_id"])
+    assert live.status_code == 400
+    assert live.json()["error"] == "invalid_grant"
+    for issued in (first, second, third):
+        assert cleanup_and_get(session, mcp_refresh_tokens, issued["refresh_token"]) is None
+    with Session(get_engine()) as own:
+        assert own.exec(select(func.count()).select_from(McpRefreshTokenRecord)).one() == 0
+
+
+def test_two_concurrent_redeems_of_one_code_yield_exactly_one_token(racing_client, session, monkeypatch):
+    registered = _register(racing_client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    _racing_peek(monkeypatch, mcp_auth_codes)
+
+    def redeem(client):
+        return _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier")
+
+    responses = _race(racing_client, [redeem, redeem])
+
+    assert sorted(response.status_code for response in responses) == [200, 400]
+    lost = next(response for response in responses if response.status_code == 400)
+    assert lost.json()["error"] == "invalid_grant"
+
+
+def test_two_concurrent_redeems_of_one_refresh_token_yield_one_token_and_revoke_the_family(
+    racing_client, session, monkeypatch
+):
+    """The loser's revocation must reach the winner's replacement, which the one-transaction rotation guarantees."""
+    registered = _register(racing_client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    first = _token(racing_client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
+    stop_racing = _racing_peek(monkeypatch, mcp_refresh_tokens)
+
+    def rotate(client):
+        return _refresh(client, first["refresh_token"], registered["client_id"])
+
+    responses = _race(racing_client, [rotate, rotate])
+
+    assert sorted(response.status_code for response in responses) == [200, 400]
+    won = next(response for response in responses if response.status_code == 200)
+    stop_racing()
+    revoked = _refresh(racing_client, won.json()["refresh_token"], registered["client_id"])
+    assert revoked.status_code == 400
+    assert revoked.json()["error"] == "invalid_grant"
 
 
 def test_a_refresh_token_is_bound_to_the_client_it_was_issued_to(client, session):
