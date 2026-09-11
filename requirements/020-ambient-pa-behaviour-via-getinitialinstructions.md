@@ -1,8 +1,8 @@
 ---
 created: '2026-09-11'
-github_issue: null
+github_issue: 1466
 id: '020'
-status: draft
+status: idea
 title: Ambient PA behaviour via get_initial_instructions
 updated: '2026-09-11'
 ---
@@ -29,4 +29,5 @@ This matches the pattern already established by Annie and Lachesis, both of whic
 
 ## Issues
 
-_None yet._
+- #1466 — Add get_initial_instructions so PA behaviour reaches every session
+- #1467 — Vision doc: correct how ambient behaviour reaches a session
