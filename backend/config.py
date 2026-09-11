@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     # missing secret does not roll the deploy back.
     MCP_API_TOKEN: str = ""
 
+    # --- Web view ---
+    # Password for the read-only web view at / and the /api routes behind it. Human-provisioned on
+    # the same terms as MCP_API_TOKEN: an empty value closes the view with a 401 rather than
+    # serving the whole graph to anyone with the URL, and never stops the boot — /healthz stays
+    # green so a missing secret does not roll the deploy back.
+    WEB_UI_PASSWORD: str = ""
+
     # --- Google (read-only Calendar and Gmail) ---
     # Human-provisioned, exactly like MCP_API_TOKEN: a person runs
     # scripts/google_oauth_grant.py once and pastes the refresh token here. Empty defaults keep an

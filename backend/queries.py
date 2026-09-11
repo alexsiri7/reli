@@ -39,6 +39,17 @@ class RelatedThing(NamedTuple):
     relationship_type: RelationshipType
 
 
+class TreeNode(NamedTuple):
+    """A Thing at one level of the tree, with how many live children hang below it.
+
+    ``child_count`` counts only active children, because a level only ever returns active Things:
+    a count that included archived ones would promise an expansion that comes back empty.
+    """
+
+    thing: ThingRecord
+    child_count: int
+
+
 class History(NamedTuple):
     """A window onto one entity's journal, with ``total`` so a capped answer cannot pass for a whole one."""
 
@@ -232,6 +243,94 @@ def children(session: Session, thing_id: uuid.UUID) -> list[ThingRecord]:
         .order_by(col(ThingRecord.priority).desc())
     )
     return list(session.exec(statement).all())
+
+
+def things_by_id(session: Session, ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, ThingRecord]:
+    """The named Things keyed by id, for a payload that resolves a whole set of them at once.
+
+    An id with no Thing is simply absent from the mapping, so a dangling reference is visible to the
+    caller rather than raising on the whole batch.
+    """
+    if not ids:
+        return {}
+
+    things = session.exec(select(ThingRecord).where(col(ThingRecord.id).in_(ids))).all()
+    return {thing.id: thing for thing in things}
+
+
+def _active_child_counts(session: Session, parent_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """How many active children each of these Things has, in one grouped count.
+
+    Counted ``DISTINCT`` on the child: nothing stops two ``ChildOf`` edges joining the same pair,
+    and a Thing is one child however many edges say so.
+    """
+    if not parent_ids:
+        return {}
+
+    rows = session.exec(
+        select(
+            col(RelationshipRecord.source_thing_id),
+            func.count(func.distinct(col(RelationshipRecord.target_thing_id))),
+        )
+        .join(ThingRecord, col(ThingRecord.id) == col(RelationshipRecord.target_thing_id))
+        .where(
+            col(RelationshipRecord.source_thing_id).in_(parent_ids),
+            col(RelationshipRecord.relationship_type) == RelationshipType.CHILD_OF,
+            col(ThingRecord.active).is_(True),
+        )
+        .group_by(col(RelationshipRecord.source_thing_id))
+    ).all()
+    return {parent_id: count for parent_id, count in rows}
+
+
+def tree_level(
+    session: Session,
+    *,
+    parent_id: uuid.UUID | None = None,
+    exclude_tags: Sequence[str] = (),
+) -> list[TreeNode]:
+    """One level of the ``ChildOf`` tree: the children of *parent_id*, or the top level without it.
+
+    The top level is the active Things no **active** Thing claims as a child. An archived parent
+    claims nothing: it has itself dropped out of the tree, so a child still counted against it would
+    appear at no level at all. *exclude_tags* drops Things carrying any of them, which is how the
+    tree keeps the user-model machinery out of itself.
+
+    Only active Things are returned, at both levels, and each node carries the count of its active
+    children so the caller knows whether expanding it will show anything.
+    """
+    conditions: list[ColumnElement[bool]] = [col(ThingRecord.active).is_(True)]
+    if exclude_tags:
+        conditions.append(~_tagged(exclude_tags, "any"))
+
+    if parent_id is None:
+        parent = _THINGS.alias("parent")
+        claimed = (
+            select(col(RelationshipRecord.target_thing_id))
+            .join(parent, parent.c["id"] == col(RelationshipRecord.source_thing_id))
+            .where(
+                col(RelationshipRecord.relationship_type) == RelationshipType.CHILD_OF,
+                parent.c["active"].is_(True),
+            )
+        )
+        statement = select(ThingRecord).where(*conditions, col(ThingRecord.id).not_in(claimed))
+    else:
+        statement = (
+            select(ThingRecord)
+            .distinct()
+            .join(RelationshipRecord, col(RelationshipRecord.target_thing_id) == col(ThingRecord.id))
+            .where(
+                *conditions,
+                col(RelationshipRecord.source_thing_id) == parent_id,
+                col(RelationshipRecord.relationship_type) == RelationshipType.CHILD_OF,
+            )
+        )
+
+    things = list(
+        session.exec(statement.order_by(col(ThingRecord.priority).desc(), col(ThingRecord.title).asc())).all()
+    )
+    counts = _active_child_counts(session, [thing.id for thing in things])
+    return [TreeNode(thing=thing, child_count=counts.get(thing.id, 0)) for thing in things]
 
 
 def relationships_for(session: Session, thing_id: uuid.UUID) -> list[RelationshipRecord]:

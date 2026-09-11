@@ -1,8 +1,9 @@
 """Reli FastAPI application entry point.
 
 Reli is a data service, not an application: the graph is reached over MCP and the judgement happens
-in Claude. This app serves the health check the deploy pipeline polls and mounts the MCP tools of
-:mod:`backend.mcp_server` at ``/mcp``.
+in Claude. This app serves the health check the deploy pipeline polls, mounts the MCP tools of
+:mod:`backend.mcp_server` at ``/mcp``, and serves the read-only web view of :mod:`backend.api` —
+its ``/api`` routes and, when the image was built with one, the frontend bundle behind them.
 """
 
 import logging
@@ -12,6 +13,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from . import api
 from .config import settings
 from .mcp_server import create_mcp_asgi_app, reli_mcp
 from .sentry import init_sentry
@@ -25,6 +27,7 @@ logging.basicConfig(
 init_sentry()
 
 _ALEMBIC_INI = pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
+_DIST = pathlib.Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 
 @asynccontextmanager
@@ -51,16 +54,24 @@ app = FastAPI(
     title="Reli API",
     description=(
         "Reli stores Things, the relationships between them, and an append-only journal of every "
-        "mutation. Reads and writes arrive over MCP at /mcp; the only other route is the health check."
+        "mutation. Reads and writes arrive over MCP at /mcp. The /api routes are the read-only view "
+        "the web frontend consumes, with one exception: rejecting a preference."
     ),
     version="0.1.0",
     lifespan=lifespan,
 )
-
-app.mount("/mcp", create_mcp_asgi_app())
 
 
 @app.get("/healthz", tags=["health"], summary="Health check", description="Returns service health status.")
 def health() -> dict[str, str]:
     """Returns service health status."""
     return {"status": "ok", "service": "reli"}
+
+
+app.include_router(api.router)
+app.mount("/mcp", create_mcp_asgi_app())
+
+# Last, and in this order: the frontend fallback answers every unmatched path, so anything mounted
+# after it would never be reached.
+api.mount_frontend(app, _DIST)
+api.add_web_view_auth(app)

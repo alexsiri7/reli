@@ -59,6 +59,23 @@ jobs:
       - name: Test
         run: ./scripts/gates.sh test
 
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    # Pinned to the @playwright/test version in frontend/package.json. The committed snapshots were
+    # generated in this image; any other renders different pixels and fails on nothing real.
+    container: mcr.microsoft.com/playwright:v1.63.0-noble
+    steps:
+      - uses: actions/checkout@v7
+
+      # The checkout is owned by a different uid inside the container, and gates.sh opens with
+      # `git rev-parse --show-toplevel`, which git refuses on a repository it calls dubious.
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Frontend
+        run: ./scripts/gates.sh frontend
+
   build:
     name: Build Docker image
     runs-on: ubuntu-latest

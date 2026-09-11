@@ -23,6 +23,8 @@ htmlcov/
 # Frontend build artifacts and dependencies
 frontend/node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 api_key.txt
 
 # Legacy ChromaDB data dir (removed — now using pgvector)
