@@ -76,7 +76,7 @@ def _id_token(email="owner@example.com", subject="1234567890"):
             "email_verified": True,
             "exp": datetime.now(UTC) + timedelta(seconds=300),
         },
-        "unchecked",
+        "a-google-key-whose-signature-is-never-checked",
         algorithm="HS256",
     )
 
