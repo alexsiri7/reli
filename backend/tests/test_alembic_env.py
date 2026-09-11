@@ -68,14 +68,26 @@ def fresh_database(postgres_url: str) -> Iterator[str]:
     server.dispose()
 
 
-def _upgrade(revision: str) -> None:
-    from alembic import command as alembic_command
+def _alembic_config():
     from alembic.config import Config as AlembicConfig
 
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    alembic_command.upgrade(
-        AlembicConfig(os.path.join(repo_root, "alembic.ini")), "head" if revision == "head" else revision
-    )
+    return AlembicConfig(os.path.join(repo_root, "alembic.ini"))
+
+
+def _upgrade(revision: str) -> None:
+    from alembic import command as alembic_command
+
+    alembic_command.upgrade(_alembic_config(), revision)
+
+
+def _script_head() -> str:
+    """The single head revision of the versions directory, so the test follows new migrations."""
+    from alembic.script import ScriptDirectory
+
+    head = ScriptDirectory.from_config(_alembic_config()).get_current_head()
+    assert head is not None, "the versions directory must have exactly one head"
+    return head
 
 
 def _state(url: str) -> tuple[set[str], set[str]]:
@@ -105,5 +117,7 @@ def test_upgrading_from_an_existing_revision_persists(fresh_database: str):
     _upgrade("head")
 
     versions, tables = _state(fresh_database)
-    assert versions == {"v4_mcp_oauth_state"}
+    assert versions == {_script_head()}
+    assert versions != {"v4_baseline"}
     assert {"mcp_registered_clients", "mcp_oauth_sessions", "mcp_auth_codes", "mcp_refresh_tokens"} <= tables
+    assert "web_oauth_sessions" in tables
