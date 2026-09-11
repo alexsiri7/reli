@@ -637,6 +637,34 @@ def test_mcp_endpoint_admits_the_configured_token(client, mcp_token):
     assert "create_thing" in response.text
 
 
+def test_the_bare_path_reaches_the_mcp_app_with_the_same_bearer_check(client, mcp_token):
+    """#1450: what the claude.ai connector actually sends is POST /mcp, with no trailing slash."""
+    headers = {**_MCP_HEADERS, "Authorization": f"Bearer {mcp_token}"}
+
+    admitted = client.post("/mcp", json=_TOOLS_LIST, headers=headers, follow_redirects=False)
+    refused = client.post("/mcp", json=_TOOLS_LIST, headers=_MCP_HEADERS, follow_redirects=False)
+
+    assert admitted.status_code == 200
+    assert "create_thing" in admitted.text
+    assert refused.status_code == 401
+    assert refused.json() == client.post("/mcp/", json=_TOOLS_LIST, headers=_MCP_HEADERS).json()
+
+
+@pytest.mark.parametrize(("method", "status"), [("GET", 406), ("DELETE", 405)])
+def test_the_bare_path_answers_the_other_transport_methods_like_the_slash_path(client, mcp_token, method, status):
+    """Streamable HTTP also uses GET (the listening stream) and DELETE (session end); both must reach
+    the transport on either path, and neither may be a redirect. The JSON-only Accept keeps the GET
+    from opening a stream that never ends, so what comes back is the transport's own 406; stateless
+    mode has no session for the DELETE to end, so that is its 405. A 401 or 3xx would be the check or
+    the router answering instead."""
+    headers = {"Accept": "application/json", "Authorization": f"Bearer {mcp_token}"}
+
+    bare = client.request(method, "/mcp", headers=headers, follow_redirects=False)
+    canonical = client.request(method, "/mcp/", headers=headers, follow_redirects=False)
+
+    assert bare.status_code == canonical.status_code == status
+
+
 def test_the_prompts_are_retrievable_over_mcp(client, mcp_token):
     """#1411's first acceptance criterion, through the real transport rather than the registry."""
     headers = {**_MCP_HEADERS, "Authorization": f"Bearer {mcp_token}"}

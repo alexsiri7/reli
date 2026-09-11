@@ -309,7 +309,7 @@ Creating documentation that claims success on an action you cannot perform is a 
   flows), the web view's `GET /api/auth/google`, `GET /api/auth/me` and `POST /api/auth/logout`,
   and `web_session`, the one reading of the `reli_session` cookie
 - Authorization server: `backend/mcp_oauth.py` — `/.well-known/*`, `/oauth/register`,
-  `/oauth/authorize`, `/oauth/token` and the bare-`/mcp` redirect
+  `/oauth/authorize`, `/oauth/token`
 - OAuth flow state: `backend/oauth_state.py` — the four bounded `mcp_*` stores and
   `web_oauth_sessions`; not graph state, not journalled
 - HTTP: `backend/main.py` serves `/healthz`, includes the auth, OAuth and `/api` routers in that
