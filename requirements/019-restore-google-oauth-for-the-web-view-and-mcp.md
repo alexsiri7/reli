@@ -1,8 +1,8 @@
 ---
 created: '2026-09-11'
-github_issue: null
+github_issue: 1448
 id: 019
-status: draft
+status: idea
 title: Restore Google OAuth for the web view and MCP
 updated: '2026-09-11'
 ---
@@ -30,4 +30,7 @@ Separately, and independently of the auth work: this repository is public. No re
 
 ## Issues
 
-_None yet._
+- #1448 — Recover the pre-v4 Google OAuth implementation from git history
+- #1449 — Restore Google OAuth on the web view
+- #1450 — Restore the MCP endpoint's original authentication
+- #1451 — CLAUDE.md: this is a public repo, no real user data in it
