@@ -14,6 +14,7 @@ import socket
 import urllib.parse
 from pathlib import Path
 
+import httpx
 import pytest
 
 from backend.config import Settings
@@ -85,3 +86,44 @@ def test_a_busy_port_names_itself_and_exchanges_nothing(grant, monkeypatch, caps
         assert grant.main() == 1
 
     assert str(grant.REDIRECT_PORT) in capsys.readouterr().out
+
+
+def test_the_exchange_sends_the_redirect_uri_the_consent_request_carried(grant, monkeypatch):
+    """The two redirect_uri values Google compares are one constant; a bind, a browser and an exchange are all faked."""
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "client-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "client-secret")
+
+    bound_to = []
+    consent_params = {}
+    exchange = {}
+
+    class FakeServer:
+        def handle_request(self):
+            grant._CallbackHandler.code = "auth-code-1"
+            grant._CallbackHandler.state = consent_params["state"][0]
+
+        def server_close(self):
+            pass
+
+    def fake_http_server(address, handler):
+        bound_to.append(address)
+        return FakeServer()
+
+    def fake_browser(url):
+        consent_params.update(urllib.parse.parse_qs(urllib.parse.urlparse(url).query))
+
+    def fake_post(url, data, timeout):
+        exchange.update(data)
+        return httpx.Response(200, json={"refresh_token": "rt-1"})
+
+    monkeypatch.setattr(grant, "HTTPServer", fake_http_server)
+    monkeypatch.setattr(grant.webbrowser, "open", fake_browser)
+    monkeypatch.setattr(grant.httpx, "post", fake_post)
+
+    assert grant.main() == 0
+
+    assert bound_to == [("127.0.0.1", grant.REDIRECT_PORT)]
+    assert exchange["redirect_uri"] == grant.REDIRECT_URI
+    assert exchange["redirect_uri"] == consent_params["redirect_uri"][0]
+    assert exchange["code"] == "auth-code-1"
+    assert exchange["grant_type"] == "authorization_code"
