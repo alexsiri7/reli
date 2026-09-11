@@ -5,6 +5,8 @@ built fresh per call by ``google_client._http_client``, which is what the ``tran
 replaces.
 """
 
+import urllib.parse
+
 import httpx
 import pytest
 
@@ -98,6 +100,29 @@ def test_the_first_read_refreshes_and_carries_the_bearer_token(configured, trans
     assert get_json(API_URL, {"q": "invoice"}) == {"messages": []}
     assert len(_token_requests(seen)) == 1
     assert seen[-1].headers["Authorization"] == "Bearer access-token-1"
+
+
+def test_the_refresh_carries_the_client_the_grant_was_minted_with(configured, transport):
+    """A refresh token is only refreshable with the secret of the client that minted it, and
+    ``scripts/google_oauth_grant.py`` mints against the same GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+    pair (#1460) — so the refresh body must carry exactly that pair, and nothing else."""
+
+    def handler(request):
+        if str(request.url) == TOKEN_URL:
+            return _token_response()
+        return httpx.Response(200, json={"ok": True})
+
+    seen = transport(handler)
+
+    get_json(API_URL, {})
+
+    (refresh,) = _token_requests(seen)
+    assert urllib.parse.parse_qs(refresh.content.decode()) == {
+        "client_id": [settings.GOOGLE_CLIENT_ID],
+        "client_secret": [CLIENT_SECRET],
+        "refresh_token": [REFRESH_TOKEN],
+        "grant_type": ["refresh_token"],
+    }
 
 
 def test_a_cached_token_is_reused_for_the_next_read(configured, transport):

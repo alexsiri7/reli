@@ -109,6 +109,12 @@ export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...
 uv run python scripts/google_oauth_grant.py
 ```
 
+Before the first run, a human adds `http://127.0.0.1:18765/` — the exact string, trailing slash
+included — to the authorised redirect URIs of the Web application client `GOOGLE_CLIENT_ID` names,
+in the Google Cloud console. A Web client accepts only a redirect registered verbatim, so the script
+sends that one fixed loopback URI (#1460); a missing entry answers `redirect_uri_mismatch` on the
+consent page. Nothing in the repository can perform or check the console step.
+
 It prints a refresh token and stores nothing. Replace `GOOGLE_REFRESH_TOKEN` with it and restart.
 Leaving all three unset is safe: the boot succeeds, `/healthz` stays green, the graph tools work,
 and only the three Google tools fail — with a message naming what to set.
@@ -116,7 +122,9 @@ and only the three Google tools fail — with a message naming what to set.
 The same `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` also identify Reli to Google for the sign-in
 below, read by `backend/google_login.py` under the same never-persist rule (it is in the same
 test's `GOOGLE_MODULES`), with the `openid email profile` scopes — the readers' `SCOPES` tuple is
-unchanged.
+unchanged. The readers' grant is minted through that same Web client, which is why one pair
+suffices: a refresh token is only refreshable with the secret of the client that minted it, and
+`backend/google_client.py` sends this one.
 
 ## Google sign-in
 
@@ -157,9 +165,9 @@ done:
    is exactly this one.
 2. In the Google Cloud console, confirm the OAuth client `GOOGLE_CLIENT_ID` names is a **Web
    application** client with that exact redirect URI authorised. Nothing in the repository can
-   check this; when it is wrong the callback answers 502 naming `redirect_uri_mismatch`. Note that
-   `scripts/google_oauth_grant.py` documents a **Desktop app** client for the readers' grant;
-   whether the readers' grant can share the Web client is an open question for the owner.
+   check this; when it is wrong the callback answers 502 naming `redirect_uri_mismatch`. The
+   readers' grant shares this Web client: its loopback redirect `http://127.0.0.1:18765/` is
+   registered on the same client (see *Google credentials*).
 3. Add the claude.ai connector for `https://<host>/mcp` with **no** bearer token. It discovers the
    server, registers itself, opens Google sign-in, and the allowlisted account completes it.
 4. Confirm it works, then retire `MCP_API_TOKEN` in a follow-up change. Until then the static

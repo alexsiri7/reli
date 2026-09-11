@@ -8,9 +8,15 @@ whose Calendar and Gmail are being read. Run this once, then paste the printed r
     export GOOGLE_CLIENT_SECRET=...
     uv run python scripts/google_oauth_grant.py
 
-The client id and secret come from a **Desktop app** OAuth client in Google Cloud Console, which is
-what makes a loopback redirect legal; Google retired the out-of-band flow. They are read from the
-environment rather than taken as arguments, so they do not land in shell history.
+The client id and secret are the same **Web application** OAuth client the sign-in uses — the pair
+`backend/google_client.py` refreshes with, so a token minted here is refreshable there. A Web client
+accepts only a redirect URI registered verbatim, so before the first run a human adds
+`http://127.0.0.1:18765/` (exact string, trailing slash included) to that client's authorised
+redirect URIs in the Google Cloud console; a missing entry answers `redirect_uri_mismatch` on the
+consent page. The arbitrary-port loopback flow the first version of this script assumed is a
+feature of a different client type, and this deploy's client is a Web client (#1460). The id and
+secret are read from the environment rather than taken as arguments, so they do not land in shell
+history.
 
 This script writes no file. Nothing in Reli ever writes a Google credential anywhere — that is what
 keeps #938 (a token file left behind on disk) from happening a second time.
@@ -35,6 +41,12 @@ from backend.google_client import SCOPES, TOKEN_URL  # noqa: E402
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 
+# Fixed, and deliberately not configurable: a Web application client only accepts a redirect URI
+# registered verbatim, port and trailing slash included. An ephemeral port was #1460, and a port
+# read from the environment would fail at Google the same way unless it happened to be registered.
+REDIRECT_PORT = 18765
+REDIRECT_URI = f"http://127.0.0.1:{REDIRECT_PORT}/"
+
 
 class _CallbackHandler(BaseHTTPRequestHandler):
     """Catches the one redirect Google makes back to the loopback address."""
@@ -57,24 +69,11 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         """Silence the default request log: the URL it prints carries the authorization code."""
 
 
-def main() -> int:
-    client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
-    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-    if not client_id or not client_secret:
-        print("Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first (Desktop app OAuth client).")
-        return 1
-
-    verifier = secrets.token_urlsafe(64)
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
-    state = secrets.token_urlsafe(16)
-
-    server = HTTPServer(("127.0.0.1", 0), _CallbackHandler)
-    redirect_uri = f"http://127.0.0.1:{server.server_port}/"
-
-    consent = f"{AUTH_URL}?" + urllib.parse.urlencode(
+def consent_url(client_id: str, state: str, challenge: str) -> str:
+    return f"{AUTH_URL}?" + urllib.parse.urlencode(
         {
             "client_id": client_id,
-            "redirect_uri": redirect_uri,
+            "redirect_uri": REDIRECT_URI,
             "response_type": "code",
             "scope": " ".join(SCOPES),
             # offline + consent is what makes Google return a refresh token rather than only an
@@ -86,6 +85,31 @@ def main() -> int:
             "code_challenge_method": "S256",
         }
     )
+
+
+def main() -> int:
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        print(
+            "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first (the Web application OAuth client the sign-in uses)."
+        )
+        return 1
+
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    state = secrets.token_urlsafe(16)
+
+    try:
+        server = HTTPServer(("127.0.0.1", REDIRECT_PORT), _CallbackHandler)
+    except OSError:
+        print(
+            f"Port {REDIRECT_PORT} is in use. The grant must come back to {REDIRECT_URI} — the URI "
+            "registered on the OAuth client — so free the port and run this again."
+        )
+        return 1
+
+    consent = consent_url(client_id, state, challenge)
 
     print(f"Granting: {', '.join(SCOPES)}")
     print(f"\nOpen this and approve:\n\n{consent}\n")
@@ -108,7 +132,7 @@ def main() -> int:
             "code": _CallbackHandler.code,
             "code_verifier": verifier,
             "grant_type": "authorization_code",
-            "redirect_uri": redirect_uri,
+            "redirect_uri": REDIRECT_URI,
         },
         timeout=30.0,
     )

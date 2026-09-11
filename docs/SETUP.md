@@ -65,7 +65,9 @@ The tools, prompts and resources it serves are listed in [mcp-design.md](mcp-des
 The three Google tools (`find_correspondence`, `find_events`, `check_occurred`) read Gmail and
 Calendar with the `gmail.readonly` and `calendar.readonly` scopes. They need `GOOGLE_CLIENT_ID`,
 `GOOGLE_CLIENT_SECRET` and `GOOGLE_REFRESH_TOKEN`. A human obtains the refresh token once — the
-consent step needs a person signed in to the Google account:
+consent step needs a person signed in to the Google account. First, in the Google Cloud console,
+add `http://127.0.0.1:18765/` (exact string, trailing slash included) to the authorised redirect
+URIs of the OAuth client `GOOGLE_CLIENT_ID` names — the Web client from *Connecting Claude* — then:
 
 ```bash
 export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...
