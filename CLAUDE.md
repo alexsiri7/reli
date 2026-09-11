@@ -166,8 +166,7 @@ done:
    readers' grant shares this Web client: its loopback redirect `http://127.0.0.1:18765/` is
    registered on the same client (see *Google credentials*).
 3. Add the claude.ai connector for `https://<host>/mcp` with **no** bearer token. It discovers the
-   server, registers itself, opens Google sign-in, and the allowlisted account completes it. The
-   owner confirmed this on 2026-09-11, which is what retired `MCP_API_TOKEN` (#1461).
+   server, registers itself, opens Google sign-in, and the allowlisted account completes it.
 4. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. Then
    retire `WEB_UI_PASSWORD` in a follow-up change — remembering the watchdog in
    `.github/workflows/scheduled-run-health.yml` reads `/api/things` with it and needs another way
@@ -177,10 +176,11 @@ done:
 
 The proactive half (#1413) is three saved prompts under `prompts/scheduled/` — `resolution-pass.md`,
 `learning-pass.md`, `morning-conversation.md`, in that order — each the text of a claude.ai
-scheduled task with the Reli connector attached: the same `/mcp`, through the same Google sign-in,
-an interactive session uses. Nothing runs on a schedule inside Reli, and nothing here may be turned
-into a background task in the service. [`prompts/scheduled/README.md`](prompts/scheduled/README.md)
-describes what the passes leave in the graph.
+scheduled task with the Reli connector attached: the same `/mcp` an interactive session uses,
+through the same Google sign-in. Nothing runs on a schedule inside Reli, and nothing here may be
+turned into a background task in the service.
+[`prompts/scheduled/README.md`](prompts/scheduled/README.md) describes what the passes leave in the
+graph.
 
 **Agents cannot create the scheduled tasks, add the watchdog's secret, or verify that claude.ai
 scheduled tasks run reliably unattended.** Those are human steps, in the same class as the Google

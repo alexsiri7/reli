@@ -51,15 +51,15 @@ uv sync --frozen
 `DATABASE_URL` is required and has no default — the service refuses to start without it rather than
 silently using an empty database.
 
-Both surfaces are guarded by what a Google sign-in mints — `SECRET_KEY`, `ALLOWED_EMAILS`,
-`GOOGLE_AUTH_REDIRECT_URI` and the Google client, with the human steps in CLAUDE.md's *Google
-sign-in* section: `/mcp` takes only the JWTs its OAuth 2.1 authorization server issues, so a
-claude.ai connector authorises without holding a shared secret, and the web view at `/` presents
-Google sign-in and holds the session in a cookie. `WEB_UI_PASSWORD` is the HTTP Basic password the
-`/api` routes behind the web view still accept beside the cookie; leaving it empty does not open
-what it guards. `/mcp` answers 401 to every request while `SECRET_KEY` is empty; `/api` answers 401
-while neither the sign-in nor `WEB_UI_PASSWORD` is set. `/healthz` stays open either way, so a
-missing secret cannot roll a deploy back.
+`/mcp` and the web view's `/api` are both guarded by what a Google sign-in mints — `SECRET_KEY`,
+`ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and the Google client, with the human steps in
+CLAUDE.md's *Google sign-in* section: `/mcp` takes only the JWTs its OAuth 2.1 authorization
+server issues, so a claude.ai connector authorises without holding a shared secret, and the web
+view at `/` presents Google sign-in and holds the session in a cookie. `WEB_UI_PASSWORD` is the
+HTTP Basic password the `/api` routes behind the web view still accept beside the cookie; leaving
+it empty does not open what it guards. `/mcp` answers 401 to every request while `SECRET_KEY` is
+empty; `/api` answers 401 while neither the sign-in nor `WEB_UI_PASSWORD` is set. `/healthz` stays
+open either way, so a missing secret cannot roll a deploy back.
 
 ```bash
 cp .env.example .env
