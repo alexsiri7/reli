@@ -22,8 +22,6 @@ import logging
 import secrets
 import urllib.parse
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -32,7 +30,6 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlmodel import Session
 
 from . import auth, google_login
-from .db_engine import get_engine
 from .oauth_state import (
     StoreFullError,
     cleanup_and_get,
@@ -56,13 +53,6 @@ CLIENT_TTL_SECONDS = REFRESH_TOKEN_TTL_SECONDS
 
 _AT_CAPACITY = "Server is at capacity; try again later"
 _NO_STORE = {"Cache-Control": "no-store"}
-
-
-@contextmanager
-def _session() -> Iterator[Session]:
-    """The session a route runs in. Tests patch this to bind the routes to the fixture session."""
-    with Session(get_engine()) as session:
-        yield session
 
 
 # --- Discovery -------------------------------------------------------------
@@ -142,7 +132,7 @@ async def oauth_register(request: Request) -> JSONResponse:
         "scope": body.get("scope", "mcp"),
         "expires_at": expires_at,
     }
-    with _session() as session:
+    with auth._session() as session:
         try:
             cleanup_and_store(session, mcp_registered_clients, client_id, client)
         except StoreFullError as full:
@@ -198,7 +188,7 @@ def oauth_authorize(
     if not code_challenge:
         raise HTTPException(status_code=400, detail="code_challenge is required (PKCE required)")
 
-    with _session() as session:
+    with auth._session() as session:
         registered = cleanup_and_get(session, mcp_registered_clients, client_id)
         if registered is None:
             raise HTTPException(status_code=400, detail="Unknown client_id — register first via POST /oauth/register")
@@ -342,7 +332,7 @@ async def oauth_token(
 ) -> JSONResponse:
     """Exchange an authorization code, or rotate a refresh token, for an ``aud="mcp"`` JWT."""
     try:
-        with _session() as session:
+        with auth._session() as session:
             if grant_type == "refresh_token":
                 return _exchange_refresh_token(session, refresh_token, client_id, client_secret)
             if grant_type != "authorization_code":

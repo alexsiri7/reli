@@ -119,7 +119,7 @@ def decode_jwt(token: str, audience: str) -> dict[str, Any]:
 
 @contextmanager
 def _session() -> Iterator[Session]:
-    """The session a route runs in. Tests patch this to bind the routes to the fixture session."""
+    """The session a route here or in :mod:`backend.mcp_oauth` runs in; tests bind it to the fixture session."""
     with Session(get_engine()) as session:
         yield session
 

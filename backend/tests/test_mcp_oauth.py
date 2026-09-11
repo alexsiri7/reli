@@ -1,8 +1,8 @@
 """The authorization server at /oauth/* and /.well-known/*: discovery, registration, PKCE, tokens.
 
-Built onto a fresh ``FastAPI()`` with ``auth.router`` and ``mcp_oauth.router``, both sessions bound
-to the fixture session, and the Basic check applied — so every request below also proves the
-exemption. Google is ``httpx.MockTransport`` throughout; nothing opens a socket.
+Built onto a fresh ``FastAPI()`` with ``auth.router`` and ``mcp_oauth.router``, ``auth._session``
+(the one session both routers run in) bound to the fixture session, and the Basic check applied — so
+every request below also proves the exemption. Google is ``httpx.MockTransport`` throughout; nothing opens a socket.
 """
 
 import secrets
@@ -45,7 +45,6 @@ def client(session, monkeypatch, sign_in_settings):
         yield session
 
     monkeypatch.setattr(auth, "_session", _fixture_session)
-    monkeypatch.setattr(mcp_oauth, "_session", _fixture_session)
     app = FastAPI()
     app.include_router(auth.router)
     app.include_router(mcp_oauth.router)
@@ -129,7 +128,7 @@ def test_discovery_and_registration_answer_without_any_credential(session, monke
     def _fixture_session():
         yield session
 
-    monkeypatch.setattr(mcp_oauth, "_session", _fixture_session)
+    monkeypatch.setattr(auth, "_session", _fixture_session)
     app = FastAPI()
     app.include_router(mcp_oauth.router)
     api.add_web_view_auth(app)
