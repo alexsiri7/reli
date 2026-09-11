@@ -1,276 +1,171 @@
 # Reli: System Architecture
 
+What the shipped v4 system is, derived from the code. The *why* is in [vision.md](vision.md); this
+document does not restate it.
+
 ## 1. Overview
 
-Reli is a personal AI information manager. It stores knowledge as **Things** (tasks, notes, projects, people, ideas) in a graph structure and processes every user message through a **4-stage multi-agent pipeline** to understand context, reason about changes, and respond naturally.
+Reli is a deterministic data service: storage, indexed queries and an append-only journal, with no
+model inside it. Every judgement happens in Claude, reached over MCP. One FastAPI container serves
+three surfaces (`backend/main.py`):
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  React SPA      │────▶│  FastAPI Backend  │────▶│  Requesty       │
-│  (Vite + TS)    │     │  (Python 3.12)   │     │  (LLM Gateway)  │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-                              │    │
-                    ┌─────────┘    └─────────┐
-                    ▼                        ▼
-              ┌──────────────────┐    ┌──────────────┐
-              │  SQLite          │    │  ChromaDB    │
-              │  (or Postgres)   │    │  (vectors)   │
-              └──────────────────┘    └──────────────┘
+Claude session (claude.ai, interactive or scheduled)
+        │  MCP over streamable HTTP, Authorization: Bearer $MCP_API_TOKEN
+        ▼
+   /mcp ──────────────┐
+                      │        ┌──────────────┐
+Browser               │        │              │──── Postgres (things, relationships, journal)
+        │  HTTP Basic, $WEB_UI_PASSWORD       │
+        ▼             ├───────▶│   FastAPI    │
+   /  and  /api ──────┘        │   (reli)     │──── GET only ──▶ Gmail API, Calendar API
+                               │              │                  (the three Google tools)
+Deploy pipeline ──▶ /healthz ─▶│              │
+   (unauthenticated)           └──────────────┘
 ```
 
-## 2. The 4-Stage Agent Pipeline
+`/mcp` is the only path that writes. `/` and `/api` read, with one exception (§8). `/healthz`
+answers `{"status": "ok", "service": "reli"}` to anyone.
 
-Every chat message flows through four sequential agent stages.
+## 2. Data model
 
-```
-User Message
-    │
-    ▼
-┌─────────────────────────────────────┐
-│  Stage 1: Context Agent (Librarian) │
-│  • Generates search queries         │
-│  • Retrieves relevant Things via    │
-│    vector search + SQL filters      │
-└──────────────────┬──────────────────┘
-                   ▼
-┌─────────────────────────────────────┐
-│  Stage 2: Reasoning Agent (Brain)   │
-│  • Analyzes message + context       │
-│  • Outputs structured JSON with     │
-│    storage changes (create/update)  │
-└──────────────────┬──────────────────┘
-                   ▼
-┌─────────────────────────────────────┐
-│  Stage 3: Validator (Code)          │
-│  • Validates schema & business      │
-│    logic (not an LLM call)          │
-│  • Commits changes to SQLite        │
-└──────────────────┬──────────────────┘
-                   ▼
-┌─────────────────────────────────────┐
-│  Stage 4: Response Agent (Voice)    │
-│  • Generates natural language reply │
-│  • Based only on actual changes     │
-│    committed — never hallucinates   │
-└──────────────────┬──────────────────┘
-                   ▼
-         Response + UI Updates
-```
+Three tables, defined in `backend/db_models.py` and created by the single migration
+`backend/alembic/versions/v4_baseline_things_relationships_journal.py`.
 
-### Agent Responsibilities
+**`things`** — the universal unit. `id` (UUID), `title`, `description`, `notes` (JSONB, slug →
+markdown), `tags` (JSONB list), `urls` (JSONB, name → URL), `checkin_date`, `priority` (float,
+higher sorts first), `active`, `created_at`, `updated_at`. There is no type column and no
+`parent_id`: what a Thing *is* lives in its tags and its edges.
 
-| Stage | Agent | Role | Constraint |
-|-------|-------|------|------------|
-| 1 | Context Agent | Determines what prior knowledge is relevant | Must not change state |
-| 2 | Reasoning Agent | Decides what to create/update/delete | Must output valid JSON, no natural language |
-| 3 | Validator | Applies changes to the database | Pure code, no LLM |
-| 4 | Response Agent | Explains what happened to the user | Must base reply only on actual applied changes |
+**`relationships`** — a directed edge: `source_thing_id`, `target_thing_id`, `relationship_type`,
+`context`, `created_at`. The type is one of the five `RelationshipType` values, enforced by a
+`CHECK` constraint, and each type declares its own reading of source and target:
 
-**Key files:**
-- `backend/pipeline.py` — Orchestrates the 4 stages
-- `backend/context_agent.py` — Stage 1
-- `backend/reasoning_agent.py` — Stage 2
-- `backend/response_agent.py` — Stage 4
+| Type | Direction |
+|---|---|
+| `ChildOf` | source is the **parent**, target the child — hierarchy is this edge and nothing else |
+| `Blocks` | source is the **blocked** Thing, target is what blocks it |
+| `EvidenceFor` | source is the evidence, target is what it supports |
+| `RelatedTo` | unpinned, except that `user_model` reads anchor → preference (§5) |
+| `References` | unpinned; no query depends on it |
 
-### Sequence Diagram
+**`journal`** — one row per mutation of the other two tables: `occurred_at`, `actor`, `operation`,
+`entity_type`, `entity_id`, `before`, `after`. `actor` is `user`, `claude_interactive` or
+`claude_scheduled` (`Actor`); `operation` is `create`, `update`, `delete`, `relate` or `unrelate`
+(`Operation`). The `journal_no_mutate` and `journal_no_truncate` triggers in the migration reject
+`UPDATE`, `DELETE` and `TRUNCATE`, which is why `lifespan` in `backend/main.py` runs
+`alembic upgrade head` at startup with no `create_all` fallback — a schema built from ORM metadata
+would be a silently mutable journal.
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Frontend
-    participant API as FastAPI Backend
-    participant DB as SQLite + ChromaDB
-    participant CA as Context Agent
-    participant RA as Reasoning Agent
-    participant VA as Validator
-    participant ResA as Response Agent
+Indexes: btree on `things.title`, `checkin_date`, `active` and `updated_at`; GIN on `things.tags`;
+btree on both relationship endpoints and the type; btree on `journal.occurred_at` and `entity_id`.
 
-    User->>Frontend: Message
-    Frontend->>API: POST /api/chat { message, session_id }
+## 3. Write path
 
-    API->>DB: Fetch conversation history
-    API->>CA: Prompt(message + history)
-    CA-->>API: { search_queries, filter_params }
+`backend/service.py` is the only module that constructs or mutates a `ThingRecord` or
+`RelationshipRecord`; `backend/tests/test_architecture.py` fails the build if anything else does.
+Every public function writes its row and its journal entry in one transaction:
 
-    API->>DB: Vector search + SQL query
-    DB-->>API: [Relevant Things]
+- `create_thing`, `update_thing` — one `create` / `update` entry with before and after snapshots.
+- `delete_thing` — the foreign keys are `ON DELETE RESTRICT`, so each edge is unrelated first: a
+  Thing with N edges produces N `unrelate` entries and then the `delete`. Not exposed over MCP.
+- `relate`, `unrelate` — journalled against the relationship, not the Things it joins.
+- `get_or_create_user_anchor`, `record_preference`, `add_preference_evidence`,
+  `reject_preference` — the user model (§5), built from the same primitives.
 
-    API->>RA: Prompt(message + history + Things)
-    RA-->>API: JSON { storage_changes, reasoning_summary }
+## 4. Queries
 
-    API->>VA: Validate + commit changes
-    VA->>DB: INSERT / UPDATE
-    DB-->>VA: OK
+`backend/queries.py` answers questions with an index, never a search and never a model:
 
-    API->>ResA: Prompt(reasoning_summary + applied_changes)
-    ResA-->>API: Natural language reply
+- `due_for_checkin` — active Things whose `checkin_date` has arrived, most important first.
+- `stale` — active Things untouched since a given moment, longest untouched first.
+- `by_tag` — Things carrying any (or all) of a set of tags.
+- `blocked` — Things whose `Blocks` target is still active.
+- `related` — the neighbourhood of a Thing within N hops, following edges in both directions.
+- `children` — the targets of a Thing's `ChildOf` edges.
+- `tree_level` — one level of the `ChildOf` tree with a live child count per row, for the web view.
+- `relationships_for`, `things_by_id` — the edges on a Thing and a batch of Things by id.
+- `find_things` — Things matching every filter given: tags, active, check-in window, priority
+  range. A filter, not a search: there is no text matching anywhere in Reli.
+- `history` — the newest N journal entries for one entity, with the total so a capped answer cannot
+  pass for a whole one.
+- `user_model`, `evidence_for` — the preferences and the evidence behind each (§5).
 
-    API->>Frontend: { reply, applied_changes }
-    Frontend->>User: Display reply + update UI
-```
+## 5. The user model
 
-## 3. Memory Architecture
+A single Thing tagged `#User` at the fixed id `USER_ANCHOR_ID` anchors every preference. A
+preference is its own Thing tagged `#Preference`, carrying `notes["scope"]`, reached by a
+`RelatedTo` edge running anchor → preference. Its evidence is the set of `EvidenceFor` edges
+pointing at it from other Things; strength is the count of those edges, and there is no confidence
+value anywhere. Because an edge can only point at a Thing, a journal entry becomes evidence once a
+Thing tagged `#Observation` carrying `notes["journal_entry_id"]` stands for it. Rejecting a
+preference adds the `#Rejected` tag and journals it; the preference stays readable and is not
+re-derived. `queries.user_model` drops any preference with no evidence or a blank scope, so an
+evidence-less preference cannot pass for a recorded one.
 
-Reli uses three layers of memory to maintain context:
+The tags and the anchor id are constants in `backend/db_models.py`, read by both the write path
+and the read path so the two cannot drift. Rationale: [vision.md §5](vision.md#5-the-user-model).
 
-| Layer | Storage | Purpose | Lifetime |
-|-------|---------|---------|----------|
-| **Long-term** | SQLite Things + ChromaDB vectors | Knowledge graph: tasks, notes, people, projects | Permanent |
-| **Short-term** | `conversation_summaries` table | Rolling summary of recent conversation | Rolling window |
-| **Working** | Vector search + SQL retrieval | Only what's relevant to the current request | Per-request |
+## 6. MCP surface
 
-The Context Agent (Stage 1) populates working memory before the Reasoning Agent makes decisions. It generates search queries, runs vector similarity search against ChromaDB, and filters SQLite for structured matches.
+`backend/mcp_server.py` is the only way into the graph: twenty tools, four prompts and two
+resources, each a thin wrapper over `service`, `queries` or `google_readers`. Every writing tool
+takes a required `actor` (`claude_interactive` or `claude_scheduled`); there is no hard delete;
+the endpoint sits behind a bearer token. The catalogue is in [mcp-design.md](mcp-design.md).
 
-## 4. Data Model: Things
+## 7. Google readers
 
-Everything in Reli is a **Thing**. Things form a graph connected by typed relationships.
+`backend/google_client.py` is the only module that reads the Google credential
+(`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`) and the only one that
+reaches a Google API. The access token it derives lives in process memory and is written nowhere;
+every call is a `GET`; the scopes are `gmail.readonly` and `calendar.readonly`
+(`SCOPES`). `backend/google_readers.py` builds three read-only lookups on it —
+`find_correspondence`, `find_events`, `check_occurred` — that return summaries and counts, never a
+verdict: whether a check-in is settled is the calling session's judgement. Nothing here mutates a
+Thing, so nothing here journals.
 
-### Core Fields
+## 8. The web view
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | TEXT (UUID) | Unique identifier |
-| `title` | TEXT | Human-readable name |
-| `type_hint` | TEXT | Category: `task`, `note`, `project`, `person`, `idea`, etc. |
-| `parent_id` | TEXT | Parent Thing ID (for hierarchical nesting) |
-| `priority` | INTEGER (1–5) | Urgency level (5 = highest) |
-| `checkin_date` | TIMESTAMP | When to surface in briefing |
-| `active` | BOOLEAN | False = completed or archived |
-| `data` | JSON | Flexible extra fields: `{url, tags, body, ...}` |
-| `open_questions` | TEXT | Unresolved questions about this Thing |
+`frontend/` is a Vite + React + TypeScript bundle with three views in `frontend/src/views/` —
+`Tree`, `ThingDetail` and `UserModel` — consuming the `/api` routes in `backend/api.py`
+([API.md](API.md)). It reads; the single write is `POST /api/preferences/{id}/reject`, attributed
+to `Actor.USER` because the user performed it, which is the only place that actor is used. The
+bundle is built in the Dockerfile's `frontend-build` stage and served by `api.mount_frontend`,
+which `backend/main.py` calls **last** because its fallback answers every unmatched path. Without a
+`frontend/dist` the API still serves and the view is simply absent.
 
-### Relationships
+## 9. Access control
 
-Things are connected by typed edges in the `relationships` table:
+- `/mcp` — `_BearerTokenMiddleware` in `backend/mcp_server.py` requires
+  `Authorization: Bearer $MCP_API_TOKEN`, compared with `secrets.compare_digest`.
+- `/` and `/api` — `_BasicAuthMiddleware` in `backend/api.py` requires HTTP Basic with
+  `WEB_UI_PASSWORD` as the password; the username is ignored.
+- `/healthz` — exempt from both.
 
-```
-from_thing_id ──[relationship_type]──▶ to_thing_id
-```
+An empty secret closes its surface rather than opening it: every request gets a 401 and a warning
+is logged at startup, while `/healthz` stays green so a missing secret cannot roll a deploy back.
+There is no dev-mode bypass. The MCP app's DNS-rebinding protection is off because the service is
+reached through a Cloudflare tunnel; that is safe only because the bearer header is mandatory and
+a cross-origin page cannot set one — the two decisions are coupled.
 
-Example types: `blocks`, `part_of`, `related_to`, `assigned_to`
+## 10. Scheduled Claude
 
-### SQLite Schema (core tables)
+Nothing runs on a schedule inside Reli. The resolution pass, the learning pass and the morning
+conversation are Claude scheduled tasks on the same MCP connection as an interactive session,
+distinguished only by the `claude_scheduled` actor in the journal. They are not yet shipped
+(#1413). Design: [vision.md §4.3](vision.md#43-scheduled-claude--the-proactive-half).
 
-```sql
-CREATE TABLE things (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    type_hint TEXT,
-    parent_id TEXT,
-    checkin_date TIMESTAMP,
-    priority INTEGER DEFAULT 3,
-    active BOOLEAN DEFAULT 1,
-    data JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(parent_id) REFERENCES things(id)
-);
+## 11. Infrastructure
 
-CREATE TABLE relationships (
-    id TEXT PRIMARY KEY,
-    from_thing_id TEXT NOT NULL,
-    to_thing_id TEXT NOT NULL,
-    relationship_type TEXT NOT NULL,
-    metadata JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+| Piece | Where | What |
+|---|---|---|
+| Image | `Dockerfile` | `node:22-slim` stage builds `frontend/dist`; `python:3.12-slim` stage runs `uv sync --frozen --no-dev`, drops to the non-root `reli` user, serves with uvicorn on `$PORT` (default 8000); healthcheck polls `/healthz` |
+| Production compose | `docker-compose.yml` | service `reli` on `127.0.0.1:8000`; a `localdb` profile adds a `postgres:16-alpine` for development, never started in production |
+| Staging compose | `docker-compose.staging.yml` | `reli-staging` on port 8001 with its own Postgres, configured by `STAGING_DATABASE_URL` and `STAGING_POSTGRES_PASSWORD` |
+| CI | `.github/workflows/ci.yml` | Lint & Typecheck, Test, Frontend (inside the pinned Playwright container), Build Docker image — pushed to GHCR on `main`, keeping the last three SHA tags |
+| Deploy | `.github/workflows/staging-pipeline.yml` | on a green `main` CI run: Railway staging → health wait → Railway production |
+| Public access | Cloudflare Tunnel | host infrastructure, pointed at `http://reli:8000`; not read by the app |
+| Errors | `backend/sentry.py` | optional; an empty `SENTRY_DSN` disables it |
 
-CREATE TABLE chat_sessions (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    title TEXT NOT NULL DEFAULT 'New chat',
-    origin TEXT,               -- e.g. 'morning_briefing', 'weekly_review'; null for manual sessions
-    created_at TIMESTAMP NOT NULL,
-    last_active_at TIMESTAMP NOT NULL
-);
-
-CREATE TABLE chat_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT,
-    role TEXT,           -- 'user', 'assistant', or 'system'
-    content TEXT,
-    applied_changes JSON,
-    cost_usd REAL,
-    model TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-## 5. Vector Search (RAG)
-
-Reli uses ChromaDB for semantic search over Things.
-
-- **Vector store:** ChromaDB (persistent, embedded in-process at `backend/chroma_db/`)
-- **Embedding model:** `text-embedding-3-small` via Requesty
-- **Fallback:** Ollama `nomic-embed-text` (local)
-
-On each Thing create/update, an embedding of the title + type + data is generated and stored in ChromaDB. The Context Agent queries ChromaDB with the user's message to retrieve semantically similar Things, then intersects those results with SQL filters (active status, type_hint, date ranges).
-
-## 6. LLM Routing
-
-All LLM calls route through **Requesty** (`router.requesty.ai/v1`), an OpenAI-compatible gateway.
-
-Model selection is configured in `config.yaml`:
-
-```yaml
-llm:
-  models:
-    context: google/gemini-2.5-flash-lite    # Stage 1: fast, query generation
-    reasoning: google/gemini-3-flash-preview         # Stage 2: structured JSON decisions
-    response: google/gemini-2.5-flash-lite    # Stage 4: natural language
-```
-
-Override per-user via `PUT /api/settings`. Override globally via env vars: `REQUESTY_MODEL`, `REQUESTY_REASONING_MODEL`, `REQUESTY_RESPONSE_MODEL`.
-
-## 7. Authentication
-
-Authentication uses Google OAuth2 with JWT session cookies.
-
-```
-Browser ──GET /api/auth/google──▶ FastAPI ──redirect──▶ Google OAuth
-                                                              │
-Browser ◀──Set-Cookie: reli_session (JWT)─── FastAPI ◀──callback─┘
-```
-
-All `/api/*` routes (except `/api/auth/*`) require a valid `reli_session` cookie. The JWT payload contains the user's Google `sub` ID. All database queries apply user-scoped filtering via `user_id`.
-
-## 8. Background Jobs
-
-The sweep scheduler (`sweep_scheduler.py`) runs nightly jobs:
-
-| Job | Purpose |
-|-----|---------|
-| Preference sweep | Infers user preferences from conversation patterns |
-| Connection sweep | Detects semantically related Things to suggest connections |
-| Research sweep | Fetches external data (web, Gmail, calendar) for Things with open questions |
-| Auto-merge sweep | Auto-merges exact-title cross-project duplicate Things above confidence threshold |
-| Morning briefing | Pre-generates the daily briefing |
-
-Scheduler starts at app startup and stops on shutdown (via FastAPI lifespan context).
-
-Autonomous actions taken by sweep jobs (Thing merges via auto-merge sweep, connection suggestions, etc.) are persisted to the `sweep_actions` table via `record_sweep_action()` in `morning_briefing.py` and surfaced in the pre-generated morning briefing under `actions_taken`.
-
-## 9. Frontend Architecture
-
-The frontend is a React 19 SPA built with Vite.
-
-| Concern | Approach |
-|---------|---------|
-| State management | Zustand store (`store.ts`) — Things, chat, UI state |
-| API calls | `apiFetch` wrapper (`api.ts`) — handles auth, errors, JSON |
-| Validation | Zod schemas (`schemas.ts`) validate API responses |
-| Offline | IndexedDB caching + sync engine (`src/offline/`) |
-| Routing | No router — panels shown/hidden via store state |
-
-The Vite dev server proxies `/api/*` to `localhost:8000`. In production, the backend serves the built `frontend/dist/` directly via FastAPI's `StaticFiles`.
-
-## 10. Infrastructure
-
-| Component | Details |
-|-----------|---------|
-| Container | Docker (python:3.12-slim), non-root user `reli:reli` |
-| Data persistence | `./data:/app/data` volume — SQLite persists across rebuilds |
-| Port | `127.0.0.1:8000` (local only) |
-| Public access | Cloudflare Tunnel via `CLOUDFLARE_TUNNEL_TOKEN` |
-| CI/CD | GitHub Actions → SSH via Tailscale → `git pull + rebuild` |
-| Health check | `GET /healthz` |
+Runbooks: [ROLLBACK.md](ROLLBACK.md), [RAILWAY_TOKEN_ROTATION_742.md](RAILWAY_TOKEN_ROTATION_742.md),
+[DEPLOYMENT_SECRETS.md](../DEPLOYMENT_SECRETS.md).
