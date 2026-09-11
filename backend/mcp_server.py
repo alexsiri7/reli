@@ -115,8 +115,10 @@ reli_mcp = FastMCP(
     "Reli",
     instructions=(
         "Reli is a personal knowledge graph of Things — tasks, notes, projects, ideas, goals — and "
-        "the typed relationships between them. There is no type column: what a Thing is lives in "
-        "its tags and its edges, and hierarchy is a ChildOf relationship. "
+        "the typed relationships between them. Call get_initial_instructions before anything else: "
+        "it returns how to behave as the user's assistant with Reli attached. "
+        "There is no type column: what a Thing is lives in its tags and its edges, and hierarchy "
+        "is a ChildOf relationship. "
         "Read with get_thing, find_things, get_related, children and the standing questions "
         "due_for_checkin, stale, blocked and needs_input. Write with create_thing, update_thing, "
         "archive_thing, relate and unrelate. "
@@ -683,11 +685,26 @@ def scoped_user_model_resource(scope: str) -> dict[str, Any]:
     return _user_model_payload(scope=scope)
 
 
-# --- Prompts: the hats ------------------------------------------------------
+# --- The default behaviour, and the hats ------------------------------------
 #
-# The text lives in backend.prompts; these register it. Each description names the preference
-# scope the prompt loads, because the description is what a connected session shows before the
-# prompt is picked.
+# The text lives in backend.prompts; these register it. A prompt reaches a session only when the
+# user picks it, so the default behaviour is a tool as well: any session can call it, and nothing
+# outside this repository needs to restate it. Each prompt's description names the preference
+# scope it loads, because the description is what a connected session shows before the prompt is
+# picked.
+
+
+@reli_mcp.tool()
+def get_initial_instructions() -> str:
+    """How to behave as the user's assistant with Reli attached. Call this first, every session.
+
+    Returns the default behaviour — what is worth a Thing, how to title and tag it, when to relate
+    rather than create, when to set a check-in date and what one means, how to record a
+    preference, which actor to write as — and names the three prompts to load when the
+    conversation turns to daily planning, project planning or review. It reads nothing from the
+    graph: loading the user model is the first thing the text tells you to do.
+    """
+    return prompts.initial_instructions()
 
 
 @reli_mcp.prompt(

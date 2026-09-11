@@ -2,13 +2,15 @@
 
 ## 1. Overview
 
-`/mcp` is the only way into the graph. `backend/mcp_server.py` registers twenty-two tools, four
+`/mcp` is the only way into the graph. `backend/mcp_server.py` registers twenty-three tools, four
 prompts and two resources, each a thin wrapper over `backend/service.py` (writes),
-`backend/queries.py` (graph reads) or `backend/google_readers.py` (Gmail and Calendar reads). No
+`backend/queries.py` (graph reads), `backend/google_readers.py` (Gmail and Calendar reads) or
+`backend/prompts.py` (the behaviour). No
 judgement happens in that module and no model is called from it: the tools hand Claude the graph
 and Claude decides what it means. Rationale: [vision.md §4.2](vision.md#42-mcp--the-only-way-in).
 
-The server's `instructions` string tells a connected session the shape of the graph (Things,
+The server's `instructions` string tells a connected session to call `get_initial_instructions`
+before anything else, then the shape of the graph (Things,
 tags instead of a type column, `ChildOf` for hierarchy), which tools read and which write, the two
 actor values and why they must be honest, that nothing is hard-deleted, how the user model is
 structured, and that the Google tools return evidence rather than answers.
@@ -92,6 +94,12 @@ Google — no `actor`, and they journal nothing because they mutate nothing:
 | `find_correspondence` | Gmail search (`query` in Gmail syntax, `since`, `until`, `limit` capped at 25); returns sender, recipient, subject, date, snippet and labels. Bodies are never fetched. |
 | `find_events` | The primary calendar over `since`–`until`, recurring events expanded, optional free-text `query`, `limit` capped at 25. |
 | `check_occurred` | Both sources for one `description` over a window; returns the events, the messages and their counts, and deliberately no verdict — whether the thing happened is the caller's judgement. |
+
+Behaviour — no `actor`, and it reads nothing from the graph:
+
+| Tool | Does |
+|---|---|
+| `get_initial_instructions` | Returns the `capture` behaviour plus a paragraph naming the three hats as prompts to load. A prompt reaches a session only when the user picks one, so this is how the default behaviour reaches every session (#1466); the server's `instructions` tell a session to call it first. Derived from the same text as the `capture` prompt at call time, so there is no second copy to drift. |
 
 ## 5. Prompts
 

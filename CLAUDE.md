@@ -19,6 +19,13 @@ Non-negotiables from `docs/vision.md`. They hold even when a bead description or
 - Every mutation writes a journal entry. A code path that changes a Thing without journalling is a bug.
 - No derived state without evidence links. No confidence floats.
 - The frontend never writes, with one exception: rejecting a preference.
+- Reli's operating behaviour lives in `backend/prompts.py` and is served to sessions by the
+  `get_initial_instructions` tool (#1466), because claude.ai applies an MCP prompt only when the
+  user picks one. A Claude Project, system prompt or scheduled-task prompt calls the tool rather
+  than restating the rules in its own words — a restatement is a copy that drifts with nothing to
+  catch it. The scheduled prompts under `prompts/scheduled/` carry the two conventions pasted
+  verbatim, which is not a restatement: `backend/tests/test_scheduled_prompts.py` fails when they
+  diverge.
 - **This repository is public.** No real user data is ever committed to it. This covers, and is not limited to: graph exports or database dumps; statistics derived from real data, including tag frequencies and counts; recorded Gmail or Calendar fixtures; briefing Things; preference Things and their evidence; and logs containing Thing titles or notes. Test fixtures are synthetic and written by hand. If a task appears to require real data in the repository, that is a design error — send mail to mayor rather than committing it.
 
 The merged code now follows these rules: #1408 deleted the LLM pipeline, replaced the schema and made hierarchy a `ChildOf` relationship. The five relationship-type literals are defined once, in `RelationshipType` in `backend/db_models.py` — use them, do not invent a sixth without an issue that asks for it.
@@ -287,9 +294,11 @@ Creating documentation that claims success on an action you cannot perform is a 
 - Writes: `backend/service.py` — the only module that may mutate a Thing; every function journals
 - Reads: `backend/queries.py` — the indexed queries, including `user_model`
 - Retained reference, not built or shipped: `reference/oauth/` (see its README)
-- MCP: `backend/mcp_server.py` — the twenty-two tools wrapping `service.py`, `queries.py` and
-  `google_readers.py`, behind the OAuth JWT the Google sign-in mints; every writing tool takes a
-  required `actor`, and hard delete is not exposed.
+- MCP: `backend/mcp_server.py` — the twenty-three tools wrapping `service.py`, `queries.py`,
+  `google_readers.py` and `prompts.py`, behind the OAuth JWT the Google sign-in mints; every
+  writing tool takes a required `actor`, and hard delete is not exposed.
+  `get_initial_instructions` is the one tool that touches no data: it returns the default
+  behaviour, and the server's `instructions` tell a session to call it first.
   `journal_since` is the one cross-Thing journal read, filtered by actor, for the learning pass.
   The three Google tools take no `actor` and journal nothing, because they mutate nothing. The four
   user-model tools are `record_preference`, `add_preference_evidence`, `reject_preference` and
@@ -298,7 +307,9 @@ Creating documentation that claims success on an action you cannot perform is a 
   tasks, plain files rather than MCP prompts, with the conventions from `backend/prompts.py` pasted
   verbatim and `backend/tests/test_scheduled_prompts.py` holding them to it
 - Prompts: `backend/prompts.py` — the text of the four MCP prompts `capture`, `daily-planning`,
-  `project-planning` and `review`, registered in `mcp_server.py`. Every one carries the
+  `project-planning` and `review`, registered in `mcp_server.py`, and `initial_instructions`,
+  what `get_initial_instructions` returns: `capture` derived at call time plus a paragraph naming
+  the three hats, never a second copy. Every prompt carries the
   preference-capture convention and the check-in semantics, held as constants there so a test can
   prove it, and names the one preference scope it loads; those scope labels (`capture`,
   `scheduling`, `planning`, `review`) are the scope vocabulary — reuse them rather than coin new ones
