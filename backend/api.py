@@ -9,8 +9,9 @@ journal keeps one story about who did what.
 through Claude and a rejection the user made themselves are distinguishable in the journal, which is
 the learning pass's only signal for "the user decided".
 
-Everything here except ``/healthz`` and ``/mcp`` sits behind :func:`add_web_view_auth`: the service
-is publicly reachable and these routes serve the user's whole graph.
+Everything here sits behind :func:`add_web_view_auth`: the service is publicly reachable and these
+routes serve the user's whole graph. The exemptions are ``/healthz``, ``/mcp`` and the
+authorization server's own surface — see :func:`_is_exempt`.
 """
 
 from __future__ import annotations
@@ -345,9 +346,16 @@ def mount_frontend(app: FastAPI, dist: pathlib.Path) -> None:
 # --- Access control --------------------------------------------------------
 
 
+#: Public by design. ``/healthz`` is polled unauthenticated by the deploy pipeline. ``/mcp`` carries
+#: its own bearer check. ``/.well-known/`` and ``/oauth/`` are the authorization server's discovery,
+#: registration and token endpoints, which an MCP client reaches before it holds any credential.
+#: ``/api/auth/`` is Google's redirect, which lands in a fresh browser that has never seen the Basic
+#: prompt. The prefixes end in a slash so ``/api/auth`` cannot be widened into ``/api/authors``.
+_EXEMPT_PREFIXES = ("/mcp/", "/.well-known/", "/oauth/", "/api/auth/")
+
+
 def _is_exempt(path: str) -> bool:
-    """``/healthz`` is polled unauthenticated by the deploy pipeline; ``/mcp`` carries its own bearer check."""
-    return path == "/healthz" or path == "/mcp" or path.startswith("/mcp/")
+    return path in ("/healthz", "/mcp") or path.startswith(_EXEMPT_PREFIXES)
 
 
 def _basic_password(header: str) -> str:
@@ -366,7 +374,7 @@ def _basic_password(header: str) -> str:
 
 
 class _BasicAuthMiddleware:
-    """Requires HTTP Basic with ``WEB_UI_PASSWORD`` on every path but ``/healthz`` and ``/mcp``.
+    """Requires HTTP Basic with ``WEB_UI_PASSWORD`` on every path :func:`_is_exempt` does not name.
 
     An unset password closes the view rather than opening it: there is no dev-mode bypass, because
     these routes serve the user's whole graph and the deploy URLs answer the public internet.
@@ -402,7 +410,7 @@ class _BasicAuthMiddleware:
 
 
 def add_web_view_auth(app: FastAPI) -> None:
-    """Put every route but ``/healthz`` and ``/mcp`` behind the Basic check."""
+    """Put every route :func:`_is_exempt` does not name behind the Basic check."""
     if not settings.WEB_UI_PASSWORD:
         logger.warning("WEB_UI_PASSWORD is not set: the web view and /api will answer 401 to every request.")
     app.add_middleware(_BasicAuthMiddleware)

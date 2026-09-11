@@ -449,6 +449,17 @@ def test_the_mcp_mount_is_not_touched_by_the_basic_check(session, monkeypatch, w
     assert TestClient(app).get("/mcp/").status_code == 200
 
 
+@pytest.mark.parametrize("path", ["/.well-known/x", "/oauth/x", "/api/auth/x"])
+def test_the_authorization_servers_surface_is_not_touched_by_the_basic_check(anonymous, web_password, path):
+    """These reach the router — a 404 here, where nothing is registered — rather than the middleware."""
+    assert anonymous.get(path).status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/api/authors", "/api/auth", "/oauth", "/.well-known"])
+def test_the_exemption_is_by_whole_path_segment(anonymous, web_password, path):
+    assert anonymous.get(path).status_code == 401
+
+
 # --- Serving the built frontend ------------------------------------------
 
 
