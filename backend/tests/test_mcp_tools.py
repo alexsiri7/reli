@@ -12,10 +12,11 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import get_args
 
+import jwt
 import pytest
 from sqlalchemy import text
 
-from backend import google_readers, prompts
+from backend import auth, google_readers, prompts
 from backend.config import settings
 from backend.db_models import Actor, RelationshipType
 from backend.mcp_server import (
@@ -655,3 +656,89 @@ def test_an_unset_token_closes_the_endpoint_rather_than_opening_it(client):
         settings.MCP_API_TOKEN = previous
 
     assert response.status_code == 401
+
+
+@pytest.fixture()
+def secret_key():
+    """A signing key on the settings singleton, the static token cleared, and both put back."""
+    previous = settings.SECRET_KEY, settings.MCP_API_TOKEN
+    settings.SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
+    settings.MCP_API_TOKEN = ""
+    yield settings.SECRET_KEY
+    settings.SECRET_KEY, settings.MCP_API_TOKEN = previous
+
+
+def _bearer(token):
+    return {**_MCP_HEADERS, "Authorization": f"Bearer {token}"}
+
+
+def test_mcp_endpoint_admits_a_jwt_the_authorization_server_minted(client, secret_key):
+    token = auth.create_jwt("1234567890", "owner@example.com", audience="mcp")
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(token))
+
+    assert response.status_code != 401
+    assert "create_thing" in response.text
+
+
+def test_mcp_endpoint_refuses_a_jwt_for_another_audience(client, secret_key):
+    token = auth.create_jwt("1234567890", "owner@example.com", audience="web")
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(token))
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+
+
+def test_an_expired_jwt_is_refused_naming_the_refresh_path(client, secret_key):
+    expired = jwt.encode(
+        {"sub": "1234567890", "aud": "mcp", "exp": datetime.now(UTC) - timedelta(seconds=1)},
+        secret_key,
+        algorithm="HS256",
+    )
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(expired))
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+    assert "/oauth/token" in response.json()["detail"]
+
+
+def test_the_401_points_at_the_resource_metadata_when_a_base_url_is_set(client, secret_key):
+    previous = settings.RELI_BASE_URL
+    settings.RELI_BASE_URL = "https://reli.example.test"
+    try:
+        response = client.post("/mcp/", json=_TOOLS_LIST, headers=_MCP_HEADERS)
+    finally:
+        settings.RELI_BASE_URL = previous
+
+    assert response.status_code == 401
+    assert (
+        'resource_metadata="https://reli.example.test/.well-known/oauth-protected-resource"'
+        in response.headers["WWW-Authenticate"]
+    )
+
+
+def test_with_neither_secret_set_the_401_names_what_to_set(client):
+    previous = settings.SECRET_KEY, settings.MCP_API_TOKEN
+    settings.SECRET_KEY = ""
+    settings.MCP_API_TOKEN = ""
+    try:
+        response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("anything"))
+    finally:
+        settings.SECRET_KEY, settings.MCP_API_TOKEN = previous
+
+    assert response.status_code == 401
+    assert "MCP_API_TOKEN" in response.json()["detail"]
+
+
+def test_the_static_token_is_still_admitted_beside_the_jwt_path(client, mcp_token):
+    """The acceptance criterion in one line: MCP_API_TOKEN works until a human retires it."""
+    previous = settings.SECRET_KEY
+    settings.SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
+    try:
+        response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
+    finally:
+        settings.SECRET_KEY = previous
+
+    assert response.status_code != 401
