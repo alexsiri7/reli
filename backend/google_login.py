@@ -145,7 +145,7 @@ def _failure_message(response: httpx.Response) -> str:
         )
     if error in ("invalid_grant", "invalid_client"):
         return (
-            f"Google refused the sign-in as {error}: start the sign-in again from the connector. If it "
+            f"Google refused the sign-in as {error}: start the sign-in again. If it "
             "keeps failing, a human checks GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the deploy."
         )
     return f"Google refused the sign-in with HTTP {response.status_code}" + (f" ({error})" if error else "")

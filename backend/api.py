@@ -10,14 +10,17 @@ through Claude and a rejection the user made themselves are distinguishable in t
 the learning pass's only signal for "the user decided".
 
 Everything here sits behind :func:`add_web_view_auth`: the service is publicly reachable and these
-routes serve the user's whole graph. The exemptions are ``/healthz``, ``/mcp`` and the
-authorization server's own surface — see :func:`_is_exempt`.
+routes serve the user's whole graph. A request is admitted by the ``reli_session`` cookie the
+Google sign-in sets, or by ``WEB_UI_PASSWORD`` as an HTTP Basic password while that remains. The
+bundle itself is public — it is the sign-in view — and so is ``/api/auth/``, which is how a
+browser gets a session; see :func:`_is_guarded`.
 """
 
 from __future__ import annotations
 
 import base64
 import binascii
+import json
 import logging
 import pathlib
 import secrets
@@ -31,10 +34,11 @@ from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 from sqlmodel import Session
+from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from . import queries, service
+from . import auth, queries, service
 from .config import settings
 from .db_engine import get_engine
 from .db_models import (
@@ -346,16 +350,19 @@ def mount_frontend(app: FastAPI, dist: pathlib.Path) -> None:
 # --- Access control --------------------------------------------------------
 
 
-#: Public by design. ``/healthz`` is polled unauthenticated by the deploy pipeline. ``/mcp`` carries
-#: its own bearer check. ``/.well-known/`` and ``/oauth/`` are the authorization server's discovery,
-#: registration and token endpoints, which an MCP client reaches before it holds any credential.
-#: ``/api/auth/`` is Google's redirect, which lands in a fresh browser that has never seen the Basic
-#: prompt. The prefixes end in a slash so ``/api/auth`` cannot be widened into ``/api/authors``.
-_EXEMPT_PREFIXES = ("/mcp/", "/.well-known/", "/oauth/", "/api/auth/")
+#: What the check guards: the graph, which only ``/api`` serves. The bundle is static code from a
+#: public repository and is the sign-in view, so it answers everyone; ``/api/auth/`` is how a
+#: browser gets a session, so it must answer before there is one. ``/healthz``, ``/mcp``,
+#: ``/.well-known/`` and ``/oauth/`` were never the web view's to guard — ``/mcp`` carries its own
+#: bearer check. The prefix ends in a slash so ``/api/auth`` cannot be widened into ``/api/authors``.
+_GUARDED_PREFIX = "/api/"
+_PUBLIC_PREFIX = "/api/auth/"
+
+_NO_CREDENTIAL = "Not signed in: sign in with Google at /, or send WEB_UI_PASSWORD as the HTTP Basic password."
 
 
-def _is_exempt(path: str) -> bool:
-    return path in ("/healthz", "/mcp") or path.startswith(_EXEMPT_PREFIXES)
+def _is_guarded(path: str) -> bool:
+    return (path == "/api" or path.startswith(_GUARDED_PREFIX)) and not path.startswith(_PUBLIC_PREFIX)
 
 
 def _basic_password(header: str) -> str:
@@ -373,36 +380,48 @@ def _basic_password(header: str) -> str:
     return password if separator else ""
 
 
-class _BasicAuthMiddleware:
-    """Requires HTTP Basic with ``WEB_UI_PASSWORD`` on every path :func:`_is_exempt` does not name.
+def _refusal(request: Request) -> str | None:
+    """Why the request is not admitted, or ``None`` when the cookie or the password admits it.
 
-    An unset password closes the view rather than opening it: there is no dev-mode bypass, because
-    these routes serve the user's whole graph and the deploy URLs answer the public internet.
+    The cookie is asked first, then the password. A stale cookie beside the right password still
+    admits — the watchdog and ``curl`` never carry a cookie, but a browser might keep an expired one.
+    """
+    reason = _NO_CREDENTIAL
+    try:
+        if auth.web_session(request) is not None:
+            return None
+    except auth.SessionRefused as refused:
+        reason = str(refused)
 
-    Guarding the static bundle as well as ``/api`` is what makes this work with no login view — the
-    browser gets a 401 on ``/``, prompts once, and then carries the header on the XHRs too.
+    # Read the password per request, not at construction: the app is built at import time, so a
+    # value captured then could never be corrected.
+    expected = settings.WEB_UI_PASSWORD
+    if expected and secrets.compare_digest(_basic_password(request.headers.get("authorization", "")), expected):
+        return None
+    return reason
+
+
+class _WebViewAuthMiddleware:
+    """Requires the ``reli_session`` cookie or HTTP Basic with ``WEB_UI_PASSWORD`` on every ``/api`` path.
+
+    Nothing set closes the graph rather than opening it: there is no dev-mode bypass, because these
+    routes serve the user's whole graph and the deploy URLs answer the public internet.
+
+    The 401 carries no ``WWW-Authenticate``: a challenge would make the browser pop its own
+    credential prompt over the sign-in view. The body says what admits a request instead.
     """
 
     def __init__(self, app: ASGIApp) -> None:
         self._app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or _is_exempt(scope.get("path", "")):
+        if scope["type"] != "http" or not _is_guarded(scope.get("path", "")):
             await self._app(scope, receive, send)
             return
 
-        # Read the password per request, not at construction: the app is built at import time, so a
-        # value captured then could never be corrected.
-        expected = settings.WEB_UI_PASSWORD
-        header = dict(scope.get("headers", [])).get(b"authorization", b"").decode()
-
-        if not expected or not secrets.compare_digest(_basic_password(header), expected):
-            response = Response(
-                content='{"detail":"Unauthorized"}',
-                status_code=401,
-                media_type="application/json",
-                headers={"WWW-Authenticate": 'Basic realm="reli"'},
-            )
+        reason = _refusal(Request(scope))
+        if reason is not None:
+            response = Response(content=json.dumps({"detail": reason}), status_code=401, media_type="application/json")
             await response(scope, receive, send)
             return
 
@@ -410,7 +429,11 @@ class _BasicAuthMiddleware:
 
 
 def add_web_view_auth(app: FastAPI) -> None:
-    """Put every route :func:`_is_exempt` does not name behind the Basic check."""
-    if not settings.WEB_UI_PASSWORD:
-        logger.warning("WEB_UI_PASSWORD is not set: the web view and /api will answer 401 to every request.")
-    app.add_middleware(_BasicAuthMiddleware)
+    """Put every ``/api`` route outside ``/api/auth/`` behind the session-or-password check."""
+    missing = auth.missing_sign_in_settings()
+    if not settings.WEB_UI_PASSWORD and missing:
+        logger.warning(
+            "WEB_UI_PASSWORD is not set and the Google sign-in is missing %s: /api will answer 401 to every request.",
+            ", ".join(missing),
+        )
+    app.add_middleware(_WebViewAuthMiddleware)

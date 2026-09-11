@@ -1,8 +1,8 @@
-"""The JWTs Reli mints and Google's callback: who gets a code, who is turned away, and what is logged.
+"""The JWTs Reli mints, Google's callback and the web session: who gets in, who is turned away, what is logged.
 
-The callback is built onto a fresh ``FastAPI()`` with ``auth._session`` bound to the fixture session
-and the Basic check applied, so the tests also prove the callback is exempt from it — without the
-exemption every request below would be 401. Google is ``httpx.MockTransport`` throughout.
+The router is built onto a fresh ``FastAPI()`` with ``auth._session`` bound to the fixture session
+and the web view's check applied, so the tests also prove ``/api/auth/`` is exempt from it — without
+the exemption every request below would be 401. Google is ``httpx.MockTransport`` throughout.
 """
 
 import logging
@@ -18,7 +18,13 @@ from fastapi.testclient import TestClient
 
 from backend import api, auth, google_login
 from backend.config import settings
-from backend.oauth_state import cleanup_and_get, cleanup_and_store, mcp_auth_codes, mcp_oauth_sessions
+from backend.oauth_state import (
+    cleanup_and_get,
+    cleanup_and_store,
+    mcp_auth_codes,
+    mcp_oauth_sessions,
+    web_oauth_sessions,
+)
 
 SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
 CLIENT_ID = "client-id.apps.googleusercontent.com"
@@ -99,10 +105,25 @@ def _seed_flow(session, state="server-state", client_state="client-state"):
     )
 
 
-def _location_query(response):
+def _seed_web_flow(session, state="web-state"):
+    cleanup_and_store(
+        session,
+        web_oauth_sessions,
+        state,
+        {"google_code_verifier": "verifier", "expires_at": datetime.now(UTC) + timedelta(minutes=10)},
+    )
+
+
+def _location_query(response, base=CLIENT_REDIRECT):
     location = response.headers["location"]
-    assert location.startswith(CLIENT_REDIRECT + "?")
+    assert location.startswith(base + "?")
     return {key: values[0] for key, values in parse_qs(urlsplit(location).query).items()}
+
+
+def _session_cookie(response):
+    cookie = response.headers["set-cookie"]
+    assert cookie.startswith(auth.SESSION_COOKIE + "=")
+    return cookie
 
 
 # --- JWTs ------------------------------------------------------------------
@@ -161,7 +182,7 @@ def test_a_good_sign_in_sends_the_client_a_code_bound_to_the_identity(client, se
     assert cleanup_and_get(session, mcp_oauth_sessions, "server-state") is None
 
 
-def test_an_unknown_state_is_400_and_the_callback_is_exempt_from_the_basic_check(client, google):
+def test_an_unknown_state_is_400_and_the_callback_is_exempt_from_the_web_view_check(client, google):
     seen = google(lambda request: httpx.Response(500))
 
     response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "nope"})
@@ -236,3 +257,129 @@ def test_the_code_is_appended_to_a_redirect_uri_that_already_has_a_query(client,
     location = response.headers["location"]
     assert location.startswith(CLIENT_REDIRECT + "?app=claude&code=")
     assert "state=" not in location
+
+
+# --- The web view's sign-in ---------------------------------------------------
+
+
+def test_starting_a_web_sign_in_remembers_the_verifier_and_points_at_google(client, session):
+    response = client.get("/api/auth/google")
+
+    assert response.status_code == 200
+    auth_url = response.json()["auth_url"]
+    assert auth_url.startswith(google_login.AUTHORIZATION_URL + "?")
+    query = {key: values[0] for key, values in parse_qs(urlsplit(auth_url).query).items()}
+    assert query["code_challenge_method"] == "S256"
+    stored = cleanup_and_get(session, web_oauth_sessions, query["state"])
+    assert stored is not None
+    assert google_login.s256_challenge(stored["google_code_verifier"]) == query["code_challenge"]
+
+
+def test_starting_a_web_sign_in_refuses_up_front_naming_each_missing_setting(client, monkeypatch):
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "")
+
+    response = client.get("/api/auth/google")
+
+    assert response.status_code == 501
+    assert "GOOGLE_CLIENT_SECRET, ALLOWED_EMAILS" in response.json()["detail"]
+    assert "CLAUDE.md" in response.json()["detail"]
+
+
+def test_a_good_web_sign_in_sets_the_session_cookie_and_lands_on_the_view(client, session, google, caplog):
+    _seed_web_flow(session)
+    google(lambda request: httpx.Response(200, json={"access_token": "never-read", "id_token": _id_token()}))
+
+    with caplog.at_level(logging.DEBUG):
+        response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "web-state"})
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/"
+    cookie = _session_cookie(response)
+    assert "HttpOnly" in cookie
+    assert "SameSite=lax" in cookie
+    assert "Secure" in cookie
+    assert f"Max-Age={auth.JWT_EXPIRY_SECONDS}" in cookie
+    token = cookie.split(";")[0].split("=", 1)[1]
+    claims = auth.decode_jwt(token, audience=auth.WEB_AUDIENCE)
+    assert claims["email"] == "owner@example.com"
+    assert token not in caplog.text
+    assert cleanup_and_get(session, web_oauth_sessions, "web-state") is None
+
+
+def test_the_cookie_is_not_marked_secure_for_a_plain_http_deploy(client, session, google, monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback")
+    _seed_web_flow(session)
+    google(lambda request: httpx.Response(200, json={"access_token": "never-read", "id_token": _id_token()}))
+
+    response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "web-state"})
+
+    assert "Secure" not in _session_cookie(response)
+
+
+def test_a_web_account_outside_the_allowlist_is_sent_to_the_view_as_invite_only(client, session, google, caplog):
+    _seed_web_flow(session)
+    google(
+        lambda request: httpx.Response(
+            200, json={"access_token": "never-read", "id_token": _id_token(email="intruder@example.com")}
+        )
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "web-state"})
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/?error=invite_only"
+    assert "set-cookie" not in response.headers
+    assert "intruder@example.com" not in caplog.text
+
+
+def test_a_cancelled_web_sign_in_is_sent_to_the_view_without_an_exchange(client, session, google):
+    _seed_web_flow(session)
+    seen = google(lambda request: httpx.Response(500))
+
+    response = client.get("/api/auth/google/callback", params={"error": "access_denied", "state": "web-state"})
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/?error=cancelled"
+    assert seen == []
+
+
+def test_a_google_refusal_of_a_web_sign_in_is_502_naming_the_remedy(client, session, google):
+    _seed_web_flow(session)
+    google(lambda request: httpx.Response(400, json={"error": "invalid_grant"}))
+
+    response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "web-state"})
+
+    assert response.status_code == 502
+    assert "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET" in response.json()["detail"]
+
+
+def test_me_answers_the_cookie_and_401_with_the_remedy_without_one(client):
+    token = auth.create_jwt("1234567890", "owner@example.com", audience=auth.WEB_AUDIENCE)
+
+    assert client.get("/api/auth/me", headers={"Cookie": f"{auth.SESSION_COOKIE}={token}"}).json() == {
+        "email": "owner@example.com"
+    }
+
+    response = client.get("/api/auth/me")
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Not signed in: sign in with Google at /."
+
+
+def test_me_refuses_an_mcp_token_as_a_web_session(client):
+    token = auth.create_jwt("1234567890", "owner@example.com", audience=auth.MCP_AUDIENCE)
+
+    response = client.get("/api/auth/me", headers={"Cookie": f"{auth.SESSION_COOKIE}={token}"})
+
+    assert response.status_code == 401
+    assert "sign in with Google" in response.json()["detail"]
+
+
+def test_logout_deletes_the_cookie(client):
+    response = client.post("/api/auth/logout")
+
+    assert response.status_code == 204
+    cookie = _session_cookie(response)
+    assert 'reli_session=""' in cookie
+    assert "Max-Age=0" in cookie

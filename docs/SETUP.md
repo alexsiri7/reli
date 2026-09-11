@@ -38,8 +38,10 @@ Startup runs `alembic upgrade head`; a migration failure fails the boot. `curl l
 answers `{"status":"ok","service":"reli"}`.
 
 `/mcp` answers 401 to every request until `MCP_API_TOKEN` or the Google sign-in (`SECRET_KEY` and
-the settings beside it) is set, and `/` and `/api` answer 401 until `WEB_UI_PASSWORD` is set. There
-is no dev-mode bypass — set `MCP_API_TOKEN` and `WEB_UI_PASSWORD` in `.env` to use them locally.
+the settings beside it) is set, and `/api` answers 401 until one of the Google sign-in or
+`WEB_UI_PASSWORD` is set — `/` itself is the sign-in view and always serves. There is no dev-mode
+bypass — set `MCP_API_TOKEN` and `WEB_UI_PASSWORD` in `.env` to use them locally without a Google
+client.
 
 ## Connecting Claude
 
@@ -113,8 +115,8 @@ These are the fields of `Settings` in `backend/config.py`, and nothing else is r
 |---|---|---|
 | `DATABASE_URL` | — | **Required.** Postgres connection string. No default: the boot fails without it rather than serving an empty database. |
 | `MCP_API_TOKEN` | empty | Bearer token for `/mcp`. Human-provisioned. Empty never opens the endpoint: with `SECRET_KEY` also empty it closes it (401 to everything) and logs a warning; with `SECRET_KEY` set, the JWT path stays open. |
-| `WEB_UI_PASSWORD` | empty | HTTP Basic password for `/` and `/api`; any username. Human-provisioned. Empty closes the view (401), never opens it. |
-| `SECRET_KEY` | empty | HS256 key for the JWTs the authorization server mints for `/mcp`. Human-provisioned; at least 32 random bytes. Empty means no JWT is issued or accepted, never a boot failure. |
+| `WEB_UI_PASSWORD` | empty | HTTP Basic password `/api` accepts beside the sign-in's session cookie; any username. Human-provisioned. Empty never opens anything; with the sign-in also unset, `/api` is closed (401). |
+| `SECRET_KEY` | empty | HS256 key for the JWTs the authorization server mints for `/mcp` and the web view's `reli_session` cookie. Human-provisioned; at least 32 random bytes. Empty means no JWT is issued or accepted, never a boot failure. |
 | `ALLOWED_EMAILS` | empty | Comma-separated Google account emails allowed to sign in. Empty admits nobody. |
 | `GOOGLE_AUTH_REDIRECT_URI` | empty | `https://<your-host>/api/auth/google/callback`, registered verbatim on the OAuth client. Empty closes the sign-in; there is no localhost guess. |
 | `RELI_BASE_URL` | empty | Issuer and base of the OAuth metadata documents. Derived from `GOOGLE_AUTH_REDIRECT_URI` when empty. |
