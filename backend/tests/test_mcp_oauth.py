@@ -113,6 +113,7 @@ def test_the_metadata_documents_derive_the_base_from_the_redirect_uri(client):
     assert server["registration_endpoint"] == f"{BASE_URL}/oauth/register"
     assert server["code_challenge_methods_supported"] == ["S256"]
     assert server["grant_types_supported"] == ["authorization_code", "refresh_token"]
+    assert server["token_endpoint_auth_methods_supported"] == ["none", "client_secret_post"]
 
 
 def test_the_metadata_documents_use_reli_base_url_when_set(client, monkeypatch):
@@ -168,6 +169,27 @@ def test_register_refuses_an_unsafe_redirect_whatever_its_position(client, redir
 
     assert response.status_code == 400
     assert "redirect_uri must use https" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("auth_method", ["none", "client_secret_post"])
+def test_register_echoes_an_auth_method_the_token_endpoint_implements(client, auth_method):
+    body = _register(client, auth_method=auth_method)
+
+    assert body["token_endpoint_auth_method"] == auth_method
+
+
+def test_register_refuses_an_auth_method_the_token_endpoint_does_not_implement(client):
+    """A client told to authenticate with HTTP Basic would fail every exchange; refuse it up front."""
+    response = client.post(
+        "/oauth/register",
+        json={"redirect_uris": [CLIENT_REDIRECT], "token_endpoint_auth_method": "client_secret_basic"},
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "token_endpoint_auth_method" in detail
+    assert "client_secret_basic" in detail
+    assert "client_secret_post" in detail
 
 
 # --- Authorization -----------------------------------------------------------

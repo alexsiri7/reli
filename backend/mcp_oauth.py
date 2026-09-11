@@ -53,6 +53,10 @@ REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
 CLIENT_TTL_SECONDS = REFRESH_TOKEN_TTL_SECONDS
 
 _AT_CAPACITY = "Server is at capacity; try again later"
+# The only client authentication methods /oauth/token implements: a secret arrives in the form
+# body or not at all. Registration refuses any other, so a client is never told to authenticate a
+# way that would fail.
+TOKEN_ENDPOINT_AUTH_METHODS = ("none", "client_secret_post")
 _NO_STORE = {"Cache-Control": "no-store"}
 
 
@@ -83,6 +87,7 @@ def authorization_server_metadata() -> JSONResponse:
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "code_challenge_methods_supported": ["S256"],
+            "token_endpoint_auth_methods_supported": list(TOKEN_ENDPOINT_AUTH_METHODS),
             "scopes_supported": ["mcp"],
         }
     )
@@ -106,10 +111,19 @@ async def oauth_register(request: Request) -> JSONResponse:
     when they are gone. A registration never yields a token.
 
     Raises:
-        HTTPException 400: A ``redirect_uri`` is not ``https`` (``http`` only for localhost).
+        HTTPException 400: A ``redirect_uri`` is not ``https`` (``http`` only for localhost), or
+            ``token_endpoint_auth_method`` is one the token endpoint does not implement.
         HTTPException 503: The client store is at capacity.
     """
     body: dict[str, Any] = await request.json()
+
+    auth_method: str = body.get("token_endpoint_auth_method", "client_secret_post")
+    if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
+        logger.warning("MCP OAuth: rejected token_endpoint_auth_method during registration: %r", auth_method)
+        raise HTTPException(
+            status_code=400,
+            detail=f"token_endpoint_auth_method must be one of {', '.join(TOKEN_ENDPOINT_AUTH_METHODS)}: {auth_method}",
+        )
 
     redirect_uris: list[str] = body.get("redirect_uris") or []
     for uri in redirect_uris:
@@ -129,7 +143,7 @@ async def oauth_register(request: Request) -> JSONResponse:
         "client_name": body.get("client_name", ""),
         "grant_types": body.get("grant_types", ["authorization_code"]),
         "response_types": body.get("response_types", ["code"]),
-        "token_endpoint_auth_method": body.get("token_endpoint_auth_method", "client_secret_post"),
+        "token_endpoint_auth_method": auth_method,
         "scope": body.get("scope", "mcp"),
         "expires_at": expires_at,
     }
