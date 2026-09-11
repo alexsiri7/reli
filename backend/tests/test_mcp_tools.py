@@ -9,14 +9,13 @@ because auth and the mount are properties of the ASGI stack and not of the funct
 import asyncio
 import json
 import uuid
-from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from typing import get_args
 
 import pytest
 from sqlalchemy import text
 
-from backend import google_readers, mcp_server, prompts
+from backend import google_readers, prompts
 from backend.config import settings
 from backend.db_models import Actor, RelationshipType
 from backend.mcp_server import (
@@ -82,18 +81,6 @@ WRITING_TOOLS = {
     "add_preference_evidence",
     "reject_preference",
 }
-
-
-@pytest.fixture()
-def tools(session, monkeypatch):
-    """Bind every tool to the fixture session for the duration of one test."""
-
-    @contextmanager
-    def _fixture_session():
-        yield session
-
-    monkeypatch.setattr(mcp_server, "_session", _fixture_session)
-    return session
 
 
 def _journal_count(session):

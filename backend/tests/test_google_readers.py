@@ -5,16 +5,13 @@ refuses any verb but ``GET`` outside the token endpoint, which is the executable
 issue's "both integrations are read-only".
 """
 
-import json
 from datetime import date, timedelta
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
 
 from backend import google_client
-from backend.config import settings
 from backend.google_client import TOKEN_URL
 from backend.google_readers import (
     _CALENDAR_PAGE_LIMIT,
@@ -25,56 +22,13 @@ from backend.google_readers import (
     find_events,
 )
 
-FIXTURES = Path(__file__).parent / "fixtures" / "google"
-
 SINCE = date(2026, 9, 7)
 UNTIL = date(2026, 9, 9)
 
 
-def _fixture(name):
-    return json.loads((FIXTURES / f"{name}.json").read_text())
-
-
 @pytest.fixture(autouse=True)
-def configured(monkeypatch):
-    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "client-id.apps.googleusercontent.com")
-    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "client-secret")
-    monkeypatch.setattr(settings, "GOOGLE_REFRESH_TOKEN", "refresh-token")
-    google_client.reset_token_cache()
-    yield
-    google_client.reset_token_cache()
-
-
-@pytest.fixture()
-def google(monkeypatch):
-    """A read-only Google: the handler fails the test if anything but a GET reaches an API."""
-    seen: list[httpx.Request] = []
-    responses: dict[str, object] = {}
-
-    def handler(request):
-        if str(request.url) == TOKEN_URL:
-            return httpx.Response(200, json={"access_token": "access-token", "expires_in": 3600})
-
-        assert request.method == "GET", f"{request.method} {request.url} is not a read"
-        seen.append(request)
-
-        path = request.url.path
-        if path.startswith("/gmail/v1/users/me/messages/"):
-            message_id = path.rsplit("/", 1)[-1]
-            for message in _fixture("messages_metadata"):
-                if message["id"] == message_id:
-                    return httpx.Response(200, json=message)
-            stub = dict(_fixture("messages_metadata")[0])
-            stub["id"] = message_id
-            return httpx.Response(200, json=stub)
-        if path == "/gmail/v1/users/me/messages":
-            return httpx.Response(200, json=responses.get("messages", _fixture("messages_list")))
-        if path.startswith("/calendar/v3/calendars/primary/events"):
-            return httpx.Response(200, json=responses.get("events", _fixture("events_list")))
-        raise AssertionError(f"unexpected URL {request.url}")
-
-    monkeypatch.setattr(google_client, "_http_client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
-    return type("Google", (), {"seen": seen, "responses": responses})()
+def _configured(configured):
+    """Every reader test runs with a credential set; ``configured`` itself lives in conftest."""
 
 
 @pytest.fixture()
@@ -222,7 +176,7 @@ def test_find_events_requests_a_window_wider_than_it_was_asked_for(google):
 
 
 def test_find_events_filters_the_widened_window_back_by_local_date(google):
-    google.responses["events"] = _fixture("events_boundary")
+    google.responses["events"] = google.fixture("events_boundary")
 
     events = find_events(since=SINCE, until=UNTIL)
 
