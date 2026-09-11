@@ -16,6 +16,10 @@ dependencies = [
     "mcp>=1.26.0,<2.0.0",
     # Direct: backend/google_client.py talks to Google's REST APIs over it.
     "httpx>=0.28.1",
+    # Direct: backend/auth.py mints and verifies the MCP tokens with it.
+    "PyJWT>=2.10.1",
+    # Direct: /oauth/token in backend/mcp_oauth.py reads a form body.
+    "python-multipart>=0.0.20",
 ]
 
 [dependency-groups]
