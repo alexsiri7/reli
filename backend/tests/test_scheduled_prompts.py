@@ -60,6 +60,7 @@ RESOLUTION_LITERALS = (
     "archive_thing",
     "find_correspondence",
     "check_occurred",
+    "needs_input()",
     BRIEFING_TAG,
     "#NeedsInput",
     "References",

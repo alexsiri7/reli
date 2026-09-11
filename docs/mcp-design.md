@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`/mcp` is the only way into the graph. `backend/mcp_server.py` registers twenty-one tools, four
+`/mcp` is the only way into the graph. `backend/mcp_server.py` registers twenty-two tools, four
 prompts and two resources, each a thin wrapper over `backend/service.py` (writes),
 `backend/queries.py` (graph reads) or `backend/google_readers.py` (Gmail and Calendar reads). No
 judgement happens in that module and no model is called from it: the tools hand Claude the graph
@@ -52,7 +52,7 @@ Writes — every one takes `actor`, every one is journalled by `backend/service.
 |---|---|
 | `create_thing` | Creates a Thing: `title`, `description`, `notes`, `tags`, `urls`, `checkin_date`, `priority`. |
 | `update_thing` | Replaces the fields given — a `tags` or `notes` argument replaces the whole value, nothing is merged, and an unset field is untouched. |
-| `archive_thing` | Sets `active=False`, journalled as an update. The Thing and its edges stay readable; it drops out of `due_for_checkin`, `stale`, `blocked` and the default `find_things`. There is no hard delete over MCP and nothing un-archives. |
+| `archive_thing` | Sets `active=False`, journalled as an update. The Thing and its edges stay readable; it drops out of `due_for_checkin`, `stale`, `blocked`, `needs_input` and the default `find_things`. There is no hard delete over MCP and nothing un-archives. |
 | `relate` | Links two Things with one of the five `RelationshipType` values (`ChildOf` source is the parent; `Blocks` source is the blocked Thing; `EvidenceFor` source is the evidence) and an optional `context`. |
 | `unrelate` | Removes an edge by id; both Things stay. |
 
@@ -66,6 +66,7 @@ Reads — no `actor`:
 | `due_for_checkin` | Active Things whose check-in date has arrived, as of today or `as_of`. |
 | `stale` | Active Things untouched for at least `days` (default 30). |
 | `blocked` | Things whose `Blocks` target is still active. |
+| `needs_input` | Active Things tagged `#NeedsInput` — what only the user can settle — most important first, capped at `limit` (default 100) with `total` and `truncated`. The tag is what the prompts apply to a Thing that cannot be resolved from Calendar, Gmail or the graph. |
 | `children` | The targets of a Thing's `ChildOf` edges. |
 | `get_thing_history` | The Thing's newest `limit` journal entries, oldest first, with `total` and `truncated`. Edge changes are journalled against the relationship, so they do not appear here. |
 | `journal_since` | Every journal entry with an id above `after_id`, across all Things and relationships, oldest first and capped at `limit`, optionally only those made by `actors`. `total` and `truncated` count under the same filters, so a caller pages by passing the last id back. The learning pass's input. |

@@ -213,7 +213,7 @@ Creating documentation that claims success on an action you cannot perform is a 
 - Writes: `backend/service.py` — the only module that may mutate a Thing; every function journals
 - Reads: `backend/queries.py` — the indexed queries, including `user_model`
 - Retained reference, not built or shipped: `reference/oauth/` (see its README)
-- MCP: `backend/mcp_server.py` — the twenty-one tools wrapping `service.py`, `queries.py` and
+- MCP: `backend/mcp_server.py` — the twenty-two tools wrapping `service.py`, `queries.py` and
   `google_readers.py`; every writing tool takes a required `actor`, and hard delete is not exposed.
   `journal_since` is the one cross-Thing journal read, filtered by actor, for the learning pass.
   The three Google tools take no `actor` and journal nothing, because they mutate nothing. The four

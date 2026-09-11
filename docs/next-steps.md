@@ -23,12 +23,13 @@ The rebuild chain that replaced the previous system, in order:
   conversation as prompt files under `prompts/scheduled/`, with `journal_since` as their one new
   tool, a `#ScheduledTask` heartbeat per task and a daily watchdog that files an issue when a run
   is missed.
+- **`#NeedsInput` as a first-class query** (#1442) — `needs_input`, the one standing question in
+  vision §4.1 that was still only reachable through `find_things` by tag, bounded with a `total`
+  so a decision cannot silently fall off the list.
 
 The result is described in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Open
 
-- **`#NeedsInput` as a first-class query** (#1442) — vision §4.1 lists it among the questions the
-  service answers; today it is reachable only through `find_things` by tag.
-
-What is deliberately not next is in [vision.md §7](vision.md#7-non-goals).
+Nothing remains from the rebuild chain. What is deliberately not next is in
+[vision.md §7](vision.md#7-non-goals).
