@@ -439,21 +439,6 @@ def test_a_refresh_token_is_bound_to_the_client_it_was_issued_to(client, session
     assert _refresh(client, issued["refresh_token"], owner["client_id"]).status_code == 200
 
 
-# --- The bare /mcp path ------------------------------------------------------
-
-
-def test_bare_mcp_redirects_to_the_slash_path_from_the_configured_base(client, monkeypatch):
-    monkeypatch.setattr(settings, "RELI_BASE_URL", "")
-    monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", "")
-    unconfigured = client.post("/mcp")
-    assert unconfigured.status_code == 307
-    assert unconfigured.headers["location"] == "/mcp/"
-
-    monkeypatch.setattr(settings, "RELI_BASE_URL", BASE_URL)
-    configured = client.post("/mcp")
-    assert configured.headers["location"] == f"{BASE_URL}/mcp/"
-
-
 # --- End to end --------------------------------------------------------------
 
 

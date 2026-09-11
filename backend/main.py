@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import api, auth, mcp_oauth
 from .config import settings
@@ -70,12 +71,33 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "reli"}
 
 
+class _BareMcpPath:
+    """Serves ``/mcp`` as ``/mcp/`` instead of redirecting to it.
+
+    The mount below only matches under ``/mcp/``; a bare ``/mcp`` is otherwise a 307 — Starlette's own
+    slash redirect, or the explicit one this replaced — and the claude.ai connector follows a 307
+    without re-sending its ``Authorization`` header, so the follow-up is a 401 and the connector
+    reports the authorisation as failed right after completing it. Rewriting the path before routing
+    keeps one mount, one bearer check and no redirect for any method the streamable-HTTP transport
+    uses; ``/mcp/`` stays the canonical resource the protected-resource metadata advertises.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self._app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["path"] == "/mcp":
+            scope = {**scope, "path": "/mcp/", "raw_path": (scope.get("raw_path") or b"/mcp") + b"/"}
+        await self._app(scope, receive, send)
+
+
 # Before api.router, which ends in the /api/{unmatched:path} catch-all that would otherwise take the
-# Google callback; and before the mount, so the bare-/mcp redirect is matched ahead of it.
+# Google callback.
 app.include_router(auth.router)
 app.include_router(mcp_oauth.router)
 app.include_router(api.router)
 app.mount("/mcp", create_mcp_asgi_app())
+app.add_middleware(_BareMcpPath)
 
 # Last, and in this order: the frontend fallback answers every unmatched path, so anything mounted
 # after it would never be reached.

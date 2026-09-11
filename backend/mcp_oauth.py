@@ -384,17 +384,3 @@ async def oauth_token(
             return _exchange_authorization_code(session, code, redirect_uri, client_id, client_secret, code_verifier)
     except _TokenError as refused:
         return refused.response()
-
-
-# --- The bare /mcp path ----------------------------------------------------
-
-
-@router.api_route("/mcp", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
-def mcp_redirect() -> RedirectResponse:
-    """Send ``/mcp`` to ``/mcp/`` with a ``Location`` built from the configured base, not the request.
-
-    Starlette's own slash redirect builds it from the request scheme, which behind a TLS-terminating
-    proxy is ``http://`` — a client following that loses the connection. With no base configured
-    this is the relative ``/mcp/``.
-    """
-    return RedirectResponse(url=f"{auth.base_url()}/mcp/", status_code=307)
