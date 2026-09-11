@@ -113,7 +113,7 @@ and the read path so the two cannot drift. Rationale: [vision.md §5](vision.md#
 `backend/mcp_server.py` is the only way into the graph: twenty-two tools, four prompts and two
 resources, each a thin wrapper over `service`, `queries` or `google_readers`. Every writing tool
 takes a required `actor` (`claude_interactive` or `claude_scheduled`); there is no hard delete;
-the endpoint sits behind the static token or a JWT from the OAuth 2.1 authorization server in
+the endpoint sits behind a JWT from the OAuth 2.1 authorization server in
 `backend/mcp_oauth.py`. The catalogue is in [mcp-design.md](mcp-design.md).
 
 ## 7. Google readers

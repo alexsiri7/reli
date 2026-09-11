@@ -24,9 +24,8 @@ lifespan never runs.
 
 DNS-rebinding protection is disabled. The SDK's default host allowlist is `127.0.0.1`/`localhost`,
 which answers 421 to any request carrying a real `Host` header — and Reli is served through a
-Cloudflare tunnel. This is safe only because the bearer check below (static token or OAuth JWT)
-makes an `Authorization` header mandatory, which a cross-origin page cannot set; the two decisions
-are coupled.
+Cloudflare tunnel. This is safe only because the bearer check below makes an `Authorization`
+header mandatory, which a cross-origin page cannot set; the two decisions are coupled.
 
 ## 3. Authentication
 

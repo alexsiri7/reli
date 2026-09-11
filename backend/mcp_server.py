@@ -148,8 +148,7 @@ reli_mcp = FastMCP(
     # The SDK's default host allowlist is 127.0.0.1/localhost only, which answers 421 to every
     # request carrying a real Host header — Reli is served through a Cloudflare tunnel, so that
     # default is an outage. Safe only because _BearerTokenMiddleware below makes an Authorization
-    # header mandatory — the static token or an OAuth JWT — which a cross-origin page cannot set:
-    # the two decisions are coupled.
+    # header mandatory, which a cross-origin page cannot set: the two decisions are coupled.
     transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
 
