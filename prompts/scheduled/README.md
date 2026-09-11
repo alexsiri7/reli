@@ -1,9 +1,9 @@
 # Scheduled passes
 
 The proactive half of the PA (#1413). Nothing here runs inside Reli: each file is the text of a
-saved prompt for a Claude scheduled task with Reli's MCP connector attached — the same `/mcp` and
-the same bearer token an interactive session uses. The files are plain prose with no placeholders,
-so each is pasted into its task as-is.
+saved prompt for a Claude scheduled task with Reli's MCP connector attached — the same `/mcp` an
+interactive session uses, through the same Google sign-in. The files are plain prose with no
+placeholders, so each is pasted into its task as-is.
 
 Three tasks, in this order, each depending on what the one before it wrote:
 

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import logging
-import secrets
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -149,8 +148,7 @@ reli_mcp = FastMCP(
     # The SDK's default host allowlist is 127.0.0.1/localhost only, which answers 421 to every
     # request carrying a real Host header — Reli is served through a Cloudflare tunnel, so that
     # default is an outage. Safe only because _BearerTokenMiddleware below makes an Authorization
-    # header mandatory — the static token or an OAuth JWT — which a cross-origin page cannot set:
-    # the two decisions are coupled.
+    # header mandatory, which a cross-origin page cannot set: the two decisions are coupled.
     transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
 
@@ -825,28 +823,24 @@ _EXPIRED = (
     "Access token expired: the connector refreshes it at /oauth/token with its refresh token, "
     "or re-authorises against Google"
 )
-_NOT_OURS = (
-    "Not a token this Reli issued: authorise the connector against Google via the authorization "
-    "server, or use MCP_API_TOKEN"
-)
-_CLOSED = "/mcp is closed: a human sets MCP_API_TOKEN or the Google sign-in settings (CLAUDE.md)"
+_NOT_OURS = "Not a token this Reli issued: authorise the connector against Google via the authorization server"
+_CLOSED = "/mcp is closed: a human sets SECRET_KEY and the Google sign-in settings (CLAUDE.md)"
 _NO_BEARER = (
-    "Authorization required: a Bearer of MCP_API_TOKEN, or the access token the authorization "
-    "server at /oauth/token issues after a Google sign-in"
+    "Authorization required: a Bearer of the access token the authorization server at /oauth/token "
+    "issues after a Google sign-in"
 )
 
 
 class _BearerTokenMiddleware:
     """Requires ``Authorization: Bearer <credential>`` on every request to the mounted app.
 
-    Two credentials are accepted: the static ``MCP_API_TOKEN``, and an ``aud="mcp"`` JWT minted by
-    the authorization server in :mod:`backend.mcp_oauth` after a Google sign-in. The static token
-    stays until a human confirms the OAuth flow against a real connector and retires it.
+    The one credential is an ``aud="mcp"`` JWT minted by the authorization server in
+    :mod:`backend.mcp_oauth` after a Google sign-in.
 
-    An unset secret closes the endpoint rather than opening it: there is no dev-mode bypass, because
-    /mcp is the only write path into the graph and it is publicly reachable. Every 401 says what a
-    human or the connector must do next, and names the RFC 9728 resource metadata when a base URL
-    is configured, which is how an MCP client discovers the authorization server.
+    An unset ``SECRET_KEY`` closes the endpoint rather than opening it: there is no dev-mode bypass,
+    because /mcp is the only write path into the graph and it is publicly reachable. Every 401 says
+    what a human or the connector must do next, and names the RFC 9728 resource metadata when a
+    base URL is configured, which is how an MCP client discovers the authorization server.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -857,35 +851,25 @@ class _BearerTokenMiddleware:
             await self._app(scope, receive, send)
             return
 
-        # Read the secrets per request, not at construction: the app is built at import time, so a
+        # Read the secret per request, not at construction: the app is built at import time, so a
         # value captured then could never be corrected.
-        static_token = settings.MCP_API_TOKEN
-        secret_key = settings.SECRET_KEY
-        header = dict(scope.get("headers", [])).get(b"authorization", b"").decode()
-        provided = header[7:] if header.startswith("Bearer ") else ""
-
-        if not static_token and not secret_key:
+        if not settings.SECRET_KEY:
             await _refuse(scope, receive, send, _CLOSED)
             return
+        header = dict(scope.get("headers", [])).get(b"authorization", b"").decode()
+        provided = header[7:] if header.startswith("Bearer ") else ""
         if not provided:
             await _refuse(scope, receive, send, _NO_BEARER)
             return
-        if static_token and secrets.compare_digest(provided, static_token):
-            await self._app(scope, receive, send)
+        try:
+            auth.decode_jwt(provided, audience=auth.MCP_AUDIENCE)
+        except jwt.ExpiredSignatureError:
+            await _refuse(scope, receive, send, _EXPIRED, error="invalid_token")
             return
-        if secret_key:
-            try:
-                auth.decode_jwt(provided, audience=auth.MCP_AUDIENCE)
-            except jwt.ExpiredSignatureError:
-                await _refuse(scope, receive, send, _EXPIRED, error="invalid_token")
-                return
-            except jwt.InvalidTokenError:
-                await _refuse(scope, receive, send, _NOT_OURS, error="invalid_token")
-                return
-            await self._app(scope, receive, send)
+        except jwt.InvalidTokenError:
+            await _refuse(scope, receive, send, _NOT_OURS, error="invalid_token")
             return
-
-        await _refuse(scope, receive, send, _NOT_OURS, error="invalid_token")
+        await self._app(scope, receive, send)
 
 
 async def _refuse(scope: Scope, receive: Receive, send: Send, description: str, error: str | None = None) -> None:
@@ -907,8 +891,8 @@ async def _refuse(scope: Scope, receive: Receive, send: Send, description: str, 
 
 def create_mcp_asgi_app() -> ASGIApp:
     """The streamable-HTTP MCP app behind the bearer check, for ``app.mount("/mcp", ...)``."""
-    if not settings.MCP_API_TOKEN and not settings.SECRET_KEY:
-        logger.warning("Neither MCP_API_TOKEN nor SECRET_KEY is set: /mcp will answer 401 to every request.")
-    elif settings.SECRET_KEY and (missing := auth.missing_sign_in_settings()):
+    if not settings.SECRET_KEY:
+        logger.warning("SECRET_KEY is not set: /mcp will answer 401 to every request.")
+    elif missing := auth.missing_sign_in_settings():
         logger.warning("SECRET_KEY is set but %s is not: the OAuth sign-in cannot complete.", ", ".join(missing))
     return _BearerTokenMiddleware(reli_mcp.streamable_http_app())

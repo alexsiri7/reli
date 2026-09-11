@@ -229,7 +229,7 @@ an agent can read).
 | `RELI_BASE_URL` | `""` | Issuer / metadata URLs / DNS-rebinding host | no | not in the list |
 | `MCP_CORS_ORIGINS` | `""` | Origins reflected on `/oauth/*`, `/.well-known/*`, `/mcp` | no | not in the list |
 | `CORS_ORIGINS` | `""` | The restrictive CORS on everything else | no | yes |
-| `MCP_API_TOKEN` | `""` | Static bearer on `/mcp`, legacy path beside the JWT | yes — the *only* `/mcp` credential now | not in the list |
+| `MCP_API_TOKEN` | `""` | Static bearer on `/mcp`, legacy path beside the JWT | was, at the time of writing — retired by #1461 | not in the list |
 | `RELI_API_TOKEN` / `RELI_API_TOKEN_USER_ID` | `""` | Static bearer on `/api` for programmatic clients | no | not in the list (`API_TOKEN` is set on staging, a name neither tree reads) |
 | `GOOGLE_REDIRECT_URI` | `http://localhost:8000/api/calendar/callback` | Calendar grant callback, and base for the Gmail one — **not** login | no | yes |
 | `TOKEN_ENCRYPTION_KEY` | `""` | Encrypting stored Calendar/Gmail refresh tokens (`token_encryption.py`) — not login | no | yes |
