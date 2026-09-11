@@ -226,7 +226,7 @@ an agent can read).
 | `SECRET_KEY` | `""` | HS256 signing key for every JWT; both flows are 501 without it | no | yes |
 | `ALLOWED_EMAILS` | `""` (= allow all) | The allowlist | no | yes |
 | `COOKIE_SECURE` | `"true"` | `Secure` flag on `reli_session` | no | not in the list |
-| `RELI_BASE_URL` | `""` | Issuer / metadata URLs / `/mcp` redirect / DNS-rebinding host | no | not in the list |
+| `RELI_BASE_URL` | `""` | Issuer / metadata URLs / DNS-rebinding host | no | not in the list |
 | `MCP_CORS_ORIGINS` | `""` | Origins reflected on `/oauth/*`, `/.well-known/*`, `/mcp` | no | not in the list |
 | `CORS_ORIGINS` | `""` | The restrictive CORS on everything else | no | yes |
 | `MCP_API_TOKEN` | `""` | Static bearer on `/mcp`, legacy path beside the JWT | yes — the *only* `/mcp` credential now | not in the list |

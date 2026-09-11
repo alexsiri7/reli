@@ -286,7 +286,7 @@ Creating documentation that claims success on an action you cannot perform is a 
 - JWTs and the callback: `backend/auth.py` — `create_jwt` / `decode_jwt`, the allowlist, and
   `GET /api/auth/google/callback`, the one address Google redirects to
 - Authorization server: `backend/mcp_oauth.py` — `/.well-known/*`, `/oauth/register`,
-  `/oauth/authorize`, `/oauth/token` and the bare-`/mcp` redirect
+  `/oauth/authorize`, `/oauth/token`
 - OAuth flow state: `backend/oauth_state.py` — the four bounded `mcp_*` stores; not graph state,
   not journalled
 - HTTP: `backend/main.py` serves `/healthz`, includes the auth, OAuth and `/api` routers in that
