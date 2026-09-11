@@ -171,6 +171,11 @@ Creating documentation that claims success on an action you cannot perform is a 
   The three Google tools take no `actor` and journal nothing, because they mutate nothing. The four
   user-model tools are `record_preference`, `add_preference_evidence`, `reject_preference` and
   `get_user_model`; the same model is also served as the `reli://user-model` resource
+- Prompts: `backend/prompts.py` — the text of the four MCP prompts `capture`, `daily-planning`,
+  `project-planning` and `review`, registered in `mcp_server.py`. Every one carries the
+  preference-capture convention and the check-in semantics, held as constants there so a test can
+  prove it, and names the one preference scope it loads; those scope labels (`capture`,
+  `scheduling`, `planning`, `review`) are the scope vocabulary — reuse them rather than coin new ones
 - Google reads: `backend/google_readers.py` — `find_correspondence`, `find_events`,
   `check_occurred`; read-only and summarising, and they return evidence rather than a verdict
 - Google credentials and transport: `backend/google_client.py` — the only module that reads the

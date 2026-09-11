@@ -26,7 +26,7 @@ from sqlmodel import Session
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from . import google_readers, queries, service
+from . import google_readers, prompts, queries, service
 from .config import settings
 from .db_engine import get_engine
 from .db_models import (
@@ -519,8 +519,9 @@ def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: lis
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
         title: The preference stated plainly — "Prefers deep work 9-11am".
-        scope: What it applies to — a short, consistent label like 'scheduling' or 'naming'.
-            get_user_model matches it exactly (case aside), so reuse the labels already in the model.
+        scope: What it applies to — one of the labels the prompts load: 'capture', 'scheduling',
+            'planning' or 'review'. get_user_model matches it exactly (case aside), so a label no
+            prompt loads is a preference no session ever sees.
         evidence_ids: The Things that support it. At least one.
 
     Returns:
@@ -626,6 +627,62 @@ def user_model_resource() -> dict[str, Any]:
 def scoped_user_model_resource(scope: str) -> dict[str, Any]:
     """One scope of the user model, for a session that only needs part of it."""
     return _user_model_payload(scope=scope)
+
+
+# --- Prompts: the hats ------------------------------------------------------
+#
+# The text lives in backend.prompts; these register it. Each description names the preference
+# scope the prompt loads, because the description is what a connected session shows before the
+# prompt is picked.
+
+
+@reli_mcp.prompt(
+    name="capture",
+    title="Capture",
+    description=(
+        "The default behaviour: what is worth a Thing, how to title and tag it, when to set a "
+        f"check-in date, and when to relate rather than create. Loads the '{prompts.CAPTURE_SCOPE}' "
+        "preference scope."
+    ),
+)
+def capture_prompt() -> str:
+    return prompts.capture()
+
+
+@reli_mcp.prompt(
+    name="daily-planning",
+    title="Daily planning",
+    description=(
+        "The daily hat: resolves what is due for check-in, then shapes a plan for the day. "
+        f"Loads the '{prompts.SCHEDULING_SCOPE}' preference scope."
+    ),
+)
+def daily_planning_prompt() -> str:
+    return prompts.daily_planning()
+
+
+@reli_mcp.prompt(
+    name="project-planning",
+    title="Project planning",
+    description=(
+        "The project hat: breaks a piece of work into Things related by ChildOf and Blocks, each "
+        f"with a check-in date. Loads the '{prompts.PLANNING_SCOPE}' preference scope."
+    ),
+)
+def project_planning_prompt() -> str:
+    return prompts.project_planning()
+
+
+@reli_mcp.prompt(
+    name="review",
+    title="Review",
+    description=(
+        "The review hat: walks a part of the graph, archives what is done and re-dates what has "
+        f"drifted. Loads the '{prompts.REVIEW_SCOPE}' preference scope."
+    ),
+)
+def review_prompt() -> str:
+    return prompts.review()
 
 
 # --- Google reads (Calendar and Gmail) -------------------------------------
