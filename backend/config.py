@@ -31,10 +31,11 @@ class Settings(BaseSettings):
     MCP_API_TOKEN: str = ""
 
     # --- Web view ---
-    # Password for the read-only web view at / and the /api routes behind it. Human-provisioned on
-    # the same terms as MCP_API_TOKEN: an empty value closes the view with a 401 rather than
-    # serving the whole graph to anyone with the URL, and never stops the boot — /healthz stays
-    # green so a missing secret does not roll the deploy back.
+    # HTTP Basic password the /api routes accept, beside the Google sign-in's session cookie.
+    # Human-provisioned on the same terms as MCP_API_TOKEN: an empty value closes nothing the
+    # sign-in opens, and with the sign-in also unset /api answers 401 to everything — never
+    # stopping the boot, so /healthz stays green and a missing secret does not roll the deploy
+    # back. The bundle at / is always public; it is the sign-in view.
     WEB_UI_PASSWORD: str = ""
 
     # --- Google sign-in (web view and MCP) ---
