@@ -40,7 +40,8 @@ jobs:
           }
 
           # A missed run is the time-sensitive case ntfy is kept for. Notification failure is
-          # intentionally non-fatal; the issue is the record.
+          # intentionally non-fatal; the issue is the record. It is sent before the issue is filed
+          # because the step runs under -e: a gh call that fails would end the script there.
           notify() {
             [ -z "$NTFY_TOPIC" ] && return 0
             curl -s -o /dev/null \
@@ -77,16 +78,16 @@ jobs:
 
           if [ "$COUNT" -lt 3 ]; then
             MSG="Only $COUNT of the three #ScheduledTask heartbeats exist: a pass has never run."
+            notify "$MSG"
             create_issue_if_absent "Scheduled pass missed" "Scheduled pass missed — a heartbeat is absent" \
               "$MSG See the Scheduled passes section of CLAUDE.md."
-            notify "$MSG"
             exit 1
           fi
           if [ -n "$DUE" ]; then
             MSG="Still due on $TODAY, so the last run did not complete: $(echo "$DUE" | paste -sd, -)."
+            notify "$MSG"
             create_issue_if_absent "Scheduled pass missed" "Scheduled pass missed — a heartbeat is still due" \
               "$MSG See the Scheduled passes section of CLAUDE.md."
-            notify "$MSG"
             exit 1
           fi
           echo "All $COUNT scheduled passes have run since yesterday."
