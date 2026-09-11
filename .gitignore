@@ -27,8 +27,25 @@ frontend/test-results/
 frontend/playwright-report/
 api_key.txt
 
-# Legacy ChromaDB data dir (removed — now using pgvector)
+# Legacy data (this repo is public — see CLAUDE.md Architectural rules).
+# The superseded SQLite graph, ChromaDB store and any offline export of the
+# legacy graph live outside the repository and must never be added to it.
+legacy/
 backend/chroma_db/
+chroma_db/
+chroma/
+*.sqlite
+*.sqlite3
+
+# Graph exports and database dumps (never commit real user data)
+export-*.json
+export_*.json
+*-export.json
+*.dump
+*.sql.gz
+
+# Agent run logs (may echo Thing titles or notes)
+.archon-logs/
 
 # Beads / Dolt files (added by bd init)
 .beads-credential-key

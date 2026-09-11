@@ -19,6 +19,7 @@ Non-negotiables from `docs/vision.md`. They hold even when a bead description or
 - Every mutation writes a journal entry. A code path that changes a Thing without journalling is a bug.
 - No derived state without evidence links. No confidence floats.
 - The frontend never writes, with one exception: rejecting a preference.
+- **This repository is public.** No real user data is ever committed to it. This covers, and is not limited to: graph exports or database dumps; statistics derived from real data, including tag frequencies and counts; recorded Gmail or Calendar fixtures; briefing Things; preference Things and their evidence; and logs containing Thing titles or notes. Test fixtures are synthetic and written by hand. If a task appears to require real data in the repository, that is a design error — send mail to mayor rather than committing it.
 
 The merged code now follows these rules: #1408 deleted the LLM pipeline, replaced the schema and made hierarchy a `ChildOf` relationship. The five relationship-type literals are defined once, in `RelationshipType` in `backend/db_models.py` — use them, do not invent a sixth without an issue that asks for it.
 
