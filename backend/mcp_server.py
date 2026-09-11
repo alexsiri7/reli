@@ -519,8 +519,9 @@ def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: lis
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
         title: The preference stated plainly — "Prefers deep work 9-11am".
-        scope: What it applies to — a short, consistent label like 'scheduling' or 'naming'.
-            get_user_model matches it exactly (case aside), so reuse the labels already in the model.
+        scope: What it applies to — one of the labels the prompts load: 'capture', 'scheduling',
+            'planning' or 'review'. get_user_model matches it exactly (case aside), so a label no
+            prompt loads is a preference no session ever sees.
         evidence_ids: The Things that support it. At least one.
 
     Returns:
