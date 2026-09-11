@@ -19,16 +19,15 @@ The rebuild chain that replaced the previous system, in order:
   settling a check-in.
 - **Read-only web view** (#1414) — tree, Thing detail with history, and the user model, with
   rejecting a preference as the only button.
+- **The scheduled passes** (#1413) — the resolution pass, the learning pass and the morning
+  conversation as prompt files under `prompts/scheduled/`, with `journal_since` as their one new
+  tool, a `#ScheduledTask` heartbeat per task and a daily watchdog that files an issue when a run
+  is missed.
 
 The result is described in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Open
 
-- **The scheduled passes** (#1413) — the resolution pass, the learning pass and the morning
-  conversation as Claude scheduled tasks on the same MCP connection, per
-  [vision.md §4.3](vision.md#43-scheduled-claude--the-proactive-half). That section also names
-  the question to settle first: whether claude.ai scheduled tasks genuinely run unattended, or a
-  headless routine is needed — and either way, that a stopped PA must fail loudly.
 - **`#NeedsInput` as a first-class query** (#1442) — vision §4.1 lists it among the questions the
   service answers; today it is reachable only through `find_things` by tag.
 

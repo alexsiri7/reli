@@ -99,6 +99,53 @@ It prints a refresh token and stores nothing. Replace `GOOGLE_REFRESH_TOKEN` wit
 Leaving all three unset is safe: the boot succeeds, `/healthz` stays green, the graph tools work,
 and only the three Google tools fail — with a message naming what to set.
 
+## Scheduled passes
+
+The proactive half (#1413) is three saved prompts under `prompts/scheduled/` — `resolution-pass.md`,
+`learning-pass.md`, `morning-conversation.md`, in that order — each the text of a claude.ai
+scheduled task with the Reli connector attached: the same `/mcp` and the same `MCP_API_TOKEN` an
+interactive session uses. Nothing runs on a schedule inside Reli, and nothing here may be turned
+into a background task in the service. [`prompts/scheduled/README.md`](prompts/scheduled/README.md)
+describes what the passes leave in the graph.
+
+**Agents cannot create the scheduled tasks, add the watchdog's secret, or verify that claude.ai
+scheduled tasks run reliably unattended.** Those are human steps, in the same class as the Google
+consent step and `MCP_API_TOKEN`; do not claim any of them is done. A human:
+
+1. creates three claude.ai scheduled tasks, each pasting one file's text — the resolution pass
+   overnight, the learning pass at least half an hour later, the morning conversation in waking
+   hours — with the Reli connector attached;
+2. adds `WEB_UI_PASSWORD` to the repository's GitHub Actions secrets, the same value as the
+   deploy's, so the watchdog can read `/api/things`;
+3. watches the first night. Reliability is *observed*, not assumed: the watchdog below is what
+   makes running the trial in production safe.
+
+**The failure signal.** Each task owns one active Thing tagged `#ScheduledTask` (titled
+`Resolution pass`, `Learning pass`, `Morning conversation`) and ends every run by setting its
+`checkin_date` to tomorrow. A run that did not complete leaves the Thing due, so a missed run is a
+due Thing that every session sees: the next resolution pass notes it in the briefing, the morning
+conversation says so in its first line, and `daily-planning` lists it.
+`.github/workflows/scheduled-run-health.yml` reads the tree's top level at noon UTC, after all
+three windows, and files a "Scheduled pass missed" issue — and pings `NTFY_TOPIC` if set — when
+fewer than three heartbeats exist or any is still due. It files an issue until the secret is added
+and the tasks have run once; that first issue is the reminder, not a bug in the check. The
+heartbeats must never be archived or made a child of anything, because the check reads
+`/api/things`, which is the top level only.
+
+**The fallback, documented and not built.** If claude.ai scheduled tasks prove unreliable — the
+first "Scheduled pass missed" issue that is not a human step left undone — the overnight two move
+to a host cron running headless Claude Code: `claude -p "$(cat prompts/scheduled/resolution-pass.md)"`
+with an `--mcp-config` naming the same `/mcp` URL and bearer token, the shape the owner's overnight
+development tooling already uses outside this repository. Same files, same heartbeats, same
+watchdog. The morning conversation is a conversation and can only be a claude.ai session.
+
+**Actor discipline.** The overnight passes pass `actor="claude_scheduled"` on every write. The
+morning conversation splits: `claude_scheduled` for its own bookkeeping (its heartbeat, archiving
+the briefing) and `claude_interactive` for every write that encodes something the user said.
+`user` is the web view's reject button and nothing else. The learning pass reads
+`journal_since(actors=["user", "claude_interactive"])`, so a `claude_scheduled` write is never
+mistaken for user behaviour — that is the whole reason the split must be honest.
+
 ## Database Safety Policy
 
 The legacy SQLite (`data/reli.db`) and ChromaDB (`backend/chroma_db/`) data are superseded. The owner holds an offline export of the legacy graph outside this repository — the repo is public, so the export is not here and must not be committed or recreated here.
@@ -166,11 +213,15 @@ Creating documentation that claims success on an action you cannot perform is a 
 - Writes: `backend/service.py` — the only module that may mutate a Thing; every function journals
 - Reads: `backend/queries.py` — the indexed queries, including `user_model`
 - Retained reference, not built or shipped: `reference/oauth/` (see its README)
-- MCP: `backend/mcp_server.py` — the twenty tools wrapping `service.py`, `queries.py` and
+- MCP: `backend/mcp_server.py` — the twenty-one tools wrapping `service.py`, `queries.py` and
   `google_readers.py`; every writing tool takes a required `actor`, and hard delete is not exposed.
+  `journal_since` is the one cross-Thing journal read, filtered by actor, for the learning pass.
   The three Google tools take no `actor` and journal nothing, because they mutate nothing. The four
   user-model tools are `record_preference`, `add_preference_evidence`, `reject_preference` and
   `get_user_model`; the same model is also served as the `reli://user-model` resource
+- Scheduled passes: `prompts/scheduled/` — the three saved prompts for the claude.ai scheduled
+  tasks, plain files rather than MCP prompts, with the conventions from `backend/prompts.py` pasted
+  verbatim and `backend/tests/test_scheduled_prompts.py` holding them to it
 - Prompts: `backend/prompts.py` — the text of the four MCP prompts `capture`, `daily-planning`,
   `project-planning` and `review`, registered in `mcp_server.py`. Every one carries the
   preference-capture convention and the check-in semantics, held as constants there so a test can
