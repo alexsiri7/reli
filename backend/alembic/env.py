@@ -83,6 +83,12 @@ def run_migrations_online() -> None:
                 exc_info=True,
             )
             current_heads = set()
+        finally:
+            # The probe autobegins a transaction (SQLAlchemy 2.x). If it is still open when the
+            # context is configured, Alembic treats it as an "external" transaction, runs the DDL
+            # inside it and never commits — and leaving the ``connect()`` block rolls it back, so
+            # every migration after the baseline is silently undone on each boot. End it here so
+            # ``context.begin_transaction()`` below opens and commits its own.
             connection.rollback()
 
         check_pending_migrations(script_dir, current_heads=current_heads)
