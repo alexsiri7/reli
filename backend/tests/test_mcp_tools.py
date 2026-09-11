@@ -535,6 +535,7 @@ def test_every_prompt_carries_the_preference_capture_convention(name):
 
     assert prompts.PREFERENCE_CAPTURE_CONVENTION in text
     assert "record_preference" in text
+    assert "in the same turn you noticed it" in text
     assert '"I hate morning meetings" is a preference' in text
     assert '"Move that to Thursday" on its own is not' in text
 
@@ -545,6 +546,7 @@ def test_every_prompt_states_what_a_checkin_date_means(name):
 
     assert prompts.CHECKIN_SEMANTICS in text
     assert "A check-in date is your obligation, not the user's." in text
+    assert "resolved without involving the user" in text
 
 
 @pytest.mark.parametrize(("name", "scope"), sorted(PROMPT_SCOPES.items()))
