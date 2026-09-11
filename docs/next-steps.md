@@ -31,4 +31,5 @@ The result is described in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Open
 
-Nothing is filed. What is deliberately not next is in [vision.md §7](vision.md#7-non-goals).
+Nothing remains from the rebuild chain. What is deliberately not next is in
+[vision.md §7](vision.md#7-non-goals).
