@@ -1,9 +1,15 @@
 """The MCP prompts: the PA behaviour, carried to where the reasoning happens.
 
 Reli owns no model, so what makes Claude behave as a PA lives here as text served over MCP. There
-are four: ``capture`` is the default behaviour and the other three are the hats from the original
-spec — daily planning, project planning, review. Each is static prose; loading the user model is
-the first thing every prompt tells Claude to do, so nothing here reads the graph at render time.
+are four prompts: ``capture`` is the default behaviour and the other three are the hats from the
+original spec — daily planning, project planning, review. Each is static prose; loading the user
+model is the first thing every prompt tells Claude to do, so nothing here reads the graph at
+render time.
+
+A prompt reaches a session only when the user picks it, so the default behaviour is also served
+as a tool: ``get_initial_instructions`` returns :func:`initial_instructions`, which is
+:func:`capture` plus a paragraph pointing at the three hats. It is derived from the same text at
+call time rather than kept as a second copy, so the two cannot drift.
 
 Two conventions are common to all four and are held as constants so a test can prove each prompt
 carries them. Every prompt also names the one preference scope it loads, and the labels below are
@@ -55,6 +61,15 @@ Calendar and Gmail for exactly this. They return evidence, not a verdict: an emp
 it did not happen or that it left no trace, and telling those apart is your job. A deadline that \
 matters to the outside world belongs in `notes`, not in `checkin_date` — the check-in is about \
 when the Thing next needs your attention.\
+"""
+
+HAT_ORIENTATION = """\
+## The hats
+
+This is the default behaviour and not the whole of it. When the conversation moves into planning \
+the day, breaking a project into pieces, or reviewing a part of the graph, load the matching \
+prompt — `daily-planning`, `project-planning` or `review` — and let it take over: each loads its \
+own preference scope and carries the procedure for that mode.\
 """
 
 
@@ -123,6 +138,14 @@ Do not set one for the user's own to-do — that is a deadline, and deadlines go
 
 Pass `actor="claude_interactive"` on every write while a person is in the conversation. The \
 journal is how Reli tells what the user decided from what you did, so this must be honest.\
+"""
+
+
+def initial_instructions() -> str:
+    return f"""\
+{capture()}
+
+{HAT_ORIENTATION}\
 """
 
 

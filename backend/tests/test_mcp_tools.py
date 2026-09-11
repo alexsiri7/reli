@@ -31,6 +31,7 @@ from backend.mcp_server import (
     find_correspondence,
     find_events,
     find_things,
+    get_initial_instructions,
     get_related,
     get_thing,
     get_thing_history,
@@ -70,6 +71,7 @@ TOOL_NAMES = {
     "add_preference_evidence",
     "reject_preference",
     "get_user_model",
+    "get_initial_instructions",
 }
 
 GOOGLE_TOOLS = {"find_correspondence", "find_events", "check_occurred"}
@@ -108,7 +110,7 @@ def _tool_schemas():
 # --- The surface -----------------------------------------------------------
 
 
-def test_the_exposed_tools_are_exactly_the_twenty_two():
+def test_the_exposed_tools_are_exactly_the_twenty_three():
     assert set(_tool_schemas()) == TOOL_NAMES
 
 
@@ -599,6 +601,42 @@ def test_every_prompt_names_the_scope_it_loads_in_its_description_and_its_body(n
 
 def test_the_prompts_take_no_arguments():
     assert all(prompt.arguments == [] for prompt in _prompts().values())
+
+
+# --- get_initial_instructions ----------------------------------------------
+#
+# #1466: a prompt reaches a session only when the user picks it, so the default behaviour is also
+# a tool. It is called without the ``tools`` fixture: it reads nothing from the graph.
+
+
+def test_get_initial_instructions_is_the_capture_prompt_plus_the_hats():
+    text = get_initial_instructions()
+
+    assert text.startswith(prompts.capture())
+    assert prompts.HAT_ORIENTATION in text
+    for hat in ("daily-planning", "project-planning", "review"):
+        assert f"`{hat}`" in text
+
+
+def test_get_initial_instructions_carries_the_shared_conventions():
+    text = get_initial_instructions()
+
+    assert prompts.PREFERENCE_CAPTURE_CONVENTION in text
+    assert prompts.CHECKIN_SEMANTICS in text
+    assert f'get_user_model(scope="{prompts.CAPTURE_SCOPE}")' in text
+    assert 'actor="claude_interactive"' in text
+
+
+def test_get_initial_instructions_follows_an_edit_to_the_convention(monkeypatch):
+    """One source, not two: the text is derived at call time, so editing the constant is enough."""
+    monkeypatch.setattr(prompts, "PREFERENCE_CAPTURE_CONVENTION", "## Sentinel convention")
+
+    assert "## Sentinel convention" in get_initial_instructions()
+    assert "## Sentinel convention" in _prompt_text("capture")
+
+
+def test_get_initial_instructions_takes_no_arguments():
+    assert _tool_schemas()["get_initial_instructions"]["properties"] == {}
 
 
 # --- Transport and auth ----------------------------------------------------
