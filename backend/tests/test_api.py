@@ -474,3 +474,24 @@ def test_an_image_built_without_a_frontend_still_boots(tmp_path):
     api.mount_frontend(app, tmp_path / "absent")
 
     assert TestClient(app).get("/").status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/", "/assets/app.js"], ids=["spa", "asset"])
+def test_the_bundle_is_behind_the_same_password_as_the_api(tmp_path, web_password, path):
+    """Both the SPA catch-all and the ``/assets`` sub-app, which are registered separately.
+
+    A guard attached to ``api.router`` alone would leave the bundle open; that this is what prompts
+    the browser once, and then carries the header onto the XHRs, is the reason there is no login view.
+    """
+    dist = _dist(tmp_path)
+    (dist / "assets" / "app.js").write_text("export {};")
+    app = FastAPI()
+    api.mount_frontend(app, dist)
+    api.add_web_view_auth(app)
+    client = TestClient(app)
+
+    anonymous = client.get(path)
+    assert anonymous.status_code == 401
+    assert anonymous.headers["WWW-Authenticate"] == 'Basic realm="reli"'
+
+    assert client.get(path, headers=_basic(web_password)).status_code == 200
