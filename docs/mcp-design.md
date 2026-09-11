@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`/mcp` is the only way into the graph. `backend/mcp_server.py` registers twenty tools, four
+`/mcp` is the only way into the graph. `backend/mcp_server.py` registers twenty-one tools, four
 prompts and two resources, each a thin wrapper over `backend/service.py` (writes),
 `backend/queries.py` (graph reads) or `backend/google_readers.py` (Gmail and Calendar reads). No
 judgement happens in that module and no model is called from it: the tools hand Claude the graph
@@ -68,6 +68,7 @@ Reads — no `actor`:
 | `blocked` | Things whose `Blocks` target is still active. |
 | `children` | The targets of a Thing's `ChildOf` edges. |
 | `get_thing_history` | The Thing's newest `limit` journal entries, oldest first, with `total` and `truncated`. Edge changes are journalled against the relationship, so they do not appear here. |
+| `journal_since` | Every journal entry with an id above `after_id`, across all Things and relationships, oldest first and capped at `limit`, optionally only those made by `actors`. `total` and `truncated` count under the same filters, so a caller pages by passing the last id back. The learning pass's input. |
 
 User model — see [vision.md §5](vision.md#5-the-user-model):
 
@@ -109,7 +110,8 @@ what they prefer. `get_user_model(include_rejected=true)` is where they are visi
 
 Every write above reaches the journal through `backend/service.py` with the actor, the operation
 and the before/after snapshots, in the same transaction as the row it changes. `get_thing_history`
-reads it per Thing.
+reads it per Thing; `journal_since` reads it across Things from an id onward, by actor, which is
+how the learning pass keeps `claude_scheduled` edits out of what it learns about the user.
 
 ## 8. Design principles
 

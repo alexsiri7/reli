@@ -15,7 +15,7 @@ How Reli relates to other projects in the personal AI space.
 | Storage | Flat "thoughts" + vector search | Typed Things with five relationship types; hierarchy is a `ChildOf` edge |
 | Reasoning | None — the calling agent figures it out | None in Reli either — Claude reasons over MCP. The difference is the PA prompts Reli serves: capture, daily planning, project planning, review |
 | Learning | None — it's a database | Preferences as evidence-linked Things, explicit from conversation and implicit from the journal; strength is a count of evidence, there is no confidence score |
-| Proactive | None | `checkin_date` as Claude's obligation to verify, answered by indexed queries (`due_for_checkin`, `stale`, `blocked`) and discharged by scheduled Claude sessions (not yet shipped) |
+| Proactive | None | `checkin_date` as Claude's obligation to verify, answered by indexed queries (`due_for_checkin`, `stale`, `blocked`) and discharged by scheduled Claude sessions (prompt files under `prompts/scheduled/`; running them as claude.ai scheduled tasks is a pending human step) |
 | Domain intelligence | None | None — Concerns are a stated non-goal |
 | Ingestion | Slack messages | MCP, plus read-only Gmail and Calendar lookups that return evidence for settling a check-in |
 
@@ -37,7 +37,7 @@ How Reli relates to other projects in the personal AI space.
 | Channels | 23+ messaging platforms | claude.ai (interactive and scheduled), ntfy for what cannot wait; a read-only web view |
 | Memory | Conversation history with pruning/compaction | Structured knowledge graph with a journal of every mutation |
 | User model | None | Preferences with the evidence behind each, correctable by rejection |
-| Proactive | None | Check-ins as indexed queries, discharged by scheduled Claude sessions (not yet shipped) |
+| Proactive | None | Check-ins as indexed queries, discharged by scheduled Claude sessions (prompt files under `prompts/scheduled/`; running them as claude.ai scheduled tasks is a pending human step) |
 | Device integration | macOS/iOS/Android nodes | None |
 
 **OpenClaw is a routing and delivery layer.** It's excellent at getting messages to/from you across platforms and executing tools. But it doesn't have a structured model of *you* — no knowledge graph, no evidence-linked preferences, no record of what needs verifying and when.

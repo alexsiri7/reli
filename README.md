@@ -4,7 +4,7 @@ Reli is the memory and the obligations layer that lets Claude act as a complete 
 
 The goal is a PA that says "bring a change of clothes today, you have that event tonight" or "it's Saturday morning — your energy contract expires next month, want me to find a better deal?" — one that understands your life context, your schedule, your routines, and the right moment to act.
 
-Reli is being rebuilt. The data layer, the MCP tools over it, the user model and the read-only web view are what exists today; the scheduled passes are still ahead.
+Reli is being rebuilt. The data layer, the MCP tools over it, the user model, the read-only web view and the prompts for the scheduled passes are what exists today.
 
 ## How it works
 
@@ -29,7 +29,7 @@ For how Reli compares to related projects, see [comparisons](docs/comparisons.md
 **Integrations:** Google Calendar and Gmail, read-only — `backend/google_client.py` and `backend/google_readers.py`; `reference/oauth/` holds the pre-rebuild code, not reused
 **Infrastructure:** Docker, Cloudflare Tunnel, GitHub Actions CI, Railway (staging + production deploy)
 
-Today the service is the data layer, the MCP tools over it at `/mcp` — including the read-only Calendar and Gmail readers and the user model — the read-only web view at `/` with the `/api` routes behind it, and a health check. The scheduled passes are the next issues.
+Today the service is the data layer, the MCP tools over it at `/mcp` — including the read-only Calendar and Gmail readers and the user model — the read-only web view at `/` with the `/api` routes behind it, and a health check. The scheduled passes are prompt files under `prompts/scheduled/`, run as Claude scheduled tasks against that same `/mcp`.
 
 ## Setup
 

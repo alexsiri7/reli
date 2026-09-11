@@ -108,7 +108,7 @@ and the read path so the two cannot drift. Rationale: [vision.md §5](vision.md#
 
 ## 6. MCP surface
 
-`backend/mcp_server.py` is the only way into the graph: twenty tools, four prompts and two
+`backend/mcp_server.py` is the only way into the graph: twenty-one tools, four prompts and two
 resources, each a thin wrapper over `service`, `queries` or `google_readers`. Every writing tool
 takes a required `actor` (`claude_interactive` or `claude_scheduled`); there is no hard delete;
 the endpoint sits behind a bearer token. The catalogue is in [mcp-design.md](mcp-design.md).
@@ -152,8 +152,14 @@ a cross-origin page cannot set one — the two decisions are coupled.
 
 Nothing runs on a schedule inside Reli. The resolution pass, the learning pass and the morning
 conversation are Claude scheduled tasks on the same MCP connection as an interactive session,
-distinguished only by the `claude_scheduled` actor in the journal. They are not yet shipped
-(#1413). Design: [vision.md §4.3](vision.md#43-scheduled-claude--the-proactive-half).
+distinguished only by the `claude_scheduled` actor in the journal. Their prompts are the three
+files under [`prompts/scheduled/`](../prompts/scheduled/README.md) (#1413). Each task keeps one
+`#ScheduledTask` Thing whose `checkin_date` it pushes to tomorrow at the end of every run, so a
+missed run is a due Thing every session sees; the resolution pass hands the morning conversation a
+`#Briefing` Thing; the learning pass reads the journal through `journal_since`, filtered to the
+actors a person was present for. `.github/workflows/scheduled-run-health.yml` reads the tree's top
+level daily and files an issue when a heartbeat is absent or still due. Design:
+[vision.md §4.3](vision.md#43-scheduled-claude--the-proactive-half).
 
 ## 11. Infrastructure
 

@@ -1,0 +1,93 @@
+name: Scheduled Run Health Check
+
+# Noon UTC is after all three scheduled passes' windows in any European timezone: a pass that ran
+# just after local midnight has already pushed its check-in date to a day the UTC clock agrees is
+# tomorrow, so the check cannot fire on a run that happened.
+on:
+  schedule:
+    - cron: '0 12 * * *'  # Every day at 12:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check-heartbeats:
+    name: Every scheduled pass ran since yesterday
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Check the #ScheduledTask heartbeats
+        env:
+          WEB_UI_PASSWORD: ${{ secrets.WEB_UI_PASSWORD }}
+          RAILWAY_PRODUCTION_URL: ${{ secrets.RAILWAY_PRODUCTION_URL }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          create_issue_if_absent() {
+            local search_term="$1" title="$2" body="$3"
+            EXISTING=$(gh issue list \
+              --repo alexsiri7/reli \
+              --state open \
+              --search "$search_term" \
+              --json number \
+              --jq '.[0].number // empty')
+            if [ -z "$EXISTING" ]; then
+              gh issue create \
+                --repo alexsiri7/reli \
+                --title "$title" \
+                --body "$body" \
+                --label bug
+            fi
+          }
+
+          # A missed run is the time-sensitive case ntfy is kept for. Notification failure is
+          # intentionally non-fatal; the issue is the record. It is sent before the issue is filed
+          # because the step runs under -e: a gh call that fails would end the script there.
+          notify() {
+            [ -z "$NTFY_TOPIC" ] && return 0
+            curl -s -o /dev/null \
+              -H "Title: Reli scheduled pass missed" \
+              -H "Tags: warning" \
+              -d "$1" "ntfy.sh/$NTFY_TOPIC" || true
+          }
+
+          missing=""
+          [ -z "$WEB_UI_PASSWORD" ] && missing="$missing WEB_UI_PASSWORD"
+          [ -z "$RAILWAY_PRODUCTION_URL" ] && missing="$missing RAILWAY_PRODUCTION_URL"
+          if [ -n "$missing" ]; then
+            create_issue_if_absent "Scheduled pass watchdog unconfigured" \
+              "Scheduled pass watchdog unconfigured — secrets missing:$missing" \
+              "The scheduled-run health check cannot read the heartbeats without these GitHub secrets:$missing. See the Scheduled passes section of CLAUDE.md."
+            exit 1
+          fi
+
+          # /api/things is the tree's top level, which is where the #ScheduledTask Things live as
+          # long as nothing makes them a child of anything. The username is ignored by Basic auth.
+          if ! BODY=$(curl -sf --max-time 30 -u ":$WEB_UI_PASSWORD" "$RAILWAY_PRODUCTION_URL/api/things"); then
+            create_issue_if_absent "Scheduled pass watchdog unreachable" \
+              "Scheduled pass watchdog unreachable — could not read /api/things" \
+              "The scheduled-run health check could not read \`$RAILWAY_PRODUCTION_URL/api/things\`. If the deploy is healthy, WEB_UI_PASSWORD in GitHub secrets no longer matches the deploy's."
+            exit 1
+          fi
+
+          TODAY=$(date -u +%F)
+          COUNT=$(echo "$BODY" | jq '[.things[] | select(.tags | index("#ScheduledTask"))] | length')
+          # null must be guarded first: in jq, null <= "2026-09-11" is true.
+          DUE=$(echo "$BODY" | jq -r --arg today "$TODAY" '
+            .things[] | select(.tags | index("#ScheduledTask"))
+            | select(.checkin_date != null and .checkin_date <= $today) | .title')
+
+          if [ "$COUNT" -lt 3 ]; then
+            MSG="Only $COUNT of the three #ScheduledTask heartbeats exist: a pass has never run."
+            notify "$MSG"
+            create_issue_if_absent "Scheduled pass missed" "Scheduled pass missed — a heartbeat is absent" \
+              "$MSG See the Scheduled passes section of CLAUDE.md."
+            exit 1
+          fi
+          if [ -n "$DUE" ]; then
+            MSG="Still due on $TODAY, so the last run did not complete: $(echo "$DUE" | paste -sd, -)."
+            notify "$MSG"
+            create_issue_if_absent "Scheduled pass missed" "Scheduled pass missed — a heartbeat is still due" \
+              "$MSG See the Scheduled passes section of CLAUDE.md."
+            exit 1
+          fi
+          echo "All $COUNT scheduled passes have run since yesterday."
