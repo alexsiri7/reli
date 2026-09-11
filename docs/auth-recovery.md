@@ -245,7 +245,8 @@ Two readings of that table matter for the restore:
   redirect to `GOOGLE_AUTH_REDIRECT_URI`) on the same OAuth client. That is how it was at `553e3f0`
   too — the Calendar and Gmail routers used the same `_client_config()` shape with their own
   redirect URIs — so it is known to work, but the two must not be confused when reading logs or
-  the console.
+  the console. #1460 made the sharing explicit: the grant's fixed loopback URI is registered beside
+  `GOOGLE_AUTH_REDIRECT_URI` on the one Web client.
 - **The current credentials are not in the owner's list.** `MCP_API_TOKEN` and `WEB_UI_PASSWORD`
   are absent from the reported names while `SECRET_KEY`, `ALLOWED_EMAILS` and
   `GOOGLE_AUTH_REDIRECT_URI` are present. Read literally, that is the deploy that requirement 019
@@ -266,7 +267,7 @@ authorised redirect list. Only the first is needed for login.
 | `<GOOGLE_AUTH_REDIRECT_URI>` — by default `<base>/api/auth/google/callback` | `GOOGLE_AUTH_REDIRECT_URI` | Web login **and** MCP login (both flows share the one callback) |
 | `<GOOGLE_REDIRECT_URI>` — by default `<base>/api/calendar/callback` | `GOOGLE_REDIRECT_URI` | Old per-user Calendar grant (superseded by #1412) |
 | `<RELI_BASE_URL>/api/gmail/callback`, falling back to `GOOGLE_REDIRECT_URI`'s scheme+host | derived in `routers/gmail.py` | Old per-user Gmail grant (superseded by #1412) |
-| `http://127.0.0.1:<ephemeral port>/` | `scripts/google_oauth_grant.py` | The current Calendar/Gmail refresh-token grant (loopback, no console entry needed) |
+| `http://127.0.0.1:18765/` | `scripts/google_oauth_grant.py` | The current Calendar/Gmail refresh-token grant (loopback on a fixed port; registered on the Web client since #1460) |
 
 Redirect URIs an MCP client registers with `POST /oauth/register` are Reli's own concern, not
 Google's: Google only ever sees `GOOGLE_AUTH_REDIRECT_URI`.
