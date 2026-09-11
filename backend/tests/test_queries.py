@@ -12,6 +12,7 @@ from backend.queries import (
     due_for_checkin,
     find_things,
     history,
+    journal_since,
     related,
     relationships_for,
     stale,
@@ -421,3 +422,62 @@ def test_history_keeps_the_newest_entries_and_flags_truncation(session):
     assert [e.id for e in result.entries] == sorted(e.id for e in result.entries)
     assert result.total == 7
     assert result.truncated is True
+
+
+# --- journal_since ---------------------------------------------------------
+
+
+def _newest_journal_id(session):
+    return session.execute(text("SELECT coalesce(max(id), 0) FROM journal")).scalar_one()
+
+
+def test_journal_since_returns_entries_after_the_id_oldest_first(session):
+    _thing(session, "before the watermark")
+    watermark = _newest_journal_id(session)
+    first = _thing(session, "first")
+    second = create_thing(session, actor=Actor.CLAUDE_INTERACTIVE, title="second")
+    update_thing(session, actor=Actor.USER, thing_id=first.id, title="first, renamed")
+
+    result = journal_since(session, after_id=watermark)
+
+    assert [(e.entity_id, e.operation.value, e.actor.value) for e in result.entries] == [
+        (first.id, "create", "user"),
+        (second.id, "create", "claude_interactive"),
+        (first.id, "update", "user"),
+    ]
+    assert [e.id for e in result.entries] == sorted(e.id for e in result.entries)
+    assert all(e.id > watermark for e in result.entries)
+    assert result.total == 3
+    assert result.truncated is False
+
+
+def test_journal_since_filters_by_actor(session):
+    watermark = _newest_journal_id(session)
+    _thing(session, "by the user")
+    create_thing(session, actor=Actor.CLAUDE_INTERACTIVE, title="relayed in conversation")
+    create_thing(session, actor=Actor.CLAUDE_SCHEDULED, title="claude, unattended")
+
+    result = journal_since(session, after_id=watermark, actors=[Actor.USER, Actor.CLAUDE_INTERACTIVE])
+
+    assert [e.actor for e in result.entries] == [Actor.USER, Actor.CLAUDE_INTERACTIVE]
+    assert result.total == 2
+    assert result.truncated is False
+    assert journal_since(session, after_id=watermark, actors=[]).entries == []
+
+
+def test_journal_since_pages_from_the_oldest_end(session):
+    watermark = _newest_journal_id(session)
+    thing = _thing(session, "v0")
+    for version in range(1, 5):
+        update_thing(session, actor=Actor.USER, thing_id=thing.id, title=f"v{version}")
+
+    first_page = journal_since(session, after_id=watermark, limit=2)
+
+    assert [e.after["title"] for e in first_page.entries] == ["v0", "v1"]
+    assert first_page.total == 5
+    assert first_page.truncated is True
+
+    second_page = journal_since(session, after_id=first_page.entries[-1].id, limit=2)
+
+    assert [e.after["title"] for e in second_page.entries] == ["v2", "v3"]
+    assert second_page.total == 3

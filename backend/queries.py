@@ -20,6 +20,7 @@ from .db_models import (
     PREFERENCE_TAG,
     REJECTED_TAG,
     USER_ANCHOR_ID,
+    Actor,
     JournalRecord,
     RelationshipRecord,
     RelationshipType,
@@ -51,14 +52,18 @@ class TreeNode(NamedTuple):
 
 
 class History(NamedTuple):
-    """A window onto one entity's journal, with ``total`` so a capped answer cannot pass for a whole one."""
+    """A window onto the journal, with ``total`` so a capped answer cannot pass for a whole one.
+
+    :func:`history` cuts the window for one entity from the newest end; :func:`journal_since` cuts
+    it for a range of ids from the oldest. Either way ``total`` is every entry that matched.
+    """
 
     entries: list[JournalRecord]
     total: int
 
     @property
     def truncated(self) -> bool:
-        """Whether older entries were left out of this window."""
+        """Whether matching entries were left out of this window, at whichever end it was cut."""
         return self.total > len(self.entries)
 
 
@@ -412,6 +417,38 @@ def history(session: Session, entity_id: uuid.UUID, limit: int = 200) -> History
     ).all()
     total = session.exec(select(func.count()).select_from(JournalRecord).where(condition)).one()
     return History(entries=list(reversed(newest_first)), total=total)
+
+
+def journal_since(
+    session: Session,
+    *,
+    after_id: int = 0,
+    actors: Sequence[Actor] | None = None,
+    limit: int = 200,
+) -> History:
+    """Journal entries with an id above *after_id*, across every entity, oldest first.
+
+    This is the learning pass's input: everything that happened since the last run, whoever did it
+    and whatever it touched. The window is cut from the **oldest** end, so a caller pages forward
+    by passing the last id it saw as the next *after_id*; ``total`` counts every entry that matches
+    the same filters, so ``truncated`` says whether there is a next page.
+
+    *actors* restricts the window to entries those actors made, which is how a caller keeps
+    Claude's own unattended edits out of a conclusion about the user. ``None`` means every actor;
+    an empty sequence means no actors and returns nothing, as :func:`by_tag` reads an empty filter.
+
+    Ordered by ``id`` rather than ``occurred_at`` for the reason :func:`history` gives: two
+    mutations inside one transaction share a timestamp, and the sequence is the point.
+    """
+    conditions: list[ColumnElement[bool]] = [col(JournalRecord.id) > after_id]
+    if actors is not None:
+        conditions.append(col(JournalRecord.actor).in_(list(actors)))
+
+    entries = session.exec(
+        select(JournalRecord).where(*conditions).order_by(col(JournalRecord.id).asc()).limit(limit)
+    ).all()
+    total = session.exec(select(func.count()).select_from(JournalRecord).where(*conditions)).one()
+    return History(entries=list(entries), total=total)
 
 
 def _evidence_by_preference(

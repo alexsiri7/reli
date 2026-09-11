@@ -35,6 +35,7 @@ from backend.mcp_server import (
     get_thing,
     get_thing_history,
     get_user_model,
+    journal_since,
     record_preference,
     reject_preference,
     relate,
@@ -59,6 +60,7 @@ TOOL_NAMES = {
     "blocked",
     "children",
     "get_thing_history",
+    "journal_since",
     "find_correspondence",
     "find_events",
     "check_occurred",
@@ -98,6 +100,10 @@ def _journal_count(session):
     return session.execute(text("SELECT count(*) FROM journal")).scalar_one()
 
 
+def _newest_journal_id(session):
+    return session.execute(text("SELECT coalesce(max(id), 0) FROM journal")).scalar_one()
+
+
 def _entries_since(session, count_before):
     return session.execute(
         text("SELECT actor, operation, entity_type, entity_id FROM journal ORDER BY id OFFSET :n"),
@@ -112,7 +118,7 @@ def _tool_schemas():
 # --- The surface -----------------------------------------------------------
 
 
-def test_the_exposed_tools_are_exactly_the_twenty():
+def test_the_exposed_tools_are_exactly_the_twenty_one():
     assert set(_tool_schemas()) == TOOL_NAMES
 
 
@@ -389,6 +395,29 @@ def test_get_thing_history_reports_the_newest_window_and_its_truncation(tools):
     assert [e["after"]["title"] for e in result["entries"]] == ["v4", "v5"]
     assert result["total"] == 7
     assert result["truncated"] is True
+
+
+def test_journal_since_is_a_read_and_takes_no_actor_argument():
+    """The ``actors`` filter is a different key, and it admits all three actors: a read may ask for
+    the user's own edits, which no write over MCP may claim."""
+    schema = _tool_schemas()["journal_since"]
+
+    assert "actor" not in schema["properties"]
+    assert "actors" in schema["properties"]
+    assert schema["$defs"]["Actor"]["enum"] == [actor.value for actor in Actor]
+
+
+def test_journal_since_over_mcp_excludes_the_actor_it_was_told_to(tools):
+    watermark = _newest_journal_id(tools)
+    create_thing(actor="claude_scheduled", title="claude, unattended")
+    relayed = create_thing(actor="claude_interactive", title="relayed in conversation")
+
+    result = journal_since(after_id=watermark, actors=["claude_interactive"])
+
+    assert [(e["actor"], e["entity_id"]) for e in result["entries"]] == [("claude_interactive", relayed["id"])]
+    assert result["total"] == 1
+    assert result["truncated"] is False
+    assert json.loads(json.dumps(result))
 
 
 # --- The user model --------------------------------------------------------

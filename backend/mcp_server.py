@@ -116,7 +116,8 @@ reli_mcp = FastMCP(
         "session is an unattended scheduled task. The distinction is what lets Reli tell what the "
         "user decided from what Claude did, so it must be honest. "
         "Nothing is ever hard-deleted here — archive_thing retires a Thing and get_thing_history "
-        "shows how it got that way. "
+        "shows how it got that way; journal_since reads the journal across the whole graph from an "
+        "id onward, filtered by actor. "
         f"Reli also holds a model of its user: a single Thing tagged {USER_TAG} anchors "
         f"preferences, each its own Thing tagged {PREFERENCE_TAG} with a scope and the "
         "EvidenceFor edges that support it. Strength is the count of that evidence — there is no "
@@ -490,6 +491,32 @@ def get_thing_history(thing_id: uuid.UUID, limit: int = 200) -> dict[str, Any]:
     """
     with _session() as session:
         return _history_dict(queries.history(session, thing_id, limit))
+
+
+@reli_mcp.tool()
+def journal_since(after_id: int = 0, actors: list[Actor] | None = None, limit: int = 200) -> dict[str, Any]:
+    """Everything that happened since a point in the journal, across every Thing and relationship.
+
+    This is the learning pass's input: the entries with an id above ``after_id``, oldest first,
+    whoever made them and whatever they touched. Page forward by passing the last ``id`` you saw
+    back as the next ``after_id``; ``truncated`` says whether there is more.
+
+    ``actors`` is how you keep Claude's own unattended edits out of a conclusion about the user: a
+    check-in date moved by 'claude_scheduled' is not evidence of anything the user does. Pass
+    ['user', 'claude_interactive'] to see only what happened with a person present.
+
+    Args:
+        after_id: Return entries with an id strictly above this; 0 reads from the beginning.
+        actors: Only entries these actors made; omitted returns every actor's.
+        limit: How many entries to return at most; the oldest this many are the ones returned.
+
+    Returns:
+        {"entries": [...], "total": N, "truncated": bool} — one entry per mutation, each with the
+        actor, the operation, the entity and the before and after snapshots; ``total`` is how many
+        entries match in all, and ``truncated`` is true when there is a next page.
+    """
+    with _session() as session:
+        return _history_dict(queries.journal_since(session, after_id=after_id, actors=actors, limit=limit))
 
 
 # --- The user model --------------------------------------------------------
