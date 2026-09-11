@@ -313,7 +313,25 @@ def test_an_unsupported_grant_type_is_named(client):
     assert response.json()["error"] == "unsupported_grant_type"
 
 
-def test_a_confidential_client_must_present_its_secret(client, session):
+def test_a_code_is_bound_to_the_redirect_uri_it_was_authorised_with(client, session):
+    registered = _register(client, redirect_uris=(CLIENT_REDIRECT, "https://client.example.test/other"))
+    code = _seed_code(session, registered["client_id"], "verifier", redirect_uri=CLIENT_REDIRECT)
+
+    response = _token(
+        client,
+        code=code,
+        client_id=registered["client_id"],
+        code_verifier="verifier",
+        redirect_uri="https://client.example.test/other",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_grant"
+    assert "redirect_uri" in response.json()["error_description"]
+
+
+def test_a_wrong_secret_does_not_consume_the_code(client, session):
+    """The client is authenticated before its code is consumed: a typo costs one attempt, not a sign-in."""
     registered = _register(client, auth_method="client_secret_post")
     code = _seed_code(session, registered["client_id"], "verifier")
 
@@ -321,7 +339,6 @@ def test_a_confidential_client_must_present_its_secret(client, session):
     assert wrong.status_code == 401
     assert wrong.json()["error"] == "invalid_client"
 
-    code = _seed_code(session, registered["client_id"], "verifier", code="second-code")
     right = _token(
         client,
         code=code,
@@ -329,7 +346,43 @@ def test_a_confidential_client_must_present_its_secret(client, session):
         code_verifier="verifier",
         client_secret=registered["client_secret"],
     )
-    assert right.status_code == 200
+    assert right.status_code == 200, right.text
+
+
+def test_a_wrong_secret_does_not_consume_the_refresh_token(client, session):
+    registered = _register(client, auth_method="client_secret_post")
+    code = _seed_code(session, registered["client_id"], "verifier")
+    issued = _token(
+        client,
+        code=code,
+        client_id=registered["client_id"],
+        code_verifier="verifier",
+        client_secret=registered["client_secret"],
+    ).json()
+
+    wrong = client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": issued["refresh_token"],
+            "client_id": registered["client_id"],
+            "client_secret": "no",
+        },
+    )
+    assert wrong.status_code == 401
+    assert wrong.json()["error"] == "invalid_client"
+
+    right = client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": issued["refresh_token"],
+            "client_id": registered["client_id"],
+            "client_secret": registered["client_secret"],
+        },
+    )
+    assert right.status_code == 200, right.text
+    assert right.json()["refresh_token"] != issued["refresh_token"]
 
 
 def test_a_refresh_token_rotates(client, session):
@@ -347,6 +400,21 @@ def test_a_refresh_token_rotates(client, session):
     replay = _refresh(client, first["refresh_token"], registered["client_id"])
     assert replay.status_code == 400
     assert replay.json()["error"] == "invalid_grant"
+
+
+def test_a_refresh_token_is_bound_to_the_client_it_was_issued_to(client, session):
+    owner = _register(client)
+    other = _register(client)
+    code = _seed_code(session, owner["client_id"], "verifier")
+    issued = _token(client, code=code, client_id=owner["client_id"], code_verifier="verifier").json()
+
+    response = _refresh(client, issued["refresh_token"], other["client_id"])
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_grant"
+    assert "client_id" in response.json()["error_description"]
+    # The refused attempt did not consume it: the owner still holds a live refresh token.
+    assert _refresh(client, issued["refresh_token"], owner["client_id"]).status_code == 200
 
 
 # --- The bare /mcp path ------------------------------------------------------

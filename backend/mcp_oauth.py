@@ -31,6 +31,7 @@ from sqlmodel import Session
 
 from . import auth, google_login
 from .oauth_state import (
+    Store,
     StoreFullError,
     cleanup_and_get,
     cleanup_and_pop,
@@ -286,30 +287,59 @@ def _issue_token_response(session: Session, subject: str, email: str, client_id:
     )
 
 
-def _exchange_refresh_token(session: Session, refresh_token: str, client_id: str, client_secret: str) -> JSONResponse:
-    if not refresh_token:
-        raise _invalid_grant("refresh_token is required")
-    grant = cleanup_and_pop(session, mcp_refresh_tokens, refresh_token)
+def _consume_grant(
+    session: Session, store: Store, key: str, client_id: str, client_secret: str, gone: str
+) -> dict[str, Any]:
+    """The grant under *key*, deleted, once the client it was issued to has authenticated.
+
+    The client is authenticated before the grant is consumed (RFC 6749 §3.2.1 puts client
+    authentication ahead of processing the grant), so a wrong secret leaves a still-valid code or
+    refresh token for its holder to redeem instead of burning it. The grant is bound to the client
+    that asked for it, so an injected code exchanges for nothing.
+
+    Raises:
+        _TokenError: ``invalid_grant`` when the grant is gone or belongs to another client;
+            ``invalid_client`` from :func:`_validate_client_secret`.
+    """
+    grant = cleanup_and_get(session, store, key)
     if grant is None:
-        raise _invalid_grant("Refresh token is invalid or expired: re-authorise the connector")
+        raise _invalid_grant(gone)
     if not client_id or client_id != grant["client_id"]:
         raise _invalid_grant("client_id mismatch: re-authorise the connector")
     _validate_client_secret(session, client_id, client_secret)
+    consumed = cleanup_and_pop(session, store, key)
+    if consumed is None:
+        raise _invalid_grant(gone)
+    return consumed
+
+
+def _exchange_refresh_token(session: Session, refresh_token: str, client_id: str, client_secret: str) -> JSONResponse:
+    if not refresh_token:
+        raise _invalid_grant("refresh_token is required")
+    grant = _consume_grant(
+        session,
+        mcp_refresh_tokens,
+        refresh_token,
+        client_id,
+        client_secret,
+        gone="Refresh token is invalid or expired: re-authorise the connector",
+    )
     return _issue_token_response(session, grant["subject"], grant["email"], grant["client_id"], grant["scope"])
 
 
 def _exchange_authorization_code(
     session: Session, code: str, redirect_uri: str, client_id: str, client_secret: str, code_verifier: str
 ) -> JSONResponse:
-    grant = cleanup_and_pop(session, mcp_auth_codes, code)
-    if grant is None:
-        raise _invalid_grant("Authorization code is invalid or expired: re-authorise the connector")
+    grant = _consume_grant(
+        session,
+        mcp_auth_codes,
+        code,
+        client_id,
+        client_secret,
+        gone="Authorization code is invalid or expired: re-authorise the connector",
+    )
     if redirect_uri != grant["redirect_uri"]:
         raise _invalid_grant("redirect_uri mismatch: re-authorise the connector")
-    # The code is bound to the client that asked for it, so an injected code exchanges for nothing.
-    if not client_id or client_id != grant["client_id"]:
-        raise _invalid_grant("client_id mismatch: re-authorise the connector")
-    _validate_client_secret(session, client_id, client_secret)
 
     if grant["code_challenge_method"] == "S256":
         if not code_verifier:
