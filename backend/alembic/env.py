@@ -28,6 +28,7 @@ if config.config_file_name is not None:
 from sqlmodel import SQLModel  # noqa: E402
 
 from backend import db_models as _db_models  # noqa: F401, E402
+from backend import oauth_state as _oauth_state  # noqa: F401, E402
 
 target_metadata = SQLModel.metadata
 

@@ -1,8 +1,9 @@
 """The Reli data layer: Things, the relationships between them, and the mutations journal.
 
-Three tables and nothing else. A Thing is the universal unit — task, note, project, idea, goal —
-with no type column and no ``parent_id``; hierarchy is a ``ChildOf`` relationship like any other
-edge. Every mutation of the first two tables is recorded in the third, which is append-only.
+The three graph tables — the OAuth flow state in :mod:`backend.oauth_state` is not graph state. A
+Thing is the universal unit — task, note, project, idea, goal — with no type column and no
+``parent_id``; hierarchy is a ``ChildOf`` relationship like any other edge. Every mutation of the
+first two tables is recorded in the third, which is append-only.
 
 All writes go through :mod:`backend.service`, which is the only module that may construct or mutate
 ``ThingRecord`` and ``RelationshipRecord``.
