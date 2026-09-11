@@ -20,6 +20,12 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN:-}
+      # The Google sign-in behind /oauth/*, on the same terms: empty closes the sign-in and keeps
+      # /mcp on the static token, never a boot failure.
+      - SECRET_KEY=${SECRET_KEY:-}
+      - ALLOWED_EMAILS=${ALLOWED_EMAILS:-}
+      - GOOGLE_AUTH_REDIRECT_URI=${GOOGLE_AUTH_REDIRECT_URI:-}
+      - RELI_BASE_URL=${RELI_BASE_URL:-}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=staging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}

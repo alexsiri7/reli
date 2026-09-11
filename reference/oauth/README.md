@@ -21,7 +21,8 @@ It targets the schema the #1408 baseline migration drops (`users`, `google_token
 `backend/config.py` no longer defines. #1412 has since rewritten the Calendar and Gmail readers
 against the new data layer, as `backend/google_client.py` and `backend/google_readers.py`: they are
 read-only, they hold no token at rest — the credential is three environment variables and an
-in-memory access token — and they reuse none of this code. #1409 answered the auth half:
-`/mcp` takes a static bearer token (`MCP_API_TOKEN`), so none of this is needed for the MCP surface — a full authorization server
-would be its own issue. Read it for the OAuth flow and the token handling, do not reuse it
-wholesale.
+in-memory access token — and they reuse none of this code. #1450 restored the authorization
+server as `backend/mcp_oauth.py`, ported from `git show 553e3f0:backend/routers/mcp_oauth.py`, so
+`/mcp` takes either the static bearer token (`MCP_API_TOKEN`) or the JWT it mints; `router_auth.py`
+here is still the web half's reference for #1449. Read it for the OAuth flow and the token
+handling, do not reuse it wholesale.

@@ -7,7 +7,9 @@
   Postgres via testcontainers) and production
 - **Node 22** — only for frontend development; the Docker image builds the bundle itself
 
-There is no LLM key to provision and no OAuth login. Reli has one user and no accounts.
+There is no LLM key to provision. Reli has one user and no accounts: the only sign-in is the
+Google account in `ALLOWED_EMAILS`, which a claude.ai connector authorises with (see
+[Connecting Claude](#connecting-claude)).
 
 ## Local development
 
@@ -41,10 +43,20 @@ locally.
 
 ## Connecting Claude
 
-`/mcp` is an MCP streamable-HTTP endpoint. Every request needs
-`Authorization: Bearer $MCP_API_TOKEN`; put the same value in the claude.ai connector for
-`https://<your-host>/mcp`. The tools, prompts and resources it serves are listed in
-[mcp-design.md](mcp-design.md).
+`/mcp` is an MCP streamable-HTTP endpoint. Every request needs an `Authorization: Bearer`, and
+there are two ways to get one:
+
+- **Google sign-in (no token in the connector).** Add a claude.ai connector for
+  `https://<your-host>/mcp` with no bearer token. The connector discovers the authorization server
+  at `/.well-known/oauth-authorization-server`, registers itself, opens Google sign-in, and the
+  account listed in `ALLOWED_EMAILS` completes it. Needs `SECRET_KEY`, `ALLOWED_EMAILS`,
+  `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_AUTH_REDIRECT_URI` set, and the redirect
+  URI authorised on the OAuth client in the Google Cloud console — the human steps are in
+  CLAUDE.md, *Google sign-in*.
+- **Static token.** Put `MCP_API_TOKEN` in the connector as the bearer token. This stays until a
+  human confirms the sign-in flow against a real connector and retires it.
+
+The tools, prompts and resources it serves are listed in [mcp-design.md](mcp-design.md).
 
 ## Google (optional)
 
@@ -102,7 +114,11 @@ These are the fields of `Settings` in `backend/config.py`, and nothing else is r
 | `DATABASE_URL` | — | **Required.** Postgres connection string. No default: the boot fails without it rather than serving an empty database. |
 | `MCP_API_TOKEN` | empty | Bearer token for `/mcp`. Human-provisioned. Empty closes the endpoint (401 to everything) and logs a warning; it never opens it. |
 | `WEB_UI_PASSWORD` | empty | HTTP Basic password for `/` and `/api`; any username. Human-provisioned. Empty closes the view (401), never opens it. |
-| `GOOGLE_CLIENT_ID` | empty | Google OAuth client, see above. Empty disables only the three Google tools. |
+| `SECRET_KEY` | empty | HS256 key for the JWTs the authorization server mints for `/mcp`. Human-provisioned; at least 32 random bytes. Empty means no JWT is issued or accepted, never a boot failure. |
+| `ALLOWED_EMAILS` | empty | Comma-separated Google account emails allowed to sign in. Empty admits nobody. |
+| `GOOGLE_AUTH_REDIRECT_URI` | empty | `https://<your-host>/api/auth/google/callback`, registered verbatim on the OAuth client. Empty closes the sign-in; there is no localhost guess. |
+| `RELI_BASE_URL` | empty | Issuer and base of the OAuth metadata documents. Derived from `GOOGLE_AUTH_REDIRECT_URI` when empty. |
+| `GOOGLE_CLIENT_ID` | empty | Google OAuth client, see above; also identifies Reli to Google for the sign-in. Empty disables only the three Google tools and the sign-in. |
 | `GOOGLE_CLIENT_SECRET` | empty | As above. |
 | `GOOGLE_REFRESH_TOKEN` | empty | As above; printed by `scripts/google_oauth_grant.py`. |
 | `LOG_LEVEL` | `INFO` | Python logging level. |

@@ -11,7 +11,7 @@ three surfaces (`backend/main.py`):
 
 ```
 Claude session (claude.ai, interactive or scheduled)
-        │  MCP over streamable HTTP, Authorization: Bearer $MCP_API_TOKEN
+        │  MCP over streamable HTTP, Authorization: Bearer <MCP_API_TOKEN or OAuth JWT>
         ▼
    /mcp ──────────────┐
                       │        ┌──────────────┐
@@ -113,7 +113,8 @@ and the read path so the two cannot drift. Rationale: [vision.md §5](vision.md#
 `backend/mcp_server.py` is the only way into the graph: twenty-two tools, four prompts and two
 resources, each a thin wrapper over `service`, `queries` or `google_readers`. Every writing tool
 takes a required `actor` (`claude_interactive` or `claude_scheduled`); there is no hard delete;
-the endpoint sits behind a bearer token. The catalogue is in [mcp-design.md](mcp-design.md).
+the endpoint sits behind the static token or a JWT from the OAuth 2.1 authorization server in
+`backend/mcp_oauth.py`. The catalogue is in [mcp-design.md](mcp-design.md).
 
 ## 7. Google readers
 
@@ -138,8 +139,12 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
 
 ## 9. Access control
 
-- `/mcp` — `_BearerTokenMiddleware` in `backend/mcp_server.py` requires
-  `Authorization: Bearer $MCP_API_TOKEN`, compared with `secrets.compare_digest`.
+- `/mcp` — `_BearerTokenMiddleware` in `backend/mcp_server.py` requires an `Authorization: Bearer`
+  of either `MCP_API_TOKEN`, compared with `secrets.compare_digest`, or an `aud="mcp"` JWT that the
+  OAuth 2.1 authorization server in `backend/mcp_oauth.py` minted after a Google sign-in
+  (`SECRET_KEY`, `ALLOWED_EMAILS`). Its discovery, registration and token endpoints
+  (`/.well-known/*`, `/oauth/*`) and Google's callback (`/api/auth/google/callback`) are public
+  by design: a client reaches them before it holds any credential.
 - `/` and `/api` — `_BasicAuthMiddleware` in `backend/api.py` requires HTTP Basic with
   `WEB_UI_PASSWORD` as the password; the username is ignored.
 - `/healthz` — exempt from both.
@@ -147,8 +152,8 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
 An empty secret closes its surface rather than opening it: every request gets a 401 and a warning
 is logged at startup, while `/healthz` stays green so a missing secret cannot roll a deploy back.
 There is no dev-mode bypass. The MCP app's DNS-rebinding protection is off because the service is
-reached through a Cloudflare tunnel; that is safe only because the bearer header is mandatory and
-a cross-origin page cannot set one — the two decisions are coupled.
+reached through a Cloudflare tunnel; that is safe only because the bearer header — static token or
+JWT — is mandatory and a cross-origin page cannot set one; the two decisions are coupled.
 
 ## 10. Scheduled Claude
 
