@@ -16,7 +16,7 @@ from typing import get_args
 import pytest
 from sqlalchemy import text
 
-from backend import google_readers, mcp_server
+from backend import google_readers, mcp_server, prompts
 from backend.config import settings
 from backend.db_models import Actor, RelationshipType
 from backend.mcp_server import (
@@ -502,9 +502,67 @@ def test_no_user_model_payload_carries_a_confidence_score(tools):
     assert "confidence" not in json.dumps(get_user_model())
 
 
+# --- Prompts: the hats ------------------------------------------------------
+
+PROMPT_SCOPES = {
+    "capture": prompts.CAPTURE_SCOPE,
+    "daily-planning": prompts.SCHEDULING_SCOPE,
+    "project-planning": prompts.PLANNING_SCOPE,
+    "review": prompts.REVIEW_SCOPE,
+}
+
+
+def _prompts():
+    return {prompt.name: prompt for prompt in asyncio.run(reli_mcp.list_prompts())}
+
+
+def _prompt_text(name):
+    result = asyncio.run(reli_mcp.get_prompt(name))
+    (message,) = result.messages
+    assert message.role == "user"
+    return message.content.text
+
+
+def test_the_exposed_prompts_are_exactly_the_four_hats():
+    """#1411: the names are the ones the issue gives, hyphens included, not the function names."""
+    assert set(_prompts()) == set(PROMPT_SCOPES)
+
+
+@pytest.mark.parametrize("name", sorted(PROMPT_SCOPES))
+def test_every_prompt_carries_the_preference_capture_convention(name):
+    """The explicit half of learning depends on this appearing in every prompt, not just one."""
+    text = _prompt_text(name)
+
+    assert prompts.PREFERENCE_CAPTURE_CONVENTION in text
+    assert "record_preference" in text
+    assert '"I hate morning meetings" is a preference' in text
+    assert '"Move that to Thursday" on its own is not' in text
+
+
+@pytest.mark.parametrize("name", sorted(PROMPT_SCOPES))
+def test_every_prompt_states_what_a_checkin_date_means(name):
+    text = _prompt_text(name)
+
+    assert prompts.CHECKIN_SEMANTICS in text
+    assert "A check-in date is your obligation, not the user's." in text
+
+
+@pytest.mark.parametrize(("name", "scope"), sorted(PROMPT_SCOPES.items()))
+def test_every_prompt_names_the_scope_it_loads_in_its_description_and_its_body(name, scope):
+    """The description is what a connected session shows before the prompt is picked."""
+    assert f"'{scope}'" in _prompts()[name].description
+    assert f'get_user_model(scope="{scope}")' in _prompt_text(name)
+    assert f"reli://user-model/{scope}" in _prompt_text(name)
+
+
+def test_the_prompts_take_no_arguments():
+    assert all(prompt.arguments == [] for prompt in _prompts().values())
+
+
 # --- Transport and auth ----------------------------------------------------
 
 _TOOLS_LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+_PROMPTS_LIST = {"jsonrpc": "2.0", "id": 1, "method": "prompts/list", "params": {}}
 _MCP_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 
 
@@ -535,6 +593,16 @@ def test_mcp_endpoint_admits_the_configured_token(client, mcp_token):
 
     assert response.status_code != 401
     assert "create_thing" in response.text
+
+
+def test_the_prompts_are_retrievable_over_mcp(client, mcp_token):
+    """#1411's first acceptance criterion, through the real transport rather than the registry."""
+    headers = {**_MCP_HEADERS, "Authorization": f"Bearer {mcp_token}"}
+
+    response = client.post("/mcp/", json=_PROMPTS_LIST, headers=headers)
+
+    assert response.status_code == 200
+    assert all(name in response.text for name in PROMPT_SCOPES)
 
 
 def test_an_unset_token_closes_the_endpoint_rather_than_opening_it(client):
