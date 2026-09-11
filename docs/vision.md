@@ -26,6 +26,8 @@ This section exists so the next rebuild doesn't repeat the last one. It is not h
 
 **Confidence was a number instead of evidence.** A preference carrying `confidence: 0.7` and no link to what caused it cannot be audited, corrected, or falsified. It can only be decayed by an algorithm guessing on the user's behalf.
 
+**Behaviour was written but never delivered.** The v4 rebuild put the PA behaviour into MCP prompts on the assumption that the default one would apply to every session. It does not: a prompt applies only when the user picks it, so an ordinary conversation got Reli's tools with none of its behaviour, and Reli did not feel like a PA with every prompt present and correct. Behaviour that depends on the user remembering to load it is behaviour the system does not have. A default must be obtainable by the session itself.
+
 **The vision doc was a manifesto.** Nine thousand words describing Concerns, multi-channel delivery, personality adaptation, memory layers and a learning flywheel — none of it small enough to build to, so the build went its own way. This document is deliberately shorter and deliberately says no more often than yes.
 
 ## 3. Principles
@@ -58,7 +60,9 @@ Every action goes through MCP. Nothing writes to Reli except an MCP client, and 
 
 **Tools** cover the Things, relationships and queries above.
 
-**Prompts** carry the PA behaviour — what to capture, when to set a check-in, how to name things, when to record a preference. This is what makes Claude behave as a PA without Reli owning a model. The operational "hats" from the original spec become prompts rather than backend modes: daily planning, project planning, review.
+**Prompts** carry the PA behaviour — what to capture, when to set a check-in, how to name things, when to record a preference — as text, so Claude behaves as a PA without Reli owning a model. A prompt applies only when the user picks it, so prompts are the modes entered deliberately: the operational "hats" from the original spec — daily planning, project planning, review — become prompts rather than backend modes. The fourth, `capture`, is the default, and a default the user has to remember to load is not one.
+
+**`get_initial_instructions`** is how the default reaches a session that loaded no prompt. It is a tool rather than a prompt precisely so a session can obtain it without the user doing anything: the server's own instructions tell every session to call it first, and it returns `capture` derived at call time, plus a pointer to the three hats, so it cannot drift from the prompt.
 
 **Resources** expose the current user model, scoped, so a session loads the preferences relevant to what it's doing.
 
