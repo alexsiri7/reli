@@ -3,9 +3,11 @@
 `/api` exists for the frontend. It mirrors the query layer and nothing more: every write into the
 graph goes over MCP ([mcp-design.md](mcp-design.md)), with the single exception listed below.
 Every route sits behind HTTP Basic with `WEB_UI_PASSWORD` as the password and any username; an
-unset password answers 401 to everything. The routes and their response models are in
-`backend/api.py`, the TypeScript mirror is `frontend/src/api.ts`, and the contract is proven by
-`backend/tests/test_api.py`.
+unset password answers 401 to everything. The one exception is `/api/auth/`, Google's sign-in
+redirect for the MCP connector, which is not part of this surface (it lives in `backend/auth.py`,
+see [mcp-design.md](mcp-design.md) §3) and is listed below only so its exemption is on record. The
+routes and their response models are in `backend/api.py`, the TypeScript mirror is
+`frontend/src/api.ts`, and the contract is proven by `backend/tests/test_api.py`.
 
 ## Routes
 
@@ -16,6 +18,7 @@ unset password answers 401 to everything. The routes and their response models a
 | GET | `/api/things/{thing_id}/history?limit=` | `HistoryOut` | The newest `limit` journal entries (1–1000, default 200), oldest first within that window. Only entries recorded against the Thing itself — relating and unrelating are journalled against the relationship, so edge changes do not appear. An unknown id answers an empty history, not a 404. |
 | GET | `/api/user-model?scope=` | `UserModelOut` | Every preference with its evidence. Rejected preferences are **always** included, so the view can make a wrong one spottable. A preference with no evidence or a blank scope never appears. |
 | POST | `/api/preferences/{preference_id}/reject` | `PreferenceOut` | **The only write.** Tags the preference `#Rejected` and journals it as `Actor.USER`. Rejecting twice is a 200 that changes nothing. 404 for a missing id or a Thing that is not tagged `#Preference`. |
+| GET | `/api/auth/google/callback` | redirect | **Not the web view's.** Where Google sends the browser after the MCP connector's sign-in; exempt from Basic because it lands in a fresh browser. Answers a 302 to the connector, or 400 for an unknown `state`. |
 | any | `/api/{anything else}` | — | 404 JSON, never the SPA fallback. |
 
 `GET /healthz` is unauthenticated and answers `{"status": "ok", "service": "reli"}`.

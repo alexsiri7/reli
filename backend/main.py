@@ -1,9 +1,11 @@
 """Reli FastAPI application entry point.
 
 Reli is a data service, not an application: the graph is reached over MCP and the judgement happens
-in Claude. This app serves the health check the deploy pipeline polls, mounts the MCP tools of
-:mod:`backend.mcp_server` at ``/mcp``, and serves the read-only web view of :mod:`backend.api` —
-its ``/api`` routes and, when the image was built with one, the frontend bundle behind them.
+in Claude. This app serves the health check the deploy pipeline polls, the OAuth 2.1 authorization
+server of :mod:`backend.mcp_oauth` and the Google callback of :mod:`backend.auth` that an MCP client
+authorises through, mounts the MCP tools of :mod:`backend.mcp_server` at ``/mcp``, and serves the
+read-only web view of :mod:`backend.api` — its ``/api`` routes and, when the image was built with
+one, the frontend bundle behind them.
 """
 
 import logging
@@ -13,7 +15,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import api
+from . import api, auth, mcp_oauth
 from .config import settings
 from .mcp_server import create_mcp_asgi_app, reli_mcp
 from .sentry import init_sentry
@@ -68,6 +70,10 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "reli"}
 
 
+# Before api.router, which ends in the /api/{unmatched:path} catch-all that would otherwise take the
+# Google callback; and before the mount, so the bare-/mcp redirect is matched ahead of it.
+app.include_router(auth.router)
+app.include_router(mcp_oauth.router)
 app.include_router(api.router)
 app.mount("/mcp", create_mcp_asgi_app())
 

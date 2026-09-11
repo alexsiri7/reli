@@ -45,8 +45,15 @@ docker compose build && docker compose up -d
 start without it rather than silently using an empty database.
 
 `MCP_API_TOKEN` is the bearer token for `/mcp`. It is human-provisioned: agents cannot mint it. An
-empty value is not a dev-mode bypass — `/mcp` answers 401 to every request and logs a warning at
-startup, while `/healthz` stays green so a missing secret cannot roll a deploy back.
+empty value is not a dev-mode bypass — with `SECRET_KEY` also empty, `/mcp` answers 401 to every
+request and logs a warning at startup, while `/healthz` stays green so a missing secret cannot roll
+a deploy back. Clearing `MCP_API_TOKEN` alone does not close `/mcp` while the Google sign-in below
+is configured: the JWT path stays open to every account in `ALLOWED_EMAILS`.
+
+`/mcp` also accepts the JWTs the OAuth 2.1 authorization server at `/oauth/*` mints after a Google
+sign-in (see *Google sign-in* below), which is how a claude.ai connector authorises without holding
+a shared secret. The static token stays beside the JWT until a human confirms the OAuth flow
+against a real connector and retires it in its own change. Agents must not remove it.
 
 The container runs `alembic upgrade head` on startup. A migration failure now fails the boot: there
 is no `create_all` fallback, because a schema built from ORM metadata would omit the journal's
@@ -99,6 +106,47 @@ uv run python scripts/google_oauth_grant.py
 It prints a refresh token and stores nothing. Replace `GOOGLE_REFRESH_TOKEN` with it and restart.
 Leaving all three unset is safe: the boot succeeds, `/healthz` stays green, the graph tools work,
 and only the three Google tools fail — with a message naming what to set.
+
+The same `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` also identify Reli to Google for the sign-in
+below, read by `backend/google_login.py` under the same never-persist rule (it is in the same
+test's `GOOGLE_MODULES`), with the `openid email profile` scopes — the readers' `SCOPES` tuple is
+unchanged.
+
+## Google sign-in
+
+The OAuth 2.1 authorization server in `backend/mcp_oauth.py` (#1450, requirement 019) lets a
+claude.ai connector authorise against `/mcp` by signing in to Google rather than carrying
+`MCP_API_TOKEN`: the connector discovers `/.well-known/oauth-authorization-server`, registers
+itself at `/oauth/register`, is sent through Google by `/oauth/authorize`, lands on
+`/api/auth/google/callback` (`backend/auth.py`), and exchanges the code at `/oauth/token` for an
+`aud="mcp"` JWT that `/mcp` accepts. Identity is the Google account: there is no users table, the
+allowlisted email lives in the token, and the four `mcp_*` tables in `backend/oauth_state.py` hold
+only flow state — none of it is a Thing, so none of it journals.
+
+Its settings are `SECRET_KEY`, `ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and `RELI_BASE_URL`,
+beside `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Every one is human-provisioned on the
+`MCP_API_TOKEN` pattern: empty closes the sign-in — `/oauth/authorize` answers 501 naming each
+missing setting, and no JWT is issued or accepted — and never stops the boot. **Empty
+`ALLOWED_EMAILS` admits nobody.**
+
+**The human steps, none of which an agent can perform or verify.** Do not claim any of these is
+done:
+
+1. Set the settings on the deploy: `SECRET_KEY` to at least 32 random bytes
+   (`python -c "import secrets; print(secrets.token_urlsafe(48))"`), `ALLOWED_EMAILS` to the
+   owner's Google address, `GOOGLE_AUTH_REDIRECT_URI` to `https://<host>/api/auth/google/callback`.
+   #1448 found `SECRET_KEY`, `ALLOWED_EMAILS` and `GOOGLE_AUTH_REDIRECT_URI` still set on Railway
+   from before the rebuild; a human checks the values, in particular that the redirect URI's path
+   is exactly this one.
+2. In the Google Cloud console, confirm the OAuth client `GOOGLE_CLIENT_ID` names is a **Web
+   application** client with that exact redirect URI authorised. Nothing in the repository can
+   check this; when it is wrong the callback answers 502 naming `redirect_uri_mismatch`. Note that
+   `scripts/google_oauth_grant.py` documents a **Desktop app** client for the readers' grant;
+   whether the readers' grant can share the Web client is an open question for the owner.
+3. Add the claude.ai connector for `https://<host>/mcp` with **no** bearer token. It discovers the
+   server, registers itself, opens Google sign-in, and the allowlisted account completes it.
+4. Confirm it works, then retire `MCP_API_TOKEN` in a follow-up change. Until then the static
+   token stays, and agents must not remove it.
 
 ## Scheduled passes
 
@@ -215,7 +263,8 @@ Creating documentation that claims success on an action you cannot perform is a 
 - Reads: `backend/queries.py` — the indexed queries, including `user_model`
 - Retained reference, not built or shipped: `reference/oauth/` (see its README)
 - MCP: `backend/mcp_server.py` — the twenty-two tools wrapping `service.py`, `queries.py` and
-  `google_readers.py`; every writing tool takes a required `actor`, and hard delete is not exposed.
+  `google_readers.py`, behind the static token or an OAuth JWT; every writing tool takes a
+  required `actor`, and hard delete is not exposed.
   `journal_since` is the one cross-Thing journal read, filtered by actor, for the learning pass.
   The three Google tools take no `actor` and journal nothing, because they mutate nothing. The four
   user-model tools are `record_preference`, `add_preference_evidence`, `reject_preference` and
@@ -232,9 +281,17 @@ Creating documentation that claims success on an action you cannot perform is a 
   `check_occurred`; read-only and summarising, and they return evidence rather than a verdict
 - Google credentials and transport: `backend/google_client.py` — the only module that reads the
   credential and the only one that reaches a Google API, always with a `GET`
-- HTTP: `backend/main.py` serves `/healthz`, includes the `/api` router, mounts the MCP
-  streamable-HTTP app at `/mcp`, and mounts the frontend bundle **last** — its catch-all answers
-  every unmatched path, so anything mounted after it would be dead
+- Google sign-in: `backend/google_login.py` — the only code that reaches Google for sign-in: the
+  authorization URL, the code exchange and the id-token claims; persists nothing
+- JWTs and the callback: `backend/auth.py` — `create_jwt` / `decode_jwt`, the allowlist, and
+  `GET /api/auth/google/callback`, the one address Google redirects to
+- Authorization server: `backend/mcp_oauth.py` — `/.well-known/*`, `/oauth/register`,
+  `/oauth/authorize`, `/oauth/token` and the bare-`/mcp` redirect
+- OAuth flow state: `backend/oauth_state.py` — the four bounded `mcp_*` stores; not graph state,
+  not journalled
+- HTTP: `backend/main.py` serves `/healthz`, includes the auth, OAuth and `/api` routers in that
+  order, mounts the MCP streamable-HTTP app at `/mcp`, and mounts the frontend bundle **last** — its
+  catch-all answers every unmatched path, so anything mounted after it would be dead
 - Web view API: `backend/api.py` — the five `/api` routes, their response models, the Basic-auth
   middleware and the SPA mount. Read-only apart from `POST /api/preferences/{id}/reject`, the only
   place `Actor.USER` is used

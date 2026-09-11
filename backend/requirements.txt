@@ -11,6 +11,8 @@ alembic>=1.19.2
 psycopg2>=2.9.12
 mcp>=1.26.0,<2.0.0
 httpx>=0.28.1
+PyJWT>=2.10.1
+python-multipart>=0.0.20
 
 # Dev / test only
 ruff>=0.16.6

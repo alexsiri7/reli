@@ -55,9 +55,10 @@ def test_no_confidence_column_exists_anywhere(session):
     assert _columns_named(session, "confidence") == []
 
 
-def test_only_the_three_v4_tables_exist(session):
+def test_the_graph_tables_and_the_oauth_state_tables_exist_and_no_legacy_table_does(session):
     tables = _tables(session)
     assert {"things", "relationships", "journal"} <= tables
+    assert {"mcp_registered_clients", "mcp_oauth_sessions", "mcp_auth_codes", "mcp_refresh_tokens"} <= tables
     assert not tables & set(LEGACY_TABLES)
 
 

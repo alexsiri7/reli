@@ -24,16 +24,23 @@ lifespan never runs.
 
 DNS-rebinding protection is disabled. The SDK's default host allowlist is `127.0.0.1`/`localhost`,
 which answers 421 to any request carrying a real `Host` header — and Reli is served through a
-Cloudflare tunnel. This is safe only because the bearer check below makes an `Authorization`
-header mandatory, which a cross-origin page cannot set; the two decisions are coupled.
+Cloudflare tunnel. This is safe only because the bearer check below (static token or OAuth JWT)
+makes an `Authorization` header mandatory, which a cross-origin page cannot set; the two decisions
+are coupled.
 
 ## 3. Authentication
 
-`_BearerTokenMiddleware` requires `Authorization: Bearer <MCP_API_TOKEN>` on every request, compared
-with `secrets.compare_digest` and read from settings per request. An empty token closes the
-endpoint — 401 to everything, and a warning at startup — rather than opening it, because `/mcp` is
-the only write path into the graph and it is publicly reachable. There is no JWT, no OAuth and no
-dev mode.
+`_BearerTokenMiddleware` requires an `Authorization: Bearer` on every request and accepts two
+credentials, read from settings per request: the static `MCP_API_TOKEN`, compared with
+`secrets.compare_digest`, or an `aud="mcp"` JWT signed with `SECRET_KEY` and minted by the OAuth 2.1
+authorization server in `backend/mcp_oauth.py` after a Google sign-in — `/.well-known/*`,
+`/oauth/register`, `/oauth/authorize`, `/oauth/token`, with the callback in `backend/auth.py`. A
+401 carries an RFC 9728 `resource_metadata` pointer when a base URL is configured, which is how a
+claude.ai connector finds the authorization server, and its body names the remedy. Empty secrets
+close the endpoint — 401 to everything, and a warning at startup — rather than opening it, because
+`/mcp` is the only write path into the graph and it is publicly reachable. There is no dev mode.
+The static token stays beside the JWT until a human confirms the OAuth flow against a real
+connector and retires it.
 
 Every writing tool takes `actor: McpActor` as a required first argument, where
 `McpActor = Literal[Actor.CLAUDE_INTERACTIVE, Actor.CLAUDE_SCHEDULED]`: `claude_interactive` when a
