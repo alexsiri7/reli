@@ -8,13 +8,10 @@ services:
       # No default: an unset DATABASE_URL must fail the boot, not silently bind the
       # service to the local `postgres` container instead of the real database.
       - DATABASE_URL=${DATABASE_URL}
-      # Defaulted, not required: an unset token closes /mcp with a 401 and leaves /healthz
+      # Defaulted, not required: an unset password answers 401 to /api and keeps /healthz
       # green, which is better than refusing to boot and rolling the deploy back.
-      - MCP_API_TOKEN=${MCP_API_TOKEN:-}
-      # The web view's password, on the same terms: empty answers 401 to / and /api and keeps
-      # /healthz green, so a deploy without it does not roll back.
       - WEB_UI_PASSWORD=${WEB_UI_PASSWORD:-}
-      # Defaulted-empty like MCP_API_TOKEN: an unset Google credential must not fail a boot.
+      # Defaulted-empty like WEB_UI_PASSWORD: an unset Google credential must not fail a boot.
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN:-}

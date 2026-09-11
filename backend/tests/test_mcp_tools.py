@@ -609,32 +609,35 @@ _MCP_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type":
 
 
 @pytest.fixture()
-def mcp_token():
-    """Set a token on the settings singleton, as conftest does for DATABASE_URL, and put it back."""
-    previous = settings.MCP_API_TOKEN
-    settings.MCP_API_TOKEN = "test-token"
-    yield "test-token"
-    settings.MCP_API_TOKEN = previous
+def secret_key():
+    """A signing key on the settings singleton, as conftest does for DATABASE_URL, and put it back."""
+    previous = settings.SECRET_KEY
+    settings.SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
+    yield settings.SECRET_KEY
+    settings.SECRET_KEY = previous
 
 
-def test_mcp_endpoint_refuses_an_unauthenticated_request(client, mcp_token):
+@pytest.fixture()
+def mcp_token(secret_key):
+    """What a connector holds after the Google sign-in: an ``aud="mcp"`` JWT the authorization server minted."""
+    return auth.create_jwt("1234567890", "owner@example.com", audience="mcp")
+
+
+def _bearer(token):
+    return {**_MCP_HEADERS, "Authorization": f"Bearer {token}"}
+
+
+def test_mcp_endpoint_refuses_an_unauthenticated_request(client, secret_key):
     response = client.post("/mcp/", json=_TOOLS_LIST, headers=_MCP_HEADERS)
 
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"].startswith("Bearer")
 
 
-def test_mcp_endpoint_refuses_the_wrong_token(client, mcp_token):
-    response = client.post("/mcp/", json=_TOOLS_LIST, headers={**_MCP_HEADERS, "Authorization": "Bearer wrong-token"})
+def test_mcp_endpoint_refuses_a_bearer_that_is_not_a_jwt(client, secret_key):
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("wrong-token"))
 
     assert response.status_code == 401
-
-
-def test_mcp_endpoint_admits_the_configured_token(client, mcp_token):
-    response = client.post("/mcp/", json=_TOOLS_LIST, headers={**_MCP_HEADERS, "Authorization": f"Bearer {mcp_token}"})
-
-    assert response.status_code != 401
-    assert "create_thing" in response.text
 
 
 def test_the_bare_path_reaches_the_mcp_app_with_the_same_bearer_check(client, mcp_token):
@@ -675,35 +678,19 @@ def test_the_prompts_are_retrievable_over_mcp(client, mcp_token):
     assert all(name in response.text for name in PROMPT_SCOPES)
 
 
-def test_an_unset_token_closes_the_endpoint_rather_than_opening_it(client):
-    previous = settings.MCP_API_TOKEN
-    settings.MCP_API_TOKEN = ""
+def test_an_unset_secret_key_closes_the_endpoint_rather_than_opening_it(client):
+    previous = settings.SECRET_KEY
+    settings.SECRET_KEY = ""
     try:
         response = client.post("/mcp/", json=_TOOLS_LIST, headers=_MCP_HEADERS)
     finally:
-        settings.MCP_API_TOKEN = previous
+        settings.SECRET_KEY = previous
 
     assert response.status_code == 401
 
 
-@pytest.fixture()
-def secret_key():
-    """A signing key on the settings singleton, the static token cleared, and both put back."""
-    previous = settings.SECRET_KEY, settings.MCP_API_TOKEN
-    settings.SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
-    settings.MCP_API_TOKEN = ""
-    yield settings.SECRET_KEY
-    settings.SECRET_KEY, settings.MCP_API_TOKEN = previous
-
-
-def _bearer(token):
-    return {**_MCP_HEADERS, "Authorization": f"Bearer {token}"}
-
-
-def test_mcp_endpoint_admits_a_jwt_the_authorization_server_minted(client, secret_key):
-    token = auth.create_jwt("1234567890", "owner@example.com", audience="mcp")
-
-    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(token))
+def test_mcp_endpoint_admits_a_jwt_the_authorization_server_minted(client, mcp_token):
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
 
     assert response.status_code != 401
     assert "create_thing" in response.text
@@ -747,26 +734,26 @@ def test_the_401_points_at_the_resource_metadata_when_a_base_url_is_set(client, 
     )
 
 
-def test_with_neither_secret_set_the_401_names_what_to_set(client):
-    previous = settings.SECRET_KEY, settings.MCP_API_TOKEN
+def test_with_secret_key_unset_the_401_names_what_to_set(client):
+    previous = settings.SECRET_KEY
     settings.SECRET_KEY = ""
-    settings.MCP_API_TOKEN = ""
     try:
         response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("anything"))
     finally:
-        settings.SECRET_KEY, settings.MCP_API_TOKEN = previous
-
-    assert response.status_code == 401
-    assert "MCP_API_TOKEN" in response.json()["detail"]
-
-
-def test_the_static_token_is_still_admitted_beside_the_jwt_path(client, mcp_token):
-    """The acceptance criterion in one line: MCP_API_TOKEN works until a human retires it."""
-    previous = settings.SECRET_KEY
-    settings.SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
-    try:
-        response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
-    finally:
         settings.SECRET_KEY = previous
 
-    assert response.status_code != 401
+    assert response.status_code == 401
+    assert "SECRET_KEY" in response.json()["detail"]
+
+
+def test_a_static_token_left_in_the_environment_is_not_a_credential(client, secret_key, monkeypatch):
+    """#1461 retired MCP_API_TOKEN: a deploy still carrying the variable boots, and the value it
+    holds is refused like any other non-JWT bearer, naming the sign-in as the remedy."""
+    monkeypatch.setenv("MCP_API_TOKEN", "the-retired-static-token")
+    assert not hasattr(type(settings)(), "MCP_API_TOKEN")
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("the-retired-static-token"))
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+    assert "Google" in response.json()["detail"]

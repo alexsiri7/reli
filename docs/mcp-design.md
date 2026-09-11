@@ -30,17 +30,16 @@ are coupled.
 
 ## 3. Authentication
 
-`_BearerTokenMiddleware` requires an `Authorization: Bearer` on every request and accepts two
-credentials, read from settings per request: the static `MCP_API_TOKEN`, compared with
-`secrets.compare_digest`, or an `aud="mcp"` JWT signed with `SECRET_KEY` and minted by the OAuth 2.1
-authorization server in `backend/mcp_oauth.py` after a Google sign-in — `/.well-known/*`,
-`/oauth/register`, `/oauth/authorize`, `/oauth/token`, with the callback in `backend/auth.py`. A
-401 carries an RFC 9728 `resource_metadata` pointer when a base URL is configured, which is how a
-claude.ai connector finds the authorization server, and its body names the remedy. Empty secrets
-close the endpoint — 401 to everything, and a warning at startup — rather than opening it, because
-`/mcp` is the only write path into the graph and it is publicly reachable. There is no dev mode.
-The static token stays beside the JWT until a human confirms the OAuth flow against a real
-connector and retires it.
+`_BearerTokenMiddleware` requires an `Authorization: Bearer` on every request and accepts one
+credential: an `aud="mcp"` JWT signed with `SECRET_KEY`, read from settings per request, and minted
+by the OAuth 2.1 authorization server in `backend/mcp_oauth.py` after a Google sign-in —
+`/.well-known/*`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, with the callback in
+`backend/auth.py`. A 401 carries an RFC 9728 `resource_metadata` pointer when a base URL is
+configured, which is how a claude.ai connector finds the authorization server, and its body names
+the remedy. An empty `SECRET_KEY` closes the endpoint — 401 to everything, and a warning at
+startup — rather than opening it, because `/mcp` is the only write path into the graph and it is
+publicly reachable. There is no dev mode. The static `MCP_API_TOKEN` that stood beside the JWT
+until the owner confirmed the sign-in against a real connector was retired in #1461.
 
 Every writing tool takes `actor: McpActor` as a required first argument, where
 `McpActor = Literal[Actor.CLAUDE_INTERACTIVE, Actor.CLAUDE_SCHEDULED]`: `claude_interactive` when a

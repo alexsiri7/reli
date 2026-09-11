@@ -12,11 +12,10 @@ services:
       - "127.0.0.1:8001:8000"
     environment:
       - DATABASE_URL=${STAGING_DATABASE_URL:?STAGING_DATABASE_URL must be set for staging}
-      - MCP_API_TOKEN=${MCP_API_TOKEN:-}
-      # The web view's password, on the same terms: empty answers 401 to / and /api and keeps
-      # /healthz green, so a deploy without it does not roll back.
+      # Defaulted, not required: an unset password answers 401 to /api and keeps /healthz
+      # green, which is better than refusing to boot and rolling the deploy back.
       - WEB_UI_PASSWORD=${WEB_UI_PASSWORD:-}
-      # Defaulted-empty like MCP_API_TOKEN: an unset Google credential must not fail a boot.
+      # Defaulted-empty like WEB_UI_PASSWORD: an unset Google credential must not fail a boot.
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN:-}

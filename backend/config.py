@@ -24,28 +24,23 @@ class Settings(BaseSettings):
     # --- Database ---
     DATABASE_URL: str = ""
 
-    # --- MCP ---
-    # Bearer token for the /mcp endpoint. Human-provisioned: an empty value closes /mcp with a
-    # 401 rather than opening it, and never stops the boot — /healthz must stay green so a
-    # missing secret does not roll the deploy back.
-    MCP_API_TOKEN: str = ""
-
     # --- Web view ---
     # HTTP Basic password the /api routes accept, beside the Google sign-in's session cookie.
-    # Human-provisioned on the same terms as MCP_API_TOKEN: an empty value closes nothing the
-    # sign-in opens, and with the sign-in also unset /api answers 401 to everything — never
-    # stopping the boot, so /healthz stays green and a missing secret does not roll the deploy
-    # back. The bundle at / is always public; it is the sign-in view.
+    # Human-provisioned: an empty value closes nothing the sign-in opens, and with the sign-in
+    # also unset /api answers 401 to everything — never stopping the boot, so /healthz stays
+    # green and a missing secret does not roll the deploy back. The bundle at / is always public;
+    # it is the sign-in view.
     WEB_UI_PASSWORD: str = ""
 
     # --- Google sign-in (web view and MCP) ---
     # The settings behind the OAuth 2.1 authorization server at /oauth/* and the Google login it
-    # delegates to. Human-provisioned on the MCP_API_TOKEN pattern: every one defaults to empty,
-    # an empty value closes the sign-in (501 from /oauth/authorize naming what is missing, no JWT
-    # ever accepted) and never stops the boot.
+    # delegates to. Human-provisioned on the same terms as WEB_UI_PASSWORD: every one defaults to
+    # empty, an empty value closes the sign-in (501 from /oauth/authorize naming what is missing,
+    # no JWT ever accepted) and never stops the boot.
     #
-    # SECRET_KEY signs every JWT Reli mints (HS256). PyJWT warns below 32 bytes; provision with
-    # `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+    # SECRET_KEY signs every JWT Reli mints (HS256) — the only credential /mcp accepts is one of
+    # them, so an empty value closes /mcp with a 401 rather than opening it. PyJWT warns below
+    # 32 bytes; provision with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
     SECRET_KEY: str = ""
     # Comma-separated Google account emails allowed to sign in. Empty admits nobody.
     ALLOWED_EMAILS: str = ""
@@ -58,7 +53,7 @@ class Settings(BaseSettings):
     RELI_BASE_URL: str = ""
 
     # --- Google (read-only Calendar and Gmail) ---
-    # Human-provisioned, exactly like MCP_API_TOKEN: a person runs
+    # Human-provisioned, exactly like the sign-in settings: a person runs
     # scripts/google_oauth_grant.py once and pastes the refresh token here. Empty defaults keep an
     # unconfigured deploy booting — only the three Google tools fail, and they say what to set.
     GOOGLE_CLIENT_ID: str = ""

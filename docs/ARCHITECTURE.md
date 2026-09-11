@@ -11,7 +11,7 @@ three surfaces (`backend/main.py`):
 
 ```
 Claude session (claude.ai, interactive or scheduled)
-        │  MCP over streamable HTTP, Authorization: Bearer <MCP_API_TOKEN or OAuth JWT>
+        │  MCP over streamable HTTP, Authorization: Bearer <OAuth JWT>
         ▼
    /mcp ──────────────┐
                       │        ┌──────────────┐
@@ -140,11 +140,10 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
 ## 9. Access control
 
 - `/mcp` — `_BearerTokenMiddleware` in `backend/mcp_server.py` requires an `Authorization: Bearer`
-  of either `MCP_API_TOKEN`, compared with `secrets.compare_digest`, or an `aud="mcp"` JWT that the
-  OAuth 2.1 authorization server in `backend/mcp_oauth.py` minted after a Google sign-in
-  (`SECRET_KEY`, `ALLOWED_EMAILS`). Its discovery, registration and token endpoints
-  (`/.well-known/*`, `/oauth/*`) and Google's callback (`/api/auth/google/callback`) are public
-  by design: a client reaches them before it holds any credential.
+  of an `aud="mcp"` JWT that the OAuth 2.1 authorization server in `backend/mcp_oauth.py` minted
+  after a Google sign-in (`SECRET_KEY`, `ALLOWED_EMAILS`). Its discovery, registration and token
+  endpoints (`/.well-known/*`, `/oauth/*`) and Google's callback (`/api/auth/google/callback`) are
+  public by design: a client reaches them before it holds any credential.
 - `/api` — `_WebViewAuthMiddleware` in `backend/api.py` requires either the `reli_session` cookie
   (an `aud="web"` JWT the Google sign-in in `backend/auth.py` sets after the allowlist check) or
   HTTP Basic with `WEB_UI_PASSWORD` as the password, the username ignored. `/api/auth/` — the
@@ -152,12 +151,12 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
 - `/` — the bundle is public: it is the sign-in view, and static code from a public repository.
 - `/healthz` — exempt from both.
 
-An empty secret never opens its surface: `/mcp` with neither `MCP_API_TOKEN` nor `SECRET_KEY`,
-and `/api` with neither the Google sign-in nor `WEB_UI_PASSWORD`, answer 401 to every request and
-log a warning at startup, while `/healthz` stays green so a missing secret cannot roll a deploy
-back. There is no dev-mode bypass. The MCP app's DNS-rebinding protection is off because the service is
-reached through a Cloudflare tunnel; that is safe only because the bearer header — static token or
-JWT — is mandatory and a cross-origin page cannot set one; the two decisions are coupled.
+An empty secret never opens its surface: `/mcp` without `SECRET_KEY`, and `/api` with neither the
+Google sign-in nor `WEB_UI_PASSWORD`, answer 401 to every request and log a warning at startup,
+while `/healthz` stays green so a missing secret cannot roll a deploy back. There is no dev-mode
+bypass. The MCP app's DNS-rebinding protection is off because the service is reached through a
+Cloudflare tunnel; that is safe only because the bearer header is mandatory and a cross-origin page
+cannot set one; the two decisions are coupled.
 
 ## 10. Scheduled Claude
 

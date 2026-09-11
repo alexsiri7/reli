@@ -13,8 +13,8 @@ Implements the MCP authorization spec
 PKCE is mandatory and only ``S256`` is accepted; refresh tokens rotate on every use, and presenting
 one that has already been rotated away revokes every token from that sign-in (OAuth 2.1 §4.3.1), so
 the connector re-authorises. The identity step is Google's: a client never holds a shared secret,
-and a token is only ever minted for an account in ``ALLOWED_EMAILS``. ``/mcp`` accepts the JWTs
-alongside ``MCP_API_TOKEN`` until a human retires the static token.
+and a token is only ever minted for an account in ``ALLOWED_EMAILS``. The JWT is the only
+credential ``/mcp`` accepts.
 """
 
 from __future__ import annotations

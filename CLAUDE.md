@@ -44,16 +44,13 @@ docker compose build && docker compose up -d
 `DATABASE_URL` must be set in the environment — there is no default, and the service refuses to
 start without it rather than silently using an empty database.
 
-`MCP_API_TOKEN` is the bearer token for `/mcp`. It is human-provisioned: agents cannot mint it. An
-empty value is not a dev-mode bypass — with `SECRET_KEY` also empty, `/mcp` answers 401 to every
-request and logs a warning at startup, while `/healthz` stays green so a missing secret cannot roll
-a deploy back. Clearing `MCP_API_TOKEN` alone does not close `/mcp` while the Google sign-in below
-is configured: the JWT path stays open to every account in `ALLOWED_EMAILS`.
-
-`/mcp` also accepts the JWTs the OAuth 2.1 authorization server at `/oauth/*` mints after a Google
-sign-in (see *Google sign-in* below), which is how a claude.ai connector authorises without holding
-a shared secret. The static token stays beside the JWT until a human confirms the OAuth flow
-against a real connector and retires it in its own change. Agents must not remove it.
+The only credential `/mcp` accepts is a JWT the OAuth 2.1 authorization server at `/oauth/*` mints
+after a Google sign-in (see *Google sign-in* below), which is how a claude.ai connector authorises
+without holding a shared secret; the static `MCP_API_TOKEN` it used to accept beside the JWT was
+retired in #1461 and a value left in a deploy's environment is ignored. `SECRET_KEY` is
+human-provisioned: agents cannot mint it. An empty value is not a dev-mode bypass — `/mcp` answers
+401 to every request and logs a warning at startup, while `/healthz` stays green so a missing
+secret cannot roll a deploy back. `/mcp` is open to every account in `ALLOWED_EMAILS`.
 
 The container runs `alembic upgrade head` on startup. A migration failure now fails the boot: there
 is no `create_all` fallback, because a schema built from ORM metadata would omit the journal's
@@ -71,7 +68,7 @@ cookie the Google sign-in below sets, or `WEB_UI_PASSWORD` as an HTTP Basic pass
 at `/` is public — it is the sign-in view, and static code from a public repository — so opening
 `/` presents Google sign-in rather than a browser password prompt, and a 401 from `/api` carries no
 `WWW-Authenticate` challenge for the same reason. `WEB_UI_PASSWORD` is human-provisioned like
-`MCP_API_TOKEN`: agents cannot mint it, and an empty value is not a dev-mode bypass. With neither
+`SECRET_KEY`: agents cannot mint it, and an empty value is not a dev-mode bypass. With neither
 it nor the sign-in configured, `/api` answers 401 to every request and logs a warning at startup,
 while `/healthz` stays green so a missing secret cannot roll a deploy back. The password stays
 beside the cookie — it is what `curl` and the scheduled-pass watchdog carry — until a human
@@ -99,7 +96,7 @@ The scopes granted are `gmail.readonly` and `calendar.readonly`, listed in `SCOP
 asks for it.
 
 **Agents cannot perform the consent step.** It requires a human signed in to the Google account, in
-the same class as `MCP_API_TOKEN` and `RAILWAY_TOKEN`. Do not claim a credential is provisioned.
+the same class as `WEB_UI_PASSWORD` and `RAILWAY_TOKEN`. Do not claim a credential is provisioned.
 
 Runbook — when the Google tools start raising `GoogleAuthFailed`, the grant has been revoked or has
 expired, and a human re-runs the one-time consent:
@@ -129,8 +126,8 @@ suffices: a refresh token is only refreshable with the secret of the client that
 ## Google sign-in
 
 The OAuth 2.1 authorization server in `backend/mcp_oauth.py` (#1450, requirement 019) lets a
-claude.ai connector authorise against `/mcp` by signing in to Google rather than carrying
-`MCP_API_TOKEN`: the connector discovers `/.well-known/oauth-authorization-server`, registers
+claude.ai connector authorise against `/mcp` by signing in to Google rather than carrying a shared
+secret: the connector discovers `/.well-known/oauth-authorization-server`, registers
 itself at `/oauth/register`, is sent through Google by `/oauth/authorize`, lands on
 `/api/auth/google/callback` (`backend/auth.py`), and exchanges the code at `/oauth/token` for an
 `aud="mcp"` JWT that `/mcp` accepts. Identity is the Google account: there is no users table, the
@@ -150,7 +147,7 @@ redirect URI is the one already documented below — the web sign-in adds no con
 
 Its settings are `SECRET_KEY`, `ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and `RELI_BASE_URL`,
 beside `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Every one is human-provisioned on the
-`MCP_API_TOKEN` pattern: empty closes the sign-in — `/oauth/authorize` answers 501 naming each
+`WEB_UI_PASSWORD` pattern: empty closes the sign-in — `/oauth/authorize` answers 501 naming each
 missing setting, and no JWT is issued or accepted — and never stops the boot. **Empty
 `ALLOWED_EMAILS` admits nobody.**
 
@@ -169,10 +166,9 @@ done:
    readers' grant shares this Web client: its loopback redirect `http://127.0.0.1:18765/` is
    registered on the same client (see *Google credentials*).
 3. Add the claude.ai connector for `https://<host>/mcp` with **no** bearer token. It discovers the
-   server, registers itself, opens Google sign-in, and the allowlisted account completes it.
-4. Confirm it works, then retire `MCP_API_TOKEN` in a follow-up change. Until then the static
-   token stays, and agents must not remove it.
-5. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. Then
+   server, registers itself, opens Google sign-in, and the allowlisted account completes it. The
+   owner confirmed this on 2026-09-11, which is what retired `MCP_API_TOKEN` (#1461).
+4. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. Then
    retire `WEB_UI_PASSWORD` in a follow-up change — remembering the watchdog in
    `.github/workflows/scheduled-run-health.yml` reads `/api/things` with it and needs another way
    in first. Until then the password stays, and agents must not remove it.
@@ -181,14 +177,14 @@ done:
 
 The proactive half (#1413) is three saved prompts under `prompts/scheduled/` — `resolution-pass.md`,
 `learning-pass.md`, `morning-conversation.md`, in that order — each the text of a claude.ai
-scheduled task with the Reli connector attached: the same `/mcp` and the same `MCP_API_TOKEN` an
-interactive session uses. Nothing runs on a schedule inside Reli, and nothing here may be turned
+scheduled task with the Reli connector attached: the same `/mcp`, through the same Google sign-in,
+an interactive session uses. Nothing runs on a schedule inside Reli, and nothing here may be turned
 into a background task in the service. [`prompts/scheduled/README.md`](prompts/scheduled/README.md)
 describes what the passes leave in the graph.
 
 **Agents cannot create the scheduled tasks, add the watchdog's secret, or verify that claude.ai
 scheduled tasks run reliably unattended.** Those are human steps, in the same class as the Google
-consent step and `MCP_API_TOKEN`; do not claim any of them is done. A human:
+consent step and `WEB_UI_PASSWORD`; do not claim any of them is done. A human:
 
 1. creates three claude.ai scheduled tasks, each pasting one file's text — the resolution pass
    overnight, the learning pass at least half an hour later, the morning conversation in waking
@@ -213,8 +209,8 @@ heartbeats must never be archived or made a child of anything, because the check
 **The fallback, documented and not built.** If claude.ai scheduled tasks prove unreliable — the
 first "Scheduled pass missed" issue that is not a human step left undone — the overnight two move
 to a host cron running headless Claude Code: `claude -p "$(cat prompts/scheduled/resolution-pass.md)"`
-with an `--mcp-config` naming the same `/mcp` URL and bearer token, the shape the owner's overnight
-development tooling already uses outside this repository. Same files, same heartbeats, same
+with an `--mcp-config` naming the same `/mcp` URL, the shape the owner's overnight development
+tooling already uses outside this repository. Same files, same heartbeats, same
 watchdog. The morning conversation is a conversation and can only be a claude.ai session.
 
 **Actor discipline.** The overnight passes pass `actor="claude_scheduled"` on every write. The
@@ -292,7 +288,7 @@ Creating documentation that claims success on an action you cannot perform is a 
 - Reads: `backend/queries.py` — the indexed queries, including `user_model`
 - Retained reference, not built or shipped: `reference/oauth/` (see its README)
 - MCP: `backend/mcp_server.py` — the twenty-two tools wrapping `service.py`, `queries.py` and
-  `google_readers.py`, behind the static token or an OAuth JWT; every writing tool takes a
+  `google_readers.py`, behind the OAuth JWT the Google sign-in mints; every writing tool takes a
   required `actor`, and hard delete is not exposed.
   `journal_since` is the one cross-Thing journal read, filtered by actor, for the learning pass.
   The three Google tools take no `actor` and journal nothing, because they mutate nothing. The four
