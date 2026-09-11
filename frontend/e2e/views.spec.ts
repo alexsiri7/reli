@@ -1,11 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { childrenOf, CHILD_ID, history, thingDetail, topLevel, userModel } from "./fixtures";
+import { childrenOf, CHILD_ID, history, session, thingDetail, topLevel, userModel } from "./fixtures";
+
+const NOT_SIGNED_IN = { status: 401, json: { detail: "Not signed in: sign in with Google at /." } };
 
 /** Answer every `/api` request from the fixtures, so these tests need no backend and no database. */
 async function stubApi(page: Page) {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me") {
+      await route.fulfill({ json: session });
+      return;
+    }
     if (url.pathname === "/api/things") {
       const parent = url.searchParams.get("parent");
       await route.fulfill({ json: parent === null ? topLevel : (childrenOf[parent] ?? { things: [] }) });
@@ -34,7 +40,7 @@ test.beforeEach(async ({ page }) => {
 test("the tree expands a node", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Rebuild Reli" })).toBeVisible();
-  expect(await page.getByRole("button").count()).toBe(1);
+  expect(await page.locator("main").getByRole("button").count()).toBe(1);
 
   await page.getByRole("button", { name: "Expand" }).click();
 
@@ -95,4 +101,74 @@ test("the tree is reachable from the user model in one click from evidence", asy
 
   await expect(page.getByRole("heading", { name: "Read-only web view", level: 1 })).toBeVisible();
   expect(new URL(page.url()).pathname).toBe(`/things/${CHILD_ID}`);
+});
+
+// --- Session ---------------------------------------------------------------
+
+test("a visitor without a session is offered Google sign-in and nothing else", async ({ page }) => {
+  await page.route("**/api/auth/me", (route) => route.fulfill(NOT_SIGNED_IN));
+  await page.goto("/");
+
+  await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Rebuild Reli" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Tree" })).toHaveCount(0);
+  await expect(page).toHaveScreenshot("sign-in.png", { fullPage: true });
+});
+
+test("the sign-in button goes where /api/auth/google points", async ({ page }) => {
+  await page.route("**/api/auth/me", (route) => route.fulfill(NOT_SIGNED_IN));
+  await page.route("**/api/auth/google", (route) =>
+    route.fulfill({ json: { auth_url: "https://accounts.google.com/o/oauth2/v2/auth?state=stubbed" } }),
+  );
+  await page.route("https://accounts.google.com/**", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<title>Google</title>" }),
+  );
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Sign in with Google" }).click();
+
+  await expect(page).toHaveURL(/accounts\.google\.com/);
+});
+
+test("a deploy without the sign-in configured says which settings a human sets", async ({ page }) => {
+  const detail = "Google sign-in is not configured on this deploy: a human sets SECRET_KEY (CLAUDE.md, Google sign-in).";
+  await page.route("**/api/auth/me", (route) => route.fulfill(NOT_SIGNED_IN));
+  await page.route("**/api/auth/google", (route) => route.fulfill({ status: 501, json: { detail } }));
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Sign in with Google" }).click();
+
+  await expect(page.getByText(detail)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeEnabled();
+});
+
+test("an account outside the allowlist is told the view is invite-only", async ({ page }) => {
+  await page.route("**/api/auth/me", (route) => route.fulfill(NOT_SIGNED_IN));
+  await page.goto("/?error=invite_only");
+
+  await expect(page.getByText("This Reli is invite-only")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+});
+
+test("a 401 mid-session falls back to the sign-in view", async ({ page }) => {
+  await page.route("**/api/things", (route) => route.fulfill(NOT_SIGNED_IN));
+  await page.goto("/");
+
+  await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+});
+
+test("signing out posts to the logout route and returns to the sign-in view", async ({ page }) => {
+  let signedOut = false;
+  await page.route("**/api/auth/logout", async (route) => {
+    expect(route.request().method()).toBe("POST");
+    signedOut = true;
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto("/");
+  await expect(page.getByText(session.email)).toBeVisible();
+
+  await page.getByRole("button", { name: "Sign out" }).click();
+
+  await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+  expect(signedOut).toBe(true);
 });

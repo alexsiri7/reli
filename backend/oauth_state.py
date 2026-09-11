@@ -1,10 +1,11 @@
-"""Flow state for the OAuth 2.1 authorization server in :mod:`backend.mcp_oauth`.
+"""Flow state for the OAuth 2.1 authorization server in :mod:`backend.mcp_oauth` and the web view's sign-in.
 
-Four tables, each a bounded store of short-lived rows keyed by an opaque string: the clients that
-registered themselves, the sign-ins in flight, the authorization codes waiting to be exchanged and
-the refresh tokens still valid. None of it is a Thing and nothing here touches the graph, so nothing
-here is journalled — the journal records mutations of Things and relationships, and these rows are
-the authorization server's bookkeeping (docs/auth-recovery.md §6.1).
+Five tables, each a bounded store of short-lived rows keyed by an opaque string: the clients that
+registered themselves, the MCP sign-ins in flight, the authorization codes waiting to be exchanged,
+the refresh tokens still valid, and the web view's sign-ins in flight. None of it is a Thing and
+nothing here touches the graph, so nothing here is journalled — the journal records mutations of
+Things and relationships, and these rows are the authorization server's bookkeeping
+(docs/auth-recovery.md §6.1).
 
 Every access purges expired rows first, so a store can only ever hold what is still live, and a
 store at its cap refuses with :class:`StoreFullError` rather than growing. Client secrets are
@@ -98,9 +99,19 @@ class McpRefreshTokenRecord(SQLModel, table=True):
     expires_at: datetime = _expires_at()
 
 
+class WebOAuthSessionRecord(SQLModel, table=True):
+    """A web-view sign-in in flight: the PKCE verifier, keyed by the state sent to Google."""
+
+    __tablename__ = "web_oauth_sessions"
+
+    state: str = _text(primary_key=True)
+    google_code_verifier: str = _text()
+    expires_at: datetime = _expires_at()
+
+
 @dataclass(frozen=True)
 class Store:
-    """One of the four tables, with the most live rows it may hold."""
+    """One of the five tables, with the most live rows it may hold."""
 
     model: type[SQLModel]
     max_entries: int
@@ -117,6 +128,7 @@ mcp_registered_clients = Store(McpRegisteredClientRecord, max_entries=100)
 mcp_oauth_sessions = Store(McpOAuthSessionRecord, max_entries=MAX_ENTRIES)
 mcp_auth_codes = Store(McpAuthCodeRecord, max_entries=MAX_ENTRIES)
 mcp_refresh_tokens = Store(McpRefreshTokenRecord, max_entries=MAX_ENTRIES)
+web_oauth_sessions = Store(WebOAuthSessionRecord, max_entries=MAX_ENTRIES)
 
 
 class StoreFullError(Exception):

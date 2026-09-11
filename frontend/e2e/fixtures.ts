@@ -6,7 +6,7 @@
  * to migrate — and every timestamp below is fixed, so a snapshot cannot drift by being taken later.
  */
 
-import type { History, ThingDetail, TreeLevel, UserModel } from "../src/api";
+import type { History, Session, ThingDetail, TreeLevel, UserModel } from "../src/api";
 
 export const ROOT_ID = "11111111-1111-1111-1111-111111111111";
 export const CHILD_ID = "22222222-2222-2222-2222-222222222222";
@@ -15,6 +15,8 @@ export const BLOCKER_ID = "44444444-4444-4444-4444-444444444444";
 export const OBSERVATION_ID = "55555555-5555-5555-5555-555555555555";
 export const PREFERENCE_ID = "66666666-6666-6666-6666-666666666666";
 export const REJECTED_ID = "77777777-7777-7777-7777-777777777777";
+
+export const session: Session = { email: "owner@example.test" };
 
 export const topLevel: TreeLevel = {
   things: [

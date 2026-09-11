@@ -9,14 +9,15 @@ it breaks the MCP session manager.
 import base64
 import uuid
 from contextlib import contextmanager
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
+import jwt
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from backend import api
+from backend import api, auth
 from backend.config import settings
 from backend.db_models import (
     OBSERVATION_TAG,
@@ -29,10 +30,11 @@ from backend.db_models import (
 from backend.service import create_thing, get_or_create_user_anchor, record_preference, relate, update_thing
 
 PASSWORD = "test-password"
+SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
 
 
 def _routed_app(session, monkeypatch) -> FastAPI:
-    """The ``/api`` router plus a stand-in ``/healthz``, behind the Basic check."""
+    """The ``/api`` router plus a stand-in ``/healthz``, behind the session-or-password check."""
 
     @contextmanager
     def _fixture_session():
@@ -74,6 +76,20 @@ def client(session, monkeypatch, web_password):
 def anonymous(session, monkeypatch):
     """A client carrying no credentials, for the auth tests that drive the password themselves."""
     return TestClient(_routed_app(session, monkeypatch))
+
+
+@pytest.fixture()
+def secret_key(monkeypatch):
+    monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    return SECRET_KEY
+
+
+def _cookie(token):
+    return {"Cookie": f"{auth.SESSION_COOKIE}={token}"}
+
+
+def _session_cookie(audience=auth.WEB_AUDIENCE):
+    return _cookie(auth.create_jwt("1234567890", "owner@example.com", audience=audience))
 
 
 def _thing(session, title, **fields):
@@ -400,6 +416,15 @@ def test_an_unset_password_closes_the_view_rather_than_opening_it(anonymous, pat
         settings.WEB_UI_PASSWORD = previous
 
 
+def test_nothing_configured_closes_the_view_and_leaves_healthz_open(anonymous, monkeypatch):
+    """No password and no sign-in is the state a fresh deploy boots in: 401 on the graph, 200 on /healthz."""
+    monkeypatch.setattr(settings, "WEB_UI_PASSWORD", "")
+    monkeypatch.setattr(settings, "SECRET_KEY", "")
+
+    assert anonymous.get("/api/things").status_code == 401
+    assert anonymous.get("/healthz").status_code == 200
+
+
 def test_healthz_stays_open_so_a_missing_password_cannot_roll_a_deploy_back(anonymous):
     previous = settings.WEB_UI_PASSWORD
     settings.WEB_UI_PASSWORD = ""
@@ -411,11 +436,16 @@ def test_healthz_stays_open_so_a_missing_password_cannot_roll_a_deploy_back(anon
     assert response.status_code == 200
 
 
-def test_a_missing_header_is_401_and_asks_the_browser_to_prompt(anonymous, web_password):
+def test_a_missing_credential_is_401_naming_both_ways_in_and_does_not_ask_the_browser_to_prompt(
+    anonymous, web_password
+):
+    """No ``WWW-Authenticate``: a Basic challenge would put the browser's own prompt over the sign-in view."""
     response = anonymous.get("/api/things")
 
     assert response.status_code == 401
-    assert response.headers["WWW-Authenticate"] == 'Basic realm="reli"'
+    assert "WWW-Authenticate" not in response.headers
+    assert "sign in with Google" in response.json()["detail"]
+    assert "WEB_UI_PASSWORD" in response.json()["detail"]
 
 
 def test_the_wrong_password_is_401(anonymous, web_password):
@@ -429,6 +459,13 @@ def test_the_right_password_is_admitted_whatever_the_username(anonymous, web_pas
     assert response.status_code == 200
 
 
+def test_the_password_is_admitted_with_no_session_configured(anonymous, web_password, monkeypatch):
+    """The watchdog and ``curl`` carry the password and nothing else; SECRET_KEY has no say over them."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "")
+
+    assert anonymous.get("/api/things", headers=_basic(web_password)).status_code == 200
+
+
 @pytest.mark.parametrize(
     "header",
     ["Bearer test-password", "Basic not-base64!!", f"Basic {base64.b64encode(b'no-colon').decode()}"],
@@ -438,7 +475,58 @@ def test_a_malformed_authorization_header_is_401_and_not_a_500(anonymous, web_pa
     assert anonymous.get("/api/things", headers={"Authorization": header}).status_code == 401
 
 
-def test_the_mcp_mount_is_not_touched_by_the_basic_check(session, monkeypatch, web_password):
+def test_the_session_cookie_is_admitted_with_no_password_set(anonymous, secret_key, monkeypatch):
+    monkeypatch.setattr(settings, "WEB_UI_PASSWORD", "")
+
+    assert anonymous.get("/api/things", headers=_session_cookie()).status_code == 200
+
+
+def test_an_mcp_token_is_not_a_web_session(anonymous, secret_key):
+    response = anonymous.get("/api/things", headers=_session_cookie(audience=auth.MCP_AUDIENCE))
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid session: sign in with Google at / again."
+
+
+def test_an_expired_session_is_401_saying_so(anonymous, secret_key):
+    expired = datetime.now(UTC) - timedelta(days=1)
+    token = jwt.encode({"sub": "x", "aud": auth.WEB_AUDIENCE, "exp": expired}, SECRET_KEY, algorithm="HS256")
+
+    response = anonymous.get("/api/things", headers=_cookie(token))
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Session expired: sign in with Google at / again."
+
+
+def test_a_session_signed_with_another_key_is_401(anonymous, secret_key):
+    forged = jwt.encode(
+        {"sub": "x", "aud": auth.WEB_AUDIENCE, "exp": 4_102_444_800}, "another-key-of-the-same-length-as-ours-", "HS256"
+    )
+
+    assert anonymous.get("/api/things", headers=_cookie(forged)).status_code == 401
+
+
+def test_a_stale_cookie_beside_the_right_password_still_admits(anonymous, web_password, secret_key):
+    """The password stays a way in on its own terms until a human retires it."""
+    headers = {**_session_cookie(audience=auth.MCP_AUDIENCE), **_basic(web_password)}
+
+    assert anonymous.get("/api/things", headers=headers).status_code == 200
+
+
+def test_a_cookie_with_secret_key_unset_is_401_naming_the_setting_and_not_a_500(anonymous, monkeypatch):
+    """PyJWT refuses an empty HMAC key with an error that is not an ``InvalidTokenError``."""
+    monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    headers = _session_cookie()
+    monkeypatch.setattr(settings, "SECRET_KEY", "")
+    monkeypatch.setattr(settings, "WEB_UI_PASSWORD", "")
+
+    response = anonymous.get("/api/things", headers=headers)
+
+    assert response.status_code == 401
+    assert "SECRET_KEY" in response.json()["detail"]
+
+
+def test_the_mcp_mount_is_not_touched_by_the_web_view_check(session, monkeypatch, web_password):
     """/mcp carries its own bearer check, which must stay the only thing deciding it."""
     app = _routed_app(session, monkeypatch)
 
@@ -449,14 +537,14 @@ def test_the_mcp_mount_is_not_touched_by_the_basic_check(session, monkeypatch, w
     assert TestClient(app).get("/mcp/").status_code == 200
 
 
-@pytest.mark.parametrize("path", ["/.well-known/x", "/oauth/x", "/api/auth/x"])
-def test_the_authorization_servers_surface_is_not_touched_by_the_basic_check(anonymous, web_password, path):
+@pytest.mark.parametrize("path", ["/.well-known/x", "/oauth/x", "/oauth", "/.well-known", "/api/auth/x"])
+def test_only_api_is_guarded(anonymous, web_password, path):
     """These reach the router — a 404 here, where nothing is registered — rather than the middleware."""
     assert anonymous.get(path).status_code == 404
 
 
-@pytest.mark.parametrize("path", ["/api/authors", "/api/auth", "/oauth", "/.well-known"])
-def test_the_exemption_is_by_whole_path_segment(anonymous, web_password, path):
+@pytest.mark.parametrize("path", ["/api/authors", "/api/auth", "/api"])
+def test_the_public_exemption_is_by_whole_path_segment(anonymous, web_password, path):
     assert anonymous.get(path).status_code == 401
 
 
@@ -487,22 +575,17 @@ def test_an_image_built_without_a_frontend_still_boots(tmp_path):
     assert TestClient(app).get("/").status_code == 404
 
 
-@pytest.mark.parametrize("path", ["/", "/assets/app.js"], ids=["spa", "asset"])
-def test_the_bundle_is_behind_the_same_password_as_the_api(tmp_path, web_password, path):
+@pytest.mark.parametrize("path", ["/", "/assets/app.js", "/things/x"], ids=["spa", "asset", "deep-link"])
+def test_the_bundle_is_public_because_it_is_the_sign_in_view(tmp_path, web_password, path):
     """Both the SPA catch-all and the ``/assets`` sub-app, which are registered separately.
 
-    A guard attached to ``api.router`` alone would leave the bundle open; that this is what prompts
-    the browser once, and then carries the header onto the XHRs, is the reason there is no login view.
+    Opening ``/`` has to present Google sign-in, which is the bundle; the graph behind ``/api`` is
+    what the check guards.
     """
     dist = _dist(tmp_path)
     (dist / "assets" / "app.js").write_text("export {};")
     app = FastAPI()
     api.mount_frontend(app, dist)
     api.add_web_view_auth(app)
-    client = TestClient(app)
 
-    anonymous = client.get(path)
-    assert anonymous.status_code == 401
-    assert anonymous.headers["WWW-Authenticate"] == 'Basic realm="reli"'
-
-    assert client.get(path, headers=_basic(web_password)).status_code == 200
+    assert TestClient(app).get(path).status_code == 200

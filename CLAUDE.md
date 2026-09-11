@@ -66,11 +66,17 @@ cannot resolve a pre-v4 revision recorded in the database:
 psql "$DATABASE_URL" -c 'DROP TABLE IF EXISTS alembic_version'
 ```
 
-`WEB_UI_PASSWORD` is the HTTP Basic password for the web view at `/` and the `/api` routes behind
-it. Human-provisioned like `MCP_API_TOKEN`: agents cannot mint it, and an empty value is not a
-dev-mode bypass — `/` and `/api` answer 401 to every request and log a warning at startup, while
-`/healthz` stays green so a missing secret cannot roll a deploy back. `/mcp` is exempt from this
-check; its own bearer check still decides.
+The `/api` routes serve the user's whole graph and admit a request two ways: the `reli_session`
+cookie the Google sign-in below sets, or `WEB_UI_PASSWORD` as an HTTP Basic password. The bundle
+at `/` is public — it is the sign-in view, and static code from a public repository — so opening
+`/` presents Google sign-in rather than a browser password prompt, and a 401 from `/api` carries no
+`WWW-Authenticate` challenge for the same reason. `WEB_UI_PASSWORD` is human-provisioned like
+`MCP_API_TOKEN`: agents cannot mint it, and an empty value is not a dev-mode bypass. With neither
+it nor the sign-in configured, `/api` answers 401 to every request and logs a warning at startup,
+while `/healthz` stays green so a missing secret cannot roll a deploy back. The password stays
+beside the cookie — it is what `curl` and the scheduled-pass watchdog carry — until a human
+confirms Google sign-in works on the deploy and retires it in its own change (#1449). Agents must
+not remove it. `/mcp` is exempt from this check; its own bearer check still decides.
 
 The frontend is built inside the image: the Dockerfile's `frontend-build` stage runs `npm ci` and
 `npm run build`, and the python stage copies `frontend/dist` in. `docker compose build` therefore
@@ -120,8 +126,19 @@ claude.ai connector authorise against `/mcp` by signing in to Google rather than
 itself at `/oauth/register`, is sent through Google by `/oauth/authorize`, lands on
 `/api/auth/google/callback` (`backend/auth.py`), and exchanges the code at `/oauth/token` for an
 `aud="mcp"` JWT that `/mcp` accepts. Identity is the Google account: there is no users table, the
-allowlisted email lives in the token, and the four `mcp_*` tables in `backend/oauth_state.py` hold
-only flow state — none of it is a Thing, so none of it journals.
+allowlisted email lives in the token, and the five tables in `backend/oauth_state.py` — four
+`mcp_*` and `web_oauth_sessions` — hold only flow state — none of it is a Thing, so none of it
+journals.
+
+The web view (#1449) signs in through the same Google client and the same callback. The sign-in
+view calls `GET /api/auth/google` for the Google URL (a 501 names each missing setting, shown in
+place), Google lands on `/api/auth/google/callback`, and the callback sets `reli_session` — an
+`httponly`, `samesite=lax` cookie holding an `aud="web"` JWT good for seven days, `Secure` whenever
+the base URL is https — and redirects to `/`. An account outside `ALLOWED_EMAILS` is sent to
+`/?error=invite_only`, which the view turns into a sentence; a Google refusal at the exchange is a
+502 whose detail names the human step, as for MCP. `GET /api/auth/me` is the view's "am I signed
+in" probe and `POST /api/auth/logout` deletes the cookie; there is no revocation list. The
+redirect URI is the one already documented below — the web sign-in adds no console entry.
 
 Its settings are `SECRET_KEY`, `ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and `RELI_BASE_URL`,
 beside `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Every one is human-provisioned on the
@@ -147,6 +164,10 @@ done:
    server, registers itself, opens Google sign-in, and the allowlisted account completes it.
 4. Confirm it works, then retire `MCP_API_TOKEN` in a follow-up change. Until then the static
    token stays, and agents must not remove it.
+5. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. Then
+   retire `WEB_UI_PASSWORD` in a follow-up change — remembering the watchdog in
+   `.github/workflows/scheduled-run-health.yml` reads `/api/things` with it and needs another way
+   in first. Until then the password stays, and agents must not remove it.
 
 ## Scheduled passes
 
@@ -283,18 +304,21 @@ Creating documentation that claims success on an action you cannot perform is a 
   credential and the only one that reaches a Google API, always with a `GET`
 - Google sign-in: `backend/google_login.py` — the only code that reaches Google for sign-in: the
   authorization URL, the code exchange and the id-token claims; persists nothing
-- JWTs and the callback: `backend/auth.py` — `create_jwt` / `decode_jwt`, the allowlist, and
-  `GET /api/auth/google/callback`, the one address Google redirects to
+- JWTs, the callback and the web session: `backend/auth.py` — `create_jwt` / `decode_jwt`, the
+  allowlist, `GET /api/auth/google/callback` (the one address Google redirects to, for both
+  flows), the web view's `GET /api/auth/google`, `GET /api/auth/me` and `POST /api/auth/logout`,
+  and `web_session`, the one reading of the `reli_session` cookie
 - Authorization server: `backend/mcp_oauth.py` — `/.well-known/*`, `/oauth/register`,
   `/oauth/authorize`, `/oauth/token` and the bare-`/mcp` redirect
-- OAuth flow state: `backend/oauth_state.py` — the four bounded `mcp_*` stores; not graph state,
-  not journalled
+- OAuth flow state: `backend/oauth_state.py` — the four bounded `mcp_*` stores and
+  `web_oauth_sessions`; not graph state, not journalled
 - HTTP: `backend/main.py` serves `/healthz`, includes the auth, OAuth and `/api` routers in that
   order, mounts the MCP streamable-HTTP app at `/mcp`, and mounts the frontend bundle **last** — its
   catch-all answers every unmatched path, so anything mounted after it would be dead
-- Web view API: `backend/api.py` — the five `/api` routes, their response models, the Basic-auth
-  middleware and the SPA mount. Read-only apart from `POST /api/preferences/{id}/reject`, the only
-  place `Actor.USER` is used
-- Frontend: `frontend/` — Vite + React + TypeScript. Three views in `frontend/src/views/`, the
-  `/api` types mirrored in `frontend/src/api.ts`, screenshot tests in `frontend/e2e/`
+- Web view API: `backend/api.py` — the five `/api` routes, their response models, the
+  session-or-password middleware and the SPA mount. Read-only apart from
+  `POST /api/preferences/{id}/reject`, the only place `Actor.USER` is used
+- Frontend: `frontend/` — Vite + React + TypeScript. Three views and the sign-in view in
+  `frontend/src/views/`, the `/api` types mirrored in `frontend/src/api.ts`, screenshot tests in
+  `frontend/e2e/`
 - Docker service name: `reli` (not `app`)

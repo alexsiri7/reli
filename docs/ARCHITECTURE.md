@@ -16,7 +16,7 @@ Claude session (claude.ai, interactive or scheduled)
    /mcp ──────────────┐
                       │        ┌──────────────┐
 Browser               │        │              │──── Postgres (things, relationships, journal)
-        │  HTTP Basic, $WEB_UI_PASSWORD       │
+        │  reli_session cookie or Basic       │
         ▼             ├───────▶│   FastAPI    │
    /  and  /api ──────┘        │   (reli)     │──── GET only ──▶ Gmail API, Calendar API
                                │              │                  (the three Google tools)
@@ -145,13 +145,17 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
   (`SECRET_KEY`, `ALLOWED_EMAILS`). Its discovery, registration and token endpoints
   (`/.well-known/*`, `/oauth/*`) and Google's callback (`/api/auth/google/callback`) are public
   by design: a client reaches them before it holds any credential.
-- `/` and `/api` — `_BasicAuthMiddleware` in `backend/api.py` requires HTTP Basic with
-  `WEB_UI_PASSWORD` as the password; the username is ignored.
+- `/api` — `_WebViewAuthMiddleware` in `backend/api.py` requires either the `reli_session` cookie
+  (an `aud="web"` JWT the Google sign-in in `backend/auth.py` sets after the allowlist check) or
+  HTTP Basic with `WEB_UI_PASSWORD` as the password, the username ignored. `/api/auth/` — the
+  sign-in, its callback, `me` and `logout` — is public because it is how a browser gets a session.
+- `/` — the bundle is public: it is the sign-in view, and static code from a public repository.
 - `/healthz` — exempt from both.
 
-An empty secret closes its surface rather than opening it: every request gets a 401 and a warning
-is logged at startup, while `/healthz` stays green so a missing secret cannot roll a deploy back.
-There is no dev-mode bypass. The MCP app's DNS-rebinding protection is off because the service is
+An empty secret never opens its surface: `/mcp` with neither `MCP_API_TOKEN` nor `SECRET_KEY`,
+and `/api` with neither the Google sign-in nor `WEB_UI_PASSWORD`, answer 401 to every request and
+log a warning at startup, while `/healthz` stays green so a missing secret cannot roll a deploy
+back. There is no dev-mode bypass. The MCP app's DNS-rebinding protection is off because the service is
 reached through a Cloudflare tunnel; that is safe only because the bearer header — static token or
 JWT — is mandatory and a cross-origin page cannot set one; the two decisions are coupled.
 

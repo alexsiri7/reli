@@ -52,13 +52,15 @@ uv sync --frozen
 silently using an empty database.
 
 `MCP_API_TOKEN` is the static bearer token for `/mcp`, and `WEB_UI_PASSWORD` is the HTTP Basic
-password for the web view at `/` and the `/api` routes behind it. Leaving either empty does not open
-what it guards. `/mcp` also accepts the JWTs its OAuth 2.1 authorization server mints after a Google
-sign-in — `SECRET_KEY`, `ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and the Google client, with the
-human steps in CLAUDE.md's *Google sign-in* section — so a claude.ai connector can authorise without
-holding the static token; `/mcp` answers 401 to every request only while both `MCP_API_TOKEN` and
-`SECRET_KEY` are empty. `/` and `/api` answer 401 to every request until `WEB_UI_PASSWORD` is set.
-`/healthz` stays open either way, so a missing secret cannot roll a deploy back.
+password the `/api` routes behind the web view still accept. Leaving either empty does not open
+what it guards. Both surfaces also accept what a Google sign-in mints — `SECRET_KEY`,
+`ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and the Google client, with the human steps in
+CLAUDE.md's *Google sign-in* section: `/mcp` takes the JWTs its OAuth 2.1 authorization server
+issues, so a claude.ai connector can authorise without holding the static token, and the web view
+at `/` presents Google sign-in and holds the session in a cookie. `/mcp` answers 401 to every
+request only while both `MCP_API_TOKEN` and `SECRET_KEY` are empty; `/api` answers 401 while
+neither the sign-in nor `WEB_UI_PASSWORD` is set. `/healthz` stays open either way, so a missing
+secret cannot roll a deploy back.
 
 ```bash
 cp .env.example .env
@@ -93,9 +95,9 @@ docker compose up -d
 The health check is at `http://localhost:8000/healthz`, the MCP endpoint at
 `http://localhost:8000/mcp`, which requires an `Authorization: Bearer` of `MCP_API_TOKEN` or an OAuth
 JWT, and the web view
-at `http://localhost:8000/`, which prompts for `WEB_UI_PASSWORD` (any username). The image builds the
-frontend bundle in a node stage and serves it from the same container. Data lives in Postgres, not on
-the container filesystem.
+at `http://localhost:8000/`, which presents Google sign-in (`curl -u ":$WEB_UI_PASSWORD"` still
+reads `/api` directly). The image builds the frontend bundle in a node stage and serves it from the
+same container. Data lives in Postgres, not on the container filesystem.
 
 ## Testing
 

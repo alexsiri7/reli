@@ -319,3 +319,53 @@ button.reject:disabled {
   opacity: 0.6;
   cursor: progress;
 }
+
+/* --- Session --- */
+
+.masthead .session {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+button.sign-out {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+button.sign-out:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sign-in {
+  max-width: 28rem;
+  margin: 4rem auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  padding: 1.5rem;
+}
+
+button.google {
+  background: var(--accent);
+  border: none;
+  border-radius: 0.3rem;
+  color: var(--paper);
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+button.google:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
