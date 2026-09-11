@@ -53,11 +53,12 @@ silently using an empty database.
 
 `MCP_API_TOKEN` is the static bearer token for `/mcp`, and `WEB_UI_PASSWORD` is the HTTP Basic
 password for the web view at `/` and the `/api` routes behind it. Leaving either empty does not open
-what it guards: every request gets a 401 until it is set. `/healthz` stays open either way, so a
-missing secret cannot roll a deploy back. `/mcp` also accepts the JWTs its OAuth 2.1 authorization
-server mints after a Google sign-in — `SECRET_KEY`, `ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and
-the Google client, with the human steps in CLAUDE.md's *Google sign-in* section — so a claude.ai
-connector can authorise without holding the static token.
+what it guards. `/mcp` also accepts the JWTs its OAuth 2.1 authorization server mints after a Google
+sign-in — `SECRET_KEY`, `ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and the Google client, with the
+human steps in CLAUDE.md's *Google sign-in* section — so a claude.ai connector can authorise without
+holding the static token; `/mcp` answers 401 to every request only while both `MCP_API_TOKEN` and
+`SECRET_KEY` are empty. `/` and `/api` answer 401 to every request until `WEB_UI_PASSWORD` is set.
+`/healthz` stays open either way, so a missing secret cannot roll a deploy back.
 
 ```bash
 cp .env.example .env

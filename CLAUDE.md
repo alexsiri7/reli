@@ -45,8 +45,10 @@ docker compose build && docker compose up -d
 start without it rather than silently using an empty database.
 
 `MCP_API_TOKEN` is the bearer token for `/mcp`. It is human-provisioned: agents cannot mint it. An
-empty value is not a dev-mode bypass — `/mcp` answers 401 to every request and logs a warning at
-startup, while `/healthz` stays green so a missing secret cannot roll a deploy back.
+empty value is not a dev-mode bypass — with `SECRET_KEY` also empty, `/mcp` answers 401 to every
+request and logs a warning at startup, while `/healthz` stays green so a missing secret cannot roll
+a deploy back. Clearing `MCP_API_TOKEN` alone does not close `/mcp` while the Google sign-in below
+is configured: the JWT path stays open to every account in `ALLOWED_EMAILS`.
 
 `/mcp` also accepts the JWTs the OAuth 2.1 authorization server at `/oauth/*` mints after a Google
 sign-in (see *Google sign-in* below), which is how a claude.ai connector authorises without holding
