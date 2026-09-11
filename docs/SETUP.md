@@ -2,224 +2,145 @@
 
 ## Prerequisites
 
-- Python 3.11+ (3.12 recommended)
-- Node.js 20+
-- Docker & Docker Compose (for production)
-- A [Requesty](https://requesty.ai) API key (for LLM calls)
-- Google OAuth credentials (for login)
+- **Python 3.11+** and [`uv`](https://docs.astral.sh/uv/)
+- **Docker and Docker Compose** — for the local Postgres, the test suite (which starts a throwaway
+  Postgres via testcontainers) and production
+- **Node 22** — only for frontend development; the Docker image builds the bundle itself
 
----
+There is no LLM key to provision and no OAuth login. Reli has one user and no accounts.
 
-## Local Development
-
-### 1. Clone and install dependencies
+## Local development
 
 ```bash
 git clone https://github.com/alexsiri7/reli.git
 cd reli
-
-# Backend
-pip install -r backend/requirements.txt
-
-# Frontend (note: --legacy-peer-deps required due to peer dependency conflict)
-npm --prefix frontend install --legacy-peer-deps
-```
-
-### 2. Configure environment
-
-```bash
+uv sync --frozen
 cp .env.example .env
+docker compose --profile localdb up -d postgres
 ```
 
-Edit `.env` with your credentials:
+`.env.example` already points `DATABASE_URL` at the `localdb` Postgres:
 
-```bash
-# Required: LLM gateway
-REQUESTY_API_KEY=your_key_here
-REQUESTY_BASE_URL=https://router.requesty.ai/v1
-
-# Required: Google OAuth (for login)
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-
-# Required: JWT signing key (any random secret)
-SECRET_KEY=change-me-to-a-random-secret
-
-# Optional: Local LLM (reduces API costs)
-OLLAMA_MODEL=qwen2.5:7b
-OLLAMA_BASE_URL=http://localhost:11434
-
-# Optional: Web search in chat
-GOOGLE_SEARCH_API_KEY=...
-GOOGLE_SEARCH_CX=...
-
-# Optional: Public tunnel
-CLOUDFLARE_TUNNEL_TOKEN=...
+```
+DATABASE_URL=postgresql://reli:reli@localhost:5432/reli
 ```
 
-### 3. Run the development servers
+Then run the backend, and the web view if you want it:
 
 ```bash
-# Terminal 1: Backend (auto-reload on file changes)
 uvicorn backend.main:app --reload --port 8000
-
-# Terminal 2: Frontend (proxies /api to backend)
-cd frontend && npm run dev
+npm --prefix frontend install && npm --prefix frontend run dev   # Vite on :5173, proxying /api to :8000
 ```
 
-- Frontend: `http://localhost:5173`
-- Backend/API: `http://localhost:8000`
-- Swagger docs: `http://localhost:8000/docs` *(local only — disabled in production)*
+Startup runs `alembic upgrade head`; a migration failure fails the boot. `curl localhost:8000/healthz`
+answers `{"status":"ok","service":"reli"}`.
 
----
+`/mcp` answers 401 to every request until `MCP_API_TOKEN` is set, and `/` and `/api` answer 401
+until `WEB_UI_PASSWORD` is set. There is no dev-mode bypass — set both in `.env` to use them
+locally.
 
-## Model Configuration
+## Connecting Claude
 
-`config.yaml` controls which LLM model is used for each pipeline stage:
+`/mcp` is an MCP streamable-HTTP endpoint. Every request needs
+`Authorization: Bearer $MCP_API_TOKEN`; put the same value in the claude.ai connector for
+`https://<your-host>/mcp`. The tools, prompts and resources it serves are listed in
+[mcp-design.md](mcp-design.md).
 
-```yaml
-llm:
-  base_url: https://router.requesty.ai/v1
-  models:
-    context: google/gemini-2.5-flash-lite    # Stage 1: query generation (fast/cheap)
-    reasoning: google/gemini-3-flash-preview         # Stage 2: structured decisions
-    response: google/gemini-2.5-flash-lite    # Stage 4: natural language replies
+## Google (optional)
 
-embedding:
-  model: text-embedding-3-small
+The three Google tools (`find_correspondence`, `find_events`, `check_occurred`) read Gmail and
+Calendar with the `gmail.readonly` and `calendar.readonly` scopes. They need `GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET` and `GOOGLE_REFRESH_TOKEN`. A human obtains the refresh token once — the
+consent step needs a person signed in to the Google account:
+
+```bash
+export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...
+uv run python scripts/google_oauth_grant.py
 ```
 
-Override per-environment via env vars:
-- `REQUESTY_MODEL` — overrides all three model stages
-- `REQUESTY_REASONING_MODEL` — overrides reasoning stage only
-- `REQUESTY_RESPONSE_MODEL` — overrides response stage only
-- `SWEEP_SUPPRESSED_FINDING_TYPES` — comma-separated list of finding types to suppress from the briefing (default: `lifestyle_wellness,location_suggestion,unverified_context`). Set to empty string to show all types.
-- `SWEEP_MIN_CONFIDENCE` — minimum confidence score (0.0–1.0) a finding must have to appear in briefings (default: `0.5`). Set to `0.0` to disable filtering.
-- `SWEEP_AUTO_MERGE_ENABLED` — set to `false` to disable autonomous duplicate-Thing merging (default: `true`). When disabled, exact-match duplicates are detected but not merged without human action.
-- `SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD` — minimum confidence score (0.0–1.0) for a duplicate pair to be auto-merged (default: `0.95`). Only SQL exact-match duplicates are candidates; lower values have no effect below the floor set by the detection logic.
+It prints a refresh token and stores nothing. Leaving all three unset is safe: the boot succeeds,
+`/healthz` stays green, the graph tools work, and only the three Google tools fail, with a message
+naming what to set. When they start raising `GoogleAuthFailed`, the grant has expired or been
+revoked — re-run the consent and replace `GOOGLE_REFRESH_TOKEN`.
 
----
-
-## Docker Production Deployment
-
-### Quick start
+## Docker production deployment
 
 ```bash
 docker compose up -d
 ```
 
-The app is available at `http://localhost:8000`. Data persists in `./data/` via a volume mount.
+The image builds the frontend bundle in a node stage and serves it from the same container; the
+health check is at `http://localhost:8000/healthz`, the MCP endpoint at `/mcp` and the web view at
+`/`. Data lives in Postgres, not on the container filesystem.
 
-### What `docker compose` does
-
-- Builds a multi-stage image: Node 22 builds the React frontend, then Python 3.12 runs the backend
-- Mounts `./data:/app/data` so SQLite survives container rebuilds
-- Runs as non-root user (`reli:reli`, uid 1000)
-- Restarts `unless-stopped`
-
-### Manual build and run
+After merging code changes, rebuild:
 
 ```bash
-# Build image
-docker build -t reli:latest .
-
-# Run with required env vars
-docker run -d \
-  -p 127.0.0.1:8000:8000 \
-  -v ./data:/app/data \
-  -e REQUESTY_API_KEY=... \
-  -e GOOGLE_CLIENT_ID=... \
-  -e GOOGLE_CLIENT_SECRET=... \
-  -e SECRET_KEY=... \
-  --restart unless-stopped \
-  reli:latest
-```
-
-### Optional: Distributed tracing with Phoenix
-
-To enable the Phoenix tracing UI (port 6006, local only):
-
-```bash
-PHOENIX_ENABLED=true docker compose --profile tracing up -d
-```
-
-Phoenix runs as a sidecar under the `tracing` profile. Set `PHOENIX_ENDPOINT` to point to an external OTLP collector if you prefer a hosted provider (Arize, Honeycomb). Trace data persists in `./data-phoenix/` across container restarts.
-
-### After code changes
-
-The container must be rebuilt after merging code changes:
-
-```bash
-cd /path/to/reli
 git pull
-npm --prefix frontend install --legacy-peer-deps
-npm --prefix frontend run build
 docker compose build && docker compose up -d
 ```
 
----
+**One-time step before the first v4 deploy** against a database that still holds a pre-v4 Alembic
+revision. The v4 baseline has no `down_revision`, so Alembic cannot resolve the recorded one:
 
-## Data Safety
+```bash
+psql "$DATABASE_URL" -c 'DROP TABLE IF EXISTS alembic_version'
+```
 
-Both data stores contain production data. Handle with care.
+Staging runs on the same host from `docker-compose.staging.yml` (port 8001, its own Postgres):
 
-### SQLite (`data/reli.db`)
+```bash
+docker compose -f docker-compose.staging.yml up -d
+```
 
-- **Never delete or recreate the database file.** The `./data` directory is volume-mounted — the DB persists across container rebuilds.
-- **Schema changes must be additive** (`ALTER TABLE`, `CREATE TABLE IF NOT EXISTS`). See `backend/database.py` for the migration pattern.
-- **Never use destructive DDL** (`DROP TABLE`, `DROP COLUMN`) without a data migration plan.
+## Environment variables
 
-### ChromaDB (`backend/chroma_db/`)
+These are the fields of `Settings` in `backend/config.py`, and nothing else is read by the app.
 
-- **Never delete the `chroma_db/` directory.** It contains vector embeddings that are expensive to regenerate.
-- To rebuild embeddings after deletion: `POST /api/things/reindex`
+| Variable | Default | Notes |
+|---|---|---|
+| `DATABASE_URL` | — | **Required.** Postgres connection string. No default: the boot fails without it rather than serving an empty database. |
+| `MCP_API_TOKEN` | empty | Bearer token for `/mcp`. Human-provisioned. Empty closes the endpoint (401 to everything) and logs a warning; it never opens it. |
+| `WEB_UI_PASSWORD` | empty | HTTP Basic password for `/` and `/api`; any username. Human-provisioned. Empty closes the view (401), never opens it. |
+| `GOOGLE_CLIENT_ID` | empty | Google OAuth client, see above. Empty disables only the three Google tools. |
+| `GOOGLE_CLIENT_SECRET` | empty | As above. |
+| `GOOGLE_REFRESH_TOKEN` | empty | As above; printed by `scripts/google_oauth_grant.py`. |
+| `LOG_LEVEL` | `INFO` | Python logging level. |
+| `SENTRY_DSN` | empty | Empty disables Sentry. |
+| `SENTRY_ENVIRONMENT` | `production` | Environment tag on Sentry events. |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.2` | Sentry tracing sample rate. |
 
----
+Read by the host or the image, not by the app:
 
-## Environment Variables Reference
+- `PORT` — the Dockerfile's `CMD` and healthcheck, and Railway; default 8000.
+- `RELI_IMAGE_TAG` — which `ghcr.io/alexsiri7/reli` tag both compose files run; default `latest`.
+- `STAGING_DATABASE_URL`, `STAGING_POSTGRES_PASSWORD` — `docker-compose.staging.yml`, kept distinct
+  from production's so staging never points at production data.
+- `CLOUDFLARE_TUNNEL_TOKEN` — the Cloudflare Tunnel on the host, pointed at `http://reli:8000`.
+- `RELI_TEST_DATABASE_URL` — `backend/tests/conftest.py`: run the suite against an existing
+  database instead of a testcontainers one.
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `REQUESTY_API_KEY` | Yes | — | Requesty LLM gateway key |
-| `REQUESTY_BASE_URL` | No | `https://router.requesty.ai/v1` | LLM gateway base URL |
-| `GOOGLE_CLIENT_ID` | Yes | — | Google OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | Yes | — | Google OAuth client secret |
-| `SECRET_KEY` | Yes | — | JWT signing secret |
-| `RELI_API_TOKEN` | No | — | Static bearer token for API auth; enables token-based access without Google OAuth |
-| `RELI_API_TOKEN_USER_ID` | No | — | user_id that `RELI_API_TOKEN` authenticates as; if empty, falls back to the first user in the database (single-tenant shortcut) |
-| `DATA_DIR` | No | `backend/` | Directory for `reli.db` |
-| `COOKIE_SECURE` | No | `true` | Set to `false` in local dev when running without HTTPS; always `true` in production |
-| `LOG_LEVEL` | No | `INFO` | Log verbosity: DEBUG, INFO, WARNING |
-| `OLLAMA_MODEL` | No | — | Local model for context agent |
-| `OLLAMA_BASE_URL` | No | `http://localhost:11434` | Ollama server URL |
-| `GOOGLE_SEARCH_API_KEY` | No | — | Google Custom Search API key |
-| `GOOGLE_SEARCH_CX` | No | — | Google Custom Search engine ID |
-| `CLOUDFLARE_TUNNEL_TOKEN` | No | — | Cloudflare Tunnel token for public access |
-| `REQUESTY_MODEL` | No | — | Override model for all pipeline stages |
-| `REQUESTY_REASONING_MODEL` | No | — | Override model for reasoning stage |
-| `REQUESTY_RESPONSE_MODEL` | No | — | Override model for response stage |
-| `PHOENIX_ENABLED` | No | `false` | Enable Phoenix/OTLP distributed tracing sidecar |
-| `PHOENIX_ENDPOINT` | No | `http://phoenix:6006/v1/traces` | OTLP trace ingest endpoint |
-| `OTEL_SERVICE_NAME` | No | `reli` (`reli-staging` in staging) | OpenTelemetry service name for traces |
-| `STORAGE_BACKEND` | No | `sqlite` | Set to `supabase` to use Postgres instead of SQLite for Things data. See [docs/SUPABASE_CUTOVER.md](SUPABASE_CUTOVER.md). |
-| `DATABASE_URL` | No (required when STORAGE_BACKEND=supabase) | `sqlite:///data/reli.db` | SQLAlchemy connection URL. For Postgres: `postgresql://postgres:<pass>@db.<ref>.supabase.co:5432/postgres` |
-| `SUPABASE_URL` | No | — | Supabase project URL |
-| `SUPABASE_KEY` | No | — | Supabase anon/service key |
-| `CORS_ORIGINS` | No | — | Comma-separated extra origins allowed on standard API endpoints (e.g. `https://reli.example.com`) |
-| `MCP_CORS_ORIGINS` | No | — | Comma-separated origins allowed on MCP/OAuth endpoints (e.g. `https://claude.ai`); if empty, the wildcard `*` is used for all origins (no credentials) |
-| `SWEEP_MIN_CONFIDENCE` | No | `0.5` | Minimum confidence score (0.0–1.0) for sweep findings to appear in briefings. Set to `0.0` to disable the gate and show all findings. |
-| `SWEEP_AUTO_MERGE_ENABLED` | No | `true` | Set to `false` to disable autonomous exact-match duplicate merging. Merges are still detected and logged when disabled. |
-| `SWEEP_AUTO_MERGE_CONFIDENCE_THRESHOLD` | No | `0.95` | Minimum confidence score (0.0–1.0) for a duplicate pair to be auto-merged. Currently only exact-title cross-project duplicates are candidates. |
+## Data safety
 
----
+Postgres holds production data. Every migration from the v4 baseline is additive (`ALTER TABLE`,
+`CREATE TABLE IF NOT EXISTS`); destructive DDL needs a data migration plan and the
+`# reli:allow-destructive-ddl` opt-in comment in the migration file, which
+`backend/alembic/safety.py` checks at startup and `backend/tests/test_ddl_safety.py` covers. Test a
+migration against a copy first, never against the live database. Connection strings come from the
+environment — never hard-code one.
 
 ## CI/CD
 
-GitHub Actions runs on every push:
+`.github/workflows/ci.yml` runs four jobs on every push and pull request, each a stage of
+`scripts/gates.sh`:
 
-1. **Backend tests** — pytest on Python 3.11, coverage ≥ 70%
-2. **Frontend tests** — vitest + build on Node 20
-3. **Type checking** — mypy (backend) + tsc (frontend)
-4. **Deploy** — Railway API deployment via `staging-pipeline.yml`. Requires 7 repository secrets — see [`DEPLOYMENT_SECRETS.md`](../DEPLOYMENT_SECRETS.md) for setup.
+1. **Lint & Typecheck** — `ruff check`, `ruff format --check`, `mypy`
+2. **Test** — pytest with coverage ≥ 70%, against a testcontainers Postgres
+3. **Frontend** — `npm run lint`, `typecheck`, `build` and the Playwright screenshot tests, inside
+   the pinned Playwright container the snapshots were generated in
+4. **Build Docker image** — on `main`, pushed to GHCR as `:<sha>` and `:latest`, keeping the last
+   three SHA tags
 
-Branch protection on `main` requires all checks to pass.
+A green run on `main` triggers `staging-pipeline.yml`: deploy to Railway staging, wait for
+`/healthz`, then deploy the same image to production. The secrets it needs are listed in
+[DEPLOYMENT_SECRETS.md](../DEPLOYMENT_SECRETS.md); rolling back is [ROLLBACK.md](ROLLBACK.md).

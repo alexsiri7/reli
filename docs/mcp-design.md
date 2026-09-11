@@ -2,186 +2,120 @@
 
 ## 1. Overview
 
-Reli exposes its personal knowledge graph via the Model Context Protocol (MCP). The MCP server provides shared knowledge and PA intelligence as a service to any MCP-capable client (Claude Desktop, IDE extensions, custom agents).
+`/mcp` is the only way into the graph. `backend/mcp_server.py` registers twenty tools, four
+prompts and two resources, each a thin wrapper over `backend/service.py` (writes),
+`backend/queries.py` (graph reads) or `backend/google_readers.py` (Gmail and Calendar reads). No
+judgement happens in that module and no model is called from it: the tools hand Claude the graph
+and Claude decides what it means. Rationale: [vision.md §4.2](vision.md#42-mcp--the-only-way-in).
 
-The core architecture decision is **client does the reasoning**: the MCP server provides tools and prompt resources, but the calling agent decides what to invoke, when, and how to combine results. Reli's MCP layer is a thin wrapper over the same shared tool implementations used by the internal reasoning agent.
+The server's `instructions` string tells a connected session the shape of the graph (Things,
+tags instead of a type column, `ChildOf` for hierarchy), which tools read and which write, the two
+actor values and why they must be honest, that nothing is hard-deleted, how the user model is
+structured, and that the Google tools return evidence rather than answers.
 
-## 2. Transports
+## 2. Transport
 
-### Streamable HTTP (primary)
+Streamable HTTP only; there is no stdio transport. `backend/main.py` mounts the app at `/mcp` with
+`streamable_http_path="/"`, because the SDK's own default of `/mcp` would serve `/mcp/mcp`. The
+server is `stateless_http=True`: every tool carries its actor per call and holds no session state,
+so there is nothing for a session to remember and a container restart mid-conversation is
+harmless. The session manager is started in `main.lifespan`, because a mounted Starlette app's own
+lifespan never runs.
 
-The production transport. Mounted at `/mcp` inside the FastAPI app via `create_mcp_asgi_app()`.
-
-```python
-from backend.mcp_server import create_mcp_asgi_app
-app.mount("/mcp", create_mcp_asgi_app(settings.MCP_API_TOKEN))
-```
-
-The server sets `streamable_http_path="/"` because FastAPI handles the `/mcp` prefix at the mount level.
-
-### stdio (legacy)
-
-For local clients that connect over standard input/output:
-
-```bash
-python -m backend.mcp_server
-```
-
-Useful for development and clients that do not support HTTP transport.
+DNS-rebinding protection is disabled. The SDK's default host allowlist is `127.0.0.1`/`localhost`,
+which answers 421 to any request carrying a real `Host` header — and Reli is served through a
+Cloudflare tunnel. This is safe only because the bearer check below makes an `Authorization`
+header mandatory, which a cross-origin page cannot set; the two decisions are coupled.
 
 ## 3. Authentication
 
-The `_TokenAuthMiddleware` ASGI middleware enforces authentication on all `/mcp` requests. It supports two token forms:
+`_BearerTokenMiddleware` requires `Authorization: Bearer <MCP_API_TOKEN>` on every request, compared
+with `secrets.compare_digest` and read from settings per request. An empty token closes the
+endpoint — 401 to everything, and a warning at startup — rather than opening it, because `/mcp` is
+the only write path into the graph and it is publicly reachable. There is no JWT, no OAuth and no
+dev mode.
 
-### Static API token
+Every writing tool takes `actor: McpActor` as a required first argument, where
+`McpActor = Literal[Actor.CLAUDE_INTERACTIVE, Actor.CLAUDE_SCHEDULED]`: `claude_interactive` when a
+person is in the conversation, `claude_scheduled` for an unattended scheduled task. A call that
+omits it fails argument validation before any tool body runs. `Actor.USER` is deliberately absent:
+over MCP, `reject_preference` records the Claude session that relayed the rejection, and widening
+the literal would let any MCP caller stamp a mutation as a user decision — the distinction is the
+learning pass's only signal for "the user decided" against "Claude did". The one rejection
+attributed to `Actor.USER` is the web view's `POST /api/preferences/{id}/reject`.
 
-Set the `MCP_API_TOKEN` environment variable. Clients send it as a Bearer token. Compared using `secrets.compare_digest` to prevent timing attacks. The resolved user ID comes from `_resolve_api_token_user()`.
+## 4. Tool catalogue
 
-### JWT (OAuth flow)
+Writes — every one takes `actor`, every one is journalled by `backend/service.py`:
 
-Tokens issued by the OAuth 2.1 flow (see section 10). Validated via `jwt.decode(provided, SECRET_KEY, algorithms=["HS256"], audience="mcp")`. The token must include `aud: "mcp"`. The `sub` claim is extracted as the user ID.
+| Tool | Does |
+|---|---|
+| `create_thing` | Creates a Thing: `title`, `description`, `notes`, `tags`, `urls`, `checkin_date`, `priority`. |
+| `update_thing` | Replaces the fields given — a `tags` or `notes` argument replaces the whole value, nothing is merged, and an unset field is untouched. |
+| `archive_thing` | Sets `active=False`, journalled as an update. The Thing and its edges stay readable; it drops out of `due_for_checkin`, `stale`, `blocked` and the default `find_things`. There is no hard delete over MCP and nothing un-archives. |
+| `relate` | Links two Things with one of the five `RelationshipType` values (`ChildOf` source is the parent; `Blocks` source is the blocked Thing; `EvidenceFor` source is the evidence) and an optional `context`. |
+| `unrelate` | Removes an edge by id; both Things stay. |
 
-### Dev mode
+Reads — no `actor`:
 
-If neither `MCP_API_TOKEN` nor `SECRET_KEY` is configured, all requests pass without authentication. This allows local development without token setup.
+| Tool | Does |
+|---|---|
+| `get_thing` | One Thing and every edge touching it, each with the id `unrelate` takes. |
+| `find_things` | Things matching every filter given — `tags` (`match` any/all), `active`, a check-in window, a priority range, `limit`. A filter, not a search: there is no text matching anywhere in Reli. |
+| `get_related` | The neighbourhood of a Thing within `depth` hops, following edges in both directions, optionally restricted to some `types`. |
+| `due_for_checkin` | Active Things whose check-in date has arrived, as of today or `as_of`. |
+| `stale` | Active Things untouched for at least `days` (default 30). |
+| `blocked` | Things whose `Blocks` target is still active. |
+| `children` | The targets of a Thing's `ChildOf` edges. |
+| `get_thing_history` | The Thing's newest `limit` journal entries, oldest first, with `total` and `truncated`. Edge changes are journalled against the relationship, so they do not appear here. |
 
-### User ID propagation
+User model — see [vision.md §5](vision.md#5-the-user-model):
 
-The authenticated user ID is stored in a `contextvars.ContextVar` named `_current_user_id`, set by the middleware and read by each tool function via `_user_id()`. This ensures all tool calls operate on the correct user's data.
+| Tool | Does |
+|---|---|
+| `record_preference` (`actor`) | Records a preference as its own `#Preference` Thing with a `scope` and at least one evidence Thing id. Cite a `#Observation` Thing for a journal entry. |
+| `add_preference_evidence` (`actor`) | Adds one more `EvidenceFor` edge; a repeat changes nothing. |
+| `reject_preference` (`actor`) | Tags the preference `#Rejected` and journals it; it stays readable and is not re-derived. |
+| `get_user_model` | Preferences with their evidence and `evidence_count`, optionally for one `scope`, optionally `include_rejected`. There is no confidence score. |
 
-## 4. DNS Rebinding Protection
+Google — no `actor`, and they journal nothing because they mutate nothing:
 
-Enabled via `TransportSecuritySettings(enable_dns_rebinding_protection=True)`.
+| Tool | Does |
+|---|---|
+| `find_correspondence` | Gmail search (`query` in Gmail syntax, `since`, `until`, `limit` capped at 25); returns sender, recipient, subject, date, snippet and labels. Bodies are never fetched. |
+| `find_events` | The primary calendar over `since`–`until`, recurring events expanded, optional free-text `query`, `limit` capped at 25. |
+| `check_occurred` | Both sources for one `description` over a window; returns the events, the messages and their counts, and deliberately no verdict — whether the thing happened is the caller's judgement. |
 
-Allowed hosts:
+## 5. Prompts
 
-| Pattern | Purpose |
-|---------|---------|
-| `127.0.0.1:*` | Local development |
-| `localhost:*` | Local development |
-| `[::1]:*` | IPv6 loopback |
-| `_RELI_HOST` | Production host (derived from `RELI_BASE_URL` or `GOOGLE_AUTH_REDIRECT_URI`) |
+Four prompts, their text in `backend/prompts.py`: `capture` (the default behaviour — what is
+worth a Thing, how to title and tag it, when to set a check-in date, when to relate rather than
+create) and the three hats `daily-planning`, `project-planning` and `review`. Every prompt names
+the one preference scope it loads — `capture`, `scheduling`, `planning`, `review` — and those
+labels are the scope vocabulary: a preference is recorded under the same label a prompt loads,
+because `queries.user_model` matches scope exactly. All four carry the preference-capture
+convention (record a preference the moment you notice it, with evidence) and the check-in
+semantics (`checkin_date` is Claude's obligation to verify, not the user's deadline), held as
+constants so `backend/tests/test_mcp_tools.py` can prove it.
 
-The production host is derived at module load time: first from `RELI_BASE_URL` (stripped of scheme), falling back to the host portion of `GOOGLE_AUTH_REDIRECT_URI`.
+## 6. Resources
 
-## 5. Tool Catalog
+`reli://user-model` and `reli://user-model/{scope}` serve the same JSON payload as
+`get_user_model`, so a session can load its preferences as context without a tool call. Rejected
+preferences are left out of both: a resource is ambient context, and what the user refused is not
+what they prefer. `get_user_model(include_rejected=true)` is where they are visible.
 
-All tools are thin wrappers over `backend/tools.py` (the shared tool layer). Pattern: `@mcp.tool()` function calls `shared_tools.foo(..., user_id=_user_id())`.
+## 7. Journal
 
-### Context and Search
+Every write above reaches the journal through `backend/service.py` with the actor, the operation
+and the before/after snapshots, in the same transaction as the row it changes. `get_thing_history`
+reads it per Thing.
 
-| Tool | Description |
-|------|-------------|
-| `fetch_context` | Multi-query vector similarity search with optional ID fetching and type filtering |
-| `get_thing` | Get a single Thing by ID with all relationships |
-| `search_things` | Keyword search (SQL LIKE) across titles, types, data, and relationships |
+## 8. Design principles
 
-### CRUD
-
-| Tool | Description |
-|------|-------------|
-| `create_thing` | Create a new Thing with title, type, data, importance, checkin date |
-| `update_thing` | Partial update of any Thing fields (only provided fields change) |
-| `delete_thing` | Soft-delete: sets `active=false` (data is preserved) |
-| `merge_things` | Merge two Things into one, transferring relationships and data |
-
-### Relationships
-
-| Tool | Description |
-|------|-------------|
-| `list_relationships` | List all relationships where a Thing is source or target |
-| `create_relationship` | Create a typed edge between two Things |
-| `delete_relationship` | Delete a relationship by ID |
-
-### Intelligence
-
-| Tool | Description |
-|------|-------------|
-| `get_briefing` | Daily briefing with checkin-due items and sweep findings |
-| `get_open_questions` | Things with unresolved knowledge gaps, ordered by importance |
-| `get_user_profile` | User's anchor Thing with resolved relationships |
-| `get_preferences` | All active preference Things with pattern arrays |
-| `update_preference` | Replace the patterns array on a preference Thing |
-| `get_conflicts` | Detect blockers, schedule overlaps, and deadline conflicts |
-| `get_mutations` | Query the mutations journal for audit/rollback |
-| `schedule_task` | Schedule autonomous future work (remind, check, sweep_concern, custom) |
-| `chat_history` | Search across conversation sessions |
-
-### Reasoning-as-a-service
-
-| Tool | Description |
-|------|-------------|
-| `reli_think` | Analyze natural language and return structured CRUD instructions |
-
-## 6. Prompt Resources
-
-Prompt resources expose full agent system prompts from `backend/prompts/*.md`. Clients can adopt these personas to operate as Reli agents.
-
-| Name | Source File | Description |
-|------|-------------|-------------|
-| `context-agent` | `backend/prompts/context-agent.md` | Search for relevant Things given a user message (read-only) |
-| `reasoning-agent` | `backend/prompts/reasoning-agent.md` | Decide what storage changes are needed |
-| `response-agent` | `backend/prompts/response-agent.md` | Produce the final user-facing reply (no tools needed) |
-| `context-refinement-agent` | `backend/prompts/context-refinement-agent.md` | Decide if more context searches are needed |
-| `thing-schema` | `backend/prompts/thing-schema.md` | Complete data model reference for Things and Relationships |
-| `pa-behavior` | `backend/prompts/pa-behavior.md` | Core PA behavior instructions for calling agents |
-
-## 7. Shared Tools Pattern
-
-MCP tools do not contain business logic. They delegate to `backend/tools.py`:
-
-```python
-@mcp.tool()
-def create_thing(title: str, ...) -> dict[str, Any]:
-    return shared_tools.create_thing(title=title, ..., user_id=_user_id())
-```
-
-This ensures identical behavior between MCP access and the internal reasoning agent.
-
-Notable implementation details:
-
-- `delete_thing` is a soft delete: calls `shared_tools.update_thing(thing_id=thing_id, active=False, user_id=_user_id())`
-- `get_thing` enriches the response with relationships by calling both `shared_tools.get_thing` and `shared_tools.list_relationships`
-- `reli_think` is the only async tool; it delegates to `backend.reasoning_agent.run_think_agent`
-- JSON parameters (data, open_questions, patterns) are serialized to JSON strings before passing to shared tools
-
-## 8. Mutations Journal
-
-All MCP write operations are logged to the `McpMutationRecord` table as an append-only audit trail.
-
-Each record captures:
-- The operation performed (create, update, delete, merge)
-- Before and after state snapshots
-- The user who performed the mutation
-- Timestamp
-
-The journal is queryable via the `get_mutations` tool:
-
-```python
-get_mutations(thing_id=None, limit=50)
-```
-
-- Filter by `thing_id` to see changes to a specific Thing
-- Returns entries newest-first, up to `limit` (max 200)
-
-## 9. Key Design Principles
-
-1. **Client does the reasoning** — the MCP server exposes tools and data; the calling agent decides what to do with them.
-2. **Thin wrapper over shared tools** — no business logic in the MCP layer; `backend/tools.py` is the single source of truth.
-3. **Soft delete via MCP** — `delete_thing` marks inactive rather than destroying data. MCP clients cannot permanently delete.
-4. **Single user first** — token authentication resolves to a single user. No row-level security; multi-user deferred to post-Supabase migration.
-5. **Mutations journal for audit/rollback** — every write is logged with before/after snapshots, enabling audit trails and future undo support.
-
-## 10. OAuth 2.1
-
-The OAuth 2.1 flow for MCP client authentication is implemented in `backend/routers/mcp_oauth.py`. It follows the MCP Authorization specification and implements:
-
-| Endpoint | RFC | Purpose |
-|----------|-----|---------|
-| `GET /.well-known/oauth-protected-resource` | RFC 9728 | Protected resource metadata discovery |
-| `GET /.well-known/oauth-authorization-server` | RFC 8414 | Authorization server metadata |
-| `GET /oauth/authorize` | — | Redirect to Google, then back with auth code |
-| `POST /oauth/token` | — | Exchange auth code + PKCE verifier for JWT. Confidential clients (`token_endpoint_auth_method != "none"`) must include `client_secret`; public clients use PKCE only. |
-| `POST /oauth/register` | RFC 7591 | Dynamic client registration |
-
-The flow delegates authentication to Google (the existing auth provider) and issues JWTs that the MCP middleware validates on subsequent requests.
+- **The client does the reasoning.** Reli returns data; a tool never decides what it means.
+- **One write path.** Every tool that changes state calls `backend/service.py`, which journals.
+- **Honest actor.** The journal's attribution is what the learning pass learns from, so a write
+  cannot be attributed by default and `Actor.USER` cannot be claimed over MCP.
+- **No hard delete.** `archive_thing` retires; `get_thing_history` explains.
+- **No confidence anywhere.** A preference's strength is the count of its evidence.

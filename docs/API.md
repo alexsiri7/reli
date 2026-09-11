@@ -1,460 +1,79 @@
-# Reli API Reference
+# Reli `/api` Reference — the web view's read surface
 
-All endpoints are prefixed with `/api`. Authentication is via `reli_session` JWT cookie (set by the OAuth flow). All endpoints except `/api/auth/*` require a valid session.
+`/api` exists for the frontend. It mirrors the query layer and nothing more: every write into the
+graph goes over MCP ([mcp-design.md](mcp-design.md)), with the single exception listed below.
+Every route sits behind HTTP Basic with `WEB_UI_PASSWORD` as the password and any username; an
+unset password answers 401 to everything. The routes and their response models are in
+`backend/api.py`, the TypeScript mirror is `frontend/src/api.ts`, and the contract is proven by
+`backend/tests/test_api.py`.
 
-Interactive docs available at `http://localhost:8000/docs` (Swagger UI) when running locally.
+## Routes
 
----
+| Method | Path | Response | Notes |
+|---|---|---|---|
+| GET | `/api/things?parent=` | `TreeLevel` | One level of the `ChildOf` tree: the children of `parent`, or the top level when omitted. The top level is the active Things nothing claims as a child, minus the user-model tags (`#User`, `#Preference`, `#Observation`). Most important first; `has_children` says whether expanding a row shows anything. |
+| GET | `/api/things/{thing_id}` | `ThingDetail` | One Thing and every edge touching it. 404 when absent. `direction` is resolved relative to the requested Thing. |
+| GET | `/api/things/{thing_id}/history?limit=` | `HistoryOut` | The newest `limit` journal entries (1–1000, default 200), oldest first within that window. Only entries recorded against the Thing itself — relating and unrelating are journalled against the relationship, so edge changes do not appear. An unknown id answers an empty history, not a 404. |
+| GET | `/api/user-model?scope=` | `UserModelOut` | Every preference with its evidence. Rejected preferences are **always** included, so the view can make a wrong one spottable. A preference with no evidence or a blank scope never appears. |
+| POST | `/api/preferences/{preference_id}/reject` | `PreferenceOut` | **The only write.** Tags the preference `#Rejected` and journals it as `Actor.USER`. Rejecting twice is a 200 that changes nothing. 404 for a missing id or a Thing that is not tagged `#Preference`. |
+| any | `/api/{anything else}` | — | 404 JSON, never the SPA fallback. |
 
-## Authentication (`/api/auth`)
+`GET /healthz` is unauthenticated and answers `{"status": "ok", "service": "reli"}`.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/auth/google` | Redirect to Google OAuth consent screen |
-| GET | `/api/auth/google/callback` | Handle OAuth callback, set `reli_session` cookie |
-| GET | `/api/auth/me` | Return current user profile |
-| POST | `/api/auth/logout` | Revoke JWT server-side and clear session cookie |
+## Response models
 
-**`GET /api/auth/me` response:**
-```json
+```jsonc
+// NeighbourOut — the far end of an edge, or a piece of evidence
+{ "id": "uuid", "title": "string", "tags": ["string"] }
+
+// ThingSummary — one row of the tree
 {
-  "id": "google-sub-id",
-  "email": "user@example.com",
-  "name": "Display Name",
-  "picture": "https://..."
+  "id": "uuid", "title": "string", "tags": ["string"], "priority": 0.0,
+  "active": true, "checkin_date": "2026-09-11" | null, "has_children": false
 }
+
+// TreeLevel
+{ "things": [ThingSummary] }
+
+// ThingOut — a whole Thing
+{
+  "id": "uuid", "title": "string", "description": "string" | null,
+  "notes": { "slug": "markdown" }, "tags": ["string"], "urls": { "name": "url" },
+  "checkin_date": "2026-09-11" | null, "priority": 0.0, "active": true,
+  "created_at": "datetime", "updated_at": "datetime"
+}
+
+// RelationshipOut — one edge, with its direction relative to the requested Thing
+{
+  "id": "uuid", "relationship_type": "ChildOf" | "Blocks" | "RelatedTo" | "EvidenceFor" | "References",
+  "direction": "outgoing" | "incoming", "context": "string" | null,
+  "created_at": "datetime", "other": NeighbourOut
+}
+
+// ThingDetail
+{ "thing": ThingOut, "relationships": [RelationshipOut] }
+
+// JournalEntryOut — one journalled mutation
+{
+  "id": 1, "occurred_at": "datetime",
+  "actor": "user" | "claude_interactive" | "claude_scheduled",
+  "operation": "create" | "update" | "delete" | "relate" | "unrelate",
+  "entity_type": "thing" | "relationship", "entity_id": "uuid",
+  "before": { ... } | null, "after": { ... } | null
+}
+
+// HistoryOut — `total` is how many entries exist; `truncated` is true when older ones were left out
+{ "entries": [JournalEntryOut], "total": 0, "truncated": false }
+
+// PreferenceOut — `evidence_count` is the strength; there is no score
+{
+  "thing": ThingOut, "scope": "string" | null, "rejected": false,
+  "evidence": [NeighbourOut], "evidence_count": 0
+}
+
+// UserModelOut
+{ "scope": "string" | null, "preferences": [PreferenceOut] }
 ```
 
----
-
-## Things (`/api/things`)
-
-The core resource. Everything in Reli is a Thing.
-
-### Listing & Search
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/things` | List Things with optional filters |
-| GET | `/api/things/search?q=...` | Full-text + vector search |
-| GET | `/api/things/graph` | Things as graph (nodes + edges) |
-| GET | `/api/things/me` | Current user's profile Thing |
-
-**`GET /api/things` query params:**
-- `active` (bool) — filter by active status
-- `type_hint` (str) — filter by type (task, note, project, etc.)
-- `parent_id` (str) — filter by parent
-
-**`GET /api/things/search` query params:**
-- `q` (str, required) — search query
-
-### CRUD
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/things/{thing_id}` | Get a single Thing |
-| POST | `/api/things` | Create a Thing |
-| PATCH | `/api/things/{thing_id}` | Update a Thing (partial) |
-| DELETE | `/api/things/{thing_id}` | Delete a Thing |
-| POST | `/api/things/reindex` | Re-embed all Things (after embedding model change) |
-
-**Thing schema:**
-```json
-{
-  "id": "uuid",
-  "title": "string",
-  "type_hint": "task|note|project|person|idea|...",
-  "parent_id": "uuid|null",
-  "priority": 1,
-  "checkin_date": "2026-01-01T00:00:00|null",
-  "active": true,
-  "data": {},
-  "open_questions": "string|null",
-  "created_at": "2026-01-01T00:00:00",
-  "updated_at": "2026-01-01T00:00:00"
-}
-```
-
-### Relationships
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/things/{thing_id}/relationships` | List relationships for a Thing |
-| POST | `/api/things/relationships` | Create a relationship |
-| DELETE | `/api/things/relationships/{rel_id}` | Delete a relationship |
-
-**Create relationship body:**
-```json
-{
-  "from_thing_id": "uuid",
-  "to_thing_id": "uuid",
-  "relationship_type": "blocks|part_of|related_to|..."
-}
-```
-
-### Merge & Graph Maintenance
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/things/merge-suggestions` | Detect potential duplicate Things |
-| POST | `/api/things/merge` | Merge two Things into one |
-| GET | `/api/things/merge-history` | List past merges |
-| DELETE | `/api/things/merge-history/{record_id}` | Delete a merge history record |
-| GET | `/api/things/relationships/orphans` | Find relationships with deleted Things |
-| POST | `/api/things/relationships/cleanup` | Delete all orphaned relationships |
-
----
-
-## Thing Types (`/api/thing-types`)
-
-Custom categories for Things.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/thing-types` | List all Thing Types |
-| GET | `/api/thing-types/{type_id}` | Get a single Type |
-| POST | `/api/thing-types` | Create a custom Type |
-| PATCH | `/api/thing-types/{type_id}` | Update a Type |
-| DELETE | `/api/thing-types/{type_id}` | Delete a Type |
-
-**ThingType schema:**
-```json
-{
-  "id": "string",
-  "name": "string",
-  "icon": "🎯",
-  "color": "blue"
-}
-```
-
----
-
-## Chat & Pipeline (`/api/chat`)
-
-The primary interface to Reli's multi-agent pipeline.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/chat` | Send a message through the pipeline |
-| POST | `/api/chat/stream` | Stream a response via SSE |
-| POST | `/api/chat/sessions` | Create a named chat session |
-| GET | `/api/chat/sessions` | List chat sessions (most-recent first) |
-| GET | `/api/chat/history/{session_id}` | Get paginated chat history |
-| DELETE | `/api/chat/history/{session_id}` | Clear chat history for a session |
-| POST | `/api/chat/migrate-session` | Move history to a new session ID |
-| POST | `/api/chat/append-message` | Manually append a message to history |
-| GET | `/api/chat/stats/today` | Today's usage stats (tokens, cost) |
-
-**`POST /api/chat/sessions` request:**
-```json
-{
-  "title": "string (default: 'New chat', max 500 chars)",
-  "origin": "string | null (max 100 chars, e.g. 'morning_briefing', 'weekly_review')"
-}
-```
-
-**`POST /api/chat/sessions` / `GET /api/chat/sessions` item shape:**
-```json
-{
-  "id": "string",
-  "title": "string",
-  "origin": "string | null",
-  "created_at": "ISO datetime",
-  "last_active_at": "ISO datetime"
-}
-```
-
-**`POST /api/chat` request:**
-```json
-{
-  "session_id": "string",
-  "message": "string (max 10,000 chars)",
-  "mode": "normal|planning"
-}
-```
-
-**`POST /api/chat` response:**
-```json
-{
-  "reply": "string",
-  "applied_changes": {
-    "created": [...],
-    "updated": [...],
-    "deleted": [...]
-  },
-  "questions_for_user": ["string"],
-  "usage": {
-    "total_cost_usd": 0.001,
-    "prompt_tokens": 1200,
-    "completion_tokens": 300
-  }
-}
-```
-
-**`GET /api/chat/history/{session_id}` query params:**
-- `limit` (int, default 50) — messages per page
-- `before_id` (int) — cursor for pagination
-
----
-
-## Briefing (`/api/briefing`)
-
-Daily briefing: check-in due Things, sweep findings, and learned preferences.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/briefing` | Get today's briefing |
-| GET | `/api/briefing/morning` | Pre-generated morning briefing |
-| GET | `/api/briefing/preferences` | Get briefing preferences |
-| PUT | `/api/briefing/preferences` | Update briefing preferences |
-| POST | `/api/briefing/findings` | Create a sweep finding |
-| PATCH | `/api/briefing/findings/{finding_id}/dismiss` | Dismiss a finding |
-| POST | `/api/briefing/findings/{finding_id}/snooze` | Snooze a finding |
-
-**`GET /api/briefing` response shape:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `date` | string | Briefing date (YYYY-MM-DD) |
-| `the_one_thing` | BriefingItem \| null | Highest-priority item |
-| `secondary` | BriefingItem[] | Secondary priority items |
-| `parking_lot` | object[] | Deferred items |
-| `findings` | SweepFinding[] | Active sweep findings |
-| `learned_preferences` | LearnedPreference[] | Inferred preferences (≤5), shown in "I Noticed" section |
-| `total` | int | Total item count |
-| `stats` | object | Per-type counts |
-
-**`SweepFinding` shape:**
-
-| Field | Type | Values |
-|-------|------|--------|
-| `id` | string | UUID |
-| `thing_id` | string \| null | Related Thing ID, if any |
-| `finding_type` | string | `"llm_insight"` (default); operator-suppressed types (`lifestyle_wellness`, `location_suggestion`, `unverified_context`) are excluded from the response by default |
-| `message` | string | Human-readable finding text |
-| `priority` | int | 0=critical … 3=low |
-| `dismissed` | bool | Whether the user dismissed it |
-| `dismissed_reason` | string \| null | Why it was auto-dismissed: `"linked_thing_inactive"`, `"expired"`, `"context_changed"`, or null if dismissed by the user |
-| `expires_at` | string \| null | ISO timestamp or null |
-
-**`LearnedPreference` shape:**
-
-| Field | Type | Values |
-|-------|------|--------|
-| `id` | string | Thing ID |
-| `title` | string | Preference description |
-| `confidence_label` | string | `"emerging"`, `"moderate"`, `"strong"` |
-
-**`GET /api/briefing/morning` response shape (`MorningBriefingContent`):**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `summary` | string | Narrative summary for the day |
-| `priorities` | MorningBriefingItem[] | High-priority items |
-| `overdue` | MorningBriefingItem[] | Overdue items |
-| `blockers` | MorningBriefingItem[] | Blocking items |
-| `findings` | MorningBriefingFinding[] | Active sweep findings |
-| `actions_taken` | SweepAction[] | Autonomous actions taken by the sweep in the past 24 hours |
-| `stats` | object | Per-type counts |
-
-**`SweepAction` shape:**
-
-| Field | Type | Values |
-|-------|------|--------|
-| `id` | string | Prefixed UUID (`sa-…`) |
-| `action_type` | string | `"merge"`, `"close"`, `"dismiss"` |
-| `description` | string | Human-readable e.g. "Merged 'Buy milk' into 'Groceries'" |
-| `confidence` | float | 0.0–1.0; displayed as Emerging / Moderate / Strong |
-| `thing_id` | string \| null | Primary Thing involved |
-| `secondary_thing_id` | string \| null | Secondary Thing (e.g. removed item in a merge) |
-| `created_at` | string | ISO 8601 UTC timestamp |
-
----
-
-## Google Calendar (`/api/calendar`)
-
-Read + write calendar integration. Events can be created and updated via the
-reasoning agent tools (`calendar_create_event`, `calendar_update_event`); the
-REST endpoints below cover status, OAuth, and event listing only.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/calendar/status` | Check connection status |
-| GET | `/api/calendar/auth` | Start OAuth flow |
-| GET | `/api/calendar/callback` | Handle OAuth callback |
-| GET | `/api/calendar/events` | Fetch upcoming events |
-| DELETE | `/api/calendar/disconnect` | Revoke calendar access |
-
-**`GET /api/calendar/events` query params:**
-- `days_ahead` (int, default 7)
-- `max_results` (int, default 20)
-
----
-
-## Gmail (`/api/gmail`)
-
-Read-only Gmail integration.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/gmail/status` | Check connection status |
-| GET | `/api/gmail/auth-url` | Get OAuth authorization URL |
-| GET | `/api/gmail/callback` | Handle OAuth callback |
-| DELETE | `/api/gmail/disconnect` | Revoke Gmail access |
-| GET | `/api/gmail/messages` | List recent messages |
-| GET | `/api/gmail/messages/{message_id}` | Read a specific message |
-| GET | `/api/gmail/threads/{thread_id}` | Read a thread |
-
-**`GET /api/gmail/messages` query params:**
-- `max_results` (int, default 20)
-
----
-
-## Focus (`/api/focus`)
-
-Prioritized recommendations based on urgency, deadlines, and context.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/focus` | Get focus recommendations |
-
----
-
-## Proactive (`/api/proactive`)
-
-Things with upcoming time-relevant dates that need attention.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/proactive` | Get proactive surfaces |
-
----
-
-## Connections (`/api/connections`)
-
-Suggestions for linking semantically related Things.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/connections` | List pending connection suggestions |
-| POST | `/api/connections/{suggestion_id}/accept` | Accept a suggestion (creates relationship) |
-| POST | `/api/connections/{suggestion_id}/dismiss` | Dismiss a suggestion |
-| POST | `/api/connections/{suggestion_id}/defer` | Defer a suggestion |
-
----
-
-## Conflicts (`/api/conflicts`)
-
-Detect scheduling and resource conflicts between Things.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/conflicts` | Get conflict alerts |
-
----
-
-## Staleness (`/api/staleness`)
-
-Report on stale and neglected Things.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/staleness` | Get staleness report |
-
----
-
-## Sweep (`/api/sweep`)
-
-Background cleanup and reflection runs.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/sweep/run` | Trigger a nightly sweep run |
-| GET | `/api/sweep/runs` | List sweep run history |
-| POST | `/api/sweep/connections` | Trigger connection sweep |
-| POST | `/api/sweep/dependencies` | Detect implicit dependencies between Things via LLM |
-| POST | `/api/sweep/research` | Proactive research: fetch external data for Things with open questions |
-
-**`POST /api/sweep/research` response:**
-```json
-{
-  "things_researched": 3,
-  "findings_created": 3,
-  "lookups_executed": 3,
-  "findings": [
-    {
-      "id": "sf-abc12345",
-      "thing_id": "t-...",
-      "thing_title": "Book flights to Tokyo",
-      "action": "web_search",
-      "query": "Tokyo flight prices April 2026",
-      "results_count": 5,
-      "message": "Research for 'Book flights to Tokyo': ..."
-    }
-  ],
-  "usage": { "input_tokens": 120, "output_tokens": 45 }
-}
-```
-
----
-
-## Settings (`/api/settings`)
-
-LLM model configuration and per-user preferences.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/settings` | Get current model settings |
-| PUT | `/api/settings` | Update model settings |
-| GET | `/api/settings/models` | List available LLM models (from Requesty) |
-| GET | `/api/settings/user` | Get per-user settings |
-| PUT | `/api/settings/user` | Update per-user settings |
-
-**`PUT /api/settings` body:**
-```json
-{
-  "context_model": "google/gemini-2.5-flash-lite",
-  "reasoning_model": "google/gemini-3-flash-preview",
-  "response_model": "google/gemini-2.5-flash-lite"
-}
-```
-
----
-
-## Think (`/api/think`)
-
-Reasoning-as-a-service: analyze arbitrary text and return structured JSON.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/think` | Analyze text with the reasoning agent |
-
----
-
-## Feedback (`/api/feedback`)
-
-Submit user feedback (creates a GitHub issue).
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/feedback` | Submit feedback |
-
----
-
-## Health & Monitoring
-
-| Method | Path | Auth required | Description |
-|--------|------|--------------|-------------|
-| GET | `/healthz` | No | Simple health check |
-| GET | `/api/health` | Yes | Detailed health (DB, ChromaDB, metrics) |
-| GET | `/metrics` | No | Prometheus metrics |
-
-**`GET /api/health` response:**
-```json
-{
-  "status": "ok",
-  "database": "ok",
-  "vector_store": "ok",
-  "version": "string"
-}
-```
+The models are stated explicitly in `backend/api.py` rather than returning the database records, so
+a new column is not silently a new API field.
