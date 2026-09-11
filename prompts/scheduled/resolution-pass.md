@@ -39,7 +39,8 @@ since the Thing was last updated. Then decide which of these it is:
   not evidence about the user.
 - **Needs a decision.** List it under `decisions`, with the choice stated plainly.
 
-A Thing already tagged `#NeedsInput` from an earlier night goes straight to the briefing unless
+A Thing already tagged `#NeedsInput` from an earlier night — `needs_input()` lists them all, with
+`total` and `truncated` so none is silently left out — goes straight to the briefing unless
 something could have changed since; do not run the same Gmail lookup every night.
 
 ## What a check-in date means

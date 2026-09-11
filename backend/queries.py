@@ -17,6 +17,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, SQLModel, col, or_, select
 
 from .db_models import (
+    NEEDS_INPUT_TAG,
     PREFERENCE_TAG,
     REJECTED_TAG,
     USER_ANCHOR_ID,
@@ -65,6 +66,22 @@ class History(NamedTuple):
     def truncated(self) -> bool:
         """Whether matching entries were left out of this window, at whichever end it was cut."""
         return self.total > len(self.entries)
+
+
+class NeedsInput(NamedTuple):
+    """The Things waiting on the user, with ``total`` so a capped answer cannot pass for a whole one.
+
+    The same shape :class:`History` gives a journal window: :func:`needs_input` is bounded, and a
+    Thing left out of the list would otherwise be a decision nobody asks for.
+    """
+
+    things: list[ThingRecord]
+    total: int
+
+    @property
+    def truncated(self) -> bool:
+        """Whether tagged Things were left out of this answer."""
+        return self.total > len(self.things)
 
 
 class Preference(NamedTuple):
@@ -134,6 +151,25 @@ def by_tag(
 
     statement = select(ThingRecord).where(_tagged(tags, match)).order_by(col(ThingRecord.priority).desc())
     return list(session.exec(statement).all())
+
+
+def needs_input(session: Session, *, limit: int = 100) -> NeedsInput:
+    """Active Things tagged ``#NeedsInput`` — what only the user can settle — most important first.
+
+    Bounded, unlike the other standing questions, because the tag accumulates: a check-in resolves
+    itself off ``due_for_checkin`` but nothing but the user takes a Thing off this list, and a
+    briefing that puts a hundred decisions to someone gets none of them. ``total`` is every Thing
+    that matched, so a caller that got a capped answer can see that it did.
+    """
+    conditions = [col(ThingRecord.active).is_(True), _tagged([NEEDS_INPUT_TAG], "any")]
+    things = session.exec(
+        select(ThingRecord)
+        .where(*conditions)
+        .order_by(col(ThingRecord.priority).desc(), col(ThingRecord.title).asc())
+        .limit(limit)
+    ).all()
+    total = session.exec(select(func.count()).select_from(ThingRecord).where(*conditions)).one()
+    return NeedsInput(things=list(things), total=total)
 
 
 def blocked(session: Session) -> list[ThingRecord]:

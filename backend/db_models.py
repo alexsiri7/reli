@@ -97,6 +97,10 @@ REJECTED_TAG = "#Rejected"
 #: is what writes them; the convention is fixed here so it cannot be re-decided there.
 OBSERVATION_TAG = "#Observation"
 
+#: What only the user can settle. The prompts tell Claude to apply it and ``queries.needs_input``
+#: reads it back, so the literal lives here rather than in either.
+NEEDS_INPUT_TAG = "#NeedsInput"
+
 
 class Actor(str, Enum):
     """Who performed a journalled mutation."""

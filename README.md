@@ -119,7 +119,7 @@ backend/
   mcp_server.py        # the MCP tools; every write takes an actor, no hard delete
   db_models.py         # things, relationships, journal, and the enums
   service.py           # the only write path; every mutation is journalled
-  queries.py           # the indexed queries: due_for_checkin, stale, by_tag, blocked, related, children, find_things, user_model
+  queries.py           # the indexed queries: due_for_checkin, stale, by_tag, blocked, needs_input, related, children, find_things, user_model
   config.py            # settings from the environment
   db_engine.py         # the Postgres engine and session factory
   alembic/versions/    # the v4 baseline migration

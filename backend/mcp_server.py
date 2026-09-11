@@ -102,6 +102,14 @@ def _history_dict(found: queries.History) -> dict[str, Any]:
     }
 
 
+def _needs_input_dict(found: queries.NeedsInput) -> dict[str, Any]:
+    return {
+        "things": [_thing_dict(thing) for thing in found.things],
+        "total": found.total,
+        "truncated": found.truncated,
+    }
+
+
 reli_mcp = FastMCP(
     "Reli",
     instructions=(
@@ -109,8 +117,8 @@ reli_mcp = FastMCP(
         "the typed relationships between them. There is no type column: what a Thing is lives in "
         "its tags and its edges, and hierarchy is a ChildOf relationship. "
         "Read with get_thing, find_things, get_related, children and the standing questions "
-        "due_for_checkin, stale and blocked. Write with create_thing, update_thing, archive_thing, "
-        "relate and unrelate. "
+        "due_for_checkin, stale, blocked and needs_input. Write with create_thing, update_thing, "
+        "archive_thing, relate and unrelate. "
         "Every write requires an actor and is recorded in an append-only journal: pass "
         "'claude_interactive' when a person is in the conversation and 'claude_scheduled' when the "
         "session is an unattended scheduled task. The distinction is what lets Reli tell what the "
@@ -247,8 +255,8 @@ def archive_thing(actor: McpActor, thing_id: uuid.UUID) -> dict[str, Any]:
     """Retire a Thing by setting it inactive, journalled as an update.
 
     The Thing and its relationships stay in the graph and stay readable; it simply drops out of
-    due_for_checkin, stale, blocked and the default find_things. There is no hard delete over MCP
-    and nothing here un-archives.
+    due_for_checkin, stale, blocked, needs_input and the default find_things. There is no hard
+    delete over MCP and nothing here un-archives.
 
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
@@ -453,6 +461,24 @@ def blocked() -> list[dict[str, Any]]:
     """
     with _session() as session:
         return [_thing_dict(thing) for thing in queries.blocked(session)]
+
+
+@reli_mcp.tool()
+def needs_input(limit: int = 100) -> dict[str, Any]:
+    """Active Things tagged #NeedsInput — what only the user can settle — most important first.
+
+    The tag is what the prompts apply to a Thing that cannot be resolved from Calendar, Gmail or the
+    graph; this reads them back. Bounded because nothing but the user takes a Thing off this list,
+    so total says how many there are and truncated whether this answer left any out.
+
+    Args:
+        limit: How many Things to return.
+
+    Returns:
+        things, total and truncated.
+    """
+    with _session() as session:
+        return _needs_input_dict(queries.needs_input(session, limit=limit))
 
 
 @reli_mcp.tool()

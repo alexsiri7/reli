@@ -35,6 +35,7 @@ from backend.mcp_server import (
     get_thing_history,
     get_user_model,
     journal_since,
+    needs_input,
     record_preference,
     reject_preference,
     relate,
@@ -57,6 +58,7 @@ TOOL_NAMES = {
     "due_for_checkin",
     "stale",
     "blocked",
+    "needs_input",
     "children",
     "get_thing_history",
     "journal_since",
@@ -105,7 +107,7 @@ def _tool_schemas():
 # --- The surface -----------------------------------------------------------
 
 
-def test_the_exposed_tools_are_exactly_the_twenty_one():
+def test_the_exposed_tools_are_exactly_the_twenty_two():
     assert set(_tool_schemas()) == TOOL_NAMES
 
 
@@ -324,6 +326,27 @@ def test_blocked_returns_the_waiting_thing(tools):
     )
 
     assert [t["title"] for t in blocked()] == ["waiting"]
+
+
+def test_needs_input_returns_the_tagged_things_with_the_truncation_signal(tools):
+    for priority in range(3):
+        create_thing(actor="claude_interactive", title=f"p{priority}", tags=["#NeedsInput"], priority=float(priority))
+    settled = create_thing(actor="claude_interactive", title="settled", tags=["#NeedsInput"], priority=9.0)
+    create_thing(actor="claude_interactive", title="untagged", priority=9.0)
+    archive_thing(actor="claude_interactive", thing_id=uuid.UUID(settled["id"]))
+
+    result = needs_input()
+
+    assert [t["title"] for t in result["things"]] == ["p2", "p1", "p0"]
+    assert result["total"] == 3
+    assert result["truncated"] is False
+    assert json.loads(json.dumps(result))
+
+    capped = needs_input(limit=1)
+
+    assert [t["title"] for t in capped["things"]] == ["p2"]
+    assert capped["total"] == 3
+    assert capped["truncated"] is True
 
 
 def test_children_returns_the_targets_of_child_of_edges(tools):

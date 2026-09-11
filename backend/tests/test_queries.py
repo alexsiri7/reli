@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import text
 
-from backend.db_models import Actor, RelationshipType
+from backend.db_models import NEEDS_INPUT_TAG, Actor, RelationshipType
 from backend.queries import (
     blocked,
     by_tag,
@@ -13,6 +13,7 @@ from backend.queries import (
     find_things,
     history,
     journal_since,
+    needs_input,
     related,
     relationships_for,
     stale,
@@ -108,6 +109,45 @@ def test_by_tag_with_no_tags_returns_nothing(session):
 
     assert by_tag(session, []) == []
     assert by_tag(session, [], match="all") == []
+
+
+# --- needs_input -----------------------------------------------------------
+
+
+def test_needs_input_returns_the_tagged_things_ordered_by_priority_then_title(session):
+    _thing(session, "minor", tags=["work", NEEDS_INPUT_TAG], priority=1.0)
+    _thing(session, "b-urgent", tags=[NEEDS_INPUT_TAG], priority=9.0)
+    _thing(session, "a-urgent", tags=[NEEDS_INPUT_TAG], priority=9.0)
+    _thing(session, "settled", tags=["work"], priority=9.0)
+
+    result = needs_input(session)
+
+    assert _titles(result.things) == ["a-urgent", "b-urgent", "minor"]
+    assert result.total == 3
+    assert result.truncated is False
+
+
+def test_needs_input_excludes_inactive(session):
+    thing = _thing(session, "archived", tags=[NEEDS_INPUT_TAG])
+    update_thing(session, actor=Actor.USER, thing_id=thing.id, active=False)
+
+    result = needs_input(session)
+
+    assert result.things == []
+    assert result.total == 0
+
+
+def test_needs_input_keeps_the_most_important_and_flags_truncation(session):
+    for priority in range(4):
+        _thing(session, f"p{priority}", tags=[NEEDS_INPUT_TAG], priority=float(priority))
+    archived = _thing(session, "archived", tags=[NEEDS_INPUT_TAG], priority=9.0)
+    update_thing(session, actor=Actor.USER, thing_id=archived.id, active=False)
+
+    result = needs_input(session, limit=2)
+
+    assert _titles(result.things) == ["p3", "p2"]
+    assert result.total == 4
+    assert result.truncated is True
 
 
 # --- blocked ---------------------------------------------------------------

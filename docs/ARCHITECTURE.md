@@ -81,6 +81,8 @@ Every public function writes its row and its journal entry in one transaction:
 - `stale` — active Things untouched since a given moment, longest untouched first.
 - `by_tag` — Things carrying any (or all) of a set of tags.
 - `blocked` — Things whose `Blocks` target is still active.
+- `needs_input` — active Things tagged `#NeedsInput`, most important first, capped with a total so
+  a decision cannot silently fall off the list.
 - `related` — the neighbourhood of a Thing within N hops, following edges in both directions.
 - `children` — the targets of a Thing's `ChildOf` edges.
 - `tree_level` — one level of the `ChildOf` tree with a live child count per row, for the web view.
@@ -108,7 +110,7 @@ and the read path so the two cannot drift. Rationale: [vision.md §5](vision.md#
 
 ## 6. MCP surface
 
-`backend/mcp_server.py` is the only way into the graph: twenty-one tools, four prompts and two
+`backend/mcp_server.py` is the only way into the graph: twenty-two tools, four prompts and two
 resources, each a thin wrapper over `service`, `queries` or `google_readers`. Every writing tool
 takes a required `actor` (`claude_interactive` or `claude_scheduled`); there is no hard delete;
 the endpoint sits behind a bearer token. The catalogue is in [mcp-design.md](mcp-design.md).
