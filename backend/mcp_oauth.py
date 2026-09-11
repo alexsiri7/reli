@@ -10,10 +10,11 @@ Implements the MCP authorization spec
   client with an authorization code via :func:`backend.auth.google_callback`
 - ``POST /oauth/token``                             — code or refresh token for an ``aud="mcp"`` JWT
 
-PKCE is mandatory and only ``S256`` is accepted; refresh tokens rotate on every use. The identity
-step is Google's: a client never holds a shared secret, and a token is only ever minted for an
-account in ``ALLOWED_EMAILS``. ``/mcp`` accepts the JWTs alongside ``MCP_API_TOKEN`` until a human
-retires the static token.
+PKCE is mandatory and only ``S256`` is accepted; refresh tokens rotate on every use, and presenting
+one that has already been rotated away revokes every token from that sign-in (OAuth 2.1 §4.3.1), so
+the connector re-authorises. The identity step is Google's: a client never holds a shared secret,
+and a token is only ever minted for an account in ``ALLOWED_EMAILS``. ``/mcp`` accepts the JWTs
+alongside ``MCP_API_TOKEN`` until a human retires the static token.
 """
 
 from __future__ import annotations
@@ -36,10 +37,12 @@ from .oauth_state import (
     cleanup_and_get,
     cleanup_and_pop,
     cleanup_and_store,
+    consume_refresh_token,
     mcp_auth_codes,
     mcp_oauth_sessions,
     mcp_refresh_tokens,
     mcp_registered_clients,
+    revoke_refresh_token_family,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +56,8 @@ REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
 CLIENT_TTL_SECONDS = REFRESH_TOKEN_TTL_SECONDS
 
 _AT_CAPACITY = "Server is at capacity; try again later"
+_CODE_GONE = "Authorization code is invalid or expired: re-authorise the connector"
+_REFRESH_TOKEN_GONE = "Refresh token is invalid or expired: re-authorise the connector"
 # The only client authentication methods /oauth/token implements: a secret arrives in the form
 # body or not at all. Registration refuses any other, so a client is never told to authenticate a
 # way that would fail.
@@ -268,7 +273,9 @@ def _validate_client_secret(session: Session, client_id: str, client_secret: str
         raise _TokenError(401, "invalid_client", "Invalid client credentials: re-register the connector")
 
 
-def _issue_token_response(session: Session, subject: str, email: str, client_id: str, scope: str) -> JSONResponse:
+def _issue_token_response(
+    session: Session, subject: str, email: str, client_id: str, scope: str, family_id: str
+) -> JSONResponse:
     """An access token and a fresh refresh token, RFC 6749 §5.1, never cached."""
     access_token = auth.create_jwt(subject, email, audience=auth.MCP_AUDIENCE)
     refresh_token = secrets.token_urlsafe(32)
@@ -282,6 +289,7 @@ def _issue_token_response(session: Session, subject: str, email: str, client_id:
                 "email": email,
                 "client_id": client_id,
                 "scope": scope,
+                "family_id": family_id,
                 "expires_at": datetime.now(UTC) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
             },
         )
@@ -301,15 +309,17 @@ def _issue_token_response(session: Session, subject: str, email: str, client_id:
     )
 
 
-def _consume_grant(
+def _authenticated_grant(
     session: Session, store: Store, key: str, client_id: str, client_secret: str, gone: str
 ) -> dict[str, Any]:
-    """The grant under *key*, deleted, once the client it was issued to has authenticated.
+    """The grant under *key*, not yet consumed, once the client it was issued to has authenticated.
 
     The client is authenticated before the grant is consumed (RFC 6749 §3.2.1 puts client
     authentication ahead of processing the grant), so a wrong secret leaves a still-valid code or
     refresh token for its holder to redeem instead of burning it. The grant is bound to the client
-    that asked for it, so an injected code exchanges for nothing.
+    that asked for it, so an injected code exchanges for nothing. Each exchange then consumes the
+    grant its own way, and only what that consume returns may mint a token: for a refresh token
+    the row found here may already be consumed.
 
     Raises:
         _TokenError: ``invalid_grant`` when the grant is gone or belongs to another client;
@@ -321,47 +331,64 @@ def _consume_grant(
     if not client_id or client_id != grant["client_id"]:
         raise _invalid_grant("client_id mismatch: re-authorise the connector")
     _validate_client_secret(session, client_id, client_secret)
-    consumed = cleanup_and_pop(session, store, key)
-    if consumed is None:
-        raise _invalid_grant(gone)
-    return consumed
+    return grant
 
 
 def _exchange_refresh_token(session: Session, refresh_token: str, client_id: str, client_secret: str) -> JSONResponse:
+    """Rotate *refresh_token*; a token presented twice revokes its whole family.
+
+    Nothing may commit between :func:`consume_refresh_token` and the replacement's
+    :func:`cleanup_and_store` inside :func:`_issue_token_response`: the two commit together, which
+    is what lets a concurrent redeem of the same token revoke the replacement as well.
+    """
     if not refresh_token:
         raise _invalid_grant("refresh_token is required")
-    grant = _consume_grant(
-        session,
-        mcp_refresh_tokens,
-        refresh_token,
-        client_id,
-        client_secret,
-        gone="Refresh token is invalid or expired: re-authorise the connector",
+    grant = _authenticated_grant(
+        session, mcp_refresh_tokens, refresh_token, client_id, client_secret, gone=_REFRESH_TOKEN_GONE
     )
-    return _issue_token_response(session, grant["subject"], grant["email"], grant["client_id"], grant["scope"])
+    consumed = consume_refresh_token(session, refresh_token)
+    if consumed is None:
+        revoked = revoke_refresh_token_family(session, grant["family_id"])
+        logger.warning(
+            "MCP OAuth: refresh token reuse for client %s — revoked %d token(s) in its family", client_id, revoked
+        )
+        raise _invalid_grant(
+            "Refresh token already used: every token from that sign-in is revoked, re-authorise the connector"
+        )
+    return _issue_token_response(
+        session,
+        consumed["subject"],
+        consumed["email"],
+        consumed["client_id"],
+        consumed["scope"],
+        family_id=consumed["family_id"],
+    )
 
 
 def _exchange_authorization_code(
     session: Session, code: str, redirect_uri: str, client_id: str, client_secret: str, code_verifier: str
 ) -> JSONResponse:
-    grant = _consume_grant(
-        session,
-        mcp_auth_codes,
-        code,
-        client_id,
-        client_secret,
-        gone="Authorization code is invalid or expired: re-authorise the connector",
-    )
-    if redirect_uri != grant["redirect_uri"]:
+    _authenticated_grant(session, mcp_auth_codes, code, client_id, client_secret, gone=_CODE_GONE)
+    consumed = cleanup_and_pop(session, mcp_auth_codes, code)
+    if consumed is None:
+        raise _invalid_grant(_CODE_GONE)
+    if redirect_uri != consumed["redirect_uri"]:
         raise _invalid_grant("redirect_uri mismatch: re-authorise the connector")
 
-    if grant["code_challenge_method"] == "S256":
+    if consumed["code_challenge_method"] == "S256":
         if not code_verifier:
             raise _invalid_grant("code_verifier is required")
-        if google_login.s256_challenge(code_verifier) != grant["code_challenge"]:
+        if google_login.s256_challenge(code_verifier) != consumed["code_challenge"]:
             raise _invalid_grant("PKCE verification failed: re-authorise the connector")
 
-    return _issue_token_response(session, grant["subject"], grant["email"], grant["client_id"], grant["scope"])
+    return _issue_token_response(
+        session,
+        consumed["subject"],
+        consumed["email"],
+        consumed["client_id"],
+        consumed["scope"],
+        family_id=str(uuid.uuid4()),
+    )
 
 
 @router.post("/oauth/token", include_in_schema=False)
