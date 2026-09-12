@@ -117,6 +117,11 @@ def _text(name):
     return (PROMPTS / name).read_text()
 
 
+def _unwrapped(name):
+    """The files wrap their lines; the constants they copy do not."""
+    return " ".join(_text(name).split())
+
+
 # --- The files -------------------------------------------------------------
 
 
@@ -152,6 +157,12 @@ def test_the_morning_conversation_carries_both_conventions_verbatim():
 
     assert prompts.PREFERENCE_CAPTURE_CONVENTION in text
     assert prompts.CHECKIN_SEMANTICS in text
+
+
+def test_the_morning_conversation_loads_its_scopes_in_the_words_the_prompts_use():
+    """#1493: the paragraph is hand-copied out of ``_load_scope``, which no scheduled task can
+    call, so only this holds the overnight wording to what an interactive session is told."""
+    assert " ".join(prompts._load_scope(prompts.SCHEDULING_SCOPE).split()) in _unwrapped(MORNING)
 
 
 @pytest.mark.parametrize("name", (RESOLUTION, LEARNING))

@@ -96,8 +96,12 @@ def _entries_since(session, count_before):
     ).all()
 
 
+def _tools():
+    return {tool.name: tool for tool in asyncio.run(reli_mcp.list_tools())}
+
+
 def _tool_schemas():
-    return {tool.name: tool.inputSchema for tool in asyncio.run(reli_mcp.list_tools())}
+    return {name: tool.inputSchema for name, tool in _tools().items()}
 
 
 # --- The surface -----------------------------------------------------------
@@ -551,6 +555,15 @@ def test_no_user_model_payload_carries_a_confidence_score(tools):
     )
 
     assert "confidence" not in json.dumps(get_user_model())
+
+
+def test_the_user_model_tools_name_the_voice_scope_in_their_descriptions():
+    """#1493: a session that calls a tool without picking a prompt first sees only these, so a
+    scope missing from them is a scope that session never learns exists."""
+    tools = _tools()
+
+    assert f"'{prompts.VOICE_SCOPE}'" in tools["record_preference"].description
+    assert f"'{prompts.VOICE_SCOPE}'" in tools["get_user_model"].description
 
 
 # --- Prompts: the hats ------------------------------------------------------
