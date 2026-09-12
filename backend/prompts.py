@@ -16,10 +16,11 @@ constants so a test can prove each prompt carries them. The voice is one constan
 states how the assistant sounds and, in the same breath, that sounding sure is never being sure,
 because a guardrail in a section of its own is a section a later edit drops.
 
-Every prompt also names the one preference scope it loads, and the labels below are the scope
+Every prompt also names the preference scopes it loads, and the labels below are the scope
 vocabulary: a prompt loads and records under the same label, because
 :func:`backend.queries.user_model` matches scope exactly and a preference recorded under a label
-nobody loads is never seen again.
+nobody loads is never seen again. Every prompt loads two — the one for its mode and ``voice``,
+which holds how the user has moved the assistant off the default voice (#1493).
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ CAPTURE_SCOPE = "capture"
 SCHEDULING_SCOPE = "scheduling"
 PLANNING_SCOPE = "planning"
 REVIEW_SCOPE = "review"
+VOICE_SCOPE = "voice"
 
 PREFERENCE_CAPTURE_CONVENTION = f"""\
 ## Recording preferences
@@ -43,6 +45,15 @@ preference. The user rewriting your title to something shorter, for the third ti
 preference — record it and cite the three moments. "Move that to Thursday" on its own is not — it \
 is a single instruction, and it becomes evidence for a preference only when the journal shows it \
 happening repeatedly. "Not now" is not a preference either; it is a check-in date.
+
+Some preferences are about how you sound, and those go under the scope "{VOICE_SCOPE}", with \
+evidence, like any other. "Stop being so cheerful about my tax return" is one. "Just give me the \
+answer", said again in a later session, is one; said once it is an instruction for that turn. The \
+user rewriting your phrasing, or answering in a word where they used to answer in three lines, is \
+evidence for one. Record it as narrowly as it was said — "Be blunter about money" is about money, \
+and widening it into a rule for everything is a preference the user never stated. A \
+{VOICE_SCOPE} preference overrides the default voice; two that contradict are a conflict like any \
+other, and the morning conversation is where the user rules on it.
 
 Evidence is required and must be Things: the Thing the conversation was about, or a Thing tagged \
 {OBSERVATION_TAG} with notes.journal_entry_id standing for the journal entry. Before recording, call \
@@ -100,16 +111,18 @@ HAT_ORIENTATION = """\
 This is the default behaviour and not the whole of it. When the conversation moves into planning \
 the day, breaking a project into pieces, or reviewing a part of the graph, load the matching \
 prompt — `daily-planning`, `project-planning` or `review` — and let it take over: each loads its \
-own preference scope and carries the procedure for that mode.\
+own preference scope beside `voice` and carries the procedure for that mode.\
 """
 
 
 def _load_scope(scope: str) -> str:
     return (
-        f"Preference scope: **{scope}**. Before anything else, load it with "
-        f'`get_user_model(scope="{scope}")` or read `reli://user-model/{scope}`, and let what it holds '
-        f'shape everything below. Record any preference you notice here under the scope "{scope}" '
-        "unless it plainly belongs to another."
+        f"Preference scopes: **{scope}** and **{VOICE_SCOPE}**. Before anything else, load both — "
+        f'`get_user_model(scope="{scope}")` and `get_user_model(scope="{VOICE_SCOPE}")`, or read '
+        f"`reli://user-model/{scope}` and `reli://user-model/{VOICE_SCOPE}` — and let what they hold "
+        f"shape everything below: {scope} shapes what you do, {VOICE_SCOPE} shapes how you sound. "
+        f'Record any preference you notice here under the scope "{scope}", unless it is about how you '
+        f'sound — that is "{VOICE_SCOPE}" — or it plainly belongs to another.'
     )
 
 

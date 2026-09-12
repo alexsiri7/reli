@@ -50,9 +50,9 @@ piece of evidence, not recorded a second time.
 
 ## Patterns and their scopes
 
-Look for these, and record each under the scope named — the four labels are the whole vocabulary,
-because the interactive prompts load preferences by exact scope and a label nobody loads is a
-preference nobody ever sees:
+Look for these, and record each under the scope named — `capture`, `scheduling`, `planning` and
+`review` are the labels open to this pass, because the interactive prompts load preferences by
+exact scope and a label nobody loads is a preference nobody ever sees:
 
 - **Check-in dates repeatedly pushed, and from which day to which.** `update` entries where
   `before.checkin_date` differs from `after.checkin_date`, on the same Thing or from the same
@@ -70,6 +70,16 @@ preference nobody ever sees:
 One entry is not a pattern. A preference needs at least two supporting entries — the same rule
 the capture convention gives an interactive session: "Move that to Thursday" on its own is a single
 instruction, and it becomes evidence only when the journal shows it happening repeatedly.
+
+## What this pass cannot learn
+
+Voice is not journal-derivable. The journal records graph mutations — a Thing created, a date
+moved, a tag added — and holds nothing about how either of you sounded while it happened. It
+cannot show that the user was curt, that they rewrote a sentence you said to them, or that they
+asked you to stop being cheerful about the tax return. So this pass never records a preference
+under the voice scope, and never reads tone out of mutation data: a run of titles the user
+shortened is a `capture` pattern about titles, not evidence about how they want to be spoken to.
+Voice is learned in conversation, from what the user says outright, by the sessions that have one.
 
 ## Record what you found
 

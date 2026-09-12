@@ -53,6 +53,7 @@ HEARTBEAT_TITLES = {RESOLUTION: "Resolution pass", LEARNING: "Learning pass", MO
 # constant but not that this clause survives a reword of it.
 CHECKIN_FALLBACK = "when you cannot tell, the check-in is not resolved"
 VOICE_GUARDRAIL = "Confidence of manner is never confidence of fact."
+VOICE_PRECEDENCE = "overrides the default voice"
 
 RESOLUTION_LITERALS = (
     "due_for_checkin",
@@ -82,10 +83,13 @@ LEARNING_LITERALS = (
     "add_preference_evidence",
     "record_preference",
     "One entry is not a pattern.",
+    "Voice is not journal-derivable.",
 )
 MORNING_LITERALS = (
     f'get_user_model(scope="{prompts.SCHEDULING_SCOPE}")',
     f"reli://user-model/{prompts.SCHEDULING_SCOPE}",
+    f'get_user_model(scope="{prompts.VOICE_SCOPE}")',
+    f"reli://user-model/{prompts.VOICE_SCOPE}",
     BRIEFING_TAG,
     OBSERVATION_TAG,
     "reject_preference",
@@ -93,13 +97,29 @@ MORNING_LITERALS = (
     "A morning chat that only reports is a notification with extra steps.",
     "every write that encodes something the user said",
     CHECKIN_FALLBACK,
+    VOICE_PRECEDENCE,
 )
 SCOPE_ARGUMENT = re.compile(r'scope="([a-z]+)"')
-SCOPES = {prompts.CAPTURE_SCOPE, prompts.SCHEDULING_SCOPE, prompts.PLANNING_SCOPE, prompts.REVIEW_SCOPE}
+# The whole scope vocabulary, and the part of it this pass may record under: the prompts that
+# speak to the user load voice too, but the journal holds mutations rather than conversation, so
+# nothing in a pass's input is evidence about tone (#1493).
+SCOPES = {
+    prompts.CAPTURE_SCOPE,
+    prompts.SCHEDULING_SCOPE,
+    prompts.PLANNING_SCOPE,
+    prompts.REVIEW_SCOPE,
+    prompts.VOICE_SCOPE,
+}
+RECORDABLE_BY_THE_LEARNING_PASS = SCOPES - {prompts.VOICE_SCOPE}
 
 
 def _text(name):
     return (PROMPTS / name).read_text()
+
+
+def _unwrapped(name):
+    """The files wrap their lines; the constants they copy do not."""
+    return " ".join(_text(name).split())
 
 
 # --- The files -------------------------------------------------------------
@@ -139,6 +159,12 @@ def test_the_morning_conversation_carries_both_conventions_verbatim():
     assert prompts.CHECKIN_SEMANTICS in text
 
 
+def test_the_morning_conversation_loads_its_scopes_in_the_words_the_prompts_use():
+    """#1493: the paragraph is hand-copied out of ``_load_scope``, which no scheduled task can
+    call, so only this holds the overnight wording to what an interactive session is told."""
+    assert " ".join(prompts._load_scope(prompts.SCHEDULING_SCOPE).split()) in _unwrapped(MORNING)
+
+
 @pytest.mark.parametrize("name", (RESOLUTION, LEARNING))
 def test_the_overnight_passes_write_as_claude_scheduled_only(name):
     """A bare ``claude_interactive`` check would fail a correct learning pass, which names it in
@@ -168,10 +194,12 @@ def test_the_learning_pass_reads_the_journal_by_actor_and_checks_rejections(lite
 
 
 def test_the_learning_pass_records_only_under_the_scopes_the_prompts_load():
+    """#1493: voice among them would be tone read out of mutation data, which the journal holds
+    nothing about. The limitation is prose; this is what holds the pass to it."""
     named = set(SCOPE_ARGUMENT.findall(_text(LEARNING)))
 
     assert named
-    assert named <= SCOPES
+    assert named <= RECORDABLE_BY_THE_LEARNING_PASS
 
 
 @pytest.mark.parametrize("literal", MORNING_LITERALS)

@@ -575,8 +575,9 @@ def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: lis
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
         title: The preference stated plainly — "Prefers deep work 9-11am".
         scope: What it applies to — one of the labels the prompts load: 'capture', 'scheduling',
-            'planning' or 'review'. get_user_model matches it exactly (case aside), so a label no
-            prompt loads is a preference no session ever sees.
+            'planning', 'review', or 'voice' for how the user wants you to sound. get_user_model
+            matches it exactly (case aside), so a label no prompt loads is a preference no session
+            ever sees.
         evidence_ids: The Things that support it. At least one.
 
     Returns:
@@ -643,8 +644,9 @@ def get_user_model(scope: str | None = None, include_rejected: bool = False) -> 
     """What Reli knows about the user: their preferences and the evidence behind each one.
 
     Pass a scope to load what this session needs rather than everything — 'scheduling' for daily
-    planning, not naming conventions. Matching is exact apart from case, so use the scope labels
-    already in the model.
+    planning, not naming conventions. 'voice' holds how the user wants you to sound and every
+    session loads it beside its own scope. Matching is exact apart from case, so use the scope
+    labels already in the model.
 
     Args:
         scope: Only preferences declaring this scope; omitted returns all of them.
@@ -689,8 +691,8 @@ def scoped_user_model_resource(scope: str) -> dict[str, Any]:
 # The text lives in backend.prompts; these register it. A prompt reaches a session only when the
 # user picks it, so the default behaviour is a tool as well: any session can call it, and nothing
 # outside this repository needs to restate it. Each prompt's description names the preference
-# scope it loads, because the description is what a connected session shows before the prompt is
-# picked.
+# scopes it loads — its own and 'voice' — because the description is what a connected session
+# shows before the prompt is picked.
 
 
 @reli_mcp.tool()
@@ -712,7 +714,7 @@ def get_initial_instructions() -> str:
     description=(
         "The default behaviour: what is worth a Thing, how to title and tag it, when to set a "
         f"check-in date, and when to relate rather than create. Loads the '{prompts.CAPTURE_SCOPE}' "
-        "preference scope."
+        f"and '{prompts.VOICE_SCOPE}' preference scopes."
     ),
 )
 def capture_prompt() -> str:
@@ -724,7 +726,7 @@ def capture_prompt() -> str:
     title="Daily planning",
     description=(
         "The daily hat: resolves what is due for check-in, then shapes a plan for the day. "
-        f"Loads the '{prompts.SCHEDULING_SCOPE}' preference scope."
+        f"Loads the '{prompts.SCHEDULING_SCOPE}' and '{prompts.VOICE_SCOPE}' preference scopes."
     ),
 )
 def daily_planning_prompt() -> str:
@@ -736,7 +738,8 @@ def daily_planning_prompt() -> str:
     title="Project planning",
     description=(
         "The project hat: breaks a piece of work into Things related by ChildOf and Blocks, each "
-        f"with a check-in date. Loads the '{prompts.PLANNING_SCOPE}' preference scope."
+        f"with a check-in date. Loads the '{prompts.PLANNING_SCOPE}' and '{prompts.VOICE_SCOPE}' "
+        "preference scopes."
     ),
 )
 def project_planning_prompt() -> str:
@@ -748,7 +751,8 @@ def project_planning_prompt() -> str:
     title="Review",
     description=(
         "The review hat: walks a part of the graph, archives what is done and re-dates what has "
-        f"drifted. Loads the '{prompts.REVIEW_SCOPE}' preference scope."
+        f"drifted. Loads the '{prompts.REVIEW_SCOPE}' and '{prompts.VOICE_SCOPE}' preference "
+        "scopes."
     ),
 )
 def review_prompt() -> str:

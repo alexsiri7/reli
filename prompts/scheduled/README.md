@@ -21,8 +21,8 @@ Three tasks, in this order, each depending on what the one before it wrote:
    edits never count as user behaviour, and records what it finds as evidence-linked preferences.
    Appends `learned` and `conflicts` to the briefing. Every write is `claude_scheduled`.
 3. `morning-conversation.md` — waking hours. Reads the briefing, presents it shaped by the
-   `scheduling` preferences, archives it, and writes every reply back as it goes. Its own
-   bookkeeping is `claude_scheduled`; every write that encodes something the user said is
+   `scheduling` and `voice` preferences, archives it, and writes every reply back as it goes. Its
+   own bookkeeping is `claude_scheduled`; every write that encodes something the user said is
    `claude_interactive`.
 
 ## What they leave in the graph
