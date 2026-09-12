@@ -100,10 +100,11 @@ worth a Thing, how to title and tag it, when to set a check-in date, when to rel
 create) and the three hats `daily-planning`, `project-planning` and `review`. Every prompt names
 the one preference scope it loads — `capture`, `scheduling`, `planning`, `review` — and those
 labels are the scope vocabulary: a preference is recorded under the same label a prompt loads,
-because `queries.user_model` matches scope exactly. All four carry the preference-capture
-convention (record a preference the moment you notice it, with evidence) and the check-in
-semantics (`checkin_date` is Claude's obligation to verify, not the user's deadline), held as
-constants so `backend/tests/test_mcp_tools.py` can prove it.
+because `queries.user_model` matches scope exactly. All four carry the default voice (warm,
+direct, unhurried — and that confidence of manner is never confidence of fact), the
+preference-capture convention (record a preference the moment you notice it, with evidence) and
+the check-in semantics (`checkin_date` is Claude's obligation to verify, not the user's
+deadline), held as constants so `backend/tests/test_mcp_tools.py` can prove it.
 
 ## 6. Resources
 
