@@ -1,10 +1,9 @@
 """The three scheduled-task prompts under ``prompts/scheduled/`` (#1413).
 
 The passes are prose run by an external Claude, so this repository cannot prove Claude will follow
-them. It can prove four things, and these tests are scoped to exactly those: the files say what
+them. It can prove three things, and these tests are scoped to exactly those: the files say what
 the issue requires, the tool chain a pass follows produces the end state the acceptance criteria
-name, the actor filter the learning pass relies on is mechanical rather than a sentence, and the
-watchdog's script — run as Actions runs it — flags exactly the heartbeats a missed run leaves.
+name, and the actor filter the learning pass relies on is mechanical rather than a sentence.
 
 The content tests assert exact literals against prose, so every literal lives in the tuples at the
 top: a wording change fails one obvious place. Two spelling rules make them mechanical — a write's
@@ -12,16 +11,12 @@ attribution is always ``actor="..."`` (which separates it from the ``actors=[...
 and a preference scope is always ``scope="..."``.
 """
 
-import json
 import re
-import shutil
-import subprocess
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-import yaml
 from sqlalchemy import text
 
 from backend import db_models, prompts
@@ -41,7 +36,6 @@ from backend.mcp_server import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROMPTS = REPO_ROOT / "prompts" / "scheduled"
-WATCHDOG = REPO_ROOT / ".github" / "workflows" / "scheduled-run-health.yml"
 
 RESOLUTION = "resolution-pass.md"
 LEARNING = "learning-pass.md"
@@ -167,163 +161,13 @@ def test_every_task_maintains_its_heartbeat(name):
     assert "tomorrow" in text
 
 
-def test_the_watchdog_reads_the_same_heartbeat_tag_the_prompts_write():
-    """A rename in either place would silently kill the missed-run signal.
+def test_the_prompts_write_the_heartbeat_tag_the_module_defines():
+    """The literal asserted against the prose above must be the one constant the code holds.
 
-    The filtering moved into ``/api/heartbeats`` (#1471), so the tag the prompts are asserted
-    against above has to be the constant that endpoint selects on.
+    A rename in only one place would silently kill the missed-run signal: the passes would tag
+    their heartbeats one way and ``due_for_checkin`` would surface them by another.
     """
-    workflow = WATCHDOG.read_text()
-
     assert SCHEDULED_TASK_TAG == db_models.SCHEDULED_TASK_TAG
-    assert "checkin_date != null" in workflow
-    assert "/api/heartbeats" in workflow
-
-
-# --- The watchdog, run as GitHub Actions runs it -------------------------
-
-# The date the stubbed `date` answers, so the fixtures below are fixed rather than wall-clock
-# relative and both sides of the `<=` are reachable.
-WATCHDOG_TODAY = "2026-09-11"
-TOMORROW = "2026-09-12"
-WATCHDOG_TOOLS = ("bash", "jq", "paste")
-HEARTBEAT_ISSUE_TITLES = {
-    "absent": "Scheduled pass missed — a heartbeat is absent",
-    "due": "Scheduled pass missed — a heartbeat is still due",
-}
-
-
-def _heartbeat(title: str, checkin_date: str | None) -> dict:
-    """One ``HeartbeatOut``: ``/api/heartbeats`` has already selected the tag and dropped the rest."""
-    return {"id": str(uuid.uuid4()), "title": title, "checkin_date": checkin_date}
-
-
-def _heartbeats(
-    resolution: str | None = TOMORROW, learning: str | None = TOMORROW, morning: str | None = TOMORROW
-) -> list[dict]:
-    return [
-        _heartbeat(HEARTBEAT_TITLES[RESOLUTION], resolution),
-        _heartbeat(HEARTBEAT_TITLES[LEARNING], learning),
-        _heartbeat(HEARTBEAT_TITLES[MORNING], morning),
-    ]
-
-
-def _watchdog_script() -> str:
-    workflow = yaml.safe_load(WATCHDOG.read_text())
-    (step,) = workflow["jobs"]["check-heartbeats"]["steps"]
-    return step["run"]
-
-
-def _run_watchdog(
-    tmp_path: Path, heartbeats: list[dict], *, gh_fails: bool = False
-) -> tuple[subprocess.CompletedProcess, list[str]]:
-    """Run the step's script under the shell Actions gives a `run:` step, on a PATH holding its
-    genuine externals plus stubs: `curl` serves `heartbeats` as `/api/heartbeats` — with no
-    credential, as the job now sends none — and logs an ntfy post, `gh` logs every call and prints
-    no open issue, `date` answers `WATCHDOG_TODAY`."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    for tool in WATCHDOG_TOOLS:
-        real = shutil.which(tool)
-        assert real, f"{tool} is not installed; the watchdog needs it"
-        (bin_dir / tool).symlink_to(real)
-    body = tmp_path / "heartbeats.json"
-    body.write_text(json.dumps({"heartbeats": heartbeats}))
-    log = tmp_path / "calls.log"
-    stubs = {
-        "date": f'echo "{WATCHDOG_TODAY}"\n',
-        "curl": (
-            f'case "$*" in *"/api/heartbeats"*) printf "%s" "$(< "{body}")" ;; '
-            f'*ntfy.sh/*) echo "curl $*" >> "{log}" ;; *) exit 22 ;; esac\n'
-        ),
-        "gh": f'echo "gh $*" >> "{log}"\nexit {1 if gh_fails else 0}\n',
-    }
-    for name, script in stubs.items():
-        stub = bin_dir / name
-        stub.write_text("#!/usr/bin/env bash\n" + script)
-        stub.chmod(0o755)
-    env = {
-        "PATH": str(bin_dir),
-        "RAILWAY_PRODUCTION_URL": "https://reli.example",
-        "NTFY_TOPIC": "reli-test",
-        "GH_TOKEN": "stub",
-    }
-    result = subprocess.run(
-        [str(bin_dir / "bash"), "--noprofile", "--norc", "-eo", "pipefail", "-c", _watchdog_script()],
-        cwd=tmp_path,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-    calls = log.read_text().splitlines() if log.exists() else []
-    return result, calls
-
-
-def _issues_created(calls: list[str]) -> list[str]:
-    return [call for call in calls if call.startswith("gh issue create ")]
-
-
-def _notifications(calls: list[str]) -> list[str]:
-    return [call for call in calls if call.startswith("curl ")]
-
-
-def test_the_watchdog_is_quiet_when_every_heartbeat_was_pushed_past_today(tmp_path):
-    result, calls = _run_watchdog(tmp_path, _heartbeats())
-
-    assert result.returncode == 0, result.stderr
-    assert "All 3 scheduled passes have run since yesterday." in result.stdout
-    assert calls == []
-
-
-@pytest.mark.parametrize("still_due", (WATCHDOG_TODAY, "2026-09-10"))
-def test_the_watchdog_names_the_heartbeat_still_due_today_or_earlier(tmp_path, still_due):
-    result, calls = _run_watchdog(tmp_path, _heartbeats(learning=still_due))
-
-    assert result.returncode == 1
-    message = f"Still due on {WATCHDOG_TODAY}, so the last run did not complete: Learning pass."
-    (issue,) = _issues_created(calls)
-    assert f"--title {HEARTBEAT_ISSUE_TITLES['due']}" in issue
-    assert message in issue
-    (notification,) = _notifications(calls)
-    assert message in notification
-
-
-def test_the_watchdog_lists_every_heartbeat_still_due(tmp_path):
-    result, calls = _run_watchdog(tmp_path, _heartbeats(resolution=WATCHDOG_TODAY, learning=WATCHDOG_TODAY))
-
-    assert result.returncode == 1
-    (issue,) = _issues_created(calls)
-    assert "did not complete: Resolution pass,Learning pass." in issue
-
-
-def test_the_watchdog_does_not_flag_a_heartbeat_without_a_date(tmp_path):
-    """In jq, null <= a string is true; the guard keeps a dateless heartbeat from reading as due."""
-    result, calls = _run_watchdog(tmp_path, _heartbeats(resolution=None, learning=None, morning=None))
-
-    assert result.returncode == 0, result.stderr
-    assert calls == []
-
-
-def test_the_watchdog_counts_the_heartbeats_before_it_reads_their_dates(tmp_path):
-    result, calls = _run_watchdog(tmp_path, _heartbeats(learning=WATCHDOG_TODAY)[:2])
-
-    assert result.returncode == 1
-    message = "Only 2 of the three #ScheduledTask heartbeats exist: a pass has never run."
-    (issue,) = _issues_created(calls)
-    assert f"--title {HEARTBEAT_ISSUE_TITLES['absent']}" in issue
-    assert message in issue
-    (notification,) = _notifications(calls)
-    assert message in notification
-
-
-def test_a_missed_run_is_notified_even_when_filing_the_issue_fails(tmp_path):
-    """The step runs under `-e`, so a failing `gh` aborts whatever comes after it. The ntfy ping is
-    the time-sensitive channel and must not depend on the issue."""
-    result, calls = _run_watchdog(tmp_path, _heartbeats(resolution=WATCHDOG_TODAY), gh_fails=True)
-
-    assert result.returncode != 0
-    (notification,) = _notifications(calls)
-    assert "did not complete: Resolution pass." in notification
 
 
 # --- The acceptance scenarios, as the tool calls a pass makes ------------

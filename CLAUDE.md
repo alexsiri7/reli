@@ -27,6 +27,13 @@ Non-negotiables from `docs/vision.md`. They hold even when a bead description or
   verbatim, which is not a restatement: `backend/tests/test_scheduled_prompts.py` fails when they
   diverge.
 - **This repository is public.** No real user data is ever committed to it. This covers, and is not limited to: graph exports or database dumps; statistics derived from real data, including tag frequencies and counts; recorded Gmail or Calendar fixtures; briefing Things; preference Things and their evidence; and logs containing Thing titles or notes. Test fixtures are synthetic and written by hand. If a task appears to require real data in the repository, that is a design error — send mail to mayor rather than committing it.
+- **Nothing in GitHub Actions reads the graph.** No workflow, job or automation in this
+  repository may read an `/api` route or anything else that answers with Things. `/healthz` and
+  the Railway and GitHub APIs carry no graph content and stay. GitHub issues are never an
+  alerting channel for anything touching user data — alerting for a private system goes to ntfy
+  or to the user's own chat. Whether the scheduled passes ran is noticed in-session, by the
+  heartbeat Thing falling due, not by an external job (#1484).
+  `backend/tests/test_gates.py` scans the workflows and fails on an `/api` read.
 
 The merged code now follows these rules: #1408 deleted the LLM pipeline, replaced the schema and made hierarchy a `ChildOf` relationship. The five relationship-type literals are defined once, in `RelationshipType` in `backend/db_models.py` — use them, do not invent a sixth without an issue that asks for it.
 
