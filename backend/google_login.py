@@ -1,9 +1,8 @@
-"""The only code that reaches Google for sign-in, and the second place a Google credential is read.
+"""The only code that reaches Google, and the only place a Google credential is read.
 
-The same ``GOOGLE_CLIENT_ID`` and ``GOOGLE_CLIENT_SECRET`` that :mod:`backend.google_client` uses
-for the read-only Calendar and Gmail grant identify Reli to Google here too, with
-``GOOGLE_AUTH_REDIRECT_URI`` as the address Google sends the browser back to. The same invariant
-holds: nothing here persists anything. The identity that comes out of an exchange is returned to
+``GOOGLE_CLIENT_ID`` and ``GOOGLE_CLIENT_SECRET`` identify Reli to Google, with
+``GOOGLE_AUTH_REDIRECT_URI`` as the address Google sends the browser back to. The invariant is that
+nothing here persists anything. The identity that comes out of an exchange is returned to
 the caller and never written by this module, and the access token Google sends beside the id token
 is never read.
 
@@ -25,11 +24,12 @@ import httpx
 import jwt
 
 from .config import settings
-from .google_client import TOKEN_URL
 
 AUTH_SCOPES: tuple[str, ...] = ("openid", "email", "profile")
 
 AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+
+TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 ISSUERS: tuple[str, ...] = ("https://accounts.google.com", "accounts.google.com")
 

@@ -45,14 +45,10 @@ class Settings(BaseSettings):
     # The issuer and the base of the OAuth metadata documents. When empty it is derived from
     # GOOGLE_AUTH_REDIRECT_URI's scheme and host.
     RELI_BASE_URL: str = ""
-
-    # --- Google (read-only Calendar and Gmail) ---
-    # Human-provisioned, exactly like the sign-in settings: a person runs
-    # scripts/google_oauth_grant.py once and pastes the refresh token here. Empty defaults keep an
-    # unconfigured deploy booting — only the three Google tools fail, and they say what to set.
+    # The Web application OAuth client that identifies Reli to Google during a sign-in. #1488
+    # deleted the Calendar and Gmail readers, so this is the only Google credential Reli holds.
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REFRESH_TOKEN: str = ""
 
     # --- Logging ---
     LOG_LEVEL: str = "INFO"

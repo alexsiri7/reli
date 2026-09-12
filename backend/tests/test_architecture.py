@@ -47,7 +47,7 @@ def test_records_are_constructed_only_by_the_service_layer(record):
     assert offenders == [], f"{record} is constructed outside the service layer by {offenders}"
 
 
-GOOGLE_MODULES = ("google_client.py", "google_readers.py", "google_login.py")
+GOOGLE_MODULES = ("google_login.py",)
 
 # #938 was a Gmail token left on disk after a migration. What keeps it from recurring is that the
 # code holding a Google credential has no way to write one down.

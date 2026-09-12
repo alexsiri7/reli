@@ -14,8 +14,13 @@ import pytest
 
 from backend import google_login
 from backend.config import settings
-from backend.google_client import TOKEN_URL
-from backend.google_login import GoogleSignInFailed, authorization_url, exchange_code, s256_challenge
+from backend.google_login import (
+    TOKEN_URL,
+    GoogleSignInFailed,
+    authorization_url,
+    exchange_code,
+    s256_challenge,
+)
 
 CLIENT_ID = "client-id.apps.googleusercontent.com"
 CLIENT_SECRET = "s3cret-client-secret"

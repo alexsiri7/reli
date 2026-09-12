@@ -17,15 +17,6 @@ def test_database_url_is_returned_verbatim():
     assert Settings(DATABASE_URL=url).database_url == url
 
 
-def test_google_settings_default_to_empty_and_do_not_raise():
-    """Unlike database_url, an unset Google credential must never stop the boot."""
-    settings = Settings(DATABASE_URL="x")
-
-    assert settings.GOOGLE_CLIENT_ID == ""
-    assert settings.GOOGLE_CLIENT_SECRET == ""
-    assert settings.GOOGLE_REFRESH_TOKEN == ""
-
-
 def test_sign_in_settings_default_to_empty_and_do_not_raise():
     """The Google sign-in settings close the sign-in when unset; none of them may stop the boot."""
     settings = Settings(DATABASE_URL="x")
@@ -34,6 +25,13 @@ def test_sign_in_settings_default_to_empty_and_do_not_raise():
     assert settings.ALLOWED_EMAILS == ""
     assert settings.GOOGLE_AUTH_REDIRECT_URI == ""
     assert settings.RELI_BASE_URL == ""
+    assert settings.GOOGLE_CLIENT_ID == ""
+    assert settings.GOOGLE_CLIENT_SECRET == ""
+
+
+def test_no_google_data_credential_setting_survives():
+    """#1488: the Calendar and Gmail grant is gone, so nothing may read a refresh token."""
+    assert not hasattr(Settings(DATABASE_URL="x"), "GOOGLE_REFRESH_TOKEN")
 
 
 def test_allowed_emails_is_parsed_lower_cased_and_empty_admits_nobody():
