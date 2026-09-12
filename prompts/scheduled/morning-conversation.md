@@ -31,8 +31,8 @@ to.
 
 ## Present
 
-`find_events` for today first, so the day is shaped around the calendar that exists. Then, from the
-briefing's notes, in this order:
+Read today's calendar through this session's own Calendar connector first, so the day is shaped
+around the calendar that exists. Then, from the briefing's notes, in this order:
 
 1. `decisions` — each one as the question it is, one line, the choice stated plainly.
 2. `unresolved` — each one with what would settle it, so the user can answer in a word.
@@ -54,7 +54,7 @@ Decisions go to the individual Things, never back into the briefing.
 
 A check-in date is your obligation, not the user's. It means: by this date, establish whether this is still true. Most check-ins should be resolved without involving the user — look at Calendar, Gmail, or the state of related Things first. Only surface it if you genuinely cannot settle it yourself or a decision is needed.
 
-`find_events`, `find_correspondence` and `check_occurred` are read-only lookups into the user's Calendar and Gmail for exactly this. They return evidence, not a verdict: an empty result can mean it did not happen or that it left no trace, and telling those apart is your job. A deadline that matters to the outside world belongs in `notes`, not in `checkin_date` — the check-in is about when the Thing next needs your attention.
+Look through the Calendar and Gmail connectors attached to this session. What they return is evidence, not a verdict: an empty result can mean it did not happen or that it left no trace, and telling those apart is your job — when you cannot tell, the check-in is not resolved. A deadline that matters to the outside world belongs in `notes`, not in `checkin_date` — the check-in is about when the Thing next needs your attention.
 
 ## Write back as you go
 
