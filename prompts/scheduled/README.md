@@ -5,11 +5,17 @@ saved prompt for a Claude scheduled task with Reli's MCP connector attached — 
 interactive session uses, through the same Google sign-in. The files are plain prose with no
 placeholders, so each is pasted into its task as-is.
 
+The resolution pass and the morning conversation also need the user's **Calendar and Gmail
+connectors attached alongside Reli's** (#1487): a check-in on a booked flight is settled by the
+session reading the confirmation itself, not by Reli. That attachment is a human setup step, and a
+resolution pass that finds the connectors missing records that in the briefing rather than resolving
+nothing. The learning pass reads only the journal and the graph, so it needs neither.
+
 Three tasks, in this order, each depending on what the one before it wrote:
 
-1. `resolution-pass.md` — overnight. Walks `due_for_checkin`, settles what it can from Calendar,
-   Gmail and the graph, and writes the day's `#Briefing` Thing holding only what it could not
-   settle. Every write is `claude_scheduled`.
+1. `resolution-pass.md` — overnight. Walks `due_for_checkin`, settles what it can from the
+   session's own Calendar and Gmail and from the graph, and writes the day's `#Briefing` Thing
+   holding only what it could not settle. Every write is `claude_scheduled`.
 2. `learning-pass.md` — overnight, at least half an hour later. Reads the journal since its last
    run with `journal_since`, filtered to `user` and `claude_interactive` so Claude's own unattended
    edits never count as user behaviour, and records what it finds as evidence-linked preferences.

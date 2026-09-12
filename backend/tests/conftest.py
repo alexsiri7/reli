@@ -22,6 +22,11 @@ from sqlmodel import Session
 
 GOOGLE_FIXTURES = Path(__file__).parent / "fixtures" / "google"
 
+# Hard-coded rather than taken from ``backend.google_readers`` or the MCP tool list: #1488 deletes
+# those tools, and the guard that no prompt sends a session to one of them has to outlive them
+# (#1487). One definition, so the two absence-guard suites cannot check different sets.
+RETIRED_GOOGLE_TOOL_NAMES = ("find_events", "find_correspondence", "check_occurred")
+
 # Keep test failures out of the production Sentry project.
 os.environ.setdefault("SENTRY_DSN", "")
 

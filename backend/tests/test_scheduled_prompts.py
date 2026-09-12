@@ -25,7 +25,6 @@ from backend.mcp_server import (
     archive_thing,
     create_thing,
     due_for_checkin,
-    find_correspondence,
     get_related,
     get_thing_history,
     get_user_model,
@@ -33,6 +32,7 @@ from backend.mcp_server import (
     record_preference,
     update_thing,
 )
+from backend.tests.conftest import RETIRED_GOOGLE_TOOL_NAMES
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROMPTS = REPO_ROOT / "prompts" / "scheduled"
@@ -49,17 +49,25 @@ INTERACTIVE = 'actor="claude_interactive"'
 
 HEARTBEAT_TITLES = {RESOLUTION: "Resolution pass", LEARNING: "Learning pass", MORNING: "Morning conversation"}
 
+# Pinned on its own: the convention below is carried verbatim, which proves a file matches the
+# constant but not that this clause survives a reword of it.
+CHECKIN_FALLBACK = "when you cannot tell, the check-in is not resolved"
+
 RESOLUTION_LITERALS = (
     "due_for_checkin",
     "archive_thing",
-    "find_correspondence",
-    "check_occurred",
     "needs_input()",
     BRIEFING_TAG,
     "#NeedsInput",
     "References",
     "The user never hears about it.",
     "write the union",
+    "expected to be attached to this scheduled task",
+    "record the missing connectors",
+    "paging an inbox into context",
+    "never sends mail",
+    "goes to `unresolved`",
+    CHECKIN_FALLBACK,
 )
 LEARNING_LITERALS = (
     "journal_since",
@@ -83,6 +91,7 @@ MORNING_LITERALS = (
     "did not complete last night",
     "A morning chat that only reports is a notification with extra steps.",
     "every write that encodes something the user said",
+    CHECKIN_FALLBACK,
 )
 SCOPE_ARGUMENT = re.compile(r'scope="([a-z]+)"')
 SCOPES = {prompts.CAPTURE_SCOPE, prompts.SCHEDULING_SCOPE, prompts.PLANNING_SCOPE, prompts.REVIEW_SCOPE}
@@ -99,6 +108,13 @@ def _text(name):
 def test_the_three_prompt_files_exist_and_are_not_empty(name):
     assert _text(name).strip()
     assert _text(name).startswith("# ")
+
+
+@pytest.mark.parametrize("name", FILES)
+@pytest.mark.parametrize("tool", RETIRED_GOOGLE_TOOL_NAMES)
+def test_no_pass_reaches_for_a_reli_google_tool(name, tool):
+    """#1487: a pass looks through the connectors attached to its own session."""
+    assert tool not in _text(name)
 
 
 def test_the_resolution_pass_carries_the_checkin_semantics_verbatim():
@@ -177,14 +193,16 @@ def _newest_journal_id(session):
     return session.execute(text("SELECT coalesce(max(id), 0) FROM journal")).scalar_one()
 
 
-def test_a_checkin_settled_from_gmail_is_archived_without_a_briefing_entry(tools, google):
-    """Criterion 2: the Thing is archived by claude_scheduled and the briefing never mentions it."""
+def test_a_checkin_the_pass_settled_is_archived_without_a_briefing_entry(tools):
+    """Criterion 2: the Thing is archived by claude_scheduled and the briefing never mentions it.
+
+    The lookup that settles it happens in the session's own Gmail and Calendar (#1487), so it is
+    not a tool call this repository can make. What remains here is the graph side.
+    """
     today = datetime.now(UTC).date()
     thing = create_thing(actor="claude_interactive", title="Confirm the dentist appointment", checkin_date=today)
 
     assert thing["id"] in {due["id"] for due in due_for_checkin()}
-    found = find_correspondence("dentist appointment", since=today - timedelta(days=7))
-    assert any(message["subject"] == "Appointment confirmed" for message in found)
 
     archived = archive_thing(actor="claude_scheduled", thing_id=uuid.UUID(thing["id"]))
     briefing = create_thing(

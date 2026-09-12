@@ -47,6 +47,7 @@ from backend.mcp_server import (
     update_thing,
 )
 from backend.service import ThingNotFound
+from backend.tests.conftest import RETIRED_GOOGLE_TOOL_NAMES
 
 TOOL_NAMES = {
     "create_thing",
@@ -589,6 +590,20 @@ def test_every_prompt_states_what_a_checkin_date_means(name):
     assert prompts.CHECKIN_SEMANTICS in text
     assert "A check-in date is your obligation, not the user's." in text
     assert "resolved without involving the user" in text
+    assert "evidence, not a verdict" in text
+    assert "when you cannot tell, the check-in is not resolved" in text
+
+
+@pytest.mark.parametrize("name", sorted(PROMPT_SCOPES))
+@pytest.mark.parametrize("tool", RETIRED_GOOGLE_TOOL_NAMES)
+def test_no_prompt_sends_a_session_to_a_reli_google_tool(name, tool):
+    """#1487: a session looks through its own Calendar and Gmail connectors."""
+    assert tool not in _prompt_text(name)
+
+
+@pytest.mark.parametrize("tool", RETIRED_GOOGLE_TOOL_NAMES)
+def test_the_initial_instructions_send_no_session_to_a_reli_google_tool(tool):
+    assert tool not in get_initial_instructions()
 
 
 @pytest.mark.parametrize(("name", "scope"), sorted(PROMPT_SCOPES.items()))

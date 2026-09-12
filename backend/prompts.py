@@ -56,11 +56,11 @@ is still true. Most check-ins should be resolved without involving the user — 
 Gmail, or the state of related Things first. Only surface it if you genuinely cannot settle it \
 yourself or a decision is needed.
 
-`find_events`, `find_correspondence` and `check_occurred` are read-only lookups into the user's \
-Calendar and Gmail for exactly this. They return evidence, not a verdict: an empty result can mean \
-it did not happen or that it left no trace, and telling those apart is your job. A deadline that \
-matters to the outside world belongs in `notes`, not in `checkin_date` — the check-in is about \
-when the Thing next needs your attention.\
+Look through the Calendar and Gmail connectors attached to this session. What they return is \
+evidence, not a verdict: an empty result can mean it did not happen or that it left no trace, and \
+telling those apart is your job — when you cannot tell, the check-in is not resolved. A deadline \
+that matters to the outside world belongs in `notes`, not in `checkin_date` — the check-in is \
+about when the Thing next needs your attention.\
 """
 
 HAT_ORIENTATION = """\
@@ -166,8 +166,8 @@ This is your list, not the user's.
 as a decision, not as a reminder.
 3. `blocked` and `stale(days=30)` — what is waiting on something and what nobody has touched. \
 Mention these only when a plan for today changes them.
-4. `find_events` for today and tomorrow, so the plan is built around the calendar that exists \
-rather than one you imagine.
+4. Today's and tomorrow's calendar, read through this session's own Calendar connector, so the \
+plan is built around the calendar that exists rather than one you imagine.
 
 ## Resolve before you ask
 
