@@ -5,10 +5,11 @@ saved prompt for a Claude scheduled task with Reli's MCP connector attached — 
 interactive session uses, through the same Google sign-in. The files are plain prose with no
 placeholders, so each is pasted into its task as-is.
 
-Each task also needs the user's **Calendar and Gmail connectors attached alongside Reli's**
-(#1487): a check-in on a booked flight is settled by the session reading the confirmation itself,
-not by Reli. That attachment is a human setup step, and a resolution pass that finds the connectors
-missing records that in the briefing rather than resolving nothing.
+The resolution pass and the morning conversation also need the user's **Calendar and Gmail
+connectors attached alongside Reli's** (#1487): a check-in on a booked flight is settled by the
+session reading the confirmation itself, not by Reli. That attachment is a human setup step, and a
+resolution pass that finds the connectors missing records that in the briefing rather than resolving
+nothing. The learning pass reads only the journal and the graph, so it needs neither.
 
 Three tasks, in this order, each depending on what the one before it wrote:
 

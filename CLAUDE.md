@@ -192,10 +192,11 @@ done:
 The proactive half (#1413) is three saved prompts under `prompts/scheduled/` — `resolution-pass.md`,
 `learning-pass.md`, `morning-conversation.md`, in that order — each the text of a claude.ai
 scheduled task with the Reli connector attached: the same `/mcp` an interactive session uses,
-through the same Google sign-in. Each task also carries the user's own Calendar and Gmail
-connectors: a check-in is settled by the session reading the confirmation itself (#1487). Nothing
-runs on a schedule inside Reli, and nothing here may be turned into a background task in the
-service.
+through the same Google sign-in. The resolution pass and the morning conversation also carry the
+user's own Calendar and Gmail connectors: a check-in is settled by the session reading the
+confirmation itself (#1487). The learning pass reads only the journal and the graph, so it needs
+neither. Nothing runs on a schedule inside Reli, and nothing here may be turned into a background
+task in the service.
 [`prompts/scheduled/README.md`](prompts/scheduled/README.md) describes what the passes leave in the
 graph.
 
@@ -205,7 +206,8 @@ unattended.** Those are human steps, in the same class as the Google consent ste
 
 1. creates three claude.ai scheduled tasks, each pasting one file's text — the resolution pass
    overnight, the learning pass at least half an hour later, the morning conversation in waking
-   hours — with the Reli connector and the user's Calendar and Gmail connectors attached;
+   hours — each with the Reli connector, and the resolution pass and the morning conversation also
+   with the user's Calendar and Gmail connectors;
 2. watches the first night. Reliability is *observed*, not assumed, and there is no external
    check: the owner is what makes running the trial in production safe.
 
