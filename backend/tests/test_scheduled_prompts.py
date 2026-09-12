@@ -49,8 +49,8 @@ INTERACTIVE = 'actor="claude_interactive"'
 
 HEARTBEAT_TITLES = {RESOLUTION: "Resolution pass", LEARNING: "Learning pass", MORNING: "Morning conversation"}
 
-# The consequence the judgement carries: the one clause of the convention a reword could drop
-# without failing anything else.
+# Pinned on its own: the convention below is carried verbatim, which proves a file matches the
+# constant but not that this clause survives a reword of it.
 CHECKIN_FALLBACK = "when you cannot tell, the check-in is not resolved"
 
 RESOLUTION_LITERALS = (
