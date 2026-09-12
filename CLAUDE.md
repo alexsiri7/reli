@@ -302,9 +302,11 @@ Creating documentation that claims success on an action you cannot perform is a 
   the three hats, never a second copy. Every prompt carries `DEFAULT_VOICE`, the
   preference-capture convention and the check-in semantics, held as constants there so a test can
   prove it — the voice states how the assistant sounds and, in the same constant, that confidence
-  of manner is never confidence of fact (#1492) — and names the one preference scope it loads;
-  those scope labels (`capture`, `scheduling`, `planning`, `review`) are the scope vocabulary —
-  reuse them rather than coin new ones
+  of manner is never confidence of fact (#1492) — and names the two preference scopes it loads:
+  the one for its mode and `voice` beside it, which is how the user moves the assistant off that
+  default (#1493). Those five scope labels (`capture`, `scheduling`, `planning`, `review`,
+  `voice`) are the scope vocabulary — reuse them rather than coin new ones. `voice` is the one
+  scope the learning pass never records under: the journal holds mutations, not conversation
 - Google sign-in: `backend/google_login.py` — the only code that reaches Google at all, and the
   only one that reads the credential: the authorization URL, the code exchange and the id-token
   claims; persists nothing

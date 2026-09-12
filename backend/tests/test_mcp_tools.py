@@ -517,6 +517,30 @@ def test_the_user_model_resource_filters_by_scope(tools):
     assert [preference["thing"]["title"] for preference in scoped["preferences"]] == ["Prefers deep work 9-11am"]
 
 
+def test_the_voice_scope_returns_voice_preferences_and_nothing_else(tools):
+    """#1493: the scope the prompts load is the scope that comes back, with no new mechanism."""
+    evidence = create_thing(actor=Actor.CLAUDE_INTERACTIVE, title="rewrote a cheerful opening line")
+    for title, scope in (
+        ("Wants the answer without the preamble", prompts.VOICE_SCOPE),
+        ("Prefers deep work 9-11am", prompts.SCHEDULING_SCOPE),
+    ):
+        record_preference(
+            actor=Actor.CLAUDE_INTERACTIVE,
+            title=title,
+            scope=scope,
+            evidence_ids=[uuid.UUID(evidence["id"])],
+        )
+
+    voice = get_user_model(scope=prompts.VOICE_SCOPE)
+
+    assert voice["scope"] == prompts.VOICE_SCOPE
+    assert [preference["thing"]["title"] for preference in voice["preferences"]] == [
+        "Wants the answer without the preamble"
+    ]
+    assert [preference["scope"] for preference in voice["preferences"]] == [prompts.VOICE_SCOPE]
+    assert voice == _resource_json(f"reli://user-model/{prompts.VOICE_SCOPE}")
+
+
 def test_no_user_model_payload_carries_a_confidence_score(tools):
     evidence = create_thing(actor=Actor.CLAUDE_INTERACTIVE, title="declined a 9am meeting")
     record_preference(
@@ -565,6 +589,8 @@ def test_every_prompt_carries_the_preference_capture_convention(name):
     assert "in the same turn you noticed it" in text
     assert '"I hate morning meetings" is a preference' in text
     assert '"Move that to Thursday" on its own is not' in text
+    assert '"Be blunter about money" is about money' in text
+    assert "overrides the default voice" in text
 
 
 @pytest.mark.parametrize("name", sorted(PROMPT_SCOPES))
@@ -608,6 +634,24 @@ def test_every_prompt_names_the_scope_it_loads_in_its_description_and_its_body(n
     assert f"'{scope}'" in _prompts()[name].description
     assert f'get_user_model(scope="{scope}")' in _prompt_text(name)
     assert f"reli://user-model/{scope}" in _prompt_text(name)
+
+
+@pytest.mark.parametrize("name", sorted(PROMPT_SCOPES))
+def test_every_prompt_loads_the_voice_scope_beside_its_own(name):
+    """#1493: the voice is a starting point the user moves with a preference, so every prompt
+    that speaks to the user loads that scope as well as the one for its mode."""
+    assert f"'{prompts.VOICE_SCOPE}'" in _prompts()[name].description
+    assert f'get_user_model(scope="{prompts.VOICE_SCOPE}")' in _prompt_text(name)
+    assert f"reli://user-model/{prompts.VOICE_SCOPE}" in _prompt_text(name)
+
+
+@pytest.mark.parametrize(("name", "scope"), sorted(PROMPT_SCOPES.items()))
+def test_every_prompt_records_under_its_own_scope_unless_the_preference_is_about_how_it_sounds(name, scope):
+    """Loading two scopes must not leave it ambiguous which one a new preference goes under."""
+    text = _prompt_text(name)
+
+    assert f'Record any preference you notice here under the scope "{scope}"' in text
+    assert f'that is "{prompts.VOICE_SCOPE}"' in text
 
 
 def test_the_prompts_take_no_arguments():
