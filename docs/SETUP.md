@@ -38,9 +38,9 @@ Startup runs `alembic upgrade head`; a migration failure fails the boot. `curl l
 answers `{"status":"ok","service":"reli"}`.
 
 `/mcp` and `/api` both answer 401 to every request until the Google sign-in (`SECRET_KEY` and the
-settings beside it) is set — `/` itself is the sign-in view and always serves, as does
-`GET /api/heartbeats`, the one unauthenticated `/api` route. There is no dev-mode bypass and no
-password: reading the graph locally needs a Google client configured, like the deploy.
+settings beside it) is set — `/` itself is the sign-in view and always serves. There is no
+dev-mode bypass and no password: reading the graph locally needs a Google client configured, like
+the deploy.
 
 ## Connecting Claude
 

@@ -20,7 +20,6 @@ from .db_models import (
     NEEDS_INPUT_TAG,
     PREFERENCE_TAG,
     REJECTED_TAG,
-    SCHEDULED_TASK_TAG,
     USER_ANCHOR_ID,
     Actor,
     JournalRecord,
@@ -151,20 +150,6 @@ def by_tag(
         return []
 
     statement = select(ThingRecord).where(_tagged(tags, match)).order_by(col(ThingRecord.priority).desc())
-    return list(session.exec(statement).all())
-
-
-def scheduled_tasks(session: Session) -> list[ThingRecord]:
-    """The active ``#ScheduledTask`` heartbeats, one per scheduled pass, by title.
-
-    Active only, as ``tree_level`` is: an archived heartbeat has left the tree, and it must leave
-    this answer too, so archiving one reads as a missed run rather than as a pass in good health.
-    """
-    statement = (
-        select(ThingRecord)
-        .where(col(ThingRecord.active).is_(True), _tagged([SCHEDULED_TASK_TAG], "any"))
-        .order_by(col(ThingRecord.title).asc())
-    )
     return list(session.exec(statement).all())
 
 

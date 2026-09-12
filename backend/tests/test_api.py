@@ -23,7 +23,6 @@ from backend.db_models import (
     OBSERVATION_TAG,
     PREFERENCE_TAG,
     REJECTED_TAG,
-    SCHEDULED_TASK_TAG,
     USER_TAG,
     Actor,
     RelationshipType,
@@ -325,73 +324,6 @@ def test_the_user_model_names_no_confidence(client, session):
     assert "confidence" not in client.get("/api/user-model").text
 
 
-# --- GET /api/heartbeats: the watchdog's unauthenticated read -------------
-
-
-def _heartbeat(session, title, checkin_date=None):
-    return _thing(session, title, tags=[SCHEDULED_TASK_TAG], checkin_date=checkin_date)
-
-
-def test_the_heartbeats_are_the_scheduled_task_things_by_title(client, session):
-    _heartbeat(session, "Resolution pass", date(2026, 9, 12))
-    _heartbeat(session, "Learning pass")
-    _thing(session, "Confirm the dentist appointment", checkin_date=date(2026, 9, 11))
-
-    body = client.get("/api/heartbeats").json()
-
-    assert [beat["title"] for beat in body["heartbeats"]] == ["Learning pass", "Resolution pass"]
-    assert body["heartbeats"][1]["checkin_date"] == "2026-09-12"
-
-
-def test_a_heartbeat_carries_only_what_the_watchdog_reads(client, session):
-    """Nothing else about the Thing: the route answers without a credential, so the fields it
-    exposes are the whole of what opening it costs."""
-    _heartbeat(session, "Morning conversation", date(2026, 9, 12))
-
-    (beat,) = client.get("/api/heartbeats").json()["heartbeats"]
-
-    assert set(beat) == {"id", "title", "checkin_date"}
-
-
-def test_an_archived_heartbeat_is_absent_so_archiving_one_reads_as_a_missed_run(client, session):
-    """The watchdog counts what comes back and files an issue below three, which is why CLAUDE.md
-    tells the passes never to archive a heartbeat."""
-    heartbeat = _heartbeat(session, "Resolution pass", date(2026, 9, 12))
-    update_thing(session, actor=Actor.CLAUDE_SCHEDULED, thing_id=heartbeat.id, active=False)
-
-    assert client.get("/api/heartbeats").json()["heartbeats"] == []
-
-
-def test_no_heartbeat_at_all_is_an_empty_list_rather_than_a_404(client):
-    """An empty answer, because "a pass has never run" is the watchdog's judgement, not this route's."""
-    response = client.get("/api/heartbeats")
-
-    assert response.status_code == 200
-    assert response.json() == {"heartbeats": []}
-
-
-def test_a_heartbeat_that_is_a_child_of_something_is_still_a_heartbeat(client, session):
-    """Unlike ``/api/things``, this route is not the top level, so nothing about the tree can hide a
-    heartbeat from the watchdog."""
-    parent = _thing(session, "Reli operations")
-    heartbeat = _heartbeat(session, "Learning pass", date(2026, 9, 12))
-    _relate(session, parent, heartbeat, RelationshipType.CHILD_OF)
-
-    titles = [beat["title"] for beat in client.get("/api/heartbeats").json()["heartbeats"]]
-
-    assert titles == ["Learning pass"]
-
-
-def test_the_heartbeats_answer_without_a_credential(anonymous, session):
-    """The watchdog runs in GitHub Actions, which holds no Google session and cannot obtain one."""
-    _heartbeat(session, "Resolution pass", date(2026, 9, 12))
-
-    response = anonymous.get("/api/heartbeats")
-
-    assert response.status_code == 200
-    assert [beat["title"] for beat in response.json()["heartbeats"]] == ["Resolution pass"]
-
-
 # --- POST /api/preferences/{id}/reject: the one write ---------------------
 
 
@@ -468,6 +400,14 @@ def test_an_unmatched_api_path_is_404_for_any_method(client, method):
 @pytest.mark.parametrize("path", ["/api/things", "/api/user-model"])
 def test_the_graph_is_closed_to_a_request_with_no_session(anonymous, secret_key, path):
     assert anonymous.get(path).status_code == 401
+
+
+def test_the_heartbeats_are_no_longer_an_unauthenticated_way_in(anonymous, secret_key):
+    """#1484 removed the watchdog that read this, and the exemption it was the only reason for.
+
+    The middleware refuses before the router is reached, so no heartbeat Thing is needed here.
+    """
+    assert anonymous.get("/api/heartbeats").status_code == 401
 
 
 def test_nothing_configured_closes_the_view_and_leaves_healthz_open(anonymous, monkeypatch):
@@ -567,10 +507,10 @@ def test_only_api_is_guarded(anonymous, path):
     assert anonymous.get(path).status_code == 404
 
 
-@pytest.mark.parametrize("path", ["/api/authors", "/api/auth", "/api", "/api/heartbeats-and-the-rest"])
-def test_the_public_exemption_is_by_whole_path_segment(anonymous, path):
-    """``/api/auth/`` ends in a slash and ``/api/heartbeats`` is matched whole, so neither exemption
-    can be widened by a longer path that starts with it."""
+@pytest.mark.parametrize("path", ["/api/authors", "/api/auth", "/api"])
+def test_the_public_exemption_ends_in_a_slash_so_it_cannot_be_widened(anonymous, path):
+    """``/api/auth/`` is the only exempt prefix, and the trailing slash is what stops ``/api/authors``
+    from inheriting the exemption."""
     assert anonymous.get(path).status_code == 401
 
 
