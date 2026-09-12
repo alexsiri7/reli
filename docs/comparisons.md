@@ -17,7 +17,7 @@ How Reli relates to other projects in the personal AI space.
 | Learning | None — it's a database | Preferences as evidence-linked Things, explicit from conversation and implicit from the journal; strength is a count of evidence, there is no confidence score |
 | Proactive | None | `checkin_date` as Claude's obligation to verify, answered by indexed queries (`due_for_checkin`, `stale`, `blocked`) and discharged by scheduled Claude sessions (prompt files under `prompts/scheduled/`; running them as claude.ai scheduled tasks is a pending human step) |
 | Domain intelligence | None | None — Concerns are a stated non-goal |
-| Ingestion | Slack messages | MCP, plus read-only Gmail and Calendar lookups that return evidence for settling a check-in |
+| Ingestion | Slack messages | MCP; a session brings its own Gmail/Calendar connectors to settle a check-in — Reli holds no data integration of its own |
 
 **The key difference:** OB1 solves "my AI tools don't share memory." Reli solves "any Claude session starts already knowing how I operate and what needs checking." OB1 is what you'd build if you only wanted the storage layer.
 

@@ -9,14 +9,14 @@ because auth and the mount are properties of the ASGI stack and not of the funct
 import asyncio
 import json
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import get_args
 
 import jwt
 import pytest
 from sqlalchemy import text
 
-from backend import auth, google_readers, prompts
+from backend import auth, prompts
 from backend.config import settings
 from backend.db_models import Actor, RelationshipType
 from backend.mcp_server import (
@@ -24,12 +24,9 @@ from backend.mcp_server import (
     add_preference_evidence,
     archive_thing,
     blocked,
-    check_occurred,
     children,
     create_thing,
     due_for_checkin,
-    find_correspondence,
-    find_events,
     find_things,
     get_initial_instructions,
     get_related,
@@ -65,17 +62,12 @@ TOOL_NAMES = {
     "children",
     "get_thing_history",
     "journal_since",
-    "find_correspondence",
-    "find_events",
-    "check_occurred",
     "record_preference",
     "add_preference_evidence",
     "reject_preference",
     "get_user_model",
     "get_initial_instructions",
 }
-
-GOOGLE_TOOLS = {"find_correspondence", "find_events", "check_occurred"}
 
 WRITING_TOOLS = {
     "create_thing",
@@ -111,7 +103,7 @@ def _tool_schemas():
 # --- The surface -----------------------------------------------------------
 
 
-def test_the_exposed_tools_are_exactly_the_twenty_three():
+def test_the_exposed_tools_are_exactly_the_twenty():
     assert set(_tool_schemas()) == TOOL_NAMES
 
 
@@ -120,24 +112,16 @@ def test_hard_delete_is_not_exposed():
     assert "delete_thing" not in _tool_schemas()
 
 
-@pytest.mark.parametrize("tool_name", sorted(GOOGLE_TOOLS))
-def test_the_google_tools_take_no_actor(tool_name):
-    """They read Gmail and Calendar and touch no Thing, so no read can look like a write."""
-    assert "actor" not in _tool_schemas()[tool_name]["properties"]
+@pytest.mark.parametrize("tool", RETIRED_GOOGLE_TOOL_NAMES)
+def test_the_retired_google_tools_are_not_exposed(tool):
+    """#1488: Reli holds no Calendar or Gmail integration — a session brings its own connector."""
+    assert tool not in _tool_schemas()
 
 
-def test_the_google_tools_journal_nothing(tools, monkeypatch):
-    """Journalling a read would put entries in the learning pass's only input that no one made."""
-    monkeypatch.setattr(google_readers, "find_correspondence", lambda **kwargs: [])
-    monkeypatch.setattr(google_readers, "find_events", lambda **kwargs: [])
-    monkeypatch.setattr(google_readers, "check_occurred", lambda **kwargs: {})
-    before = _journal_count(tools)
-
-    find_correspondence("dentist")
-    find_events(since=date(2026, 9, 7), until=date(2026, 9, 9))
-    check_occurred("dentist", since=date(2026, 9, 7), until=date(2026, 9, 9))
-
-    assert _journal_count(tools) == before
+@pytest.mark.parametrize("tool", RETIRED_GOOGLE_TOOL_NAMES)
+def test_the_server_instructions_name_no_retired_google_tool(tool):
+    """The instructions reach a session before any prompt does, so they cannot name a dead tool."""
+    assert tool not in (reli_mcp.instructions or "")
 
 
 @pytest.mark.parametrize("tool_name", sorted(WRITING_TOOLS))

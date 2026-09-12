@@ -8,23 +8,18 @@ not just the ORM models, the thing under test.
 Set ``RELI_TEST_DATABASE_URL`` to run against an existing database instead of starting a container.
 """
 
-import json
 import os
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
-from pathlib import Path
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlmodel import Session
 
-GOOGLE_FIXTURES = Path(__file__).parent / "fixtures" / "google"
-
-# Hard-coded rather than taken from ``backend.google_readers`` or the MCP tool list: #1488 deletes
-# those tools, and the guard that no prompt sends a session to one of them has to outlive them
-# (#1487). One definition, so the two absence-guard suites cannot check different sets.
+# The Calendar and Gmail tools #1488 deleted. Hard-coded because there is nothing left to derive
+# them from: the guard that no prompt and no MCP surface names one has to outlive them (#1487).
+# One definition, so the absence-guard suites cannot check different sets.
 RETIRED_GOOGLE_TOOL_NAMES = ("find_events", "find_correspondence", "check_occurred")
 
 # Keep test failures out of the production Sentry project.
@@ -127,57 +122,3 @@ def tools(session, monkeypatch):
 
     monkeypatch.setattr(mcp_server, "_session", _fixture_session)
     return session
-
-
-def _google_fixture(name):
-    return json.loads((GOOGLE_FIXTURES / f"{name}.json").read_text())
-
-
-@pytest.fixture()
-def configured(monkeypatch):
-    """A Google credential in settings, and no access token left over from another test."""
-    from backend import google_client
-    from backend.config import settings
-
-    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "client-id.apps.googleusercontent.com")
-    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "client-secret")
-    monkeypatch.setattr(settings, "GOOGLE_REFRESH_TOKEN", "refresh-token")
-    google_client.reset_token_cache()
-    yield
-    google_client.reset_token_cache()
-
-
-@pytest.fixture()
-def google(configured, monkeypatch):
-    """A read-only Google serving the recorded fixtures: the handler fails the test if anything
-    but a GET reaches an API. ``responses`` overrides a source's listing; ``fixture`` loads one."""
-    from backend import google_client
-    from backend.google_client import TOKEN_URL
-
-    seen: list[httpx.Request] = []
-    responses: dict[str, object] = {}
-
-    def handler(request):
-        if str(request.url) == TOKEN_URL:
-            return httpx.Response(200, json={"access_token": "access-token", "expires_in": 3600})
-
-        assert request.method == "GET", f"{request.method} {request.url} is not a read"
-        seen.append(request)
-
-        path = request.url.path
-        if path.startswith("/gmail/v1/users/me/messages/"):
-            message_id = path.rsplit("/", 1)[-1]
-            for message in _google_fixture("messages_metadata"):
-                if message["id"] == message_id:
-                    return httpx.Response(200, json=message)
-            stub = dict(_google_fixture("messages_metadata")[0])
-            stub["id"] = message_id
-            return httpx.Response(200, json=stub)
-        if path == "/gmail/v1/users/me/messages":
-            return httpx.Response(200, json=responses.get("messages", _google_fixture("messages_list")))
-        if path.startswith("/calendar/v3/calendars/primary/events"):
-            return httpx.Response(200, json=responses.get("events", _google_fixture("events_list")))
-        raise AssertionError(f"unexpected URL {request.url}")
-
-    monkeypatch.setattr(google_client, "_http_client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
-    return type("Google", (), {"seen": seen, "responses": responses, "fixture": staticmethod(_google_fixture)})()

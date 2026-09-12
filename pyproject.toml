@@ -14,7 +14,7 @@ dependencies = [
     "psycopg2>=2.9.12",
     # Upper bound is deliberate: mcp 2.x is a different API surface.
     "mcp>=1.26.0,<2.0.0",
-    # Direct: backend/google_client.py talks to Google's REST APIs over it.
+    # Direct: backend/google_login.py exchanges a sign-in code with Google over it.
     "httpx>=0.28.1",
     # Direct: backend/auth.py mints and verifies the MCP tokens with it.
     "PyJWT>=2.10.1",

@@ -2,10 +2,9 @@
 
 ## 1. Overview
 
-`/mcp` is the only way into the graph. `backend/mcp_server.py` registers twenty-three tools, four
+`/mcp` is the only way into the graph. `backend/mcp_server.py` registers twenty tools, four
 prompts and two resources, each a thin wrapper over `backend/service.py` (writes),
-`backend/queries.py` (graph reads), `backend/google_readers.py` (Gmail and Calendar reads) or
-`backend/prompts.py` (the behaviour). No
+`backend/queries.py` (graph reads) or `backend/prompts.py` (the behaviour). No
 judgement happens in that module and no model is called from it: the tools hand Claude the graph
 and Claude decides what it means. Rationale: [vision.md §4.2](vision.md#42-mcp--the-only-way-in).
 
@@ -13,7 +12,8 @@ The server's `instructions` string tells a connected session to call `get_initia
 before anything else, then the shape of the graph (Things,
 tags instead of a type column, `ChildOf` for hierarchy), which tools read and which write, the two
 actor values and why they must be honest, that nothing is hard-deleted, how the user model is
-structured, and that the Google tools return evidence rather than answers.
+structured, and that Reli holds no Calendar or Gmail integration of its own — a check-in is
+settled through the connectors attached to the session (#1488).
 
 ## 2. Transport
 
@@ -86,14 +86,6 @@ User model — see [vision.md §5](vision.md#5-the-user-model):
 | `add_preference_evidence` (`actor`) | Adds one more `EvidenceFor` edge; a repeat changes nothing. |
 | `reject_preference` (`actor`) | Tags the preference `#Rejected` and journals it; it stays readable and is not re-derived. |
 | `get_user_model` | Preferences with their evidence and `evidence_count`, optionally for one `scope`, optionally `include_rejected`. There is no confidence score. |
-
-Google — no `actor`, and they journal nothing because they mutate nothing:
-
-| Tool | Does |
-|---|---|
-| `find_correspondence` | Gmail search (`query` in Gmail syntax, `since`, `until`, `limit` capped at 25); returns sender, recipient, subject, date, snippet and labels. Bodies are never fetched. |
-| `find_events` | The primary calendar over `since`–`until`, recurring events expanded, optional free-text `query`, `limit` capped at 25. |
-| `check_occurred` | Both sources for one `description` over a window; returns the events, the messages and their counts, and deliberately no verdict — whether the thing happened is the caller's judgement. |
 
 Behaviour — no `actor`, and it reads nothing from the graph:
 
