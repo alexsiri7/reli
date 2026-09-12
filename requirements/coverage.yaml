@@ -1,0 +1,361 @@
+# REGENERATED on every audit run by the archon-requirements-audit workflow. Never hand-edit.
+meta:
+  generated: 2026-09-12
+  workflow: archon-requirements-audit
+  totals:
+    covered: 2
+    partial: 5
+    uncovered: 41
+    stale: 17
+    orphans: 8
+coverage:
+  - id: RELI-001
+    status: stale
+    code_paths: [backend/db_models.py, backend/service.py, backend/api.py]
+    test_paths: [backend/tests/test_service.py, backend/tests/test_api.py]
+    notes: "Things persist but the v4 schema has no type_hint/importance/surface/data/open_questions and writes go through MCP, not POST /api/things"
+  - id: RELI-002
+    status: stale
+    code_paths: [backend/service.py, backend/db_models.py, backend/queries.py]
+    test_paths: [backend/tests/test_mcp_tools.py, backend/tests/test_journal.py]
+    notes: "Typed directed edges exist but as a closed 5-literal enum with a DB CHECK, MCP-only, and self-relationships are not rejected"
+  - id: RELI-003
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Text search was deliberately removed in v4; find_things is documented as a filter with no text matching anywhere"
+  - id: RELI-004
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No /api/things/graph or nodes+edges payload; the web view is a ChildOf tree instead"
+  - id: RELI-005
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No vector store, embedding or reindex code anywhere in the tree"
+  - id: RELI-006
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No merge endpoint, merge history or merge logic"
+  - id: RELI-007
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No thing_types table or /api/thing-types; v4 replaced types with free-form tags"
+  - id: RELI-008
+    status: stale
+    code_paths: [backend/service.py, backend/db_models.py]
+    test_paths: [backend/tests/test_user_model.py]
+    notes: "A single #User anchor Thing exists but is created lazily on the first preference write, not at sign-in, and there is no GET /api/things/me"
+  - id: RELI-009
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Chat pipeline deleted in #1408; in-service LLM calls are an architecture violation pinned by test_architecture.py"
+  - id: RELI-010
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Chat pipeline deleted in #1408; no storage agent or column allowlist exists"
+  - id: RELI-011
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Chat pipeline deleted in #1408; no reasoning agent or tool set exists"
+  - id: RELI-012
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Chat pipeline deleted in #1408; no entity dedup logic exists"
+  - id: RELI-013
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No surface column exists in the v4 schema"
+  - id: RELI-014
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Chat subsystem deleted in #1408; no sessions table or endpoints"
+  - id: RELI-015
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Chat subsystem deleted in #1408; no history endpoints"
+  - id: RELI-016
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Chat subsystem deleted in #1408; no SSE streaming"
+  - id: RELI-017
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Chat subsystem deleted in #1408; no chat input to limit"
+  - id: RELI-018
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Chat subsystem deleted in #1408; no summarization"
+  - id: RELI-019
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No LLM calls in the service, so no cost accounting"
+  - id: RELI-020
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Chat subsystem deleted in #1408; no retention purge"
+  - id: RELI-021
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Chat subsystem deleted in #1408; no onboarding mode"
+  - id: RELI-022
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No chat planning mode; the project-planning MCP prompt in backend/prompts.py is not a chat mode"
+  - id: RELI-023
+    status: stale
+    code_paths: [backend/service.py, backend/api.py]
+    test_paths: [backend/tests/test_user_model.py, backend/tests/test_api.py, backend/tests/test_mcp_tools.py]
+    notes: "Preference feedback exists with the opposite design — confidence floats are banned by a pinning test, strength is an EvidenceFor edge count, and rejection is a binary #Rejected tag"
+  - id: RELI-024
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No response agent or interaction_style; get_user_model hands preferences to the client, which adapts outside the service"
+  - id: RELI-025
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No /api/briefing; briefings are Things written by external claude.ai scheduled passes"
+  - id: RELI-026
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No pre-generated briefing code; the morning conversation is an external scheduled prompt"
+  - id: RELI-027
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No weekly briefing endpoint or generator"
+  - id: RELI-028
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No /api/focus or composite scoring"
+  - id: RELI-029
+    status: stale
+    code_paths: [backend/queries.py, backend/mcp_server.py]
+    test_paths: [backend/tests/test_mcp_tools.py, backend/tests/test_queries.py]
+    notes: "A staleness listing survives as the MCP stale tool (days=30 default) but there is no GET /api/staleness, no classification, and no per-user threshold"
+  - id: RELI-030
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No conflict detection; the blocked() query lists active blockers but has no severity, windows or overlaps"
+  - id: RELI-031
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No nudges or dismissal; checkin_date/due_for_checkin is a different mechanism"
+  - id: RELI-032
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Nothing runs on a schedule inside Reli by explicit design; the replacement is external claude.ai scheduled passes"
+  - id: RELI-033
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "Sweep subsystem deleted; no gap or pattern detection code"
+  - id: RELI-034
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No findings and no confidence values anywhere, by architectural rule"
+  - id: RELI-035
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No finding lifecycle; findings do not exist in v4"
+  - id: RELI-036
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No auto-merge; no merge logic at all in v4"
+  - id: RELI-037
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No connection-suggestion code"
+  - id: RELI-038
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No dependency or research sweeps"
+  - id: RELI-039
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No sweep actions to audit; the journal covers graph mutations instead"
+  - id: RELI-040
+    status: stale
+    code_paths: [backend/google_readers.py, backend/google_client.py]
+    test_paths: [backend/tests/test_google_readers.py, backend/tests/test_google_client.py]
+    notes: "Calendar is read-only (calendar.readonly scope, GET-only pinned by test) — no event writes, no per-user OAuth connect/disconnect, no calendar_event_id linkage"
+  - id: RELI-041
+    status: stale
+    code_paths: [backend/google_client.py, backend/google_readers.py, backend/mcp_server.py]
+    test_paths: [backend/tests/test_google_client.py, backend/tests/test_google_readers.py]
+    notes: "The gmail.readonly scope and no-write-verb core holds and is tested, but the stated /api/gmail surface, disconnect and 401/501 statuses are gone; cap is 25"
+  - id: RELI-042
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No web search integration of any kind"
+  - id: RELI-043
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No /api/feedback and no GitHub client"
+  - id: RELI-044
+    status: stale
+    code_paths: [backend/mcp_server.py]
+    test_paths: [backend/tests/test_mcp_tools.py]
+    notes: "The MCP service exists behind an aud=mcp JWT with no hard delete, but the roster is the 23 v4 tools, DNS-rebinding protection is deliberately disabled, and only the Google tools clamp limits"
+  - id: RELI-045
+    status: covered
+    code_paths: [backend/mcp_oauth.py, backend/oauth_state.py, backend/auth.py]
+    test_paths: [backend/tests/test_mcp_oauth.py, backend/tests/test_oauth_state.py]
+    notes: "Every clause implemented and exercised — S256-only PKCE, single-use 60s codes, client+redirect binding, refresh rotation with family revocation on replay (#1464), 30-day TTLs"
+  - id: RELI-046
+    status: stale
+    code_paths: [backend/service.py, backend/queries.py, backend/mcp_server.py]
+    test_paths: [backend/tests/test_journal.py, backend/tests/test_mcp_tools.py]
+    notes: "Journalling is stronger than stated (append-only trigger, every mutation, before/after snapshots) but there is no mcp_mutations table, no get_mutations tool, and no per-caller scoping"
+  - id: RELI-047
+    status: partial
+    code_paths: [backend/auth.py, backend/google_login.py, backend/oauth_state.py]
+    test_paths: [backend/tests/test_auth.py]
+    notes: "Implemented and well-tested; drifts — cookie is Secure only when the base URL is https (pinned by test), and ALLOWED_EMAILS is no longer optional (empty admits nobody)"
+  - id: RELI-048
+    status: stale
+    code_paths: [backend/api.py, backend/auth.py]
+    test_paths: [backend/tests/test_api.py, backend/tests/test_auth.py]
+    notes: "Enforcement half exists and is tested; revocation is deliberately absent — no revocation list, jti minted but never read, logout deletes the cookie and returns 204"
+  - id: RELI-049
+    status: stale
+    code_paths: [backend/auth.py, backend/config.py]
+    test_paths: [backend/tests/test_auth.py]
+    notes: "No user_id column on any table; isolation is perimeter-only (ALLOWED_EMAILS plus JWT/password) around a single-owner graph, so row-scoping is meaningless"
+  - id: RELI-050
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No token bucket, 429 path or X-RateLimit headers anywhere in backend/"
+  - id: RELI-051
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No security-header middleware, no CSP, and OpenAPI docs are not production-disabled"
+  - id: RELI-052
+    status: stale
+    code_paths: [backend/google_client.py, backend/google_login.py]
+    test_paths: [backend/tests/test_architecture.py]
+    notes: "Superseded by a stricter design — no credential is stored at all, enforced by a build-failing never-persist test; nothing at rest to encrypt"
+  - id: RELI-053
+    status: partial
+    code_paths: [backend/sentry.py]
+    test_paths: [backend/tests/test_sentry.py, backend/tests/test_google_client.py]
+    notes: "All three Sentry clauses implemented and tested; the remaining clauses target removed subsystems (Thing.data LLM payloads, GDPR, feedback issues)"
+  - id: RELI-054
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No /api/gdpr routes or export/erasure logic"
+  - id: RELI-055
+    status: stale
+    code_paths: [backend/api.py, backend/queries.py]
+    test_paths: [backend/tests/test_api.py, backend/tests/test_mcp_tools.py]
+    notes: "A thinner bounding regime — some reads carry limits with truncation signals, but no field-size limits exist (title is unbounded) and several reads are uncapped"
+  - id: RELI-056
+    status: covered
+    code_paths: [backend/main.py, backend/alembic/safety.py, backend/alembic/env.py]
+    test_paths: [backend/tests/test_ddl_safety.py, backend/tests/test_alembic_env.py]
+    notes: "Both acceptance criteria directly exercised; the DDL guard blocks destructive revisions with a per-migration opt-in marker, and there is no create_all fallback"
+  - id: RELI-057
+    status: partial
+    code_paths: [backend/main.py]
+    test_paths: [backend/tests/test_main.py, backend/tests/test_api.py]
+    notes: "/healthz matches the statement and is tested; /api/health (degraded status) and /metrics (Prometheus) do not exist"
+  - id: RELI-058
+    status: stale
+    code_paths: [frontend/src/main.tsx, frontend/src/views, backend/api.py]
+    test_paths: [frontend/e2e/views.spec.ts, backend/tests/test_api.py]
+    notes: "The sign-in gate matches, but the described product (list/graph/calendar views, chat and briefing panels, mobile tabs) was replaced by a read-only tree/detail/user-model/status view"
+  - id: RELI-059
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No service worker, IndexedDB, mutation queue or navigator.onLine handling in frontend/src"
+  - id: RELI-060
+    status: partial
+    code_paths: [scripts/gates.sh, frontend/e2e/views.spec.ts, .github/workflows/ci.yml]
+    test_paths: [backend/tests/test_gates.py, frontend/e2e/views.spec.ts-snapshots]
+    notes: "Snapshot baselines and a unified gate script run in CI from the pinned container, but only Desktop Chrome (no mobile/dark baselines), no staging smoke suite, no vitest stage"
+  - id: RELI-061
+    status: stale
+    code_paths: [frontend/src/api.ts, backend/api.py]
+    test_paths: [backend/tests/test_api.py]
+    notes: "The contract is hand-mirrored TS interfaces plus backend shape tests — no OpenAPI generation, no generate_types.py --check, no Zod, confidence vocabulary abolished"
+  - id: RELI-062
+    status: stale
+    code_paths: [Dockerfile, backend/db_engine.py, backend/config.py, frontend/package.json]
+    test_paths: [backend/tests/test_config.py]
+    notes: "FastAPI + Vite/React 19 holds; storage does not — Postgres is mandatory with no SQLite/STORAGE_BACKEND switch and no pgvector/ChromaDB (embeddings removed)"
+  - id: RELI-063
+    status: uncovered
+    code_paths: []
+    test_paths: []
+    notes: "No LLM gateway, config.yaml or model settings; an in-service LLM call fails the build via test_architecture.py"
+  - id: RELI-064
+    status: partial
+    code_paths: [.github/workflows/staging-pipeline.yml, Dockerfile, .github/workflows/ci.yml]
+    test_paths: []
+    notes: "The staging-to-production gate exists but is a /healthz poll rather than E2E smoke tests, the primary documented deploy is docker compose on the owner's host, and no test exercises either criterion"
+  - id: RELI-065
+    status: stale
+    code_paths: [backend/config.py, backend/mcp_server.py, backend/api.py]
+    test_paths: [backend/tests/test_mcp_tools.py, backend/tests/test_api.py]
+    notes: "The current design deliberately inverts the statement — a missing SECRET_KEY closes /mcp and /api with 401s while the boot succeeds and /healthz stays green; REQUESTY_API_KEY and AUTH_DISABLED do not exist"
+orphans:
+  - behavior: "Actor attribution discipline — every write requires an explicit actor from a closed 3-value enum; MCP writing tools accept only the two Claude actors, and Actor.USER is reachable only through the web view's reject route"
+    code_paths: [backend/mcp_server.py, backend/api.py, backend/db_models.py]
+    suggested_requirement: "When a write reaches the graph, the system shall require an explicit actor of user, claude_interactive or claude_scheduled with no default; writes over MCP shall be attributable only to the two Claude actors, and the user actor shall be recordable only by the web view's preference-rejection route."
+  - behavior: "ChildOf tree served to the web view — GET /api/things returns one tree level (top level is the active Things no active parent claims), with active-child flags per node and user-model Things excluded"
+    code_paths: [backend/api.py, backend/queries.py]
+    suggested_requirement: "When the web view requests a tree level, the system shall return the active children of the named parent — or, with no parent, the active Things not claimed as a child by any active Thing — each flagged with whether it has active children, excluding Things tagged with the user-model tags."
+  - behavior: "Standing questions as deterministic MCP tools — due_for_checkin (checkin_date arrived), blocked (source of a Blocks edge whose target is active), and needs_input (#NeedsInput tag, bounded with total/truncated)"
+    code_paths: [backend/queries.py, backend/mcp_server.py]
+    suggested_requirement: "When a session asks the standing questions, the system shall answer deterministically from indexes — active Things whose check-in date has arrived, Things whose Blocks target is still active, and active Things tagged #NeedsInput returned with a total so a capped answer is visible as capped."
+  - behavior: "Filter-only retrieval — find_things filters by tags (any/all), active state, check-in window and priority range, with deliberately no text or semantic search anywhere in the service"
+    code_paths: [backend/queries.py, backend/mcp_server.py]
+    suggested_requirement: "When a client lists Things, the system shall filter by tags, active state, check-in date range and priority range only, and shall provide no text or semantic search."
+  - behavior: "Read-only web API with exactly one write — five /api routes (tree, thing detail, history, user model always including rejected, reject-preference); POST /api/preferences/{id}/reject is the only mutation"
+    code_paths: [backend/api.py]
+    suggested_requirement: "When the web frontend calls /api, the system shall serve read-only views of the tree, Thing detail, journal history and user model (rejected preferences always included and marked), and shall accept exactly one write — rejecting a preference — journalled as the user actor."
+  - behavior: "Default PA behaviour served from the server — get_initial_instructions derives the capture behaviour plus hat orientation at call time, four MCP prompts each load one fixed preference scope, and shared conventions are constants the scheduled prompt files must carry verbatim (test-enforced)"
+    code_paths: [backend/prompts.py, backend/mcp_server.py, prompts/scheduled, backend/tests/test_scheduled_prompts.py]
+    suggested_requirement: "When a session connects to /mcp, the system shall serve the default assistant behaviour via a get_initial_instructions tool derived at call time from the capture prompt (never a second copy), shall register four prompts each loading exactly one of the fixed preference scopes, and shall hold the shared conventions as constants that the scheduled prompt files must carry verbatim."
+  - behavior: "Scheduled-pass heartbeats and watchdog — each external pass keeps one top-level active #ScheduledTask Thing whose checkin_date is pushed to tomorrow on completion, and a noon-UTC GitHub Actions job files a missed-run issue (plus optional ntfy ping) when fewer than three heartbeats exist or any is due"
+    code_paths: [prompts/scheduled, .github/workflows/scheduled-run-health.yml]
+    suggested_requirement: "When a scheduled pass completes, it shall set its own top-level #ScheduledTask Thing's check-in date to tomorrow, and when the daily watchdog finds fewer than three such heartbeats or any still due at noon UTC, the system's CI shall file a missed-run issue and send the configured notification."
+  - behavior: "No LLM in the service — no pipeline stage, model call or LLM dependency exists anywhere in the backend; every tool returns deterministic data or third-party evidence, enforced by a build-failing architecture test"
+    code_paths: [backend/tests/test_architecture.py, docs/vision.md]
+    suggested_requirement: "The system shall originate no LLM call and hold no LLM dependency; every tool shall return deterministic data or third-party evidence, with interpretation performed entirely by the connected client."
