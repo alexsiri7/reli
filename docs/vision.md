@@ -28,6 +28,8 @@ This section exists so the next rebuild doesn't repeat the last one. It is not h
 
 **Behaviour was written but never delivered.** The v4 rebuild put the PA behaviour into MCP prompts on the assumption that the default one would apply to every session. It does not: a prompt applies only when the user picks it, so an ordinary conversation got Reli's tools with none of its behaviour, and Reli did not feel like a PA with every prompt present and correct. Behaviour that depends on the user remembering to load it is behaviour the system does not have. A default must be obtainable by the session itself.
 
+**Reli built what the session already had.** The resolution pass needed Calendar and Gmail, so Reli grew its own readers: a second Google integration, a credential the owner had to mint by hand, and a tool surface duplicating one the session running the pass was already carrying. Nobody asked whether it already had those connectors. It did. The completeness test in section 1 cuts both ways — before Reli grows a capability, check whether claude.ai already provides it.
+
 **The vision doc was a manifesto.** Nine thousand words describing Concerns, multi-channel delivery, personality adaptation, memory layers and a learning flywheel — none of it small enough to build to, so the build went its own way. This document is deliberately shorter and deliberately says no more often than yes.
 
 ## 3. Principles
@@ -72,7 +74,7 @@ Nothing runs on a schedule inside Reli. Proactivity is a set of Claude scheduled
 
 Three tasks, in order, each depending on what the one before it wrote.
 
-**1. Resolution pass** (overnight). Walk everything due for check-in and try to settle each one without the user. A check-in on "book flights for holiday X" is discharged by finding the confirmation in Gmail and marking it done — the user never hears about it. What can't be resolved, or needs a decision, is written up as a briefing Thing for the day.
+**1. Resolution pass** (overnight). Walk everything due for check-in and try to settle each one without the user. A check-in on "book flights for holiday X" is discharged by the session finding the confirmation in its own Gmail and marking it done — the user never hears about it. What can't be resolved, or needs a decision, is written up as a briefing Thing for the day.
 
 **2. Learning pass** (overnight). Read the journal since the last run and look for behavioural patterns: check-in dates repeatedly pushed from Mondays, Claude-generated titles the user consistently rewrites, whole tag families never touched. Write what it finds as preference Things, evidence-linked.
 
@@ -86,7 +88,7 @@ It also carries two jobs from the user model: disclosing notable preferences the
 
 It also becomes the primary delivery channel for the briefing, which demotes ntfy to what it's actually good at: time-sensitive things that can't wait for tomorrow morning.
 
-The scheduling mechanism is claude.ai itself — a scheduled task is an ordinary Claude session on the same MCP connection, with the same access as an interactive one. There is no service account, no second set of credentials, and no separate write limits. The only thing distinguishing a scheduled session from an interactive one is the actor recorded in the journal, which is what lets the learning pass tell "the user did this" from "Claude did this."
+The scheduling mechanism is claude.ai itself — a scheduled task is an ordinary Claude session on the same MCP connection, with the same access as an interactive one. There is no service account, no second set of credentials, and no separate write limits. The access it brings is the user's own: a scheduled task carries their Calendar and Gmail connectors alongside Reli's MCP connector, and that combination — not any credential Reli holds — is what lets a check-in be settled without the user. The only thing distinguishing a scheduled session from an interactive one is the actor recorded in the journal, which is what lets the learning pass tell "the user did this" from "Claude did this."
 
 That leaves reliability as the one thing to verify before building on it: whether claude.ai scheduled tasks genuinely run unattended, or whether a headless Claude Code routine is needed instead, following the pattern already working for overnight development work. A PA that silently stops running is worse than no PA, so whichever it is needs to fail loudly.
 
@@ -135,7 +137,7 @@ The morning conversation mentions notable new preferences as it goes, one line, 
 
 It means: *by this date, establish whether this is still true.* Whether that requires the user depends entirely on what Claude finds. Most check-ins should die quietly — resolved against Calendar, Gmail, or another Thing's state.
 
-Consequently, Calendar and Gmail are not enrichment features to be added once the core works. They are the substrate that lets check-ins resolve without the user, which is the entire difference between a PA and a task list. They arrive early.
+Consequently, Calendar and Gmail are not enrichment features to be added once the core works. They are the substrate that lets check-ins resolve without the user, which is the entire difference between a PA and a task list. They arrive early. That access belongs to the session, not to Reli: a pass reads them through the connectors attached to the Claude session running it, and Reli holds no integration of its own.
 
 Deadlines, where they matter, live in `notes` as context. The check-in date is about attention, not obligation to the outside world.
 
@@ -145,6 +147,7 @@ Explicitly not being built, and not to be added without revisiting this document
 
 - A chat panel, or any write path through the frontend. claude.ai is where things happen; the web view is for looking.
 - Any LLM call originating inside the Reli service.
+- Any third-party data integration inside Reli. If a pass needs outside data, the session running it brings its own connector.
 - Multi-user, authentication beyond single-user access control, sharing, or public availability.
 - A findings table, confidence decay algorithms, or any derived-state store that doesn't link to its evidence.
 - Vector search. For one user's Things, `checkin_date`, tags and Postgres full-text are sufficient, and dropping ChromaDB removes a stateful component from the deployment.
@@ -154,7 +157,7 @@ Explicitly not being built, and not to be added without revisiting this document
 
 ## 8. Deployment
 
-Unchanged, and reused wholesale: Docker, Railway (staging and production), Cloudflare Tunnel, GitHub Actions CI, `scripts/gates.sh` for test, lint and typecheck gates. The database becomes Postgres. The frontend is rebuilt as a read-only view against the new schema — the existing React app assumed a chat-first application and a data model that no longer exists.
+Unchanged, and reused wholesale: Docker, Railway (staging and production), Cloudflare Tunnel, GitHub Actions CI, `scripts/gates.sh` for test, lint and typecheck gates. The database becomes Postgres. The frontend is rebuilt as a read-only view against the new schema — the existing React app assumed a chat-first application and a data model that no longer exists. The only Google credential in the deploy is the sign-in OAuth client — `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, read to sign a user in and for nothing else, with nothing derived from them that outlives a request. There is no data-access grant and no refresh token.
 
 ## 9. What done looks like
 
