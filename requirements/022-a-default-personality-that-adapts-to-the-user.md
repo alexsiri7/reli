@@ -1,8 +1,8 @@
 ---
 created: '2026-09-12'
-github_issue: null
+github_issue: 1492
 id: '022'
-status: draft
+status: idea
 title: A default personality that adapts to the user
 updated: '2026-09-12'
 ---
@@ -29,4 +29,6 @@ Desired behaviour:
 
 ## Issues
 
-_None yet._
+- #1492 — A default voice, defined once and carried everywhere
+- #1493 — Voice preferences: a `voice` scope the user can move
+- #1494 — Vision doc: withdraw the personality non-goal
