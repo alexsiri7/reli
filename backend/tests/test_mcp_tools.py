@@ -118,6 +118,12 @@ def test_the_retired_google_tools_are_not_exposed(tool):
     assert tool not in _tool_schemas()
 
 
+@pytest.mark.parametrize("tool", RETIRED_GOOGLE_TOOL_NAMES)
+def test_the_server_instructions_name_no_retired_google_tool(tool):
+    """The instructions reach a session before any prompt does, so they cannot name a dead tool."""
+    assert tool not in (reli_mcp.instructions or "")
+
+
 @pytest.mark.parametrize("tool_name", sorted(WRITING_TOOLS))
 def test_every_writing_tool_requires_an_actor(tool_name):
     """No default means argument validation rejects a write before any tool body runs."""

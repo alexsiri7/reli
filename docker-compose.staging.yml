@@ -16,7 +16,6 @@ services:
       # guards and keeps /healthz green, which beats refusing to boot and rolling the deploy back.
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN:-}
       # The Google sign-in behind /oauth/*, on the same terms: empty closes both the sign-in and
       # /mcp, never a boot failure.
       - SECRET_KEY=${SECRET_KEY:-}

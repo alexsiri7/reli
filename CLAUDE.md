@@ -26,6 +26,12 @@ Non-negotiables from `docs/vision.md`. They hold even when a bead description or
   catch it. The scheduled prompts under `prompts/scheduled/` carry the two conventions pasted
   verbatim, which is not a restatement: `backend/tests/test_scheduled_prompts.py` fails when they
   diverge.
+- **Reli holds no third-party data integration.** If a pass needs outside data, the session
+  running it brings its own connector. #1488 deleted the Calendar and Gmail readers, the credential
+  reader and the consent script: a check-in is settled by the claude.ai session looking through the
+  connectors attached to it and writing what it concluded into the graph. Reli reaches Google to
+  sign a user in and for nothing else. Re-adding a data integration inside the service is a design
+  error — send mail to mayor.
 - **This repository is public.** No real user data is ever committed to it. This covers, and is not limited to: graph exports or database dumps; statistics derived from real data, including tag frequencies and counts; recorded Gmail or Calendar fixtures; briefing Things; preference Things and their evidence; and logs containing Thing titles or notes. Test fixtures are synthetic and written by hand. If a task appears to require real data in the repository, that is a design error — send mail to mayor rather than committing it.
 - **Nothing in GitHub Actions reads the graph.** No workflow, job or automation in this
   repository may read an `/api` route or anything else that answers with Things. `/healthz` and
@@ -99,45 +105,22 @@ when `frontend/dist` is present, so a local `uvicorn` run without one still serv
 
 ## Google credentials
 
-A Google credential lives in exactly three environment variables and nowhere else:
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`. The access token derived from
-them is held in process memory by `backend/google_client.py` and is never persisted — not to disk,
-not to Postgres, not to the journal. Nothing under `backend/` writes a credential anywhere, and
-`test_the_google_modules_never_persist_a_credential` fails the build if either module gains a file
-write or a database import. That is the answer to #938: a token file cannot be left behind by code
-that never writes one.
+A Google credential lives in exactly two environment variables and nowhere else:
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, the Web application OAuth client that identifies
+Reli to Google during the sign-in below. Nothing is derived from them that outlives a request:
+`backend/google_login.py` reads them, exchanges a sign-in code and returns the identity, and
+persists nothing — not to disk, not to Postgres, not to the journal. Nothing under `backend/`
+writes a credential anywhere, and `test_the_google_modules_never_persist_a_credential` fails the
+build if that module gains a file write or a database import. That is the answer to #938: a token
+file cannot be left behind by code that never writes one.
 
-The scopes granted are `gmail.readonly` and `calendar.readonly`, listed in `SCOPES` in
-`backend/google_client.py`. Widening them is a visible edit to that tuple and needs an issue that
-asks for it.
+The scopes are `openid email profile`, listed in `AUTH_SCOPES` in `backend/google_login.py`.
+Widening them is a visible edit to that tuple and needs an issue that asks for it.
 
-**Agents cannot perform the consent step.** It requires a human signed in to the Google account, in
-the same class as `SECRET_KEY` and `RAILWAY_TOKEN`. Do not claim a credential is provisioned.
-
-Runbook — when the Google tools start raising `GoogleAuthFailed`, the grant has been revoked or has
-expired, and a human re-runs the one-time consent:
-
-```bash
-export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...
-uv run python scripts/google_oauth_grant.py
-```
-
-Before the first run, a human adds `http://127.0.0.1:18765/` — the exact string, trailing slash
-included — to the authorised redirect URIs of the Web application client `GOOGLE_CLIENT_ID` names,
-in the Google Cloud console. A Web client accepts only a redirect registered verbatim, so the script
-sends that one fixed loopback URI (#1460); a missing entry answers `redirect_uri_mismatch` on the
-consent page. Nothing in the repository can perform or check the console step.
-
-It prints a refresh token and stores nothing. Replace `GOOGLE_REFRESH_TOKEN` with it and restart.
-Leaving all three unset is safe: the boot succeeds, `/healthz` stays green, the graph tools work,
-and only the three Google tools fail — with a message naming what to set.
-
-The same `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` also identify Reli to Google for the sign-in
-below, read by `backend/google_login.py` under the same never-persist rule (it is in the same
-test's `GOOGLE_MODULES`), with the `openid email profile` scopes — the readers' `SCOPES` tuple is
-unchanged. The readers' grant is minted through that same Web client, which is why one pair
-suffices: a refresh token is only refreshable with the secret of the client that minted it, and
-`backend/google_client.py` sends this one.
+There is no `GOOGLE_REFRESH_TOKEN` and no consent step: #1488 deleted the `gmail.readonly` /
+`calendar.readonly` grant along with the readers it fed, so the only redirect URI the Web client
+needs is `GOOGLE_AUTH_REDIRECT_URI`. Leaving both variables unset is safe — the boot succeeds and
+`/healthz` stays green; only the sign-in is closed, and it says what to set.
 
 ## Google sign-in
 
@@ -178,9 +161,9 @@ done:
    is exactly this one.
 2. In the Google Cloud console, confirm the OAuth client `GOOGLE_CLIENT_ID` names is a **Web
    application** client with that exact redirect URI authorised. Nothing in the repository can
-   check this; when it is wrong the callback answers 502 naming `redirect_uri_mismatch`. The
-   readers' grant shares this Web client: its loopback redirect `http://127.0.0.1:18765/` is
-   registered on the same client (see *Google credentials*).
+   check this; when it is wrong the callback answers 502 naming `redirect_uri_mismatch`. That one
+   redirect URI is the only entry the client needs — #1488 retired the loopback `http://127.0.0.1:18765/`
+   that the deleted Calendar and Gmail grant used, and a leftover entry may be removed.
 3. Add the claude.ai connector for `https://<host>/mcp` with **no** bearer token. It discovers the
    server, registers itself, opens Google sign-in, and the allowlisted account completes it.
 4. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. The
@@ -301,14 +284,13 @@ Creating documentation that claims success on an action you cannot perform is a 
 - Writes: `backend/service.py` — the only module that may mutate a Thing; every function journals
 - Reads: `backend/queries.py` — the indexed queries, including `user_model`
 - Retained reference, not built or shipped: `reference/oauth/` (see its README)
-- MCP: `backend/mcp_server.py` — the twenty-three tools wrapping `service.py`, `queries.py`,
-  `google_readers.py` and `prompts.py`, behind the OAuth JWT the Google sign-in mints; every
+- MCP: `backend/mcp_server.py` — the twenty tools wrapping `service.py`, `queries.py` and
+  `prompts.py`, behind the OAuth JWT the Google sign-in mints; every
   writing tool takes a required `actor`, and hard delete is not exposed.
   `get_initial_instructions` is the one tool that touches no data: it returns the default
   behaviour, and the server's `instructions` tell a session to call it first.
   `journal_since` is the one cross-Thing journal read, filtered by actor, for the learning pass.
-  The three Google tools take no `actor` and journal nothing, because they mutate nothing. The four
-  user-model tools are `record_preference`, `add_preference_evidence`, `reject_preference` and
+  The four user-model tools are `record_preference`, `add_preference_evidence`, `reject_preference` and
   `get_user_model`; the same model is also served as the `reli://user-model` resource
 - Scheduled passes: `prompts/scheduled/` — the three saved prompts for the claude.ai scheduled
   tasks, plain files rather than MCP prompts, with the conventions from `backend/prompts.py` pasted
@@ -320,12 +302,9 @@ Creating documentation that claims success on an action you cannot perform is a 
   preference-capture convention and the check-in semantics, held as constants there so a test can
   prove it, and names the one preference scope it loads; those scope labels (`capture`,
   `scheduling`, `planning`, `review`) are the scope vocabulary — reuse them rather than coin new ones
-- Google reads: `backend/google_readers.py` — `find_correspondence`, `find_events`,
-  `check_occurred`; read-only and summarising, and they return evidence rather than a verdict
-- Google credentials and transport: `backend/google_client.py` — the only module that reads the
-  credential and the only one that reaches a Google API, always with a `GET`
-- Google sign-in: `backend/google_login.py` — the only code that reaches Google for sign-in: the
-  authorization URL, the code exchange and the id-token claims; persists nothing
+- Google sign-in: `backend/google_login.py` — the only code that reaches Google at all, and the
+  only one that reads the credential: the authorization URL, the code exchange and the id-token
+  claims; persists nothing
 - JWTs, the callback and the web session: `backend/auth.py` — `create_jwt` / `decode_jwt`, the
   allowlist, `GET /api/auth/google/callback` (the one address Google redirects to, for both
   flows), the web view's `GET /api/auth/google`, `GET /api/auth/me` and `POST /api/auth/logout`,

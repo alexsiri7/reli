@@ -26,10 +26,10 @@ For how Reli compares to related projects, see [comparisons](docs/comparisons.md
 **Frontend:** React + TypeScript, built with Vite and served by the same container — a read-only view over the graph, with rejecting a preference as its only write
 **Storage:** Postgres
 **Interface:** MCP — every write goes through an MCP client, except rejecting a preference; the `/api` routes the web view reads are read-only
-**Integrations:** Google Calendar and Gmail, read-only — `backend/google_client.py` and `backend/google_readers.py`; `reference/oauth/` holds the pre-rebuild code, not reused
+**Integrations:** none — Reli holds no third-party data integration; a session that needs Calendar or Gmail brings its own connector (#1488). Google is reached only to sign a user in
 **Infrastructure:** Docker, Cloudflare Tunnel, GitHub Actions CI, Railway (staging + production deploy)
 
-Today the service is the data layer, the MCP tools over it at `/mcp` — including the read-only Calendar and Gmail readers and the user model — the read-only web view at `/` with the `/api` routes behind it, and a health check. The scheduled passes are prompt files under `prompts/scheduled/`, run as Claude scheduled tasks against that same `/mcp`.
+Today the service is the data layer, the MCP tools over it at `/mcp` — including the user model — the read-only web view at `/` with the `/api` routes behind it, and a health check. The scheduled passes are prompt files under `prompts/scheduled/`, run as Claude scheduled tasks against that same `/mcp`.
 
 ## Setup
 

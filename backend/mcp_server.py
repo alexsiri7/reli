@@ -137,9 +137,9 @@ reli_mcp = FastMCP(
         f"{OBSERVATION_TAG} Thing holding its journal_entry_id stands for it, because an edge can "
         f"only point at a Thing. reject_preference tags a preference {REJECTED_TAG}; read the "
         "model with get_user_model, or load reli://user-model as context without a call. "
-        "find_correspondence, find_events and check_occurred are read-only lookups into the user's "
-        "Gmail and Calendar, there to settle a check-in without asking the user. They return "
-        "evidence; what it means is yours to decide."
+        "Reli holds no Calendar or Gmail integration of its own: settle a check-in by looking "
+        "through the connectors attached to this session. What they return is evidence, not a "
+        "verdict; what it means is yours to decide."
     ),
     # Mounted at /mcp by backend.main, so the SDK's own default of "/mcp" would serve /mcp/mcp.
     streamable_http_path="/",

@@ -110,22 +110,22 @@ and the read path so the two cannot drift. Rationale: [vision.md §5](vision.md#
 
 ## 6. MCP surface
 
-`backend/mcp_server.py` is the only way into the graph: twenty-three tools, four prompts and two
-resources, each a thin wrapper over `service`, `queries`, `google_readers` or `prompts`. Every writing tool
+`backend/mcp_server.py` is the only way into the graph: twenty tools, four prompts and two
+resources, each a thin wrapper over `service`, `queries` or `prompts`. Every writing tool
 takes a required `actor` (`claude_interactive` or `claude_scheduled`); there is no hard delete;
 the endpoint sits behind a JWT from the OAuth 2.1 authorization server in
 `backend/mcp_oauth.py`. The catalogue is in [mcp-design.md](mcp-design.md).
 
-## 7. Google readers
+## 7. No third-party data integration
 
-`backend/google_client.py` is the only module that reads the Google credential
-(`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`) and the only one that
-reaches a Google API. The access token it derives lives in process memory and is written nowhere;
-every call is a `GET`; the scopes are `gmail.readonly` and `calendar.readonly`
-(`SCOPES`). `backend/google_readers.py` builds three read-only lookups on it —
-`find_correspondence`, `find_events`, `check_occurred` — that return summaries and counts, never a
-verdict: whether a check-in is settled is the calling session's judgement. Nothing here mutates a
-Thing, so nothing here journals.
+Reli reaches Google to sign a user in and for nothing else. `backend/google_login.py` is the only
+module that reads the Google credential (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) and the only
+one that reaches Google at all; nothing it handles is persisted anywhere.
+
+#1488 deleted the Calendar and Gmail readers that used to live here. A session connected to `/mcp`
+already carries its own connectors, so a check-in is settled by that session looking at the user's
+own calendar and mail and writing what it concluded into the graph — Reli holds no parallel
+integration and no data-access credential.
 
 ## 8. The web view
 

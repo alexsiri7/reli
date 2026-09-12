@@ -55,24 +55,13 @@ are in CLAUDE.md, *Google sign-in*.
 
 The tools, prompts and resources it serves are listed in [mcp-design.md](mcp-design.md).
 
-## Google (optional)
+## Calendar and Gmail
 
-The three Google tools (`find_correspondence`, `find_events`, `check_occurred`) read Gmail and
-Calendar with the `gmail.readonly` and `calendar.readonly` scopes. They need `GOOGLE_CLIENT_ID`,
-`GOOGLE_CLIENT_SECRET` and `GOOGLE_REFRESH_TOKEN`. A human obtains the refresh token once — the
-consent step needs a person signed in to the Google account. First, in the Google Cloud console,
-add `http://127.0.0.1:18765/` (exact string, trailing slash included) to the authorised redirect
-URIs of the OAuth client `GOOGLE_CLIENT_ID` names — the Web client from *Connecting Claude* — then:
-
-```bash
-export GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...
-uv run python scripts/google_oauth_grant.py
-```
-
-It prints a refresh token and stores nothing. Leaving all three unset is safe: the boot succeeds,
-`/healthz` stays green, the graph tools work, and only the three Google tools fail, with a message
-naming what to set. When they start raising `GoogleAuthFailed`, the grant has expired or been
-revoked — re-run the consent and replace `GOOGLE_REFRESH_TOKEN`.
+Reli has no Calendar or Gmail integration and holds no Google data credential: #1488 deleted the
+readers, the transport and the consent script. A session that needs to look at the user's calendar
+or mail — to settle a check-in, say — does it through its own connectors, attached alongside Reli's
+in the same claude.ai session or scheduled task. `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are
+still needed, by the sign-in above and by nothing else.
 
 ## Docker production deployment
 
@@ -115,9 +104,8 @@ These are the fields of `Settings` in `backend/config.py`, and nothing else is r
 | `ALLOWED_EMAILS` | empty | Comma-separated Google account emails allowed to sign in. Empty admits nobody. |
 | `GOOGLE_AUTH_REDIRECT_URI` | empty | `https://<your-host>/api/auth/google/callback`, registered verbatim on the OAuth client. Empty closes the sign-in; there is no localhost guess. |
 | `RELI_BASE_URL` | empty | Issuer and base of the OAuth metadata documents. Derived from `GOOGLE_AUTH_REDIRECT_URI` when empty. |
-| `GOOGLE_CLIENT_ID` | empty | Google OAuth client, see above; also identifies Reli to Google for the sign-in. Empty disables only the three Google tools and the sign-in. |
+| `GOOGLE_CLIENT_ID` | empty | The Web application OAuth client that identifies Reli to Google for the sign-in, and the only Google credential Reli holds. Empty closes the sign-in; the boot succeeds. |
 | `GOOGLE_CLIENT_SECRET` | empty | As above. |
-| `GOOGLE_REFRESH_TOKEN` | empty | As above; printed by `scripts/google_oauth_grant.py`. |
 | `LOG_LEVEL` | `INFO` | Python logging level. |
 | `SENTRY_DSN` | empty | Empty disables Sentry. |
 | `SENTRY_ENVIRONMENT` | `production` | Environment tag on Sentry events. |

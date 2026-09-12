@@ -234,19 +234,17 @@ an agent can read).
 | `GOOGLE_REDIRECT_URI` | `http://localhost:8000/api/calendar/callback` | Calendar grant callback, and base for the Gmail one — **not** login | no | yes |
 | `TOKEN_ENCRYPTION_KEY` | `""` | Encrypting stored Calendar/Gmail refresh tokens (`token_encryption.py`) — not login | no | yes |
 | `WEB_UI_PASSWORD` | — | did not exist | was, at the time of writing — retired by #1471, which left the session cookie as the only web credential | not in the list |
-| `GOOGLE_REFRESH_TOKEN` | — | did not exist | yes — the Calendar/Gmail grant | not in the list |
+| `GOOGLE_REFRESH_TOKEN` | — | did not exist | was, at the time of writing — the Calendar/Gmail grant, retired by #1488 with the readers it fed | not in the list |
 
 Two readings of that table matter for the restore:
 
-- **The Google client is shared.** `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` survived the rebuild
-  and are read today by `backend/google_client.py` for a *different* grant: `gmail.readonly` +
-  `calendar.readonly`, a refresh token minted once by `scripts/google_oauth_grant.py` against a
-  loopback redirect. Restoring login puts a second grant type (`openid email profile`, a browser
-  redirect to `GOOGLE_AUTH_REDIRECT_URI`) on the same OAuth client. That is how it was at `553e3f0`
-  too — the Calendar and Gmail routers used the same `_client_config()` shape with their own
-  redirect URIs — so it is known to work, but the two must not be confused when reading logs or
-  the console. #1460 made the sharing explicit: the grant's fixed loopback URI is registered beside
-  `GOOGLE_AUTH_REDIRECT_URI` on the one Web client.
+- **The Google client was shared, and no longer is.** `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+  survived the rebuild, and at the time of writing were read for a *second* grant as well:
+  `gmail.readonly` + `calendar.readonly`, a refresh token minted once against a loopback redirect,
+  which #1460 registered beside `GOOGLE_AUTH_REDIRECT_URI` on the one Web client. #1488 deleted
+  that grant and everything that read it, so sign-in (`openid email profile`, a browser redirect to
+  `GOOGLE_AUTH_REDIRECT_URI`) is now the only thing on the client and there is nothing left to
+  confuse it with when reading logs or the console.
 - **The current credentials are not in the owner's list.** `MCP_API_TOKEN` and `WEB_UI_PASSWORD`
   are absent from the reported names while `SECRET_KEY`, `ALLOWED_EMAILS` and
   `GOOGLE_AUTH_REDIRECT_URI` are present. Read literally, that is the deploy that requirement 019
@@ -267,7 +265,7 @@ authorised redirect list. Only the first is needed for login.
 | `<GOOGLE_AUTH_REDIRECT_URI>` — by default `<base>/api/auth/google/callback` | `GOOGLE_AUTH_REDIRECT_URI` | Web login **and** MCP login (both flows share the one callback) |
 | `<GOOGLE_REDIRECT_URI>` — by default `<base>/api/calendar/callback` | `GOOGLE_REDIRECT_URI` | Old per-user Calendar grant (superseded by #1412) |
 | `<RELI_BASE_URL>/api/gmail/callback`, falling back to `GOOGLE_REDIRECT_URI`'s scheme+host | derived in `routers/gmail.py` | Old per-user Gmail grant (superseded by #1412) |
-| `http://127.0.0.1:18765/` | `scripts/google_oauth_grant.py` | The current Calendar/Gmail refresh-token grant (loopback on a fixed port; registered on the Web client since #1460) |
+| `http://127.0.0.1:18765/` | `scripts/google_oauth_grant.py` | The Calendar/Gmail refresh-token grant at the time of writing (loopback on a fixed port; registered on the Web client by #1460). #1488 deleted the script and the grant, so this entry is no longer needed on the client |
 
 Redirect URIs an MCP client registers with `POST /oauth/register` are Reli's own concern, not
 Google's: Google only ever sees `GOOGLE_AUTH_REDIRECT_URI`.
@@ -366,14 +364,14 @@ should start from the commit, not from `reference/oauth/`.
    unset both contradict the v4 rule that an empty secret closes a surface; the port should close.
 5. **Dependencies.** `553e3f0`'s `pyproject.toml` carried `google-auth`, `google-auth-oauthlib`,
    `PyJWT` and `cryptography`; the current one has `httpx` as the only Google transport, and
-   `backend/google_client.py` already exchanges tokens with plain `POST` requests to
-   `oauth2.googleapis.com/token`. The port either re-adds `google-auth-oauthlib` + `PyJWT` (a
-   `pyproject.toml` and `uv.lock` change) or does the code exchange and id-token verification over
-   `httpx` in the style of `google_client.py`. Either is a port of the same flow.
+   exchanges tokens with plain `POST` requests to `oauth2.googleapis.com/token`. The port either
+   re-adds `google-auth-oauthlib` + `PyJWT` (a `pyproject.toml` and `uv.lock` change) or does the
+   code exchange and id-token verification over `httpx`. Either is a port of the same flow —
+   `backend/google_login.py` is where it landed.
 6. **A revoked or expired grant must say what to re-run.** The old flows answered 501
    "Authentication service unavailable" for missing settings and 400/502 for a failed exchange.
-   Requirement 019 asks for the failure to name the human step, the way `GoogleAuthFailed` does for
-   the Calendar/Gmail grant today; that is new text, not old code.
+   Requirement 019 asks for the failure to name the human step, the way `GoogleAuthFailed` did for
+   the Calendar/Gmail grant at the time of writing; that is new text, not old code.
 7. **Google Cloud console.** Confirm `GOOGLE_AUTH_REDIRECT_URI`'s value is still an authorised
    redirect URI on the OAuth client, per environment. Nothing in the repository can check this.
 
