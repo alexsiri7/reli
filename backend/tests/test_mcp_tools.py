@@ -568,6 +568,18 @@ def test_every_prompt_carries_the_preference_capture_convention(name):
 
 
 @pytest.mark.parametrize("name", sorted(PROMPT_SCOPES))
+def test_every_prompt_carries_the_default_voice_and_its_guardrail(name):
+    """#1492: the guardrail is inside the voice constant, so no prompt can carry one without the
+    other."""
+    text = _prompt_text(name)
+
+    assert prompts.DEFAULT_VOICE in text
+    assert "Warm, direct, unhurried." in text
+    assert "Lead with the answer." in text
+    assert "Confidence of manner is never confidence of fact." in text
+
+
+@pytest.mark.parametrize("name", sorted(PROMPT_SCOPES))
 def test_every_prompt_states_what_a_checkin_date_means(name):
     text = _prompt_text(name)
 
@@ -620,18 +632,20 @@ def test_get_initial_instructions_is_the_capture_prompt_plus_the_hats():
 def test_get_initial_instructions_carries_the_shared_conventions():
     text = get_initial_instructions()
 
+    assert prompts.DEFAULT_VOICE in text
     assert prompts.PREFERENCE_CAPTURE_CONVENTION in text
     assert prompts.CHECKIN_SEMANTICS in text
     assert f'get_user_model(scope="{prompts.CAPTURE_SCOPE}")' in text
     assert 'actor="claude_interactive"' in text
 
 
-def test_get_initial_instructions_follows_an_edit_to_the_convention(monkeypatch):
+@pytest.mark.parametrize("constant", ("PREFERENCE_CAPTURE_CONVENTION", "DEFAULT_VOICE"))
+def test_get_initial_instructions_follows_an_edit_to_a_shared_constant(monkeypatch, constant):
     """One source, not two: the text is derived at call time, so editing the constant is enough."""
-    monkeypatch.setattr(prompts, "PREFERENCE_CAPTURE_CONVENTION", "## Sentinel convention")
+    monkeypatch.setattr(prompts, constant, "## Sentinel section")
 
-    assert "## Sentinel convention" in get_initial_instructions()
-    assert "## Sentinel convention" in _prompt_text("capture")
+    assert "## Sentinel section" in get_initial_instructions()
+    assert "## Sentinel section" in _prompt_text("capture")
 
 
 def test_get_initial_instructions_takes_no_arguments():

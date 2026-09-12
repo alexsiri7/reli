@@ -52,6 +52,7 @@ HEARTBEAT_TITLES = {RESOLUTION: "Resolution pass", LEARNING: "Learning pass", MO
 # Pinned on its own: the convention below is carried verbatim, which proves a file matches the
 # constant but not that this clause survives a reword of it.
 CHECKIN_FALLBACK = "when you cannot tell, the check-in is not resolved"
+VOICE_GUARDRAIL = "Confidence of manner is never confidence of fact."
 
 RESOLUTION_LITERALS = (
     "due_for_checkin",
@@ -115,6 +116,16 @@ def test_the_three_prompt_files_exist_and_are_not_empty(name):
 def test_no_pass_reaches_for_a_reli_google_tool(name, tool):
     """#1487: a pass looks through the connectors attached to its own session."""
     assert tool not in _text(name)
+
+
+@pytest.mark.parametrize("name", FILES)
+def test_every_pass_carries_the_default_voice_verbatim(name):
+    """#1492: one definition. The guardrail lives inside the constant, so a file that carries the
+    voice cannot have dropped the limit on it."""
+    text = _text(name)
+
+    assert prompts.DEFAULT_VOICE in text
+    assert VOICE_GUARDRAIL in text
 
 
 def test_the_resolution_pass_carries_the_checkin_semantics_verbatim():

@@ -23,9 +23,9 @@ Non-negotiables from `docs/vision.md`. They hold even when a bead description or
   `get_initial_instructions` tool (#1466), because claude.ai applies an MCP prompt only when the
   user picks one. A Claude Project, system prompt or scheduled-task prompt calls the tool rather
   than restating the rules in its own words — a restatement is a copy that drifts with nothing to
-  catch it. The scheduled prompts under `prompts/scheduled/` carry the two conventions pasted
-  verbatim, which is not a restatement: `backend/tests/test_scheduled_prompts.py` fails when they
-  diverge.
+  catch it. The scheduled prompts under `prompts/scheduled/` carry the default voice and the two
+  conventions pasted verbatim, which is not a restatement:
+  `backend/tests/test_scheduled_prompts.py` fails when they diverge.
 - **Reli holds no third-party data integration.** If a pass needs outside data, the session
   running it brings its own connector. #1488 deleted the Calendar and Gmail readers, the credential
   reader and the consent script: a check-in is settled by the claude.ai session looking through the
@@ -293,15 +293,18 @@ Creating documentation that claims success on an action you cannot perform is a 
   The four user-model tools are `record_preference`, `add_preference_evidence`, `reject_preference` and
   `get_user_model`; the same model is also served as the `reli://user-model` resource
 - Scheduled passes: `prompts/scheduled/` — the three saved prompts for the claude.ai scheduled
-  tasks, plain files rather than MCP prompts, with the conventions from `backend/prompts.py` pasted
-  verbatim and `backend/tests/test_scheduled_prompts.py` holding them to it
+  tasks, plain files rather than MCP prompts, with the default voice and the conventions from
+  `backend/prompts.py` pasted verbatim and `backend/tests/test_scheduled_prompts.py` holding them
+  to it
 - Prompts: `backend/prompts.py` — the text of the four MCP prompts `capture`, `daily-planning`,
   `project-planning` and `review`, registered in `mcp_server.py`, and `initial_instructions`,
   what `get_initial_instructions` returns: `capture` derived at call time plus a paragraph naming
-  the three hats, never a second copy. Every prompt carries the
+  the three hats, never a second copy. Every prompt carries `DEFAULT_VOICE`, the
   preference-capture convention and the check-in semantics, held as constants there so a test can
-  prove it, and names the one preference scope it loads; those scope labels (`capture`,
-  `scheduling`, `planning`, `review`) are the scope vocabulary — reuse them rather than coin new ones
+  prove it — the voice states how the assistant sounds and, in the same constant, that confidence
+  of manner is never confidence of fact (#1492) — and names the one preference scope it loads;
+  those scope labels (`capture`, `scheduling`, `planning`, `review`) are the scope vocabulary —
+  reuse them rather than coin new ones
 - Google sign-in: `backend/google_login.py` — the only code that reaches Google at all, and the
   only one that reads the credential: the authorization URL, the code exchange and the id-token
   claims; persists nothing
