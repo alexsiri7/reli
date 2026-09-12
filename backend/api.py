@@ -10,20 +10,17 @@ through Claude and a rejection the user made themselves are distinguishable in t
 the learning pass's only signal for "the user decided".
 
 Everything here sits behind :func:`add_web_view_auth`: the service is publicly reachable and these
-routes serve the user's whole graph. A request is admitted by the ``reli_session`` cookie the
-Google sign-in sets, or by ``WEB_UI_PASSWORD`` as an HTTP Basic password while that remains. The
-bundle itself is public — it is the sign-in view — and so is ``/api/auth/``, which is how a
-browser gets a session; see :func:`_is_guarded`.
+routes serve the user's whole graph. A request is admitted by the ``reli_session`` cookie the Google
+sign-in sets, and by nothing else. The bundle itself is public — it is the sign-in view — and so is
+``/api/auth/``, which is how a browser gets a session, and ``/api/heartbeats``, which is read by a
+GitHub Actions watchdog that holds no credential; see :func:`_is_guarded`.
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
 import json
 import logging
 import pathlib
-import secrets
 import uuid
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -39,7 +36,6 @@ from starlette.responses import FileResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import auth, queries, service
-from .config import settings
 from .db_engine import get_engine
 from .db_models import (
     OBSERVATION_TAG,
@@ -96,6 +92,18 @@ class ThingSummary(_FromRecord):
 
 class TreeLevel(BaseModel):
     things: list[ThingSummary]
+
+
+class HeartbeatOut(_FromRecord):
+    """One scheduled pass's heartbeat: what tells a run that happened from one that did not, only."""
+
+    id: uuid.UUID
+    title: str
+    checkin_date: date | None
+
+
+class HeartbeatsOut(BaseModel):
+    heartbeats: list[HeartbeatOut]
 
 
 class ThingOut(_FromRecord):
@@ -290,6 +298,24 @@ def user_model(scope: str | None = None) -> UserModelOut:
         return UserModelOut(scope=scope, preferences=[_preference(preference) for preference in preferences])
 
 
+@router.get("/heartbeats", summary="The scheduled passes' heartbeats")
+def heartbeats() -> HeartbeatsOut:
+    """The active ``#ScheduledTask`` Things, by title. **The one unauthenticated ``/api`` route.**
+
+    The scheduled-pass watchdog in ``.github/workflows/scheduled-run-health.yml`` runs in GitHub
+    Actions, which holds no Google session and cannot obtain one, so this answers without a
+    credential. What it exposes is the three heartbeats' titles and check-in dates — written by
+    Reli's own prompts, not by the user — which is why opening it costs the graph nothing.
+
+    An archived heartbeat is absent, exactly as it is absent from the tree, so archiving one reads
+    as a missed run. No heartbeats is an empty list: "a pass has never run" is the watchdog's
+    judgement to make, not a 404 here.
+    """
+    with _session() as session:
+        found = queries.scheduled_tasks(session)
+        return HeartbeatsOut(heartbeats=[HeartbeatOut.model_validate(thing) for thing in found])
+
+
 @router.post("/preferences/{preference_id}/reject", summary="Reject a preference")
 def reject_preference(preference_id: uuid.UUID) -> PreferenceOut:
     """Tag a preference ``#Rejected`` as the user, and journal it. The only write in the web view.
@@ -352,60 +378,41 @@ def mount_frontend(app: FastAPI, dist: pathlib.Path) -> None:
 
 #: What the check guards: the graph, which only ``/api`` serves. The bundle is static code from a
 #: public repository and is the sign-in view, so it answers everyone; ``/api/auth/`` is how a
-#: browser gets a session, so it must answer before there is one. ``/healthz``, ``/mcp``,
-#: ``/.well-known/`` and ``/oauth/`` were never the web view's to guard — ``/mcp`` carries its own
-#: bearer check. The prefix ends in a slash so ``/api/auth`` cannot be widened into ``/api/authors``.
+#: browser gets a session, so it must answer before there is one, and ``/api/heartbeats`` is read by
+#: a watchdog that cannot hold one. ``/healthz``, ``/mcp``, ``/.well-known/`` and ``/oauth/`` were
+#: never the web view's to guard — ``/mcp`` carries its own bearer check. The prefix ends in a slash
+#: so ``/api/auth`` cannot be widened into ``/api/authors``, and the path is matched whole so
+#: ``/api/heartbeats-and-everything-else`` is not exempt either.
 _GUARDED_PREFIX = "/api/"
 _PUBLIC_PREFIX = "/api/auth/"
+_PUBLIC_PATH = "/api/heartbeats"
 
-_NO_CREDENTIAL = "Not signed in: sign in with Google at /, or send WEB_UI_PASSWORD as the HTTP Basic password."
+_NO_CREDENTIAL = "Not signed in: sign in with Google at /."
 
 
 def _is_guarded(path: str) -> bool:
-    return (path == "/api" or path.startswith(_GUARDED_PREFIX)) and not path.startswith(_PUBLIC_PREFIX)
-
-
-def _basic_password(header: str) -> str:
-    """The password out of an ``Authorization: Basic`` header; empty for anything else.
-
-    The username is ignored: Reli has one user, so there are no accounts to tell apart.
-    """
-    if not header.startswith("Basic "):
-        return ""
-    try:
-        decoded = base64.b64decode(header[6:], validate=True).decode()
-    except (binascii.Error, UnicodeDecodeError, ValueError):
-        return ""
-    _, separator, password = decoded.partition(":")
-    return password if separator else ""
+    if path == _PUBLIC_PATH or path.startswith(_PUBLIC_PREFIX):
+        return False
+    return path == "/api" or path.startswith(_GUARDED_PREFIX)
 
 
 def _refusal(request: Request) -> str | None:
-    """Why the request is not admitted, or ``None`` when the cookie or the password admits it.
-
-    The cookie is asked first, then the password. A stale cookie beside the right password still
-    admits — the watchdog and ``curl`` never carry a cookie, but a browser might keep an expired one.
-    """
-    reason = _NO_CREDENTIAL
+    """Why the request is not admitted, or ``None`` when the ``reli_session`` cookie admits it."""
     try:
         if auth.web_session(request) is not None:
             return None
     except auth.SessionRefused as refused:
-        reason = str(refused)
-
-    # Read the password per request, not at construction: the app is built at import time, so a
-    # value captured then could never be corrected.
-    expected = settings.WEB_UI_PASSWORD
-    if expected and secrets.compare_digest(_basic_password(request.headers.get("authorization", "")), expected):
-        return None
-    return reason
+        return str(refused)
+    return _NO_CREDENTIAL
 
 
 class _WebViewAuthMiddleware:
-    """Requires the ``reli_session`` cookie or HTTP Basic with ``WEB_UI_PASSWORD`` on every ``/api`` path.
+    """Requires the ``reli_session`` cookie on every ``/api`` path outside the public ones.
 
-    Nothing set closes the graph rather than opening it: there is no dev-mode bypass, because these
-    routes serve the user's whole graph and the deploy URLs answer the public internet.
+    The cookie is the only credential: there is no HTTP Basic password any more (#1471), so nothing
+    but a Google sign-in opens the graph. Nothing configured closes it rather than opening it —
+    there is no dev-mode bypass, because these routes serve the user's whole graph and the deploy
+    URLs answer the public internet.
 
     The 401 carries no ``WWW-Authenticate``: a challenge would make the browser pop its own
     credential prompt over the sign-in view. The body says what admits a request instead.
@@ -429,11 +436,11 @@ class _WebViewAuthMiddleware:
 
 
 def add_web_view_auth(app: FastAPI) -> None:
-    """Put every ``/api`` route outside ``/api/auth/`` behind the session-or-password check."""
+    """Put every ``/api`` route outside ``/api/auth/`` and ``/api/heartbeats`` behind the session."""
     missing = auth.missing_sign_in_settings()
-    if not settings.WEB_UI_PASSWORD and missing:
+    if missing:
         logger.warning(
-            "WEB_UI_PASSWORD is not set and the Google sign-in is missing %s: /api will answer 401 to every request.",
+            "The Google sign-in is missing %s: /api will answer 401 to every request.",
             ", ".join(missing),
         )
     app.add_middleware(_WebViewAuthMiddleware)

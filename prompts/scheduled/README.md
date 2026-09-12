@@ -25,8 +25,9 @@ Three tasks, in this order, each depending on what the one before it wrote:
   `Morning conversation`. Each run ends by setting its `checkin_date` to tomorrow and `last_run`
   in its notes (the learning pass also keeps `journal_watermark`, the newest journal id it has
   processed). A run that did not complete leaves the Thing due, so a missed run shows up in
-  `due_for_checkin` for every session and in the web view's tree. Never archive one and never make
-  it a child of anything — the watchdog reads the tree's top level.
+  `due_for_checkin` for every session and in the web view's tree. Never archive one — the watchdog
+  reads `/api/heartbeats`, which answers with the active `#ScheduledTask` Things, so an archived
+  heartbeat reads as a missed run.
 - One `#Briefing` Thing per morning, titled `Briefing for YYYY-MM-DD` with that date as its
   `checkin_date`, with `unresolved`, `decisions`, `learned` and `conflicts` in its notes and a
   `References` edge to every Thing it mentions. The morning conversation archives it once it has

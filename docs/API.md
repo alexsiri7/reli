@@ -2,15 +2,16 @@
 
 `/api` exists for the frontend. It mirrors the query layer and nothing more: every write into the
 graph goes over MCP ([mcp-design.md](mcp-design.md)), with the single exception listed below.
-Every route admits a request by the `reli_session` cookie the Google sign-in sets or by HTTP Basic
-with `WEB_UI_PASSWORD` as the password and any username; with neither presented the answer is a
-401 whose body names both, and with neither configured every request is a 401. The one exception
-is `/api/auth/`, the sign-in itself — `GET /api/auth/google`, Google's callback for both the web
-view and the MCP connector, `GET /api/auth/me` and `POST /api/auth/logout` — which lives in
+Every route admits a request by the `reli_session` cookie the Google sign-in sets, and by nothing
+else — #1471 retired the HTTP Basic password that used to sit beside it; without the cookie the
+answer is a 401 naming the sign-in, and with the sign-in unconfigured every request is a 401. Two
+paths are exempt. `/api/auth/`, the sign-in itself — `GET /api/auth/google`, Google's callback for
+both the web view and the MCP connector, `GET /api/auth/me` and `POST /api/auth/logout` — lives in
 `backend/auth.py` (see [mcp-design.md](mcp-design.md) §3 and CLAUDE.md's *Google sign-in*) and is
-listed below only so its exemption is on record. The routes and their response models are in
-`backend/api.py`, the TypeScript mirror is `frontend/src/api.ts`, and the contract is proven by
-`backend/tests/test_api.py`.
+listed below only so its exemption is on record. `GET /api/heartbeats` is the other, read by the
+scheduled-pass watchdog in GitHub Actions, which holds no session and cannot obtain one.
+The routes and their response models are in `backend/api.py`, the TypeScript mirror is
+`frontend/src/api.ts`, and the contract is proven by `backend/tests/test_api.py`.
 
 ## Routes
 
@@ -19,6 +20,7 @@ listed below only so its exemption is on record. The routes and their response m
 | GET | `/api/things?parent=` | `TreeLevel` | One level of the `ChildOf` tree: the children of `parent`, or the top level when omitted. The top level is the active Things nothing claims as a child, minus the user-model tags (`#User`, `#Preference`, `#Observation`). Most important first; `has_children` says whether expanding a row shows anything. |
 | GET | `/api/things/{thing_id}` | `ThingDetail` | One Thing and every edge touching it. 404 when absent. `direction` is resolved relative to the requested Thing. |
 | GET | `/api/things/{thing_id}/history?limit=` | `HistoryOut` | The newest `limit` journal entries (1–1000, default 200), oldest first within that window. Only entries recorded against the Thing itself — relating and unrelating are journalled against the relationship, so edge changes do not appear. An unknown id answers an empty history, not a 404. |
+| GET | `/api/heartbeats` | `HeartbeatsOut` | The active `#ScheduledTask` Things — the scheduled passes' heartbeats — by title, each as `id`, `title` and `checkin_date` and nothing more. **Unauthenticated**, for the watchdog in `.github/workflows/scheduled-run-health.yml`. An archived heartbeat is absent, so archiving one reads as a missed run; no heartbeats is an empty list, not a 404. |
 | GET | `/api/user-model?scope=` | `UserModelOut` | Every preference with its evidence. Rejected preferences are **always** included, so the view can make a wrong one spottable. A preference with no evidence or a blank scope never appears. |
 | POST | `/api/preferences/{preference_id}/reject` | `PreferenceOut` | **The only write.** Tags the preference `#Rejected` and journals it as `Actor.USER`. Rejecting twice is a 200 that changes nothing. 404 for a missing id or a Thing that is not tagged `#Preference`. |
 | GET | `/api/auth/google` | `{auth_url}` | Where the sign-in view sends the browser. 501 naming each empty sign-in setting. Public. |
@@ -43,6 +45,12 @@ listed below only so its exemption is on record. The routes and their response m
 
 // TreeLevel
 { "things": [ThingSummary] }
+
+// HeartbeatOut — one scheduled pass's heartbeat
+{ "id": "uuid", "title": "string", "checkin_date": "2026-09-12" | null }
+
+// HeartbeatsOut
+{ "heartbeats": [HeartbeatOut] }
 
 // ThingOut — a whole Thing
 {

@@ -233,7 +233,7 @@ an agent can read).
 | `RELI_API_TOKEN` / `RELI_API_TOKEN_USER_ID` | `""` | Static bearer on `/api` for programmatic clients | no | not in the list (`API_TOKEN` is set on staging, a name neither tree reads) |
 | `GOOGLE_REDIRECT_URI` | `http://localhost:8000/api/calendar/callback` | Calendar grant callback, and base for the Gmail one — **not** login | no | yes |
 | `TOKEN_ENCRYPTION_KEY` | `""` | Encrypting stored Calendar/Gmail refresh tokens (`token_encryption.py`) — not login | no | yes |
-| `WEB_UI_PASSWORD` | — | did not exist | yes — the only web credential now | not in the list |
+| `WEB_UI_PASSWORD` | — | did not exist | was, at the time of writing — retired by #1471, which left the session cookie as the only web credential | not in the list |
 | `GOOGLE_REFRESH_TOKEN` | — | did not exist | yes — the Calendar/Gmail grant | not in the list |
 
 Two readings of that table matter for the restore:
