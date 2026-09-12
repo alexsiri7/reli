@@ -18,8 +18,8 @@ Claude session (claude.ai, interactive or scheduled)
 Browser               │        │              │──── Postgres (things, relationships, journal)
         │  reli_session cookie or Basic       │
         ▼             ├───────▶│   FastAPI    │
-   /  and  /api ──────┘        │   (reli)     │──── GET only ──▶ Gmail API, Calendar API
-                               │              │                  (the three Google tools)
+   /  and  /api ──────┘        │   (reli)     │
+                               │              │
 Deploy pipeline ──▶ /healthz ─▶│              │
    (unauthenticated)           └──────────────┘
 ```
