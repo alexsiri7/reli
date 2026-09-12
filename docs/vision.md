@@ -64,7 +64,7 @@ Every action goes through MCP. Nothing writes to Reli except an MCP client, and 
 
 **Prompts** carry the PA behaviour — what to capture, when to set a check-in, how to name things, when to record a preference — as text, so Claude behaves as a PA without Reli owning a model. A prompt applies only when the user picks it, so prompts are the modes entered deliberately: the operational "hats" from the original spec — daily planning, project planning, review — become prompts rather than backend modes. The fourth, `capture`, is the default, and a default the user has to remember to load is not one.
 
-**`get_initial_instructions`** is how the default reaches a session that loaded no prompt. It is a tool rather than a prompt precisely so a session can obtain it without the user doing anything: the server's own instructions tell every session to call it first, and it returns `capture` derived at call time, plus a pointer to the three hats, so it cannot drift from the prompt.
+**`get_initial_instructions`** is how the default reaches a session that loaded no prompt. It is a tool rather than a prompt precisely so a session can obtain it without the user doing anything: the server's own instructions tell every session to call it first, and it returns `capture` derived at call time, plus a pointer to the three hats, so it cannot drift from the prompt. The assistant has a defined default voice — how it sounds, and the rule that confidence of manner is never confidence of fact — and it reaches a session the same way: it is written once, inside `capture`, so the tool carries it without a second copy to keep in step.
 
 **Resources** expose the current user model, scoped, so a session loads the preferences relevant to what it's doing.
 
@@ -123,6 +123,8 @@ This is the part that makes Reli more than a queryable notebook. A Things databa
 - *Explicit*, mid-conversation. Claude writes a preference the moment it notices one, not in an end-of-session summary — a closed tab is a lost signal. The convention is encoded in the MCP prompts.
 - *Implicit*, from the journal. The learning pass. This is the "without being told" requirement, and it cannot come from conversation at all, because a scheduled job cannot read claude.ai sessions. It can only come from observed behaviour.
 
+**Voice is a scope like any other.** How the assistant sounds is a preference, recorded under the scope `voice` with its evidence, loaded beside the scope for the mode a session is in, and correctable and rejectable in the read view exactly like a scheduling or a naming one. A voice preference is how the user moves the assistant off the default in section 4.2, and two that contradict go to the morning conversation like any other conflict. It is the one scope the learning pass never writes to, and that is the limitation: the journal records mutations, not conversation, so a run of rewritten titles is evidence about titles and never about tone. Voice is learned from what the user says outright, by the session that hears it.
+
 **No approval queue.** A preference the learning pass derives goes live immediately. It is not held provisional, and the user is not asked to confirm it. This is the behaviour of a PA who notices you never take meetings before ten and simply stops booking them — the noticing is the job, and routing every observation back for sign-off would turn "self-learning" into a chore and defeat the point. Correctness is handled after the fact, by correction, not before it, by permission.
 
 The morning conversation mentions notable new preferences as it goes, one line, in a conversation already happening. That is disclosure, not approval.
@@ -152,8 +154,7 @@ Explicitly not being built, and not to be added without revisiting this document
 - A findings table, confidence decay algorithms, or any derived-state store that doesn't link to its evidence.
 - Vector search. For one user's Things, `checkin_date`, tags and Postgres full-text are sufficient, and dropping ChromaDB removes a stateful component from the deployment.
 - Concerns as modular domain monitors. The idea is sound and may return, but it is a layer on top of a working core, not part of it.
-- Delivery channels beyond the morning conversation and ntfy. Telegram, email digests and voice are all deferred.
-- Personality adaptation — Reli learning how to talk. Claude's own tone handling covers this.
+- Delivery channels beyond the morning conversation and ntfy. Telegram, email digests and speech are all deferred.
 
 ## 8. Deployment
 
