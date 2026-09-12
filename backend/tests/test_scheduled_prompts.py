@@ -32,6 +32,7 @@ from backend.mcp_server import (
     record_preference,
     update_thing,
 )
+from backend.tests.conftest import RETIRED_GOOGLE_TOOL_NAMES
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROMPTS = REPO_ROOT / "prompts" / "scheduled"
@@ -48,6 +49,10 @@ INTERACTIVE = 'actor="claude_interactive"'
 
 HEARTBEAT_TITLES = {RESOLUTION: "Resolution pass", LEARNING: "Learning pass", MORNING: "Morning conversation"}
 
+# The consequence the judgement carries: the one clause of the convention a reword could drop
+# without failing anything else.
+CHECKIN_FALLBACK = "when you cannot tell, the check-in is not resolved"
+
 RESOLUTION_LITERALS = (
     "due_for_checkin",
     "archive_thing",
@@ -62,6 +67,7 @@ RESOLUTION_LITERALS = (
     "paging an inbox into context",
     "never sends mail",
     "goes to `unresolved`",
+    CHECKIN_FALLBACK,
 )
 LEARNING_LITERALS = (
     "journal_since",
@@ -85,8 +91,8 @@ MORNING_LITERALS = (
     "did not complete last night",
     "A morning chat that only reports is a notification with extra steps.",
     "every write that encodes something the user said",
+    CHECKIN_FALLBACK,
 )
-RELI_GOOGLE_TOOLS = ("find_events", "find_correspondence", "check_occurred")
 SCOPE_ARGUMENT = re.compile(r'scope="([a-z]+)"')
 SCOPES = {prompts.CAPTURE_SCOPE, prompts.SCHEDULING_SCOPE, prompts.PLANNING_SCOPE, prompts.REVIEW_SCOPE}
 
@@ -105,13 +111,9 @@ def test_the_three_prompt_files_exist_and_are_not_empty(name):
 
 
 @pytest.mark.parametrize("name", FILES)
-@pytest.mark.parametrize("tool", RELI_GOOGLE_TOOLS)
+@pytest.mark.parametrize("tool", RETIRED_GOOGLE_TOOL_NAMES)
 def test_no_pass_reaches_for_a_reli_google_tool(name, tool):
-    """#1487: a pass looks through the connectors attached to its own session.
-
-    The names are hard-coded rather than imported from ``backend.google_readers``, because #1488
-    deletes that module and this guard has to outlive it.
-    """
+    """#1487: a pass looks through the connectors attached to its own session."""
     assert tool not in _text(name)
 
 

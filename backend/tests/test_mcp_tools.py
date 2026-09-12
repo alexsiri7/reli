@@ -47,6 +47,7 @@ from backend.mcp_server import (
     update_thing,
 )
 from backend.service import ThingNotFound
+from backend.tests.conftest import RETIRED_GOOGLE_TOOL_NAMES
 
 TOOL_NAMES = {
     "create_thing",
@@ -553,10 +554,6 @@ PROMPT_SCOPES = {
     "review": prompts.REVIEW_SCOPE,
 }
 
-# Hard-coded rather than taken from ``GOOGLE_TOOLS`` above: #1488 deletes those tools, and the
-# guard that no prompt sends a session to one of them has to outlive them (#1487).
-RETIRED_GOOGLE_TOOL_NAMES = ("find_events", "find_correspondence", "check_occurred")
-
 
 def _prompts():
     return {prompt.name: prompt for prompt in asyncio.run(reli_mcp.list_prompts())}
@@ -594,6 +591,7 @@ def test_every_prompt_states_what_a_checkin_date_means(name):
     assert "A check-in date is your obligation, not the user's." in text
     assert "resolved without involving the user" in text
     assert "evidence, not a verdict" in text
+    assert "when you cannot tell, the check-in is not resolved" in text
 
 
 @pytest.mark.parametrize("name", sorted(PROMPT_SCOPES))
