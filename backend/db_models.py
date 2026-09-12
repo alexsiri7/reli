@@ -102,9 +102,10 @@ OBSERVATION_TAG = "#Observation"
 #: reads it back, so the literal lives here rather than in either.
 NEEDS_INPUT_TAG = "#NeedsInput"
 
-#: One heartbeat Thing per scheduled pass (#1413). The saved prompts tell each pass to apply it and
-#: ``queries.scheduled_tasks`` reads it back for the watchdog, so the literal lives here rather than
-#: in either — a rename in only one place would silently kill the missed-run signal.
+#: One heartbeat Thing per scheduled pass (#1413). The saved prompts under ``prompts/scheduled/``
+#: tell each pass to apply it, and ``backend/tests/test_scheduled_prompts.py`` holds them to this
+#: literal: a rename in only one place would silently kill the missed-run signal, which is a
+#: heartbeat left due surfacing in ``due_for_checkin``.
 SCHEDULED_TASK_TAG = "#ScheduledTask"
 
 

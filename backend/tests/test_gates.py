@@ -22,6 +22,9 @@ DEPENDABOT = REPO_ROOT / ".github" / "dependabot.yml"
 BACKGROUNDED = re.compile(r"(?<![&>])&(?![&>])")
 UV_SYNC = re.compile(r"uv sync[^\n&|;]*")
 BARE_WAIT = re.compile(r"(?:^|[;&|]|\bthen\b|\bdo\b)\s*wait\s*(?:$|[;&|\n])", re.MULTILINE)
+# An ``/api`` path as a URL, not as a repository path: ``backend/api.py`` is prose a workflow may
+# name, and ``api.github.com`` has no leading slash.
+API_ROUTE = re.compile(r"""/api(?:/|(?=["'\s]|$))""")
 
 # What `gates.sh` needs on PATH before it reaches a stage. Every venv tool goes through
 # `uv run`, because CI never activates the venv.
@@ -106,6 +109,31 @@ def test_no_workflow_step_backgrounds_a_command():
     """A backgrounded gate reports through `wait`, which discards its exit code."""
     offenders = _backgrounding_steps(_workflow_run_steps())
     assert offenders == [], f"these steps cannot fail on a backgrounded command: {offenders}"
+
+
+def _graph_reading_workflows(directory: Path = WORKFLOWS) -> list[str]:
+    """Workflows naming an ``/api`` route anywhere — in a ``run:`` script or in an ``env:`` URL."""
+    workflows = (p for p in directory.iterdir() if p.suffix in (".yml", ".yaml"))
+    return [w.name for w in sorted(workflows) if API_ROUTE.search(w.read_text())]
+
+
+def test_no_workflow_reads_the_graph_into_github_actions():
+    """#1484: this repository is public, so no runner may hold the owner's Things."""
+    offenders = _graph_reading_workflows()
+    assert offenders == [], f"these workflows read an /api route: {offenders}"
+
+
+def test_the_graph_read_scan_tells_a_deploy_route_from_a_repository_path(tmp_path):
+    """Without the negatives the scan would fail on any workflow that merely names ``backend/api.py``."""
+    (tmp_path / "reads.yml").write_text('jobs:\n  x:\n    steps:\n      - run: curl "$URL/api/things"\n')
+    (tmp_path / "innocent.yml").write_text(
+        "jobs:\n  x:\n    steps:\n"
+        "      - run: gh api https://api.github.com/repos/alexsiri7/reli\n"
+        "      - run: ruff check backend/api.py\n"
+        '      - run: curl "$URL/healthz"\n'
+    )
+
+    assert _graph_reading_workflows(tmp_path) == ["reads.yml"]
 
 
 @pytest.mark.parametrize("extension", [".yml", ".yaml"])

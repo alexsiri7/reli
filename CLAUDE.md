@@ -27,6 +27,13 @@ Non-negotiables from `docs/vision.md`. They hold even when a bead description or
   verbatim, which is not a restatement: `backend/tests/test_scheduled_prompts.py` fails when they
   diverge.
 - **This repository is public.** No real user data is ever committed to it. This covers, and is not limited to: graph exports or database dumps; statistics derived from real data, including tag frequencies and counts; recorded Gmail or Calendar fixtures; briefing Things; preference Things and their evidence; and logs containing Thing titles or notes. Test fixtures are synthetic and written by hand. If a task appears to require real data in the repository, that is a design error — send mail to mayor rather than committing it.
+- **Nothing in GitHub Actions reads the graph.** No workflow, job or automation in this
+  repository may read an `/api` route or anything else that answers with Things. `/healthz` and
+  the Railway and GitHub APIs carry no graph content and stay. GitHub issues are never an
+  alerting channel for anything touching user data — alerting for a private system goes to ntfy
+  or to the user's own chat. Whether the scheduled passes ran is noticed in-session, by the
+  heartbeat Thing falling due, not by an external job (#1484).
+  `backend/tests/test_gates.py` scans the workflows and fails on an `/api` read.
 
 The merged code now follows these rules: #1408 deleted the LLM pipeline, replaced the schema and made hierarchy a `ChildOf` relationship. The five relationship-type literals are defined once, in `RelationshipType` in `backend/db_models.py` — use them, do not invent a sixth without an issue that asks for it.
 
@@ -80,11 +87,9 @@ reason. Without the sign-in configured, `/api` answers 401 to every request and 
 startup, while `/healthz` stays green so a missing secret cannot roll a deploy back. `/mcp` is
 exempt from this check; its own bearer check still decides.
 
-`GET /api/heartbeats` is the one unauthenticated `/api` route, and the only exemption besides
-`/api/auth/`. It answers with the active `#ScheduledTask` Things' `id`, `title` and `checkin_date`
-and nothing else about the graph, which is how the scheduled-pass watchdog reads the heartbeats from
-GitHub Actions, where it holds no Google session and cannot obtain one. Adding a second such
-exemption needs an issue that asks for it.
+`/api/auth/` is the only exemption: it is how a browser gets a session, so it must answer before
+there is one. Every other `/api` path is behind the cookie, and #1484 removed the one unauthenticated
+route there used to be beside it. Adding another needs an issue that asks for it.
 
 The frontend is built inside the image: the Dockerfile's `frontend-build` stage runs `npm ci` and
 `npm run build`, and the python stage copies `frontend/dist` in. `docker compose build` therefore
@@ -179,9 +184,8 @@ done:
 3. Add the claude.ai connector for `https://<host>/mcp` with **no** bearer token. It discovers the
    server, registers itself, opens Google sign-in, and the allowlisted account completes it.
 4. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. The
-   password that used to stand beside the cookie is gone (#1471): the watchdog in
-   `.github/workflows/scheduled-run-health.yml` reads the unauthenticated `/api/heartbeats` instead,
-   so nothing outside a browser needs a way in.
+   password that used to stand beside the cookie is gone (#1471), and nothing outside a browser
+   needs a way in.
 
 ## Scheduled passes
 
@@ -200,30 +204,24 @@ unattended.** Those are human steps, in the same class as the Google consent ste
 1. creates three claude.ai scheduled tasks, each pasting one file's text — the resolution pass
    overnight, the learning pass at least half an hour later, the morning conversation in waking
    hours — with the Reli connector attached;
-2. re-enables the workflow with `gh workflow enable scheduled-run-health.yml`, which was disabled
-   while it still needed a password, once the deploy serving `/api/heartbeats` is live;
-3. watches the first night. Reliability is *observed*, not assumed: the watchdog below is what
-   makes running the trial in production safe.
+2. watches the first night. Reliability is *observed*, not assumed, and there is no external
+   check: the owner is what makes running the trial in production safe.
 
 **The failure signal.** Each task owns one active Thing tagged `#ScheduledTask` (titled
 `Resolution pass`, `Learning pass`, `Morning conversation`) and ends every run by setting its
 `checkin_date` to tomorrow. A run that did not complete leaves the Thing due, so a missed run is a
 due Thing that every session sees: the next resolution pass notes it in the briefing, the morning
-conversation says so in its first line, and `daily-planning` lists it.
-`.github/workflows/scheduled-run-health.yml` reads `/api/heartbeats` at noon UTC, after all three
-windows, and files a "Scheduled pass missed" issue — and pings `NTFY_TOPIC` if set — when fewer than
-three heartbeats exist or any is still due. It files an issue until the tasks have run once; that
-first issue is the reminder, not a bug in the check. The heartbeats must never be archived, because
-the endpoint answers with the active `#ScheduledTask` Things only and an archived heartbeat reads as
-a missed run. Making one a child of something no longer hides it: the endpoint is the tagged Things,
-not the tree's top level.
+conversation says so in its first line, and `daily-planning` lists it. That is the whole signal —
+#1484 removed the GitHub Actions watchdog that used to read the heartbeats from outside, and nothing
+replaced it. The heartbeats must never be archived, because an archived Thing leaves the tree and
+stops surfacing in `due_for_checkin`, so archiving one hides a missed run instead of reporting it.
 
 **The fallback, documented and not built.** If claude.ai scheduled tasks prove unreliable — the
-first "Scheduled pass missed" issue that is not a human step left undone — the overnight two move
-to a host cron running headless Claude Code: `claude -p "$(cat prompts/scheduled/resolution-pass.md)"`
-with an `--mcp-config` naming the same `/mcp` URL, the shape the owner's overnight development
-tooling already uses outside this repository. Same files, same heartbeats, same
-watchdog. The morning conversation is a conversation and can only be a claude.ai session.
+owner notices a night the passes left no trace — the overnight two move to a host cron running
+headless Claude Code: `claude -p "$(cat prompts/scheduled/resolution-pass.md)"` with an
+`--mcp-config` naming the same `/mcp` URL, the shape the owner's overnight development
+tooling already uses outside this repository. Same files, same heartbeats. The morning conversation
+is a conversation and can only be a claude.ai session.
 
 **Actor discipline.** The overnight passes pass `actor="claude_scheduled"` on every write. The
 morning conversation splits: `claude_scheduled` for its own bookkeeping (its heartbeat, archiving
@@ -335,7 +333,7 @@ Creating documentation that claims success on an action you cannot perform is a 
 - HTTP: `backend/main.py` serves `/healthz`, includes the auth, OAuth and `/api` routers in that
   order, mounts the MCP streamable-HTTP app at `/mcp`, and mounts the frontend bundle **last** — its
   catch-all answers every unmatched path, so anything mounted after it would be dead
-- Web view API: `backend/api.py` — the six `/api` routes, their response models, the session
+- Web view API: `backend/api.py` — the five `/api` routes, their response models, the session
   middleware and the SPA mount. Read-only apart from
   `POST /api/preferences/{id}/reject`, the only place `Actor.USER` is used
 - Frontend: `frontend/` — Vite + React + TypeScript. Three views and the sign-in view in

@@ -58,9 +58,7 @@ issues, so a claude.ai connector authorises without holding a shared secret, and
 presents Google sign-in and holds the session in a cookie, which is the only credential `/api`
 accepts — there is no HTTP Basic password (#1471). `/mcp` and `/api` both answer 401 to every
 request while the sign-in is unconfigured. `/healthz` stays open either way, so a missing secret
-cannot roll a deploy back, and so does `GET /api/heartbeats`, the one unauthenticated `/api` route:
-it carries the three scheduled passes' heartbeats for the watchdog in GitHub Actions and nothing
-else.
+cannot roll a deploy back.
 
 ```bash
 cp .env.example .env

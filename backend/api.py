@@ -12,8 +12,8 @@ the learning pass's only signal for "the user decided".
 Everything here sits behind :func:`add_web_view_auth`: the service is publicly reachable and these
 routes serve the user's whole graph. A request is admitted by the ``reli_session`` cookie the Google
 sign-in sets, and by nothing else. The bundle itself is public — it is the sign-in view — and so is
-``/api/auth/``, which is how a browser gets a session, and ``/api/heartbeats``, which is read by a
-GitHub Actions watchdog that holds no credential; see :func:`_is_guarded`.
+``/api/auth/``, which is how a browser gets a session and is the only such path; see
+:func:`_is_guarded`.
 """
 
 from __future__ import annotations
@@ -92,18 +92,6 @@ class ThingSummary(_FromRecord):
 
 class TreeLevel(BaseModel):
     things: list[ThingSummary]
-
-
-class HeartbeatOut(_FromRecord):
-    """One scheduled pass's heartbeat: what tells a run that happened from one that did not, only."""
-
-    id: uuid.UUID
-    title: str
-    checkin_date: date | None
-
-
-class HeartbeatsOut(BaseModel):
-    heartbeats: list[HeartbeatOut]
 
 
 class ThingOut(_FromRecord):
@@ -298,24 +286,6 @@ def user_model(scope: str | None = None) -> UserModelOut:
         return UserModelOut(scope=scope, preferences=[_preference(preference) for preference in preferences])
 
 
-@router.get("/heartbeats", summary="The scheduled passes' heartbeats")
-def heartbeats() -> HeartbeatsOut:
-    """The active ``#ScheduledTask`` Things, by title. **The one unauthenticated ``/api`` route.**
-
-    The scheduled-pass watchdog in ``.github/workflows/scheduled-run-health.yml`` runs in GitHub
-    Actions, which holds no Google session and cannot obtain one, so this answers without a
-    credential. What it exposes is the three heartbeats' titles and check-in dates — written by
-    Reli's own prompts, not by the user — which is why opening it costs the graph nothing.
-
-    An archived heartbeat is absent, exactly as it is absent from the tree, so archiving one reads
-    as a missed run. No heartbeats is an empty list: "a pass has never run" is the watchdog's
-    judgement to make, not a 404 here.
-    """
-    with _session() as session:
-        found = queries.scheduled_tasks(session)
-        return HeartbeatsOut(heartbeats=[HeartbeatOut.model_validate(thing) for thing in found])
-
-
 @router.post("/preferences/{preference_id}/reject", summary="Reject a preference")
 def reject_preference(preference_id: uuid.UUID) -> PreferenceOut:
     """Tag a preference ``#Rejected`` as the user, and journal it. The only write in the web view.
@@ -378,20 +348,18 @@ def mount_frontend(app: FastAPI, dist: pathlib.Path) -> None:
 
 #: What the check guards: the graph, which only ``/api`` serves. The bundle is static code from a
 #: public repository and is the sign-in view, so it answers everyone; ``/api/auth/`` is how a
-#: browser gets a session, so it must answer before there is one, and ``/api/heartbeats`` is read by
-#: a watchdog that cannot hold one. ``/healthz``, ``/mcp``, ``/.well-known/`` and ``/oauth/`` were
-#: never the web view's to guard — ``/mcp`` carries its own bearer check. The prefix ends in a slash
-#: so ``/api/auth`` cannot be widened into ``/api/authors``, and the path is matched whole so
-#: ``/api/heartbeats-and-everything-else`` is not exempt either.
+#: browser gets a session, so it must answer before there is one, and it is the only ``/api`` path
+#: that does. ``/healthz``, ``/mcp``, ``/.well-known/`` and ``/oauth/`` were never the web view's to
+#: guard — ``/mcp`` carries its own bearer check. The prefix ends in a slash so ``/api/auth`` cannot
+#: be widened into ``/api/authors``.
 _GUARDED_PREFIX = "/api/"
 _PUBLIC_PREFIX = "/api/auth/"
-_PUBLIC_PATH = "/api/heartbeats"
 
 _NO_CREDENTIAL = "Not signed in: sign in with Google at /."
 
 
 def _is_guarded(path: str) -> bool:
-    if path == _PUBLIC_PATH or path.startswith(_PUBLIC_PREFIX):
+    if path.startswith(_PUBLIC_PREFIX):
         return False
     return path == "/api" or path.startswith(_GUARDED_PREFIX)
 
@@ -436,7 +404,7 @@ class _WebViewAuthMiddleware:
 
 
 def add_web_view_auth(app: FastAPI) -> None:
-    """Put every ``/api`` route outside ``/api/auth/`` and ``/api/heartbeats`` behind the session."""
+    """Put every ``/api`` route outside ``/api/auth/`` behind the session."""
     missing = auth.missing_sign_in_settings()
     if missing:
         logger.warning(

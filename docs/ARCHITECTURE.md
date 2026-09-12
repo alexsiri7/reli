@@ -146,11 +146,10 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
   public by design: a client reaches them before it holds any credential.
 - `/api` — `_WebViewAuthMiddleware` in `backend/api.py` requires the `reli_session` cookie: an
   `aud="web"` JWT the Google sign-in in `backend/auth.py` sets after the allowlist check, and the
-  only credential, since #1471 retired the HTTP Basic password that used to sit beside it. Two paths
-  are public: `/api/auth/` — the sign-in, its callback, `me` and `logout` — because it is how a
-  browser gets a session, and `GET /api/heartbeats`, because the scheduled-pass watchdog runs in
-  GitHub Actions, which holds no session and cannot obtain one. `/api/heartbeats` answers with the
-  active `#ScheduledTask` Things' id, title and `checkin_date`, and nothing else about the graph.
+  only credential, since #1471 retired the HTTP Basic password that used to sit beside it. One path
+  is public: `/api/auth/` — the sign-in, its callback, `me` and `logout` — because it is how a
+  browser gets a session. #1484 removed the unauthenticated `GET /api/heartbeats` that used to stand
+  beside it, and the GitHub Actions watchdog it was there for.
 - `/` — the bundle is public: it is the sign-in view, and static code from a public repository.
 - `/healthz` — exempt from both.
 
@@ -170,8 +169,8 @@ files under [`prompts/scheduled/`](../prompts/scheduled/README.md) (#1413). Each
 `#ScheduledTask` Thing whose `checkin_date` it pushes to tomorrow at the end of every run, so a
 missed run is a due Thing every session sees; the resolution pass hands the morning conversation a
 `#Briefing` Thing; the learning pass reads the journal through `journal_since`, filtered to the
-actors a person was present for. `.github/workflows/scheduled-run-health.yml` reads the tree's top
-level daily and files an issue when a heartbeat is absent or still due. Design:
+actors a person was present for. Nothing outside a session watches the passes: #1484 removed the
+GitHub Actions watchdog, because a public-repo runner may not read the graph. Design:
 [vision.md §4.3](vision.md#43-scheduled-claude--the-proactive-half).
 
 ## 11. Infrastructure

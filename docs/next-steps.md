@@ -21,8 +21,7 @@ The rebuild chain that replaced the previous system, in order:
   rejecting a preference as the only button.
 - **The scheduled passes** (#1413) — the resolution pass, the learning pass and the morning
   conversation as prompt files under `prompts/scheduled/`, with `journal_since` as their one new
-  tool, a `#ScheduledTask` heartbeat per task and a daily watchdog that files an issue when a run
-  is missed.
+  tool, and a `#ScheduledTask` heartbeat per task that falls due when a run is missed.
 - **`#NeedsInput` as a first-class query** (#1442) — `needs_input`, the one standing question in
   vision §4.1 that was still only reachable through `find_things` by tag, bounded with a `total`
   so a decision cannot silently fall off the list.
