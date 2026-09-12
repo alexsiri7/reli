@@ -38,7 +38,6 @@ def sign_in_settings(monkeypatch):
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", CLIENT_ID)
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "s3cret-client-secret")
     monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", "https://reli.example.test/api/auth/google/callback")
-    monkeypatch.setattr(settings, "WEB_UI_PASSWORD", "web-password")
 
 
 @pytest.fixture()

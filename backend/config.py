@@ -24,19 +24,13 @@ class Settings(BaseSettings):
     # --- Database ---
     DATABASE_URL: str = ""
 
-    # --- Web view ---
-    # HTTP Basic password the /api routes accept, beside the Google sign-in's session cookie.
-    # Human-provisioned: an empty value closes nothing the sign-in opens, and with the sign-in
-    # also unset /api answers 401 to everything — never stopping the boot, so /healthz stays
-    # green and a missing secret does not roll the deploy back. The bundle at / is always public;
-    # it is the sign-in view.
-    WEB_UI_PASSWORD: str = ""
-
     # --- Google sign-in (web view and MCP) ---
     # The settings behind the OAuth 2.1 authorization server at /oauth/* and the Google login it
-    # delegates to. Human-provisioned on the same terms as WEB_UI_PASSWORD: every one defaults to
-    # empty, an empty value closes the sign-in (501 from /oauth/authorize naming what is missing,
-    # no JWT ever accepted) and never stops the boot.
+    # delegates to. The sign-in is the only way in to /api and /mcp — #1471 retired the HTTP Basic
+    # password that used to sit beside it. Human-provisioned, every one defaulting to empty: an
+    # empty value closes the sign-in (501 from /oauth/authorize naming what is missing, no JWT ever
+    # accepted) and never stops the boot, so /healthz stays green and a missing secret does not roll
+    # the deploy back. The bundle at / is always public; it is the sign-in view.
     #
     # SECRET_KEY signs every JWT Reli mints (HS256) — the only credential /mcp accepts is one of
     # them, so an empty value closes /mcp with a 401 rather than opening it. PyJWT warns below

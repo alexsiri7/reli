@@ -17,7 +17,6 @@ jobs:
     steps:
       - name: Check the #ScheduledTask heartbeats
         env:
-          WEB_UI_PASSWORD: ${{ secrets.WEB_UI_PASSWORD }}
           RAILWAY_PRODUCTION_URL: ${{ secrets.RAILWAY_PRODUCTION_URL }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -51,7 +50,6 @@ jobs:
           }
 
           missing=""
-          [ -z "$WEB_UI_PASSWORD" ] && missing="$missing WEB_UI_PASSWORD"
           [ -z "$RAILWAY_PRODUCTION_URL" ] && missing="$missing RAILWAY_PRODUCTION_URL"
           if [ -n "$missing" ]; then
             create_issue_if_absent "Scheduled pass watchdog unconfigured" \
@@ -60,21 +58,20 @@ jobs:
             exit 1
           fi
 
-          # /api/things is the tree's top level, which is where the #ScheduledTask Things live as
-          # long as nothing makes them a child of anything. The username is ignored by Basic auth.
-          if ! BODY=$(curl -sf --max-time 30 -u ":$WEB_UI_PASSWORD" "$RAILWAY_PRODUCTION_URL/api/things"); then
+          # /api/heartbeats is the one unauthenticated /api route: it answers with the active
+          # #ScheduledTask Things and nothing else, so this job carries no credential (#1471).
+          if ! BODY=$(curl -sf --max-time 30 "$RAILWAY_PRODUCTION_URL/api/heartbeats"); then
             create_issue_if_absent "Scheduled pass watchdog unreachable" \
-              "Scheduled pass watchdog unreachable — could not read /api/things" \
-              "The scheduled-run health check could not read \`$RAILWAY_PRODUCTION_URL/api/things\`. If the deploy is healthy, WEB_UI_PASSWORD in GitHub secrets no longer matches the deploy's."
+              "Scheduled pass watchdog unreachable — could not read /api/heartbeats" \
+              "The scheduled-run health check could not read \`$RAILWAY_PRODUCTION_URL/api/heartbeats\`. The deploy is down, or it predates the endpoint and needs rebuilding."
             exit 1
           fi
 
           TODAY=$(date -u +%F)
-          COUNT=$(echo "$BODY" | jq '[.things[] | select(.tags | index("#ScheduledTask"))] | length')
+          COUNT=$(echo "$BODY" | jq '.heartbeats | length')
           # null must be guarded first: in jq, null <= "2026-09-11" is true.
           DUE=$(echo "$BODY" | jq -r --arg today "$TODAY" '
-            .things[] | select(.tags | index("#ScheduledTask"))
-            | select(.checkin_date != null and .checkin_date <= $today) | .title')
+            .heartbeats[] | select(.checkin_date != null and .checkin_date <= $today) | .title')
 
           if [ "$COUNT" -lt 3 ]; then
             MSG="Only $COUNT of the three #ScheduledTask heartbeats exist: a pass has never run."

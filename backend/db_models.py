@@ -102,6 +102,11 @@ OBSERVATION_TAG = "#Observation"
 #: reads it back, so the literal lives here rather than in either.
 NEEDS_INPUT_TAG = "#NeedsInput"
 
+#: One heartbeat Thing per scheduled pass (#1413). The saved prompts tell each pass to apply it and
+#: ``queries.scheduled_tasks`` reads it back for the watchdog, so the literal lives here rather than
+#: in either — a rename in only one place would silently kill the missed-run signal.
+SCHEDULED_TASK_TAG = "#ScheduledTask"
+
 
 class Actor(str, Enum):
     """Who performed a journalled mutation."""

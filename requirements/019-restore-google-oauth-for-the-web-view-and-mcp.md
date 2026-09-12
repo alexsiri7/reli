@@ -21,7 +21,7 @@ Desired behaviour:
 
 - Opening the web view presents Google sign-in. The owner's Google account is the only account allowed in; any other account is refused with a clear message rather than a blank failure.
 - The MCP endpoint authenticates the way it did before the rebuild, so a claude.ai connector authorises against Google rather than carrying a shared bearer token.
-- No HTTP Basic password anywhere. `WEB_UI_PASSWORD` is gone once Google sign-in is verified working, and not before.
+- No HTTP Basic password anywhere. `WEB_UI_PASSWORD` is gone once Google sign-in is verified working, and not before. *(Re-scoped by the owner on #1471, 2026-09-12: the web view is OAuth-only and no password will be provisioned, so it was removed without waiting for that verification.)*
 - A revoked or expired grant produces a message naming what a human needs to re-run, not a silent 401.
 
 This is a recovery, not a new design. Working implementations of both exist in this repository's git history, immediately before the v4 rebuild deleted them. They are to be read and restored, porting them onto the new backend and the read-only frontend, rather than reimplemented from the specification.
@@ -34,3 +34,4 @@ Separately, and independently of the auth work: this repository is public. No re
 - #1449 — Restore Google OAuth on the web view
 - #1450 — Restore the MCP endpoint's original authentication
 - #1451 — CLAUDE.md: this is a public repo, no real user data in it
+- #1471 — Retire `WEB_UI_PASSWORD` and give the scheduled-pass watchdog an unauthenticated heartbeat read

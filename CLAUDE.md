@@ -70,17 +70,21 @@ cannot resolve a pre-v4 revision recorded in the database:
 psql "$DATABASE_URL" -c 'DROP TABLE IF EXISTS alembic_version'
 ```
 
-The `/api` routes serve the user's whole graph and admit a request two ways: the `reli_session`
-cookie the Google sign-in below sets, or `WEB_UI_PASSWORD` as an HTTP Basic password. The bundle
-at `/` is public — it is the sign-in view, and static code from a public repository — so opening
-`/` presents Google sign-in rather than a browser password prompt, and a 401 from `/api` carries no
-`WWW-Authenticate` challenge for the same reason. `WEB_UI_PASSWORD` is human-provisioned like
-`SECRET_KEY`: agents cannot mint it, and an empty value is not a dev-mode bypass. With neither
-it nor the sign-in configured, `/api` answers 401 to every request and logs a warning at startup,
-while `/healthz` stays green so a missing secret cannot roll a deploy back. The password stays
-beside the cookie — it is what `curl` and the scheduled-pass watchdog carry — until a human
-confirms Google sign-in works on the deploy and retires it in its own change (#1449). Agents must
-not remove it. `/mcp` is exempt from this check; its own bearer check still decides.
+The `/api` routes serve the user's whole graph and admit a request one way: the `reli_session`
+cookie the Google sign-in below sets. There is no HTTP Basic password — #1471 retired
+`WEB_UI_PASSWORD` on the owner's decision that the web view is OAuth-only, and no password will be
+provisioned, so nothing may reintroduce one. The bundle at `/` is public — it is the sign-in view,
+and static code from a public repository — so opening `/` presents Google sign-in rather than a
+browser password prompt, and a 401 from `/api` carries no `WWW-Authenticate` challenge for the same
+reason. Without the sign-in configured, `/api` answers 401 to every request and logs a warning at
+startup, while `/healthz` stays green so a missing secret cannot roll a deploy back. `/mcp` is
+exempt from this check; its own bearer check still decides.
+
+`GET /api/heartbeats` is the one unauthenticated `/api` route, and the only exemption besides
+`/api/auth/`. It answers with the active `#ScheduledTask` Things' `id`, `title` and `checkin_date`
+and nothing else about the graph, which is how the scheduled-pass watchdog reads the heartbeats from
+GitHub Actions, where it holds no Google session and cannot obtain one. Adding a second such
+exemption needs an issue that asks for it.
 
 The frontend is built inside the image: the Dockerfile's `frontend-build` stage runs `npm ci` and
 `npm run build`, and the python stage copies `frontend/dist` in. `docker compose build` therefore
@@ -103,7 +107,7 @@ The scopes granted are `gmail.readonly` and `calendar.readonly`, listed in `SCOP
 asks for it.
 
 **Agents cannot perform the consent step.** It requires a human signed in to the Google account, in
-the same class as `WEB_UI_PASSWORD` and `RAILWAY_TOKEN`. Do not claim a credential is provisioned.
+the same class as `SECRET_KEY` and `RAILWAY_TOKEN`. Do not claim a credential is provisioned.
 
 Runbook — when the Google tools start raising `GoogleAuthFailed`, the grant has been revoked or has
 expired, and a human re-runs the one-time consent:
@@ -154,9 +158,9 @@ redirect URI is the one already documented below — the web sign-in adds no con
 
 Its settings are `SECRET_KEY`, `ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and `RELI_BASE_URL`,
 beside `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Every one is human-provisioned on the
-`WEB_UI_PASSWORD` pattern: empty closes the sign-in — `/oauth/authorize` answers 501 naming each
-missing setting, and no JWT is issued or accepted — and never stops the boot. **Empty
-`ALLOWED_EMAILS` admits nobody.**
+`RAILWAY_TOKEN` pattern and agents cannot mint one. Empty closes the sign-in — `/oauth/authorize`
+answers 501 naming each missing setting, and no JWT is issued or accepted — and never stops the
+boot. **Empty `ALLOWED_EMAILS` admits nobody.**
 
 **The human steps, none of which an agent can perform or verify.** Do not claim any of these is
 done:
@@ -174,10 +178,10 @@ done:
    registered on the same client (see *Google credentials*).
 3. Add the claude.ai connector for `https://<host>/mcp` with **no** bearer token. It discovers the
    server, registers itself, opens Google sign-in, and the allowlisted account completes it.
-4. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. Then
-   retire `WEB_UI_PASSWORD` in a follow-up change — remembering the watchdog in
-   `.github/workflows/scheduled-run-health.yml` reads `/api/things` with it and needs another way
-   in first. Until then the password stays, and agents must not remove it.
+4. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. The
+   password that used to stand beside the cookie is gone (#1471): the watchdog in
+   `.github/workflows/scheduled-run-health.yml` reads the unauthenticated `/api/heartbeats` instead,
+   so nothing outside a browser needs a way in.
 
 ## Scheduled passes
 
@@ -189,15 +193,15 @@ turned into a background task in the service.
 [`prompts/scheduled/README.md`](prompts/scheduled/README.md) describes what the passes leave in the
 graph.
 
-**Agents cannot create the scheduled tasks, add the watchdog's secret, or verify that claude.ai
-scheduled tasks run reliably unattended.** Those are human steps, in the same class as the Google
-consent step and `WEB_UI_PASSWORD`; do not claim any of them is done. A human:
+**Agents cannot create the scheduled tasks, or verify that claude.ai scheduled tasks run reliably
+unattended.** Those are human steps, in the same class as the Google consent step and
+`RAILWAY_TOKEN`; do not claim either is done. A human:
 
 1. creates three claude.ai scheduled tasks, each pasting one file's text — the resolution pass
    overnight, the learning pass at least half an hour later, the morning conversation in waking
    hours — with the Reli connector attached;
-2. adds `WEB_UI_PASSWORD` to the repository's GitHub Actions secrets, the same value as the
-   deploy's, so the watchdog can read `/api/things`;
+2. re-enables the workflow with `gh workflow enable scheduled-run-health.yml`, which was disabled
+   while it still needed a password, once the deploy serving `/api/heartbeats` is live;
 3. watches the first night. Reliability is *observed*, not assumed: the watchdog below is what
    makes running the trial in production safe.
 
@@ -206,12 +210,13 @@ consent step and `WEB_UI_PASSWORD`; do not claim any of them is done. A human:
 `checkin_date` to tomorrow. A run that did not complete leaves the Thing due, so a missed run is a
 due Thing that every session sees: the next resolution pass notes it in the briefing, the morning
 conversation says so in its first line, and `daily-planning` lists it.
-`.github/workflows/scheduled-run-health.yml` reads the tree's top level at noon UTC, after all
-three windows, and files a "Scheduled pass missed" issue — and pings `NTFY_TOPIC` if set — when
-fewer than three heartbeats exist or any is still due. It files an issue until the secret is added
-and the tasks have run once; that first issue is the reminder, not a bug in the check. The
-heartbeats must never be archived or made a child of anything, because the check reads
-`/api/things`, which is the top level only.
+`.github/workflows/scheduled-run-health.yml` reads `/api/heartbeats` at noon UTC, after all three
+windows, and files a "Scheduled pass missed" issue — and pings `NTFY_TOPIC` if set — when fewer than
+three heartbeats exist or any is still due. It files an issue until the tasks have run once; that
+first issue is the reminder, not a bug in the check. The heartbeats must never be archived, because
+the endpoint answers with the active `#ScheduledTask` Things only and an archived heartbeat reads as
+a missed run. Making one a child of something no longer hides it: the endpoint is the tagged Things,
+not the tree's top level.
 
 **The fallback, documented and not built.** If claude.ai scheduled tasks prove unreliable — the
 first "Scheduled pass missed" issue that is not a human step left undone — the overnight two move
@@ -330,8 +335,8 @@ Creating documentation that claims success on an action you cannot perform is a 
 - HTTP: `backend/main.py` serves `/healthz`, includes the auth, OAuth and `/api` routers in that
   order, mounts the MCP streamable-HTTP app at `/mcp`, and mounts the frontend bundle **last** — its
   catch-all answers every unmatched path, so anything mounted after it would be dead
-- Web view API: `backend/api.py` — the five `/api` routes, their response models, the
-  session-or-password middleware and the SPA mount. Read-only apart from
+- Web view API: `backend/api.py` — the six `/api` routes, their response models, the session
+  middleware and the SPA mount. Read-only apart from
   `POST /api/preferences/{id}/reject`, the only place `Actor.USER` is used
 - Frontend: `frontend/` — Vite + React + TypeScript. Three views and the sign-in view in
   `frontend/src/views/`, the `/api` types mirrored in `frontend/src/api.ts`, screenshot tests in

@@ -23,18 +23,18 @@ from backend.db_models import (
     OBSERVATION_TAG,
     PREFERENCE_TAG,
     REJECTED_TAG,
+    SCHEDULED_TASK_TAG,
     USER_TAG,
     Actor,
     RelationshipType,
 )
 from backend.service import create_thing, get_or_create_user_anchor, record_preference, relate, update_thing
 
-PASSWORD = "test-password"
 SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
 
 
 def _routed_app(session, monkeypatch) -> FastAPI:
-    """The ``/api`` router plus a stand-in ``/healthz``, behind the session-or-password check."""
+    """The ``/api`` router plus a stand-in ``/healthz``, behind the session check."""
 
     @contextmanager
     def _fixture_session():
@@ -53,28 +53,20 @@ def _routed_app(session, monkeypatch) -> FastAPI:
     return app
 
 
-@pytest.fixture()
-def web_password():
-    """A known password on the settings singleton, mutated rather than rebound, and put back."""
-    previous = settings.WEB_UI_PASSWORD
-    settings.WEB_UI_PASSWORD = PASSWORD
-    yield PASSWORD
-    settings.WEB_UI_PASSWORD = previous
-
-
 def _basic(password, username="reli"):
     return {"Authorization": "Basic " + base64.b64encode(f"{username}:{password}".encode()).decode()}
 
 
 @pytest.fixture()
-def client(session, monkeypatch, web_password):
-    """An authenticated client. Without the password every route below would answer 401."""
-    return TestClient(_routed_app(session, monkeypatch), headers=_basic(web_password))
+def client(session, monkeypatch, secret_key):
+    """An authenticated client. The session cookie is the only way in, so without it every route
+    below would answer 401."""
+    return TestClient(_routed_app(session, monkeypatch), headers=_session_cookie())
 
 
 @pytest.fixture()
 def anonymous(session, monkeypatch):
-    """A client carrying no credentials, for the auth tests that drive the password themselves."""
+    """A client carrying no credentials, for the auth tests that drive the session themselves."""
     return TestClient(_routed_app(session, monkeypatch))
 
 
@@ -333,6 +325,73 @@ def test_the_user_model_names_no_confidence(client, session):
     assert "confidence" not in client.get("/api/user-model").text
 
 
+# --- GET /api/heartbeats: the watchdog's unauthenticated read -------------
+
+
+def _heartbeat(session, title, checkin_date=None):
+    return _thing(session, title, tags=[SCHEDULED_TASK_TAG], checkin_date=checkin_date)
+
+
+def test_the_heartbeats_are_the_scheduled_task_things_by_title(client, session):
+    _heartbeat(session, "Resolution pass", date(2026, 9, 12))
+    _heartbeat(session, "Learning pass")
+    _thing(session, "Confirm the dentist appointment", checkin_date=date(2026, 9, 11))
+
+    body = client.get("/api/heartbeats").json()
+
+    assert [beat["title"] for beat in body["heartbeats"]] == ["Learning pass", "Resolution pass"]
+    assert body["heartbeats"][1]["checkin_date"] == "2026-09-12"
+
+
+def test_a_heartbeat_carries_only_what_the_watchdog_reads(client, session):
+    """Nothing else about the Thing: the route answers without a credential, so the fields it
+    exposes are the whole of what opening it costs."""
+    _heartbeat(session, "Morning conversation", date(2026, 9, 12))
+
+    (beat,) = client.get("/api/heartbeats").json()["heartbeats"]
+
+    assert set(beat) == {"id", "title", "checkin_date"}
+
+
+def test_an_archived_heartbeat_is_absent_so_archiving_one_reads_as_a_missed_run(client, session):
+    """The watchdog counts what comes back and files an issue below three, which is why CLAUDE.md
+    tells the passes never to archive a heartbeat."""
+    heartbeat = _heartbeat(session, "Resolution pass", date(2026, 9, 12))
+    update_thing(session, actor=Actor.CLAUDE_SCHEDULED, thing_id=heartbeat.id, active=False)
+
+    assert client.get("/api/heartbeats").json()["heartbeats"] == []
+
+
+def test_no_heartbeat_at_all_is_an_empty_list_rather_than_a_404(client):
+    """An empty answer, because "a pass has never run" is the watchdog's judgement, not this route's."""
+    response = client.get("/api/heartbeats")
+
+    assert response.status_code == 200
+    assert response.json() == {"heartbeats": []}
+
+
+def test_a_heartbeat_that_is_a_child_of_something_is_still_a_heartbeat(client, session):
+    """Unlike ``/api/things``, this route is not the top level, so nothing about the tree can hide a
+    heartbeat from the watchdog."""
+    parent = _thing(session, "Reli operations")
+    heartbeat = _heartbeat(session, "Learning pass", date(2026, 9, 12))
+    _relate(session, parent, heartbeat, RelationshipType.CHILD_OF)
+
+    titles = [beat["title"] for beat in client.get("/api/heartbeats").json()["heartbeats"]]
+
+    assert titles == ["Learning pass"]
+
+
+def test_the_heartbeats_answer_without_a_credential(anonymous, session):
+    """The watchdog runs in GitHub Actions, which holds no Google session and cannot obtain one."""
+    _heartbeat(session, "Resolution pass", date(2026, 9, 12))
+
+    response = anonymous.get("/api/heartbeats")
+
+    assert response.status_code == 200
+    assert [beat["title"] for beat in response.json()["heartbeats"]] == ["Resolution pass"]
+
+
 # --- POST /api/preferences/{id}/reject: the one write ---------------------
 
 
@@ -407,77 +466,50 @@ def test_an_unmatched_api_path_is_404_for_any_method(client, method):
 
 
 @pytest.mark.parametrize("path", ["/api/things", "/api/user-model"])
-def test_an_unset_password_closes_the_view_rather_than_opening_it(anonymous, path):
-    previous = settings.WEB_UI_PASSWORD
-    settings.WEB_UI_PASSWORD = ""
-    try:
-        assert anonymous.get(path).status_code == 401
-    finally:
-        settings.WEB_UI_PASSWORD = previous
+def test_the_graph_is_closed_to_a_request_with_no_session(anonymous, secret_key, path):
+    assert anonymous.get(path).status_code == 401
 
 
 def test_nothing_configured_closes_the_view_and_leaves_healthz_open(anonymous, monkeypatch):
-    """No password and no sign-in is the state a fresh deploy boots in: 401 on the graph, 200 on /healthz."""
-    monkeypatch.setattr(settings, "WEB_UI_PASSWORD", "")
+    """No sign-in configured is the state a fresh deploy boots in: 401 on the graph, 200 on /healthz.
+
+    ``/healthz`` staying open is what keeps a missing secret from rolling the deploy back.
+    """
     monkeypatch.setattr(settings, "SECRET_KEY", "")
 
     assert anonymous.get("/api/things").status_code == 401
     assert anonymous.get("/healthz").status_code == 200
 
 
-def test_healthz_stays_open_so_a_missing_password_cannot_roll_a_deploy_back(anonymous):
-    previous = settings.WEB_UI_PASSWORD
-    settings.WEB_UI_PASSWORD = ""
-    try:
-        response = anonymous.get("/healthz")
-    finally:
-        settings.WEB_UI_PASSWORD = previous
-
-    assert response.status_code == 200
-
-
-def test_a_missing_credential_is_401_naming_both_ways_in_and_does_not_ask_the_browser_to_prompt(
-    anonymous, web_password
-):
+def test_a_missing_credential_is_401_naming_the_sign_in_and_does_not_ask_the_browser_to_prompt(anonymous, secret_key):
     """No ``WWW-Authenticate``: a Basic challenge would put the browser's own prompt over the sign-in view."""
     response = anonymous.get("/api/things")
 
     assert response.status_code == 401
     assert "WWW-Authenticate" not in response.headers
-    assert "sign in with Google" in response.json()["detail"]
-    assert "WEB_UI_PASSWORD" in response.json()["detail"]
-
-
-def test_the_wrong_password_is_401(anonymous, web_password):
-    assert anonymous.get("/api/things", headers=_basic("not-the-password")).status_code == 401
-
-
-def test_the_right_password_is_admitted_whatever_the_username(anonymous, web_password):
-    """There is one user, so there are no accounts to tell apart."""
-    response = anonymous.get("/api/things", headers=_basic(web_password, username="anyone"))
-
-    assert response.status_code == 200
-
-
-def test_the_password_is_admitted_with_no_session_configured(anonymous, web_password, monkeypatch):
-    """The watchdog and ``curl`` carry the password and nothing else; SECRET_KEY has no say over them."""
-    monkeypatch.setattr(settings, "SECRET_KEY", "")
-
-    assert anonymous.get("/api/things", headers=_basic(web_password)).status_code == 200
+    assert response.json()["detail"] == "Not signed in: sign in with Google at /."
 
 
 @pytest.mark.parametrize(
     "header",
-    ["Bearer test-password", "Basic not-base64!!", f"Basic {base64.b64encode(b'no-colon').decode()}"],
-    ids=["bearer", "undecodable", "no-separator"],
+    [
+        _basic("test-password")["Authorization"],
+        "Bearer test-password",
+        "Basic not-base64!!",
+        f"Basic {base64.b64encode(b'no-colon').decode()}",
+    ],
+    ids=["basic", "bearer", "undecodable", "no-separator"],
 )
-def test_a_malformed_authorization_header_is_401_and_not_a_500(anonymous, web_password, header):
-    assert anonymous.get("/api/things", headers={"Authorization": header}).status_code == 401
+def test_an_authorization_header_is_never_a_way_in_since_the_password_was_retired(anonymous, secret_key, header):
+    """#1471 left the session cookie as the only credential: no password is provisioned any more, so
+    a Basic header is refused like any other, and the refusal names no password to send."""
+    response = anonymous.get("/api/things", headers={"Authorization": header})
+
+    assert response.status_code == 401
+    assert "WEB_UI_PASSWORD" not in response.json()["detail"]
 
 
-def test_the_session_cookie_is_admitted_with_no_password_set(anonymous, secret_key, monkeypatch):
-    monkeypatch.setattr(settings, "WEB_UI_PASSWORD", "")
-
+def test_the_session_cookie_is_the_way_in(anonymous, secret_key):
     assert anonymous.get("/api/things", headers=_session_cookie()).status_code == 200
 
 
@@ -506,19 +538,11 @@ def test_a_session_signed_with_another_key_is_401(anonymous, secret_key):
     assert anonymous.get("/api/things", headers=_cookie(forged)).status_code == 401
 
 
-def test_a_stale_cookie_beside_the_right_password_still_admits(anonymous, web_password, secret_key):
-    """The password stays a way in on its own terms until a human retires it."""
-    headers = {**_session_cookie(audience=auth.MCP_AUDIENCE), **_basic(web_password)}
-
-    assert anonymous.get("/api/things", headers=headers).status_code == 200
-
-
 def test_a_cookie_with_secret_key_unset_is_401_naming_the_setting_and_not_a_500(anonymous, monkeypatch):
     """PyJWT refuses an empty HMAC key with an error that is not an ``InvalidTokenError``."""
     monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
     headers = _session_cookie()
     monkeypatch.setattr(settings, "SECRET_KEY", "")
-    monkeypatch.setattr(settings, "WEB_UI_PASSWORD", "")
 
     response = anonymous.get("/api/things", headers=headers)
 
@@ -526,7 +550,7 @@ def test_a_cookie_with_secret_key_unset_is_401_naming_the_setting_and_not_a_500(
     assert "SECRET_KEY" in response.json()["detail"]
 
 
-def test_the_mcp_mount_is_not_touched_by_the_web_view_check(session, monkeypatch, web_password):
+def test_the_mcp_mount_is_not_touched_by_the_web_view_check(session, monkeypatch):
     """/mcp carries its own bearer check, which must stay the only thing deciding it."""
     app = _routed_app(session, monkeypatch)
 
@@ -538,13 +562,15 @@ def test_the_mcp_mount_is_not_touched_by_the_web_view_check(session, monkeypatch
 
 
 @pytest.mark.parametrize("path", ["/.well-known/x", "/oauth/x", "/oauth", "/.well-known", "/api/auth/x"])
-def test_only_api_is_guarded(anonymous, web_password, path):
+def test_only_api_is_guarded(anonymous, path):
     """These reach the router — a 404 here, where nothing is registered — rather than the middleware."""
     assert anonymous.get(path).status_code == 404
 
 
-@pytest.mark.parametrize("path", ["/api/authors", "/api/auth", "/api"])
-def test_the_public_exemption_is_by_whole_path_segment(anonymous, web_password, path):
+@pytest.mark.parametrize("path", ["/api/authors", "/api/auth", "/api", "/api/heartbeats-and-the-rest"])
+def test_the_public_exemption_is_by_whole_path_segment(anonymous, path):
+    """``/api/auth/`` ends in a slash and ``/api/heartbeats`` is matched whole, so neither exemption
+    can be widened by a longer path that starts with it."""
     assert anonymous.get(path).status_code == 401
 
 
@@ -576,7 +602,7 @@ def test_an_image_built_without_a_frontend_still_boots(tmp_path):
 
 
 @pytest.mark.parametrize("path", ["/", "/assets/app.js", "/things/x"], ids=["spa", "asset", "deep-link"])
-def test_the_bundle_is_public_because_it_is_the_sign_in_view(tmp_path, web_password, path):
+def test_the_bundle_is_public_because_it_is_the_sign_in_view(tmp_path, path):
     """Both the SPA catch-all and the ``/assets`` sub-app, which are registered separately.
 
     Opening ``/`` has to present Google sign-in, which is the bundle; the graph behind ``/api`` is

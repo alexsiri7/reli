@@ -53,13 +53,14 @@ silently using an empty database.
 
 `/mcp` and the web view's `/api` are both guarded by what a Google sign-in mints — `SECRET_KEY`,
 `ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and the Google client, with the human steps in
-CLAUDE.md's *Google sign-in* section: `/mcp` takes only the JWTs its OAuth 2.1 authorization
-server issues, so a claude.ai connector authorises without holding a shared secret, and the web
-view at `/` presents Google sign-in and holds the session in a cookie. `WEB_UI_PASSWORD` is the
-HTTP Basic password the `/api` routes behind the web view still accept beside the cookie; leaving
-it empty does not open what it guards. `/mcp` answers 401 to every request while `SECRET_KEY` is
-empty; `/api` answers 401 while neither the sign-in nor `WEB_UI_PASSWORD` is set. `/healthz` stays
-open either way, so a missing secret cannot roll a deploy back.
+CLAUDE.md's *Google sign-in* section: `/mcp` takes only the JWTs its OAuth 2.1 authorization server
+issues, so a claude.ai connector authorises without holding a shared secret, and the web view at `/`
+presents Google sign-in and holds the session in a cookie, which is the only credential `/api`
+accepts — there is no HTTP Basic password (#1471). `/mcp` and `/api` both answer 401 to every
+request while the sign-in is unconfigured. `/healthz` stays open either way, so a missing secret
+cannot roll a deploy back, and so does `GET /api/heartbeats`, the one unauthenticated `/api` route:
+it carries the three scheduled passes' heartbeats for the watchdog in GitHub Actions and nothing
+else.
 
 ```bash
 cp .env.example .env
@@ -94,8 +95,8 @@ docker compose up -d
 The health check is at `http://localhost:8000/healthz`, the MCP endpoint at
 `http://localhost:8000/mcp`, which requires an `Authorization: Bearer` of the OAuth JWT its
 authorization server mints, and the web view
-at `http://localhost:8000/`, which presents Google sign-in (`curl -u ":$WEB_UI_PASSWORD"` still
-reads `/api` directly). The image builds the frontend bundle in a node stage and serves it from the
+at `http://localhost:8000/`, which presents Google sign-in — the session cookie it sets is what
+reads `/api`. The image builds the frontend bundle in a node stage and serves it from the
 same container. Data lives in Postgres, not on the container filesystem.
 
 ## Testing

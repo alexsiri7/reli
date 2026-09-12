@@ -37,10 +37,10 @@ npm --prefix frontend install && npm --prefix frontend run dev   # Vite on :5173
 Startup runs `alembic upgrade head`; a migration failure fails the boot. `curl localhost:8000/healthz`
 answers `{"status":"ok","service":"reli"}`.
 
-`/mcp` answers 401 to every request until the Google sign-in (`SECRET_KEY` and the settings beside
-it) is set, and `/api` answers 401 until one of the Google sign-in or `WEB_UI_PASSWORD` is set —
-`/` itself is the sign-in view and always serves. There is no dev-mode bypass: `WEB_UI_PASSWORD` in
-`.env` reads `/api` locally without a Google client, but `/mcp` needs the sign-in configured.
+`/mcp` and `/api` both answer 401 to every request until the Google sign-in (`SECRET_KEY` and the
+settings beside it) is set — `/` itself is the sign-in view and always serves, as does
+`GET /api/heartbeats`, the one unauthenticated `/api` route. There is no dev-mode bypass and no
+password: reading the graph locally needs a Google client configured, like the deploy.
 
 ## Connecting Claude
 
@@ -111,7 +111,6 @@ These are the fields of `Settings` in `backend/config.py`, and nothing else is r
 | Variable | Default | Notes |
 |---|---|---|
 | `DATABASE_URL` | — | **Required.** Postgres connection string. No default: the boot fails without it rather than serving an empty database. |
-| `WEB_UI_PASSWORD` | empty | HTTP Basic password `/api` accepts beside the sign-in's session cookie; any username. Human-provisioned. Empty never opens anything; with the sign-in also unset, `/api` is closed (401). |
 | `SECRET_KEY` | empty | HS256 key for the JWTs the authorization server mints for `/mcp` — the only credential `/mcp` accepts — and the web view's `reli_session` cookie. Human-provisioned; at least 32 random bytes. Empty means no JWT is issued or accepted, so `/mcp` is closed (401 to everything, and a warning at startup), never a boot failure. |
 | `ALLOWED_EMAILS` | empty | Comma-separated Google account emails allowed to sign in. Empty admits nobody. |
 | `GOOGLE_AUTH_REDIRECT_URI` | empty | `https://<your-host>/api/auth/google/callback`, registered verbatim on the OAuth client. Empty closes the sign-in; there is no localhost guess. |

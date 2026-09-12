@@ -24,7 +24,7 @@ import pytest
 import yaml
 from sqlalchemy import text
 
-from backend import prompts
+from backend import db_models, prompts
 from backend.db_models import OBSERVATION_TAG, REJECTED_TAG
 from backend.mcp_server import (
     archive_thing,
@@ -168,12 +168,16 @@ def test_every_task_maintains_its_heartbeat(name):
 
 
 def test_the_watchdog_reads_the_same_heartbeat_tag_the_prompts_write():
-    """A rename in either place would silently kill the missed-run signal."""
+    """A rename in either place would silently kill the missed-run signal.
+
+    The filtering moved into ``/api/heartbeats`` (#1471), so the tag the prompts are asserted
+    against above has to be the constant that endpoint selects on.
+    """
     workflow = WATCHDOG.read_text()
 
-    assert f'index("{SCHEDULED_TASK_TAG}")' in workflow
+    assert SCHEDULED_TASK_TAG == db_models.SCHEDULED_TASK_TAG
     assert "checkin_date != null" in workflow
-    assert "/api/things" in workflow
+    assert "/api/heartbeats" in workflow
 
 
 # --- The watchdog, run as GitHub Actions runs it -------------------------
@@ -190,7 +194,8 @@ HEARTBEAT_ISSUE_TITLES = {
 
 
 def _heartbeat(title: str, checkin_date: str | None) -> dict:
-    return {"id": str(uuid.uuid4()), "title": title, "tags": [SCHEDULED_TASK_TAG], "checkin_date": checkin_date}
+    """One ``HeartbeatOut``: ``/api/heartbeats`` has already selected the tag and dropped the rest."""
+    return {"id": str(uuid.uuid4()), "title": title, "checkin_date": checkin_date}
 
 
 def _heartbeats(
@@ -210,24 +215,25 @@ def _watchdog_script() -> str:
 
 
 def _run_watchdog(
-    tmp_path: Path, things: list[dict], *, gh_fails: bool = False
+    tmp_path: Path, heartbeats: list[dict], *, gh_fails: bool = False
 ) -> tuple[subprocess.CompletedProcess, list[str]]:
     """Run the step's script under the shell Actions gives a `run:` step, on a PATH holding its
-    genuine externals plus stubs: `curl` serves `things` as `/api/things` and logs an ntfy post,
-    `gh` logs every call and prints no open issue, `date` answers `WATCHDOG_TODAY`."""
+    genuine externals plus stubs: `curl` serves `heartbeats` as `/api/heartbeats` — with no
+    credential, as the job now sends none — and logs an ntfy post, `gh` logs every call and prints
+    no open issue, `date` answers `WATCHDOG_TODAY`."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for tool in WATCHDOG_TOOLS:
         real = shutil.which(tool)
         assert real, f"{tool} is not installed; the watchdog needs it"
         (bin_dir / tool).symlink_to(real)
-    body = tmp_path / "things.json"
-    body.write_text(json.dumps({"things": things}))
+    body = tmp_path / "heartbeats.json"
+    body.write_text(json.dumps({"heartbeats": heartbeats}))
     log = tmp_path / "calls.log"
     stubs = {
         "date": f'echo "{WATCHDOG_TODAY}"\n',
         "curl": (
-            f'case "$*" in *"/api/things"*) printf "%s" "$(< "{body}")" ;; '
+            f'case "$*" in *"/api/heartbeats"*) printf "%s" "$(< "{body}")" ;; '
             f'*ntfy.sh/*) echo "curl $*" >> "{log}" ;; *) exit 22 ;; esac\n'
         ),
         "gh": f'echo "gh $*" >> "{log}"\nexit {1 if gh_fails else 0}\n',
@@ -238,7 +244,6 @@ def _run_watchdog(
         stub.chmod(0o755)
     env = {
         "PATH": str(bin_dir),
-        "WEB_UI_PASSWORD": "secret",
         "RAILWAY_PRODUCTION_URL": "https://reli.example",
         "NTFY_TOPIC": "reli-test",
         "GH_TOKEN": "stub",
@@ -263,16 +268,7 @@ def _notifications(calls: list[str]) -> list[str]:
 
 
 def test_the_watchdog_is_quiet_when_every_heartbeat_was_pushed_past_today(tmp_path):
-    """Only #ScheduledTask Things count: an ordinary Thing due today is a check-in, not a missed run."""
-    checkin = {
-        "id": str(uuid.uuid4()),
-        "title": "Confirm the dentist appointment",
-        "tags": [],
-        "checkin_date": WATCHDOG_TODAY,
-    }
-    things = [*_heartbeats(), checkin]
-
-    result, calls = _run_watchdog(tmp_path, things)
+    result, calls = _run_watchdog(tmp_path, _heartbeats())
 
     assert result.returncode == 0, result.stderr
     assert "All 3 scheduled passes have run since yesterday." in result.stdout
