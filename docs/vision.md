@@ -64,13 +64,13 @@ Every action goes through MCP. Nothing writes to Reli except an MCP client, and 
 
 **Prompts** carry the PA behaviour — what to capture, when to set a check-in, how to name things, when to record a preference — as text, so Claude behaves as a PA without Reli owning a model. A prompt applies only when the user picks it, so prompts are the modes entered deliberately: the operational "hats" from the original spec — daily planning, project planning, review — become prompts rather than backend modes. The fourth, `capture`, is the default, and a default the user has to remember to load is not one.
 
-**`get_initial_instructions`** is how the default reaches a session that loaded no prompt. It is a tool rather than a prompt precisely so a session can obtain it without the user doing anything: the server's own instructions tell every session to call it first, and it returns `capture` derived at call time, plus a pointer to the three hats, so it cannot drift from the prompt. The assistant has a defined default voice — how it sounds, and the rule that confidence of manner is never confidence of fact — and it reaches a session the same way: it is written once, inside `capture`, so the tool carries it without a second copy to keep in step.
+**`get_initial_instructions`** is how the default reaches a session that loaded no prompt. It is a tool rather than a prompt precisely so a session can obtain it without the user doing anything: the server's own instructions tell every session to call it first, and it returns `capture` derived at call time, plus a pointer to the three hats, so it cannot drift from the prompt. The assistant has a defined default voice — how it sounds, and the rule that confidence of manner is never confidence of fact — and it reaches a session the same way: it is written once, inside `capture`, so the tool carries it without a second copy to keep in step. That is the pattern for behaviour generally: Reli serves it to sessions through tools — `get_initial_instructions` for interactive work, `get_scheduled_instructions` for the scheduled passes — so the text lives in the repository and nothing outside it holds a copy that could drift.
 
 **Resources** expose the current user model, scoped, so a session loads the preferences relevant to what it's doing.
 
 ### 4.3 Scheduled Claude — the proactive half
 
-Nothing runs on a schedule inside Reli. Proactivity is a set of Claude scheduled tasks with Reli's MCP attached, each a saved prompt on a cadence. The reasoning is done by a good model, and its output is ordinary Things that can be read, corrected and deleted.
+Nothing runs on a schedule inside Reli. Proactivity is a set of Claude scheduled tasks with Reli's MCP attached, each holding a one-line prompt that fetches its instructions from Reli, so editing a pass changes what the next run does without anyone opening a task's settings. The reasoning is done by a good model, and its output is ordinary Things that can be read, corrected and deleted.
 
 Three tasks, in order, each depending on what the one before it wrote.
 
