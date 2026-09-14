@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`/mcp` is the only way into the graph. `backend/mcp_server.py` registers twenty tools, four
+`/mcp` is the only way into the graph. `backend/mcp_server.py` registers twenty-one tools, four
 prompts and two resources, each a thin wrapper over `backend/service.py` (writes),
 `backend/queries.py` (graph reads) or `backend/prompts.py` (the behaviour). No
 judgement happens in that module and no model is called from it: the tools hand Claude the graph
@@ -92,6 +92,7 @@ Behaviour — no `actor`, and it reads nothing from the graph:
 | Tool | Does |
 |---|---|
 | `get_initial_instructions` | Returns the `capture` behaviour plus a paragraph naming the three hats as prompts to load. A prompt reaches a session only when the user picks one, so this is how the default behaviour reaches every session (#1466); the server's `instructions` tell a session to call it first. Derived from the same text as the `capture` prompt at call time, so there is no second copy to drift. |
+| `get_scheduled_instructions` (`pass_name`) | Returns the full text of one scheduled pass — `resolution`, `learning` or `morning` — read from its file under `prompts/scheduled/` at call time, so a claude.ai scheduled task holds one line asking for its pass and what runs is what the repository holds (#1506). Any other name returns a sentence naming the three, because the caller is unattended and an error it cannot act on is worth nothing to it. |
 
 ## 5. Prompts
 

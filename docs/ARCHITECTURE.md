@@ -110,7 +110,7 @@ and the read path so the two cannot drift. Rationale: [vision.md §5](vision.md#
 
 ## 6. MCP surface
 
-`backend/mcp_server.py` is the only way into the graph: twenty tools, four prompts and two
+`backend/mcp_server.py` is the only way into the graph: twenty-one tools, four prompts and two
 resources, each a thin wrapper over `service`, `queries` or `prompts`. Every writing tool
 takes a required `actor` (`claude_interactive` or `claude_scheduled`); there is no hard delete;
 the endpoint sits behind a JWT from the OAuth 2.1 authorization server in

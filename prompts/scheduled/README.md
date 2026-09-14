@@ -1,17 +1,44 @@
 # Scheduled passes
 
-The proactive half of the PA (#1413). Nothing here runs inside Reli: each file is the text of a
-saved prompt for a Claude scheduled task with Reli's MCP connector attached — the same `/mcp` an
-interactive session uses, through the same Google sign-in. The files are plain prose with no
-placeholders, so each is pasted into its task as-is.
+The proactive half of the PA (#1413). Nothing here runs inside Reli: each file is the instructions
+for one claude.ai scheduled task with Reli's MCP connector attached — the same `/mcp` an
+interactive session uses, through the same Google sign-in. The task itself holds none of this
+text. Its prompt is one line asking Reli for it, and the `get_scheduled_instructions` tool serves
+the file as the repository holds it (#1506), so editing a file here changes what the next run does
+and there is no pasted copy to drift.
 
-The resolution pass and the morning conversation also need the user's **Calendar and Gmail
-connectors attached alongside Reli's** (#1487): a check-in on a booked flight is settled by the
-session reading the confirmation itself, not by Reli. That attachment is a human setup step, and a
-resolution pass that finds the connectors missing records that in the briefing rather than resolving
-nothing. The learning pass reads only the journal and the graph, so it needs neither.
+## Setting up the tasks
 
-Three tasks, in this order, each depending on what the one before it wrote:
+Each claude.ai scheduled task's prompt is the one line below, verbatim:
+
+- Resolution pass:
+
+  > Call get_scheduled_instructions with pass_name "resolution" and follow the result exactly. If the call fails or Reli cannot be reached, stop: do nothing else this run.
+
+- Learning pass:
+
+  > Call get_scheduled_instructions with pass_name "learning" and follow the result exactly. If the call fails or Reli cannot be reached, stop: do nothing else this run.
+
+- Morning conversation:
+
+  > Call get_scheduled_instructions with pass_name "morning" and follow the result exactly. If the call fails or Reli cannot be reached, say plainly that you could not reach Reli this morning, and nothing else.
+
+The line carries the failure behaviour because it is the only thing that survives the failure: a
+pass that could not fetch its instructions has nothing to improvise from, and an empty or cheerful
+morning message when the service is down is the worst available outcome. Asking for a pass that
+does not exist returns the three valid names rather than an error.
+
+**Connectors.** The Reli connector is required on all three tasks. The resolution pass also needs
+the user's **Calendar and Gmail connectors attached alongside Reli's** (#1487): a check-in on a
+booked flight is settled by the session reading the confirmation itself, not by Reli. That
+attachment is a human setup step, and a resolution pass that finds the connectors missing records
+that in the briefing rather than resolving nothing. The morning conversation carries the same two:
+it reads today's calendar through the Calendar connector before presenting the briefing. The
+learning pass reads only the journal and the graph, so it needs neither.
+
+## The three passes
+
+In this order, each depending on what the one before it wrote:
 
 1. `resolution-pass.md` — overnight. Walks `due_for_checkin`, settles what it can from the
    session's own Calendar and Gmail and from the graph, and writes the day's `#Briefing` Thing

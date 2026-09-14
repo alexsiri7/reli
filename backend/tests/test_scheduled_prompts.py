@@ -1,9 +1,10 @@
 """The three scheduled-task prompts under ``prompts/scheduled/`` (#1413).
 
 The passes are prose run by an external Claude, so this repository cannot prove Claude will follow
-them. It can prove three things, and these tests are scoped to exactly those: the files say what
-the issue requires, the tool chain a pass follows produces the end state the acceptance criteria
-name, and the actor filter the learning pass relies on is mechanical rather than a sentence.
+them. It can prove four things, and these tests are scoped to exactly those: the files say what
+the issue requires, ``get_scheduled_instructions`` serves each file as it is (#1506), the tool
+chain a pass follows produces the end state the acceptance criteria name, and the actor filter the
+learning pass relies on is mechanical rather than a sentence.
 
 The content tests assert exact literals against prose, so every literal lives in the tuples at the
 top: a wording change fails one obvious place. Two spelling rules make them mechanical — a write's
@@ -26,6 +27,7 @@ from backend.mcp_server import (
     create_thing,
     due_for_checkin,
     get_related,
+    get_scheduled_instructions,
     get_thing_history,
     get_user_model,
     journal_since,
@@ -41,6 +43,7 @@ RESOLUTION = "resolution-pass.md"
 LEARNING = "learning-pass.md"
 MORNING = "morning-conversation.md"
 FILES = (RESOLUTION, LEARNING, MORNING)
+PASS_NAMES = {RESOLUTION: "resolution", LEARNING: "learning", MORNING: "morning"}
 
 SCHEDULED_TASK_TAG = "#ScheduledTask"
 BRIEFING_TAG = "#Briefing"
@@ -223,6 +226,56 @@ def test_the_prompts_write_the_heartbeat_tag_the_module_defines():
     their heartbeats one way and ``due_for_checkin`` would surface them by another.
     """
     assert SCHEDULED_TASK_TAG == db_models.SCHEDULED_TASK_TAG
+
+
+# --- The tool that serves them ---------------------------------------------
+
+
+def test_the_tool_reads_the_files_these_tests_hold_to_the_conventions():
+    """Every assertion above is about the files at ``PROMPTS``; this is what makes it about the
+    text a scheduled task receives."""
+    assert prompts.SCHEDULED_PROMPTS_DIR == PROMPTS
+    assert set(prompts.SCHEDULED_PASSES) == set(PASS_NAMES.values())
+
+
+@pytest.mark.parametrize("name", FILES)
+def test_each_pass_is_served_by_the_tool_exactly_as_the_file_holds_it(name):
+    """#1506: one source. Equality with the file is what proves there is no second copy — a copy
+    would have to be edited in step to keep passing."""
+    assert get_scheduled_instructions(PASS_NAMES[name]) == _text(name)
+
+
+def test_the_tool_follows_an_edit_to_a_file(monkeypatch, tmp_path):
+    """The text is read at call time, not at import, so a change lands on the next run."""
+    edited = tmp_path / RESOLUTION
+    edited.write_text("# Resolution pass\n\n## Sentinel section\n")
+    monkeypatch.setattr(prompts, "SCHEDULED_PROMPTS_DIR", tmp_path)
+
+    assert get_scheduled_instructions(PASS_NAMES[RESOLUTION]) == edited.read_text()
+
+
+def test_the_tool_names_the_three_passes_for_a_name_that_is_not_one():
+    text = get_scheduled_instructions("resolution-pass.md")
+
+    assert text not in {_text(name) for name in FILES}
+    for pass_name in PASS_NAMES.values():
+        assert f"'{pass_name}'" in text
+
+
+@pytest.mark.parametrize("name", FILES)
+def test_the_readme_gives_each_task_its_one_line_prompt(name):
+    """The line is pasted once, so it has to call the tool by the argument name it actually has
+    and carry the failure behaviour the file cannot: a pass that could not fetch its instructions
+    never sees them."""
+    readme = (PROMPTS / "README.md").read_text()
+    one_liner = next(line for line in readme.splitlines() if f'pass_name "{PASS_NAMES[name]}"' in line)
+
+    assert one_liner.startswith("  > Call get_scheduled_instructions with pass_name ")
+    assert "follow the result exactly" in one_liner
+    if name == MORNING:
+        assert "could not reach Reli" in one_liner
+    else:
+        assert "stop" in one_liner
 
 
 # --- The acceptance scenarios, as the tool calls a pass makes ------------

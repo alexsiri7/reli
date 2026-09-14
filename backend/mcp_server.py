@@ -708,6 +708,22 @@ def get_initial_instructions() -> str:
     return prompts.initial_instructions()
 
 
+@reli_mcp.tool()
+def get_scheduled_instructions(pass_name: str) -> str:
+    """The full instructions for one scheduled pass. A scheduled task calls this first and follows
+    the result exactly; it holds nothing else.
+
+    Args:
+        pass_name: Which pass this task is — 'resolution', 'learning' or 'morning'. Any other
+            value returns a sentence naming those three instead of instructions.
+
+    Returns the text of the pass's file under ``prompts/scheduled/`` as the repository holds it,
+    with the voice and the shared conventions already in it, so nothing needs pasting into the
+    task itself and nothing can drift from what the repository says.
+    """
+    return prompts.scheduled_instructions(pass_name)
+
+
 @reli_mcp.prompt(
     name="capture",
     title="Capture",

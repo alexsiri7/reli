@@ -39,6 +39,8 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 COPY alembic.ini ./alembic.ini
 COPY backend/ ./backend/
+# get_scheduled_instructions reads prompts/scheduled/ at call time (#1506).
+COPY prompts/ ./prompts/
 COPY --from=frontend-build /frontend/dist ./frontend/dist
 
 # Entrypoint drops to non-root

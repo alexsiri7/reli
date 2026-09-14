@@ -30,6 +30,7 @@ from backend.mcp_server import (
     find_things,
     get_initial_instructions,
     get_related,
+    get_scheduled_instructions,
     get_thing,
     get_thing_history,
     get_user_model,
@@ -67,6 +68,7 @@ TOOL_NAMES = {
     "reject_preference",
     "get_user_model",
     "get_initial_instructions",
+    "get_scheduled_instructions",
 }
 
 WRITING_TOOLS = {
@@ -107,7 +109,7 @@ def _tool_schemas():
 # --- The surface -----------------------------------------------------------
 
 
-def test_the_exposed_tools_are_exactly_the_twenty():
+def test_the_exposed_tools_are_exactly_the_twenty_one():
     assert set(_tool_schemas()) == TOOL_NAMES
 
 
@@ -707,6 +709,37 @@ def test_get_initial_instructions_follows_an_edit_to_a_shared_constant(monkeypat
 
 def test_get_initial_instructions_takes_no_arguments():
     assert _tool_schemas()["get_initial_instructions"]["properties"] == {}
+
+
+# --- get_scheduled_instructions --------------------------------------------
+#
+# #1506: a scheduled task holds one line naming its pass and fetches the rest, so what runs is what
+# the repository holds. What the text says is proven in test_scheduled_prompts.py; this is the
+# surface — the argument a one-liner passes, and what an unattended caller gets for a wrong one.
+
+
+def test_get_scheduled_instructions_takes_the_pass_name_and_nothing_else():
+    schema = _tool_schemas()["get_scheduled_instructions"]
+
+    assert set(schema["properties"]) == {"pass_name"}
+    assert schema["required"] == ["pass_name"]
+
+
+def test_get_scheduled_instructions_answers_over_the_registered_surface():
+    """The one-liners call it by argument name, which only the registered surface can verify."""
+    content, _ = asyncio.run(reli_mcp.call_tool("get_scheduled_instructions", {"pass_name": "learning"}))
+
+    assert content[0].text == prompts.scheduled_instructions("learning")
+
+
+def test_get_scheduled_instructions_names_the_passes_for_a_name_that_is_not_one():
+    """The caller is unattended, so a wrong name gets the right ones rather than an error."""
+    text = get_scheduled_instructions("nightly")
+
+    assert "nightly" in text
+    for pass_name in prompts.SCHEDULED_PASSES:
+        assert f"'{pass_name}'" in text
+    assert not text.startswith("# ")
 
 
 # --- Transport and auth ----------------------------------------------------
