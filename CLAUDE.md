@@ -26,6 +26,12 @@ Non-negotiables from `docs/vision.md`. They hold even when a bead description or
   catch it. The scheduled prompts under `prompts/scheduled/` carry the default voice and the two
   conventions pasted verbatim, which is not a restatement:
   `backend/tests/test_scheduled_prompts.py` fails when they diverge.
+- The same rule reaches the scheduled tasks through `get_scheduled_instructions` (#1506): a
+  claude.ai scheduled task holds one line asking Reli for its pass, and the tool serves the file
+  under `prompts/scheduled/` as the repository holds it. A pasted copy of a pass is a fork that
+  drifts with nothing to catch it, so no task carries one and no second copy of a pass's text may
+  exist anywhere. The three one-liners are in
+  [`prompts/scheduled/README.md`](prompts/scheduled/README.md).
 - **Reli holds no third-party data integration.** If a pass needs outside data, the session
   running it brings its own connector. #1488 deleted the Calendar and Gmail readers, the credential
   reader and the consent script: a check-in is settled by the claude.ai session looking through the
@@ -173,9 +179,11 @@ done:
 ## Scheduled passes
 
 The proactive half (#1413) is three saved prompts under `prompts/scheduled/` — `resolution-pass.md`,
-`learning-pass.md`, `morning-conversation.md`, in that order — each the text of a claude.ai
+`learning-pass.md`, `morning-conversation.md`, in that order — each the instructions for a claude.ai
 scheduled task with the Reli connector attached: the same `/mcp` an interactive session uses,
-through the same Google sign-in. The resolution pass and the morning conversation also carry the
+through the same Google sign-in. The task itself holds one line that fetches its file through
+`get_scheduled_instructions` (#1506), so what runs is what the repository holds and there is no
+pasted copy to drift. The resolution pass and the morning conversation also carry the
 user's own Calendar and Gmail connectors: a check-in is settled by the session reading the
 confirmation itself (#1487). The learning pass reads only the journal and the graph, so it needs
 neither. Nothing runs on a schedule inside Reli, and nothing here may be turned into a background
@@ -187,10 +195,11 @@ graph.
 unattended.** Those are human steps, in the same class as the Google consent step and
 `RAILWAY_TOKEN`; do not claim either is done. A human:
 
-1. creates three claude.ai scheduled tasks, each pasting one file's text — the resolution pass
-   overnight, the learning pass at least half an hour later, the morning conversation in waking
-   hours — each with the Reli connector, and the resolution pass and the morning conversation also
-   with the user's Calendar and Gmail connectors;
+1. creates three claude.ai scheduled tasks, each holding the one-line prompt for its pass from
+   `prompts/scheduled/README.md` — the resolution pass overnight, the learning pass at least half
+   an hour later, the morning conversation in waking hours — each with the Reli connector, and
+   the resolution pass and the morning conversation also with the user's Calendar and Gmail
+   connectors;
 2. watches the first night. Reliability is *observed*, not assumed, and there is no external
    check: the owner is what makes running the trial in production safe.
 
@@ -284,18 +293,21 @@ Creating documentation that claims success on an action you cannot perform is a 
 - Writes: `backend/service.py` — the only module that may mutate a Thing; every function journals
 - Reads: `backend/queries.py` — the indexed queries, including `user_model`
 - Retained reference, not built or shipped: `reference/oauth/` (see its README)
-- MCP: `backend/mcp_server.py` — the twenty tools wrapping `service.py`, `queries.py` and
+- MCP: `backend/mcp_server.py` — the twenty-one tools wrapping `service.py`, `queries.py` and
   `prompts.py`, behind the OAuth JWT the Google sign-in mints; every
   writing tool takes a required `actor`, and hard delete is not exposed.
-  `get_initial_instructions` is the one tool that touches no data: it returns the default
-  behaviour, and the server's `instructions` tell a session to call it first.
+  `get_initial_instructions` and `get_scheduled_instructions` are the two tools that touch no
+  data: the first returns the default behaviour, and the server's `instructions` tell a session to
+  call it first; the second returns one scheduled pass's file, and is the whole of what a
+  scheduled task's own prompt asks for.
   `journal_since` is the one cross-Thing journal read, filtered by actor, for the learning pass.
   The four user-model tools are `record_preference`, `add_preference_evidence`, `reject_preference` and
   `get_user_model`; the same model is also served as the `reli://user-model` resource
 - Scheduled passes: `prompts/scheduled/` — the three saved prompts for the claude.ai scheduled
-  tasks, plain files rather than MCP prompts, with the default voice and the conventions from
-  `backend/prompts.py` pasted verbatim and `backend/tests/test_scheduled_prompts.py` holding them
-  to it
+  tasks, plain files served by `get_scheduled_instructions` rather than MCP prompts, with the
+  default voice and the conventions from `backend/prompts.py` pasted verbatim and
+  `backend/tests/test_scheduled_prompts.py` holding them to it; the `README.md` beside them gives
+  each task its one-line prompt
 - Prompts: `backend/prompts.py` — the text of the four MCP prompts `capture`, `daily-planning`,
   `project-planning` and `review`, registered in `mcp_server.py`, and `initial_instructions`,
   what `get_initial_instructions` returns: `capture` derived at call time plus a paragraph naming

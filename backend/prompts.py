@@ -11,6 +11,11 @@ as a tool: ``get_initial_instructions`` returns :func:`initial_instructions`, wh
 :func:`capture` plus a paragraph pointing at the three hats. It is derived from the same text at
 call time rather than kept as a second copy, so the two cannot drift.
 
+The three scheduled passes are served the same way (#1506): ``get_scheduled_instructions`` returns
+:func:`scheduled_instructions`, the text of one file under ``prompts/scheduled/`` read at call
+time. A claude.ai scheduled task holds one line asking for its pass, so what runs overnight is what
+the repository holds, and the pasted copy that used to drift from it has nothing left to drift from.
+
 Three things are common to all four — the default voice and the two conventions — and are held as
 constants so a test can prove each prompt carries them. The voice is one constant and not two: it
 states how the assistant sounds and, in the same breath, that sounding sure is never being sure,
@@ -24,6 +29,8 @@ which holds how the user has moved the assistant off the default voice (#1493).
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from .db_models import NEEDS_INPUT_TAG, OBSERVATION_TAG, PREFERENCE_TAG, REJECTED_TAG, USER_TAG
 
@@ -193,6 +200,30 @@ def initial_instructions() -> str:
 
 {HAT_ORIENTATION}\
 """
+
+
+# The Dockerfile copies ``prompts/`` beside ``backend/``, so this resolves in the image as it does
+# in a checkout.
+SCHEDULED_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts" / "scheduled"
+
+SCHEDULED_PASSES = {
+    "resolution": "resolution-pass.md",
+    "learning": "learning-pass.md",
+    "morning": "morning-conversation.md",
+}
+
+
+def scheduled_instructions(pass_name: str) -> str:
+    """The text of one scheduled pass, read from ``prompts/scheduled/`` when asked for.
+
+    The caller is an unattended session with nobody to ask, so a name that is not a pass gets a
+    sentence naming the passes that exist rather than an error it cannot act on.
+    """
+    filename = SCHEDULED_PASSES.get(pass_name)
+    if filename is None:
+        valid = ", ".join(f"'{name}'" for name in SCHEDULED_PASSES)
+        return f"There is no scheduled pass called '{pass_name}'. The passes are {valid}."
+    return (SCHEDULED_PROMPTS_DIR / filename).read_text()
 
 
 def daily_planning() -> str:

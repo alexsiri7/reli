@@ -1,6 +1,6 @@
 ---
 created: '2026-09-14'
-github_issue: null
+github_issue: 1506
 id: '023'
 status: draft
 title: Scheduled passes fetch their instructions from Reli
@@ -29,4 +29,4 @@ This is the same principle already settled for interactive sessions: behaviour l
 
 ## Issues
 
-_None yet._
+- #1506 — Add get_scheduled_instructions so scheduled passes fetch their own prompts
