@@ -165,7 +165,8 @@ cannot set one; the two decisions are coupled.
 Nothing runs on a schedule inside Reli. The resolution pass, the learning pass and the morning
 conversation are Claude scheduled tasks on the same MCP connection as an interactive session,
 distinguished only by the `claude_scheduled` actor in the journal. Their prompts are the three
-files under [`prompts/scheduled/`](../prompts/scheduled/README.md) (#1413). Each task keeps one
+files under [`prompts/scheduled/`](../prompts/scheduled/README.md) (#1413), which each task fetches
+through `get_scheduled_instructions` rather than carrying a copy (#1506). Each task keeps one
 `#ScheduledTask` Thing whose `checkin_date` it pushes to tomorrow at the end of every run, so a
 missed run is a due Thing every session sees; the resolution pass hands the morning conversation a
 `#Briefing` Thing; the learning pass reads the journal through `journal_since`, filtered to the

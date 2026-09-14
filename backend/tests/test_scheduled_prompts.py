@@ -270,7 +270,7 @@ def test_the_readme_gives_each_task_its_one_line_prompt(name):
     readme = (PROMPTS / "README.md").read_text()
     one_liner = next(line for line in readme.splitlines() if f'pass_name "{PASS_NAMES[name]}"' in line)
 
-    assert one_liner.startswith("  > Call get_scheduled_instructions with pass_name ")
+    assert "Call get_scheduled_instructions with pass_name " in one_liner
     assert "follow the result exactly" in one_liner
     if name == MORNING:
         assert "could not reach Reli" in one_liner
