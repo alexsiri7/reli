@@ -305,7 +305,7 @@ def reject_preference(preference_id: uuid.UUID) -> PreferenceOut:
         except ValueError as not_a_preference:
             raise HTTPException(status_code=404, detail=str(not_a_preference)) from not_a_preference
 
-        return _preference(queries.Preference(thing=thing, evidence=queries.evidence_for(session, thing.id)))
+        return _preference(queries.preference_of(session, thing))
 
 
 @router.api_route("/{unmatched:path}", methods=_EVERY_METHOD, include_in_schema=False, response_model=None)

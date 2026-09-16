@@ -591,7 +591,7 @@ def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: lis
             scope=scope,
             evidence_ids=evidence_ids,
         )
-        return _preference_dict(queries.Preference(thing=thing, evidence=queries.evidence_for(session, thing.id)))
+        return _preference_dict(queries.preference_of(session, thing))
 
 
 @reli_mcp.tool()
@@ -616,7 +616,7 @@ def add_preference_evidence(actor: McpActor, preference_id: uuid.UUID, evidence_
             preference_id=preference_id,
             evidence_id=evidence_id,
         )
-        return _preference_dict(queries.Preference(thing=thing, evidence=queries.evidence_for(session, thing.id)))
+        return _preference_dict(queries.preference_of(session, thing))
 
 
 @reli_mcp.tool()
@@ -636,7 +636,7 @@ def reject_preference(actor: McpActor, preference_id: uuid.UUID) -> dict[str, An
     """
     with _session() as session:
         thing = service.reject_preference(session, actor=_actor(actor), preference_id=preference_id)
-        return _preference_dict(queries.Preference(thing=thing, evidence=queries.evidence_for(session, thing.id)))
+        return _preference_dict(queries.preference_of(session, thing))
 
 
 @reli_mcp.tool()

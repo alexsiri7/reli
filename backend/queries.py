@@ -531,6 +531,11 @@ def evidence_for(session: Session, thing_id: uuid.UUID) -> list[ThingRecord]:
     return _evidence_by_preference(session, [thing_id]).get(thing_id, [])
 
 
+def preference_of(session: Session, thing: ThingRecord) -> Preference:
+    """*thing* with its evidence read off the edges: the row shape ``user_model`` returns."""
+    return Preference(thing=thing, evidence=evidence_for(session, thing.id))
+
+
 def user_model(
     session: Session,
     *,
