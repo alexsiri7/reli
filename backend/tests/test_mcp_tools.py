@@ -114,7 +114,7 @@ def test_the_exposed_tools_are_exactly_the_twenty_one():
 
 
 def test_hard_delete_is_not_exposed():
-    """#1409: there is no hard delete via MCP. service.delete_thing stays in-process only."""
+    """#1409: there is no hard delete via MCP, and the service layer no longer holds one either."""
     assert "delete_thing" not in _tool_schemas()
 
 

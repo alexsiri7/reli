@@ -24,8 +24,6 @@ from __future__ import annotations
 import logging
 import secrets
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode, urlsplit
@@ -39,7 +37,7 @@ from starlette.responses import Response
 
 from . import google_login
 from .config import settings
-from .db_engine import get_engine
+from .db_engine import open_session as _session
 from .oauth_state import (
     StoreFullError,
     cleanup_and_pop,
@@ -172,13 +170,6 @@ def _cookie_secure() -> bool:
     return base_url().startswith("https://")
 
 
-@contextmanager
-def _session() -> Iterator[Session]:
-    """The session a route here or in :mod:`backend.mcp_oauth` runs in; tests bind it to the fixture session."""
-    with Session(get_engine()) as session:
-        yield session
-
-
 def _client_redirect(redirect_uri: str, client_state: str, **params: str) -> RedirectResponse:
     """Send the browser back to the client with *params* and, when the client sent one, its state."""
     query = dict(params)
@@ -290,6 +281,58 @@ def _finish_web_sign_in(flow: dict[str, Any], code: str, error: str) -> Redirect
     return response
 
 
+def _finish_mcp_sign_in(session: Session, flow: dict[str, Any], code: str, error: str) -> RedirectResponse:
+    """The MCP branch of the callback: an authorization code delivered to the client, or why not.
+
+    A cancelled sign-in or an account outside the allowlist is delivered to the client's redirect
+    URI as an ``access_denied`` error (RFC 6749 §4.1.2.1), because that is where the person is.
+    """
+    if error:
+        logger.info("MCP sign-in cancelled at Google (%s)", error)
+        return _client_redirect(
+            flow["redirect_uri"],
+            flow["client_state"],
+            error="access_denied",
+            error_description="Google sign-in was cancelled",
+        )
+
+    try:
+        identity = google_login.exchange_code(code, flow["google_code_verifier"])
+    except google_login.GoogleSignInFailed as failed:
+        logger.error("MCP sign-in failed at the Google exchange: %s", failed)
+        raise HTTPException(status_code=502, detail=str(failed)) from failed
+
+    if not is_allowed(identity.email):
+        logger.warning("Google sign-in refused: account not in ALLOWED_EMAILS")
+        return _client_redirect(
+            flow["redirect_uri"], flow["client_state"], error="access_denied", error_description=_INVITE_ONLY
+        )
+
+    auth_code = secrets.token_urlsafe(32)
+    try:
+        cleanup_and_store(
+            session,
+            mcp_auth_codes,
+            auth_code,
+            {
+                "subject": identity.subject,
+                "email": identity.email,
+                "code_challenge": flow["code_challenge"],
+                "code_challenge_method": flow["code_challenge_method"],
+                "redirect_uri": flow["redirect_uri"],
+                "client_id": flow["client_id"],
+                "scope": flow["scope"],
+                "expires_at": datetime.now(UTC) + timedelta(seconds=MCP_AUTH_CODE_TTL_SECONDS),
+            },
+        )
+    except StoreFullError as full:
+        logger.warning("MCP sign-in refused: %s", full)
+        raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
+
+    logger.info("MCP sign-in complete, redirecting to client at %s", flow["redirect_uri"])
+    return _client_redirect(flow["redirect_uri"], flow["client_state"], code=auth_code)
+
+
 @router.get("/google/callback", include_in_schema=False)
 def google_callback(code: str = "", state: str = "", error: str = "") -> RedirectResponse:
     """Where Google sends the browser after the sign-in, for better or worse.
@@ -309,48 +352,4 @@ def google_callback(code: str = "", state: str = "", error: str = "") -> Redirec
         flow = cleanup_and_pop(session, mcp_oauth_sessions, state)
         if flow is None:
             raise HTTPException(status_code=400, detail="Invalid or expired sign-in state: start the sign-in again.")
-
-        if error:
-            logger.info("MCP sign-in cancelled at Google (%s)", error)
-            return _client_redirect(
-                flow["redirect_uri"],
-                flow["client_state"],
-                error="access_denied",
-                error_description="Google sign-in was cancelled",
-            )
-
-        try:
-            identity = google_login.exchange_code(code, flow["google_code_verifier"])
-        except google_login.GoogleSignInFailed as failed:
-            logger.error("MCP sign-in failed at the Google exchange: %s", failed)
-            raise HTTPException(status_code=502, detail=str(failed)) from failed
-
-        if not is_allowed(identity.email):
-            logger.warning("Google sign-in refused: account not in ALLOWED_EMAILS")
-            return _client_redirect(
-                flow["redirect_uri"], flow["client_state"], error="access_denied", error_description=_INVITE_ONLY
-            )
-
-        auth_code = secrets.token_urlsafe(32)
-        try:
-            cleanup_and_store(
-                session,
-                mcp_auth_codes,
-                auth_code,
-                {
-                    "subject": identity.subject,
-                    "email": identity.email,
-                    "code_challenge": flow["code_challenge"],
-                    "code_challenge_method": flow["code_challenge_method"],
-                    "redirect_uri": flow["redirect_uri"],
-                    "client_id": flow["client_id"],
-                    "scope": flow["scope"],
-                    "expires_at": datetime.now(UTC) + timedelta(seconds=MCP_AUTH_CODE_TTL_SECONDS),
-                },
-            )
-        except StoreFullError as full:
-            logger.warning("MCP sign-in refused: %s", full)
-            raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
-
-        logger.info("MCP sign-in complete, redirecting to client at %s", flow["redirect_uri"])
-        return _client_redirect(flow["redirect_uri"], flow["client_state"], code=auth_code)
+        return _finish_mcp_sign_in(session, flow, code, error)

@@ -7,7 +7,8 @@ configuration at import time — ``get_engine`` resolves it on first use — so 
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from sqlalchemy import Engine
 from sqlmodel import Session, create_engine
@@ -39,7 +40,11 @@ def reset_engine() -> None:
     _engine = None
 
 
-def get_session() -> Generator[Session, None, None]:
-    """Yield a SQLModel session. Use as a FastAPI ``Depends()`` or context manager."""
+@contextmanager
+def open_session() -> Iterator[Session]:
+    """The session a request runs in.
+
+    Each module binds it as ``_session`` so tests can patch that seam per module.
+    """
     with Session(get_engine()) as session:
         yield session

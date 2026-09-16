@@ -29,8 +29,8 @@ from typing import Any
 
 from sqlmodel import Session, func, select
 
-from . import db_engine as _engine_module
-from .db_models import (
+from . import db_engine as _engine_module  # type: ignore[attr-defined]
+from .db_models import (  # type: ignore[attr-defined]
     GmailOAuthStateRecord,
     McpAuthCodeRecord,
     McpOAuthSessionRecord,

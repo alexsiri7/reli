@@ -14,21 +14,18 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
 import jwt
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.server import TransportSecuritySettings
-from sqlmodel import Session
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import auth, prompts, queries, service
 from .config import settings
-from .db_engine import get_engine
+from .db_engine import open_session as _session
 from .db_models import (
     OBSERVATION_TAG,
     PREFERENCE_TAG,
@@ -54,13 +51,6 @@ McpActor = Literal[Actor.CLAUDE_INTERACTIVE, Actor.CLAUDE_SCHEDULED]
 
 def _actor(actor: McpActor) -> Actor:
     return Actor(actor)
-
-
-@contextmanager
-def _session() -> Iterator[Session]:
-    """The session a tool runs in. Tests patch this to bind the tools to the fixture session."""
-    with Session(get_engine()) as session:
-        yield session
 
 
 def _thing_dict(thing: ThingRecord) -> dict[str, Any]:
@@ -591,7 +581,7 @@ def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: lis
             scope=scope,
             evidence_ids=evidence_ids,
         )
-        return _preference_dict(queries.Preference(thing=thing, evidence=queries.evidence_for(session, thing.id)))
+        return _preference_dict(queries.preference_of(session, thing))
 
 
 @reli_mcp.tool()
@@ -616,7 +606,7 @@ def add_preference_evidence(actor: McpActor, preference_id: uuid.UUID, evidence_
             preference_id=preference_id,
             evidence_id=evidence_id,
         )
-        return _preference_dict(queries.Preference(thing=thing, evidence=queries.evidence_for(session, thing.id)))
+        return _preference_dict(queries.preference_of(session, thing))
 
 
 @reli_mcp.tool()
@@ -636,7 +626,7 @@ def reject_preference(actor: McpActor, preference_id: uuid.UUID) -> dict[str, An
     """
     with _session() as session:
         thing = service.reject_preference(session, actor=_actor(actor), preference_id=preference_id)
-        return _preference_dict(queries.Preference(thing=thing, evidence=queries.evidence_for(session, thing.id)))
+        return _preference_dict(queries.preference_of(session, thing))
 
 
 @reli_mcp.tool()
