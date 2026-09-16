@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Unit tests for health.py — each check function tested in isolation with mocked subprocesses."""
 
-import json
 import os
 import subprocess
 import unittest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import patch
 
 # Ensure color codes are empty during testing (not a tty)
 os.environ.setdefault("TERM", "dumb")
