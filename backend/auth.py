@@ -24,8 +24,6 @@ from __future__ import annotations
 import logging
 import secrets
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode, urlsplit
@@ -34,12 +32,11 @@ import jwt
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from sqlmodel import Session
 from starlette.responses import Response
 
 from . import google_login
 from .config import settings
-from .db_engine import get_engine
+from .db_engine import open_session as _session
 from .oauth_state import (
     StoreFullError,
     cleanup_and_pop,
@@ -170,13 +167,6 @@ def web_session(request: Request) -> dict[str, Any] | None:
 def _cookie_secure() -> bool:
     """``Secure`` whenever the deploy is reached over https, which the base URL's scheme records."""
     return base_url().startswith("https://")
-
-
-@contextmanager
-def _session() -> Iterator[Session]:
-    """The session a route here or in :mod:`backend.mcp_oauth` runs in; tests bind it to the fixture session."""
-    with Session(get_engine()) as session:
-        yield session
 
 
 def _client_redirect(redirect_uri: str, client_state: str, **params: str) -> RedirectResponse:

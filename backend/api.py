@@ -22,21 +22,19 @@ import json
 import logging
 import pathlib
 import uuid
-from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
-from sqlmodel import Session
 from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import auth, queries, service
-from .db_engine import get_engine
+from .db_engine import open_session as _session
 from .db_models import (
     OBSERVATION_TAG,
     PREFERENCE_TAG,
@@ -158,13 +156,6 @@ class PreferenceOut(BaseModel):
 class UserModelOut(BaseModel):
     scope: str | None
     preferences: list[PreferenceOut]
-
-
-@contextmanager
-def _session() -> Iterator[Session]:
-    """The session a route runs in. Tests patch this to bind the routes to the fixture session."""
-    with Session(get_engine()) as session:
-        yield session
 
 
 def _summary(node: queries.TreeNode) -> ThingSummary:
