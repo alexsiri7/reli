@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, or_, select
+from sqlmodel import Session, select
 
 from .db_models import (
     PREFERENCE_TAG,
@@ -37,7 +37,6 @@ __all__ = [
     "ThingNotFound",
     "add_preference_evidence",
     "create_thing",
-    "delete_thing",
     "get_or_create_user_anchor",
     "record_preference",
     "reject_preference",
@@ -221,53 +220,6 @@ def update_thing(
     session.commit()
     session.refresh(thing)
     return thing
-
-
-def delete_thing(session: Session, *, actor: Actor, thing_id: uuid.UUID) -> None:
-    """Delete a Thing and every relationship touching it, in one transaction.
-
-    The foreign keys are ``ON DELETE RESTRICT``, so the edges are removed first — each one
-    journalled as its own ``unrelate``. A Thing with N relationships therefore produces N+1 journal
-    entries: the N unrelates, then the delete.
-    """
-    thing = _require_thing(session, thing_id)
-
-    edges = session.exec(
-        select(RelationshipRecord).where(
-            or_(
-                RelationshipRecord.source_thing_id == thing_id,
-                RelationshipRecord.target_thing_id == thing_id,
-            )
-        )
-    ).all()
-    for edge in edges:
-        edge_before = _snapshot(edge)
-        edge_id = edge.id
-        session.delete(edge)
-        session.flush()
-        _journalled(
-            session,
-            actor=actor,
-            operation=Operation.UNRELATE,
-            entity_type=EntityType.RELATIONSHIP,
-            entity_id=edge_id,
-            before=edge_before,
-            after=None,
-        )
-
-    before = _snapshot(thing)
-    session.delete(thing)
-    session.flush()
-    _journalled(
-        session,
-        actor=actor,
-        operation=Operation.DELETE,
-        entity_type=EntityType.THING,
-        entity_id=thing_id,
-        before=before,
-        after=None,
-    )
-    session.commit()
 
 
 def _insert_relationship(

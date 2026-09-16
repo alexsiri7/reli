@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import text
 
 from backend.db_models import Actor, EntityType, Operation, RelationshipType
-from backend.service import create_thing, delete_thing, relate, unrelate, update_thing
+from backend.service import create_thing, relate, unrelate, update_thing
 
 
 def _journal_count(session):
@@ -60,22 +60,6 @@ def test_update_thing_writes_exactly_one_entry_with_both_snapshots(session):
     assert entry.after["title"] == "after title"
 
 
-def test_delete_thing_without_relationships_writes_exactly_one_entry(session):
-    thing = _make_thing(session, "doomed")
-    before_count = _journal_count(session)
-
-    delete_thing(session, actor=Actor.USER, thing_id=thing.id)
-
-    entries = _entries_since(session, before_count)
-    assert len(entries) == 1
-    entry = entries[0]
-    assert entry.operation == Operation.DELETE.value
-    assert entry.entity_type == EntityType.THING.value
-    assert entry.entity_id == thing.id
-    assert entry.before["title"] == "doomed"
-    assert entry.after is None
-
-
 def test_relate_writes_exactly_one_entry(session):
     source = _make_thing(session, "source")
     target = _make_thing(session, "target")
@@ -122,33 +106,3 @@ def test_unrelate_writes_exactly_one_entry(session):
     assert entry.entity_id == relationship.id
     assert entry.before["relationship_type"] == RelationshipType.BLOCKS.value
     assert entry.after is None
-
-
-def test_deleting_a_thing_with_two_edges_journals_each_unrelate_then_the_delete(session):
-    thing = _make_thing(session, "hub")
-    other = _make_thing(session, "spoke")
-    relate(
-        session,
-        actor=Actor.USER,
-        source_thing_id=thing.id,
-        target_thing_id=other.id,
-        relationship_type=RelationshipType.CHILD_OF,
-    )
-    relate(
-        session,
-        actor=Actor.USER,
-        source_thing_id=other.id,
-        target_thing_id=thing.id,
-        relationship_type=RelationshipType.RELATED_TO,
-    )
-    before_count = _journal_count(session)
-
-    delete_thing(session, actor=Actor.USER, thing_id=thing.id)
-
-    entries = _entries_since(session, before_count)
-    assert [e.operation for e in entries] == [
-        Operation.UNRELATE.value,
-        Operation.UNRELATE.value,
-        Operation.DELETE.value,
-    ]
-    assert entries[-1].entity_id == thing.id

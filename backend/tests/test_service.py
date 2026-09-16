@@ -6,8 +6,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError
 
-from backend.db_models import Actor, RelationshipType, ThingRecord
-from backend.service import ThingNotFound, create_thing, delete_thing, relate, update_thing
+from backend.db_models import Actor, RelationshipType
+from backend.service import ThingNotFound, create_thing, relate, update_thing
 
 
 def _journal_count(session):
@@ -74,24 +74,6 @@ def test_update_thing_advances_updated_at(session):
 def test_update_thing_rejects_an_unknown_id(session):
     with pytest.raises(ThingNotFound):
         update_thing(session, actor=Actor.USER, thing_id=uuid.uuid4(), title="nobody")
-
-
-def test_delete_thing_removes_its_relationships(session):
-    thing = create_thing(session, actor=Actor.USER, title="hub")
-    other = create_thing(session, actor=Actor.USER, title="spoke")
-    relate(
-        session,
-        actor=Actor.USER,
-        source_thing_id=thing.id,
-        target_thing_id=other.id,
-        relationship_type=RelationshipType.CHILD_OF,
-    )
-
-    delete_thing(session, actor=Actor.USER, thing_id=thing.id)
-
-    assert session.get(ThingRecord, thing.id) is None
-    assert session.execute(text("SELECT count(*) FROM relationships")).scalar_one() == 0
-    assert session.get(ThingRecord, other.id) is not None
 
 
 def test_relate_rejects_a_type_outside_the_five(session):
