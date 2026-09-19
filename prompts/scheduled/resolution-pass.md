@@ -32,10 +32,10 @@ the morning conversation says so first.
 
 ## Walk the due list
 
-`due_for_checkin()` is your list, most important first. Skip `#ScheduledTask` Things: they are
-heartbeats, not check-ins. If yesterday's `#Briefing` is still active, nobody presented it:
-`archive_thing` it, and carry its `unresolved` items forward into tonight's briefing, noting that
-they were never presented.
+`due_for_checkin()` is your list, most important first; it never holds a heartbeat or a briefing,
+which are Reli's own records. If `find_things(tags=["#Briefing"])` shows yesterday's still
+active, nobody presented it: `archive_thing` it, and carry its `unresolved` items forward into
+tonight's briefing, noting that they were never presented.
 
 For each remaining Thing, in order: `get_thing` for its edges, `get_related` at depth 1 for what
 changed around it, then a search through this session's own Calendar and Gmail connectors over the

@@ -17,6 +17,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, SQLModel, col, or_, select
 
 from .db_models import (
+    INTERNAL_TAGS,
     NEEDS_INPUT_TAG,
     PREFERENCE_TAG,
     REJECTED_TAG,
@@ -117,10 +118,19 @@ def _tagged(tags: Sequence[str], match: Literal["any", "all"]) -> ColumnElement[
 
 
 def due_for_checkin(session: Session, as_of: date) -> list[ThingRecord]:
-    """Active Things whose ``checkin_date`` has arrived, most important first."""
+    """Active Things whose ``checkin_date`` has arrived, most important first.
+
+    Reli's own records never appear here, dated or not: ``INTERNAL_TAGS`` is left out on the read
+    side as well as skipped on the write side, because a heartbeat carries a date by design and the
+    morning is about the owner's life, not the system's bookkeeping (#1516).
+    """
     statement = (
         select(ThingRecord)
-        .where(col(ThingRecord.active).is_(True), col(ThingRecord.checkin_date) <= as_of)
+        .where(
+            col(ThingRecord.active).is_(True),
+            col(ThingRecord.checkin_date) <= as_of,
+            ~_tagged(INTERNAL_TAGS, "any"),
+        )
         .order_by(col(ThingRecord.priority).desc())
     )
     return list(session.exec(statement).all())

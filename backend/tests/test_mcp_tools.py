@@ -18,7 +18,7 @@ from sqlalchemy import text
 
 from backend import auth, prompts
 from backend.config import settings
-from backend.db_models import Actor, RelationshipType
+from backend.db_models import NEW_TAG, Actor, RelationshipType
 from backend.mcp_server import (
     McpActor,
     add_preference_evidence,
@@ -152,7 +152,7 @@ def test_create_thing_journals_the_actor_it_was_given(tools):
     assert entries[0].actor == "claude_scheduled"
     assert entries[0].operation == "create"
     assert entries[0].entity_id == uuid.UUID(thing["id"])
-    assert thing["tags"] == ["auto"]
+    assert thing["tags"] == ["auto", NEW_TAG]
     assert json.loads(json.dumps(thing))["title"] == "scheduled write"
 
 

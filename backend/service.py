@@ -10,13 +10,16 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from .db_models import (
+    INTERNAL_TAGS,
+    NEW_TAG,
+    OWNER_TIMEZONE,
     PREFERENCE_TAG,
     REJECTED_TAG,
     USER_ANCHOR_ID,
@@ -134,6 +137,11 @@ def _insert_thing(
     return thing
 
 
+def _default_checkin_date(now: datetime) -> date:
+    """Tomorrow as the owner would say it — the next ``OWNER_TIMEZONE`` day, not the next UTC day."""
+    return now.astimezone(OWNER_TIMEZONE).date() + timedelta(days=1)
+
+
 def create_thing(
     session: Session,
     *,
@@ -147,7 +155,20 @@ def create_thing(
     priority: float = 0.0,
     active: bool = True,
 ) -> ThingRecord:
-    """Create a Thing and journal it as one ``create`` entry with no ``before``."""
+    """Create a Thing and journal it as one ``create`` entry with no ``before``.
+
+    A capture is what the owner has not yet been asked about (#1516): unless *tags* holds one of
+    ``INTERNAL_TAGS``, it is tagged ``NEW_TAG``, and a missing *checkin_date* becomes tomorrow in
+    ``OWNER_TIMEZONE`` so it comes up in the morning rather than never. A date given explicitly is
+    kept as given, and Reli's own records get neither the tag nor the date.
+    """
+    tags = list(tags) if tags is not None else []
+    if not any(tag in INTERNAL_TAGS for tag in tags):
+        if NEW_TAG not in tags:
+            tags.append(NEW_TAG)
+        if checkin_date is None:
+            checkin_date = _default_checkin_date(datetime.now(UTC))
+
     thing = _insert_thing(
         session,
         actor=actor,

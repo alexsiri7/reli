@@ -77,7 +77,8 @@ Every public function writes its row and its journal entry in one transaction:
 
 `backend/queries.py` answers questions with an index, never a search and never a model:
 
-- `due_for_checkin` — active Things whose `checkin_date` has arrived, most important first.
+- `due_for_checkin` — active Things whose `checkin_date` has arrived, most important first, less
+  Reli's own records (the `INTERNAL_TAGS` in `backend/db_models.py`, #1516).
 - `stale` — active Things untouched since a given moment, longest untouched first.
 - `by_tag` — Things carrying any (or all) of a set of tags.
 - `blocked` — Things whose `Blocks` target is still active.
@@ -168,10 +169,11 @@ distinguished only by the `claude_scheduled` actor in the journal. Their prompts
 files under [`prompts/scheduled/`](../prompts/scheduled/README.md) (#1413), which each task fetches
 through `get_scheduled_instructions` rather than carrying a copy (#1506). Each task keeps one
 `#ScheduledTask` Thing whose `checkin_date` it pushes to tomorrow at the end of every run, so a
-missed run is a due Thing every session sees; the resolution pass hands the morning conversation a
-`#Briefing` Thing; the learning pass reads the journal through `journal_since`, filtered to the
-actors a person was present for. Nothing outside a session watches the passes: #1484 removed the
-GitHub Actions watchdog, because a public-repo runner may not read the graph. Design:
+missed run is a due Thing the passes see through `find_things` on that tag; the resolution pass
+hands the morning conversation a `#Briefing` Thing; the learning pass reads the journal through
+`journal_since`, filtered to the actors a person was present for. Nothing outside a session
+watches the passes: #1484 removed the GitHub Actions watchdog, because a public-repo runner may
+not read the graph. Design:
 [vision.md §4.3](vision.md#43-scheduled-claude--the-proactive-half).
 
 ## 11. Infrastructure
