@@ -14,7 +14,7 @@ from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from sqlmodel import Session
 
 # The Calendar and Gmail tools #1488 deleted. Hard-coded because there is nothing left to derive
@@ -61,6 +61,44 @@ def migrated_db(postgres_url: str) -> Iterator[str]:
     yield postgres_url
 
     db_engine.reset_engine()
+
+
+@pytest.fixture()
+def fresh_database(postgres_url: str) -> Iterator[str]:
+    """An empty database on the test server, with the app's settings pointed at it for the test.
+
+    ``migrated_db`` starts from nothing and reaches head in one go, on an empty graph. A test of
+    what a migration does to a database that is already at some revision, or already holds rows,
+    needs one it can walk through revision by revision; this hands that out and restores the
+    settings singleton afterwards.
+    """
+    from backend import config as config_module
+    from backend import db_engine
+
+    name = "reli_fresh"
+    server = create_engine(postgres_url, isolation_level="AUTOCOMMIT")
+    with server.connect() as conn:
+        conn.execute(text(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
+        conn.execute(text(f"CREATE DATABASE {name}"))
+
+    url = postgres_url.rsplit("/", 1)[0] + f"/{name}"
+    previous_env = os.environ.get("DATABASE_URL")
+    previous_setting = config_module.settings.DATABASE_URL
+    os.environ["DATABASE_URL"] = url
+    config_module.settings.DATABASE_URL = url
+    db_engine.reset_engine()
+
+    yield url
+
+    config_module.settings.DATABASE_URL = previous_setting
+    if previous_env is None:
+        os.environ.pop("DATABASE_URL", None)
+    else:
+        os.environ["DATABASE_URL"] = previous_env
+    db_engine.reset_engine()
+    with server.connect() as conn:
+        conn.execute(text(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
+    server.dispose()
 
 
 @pytest.fixture()
