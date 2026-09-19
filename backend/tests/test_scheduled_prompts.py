@@ -21,7 +21,7 @@ import pytest
 from sqlalchemy import text
 
 from backend import db_models, prompts
-from backend.db_models import OBSERVATION_TAG, REJECTED_TAG
+from backend.db_models import NEW_TAG, OBSERVATION_TAG, REJECTED_TAG
 from backend.mcp_server import (
     archive_thing,
     create_thing,
@@ -88,6 +88,19 @@ LEARNING_LITERALS = (
     "One entry is not a pattern.",
     "Voice is not journal-derivable.",
 )
+# #1518: the captures the morning fills in. Pinned clause by clause because each one guards a
+# distinct failure — the oldest-in-every-batch rule against a busy day starving what came before,
+# the read-first tag write against clearing the mark dropping every other tag.
+NEW_THING_LITERALS = (
+    f'find_things(tags=["{NEW_TAG}"], limit=',
+    "three to five",
+    f"always include the single oldest `{NEW_TAG}` Thing",
+    "do not mention that there is a queue",
+    "A morning where the user answers nothing is a fine morning.",
+    "from the project (the source) to the Thing (the target)",
+    f"`tags` set to the Thing's tags minus `{NEW_TAG}`, reading them first",
+    "keeps the mark and comes back another morning",
+)
 MORNING_LITERALS = (
     f'get_user_model(scope="{prompts.SCHEDULING_SCOPE}")',
     f"reli://user-model/{prompts.SCHEDULING_SCOPE}",
@@ -101,6 +114,7 @@ MORNING_LITERALS = (
     "every write that encodes something the user said",
     CHECKIN_FALLBACK,
     VOICE_PRECEDENCE,
+    *NEW_THING_LITERALS,
 )
 SCOPE_ARGUMENT = re.compile(r'scope="([a-z]+)"')
 # The whole scope vocabulary, and the part of it this pass may record under: the prompts that
