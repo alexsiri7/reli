@@ -1,8 +1,8 @@
 ---
 created: '2026-09-19'
-github_issue: null
+github_issue: 1516
 id: '024'
-status: draft
+status: idea
 title: Capture fast, fill in during the morning conversation
 updated: '2026-09-19'
 ---
@@ -30,4 +30,7 @@ The purpose is to build up knowledge of the owner's tasks and projects over time
 
 ## Issues
 
-_None yet._
+- #1516 — Default check-in date and #New mark on capture, excluding Reli's own records
+- #1517 — Backfill: give existing dateless Things a check-in date and #New
+- #1518 — Morning conversation: fill in #New Things with short questions
+- #1519 — Resolution pass: gather context for #New Things without resolving them
