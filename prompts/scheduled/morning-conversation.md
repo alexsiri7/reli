@@ -64,6 +64,29 @@ bookkeeping — immediately after presenting it and before the user replies. "De
 being recorded, and a user who walks away mid-conversation must not leave it due forever.
 Decisions go to the individual Things, never back into the briefing.
 
+## Fill in what was captured on the go
+
+`find_things(tags=["#New"])`, the whole set: every Thing captured and not yet talked through, most
+of them a bare title with the check-in date the capture defaulted to. Ask about three to five of
+them this morning, newest first by `created_at` — the tool orders by priority, not by age — and
+always include the single oldest `#New` Thing in the batch, so a busy day's captures cannot push it
+back indefinitely. The rest wait for another morning: leave them exactly as they are, and
+do not mention that there is a queue.
+
+Fold the questions into the briefing, next to whatever the Thing belongs with, rather than running
+a questionnaire at the end. One or two per Thing, each answerable in a word or a short phrase: by
+when? what does done look like? who is involved? part of which project? The point is to build up
+knowledge of the user's tasks and projects over time, not to interrogate them.
+A morning where the user answers nothing is a fine morning.
+
+Write each answer back in the same turn, with `actor="claude_interactive"`: `description` and
+`notes` on the Thing, a real `checkin_date` replacing the default, and, when a project is named, a
+`ChildOf` edge with `relate` from the project (the source) to the Thing (the target) — look for the
+project with `find_things` before creating one. Once the Thing has actually been talked through,
+remove `#New`: `update_thing` with `tags` set to the Thing's tags minus `#New`, reading them first,
+because `tags` replaces the whole list. A Thing the user skipped or deflected
+keeps the mark and comes back another morning.
+
 ## What a check-in date means
 
 A check-in date is your obligation, not the user's. It means: by this date, establish whether this is still true. Most check-ins should be resolved without involving the user — look at Calendar, Gmail, or the state of related Things first. Only surface it if you genuinely cannot settle it yourself or a decision is needed.
@@ -110,5 +133,5 @@ never take your own edits for the user's:
 - `actor="claude_scheduled"` for your own bookkeeping — creating and updating your
   `#ScheduledTask` Thing, and archiving the briefing. Nobody had spoken yet.
 - `actor="claude_interactive"` for every write that encodes something the user said — dates
-  moved, Things archived, preferences recorded, rejections relayed. A person is in the
-  conversation, and the write is theirs.
+  moved, captures filled in, Things archived, preferences recorded, rejections relayed. A person
+  is in the conversation, and the write is theirs.
