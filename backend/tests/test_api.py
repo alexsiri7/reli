@@ -548,6 +548,21 @@ def test_the_kill_switch_worker_is_served_as_javascript(tmp_path):
     assert "skipWaiting" in response.text
 
 
+def test_the_worker_media_type_is_stated_rather_than_guessed_from_the_host(tmp_path, monkeypatch):
+    """The type must not depend on the host's ``mimetypes`` table: a host without a ``.js`` entry
+    would serve ``application/octet-stream``, the browser would refuse the update, and the stale
+    worker would stay in charge."""
+    monkeypatch.setattr("starlette.responses.guess_type", lambda *_: (None, None))
+    dist = _dist(tmp_path)
+    (dist / "sw.js").write_text("export {};")
+    app = FastAPI()
+    api.mount_frontend(app, dist)
+
+    response = TestClient(app).get("/sw.js")
+
+    assert response.headers["content-type"].split(";")[0] in {"text/javascript", "application/javascript"}
+
+
 @pytest.mark.parametrize("path", ["/nonexistent.json", "/site.webmanifest", "/sw.js", "/things/x.js"])
 def test_a_file_like_path_is_a_404_rather_than_the_bundle_in_disguise(tmp_path, path):
     """A stale manifest or asset must fail loudly; a ``/sw.js`` that 404s is what unregisters a worker
