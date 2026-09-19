@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .db_models import NEEDS_INPUT_TAG, OBSERVATION_TAG, PREFERENCE_TAG, REJECTED_TAG, USER_TAG
+from .db_models import NEEDS_INPUT_TAG, NEW_TAG, OBSERVATION_TAG, PREFERENCE_TAG, REJECTED_TAG, USER_TAG
 
 CAPTURE_SCOPE = "capture"
 SCHEDULING_SCOPE = "scheduling"
@@ -180,8 +180,9 @@ to its blocker; anything else the user connects in conversation is `RelatedTo`, 
 
 Set `checkin_date` whenever there is a date by which the world will have changed: the meeting will \
 have happened, the reply will have arrived, the thing will have shipped or slipped. Set it to the \
-day after that, not to the deadline. A note with nothing to establish gets no check-in date at all. \
-Do not set one for the user's own to-do — that is a deadline, and deadlines go in `notes`.
+day after that, not to the deadline. A capture you leave undated is dated tomorrow and tagged \
+`{NEW_TAG}`, so the morning conversation can fill it in rather than let it sink. Do not set one for the \
+user's own to-do — that is a deadline, and deadlines go in `notes`.
 
 {CHECKIN_SEMANTICS}
 
@@ -239,8 +240,8 @@ already knows, then keep the graph true as the conversation moves things around.
 
 ## Gather
 
-1. `due_for_checkin` — every active Thing whose check-in date has arrived, most important first. \
-This is your list, not the user's.
+1. `due_for_checkin` — every active Thing whose check-in date has arrived, most important first, \
+with Reli's own records already left out. This is your list, not the user's.
 2. `needs_input` — what is already waiting on the user's decision. Each one belongs in the plan \
 as a decision, not as a reminder.
 3. `blocked` and `stale(days=30)` — what is waiting on something and what nobody has touched. \

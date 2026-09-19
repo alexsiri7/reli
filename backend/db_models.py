@@ -15,6 +15,7 @@ import uuid
 from datetime import UTC, date, datetime
 from enum import Enum
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import BigInteger, Boolean, CheckConstraint, Column, Date, DateTime, Dialect, Float, ForeignKey, Text
 from sqlalchemy import Enum as SAEnum
@@ -105,8 +106,27 @@ NEEDS_INPUT_TAG = "#NeedsInput"
 #: One heartbeat Thing per scheduled pass (#1413). The saved prompts under ``prompts/scheduled/``
 #: tell each pass to apply it, and ``backend/tests/test_scheduled_prompts.py`` holds them to this
 #: literal: a rename in only one place would silently kill the missed-run signal, which is a
-#: heartbeat left due surfacing in ``due_for_checkin``.
+#: heartbeat left due, found by the passes through ``find_things`` on this tag.
 SCHEDULED_TASK_TAG = "#ScheduledTask"
+
+#: The day's briefing the resolution pass writes for the morning conversation (#1413).
+BRIEFING_TAG = "#Briefing"
+
+#: Reli's own records (#1516): the user model, the heartbeats and the briefings. None of them is
+#: something the owner captured, so none gets a default check-in date or ``NEW_TAG`` on create, and
+#: ``queries.due_for_checkin`` leaves them out even when one carries a date — a heartbeat does by
+#: design. This tuple is the only place the set is written; ``backend/tests/test_capture_defaults.py``
+#: fails if a literal reappears elsewhere, so a sixth internal tag is a one-line change here.
+INTERNAL_TAGS = (USER_TAG, PREFERENCE_TAG, OBSERVATION_TAG, SCHEDULED_TASK_TAG, BRIEFING_TAG)
+
+#: Not yet talked through (#1516). ``service.create_thing`` applies it to every capture outside
+#: ``INTERNAL_TAGS``; the morning conversation removes it once the Thing has been discussed, and
+#: nothing else does. A check-in date alone cannot tell "never asked" from "check this is still true".
+NEW_TAG = "#New"
+
+#: The owner's timezone, which is what "tomorrow" means for a default check-in date: a capture at
+#: 23:30 London is due the next London day, whatever the server's clock or UTC says.
+OWNER_TIMEZONE = ZoneInfo("Europe/London")
 
 
 class Actor(str, Enum):

@@ -57,7 +57,7 @@ Writes — every one takes `actor`, every one is journalled by `backend/service.
 
 | Tool | Does |
 |---|---|
-| `create_thing` | Creates a Thing: `title`, `description`, `notes`, `tags`, `urls`, `checkin_date`, `priority`. |
+| `create_thing` | Creates a Thing: `title`, `description`, `notes`, `tags`, `urls`, `checkin_date`, `priority`. A capture is tagged `#New` and, without a `checkin_date`, dated tomorrow in Europe/London (#1516); Reli's own records — the `INTERNAL_TAGS` in `backend/db_models.py` — get neither. |
 | `update_thing` | Replaces the fields given — a `tags` or `notes` argument replaces the whole value, nothing is merged, and an unset field is untouched. |
 | `archive_thing` | Sets `active=False`, journalled as an update. The Thing and its edges stay readable; it drops out of `due_for_checkin`, `stale`, `blocked`, `needs_input` and the default `find_things`. There is no hard delete over MCP and nothing un-archives. |
 | `relate` | Links two Things with one of the five `RelationshipType` values (`ChildOf` source is the parent; `Blocks` source is the blocked Thing; `EvidenceFor` source is the evidence) and an optional `context`. |
@@ -70,7 +70,7 @@ Reads — no `actor`:
 | `get_thing` | One Thing and every edge touching it, each with the id `unrelate` takes. |
 | `find_things` | Things matching every filter given — `tags` (`match` any/all), `active`, a check-in window, a priority range, `limit`. A filter, not a search: there is no text matching anywhere in Reli. |
 | `get_related` | The neighbourhood of a Thing within `depth` hops, following edges in both directions, optionally restricted to some `types`. |
-| `due_for_checkin` | Active Things whose check-in date has arrived, as of today or `as_of`. |
+| `due_for_checkin` | Active Things whose check-in date has arrived, as of today or `as_of`, less the `INTERNAL_TAGS` — a heartbeat is dated by design and is read through `find_things` on its tag instead. |
 | `stale` | Active Things untouched for at least `days` (default 30). |
 | `blocked` | Things whose `Blocks` target is still active. |
 | `needs_input` | Active Things tagged `#NeedsInput` — what only the user can settle — most important first, capped at `limit` (default 100) with `total` and `truncated`. The tag is what the prompts apply to a Thing that cannot be resolved from Calendar, Gmail or the graph. |

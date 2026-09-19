@@ -223,9 +223,11 @@ def test_the_prompts_write_the_heartbeat_tag_the_module_defines():
     """The literal asserted against the prose above must be the one constant the code holds.
 
     A rename in only one place would silently kill the missed-run signal: the passes would tag
-    their heartbeats one way and ``due_for_checkin`` would surface them by another.
+    their heartbeats one way and look for them by another. The briefing tag is held the same way,
+    because ``INTERNAL_TAGS`` keeps it out of ``due_for_checkin`` by that literal.
     """
     assert SCHEDULED_TASK_TAG == db_models.SCHEDULED_TASK_TAG
+    assert BRIEFING_TAG == db_models.BRIEFING_TAG
 
 
 # --- The tool that serves them ---------------------------------------------

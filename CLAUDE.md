@@ -206,11 +206,13 @@ unattended.** Those are human steps, in the same class as the Google consent ste
 **The failure signal.** Each task owns one active Thing tagged `#ScheduledTask` (titled
 `Resolution pass`, `Learning pass`, `Morning conversation`) and ends every run by setting its
 `checkin_date` to tomorrow. A run that did not complete leaves the Thing due, so a missed run is a
-due Thing that every session sees: the next resolution pass notes it in the briefing, the morning
-conversation says so in its first line, and `daily-planning` lists it. That is the whole signal —
-#1484 removed the GitHub Actions watchdog that used to read the heartbeats from outside, and nothing
-replaced it. The heartbeats must never be archived, because an archived Thing leaves the tree and
-stops surfacing in `due_for_checkin`, so archiving one hides a missed run instead of reporting it.
+due Thing that the passes see by reading `find_things(tags=["#ScheduledTask"])`: the next
+resolution pass notes it in the briefing and the morning conversation says so in its first line.
+`due_for_checkin` never lists a heartbeat — `#ScheduledTask` is one of the `INTERNAL_TAGS` it
+leaves out (#1516). That is the whole signal — #1484 removed the GitHub Actions watchdog that used
+to read the heartbeats from outside, and nothing replaced it. The heartbeats must never be archived,
+because an archived Thing leaves the tree and the tag lookup, so archiving one hides a missed run
+instead of reporting it.
 
 **The fallback, documented and not built.** If claude.ai scheduled tasks prove unreliable — the
 owner notices a night the passes left no trace — the overnight two move to a host cron running

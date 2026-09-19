@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError
 
-from backend.db_models import Actor, RelationshipType
+from backend.db_models import NEW_TAG, Actor, RelationshipType
 from backend.service import ThingNotFound, create_thing, relate, update_thing
 
 
@@ -15,13 +15,14 @@ def _journal_count(session):
 
 
 def test_create_thing_defaults(session):
+    """The capture defaults — tomorrow and ``#New`` — are test_capture_defaults.py's; the rest are here."""
     thing = create_thing(session, actor=Actor.USER, title="bare")
 
     assert thing.description is None
     assert thing.notes == {}
-    assert thing.tags == []
+    assert thing.tags == [NEW_TAG]
     assert thing.urls == {}
-    assert thing.checkin_date is None
+    assert thing.checkin_date is not None
     assert thing.priority == 0.0
     assert thing.active is True
     assert thing.created_at == thing.updated_at

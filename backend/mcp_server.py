@@ -160,6 +160,10 @@ def create_thing(
 ) -> dict[str, Any]:
     """Create a Thing and journal it.
 
+    A capture is tagged #New — not yet talked through — and, when no checkin_date is given, dated
+    tomorrow (Europe/London) so it comes up in the morning rather than never. Reli's own records —
+    the user model, the heartbeats and the briefings — get neither.
+
     Args:
         actor: 'claude_interactive' for a session with a person in it, 'claude_scheduled' for an
             unattended scheduled task. Required — no write is attributed by default.
@@ -168,7 +172,8 @@ def create_thing(
         notes: Slug to markdown mapping, for anything that does not fit the fields.
         tags: Free-form labels. What a Thing *is* lives here, not in a type column.
         urls: Name to URL mapping.
-        checkin_date: When this should next come up; drives due_for_checkin.
+        checkin_date: When this should next come up; drives due_for_checkin. Kept as given;
+            tomorrow when omitted.
         priority: Higher sorts first in every listing.
 
     Returns:
@@ -416,6 +421,9 @@ def get_related(
 @reli_mcp.tool()
 def due_for_checkin(as_of: date | None = None) -> list[dict[str, Any]]:
     """Active Things whose check-in date has arrived, most important first.
+
+    Reli's own records — the user model, the heartbeats and the briefings — are never listed, even
+    when dated; a heartbeat is checked through find_things on its tag.
 
     Args:
         as_of: The date to judge against; today if omitted.

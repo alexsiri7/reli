@@ -20,6 +20,7 @@ from sqlalchemy import text
 from backend import api, auth
 from backend.config import settings
 from backend.db_models import (
+    NEW_TAG,
     OBSERVATION_TAG,
     PREFERENCE_TAG,
     REJECTED_TAG,
@@ -135,7 +136,7 @@ def test_the_top_level_leaves_out_the_user_model_machinery(client, session):
 
     tags = [tag for thing in client.get("/api/things").json()["things"] for tag in thing["tags"]]
 
-    assert tags == []
+    assert tags == [NEW_TAG]
     assert {USER_TAG, PREFERENCE_TAG, OBSERVATION_TAG}.isdisjoint(tags)
 
 
@@ -198,7 +199,7 @@ def test_a_tree_level_carries_the_fields_the_view_renders(client, session):
     assert found == {
         "id": found["id"],
         "title": "Rebuild Reli",
-        "tags": ["#Project"],
+        "tags": ["#Project", NEW_TAG],
         "priority": 3.0,
         "active": True,
         "checkin_date": "2026-10-01",
@@ -239,7 +240,7 @@ def test_thing_detail_resolves_each_edges_direction_and_far_end(client, session)
     edges = {edge["relationship_type"]: edge for edge in client.get(f"/api/things/{thing.id}").json()["relationships"]}
 
     assert edges["ChildOf"]["direction"] == "incoming"
-    assert edges["ChildOf"]["other"] == {"id": str(parent.id), "title": "Rebuild Reli", "tags": ["#Project"]}
+    assert edges["ChildOf"]["other"] == {"id": str(parent.id), "title": "Rebuild Reli", "tags": ["#Project", NEW_TAG]}
     assert edges["ChildOf"]["context"] == "ninth issue"
     assert edges["Blocks"]["direction"] == "outgoing"
     assert edges["Blocks"]["other"]["title"] == "The user model"
