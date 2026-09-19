@@ -48,9 +48,10 @@ In this order, each depending on what the one before it wrote:
    edits never count as user behaviour, and records what it finds as evidence-linked preferences.
    Appends `learned` and `conflicts` to the briefing. Every write is `claude_scheduled`.
 3. `morning-conversation.md` — waking hours. Reads the briefing, presents it shaped by the
-   `scheduling` and `voice` preferences, archives it, and writes every reply back as it goes. Its
-   own bookkeeping is `claude_scheduled`; every write that encodes something the user said is
-   `claude_interactive`.
+   `scheduling` and `voice` preferences, archives it, asks a short question or two about a few of
+   the `#New` captures nobody has talked through yet (#1518), and writes every reply back as it
+   goes. Its own bookkeeping is `claude_scheduled`; every write that encodes something the user
+   said is `claude_interactive`.
 
 ## What they leave in the graph
 
@@ -67,6 +68,9 @@ In this order, each depending on what the one before it wrote:
   been presented.
 - `#Observation` Things standing for the journal entries a preference cites, and the `#Preference`
   Things themselves, exactly as an interactive session records them.
+- On the captures the morning conversation filled in: a description, notes, a check-in date the
+  user gave in place of the default, a `ChildOf` edge from the project they named, and no `#New`
+  tag. A capture the user skipped keeps its `#New` and comes back another morning.
 
 How the tasks are scheduled, how a missed run is noticed and what to do when one is: see the
 "Scheduled passes" section of the repository's `CLAUDE.md`.

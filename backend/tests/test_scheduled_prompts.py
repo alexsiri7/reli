@@ -92,7 +92,7 @@ LEARNING_LITERALS = (
 # distinct failure — the oldest-in-every-batch rule against a busy day starving what came before,
 # the read-first tag write against clearing the mark dropping every other tag.
 NEW_THING_LITERALS = (
-    f'find_things(tags=["{NEW_TAG}"])',
+    f'find_things(tags=["{NEW_TAG}"], limit=',
     "three to five",
     f"always include the single oldest `{NEW_TAG}` Thing",
     "do not mention that there is a queue",

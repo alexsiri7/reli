@@ -66,17 +66,18 @@ Decisions go to the individual Things, never back into the briefing.
 
 ## Fill in what was captured on the go
 
-`find_things(tags=["#New"])`, the whole set: every Thing captured and not yet talked through, most
-of them a bare title with the check-in date the capture defaulted to. Ask about three to five of
-them this morning, newest first by `created_at` — the tool orders by priority, not by age — and
+`find_things(tags=["#New"], limit=1000)`: every Thing captured and not yet talked through, most
+of them a bare title with the check-in date the capture defaulted to. The limit matters — the
+tool orders by priority, not by age, and its default page of a hundred could leave the oldest out.
+Ask about three to five of them this morning, newest first by `created_at`, and
 always include the single oldest `#New` Thing in the batch, so a busy day's captures cannot push it
 back indefinitely. The rest wait for another morning: leave them exactly as they are, and
 do not mention that there is a queue.
 
-Fold the questions into the briefing, next to whatever the Thing belongs with, rather than running
-a questionnaire at the end. One or two per Thing, each answerable in a word or a short phrase: by
-when? what does done look like? who is involved? part of which project? The point is to build up
-knowledge of the user's tasks and projects over time, not to interrogate them.
+Fold the questions into what you are presenting, next to whatever the Thing belongs with, rather
+than running a questionnaire at the end. One or two per Thing, each answerable in a word or a
+short phrase: by when? what does done look like? who is involved? part of which project? The point
+is to build up knowledge of the user's tasks and projects over time, not to interrogate them.
 A morning where the user answers nothing is a fine morning.
 
 Write each answer back in the same turn, with `actor="claude_interactive"`: `description` and
