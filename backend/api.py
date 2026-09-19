@@ -313,7 +313,7 @@ def unmatched_api_route(unmatched: str) -> Response:
 
 
 def mount_frontend(app: FastAPI, dist: pathlib.Path) -> None:
-    """Serve the Vite bundle in *dist*, with every unmatched path falling back to ``index.html``.
+    """Serve the Vite bundle in *dist*, with every unmatched route falling back to ``index.html``.
 
     Call this **last**: the fallback matches everything, so any route registered after it is dead.
 
@@ -328,9 +328,28 @@ def mount_frontend(app: FastAPI, dist: pathlib.Path) -> None:
 
     app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
+    service_worker = dist / "sw.js"
+    if service_worker.is_file():
+
+        @app.get("/sw.js", include_in_schema=False)
+        def kill_switch() -> FileResponse:
+            """The self-destructing worker in ``frontend/public/sw.js`` that evicts the pre-v4 PWA's.
+
+            The media type is stated rather than guessed: a browser refuses to update a service worker
+            from anything but JavaScript, and a refused update leaves the stale worker in charge.
+            """
+            return FileResponse(service_worker, media_type="text/javascript")
+
     @app.get("/{spa_path:path}", include_in_schema=False)
     def spa(spa_path: str) -> FileResponse:
-        """Hand every path the bundle, so a reload on /things/<uuid> resolves client-side."""
+        """Hand every route the bundle, so a reload on /things/<uuid> resolves client-side.
+
+        A path whose last segment looks like a filename is not a route and gets a 404: the old
+        ``site.webmanifest`` or a stale asset should fail loudly, not masquerade as HTML — and a service
+        worker whose script URL 404s is the one thing a browser unregisters on its own.
+        """
+        if "." in spa_path.rsplit("/", 1)[-1]:
+            raise HTTPException(status_code=404, detail=f"no file at /{spa_path}")
         return FileResponse(index)
 
 
