@@ -21,7 +21,7 @@ from backend.db_models import (
     USER_TAG,
     Actor,
 )
-from backend.queries import due_for_checkin
+from backend.queries import due_for_checkin, find_things
 from backend.service import _default_checkin_date, create_thing
 from backend.tests.test_architecture import BACKEND, _backend_sources
 
@@ -111,6 +111,18 @@ def test_an_internal_record_is_never_due_even_with_a_date(session, tag):
     _thing(session, "capture", checkin_date=TODAY)
 
     assert [thing.title for thing in due_for_checkin(session, TODAY)] == ["capture"]
+
+
+@pytest.mark.parametrize("tag", INTERNAL_TAGS)
+def test_an_internal_record_is_still_found_by_its_tag(session, tag):
+    """A missed run is a heartbeat left due, seen through ``find_things`` on ``#ScheduledTask``.
+
+    The exclusion belongs to ``due_for_checkin`` alone: the same filter in ``find_things`` would
+    hide the heartbeat and, with it, the only signal that a scheduled pass did not run.
+    """
+    _thing(session, "heartbeat", tags=[tag], checkin_date=TODAY - timedelta(days=1))
+
+    assert [thing.title for thing in find_things(session, tags=[tag])] == ["heartbeat"]
 
 
 # --- One definition --------------------------------------------------------
