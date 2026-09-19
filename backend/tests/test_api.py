@@ -533,6 +533,49 @@ def test_a_deep_link_is_served_the_bundle_so_a_reload_resolves_client_side(tmp_p
     assert "<title>Reli</title>" in response.text
 
 
+def test_the_kill_switch_worker_is_served_as_javascript(tmp_path):
+    """A browser only replaces a registered service worker from a JavaScript response at the same URL,
+    so the pre-v4 worker is evicted by ``/sw.js`` being the self-destructing one, typed as script."""
+    dist = _dist(tmp_path)
+    (dist / "sw.js").write_text("self.addEventListener('install', () => self.skipWaiting());")
+    app = FastAPI()
+    api.mount_frontend(app, dist)
+
+    response = TestClient(app).get("/sw.js")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].split(";")[0] in {"text/javascript", "application/javascript"}
+    assert "skipWaiting" in response.text
+
+
+def test_the_worker_media_type_is_stated_rather_than_guessed_from_the_host(tmp_path, monkeypatch):
+    """The type must not depend on the host's ``mimetypes`` table: a host without a ``.js`` entry
+    would serve ``application/octet-stream``, the browser would refuse the update, and the stale
+    worker would stay in charge."""
+    monkeypatch.setattr("starlette.responses.guess_type", lambda *_: (None, None))
+    dist = _dist(tmp_path)
+    (dist / "sw.js").write_text("export {};")
+    app = FastAPI()
+    api.mount_frontend(app, dist)
+
+    response = TestClient(app).get("/sw.js")
+
+    assert response.headers["content-type"].split(";")[0] in {"text/javascript", "application/javascript"}
+
+
+@pytest.mark.parametrize("path", ["/nonexistent.json", "/site.webmanifest", "/sw.js", "/things/x.js"])
+def test_a_file_like_path_is_a_404_rather_than_the_bundle_in_disguise(tmp_path, path):
+    """A stale manifest or asset must fail loudly; a ``/sw.js`` that 404s is what unregisters a worker
+    when no build ships one."""
+    app = FastAPI()
+    api.mount_frontend(app, _dist(tmp_path))
+
+    response = TestClient(app).get(path)
+
+    assert response.status_code == 404
+    assert "<title>Reli</title>" not in response.text
+
+
 def test_an_image_built_without_a_frontend_still_boots(tmp_path):
     app = FastAPI()
 
@@ -541,15 +584,18 @@ def test_an_image_built_without_a_frontend_still_boots(tmp_path):
     assert TestClient(app).get("/").status_code == 404
 
 
-@pytest.mark.parametrize("path", ["/", "/assets/app.js", "/things/x"], ids=["spa", "asset", "deep-link"])
+@pytest.mark.parametrize(
+    "path", ["/", "/assets/app.js", "/things/x", "/sw.js"], ids=["spa", "asset", "deep-link", "kill-switch"]
+)
 def test_the_bundle_is_public_because_it_is_the_sign_in_view(tmp_path, path):
-    """Both the SPA catch-all and the ``/assets`` sub-app, which are registered separately.
+    """The SPA catch-all, the ``/assets`` sub-app and ``/sw.js``, which are registered separately.
 
     Opening ``/`` has to present Google sign-in, which is the bundle; the graph behind ``/api`` is
-    what the check guards.
+    what the check guards. The kill switch has to reach a stuck browser that is signed out.
     """
     dist = _dist(tmp_path)
     (dist / "assets" / "app.js").write_text("export {};")
+    (dist / "sw.js").write_text("export {};")
     app = FastAPI()
     api.mount_frontend(app, dist)
     api.add_web_view_auth(app)
