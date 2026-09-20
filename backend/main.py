@@ -13,8 +13,10 @@ import pathlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from starlette.types import ASGIApp, Receive, Scope, Send
+from fastapi import FastAPI, Request, Response
+from starlette.datastructures import MutableHeaders
+from starlette.responses import PlainTextResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import api, auth, mcp_oauth
 from .config import settings
@@ -91,6 +93,43 @@ class _BareMcpPath:
         await self._app(scope, receive, send)
 
 
+#: Sent on every response (#1527). The bundle is self-hosted Vite output and the consent page in
+#: :mod:`backend.mcp_oauth` inlines nothing, so ``'self'`` covers everything the service serves; an
+#: image in a note's markdown pointing off-origin is what the policy is there to stop. The docs
+#: pages FastAPI generates load Swagger UI from a CDN and stop rendering under it — nothing here
+#: relies on them, and whether they stay reachable at all is #1476's question.
+_SECURITY_HEADERS = {
+    "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'",
+    "Strict-Transport-Security": "max-age=31536000",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+}
+
+
+class _SecurityHeaders:
+    """Adds :data:`_SECURITY_HEADERS` to every response, whichever layer produced it.
+
+    Raw ASGI rather than ``BaseHTTPMiddleware``, which buffers the response in its own task and
+    breaks the streamable-HTTP transport under ``/mcp``.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self._app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self._app(scope, receive, send)
+            return
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message).update(_SECURITY_HEADERS)
+            await send(message)
+
+        await self._app(scope, receive, send_with_headers)
+
+
 # Before api.router, which ends in the /api/{unmatched:path} catch-all that would otherwise take the
 # Google callback.
 app.include_router(auth.router)
@@ -103,3 +142,22 @@ app.add_middleware(_BareMcpPath)
 # after it would never be reached.
 api.mount_frontend(app, _DIST)
 api.add_web_view_auth(app)
+
+# Outermost of the layers registered here, so added last: the web view's 401 is sent by its
+# middleware without reaching anything inside it, and a headers layer registered earlier would never
+# see that response.
+app.add_middleware(_SecurityHeaders)
+
+
+async def _unhandled_exception(request: Request, exc: Exception) -> Response:
+    """The 500 for an exception nothing caught, carrying the headers itself.
+
+    Starlette's ``ServerErrorMiddleware`` wraps every ``add_middleware`` layer and sends this
+    response through the ``send`` it was given, past ``_SecurityHeaders``; without a handler its
+    own fallback goes out bare. It re-raises afterwards, so the error still reaches the log and
+    Sentry.
+    """
+    return PlainTextResponse("Internal Server Error", status_code=500, headers=_SECURITY_HEADERS)
+
+
+app.add_exception_handler(Exception, _unhandled_exception)
