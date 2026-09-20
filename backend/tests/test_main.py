@@ -31,3 +31,24 @@ def test_bare_mcp_is_served_by_the_mount_and_never_redirected(client, method):
     assert bare.status_code == canonical.status_code == 401
     assert bare.json() == canonical.json()
     assert bare.headers["WWW-Authenticate"] == canonical.headers["WWW-Authenticate"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param("/healthz", id="route"),
+        pytest.param("/api/things", id="web-view-401-sent-by-its-own-middleware"),
+        pytest.param("/mcp/", id="mount-401"),
+    ],
+)
+def test_every_response_carries_the_security_headers(client, path):
+    """#1527: one policy on every surface, including the responses that never reach a route — the web
+    view's middleware answers its own 401 before anything inside it runs, and the /mcp mount's bearer
+    check answers its own."""
+    response = client.get(path)
+
+    assert response.headers["Content-Security-Policy"] == "default-src 'self'; frame-ancestors 'none'"
+    assert response.headers["Strict-Transport-Security"] == "max-age=31536000"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "same-origin"
