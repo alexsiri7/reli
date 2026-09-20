@@ -293,6 +293,16 @@ def test_register_refuses_a_field_of_the_wrong_shape_and_stores_nothing(client, 
     assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
 
 
+def test_register_reports_one_problem_however_many_the_body_holds(client):
+    """The refusal must not grow with the body: a flood of wrong elements is not a flood of detail."""
+    body = {"redirect_uris": [0] * ((mcp_oauth.MAX_REGISTRATION_BYTES - 100) // 2)}
+
+    response = client.post("/oauth/register", json=body)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid_client_metadata: redirect_uris.0: Input should be a valid string"
+
+
 def test_register_ignores_metadata_it_does_not_keep(client):
     """RFC 7591 §2: unknown metadata is ignored, not refused, so a client sending more still registers."""
     response = client.post("/oauth/register", json={"redirect_uris": [CLIENT_REDIRECT], "logo_uri": "https://x/y.png"})

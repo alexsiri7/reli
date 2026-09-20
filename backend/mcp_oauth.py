@@ -131,10 +131,13 @@ class _ClientMetadata(BaseModel):
 
 
 def _describe(invalid: ValidationError) -> str:
-    """Field paths and pydantic's own messages: nothing from the body reaches the log or the response."""
-    return "; ".join(
-        f"{'.'.join(str(part) for part in error['loc']) or 'body'}: {error['msg']}" for error in invalid.errors()
-    )
+    """The first problem only, as a field path and pydantic's own message.
+
+    Nothing from the body reaches the log or the response, and the size of neither follows the body:
+    a list of thousands of wrong elements is one error, not one line each.
+    """
+    first = invalid.errors()[0]
+    return f"{'.'.join(str(part) for part in first['loc']) or 'body'}: {first['msg']}"
 
 
 def _redirect_uri_is_safe(uri: str) -> bool:
