@@ -145,6 +145,13 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
   after a Google sign-in (`SECRET_KEY`, `ALLOWED_EMAILS`). Its discovery, registration and token
   endpoints (`/.well-known/*`, `/oauth/*`) and Google's callback (`/api/auth/google/callback`) are
   public by design: a client reaches them before it holds any credential.
+- The OAuth flow-state stores in `backend/oauth_state.py` are bounded, and the cap's behaviour
+  follows from who can write to the store: the three a caller without a credential can fill
+  (`mcp_registered_clients`, `mcp_oauth_sessions`, `web_oauth_sessions`) evict the row nearest
+  expiry to make room, the two only a signed-in account can write to (`mcp_auth_codes`,
+  `mcp_refresh_tokens`) refuse with a 503. A registration lives an hour until the owner signs in
+  through it, then as long as its refresh family. There is no rate limiter anywhere in the
+  service; [CLAUDE.md](../CLAUDE.md) (*Rate limiting*) records why, and where one would go.
 - `/api` — `_WebViewAuthMiddleware` in `backend/api.py` requires the `reli_session` cookie: an
   `aud="web"` JWT the Google sign-in in `backend/auth.py` sets after the allowlist check, and the
   only credential, since #1471 retired the HTTP Basic password that used to sit beside it. One path
