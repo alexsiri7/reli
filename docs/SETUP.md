@@ -101,7 +101,7 @@ These are the fields of `Settings` in `backend/config.py`, and nothing else is r
 | Variable | Default | Notes |
 |---|---|---|
 | `DATABASE_URL` | — | **Required.** Postgres connection string. No default: the boot fails without it rather than serving an empty database. |
-| `SECRET_KEY` | empty | HS256 key for the JWTs the authorization server mints for `/mcp` — the only credential `/mcp` accepts — and the web view's `__Host-reli_session` cookie. Human-provisioned; at least 32 random bytes. Empty means no JWT is issued or accepted, so `/mcp` is closed (401 to everything, and a warning at startup), never a boot failure. |
+| `SECRET_KEY` | empty | HS256 key for the JWTs the authorization server mints for `/mcp` — the only credential `/mcp` accepts — and the web view's `__Host-reli_session` cookie. Human-provisioned; at least 32 random bytes. Empty — or shorter than 32 bytes (#1534) — means no JWT is issued or accepted, so `/mcp` is closed (401 to everything, and a warning at startup), never a boot failure. |
 | `ALLOWED_EMAILS` | empty | Comma-separated Google account emails allowed to sign in. Empty admits nobody. |
 | `GOOGLE_AUTH_REDIRECT_URI` | empty | `https://<your-host>/api/auth/google/callback`, registered verbatim on the OAuth client. Empty closes the sign-in; there is no localhost guess. |
 | `RELI_BASE_URL` | empty | Issuer and base of the OAuth metadata documents. Derived from `GOOGLE_AUTH_REDIRECT_URI` when empty. |

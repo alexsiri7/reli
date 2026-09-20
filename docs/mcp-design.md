@@ -37,10 +37,11 @@ by the OAuth 2.1 authorization server in `backend/mcp_oauth.py` after a Google s
 `/.well-known/*`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, with the callback in
 `backend/auth.py`. A 401 carries an RFC 9728 `resource_metadata` pointer when a base URL is
 configured, which is how a claude.ai connector finds the authorization server, and its body names
-the remedy. An empty `SECRET_KEY` closes the endpoint — 401 to everything, and a warning at
-startup — rather than opening it, because `/mcp` is the only write path into the graph and it is
-publicly reachable. There is no dev mode. The static `MCP_API_TOKEN` that stood beside the JWT
-until the owner confirmed the sign-in against a real connector was retired in #1461.
+the remedy. An empty `SECRET_KEY` — or one shorter than 32 bytes (#1534) — closes the endpoint —
+401 to everything, and a warning at startup — rather than opening it, because `/mcp` is the only
+write path into the graph and it is publicly reachable. There is no dev mode. The static
+`MCP_API_TOKEN` that stood beside the JWT until the owner confirmed the sign-in against a real
+connector was retired in #1461.
 
 Every writing tool takes `actor: McpActor` as a required first argument, where
 `McpActor = Literal[Actor.CLAUDE_INTERACTIVE, Actor.CLAUDE_SCHEDULED]`: `claude_interactive` when a
