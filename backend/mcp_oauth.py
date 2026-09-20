@@ -16,7 +16,9 @@ the connector re-authorises. The identity step is Google's: a client never holds
 and a token is only ever minted for an account in ``ALLOWED_EMAILS`` — re-checked on every
 issuance, not just at sign-in, so removing an email cuts off its refresh chain. Rotation preserves
 the family's original expiry rather than renewing it, so a family cannot outlive its sign-in by
-refreshing indefinitely. The JWT is the only credential ``/mcp`` accepts.
+refreshing indefinitely. The JWT is the only credential ``/mcp`` accepts, and it lives an hour:
+nothing can revoke one once minted, so the hour bounds how long a stolen family's last access token
+outlives its revocation.
 """
 
 from __future__ import annotations
@@ -379,7 +381,7 @@ def _issue_token_response(
         {
             "access_token": access_token,
             "token_type": "bearer",
-            "expires_in": auth.JWT_EXPIRY_SECONDS,
+            "expires_in": auth.MCP_JWT_EXPIRY_SECONDS,
             "refresh_token": refresh_token,
             "scope": scope,
         },

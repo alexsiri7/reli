@@ -140,6 +140,14 @@ def test_a_token_round_trips_for_its_audience_only(sign_in_settings):
         auth.decode_jwt(token, audience="web")
 
 
+def test_an_mcp_token_lives_an_hour_and_a_web_token_a_week(sign_in_settings):
+    mcp = auth.decode_jwt(auth.create_jwt("1234567890", "owner@example.com", audience="mcp"), audience="mcp")
+    web = auth.decode_jwt(auth.create_jwt("1234567890", "owner@example.com", audience="web"), audience="web")
+
+    assert mcp["exp"] - mcp["iat"] == auth.MCP_JWT_EXPIRY_SECONDS == 60 * 60
+    assert web["exp"] - web["iat"] == auth.WEB_JWT_EXPIRY_SECONDS == 60 * 60 * 24 * 7
+
+
 def test_base_url_prefers_the_setting_and_falls_back_to_the_redirect_uris_host(sign_in_settings, monkeypatch):
     assert auth.base_url() == "https://reli.example.test"
 
@@ -298,7 +306,7 @@ def test_a_good_web_sign_in_sets_the_session_cookie_and_lands_on_the_view(client
     assert "HttpOnly" in cookie
     assert "SameSite=lax" in cookie
     assert "Secure" in cookie
-    assert f"Max-Age={auth.JWT_EXPIRY_SECONDS}" in cookie
+    assert f"Max-Age={auth.WEB_JWT_EXPIRY_SECONDS}" in cookie
     token = cookie.split(";")[0].split("=", 1)[1]
     claims = auth.decode_jwt(token, audience=auth.WEB_AUDIENCE)
     assert claims["email"] == "owner@example.com"
