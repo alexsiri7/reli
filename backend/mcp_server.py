@@ -24,7 +24,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import auth, prompts, queries, service
-from .config import settings
+from .config import MIN_SECRET_KEY_BYTES, settings
 from .db_engine import open_session as _session
 from .db_models import (
     OBSERVATION_TAG,
@@ -794,10 +794,11 @@ class _BearerTokenMiddleware:
     The one credential is an ``aud="mcp"`` JWT minted by the authorization server in
     :mod:`backend.mcp_oauth` after a Google sign-in.
 
-    An unset ``SECRET_KEY`` closes the endpoint rather than opening it: there is no dev-mode bypass,
-    because /mcp is the only write path into the graph and it is publicly reachable. Every 401 says
-    what a human or the connector must do next, and names the RFC 9728 resource metadata when a
-    base URL is configured, which is how an MCP client discovers the authorization server.
+    An unset or too-short ``SECRET_KEY`` closes the endpoint rather than opening it: there is no
+    dev-mode bypass, because /mcp is the only write path into the graph and it is publicly
+    reachable. Every 401 says what a human or the connector must do next, and names the RFC 9728
+    resource metadata when a base URL is configured, which is how an MCP client discovers the
+    authorization server.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -810,7 +811,7 @@ class _BearerTokenMiddleware:
 
         # Read the secret per request, not at construction: the app is built at import time, so a
         # value captured then could never be corrected.
-        if not settings.SECRET_KEY:
+        if not settings.secret_key_configured:
             await _refuse(scope, receive, send, _CLOSED)
             return
         header = dict(scope.get("headers", [])).get(b"authorization", b"").decode()
@@ -848,8 +849,11 @@ async def _refuse(scope: Scope, receive: Receive, send: Send, description: str, 
 
 def create_mcp_asgi_app() -> ASGIApp:
     """The streamable-HTTP MCP app behind the bearer check, for ``app.mount("/mcp", ...)``."""
-    if not settings.SECRET_KEY:
-        logger.warning("SECRET_KEY is not set: /mcp will answer 401 to every request.")
+    if not settings.secret_key_configured:
+        logger.warning(
+            "SECRET_KEY is not set, or is shorter than %d bytes: /mcp will answer 401 to every request.",
+            MIN_SECRET_KEY_BYTES,
+        )
     elif missing := auth.missing_sign_in_settings():
         logger.warning("SECRET_KEY is set but %s is not: the OAuth sign-in cannot complete.", ", ".join(missing))
     return _BearerTokenMiddleware(reli_mcp.streamable_http_app())

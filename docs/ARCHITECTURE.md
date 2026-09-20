@@ -161,12 +161,12 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
 - `/` — the bundle is public: it is the sign-in view, and static code from a public repository.
 - `/healthz` — exempt from both.
 
-An empty secret never opens its surface: `/mcp` without `SECRET_KEY`, and `/api` without the Google
-sign-in, answer 401 to every request and log a warning at startup, while `/healthz` stays green so a
-missing secret cannot roll a deploy back. There is no dev-mode
-bypass. The MCP app's DNS-rebinding protection is off because the service is reached through a
-Cloudflare tunnel; that is safe only because the bearer header is mandatory and a cross-origin page
-cannot set one; the two decisions are coupled.
+An empty secret — or a `SECRET_KEY` shorter than 32 bytes (#1534) — never opens its surface: `/mcp`
+without `SECRET_KEY`, and `/api` without the Google sign-in, answer 401 to every request and log a
+warning at startup, while `/healthz` stays green so a missing secret cannot roll a deploy back.
+There is no dev-mode bypass. The MCP app's DNS-rebinding protection is off because the service is
+reached through a Cloudflare tunnel; that is safe only because the bearer header is mandatory and a
+cross-origin page cannot set one; the two decisions are coupled.
 
 ## 10. Scheduled Claude
 

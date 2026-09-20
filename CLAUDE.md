@@ -156,7 +156,9 @@ Its settings are `SECRET_KEY`, `ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and 
 beside `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Every one is human-provisioned on the
 `RAILWAY_TOKEN` pattern and agents cannot mint one. Empty closes the sign-in — `/oauth/authorize`
 answers 501 naming each missing setting, and no JWT is issued or accepted — and never stops the
-boot. **Empty `ALLOWED_EMAILS` admits nobody.**
+boot. A `SECRET_KEY` shorter than 32 bytes counts as empty (#1534): a key that short signs
+brute-forceable tokens, so it closes the sign-in rather than opening it. **Empty `ALLOWED_EMAILS`
+admits nobody.**
 
 **Revoking a connector.** Removing an address from `ALLOWED_EMAILS` is checked again on every
 token issuance in `mcp_oauth.py`, not just at the Google callback, so it also cuts off a connector's
