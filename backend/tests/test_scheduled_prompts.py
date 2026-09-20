@@ -62,6 +62,8 @@ VOICE_PRECEDENCE = "overrides the default voice"
 # tool by tool because the decision list above it pushes a Thing it cannot settle towards
 # `#NeedsInput`, and a default date would otherwise read as an overdue obligation.
 NEW_CONTEXT_LITERALS = (
+    "is a capture nobody has talked through, not a check-in",
+    "section below instead of the decision here",
     f"A `{NEW_TAG}` Thing is for context-gathering only",
     "A default check-in date is not an obligation to verify",
     "do not add `#NeedsInput`",
