@@ -616,11 +616,11 @@ def test_the_database_holds_a_digest_the_token_endpoint_will_not_redeem(client, 
     code = _seed_code(session, registered["client_id"], "verifier")
     issued = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
 
-    stored = session.exec(select(McpRefreshTokenRecord.refresh_token)).all()
+    row = session.exec(select(McpRefreshTokenRecord)).one()
 
-    assert stored == [credential_digest(issued["refresh_token"])]
-    assert issued["refresh_token"] not in stored
-    from_the_database = _refresh(client, stored[0], registered["client_id"])
+    assert row.refresh_token == credential_digest(issued["refresh_token"])
+    assert issued["refresh_token"] not in row.model_dump().values()
+    from_the_database = _refresh(client, row.refresh_token, registered["client_id"])
     assert from_the_database.status_code == 400
     assert from_the_database.json()["error"] == "invalid_grant"
     from_the_client = _refresh(client, issued["refresh_token"], registered["client_id"])
