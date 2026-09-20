@@ -8,6 +8,7 @@ The two racing tests use ``racing_client`` instead, which leaves ``auth._session
 session per request: a single connection cannot race itself.
 """
 
+import logging
 import re
 import secrets
 import threading
@@ -230,6 +231,18 @@ def test_register_accepts_https_and_loopback_redirects(client, redirect_uris):
     assert body["client_secret"]
     assert body["token_endpoint_auth_method"] == "client_secret_post"
     assert body["client_secret_expires_at"] > datetime.now(UTC).timestamp()
+
+
+def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
+    forged = "Claude\nINFO backend.mcp_oauth MCP OAuth: registered client attacker"
+
+    with caplog.at_level(logging.INFO, logger="backend.mcp_oauth"):
+        response = client.post("/oauth/register", json={"redirect_uris": [CLIENT_REDIRECT], "client_name": forged})
+
+    assert response.status_code == 201
+    registered = [record for record in caplog.records if "registered client" in record.getMessage()]
+    assert len(registered) == 1
+    assert "\n" not in registered[0].getMessage()
 
 
 @pytest.mark.parametrize(

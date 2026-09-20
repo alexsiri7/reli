@@ -231,6 +231,27 @@ def test_a_cancelled_sign_in_is_relayed_to_the_client_without_an_exchange(client
     assert seen == []
 
 
+@pytest.mark.parametrize("branch", ["mcp", "web"])
+def test_a_cancellation_error_cannot_forge_a_second_log_line(client, session, google, caplog, branch):
+    if branch == "mcp":
+        _seed_flow(session)
+    else:
+        _seed_web_flow(session)
+    google(lambda request: httpx.Response(500))
+    forged = "access_denied\nINFO backend.auth Web sign-in complete"
+
+    with caplog.at_level(logging.INFO, logger="backend.auth"):
+        response = client.get(
+            "/api/auth/google/callback",
+            params={"error": forged, "state": "server-state" if branch == "mcp" else "web-state"},
+        )
+
+    assert response.status_code == 302
+    cancelled = [record for record in caplog.records if "cancelled" in record.getMessage()]
+    assert len(cancelled) == 1
+    assert "\n" not in cancelled[0].getMessage()
+
+
 def test_a_google_refusal_is_502_naming_the_remedy(client, session, google):
     _seed_flow(session)
     google(lambda request: httpx.Response(400, json={"error": "redirect_uri_mismatch"}))

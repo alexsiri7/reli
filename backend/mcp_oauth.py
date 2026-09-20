@@ -176,7 +176,7 @@ async def oauth_register(request: Request) -> JSONResponse:
     with auth._session() as session:
         cleanup_and_store(session, mcp_registered_clients, client_id, client)
 
-    logger.info("MCP OAuth: registered client %s (%s)", client_id, client["client_name"])
+    logger.info("MCP OAuth: registered client %s (%r)", client_id, client["client_name"])
 
     return JSONResponse(
         {
