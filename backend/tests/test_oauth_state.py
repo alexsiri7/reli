@@ -1,13 +1,23 @@
-"""The five bounded stores behind the authorization server: what they keep, purge, consume, refuse or evict."""
+"""The five bounded stores behind the authorization server: what they keep, purge, consume, refuse or evict.
 
+The last test walks a fresh database through the ``v4_hashed_credential_keys`` revision itself,
+since ``migrated_db`` only ever runs it over empty tables.
+"""
+
+import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlmodel import Session
+from alembic import command as alembic_command
+from alembic.config import Config as AlembicConfig
+from sqlalchemy import text
+from sqlmodel import Session, select
 
 from backend.db_engine import get_engine
 from backend.oauth_state import (
+    McpAuthCodeRecord,
+    McpRefreshTokenRecord,
     McpRegisteredClientRecord,
     Store,
     StoreFullError,
@@ -15,6 +25,7 @@ from backend.oauth_state import (
     cleanup_and_pop,
     cleanup_and_store,
     consume_refresh_token,
+    credential_digest,
     extend_expiry,
     mcp_auth_codes,
     mcp_oauth_sessions,
@@ -208,6 +219,15 @@ def test_only_the_stores_an_unauthenticated_caller_can_write_to_evict():
     assert (mcp_auth_codes.evicts, mcp_refresh_tokens.evicts) == (False, False)
 
 
+def test_only_the_two_credential_stores_hash_their_keys():
+    assert (mcp_auth_codes.hashes_keys, mcp_refresh_tokens.hashes_keys) == (True, True)
+    assert (mcp_registered_clients.hashes_keys, mcp_oauth_sessions.hashes_keys, web_oauth_sessions.hashes_keys) == (
+        False,
+        False,
+        False,
+    )
+
+
 def test_storing_under_an_existing_key_replaces_the_entry(session):
     cleanup_and_store(session, mcp_registered_clients, "client-1", _client(client_name="first"))
     cleanup_and_store(session, mcp_registered_clients, "client-1", _client(client_name="second"))
@@ -216,3 +236,77 @@ def test_storing_under_an_existing_key_replaces_the_entry(session):
 
     assert found is not None
     assert found["client_name"] == "second"
+
+
+# --- What a reader of the database holds ------------------------------------
+
+
+def test_a_hashing_store_holds_only_the_digest_of_its_key(session):
+    cleanup_and_store(session, mcp_refresh_tokens, "token-1", _refresh_token())
+
+    assert session.exec(select(McpRefreshTokenRecord.refresh_token)).all() == [credential_digest("token-1")]
+    assert cleanup_and_get(session, mcp_refresh_tokens, "token-1") is not None
+    assert cleanup_and_get(session, mcp_refresh_tokens, credential_digest("token-1")) is None
+    assert consume_refresh_token(session, credential_digest("token-1")) is None
+
+
+def test_an_authorization_code_is_stored_as_its_digest_and_popped_by_the_code(session):
+    cleanup_and_store(session, mcp_auth_codes, "code-1", _auth_code())
+
+    assert session.exec(select(McpAuthCodeRecord.auth_code)).all() == [credential_digest("code-1")]
+    assert cleanup_and_pop(session, mcp_auth_codes, credential_digest("code-1")) is None
+    assert cleanup_and_pop(session, mcp_auth_codes, "code-1") is not None
+
+
+# --- The hashing revision ---------------------------------------------------
+
+
+def _insert_refresh_token(session, refresh_token, family_id):
+    session.execute(
+        text(
+            "INSERT INTO mcp_refresh_tokens"
+            " (refresh_token, subject, email, client_id, scope, family_id, expires_at)"
+            " VALUES (:token, 'google-sub', 'owner@example.com', 'client-1', 'mcp', :family, :expires_at)"
+        ),
+        {"token": refresh_token, "family": family_id, "expires_at": datetime.now(UTC) + timedelta(days=30)},
+    )
+
+
+def test_the_hashing_revision_keeps_every_live_credential_redeemable(fresh_database):
+    """Rows the older code stored by the credential are rewritten from their own value, so the
+    connector still holding that credential is found by the new lookup and nobody re-authorises.
+    This is also the proof that the digest computed in SQL is the one ``credential_digest`` computes."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    config = AlembicConfig(os.path.join(repo_root, "alembic.ini"))
+    alembic_command.upgrade(config, "v4_backfill_checkin_dates")
+    tokens = ("plain-token", "rotated-token", "uuid-family-token")
+
+    with Session(get_engine()) as session:
+        _insert_refresh_token(session, "plain-token", family_id="plain-token")
+        _insert_refresh_token(session, "rotated-token", family_id="plain-token")
+        _insert_refresh_token(session, "uuid-family-token", family_id="fam-uuid")
+        session.execute(
+            text(
+                "INSERT INTO mcp_auth_codes (auth_code, subject, email, code_challenge, code_challenge_method,"
+                " redirect_uri, client_id, scope, expires_at)"
+                " VALUES ('plain-code', 'google-sub', 'owner@example.com', 'challenge', 'S256',"
+                " 'https://client.example.test/callback', 'client-1', 'mcp', :expires_at)"
+            ),
+            {"expires_at": datetime.now(UTC) + timedelta(seconds=60)},
+        )
+        session.commit()
+
+    alembic_command.upgrade(config, "head")
+
+    with Session(get_engine()) as session:
+        rows = session.exec(select(McpRefreshTokenRecord.refresh_token, McpRefreshTokenRecord.family_id)).all()
+        assert {row.refresh_token for row in rows} == {credential_digest(token) for token in tokens}
+        assert {row.family_id for row in rows} == {credential_digest("plain-token"), "fam-uuid"}
+        assert sum(row.family_id == credential_digest("plain-token") for row in rows) == 2
+        assert session.exec(select(McpAuthCodeRecord.auth_code)).all() == [credential_digest("plain-code")]
+        assert not {row.refresh_token for row in rows} & set(tokens)
+        assert not {row.family_id for row in rows} & set(tokens)
+
+        assert cleanup_and_get(session, mcp_refresh_tokens, "plain-token") is not None
+        assert consume_refresh_token(session, "rotated-token") is not None
+        assert cleanup_and_pop(session, mcp_auth_codes, "plain-code") is not None
