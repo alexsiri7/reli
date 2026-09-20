@@ -3,6 +3,9 @@
 The connection string comes from ``settings.database_url`` and must be Postgres. Nothing here reads
 configuration at import time — ``get_engine`` resolves it on first use — so importing this module
 (or ``backend.main``) never depends on the environment being set up yet.
+
+Every connection the engine opens carries a ``statement_timeout``, so no statement — however the
+graph is shaped — can hold one of the pool's connections indefinitely.
 """
 
 from __future__ import annotations
@@ -17,6 +20,14 @@ from .config import settings
 
 _engine: Engine | None = None
 
+# The backstop for the reads that take no ``limit`` (``queries.due_for_checkin``, ``stale``,
+# ``blocked``, ``relationships_for``) and for everything else: Postgres cancels a statement that runs
+# past this, so a request fails instead of pinning one of the five pooled connections. Every query
+# is an indexed read on one person's graph and finishes in milliseconds, so this is more than an
+# order of magnitude above anything legitimate. Migrations are not under it — ``alembic/env.py``
+# builds its own engine — so a long ``alembic upgrade head`` cannot be killed by it (#1535).
+STATEMENT_TIMEOUT = "30s"
+
 
 def get_engine() -> Engine:
     """Return the process-wide engine, creating it on first call."""
@@ -28,6 +39,7 @@ def get_engine() -> Engine:
             pool_size=3,
             max_overflow=2,
             pool_pre_ping=True,
+            connect_args={"options": f"-c statement_timeout={STATEMENT_TIMEOUT}"},
         )
     return _engine
 
