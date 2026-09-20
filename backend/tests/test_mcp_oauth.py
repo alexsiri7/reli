@@ -30,11 +30,14 @@ from backend.db_engine import get_engine
 from backend.google_login import s256_challenge
 from backend.oauth_state import (
     McpRefreshTokenRecord,
+    McpRegisteredClientRecord,
+    Store,
     cleanup_and_get,
     cleanup_and_store,
     mcp_auth_codes,
     mcp_oauth_sessions,
     mcp_refresh_tokens,
+    mcp_registered_clients,
 )
 
 SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
@@ -258,6 +261,79 @@ def test_register_refuses_an_auth_method_the_token_endpoint_does_not_implement(c
     assert "token_endpoint_auth_method" in detail
     assert "client_secret_basic" in detail
     assert "client_secret_post" in detail
+
+
+def test_register_refuses_a_body_over_the_cap_and_stores_nothing(client, session):
+    response = client.post(
+        "/oauth/register",
+        json={"redirect_uris": [CLIENT_REDIRECT], "client_name": "x" * mcp_oauth.MAX_REGISTRATION_BYTES},
+    )
+
+    assert response.status_code == 413
+    assert str(mcp_oauth.MAX_REGISTRATION_BYTES) in response.json()["detail"]
+    assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
+
+
+def test_a_registration_lives_an_hour_until_its_first_token_then_as_long_as_the_family(client, session):
+    now = datetime.now(UTC)
+    registered = _register(client)
+    grace = cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["expires_at"]
+    assert abs(grace - (now + timedelta(seconds=mcp_oauth.UNUSED_CLIENT_TTL_SECONDS))) < timedelta(minutes=1)
+    advertised = datetime.fromtimestamp(registered["client_secret_expires_at"], UTC)
+    assert abs(advertised - (now + timedelta(seconds=mcp_oauth.CLIENT_TTL_SECONDS))) < timedelta(minutes=1)
+
+    code = _seed_code(session, registered["client_id"], "verifier")
+    issued = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
+
+    session.rollback()  # a promotion that was only flushed, never committed, would not survive this
+    family = cleanup_and_get(session, mcp_refresh_tokens, issued["refresh_token"])["expires_at"]
+    promoted = cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["expires_at"]
+    assert promoted == family
+    _refresh(client, issued["refresh_token"], registered["client_id"])
+    assert cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["expires_at"] == promoted
+
+
+def test_a_registration_is_not_promoted_when_no_token_could_be_stored_for_it(client, session, monkeypatch):
+    """A refused token issuance is a 503 and nothing else: the registration keeps its grace hour."""
+    monkeypatch.setattr(mcp_oauth, "mcp_refresh_tokens", Store(McpRefreshTokenRecord, max_entries=1))
+    cleanup_and_store(
+        session,
+        mcp_refresh_tokens,
+        "someone-elses-token",
+        {
+            "subject": "other",
+            "email": "owner@example.com",
+            "client_id": "other-client",
+            "scope": "mcp",
+            "family_id": "other-family",
+            "expires_at": datetime.now(UTC) + timedelta(days=30),
+        },
+    )
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+
+    response = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier")
+
+    assert response.status_code == 503
+    grace = cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["expires_at"]
+    assert grace < datetime.now(UTC) + timedelta(hours=2)
+
+
+def test_a_flood_of_registrations_displaces_only_registrations_nobody_signed_in_through(client, session, monkeypatch):
+    monkeypatch.setattr(
+        mcp_oauth, "mcp_registered_clients", Store(McpRegisteredClientRecord, max_entries=2, evicts=True)
+    )
+    used = _register(client)
+    code = _seed_code(session, used["client_id"], "verifier")
+    assert _token(client, code=code, client_id=used["client_id"], code_verifier="verifier").status_code == 200
+    unused = _register(client)
+
+    flood = client.post("/oauth/register", json={"redirect_uris": [CLIENT_REDIRECT], "client_name": "flood"})
+
+    assert flood.status_code == 201
+    assert cleanup_and_get(session, mcp_registered_clients, used["client_id"]) is not None
+    assert cleanup_and_get(session, mcp_registered_clients, flood.json()["client_id"]) is not None
+    assert cleanup_and_get(session, mcp_registered_clients, unused["client_id"]) is None
 
 
 # --- Authorization -----------------------------------------------------------
@@ -670,6 +746,9 @@ def test_authorization_code_exchange_refuses_a_de_allowlisted_email(client, sess
 
     assert response.status_code == 400
     assert response.json()["error"] == "invalid_grant"
+    # Nothing was promoted: an account outside the allowlist never holds a registration past its hour.
+    not_promoted = cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["expires_at"]
+    assert not_promoted < datetime.now(UTC) + timedelta(hours=2)
 
 
 def test_rotation_preserves_the_familys_original_expiry_instead_of_renewing_it(client, session):

@@ -1,4 +1,4 @@
-"""The five bounded stores behind the authorization server: what they keep, purge, consume and refuse."""
+"""The five bounded stores behind the authorization server: what they keep, purge, consume, refuse or evict."""
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -15,10 +15,13 @@ from backend.oauth_state import (
     cleanup_and_pop,
     cleanup_and_store,
     consume_refresh_token,
+    extend_expiry,
     mcp_auth_codes,
+    mcp_oauth_sessions,
     mcp_refresh_tokens,
     mcp_registered_clients,
     revoke_refresh_token_family,
+    web_oauth_sessions,
 )
 
 
@@ -156,6 +159,53 @@ def test_a_store_at_its_cap_refuses_rather_than_growing(session):
         cleanup_and_store(session, tiny, "client-2", _client())
 
     assert cleanup_and_get(session, tiny, "client-2") is None
+
+
+def test_an_evicting_store_at_its_cap_drops_the_row_nearest_expiry(session, caplog):
+    tiny = Store(McpRegisteredClientRecord, max_entries=2, evicts=True)
+    cleanup_and_store(session, tiny, "client-1", _client(expires_in=timedelta(hours=1)))
+    cleanup_and_store(session, tiny, "client-2", _client(expires_in=timedelta(days=30)))
+
+    with caplog.at_level("WARNING", logger="backend.oauth_state"):
+        cleanup_and_store(session, tiny, "client-3", _client(expires_in=timedelta(hours=1)))
+
+    assert cleanup_and_get(session, tiny, "client-1") is None
+    assert cleanup_and_get(session, tiny, "client-2") is not None
+    assert cleanup_and_get(session, tiny, "client-3") is not None
+    assert any(
+        "mcp_registered_clients" in record.message and "evicted 1" in record.message for record in caplog.records
+    )
+
+
+def test_replacing_a_key_in_a_full_store_neither_refuses_nor_evicts(session):
+    tiny = Store(McpRegisteredClientRecord, max_entries=1)
+    cleanup_and_store(session, tiny, "client-1", _client(client_name="first"))
+
+    cleanup_and_store(session, tiny, "client-1", _client(client_name="second"))
+
+    found = cleanup_and_get(session, tiny, "client-1")
+    assert found is not None
+    assert found["client_name"] == "second"
+
+
+def test_extend_expiry_only_ever_moves_a_row_later(session):
+    cleanup_and_store(session, mcp_registered_clients, "client-1", _client(expires_in=timedelta(hours=1)))
+    later = datetime.now(UTC) + timedelta(days=30)
+
+    extend_expiry(session, mcp_registered_clients, "client-1", later)
+    assert cleanup_and_get(session, mcp_registered_clients, "client-1")["expires_at"] == later
+
+    extend_expiry(session, mcp_registered_clients, "client-1", datetime.now(UTC) + timedelta(days=2))
+    assert cleanup_and_get(session, mcp_registered_clients, "client-1")["expires_at"] == later
+
+    extend_expiry(session, mcp_registered_clients, "no-such-client", later)
+    assert cleanup_and_get(session, mcp_registered_clients, "no-such-client") is None
+
+
+def test_only_the_stores_an_unauthenticated_caller_can_write_to_evict():
+    """The routes writing to an evicting store no longer catch StoreFullError: flip a flag and they 500."""
+    assert (mcp_registered_clients.evicts, mcp_oauth_sessions.evicts, web_oauth_sessions.evicts) == (True, True, True)
+    assert (mcp_auth_codes.evicts, mcp_refresh_tokens.evicts) == (False, False)
 
 
 def test_storing_under_an_existing_key_replaces_the_entry(session):

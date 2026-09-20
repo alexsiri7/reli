@@ -119,7 +119,7 @@ def session(migrated_db: str) -> Generator[Session, None, None]:
         cleanup.execute(text("DELETE FROM relationships"))
         cleanup.execute(text("DELETE FROM things"))
         # The OAuth stores purge only expired rows, and mcp_registered_clients caps at 100 live
-        # ones: left in place, registrations from earlier tests would turn into 503s mid-suite.
+        # ones: left in place, the store would start evicting earlier tests' registrations mid-suite.
         for table in (
             "mcp_refresh_tokens",
             "mcp_auth_codes",
