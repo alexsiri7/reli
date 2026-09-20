@@ -29,6 +29,7 @@ from backend.db_models import (
     Actor,
     RelationshipType,
 )
+from backend.queries import MAX_LIMIT
 from backend.service import create_thing, get_or_create_user_anchor, record_preference, relate, update_thing
 
 SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
@@ -281,6 +282,19 @@ def test_history_refuses_a_limit_below_one(client, session):
     thing = _thing(session, "Rebuild Reli")
 
     assert client.get(f"/api/things/{thing.id}/history?limit=0").status_code == 422
+
+
+def test_history_refuses_a_limit_above_the_max(client, session):
+    """#1535: the route's ceiling is ``queries.MAX_LIMIT``, the same constant the MCP tools validate against."""
+    thing = _thing(session, "Rebuild Reli")
+
+    assert client.get(f"/api/things/{thing.id}/history?limit={MAX_LIMIT + 1}").status_code == 422
+
+
+def test_history_accepts_the_max_limit(client, session):
+    thing = _thing(session, "Rebuild Reli")
+
+    assert client.get(f"/api/things/{thing.id}/history?limit={MAX_LIMIT}").status_code == 200
 
 
 # --- GET /api/user-model --------------------------------------------------
