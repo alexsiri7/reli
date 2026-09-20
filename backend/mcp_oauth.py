@@ -356,9 +356,10 @@ def _issue_token_response(
     after sign-in cannot keep rolling its refresh token forward — this covers both grant types,
     since both end here. *expires_at* is the family's deadline: fresh from the code exchange,
     carried forward on rotation rather than renewed. The client's registration is promoted to that
-    deadline in the same commit as the token — after the allowlist check, so only an allowed
-    account can hold a registration past its first hour — and only ever later (``GREATEST``), so a
-    second family never shortens it.
+    deadline once the token is stored and not before: a refused issuance leaves it at its grace
+    hour, the allowlist check above has already passed, so only an allowed account holds a
+    registration past its first hour, and the move is only ever later (``GREATEST``), so a second
+    family never shortens it.
     """
     if not auth.is_allowed(email):
         revoked = revoke_refresh_token_family(session, family_id)
@@ -370,7 +371,6 @@ def _issue_token_response(
         raise _invalid_grant("Account is not allowed: " + auth._INVITE_ONLY)
     access_token = auth.create_jwt(subject, email, audience=auth.MCP_AUDIENCE)
     refresh_token = secrets.token_urlsafe(32)
-    extend_expiry(session, mcp_registered_clients, client_id, expires_at)
     try:
         cleanup_and_store(
             session,
@@ -388,6 +388,7 @@ def _issue_token_response(
     except StoreFullError as full:
         logger.warning("MCP OAuth: token issuance refused for client %s — %s", client_id, full)
         raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
+    extend_expiry(session, mcp_registered_clients, client_id, expires_at)
 
     return JSONResponse(
         {

@@ -237,8 +237,7 @@ def extend_expiry(session: Session, store: Store, key: str, expires_at: datetime
 
     Only ever later: a client the owner authorised twice serves two refresh families with different
     deadlines, and a rotation of the older one must not pull the client back below the newer. A
-    missing *key* is a no-op. Does not commit — the caller's next store commit carries it, which is
-    what lands a promotion in the same transaction as the token that earned it.
+    missing *key* is a no-op.
     """
     table = store.model.__table__  # type: ignore[attr-defined]
     session.execute(
@@ -246,7 +245,7 @@ def extend_expiry(session: Session, store: Store, key: str, expires_at: datetime
         .where(table.c[store.primary_key] == key)
         .values(expires_at=func.greatest(table.c.expires_at, expires_at, type_=DateTime(timezone=True)))
     )
-    session.flush()
+    session.commit()
 
 
 def consume_refresh_token(session: Session, refresh_token: str) -> dict[str, Any] | None:
@@ -255,11 +254,11 @@ def consume_refresh_token(session: Session, refresh_token: str) -> dict[str, Any
     ``None`` when it is gone, expired, or already consumed — a replay, or a concurrent exchange
     that won. The row is kept, so :func:`cleanup_and_get` still finds it with ``consumed_at`` set.
 
-    This and :func:`extend_expiry` are the store functions that do not commit: the rotation
-    commits together with its replacement in :func:`cleanup_and_store`, and nothing may commit in
-    between. A concurrent exchange of the same token blocks on this row's lock until that commit,
-    then finds the token consumed, and its :func:`revoke_refresh_token_family` sees the replacement
-    too. A commit between the two would leave the replacement alive after the revocation.
+    This is the one store function that does not commit: the rotation commits together with its
+    replacement in :func:`cleanup_and_store`, and nothing may commit in between. A concurrent
+    exchange of the same token blocks on this row's lock until that commit, then finds the token
+    consumed, and its :func:`revoke_refresh_token_family` sees the replacement too. A commit
+    between the two would leave the replacement alive after the revocation.
     """
     _purge_expired(session, mcp_refresh_tokens)
     table = McpRefreshTokenRecord.__table__  # type: ignore[attr-defined]

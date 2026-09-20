@@ -193,15 +193,12 @@ def test_extend_expiry_only_ever_moves_a_row_later(session):
     later = datetime.now(UTC) + timedelta(days=30)
 
     extend_expiry(session, mcp_registered_clients, "client-1", later)
-    session.commit()
     assert cleanup_and_get(session, mcp_registered_clients, "client-1")["expires_at"] == later
 
     extend_expiry(session, mcp_registered_clients, "client-1", datetime.now(UTC) + timedelta(days=2))
-    session.commit()
     assert cleanup_and_get(session, mcp_registered_clients, "client-1")["expires_at"] == later
 
     extend_expiry(session, mcp_registered_clients, "no-such-client", later)
-    session.commit()
     assert cleanup_and_get(session, mcp_registered_clients, "no-such-client") is None
 
 

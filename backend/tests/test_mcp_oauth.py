@@ -285,11 +285,38 @@ def test_a_registration_lives_an_hour_until_its_first_token_then_as_long_as_the_
     code = _seed_code(session, registered["client_id"], "verifier")
     issued = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
 
+    session.rollback()  # a promotion that was only flushed, never committed, would not survive this
     family = cleanup_and_get(session, mcp_refresh_tokens, issued["refresh_token"])["expires_at"]
     promoted = cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["expires_at"]
     assert promoted == family
     _refresh(client, issued["refresh_token"], registered["client_id"])
     assert cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["expires_at"] == promoted
+
+
+def test_a_registration_is_not_promoted_when_no_token_could_be_stored_for_it(client, session, monkeypatch):
+    """A refused token issuance is a 503 and nothing else: the registration keeps its grace hour."""
+    monkeypatch.setattr(mcp_oauth, "mcp_refresh_tokens", Store(McpRefreshTokenRecord, max_entries=1))
+    cleanup_and_store(
+        session,
+        mcp_refresh_tokens,
+        "someone-elses-token",
+        {
+            "subject": "other",
+            "email": "owner@example.com",
+            "client_id": "other-client",
+            "scope": "mcp",
+            "family_id": "other-family",
+            "expires_at": datetime.now(UTC) + timedelta(days=30),
+        },
+    )
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+
+    response = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier")
+
+    assert response.status_code == 503
+    grace = cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["expires_at"]
+    assert grace < datetime.now(UTC) + timedelta(hours=2)
 
 
 def test_a_flood_of_registrations_displaces_only_registrations_nobody_signed_in_through(client, session, monkeypatch):
