@@ -13,6 +13,7 @@ import secrets
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlsplit
 
@@ -34,6 +35,7 @@ from backend.oauth_state import (
     Store,
     cleanup_and_get,
     cleanup_and_store,
+    credential_digest,
     mcp_auth_codes,
     mcp_oauth_sessions,
     mcp_refresh_tokens,
@@ -295,7 +297,7 @@ def test_a_registration_lives_an_hour_until_its_first_token_then_as_long_as_the_
 
 def test_a_registration_is_not_promoted_when_no_token_could_be_stored_for_it(client, session, monkeypatch):
     """A refused token issuance is a 503 and nothing else: the registration keeps its grace hour."""
-    monkeypatch.setattr(mcp_oauth, "mcp_refresh_tokens", Store(McpRefreshTokenRecord, max_entries=1))
+    monkeypatch.setattr(mcp_oauth, "mcp_refresh_tokens", replace(mcp_refresh_tokens, max_entries=1))
     cleanup_and_store(
         session,
         mcp_refresh_tokens,
@@ -607,6 +609,23 @@ def test_a_wrong_secret_does_not_consume_the_refresh_token(client, session):
     )
     assert right.status_code == 200, right.text
     assert right.json()["refresh_token"] != issued["refresh_token"]
+
+
+def test_the_database_holds_a_digest_the_token_endpoint_will_not_redeem(client, session):
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    issued = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
+
+    row = session.exec(select(McpRefreshTokenRecord)).one()
+
+    assert row.refresh_token == credential_digest(issued["refresh_token"])
+    assert issued["refresh_token"] not in row.model_dump().values()
+    from_the_database = _refresh(client, row.refresh_token, registered["client_id"])
+    assert from_the_database.status_code == 400
+    assert from_the_database.json()["error"] == "invalid_grant"
+    from_the_client = _refresh(client, issued["refresh_token"], registered["client_id"])
+    assert from_the_client.status_code == 200
+    assert from_the_client.json()["refresh_token"] != issued["refresh_token"]
 
 
 def test_a_refresh_token_rotates(client, session):

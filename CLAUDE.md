@@ -160,7 +160,10 @@ boot. **Empty `ALLOWED_EMAILS` admits nobody.**
 token issuance in `mcp_oauth.py`, not just at the Google callback, so it also cuts off a connector's
 existing refresh chain — the next refresh exchange is refused and the whole family is deleted. To
 revoke one connector while leaving the account able to sign in to others,
-`DELETE FROM mcp_refresh_tokens WHERE family_id = '<family_id>'` against `DATABASE_URL`. Rotating
+`DELETE FROM mcp_refresh_tokens WHERE family_id = '<family_id>'` against `DATABASE_URL`.
+`mcp_refresh_tokens` and `mcp_auth_codes` hold SHA-256 digests of the credentials, not the
+credentials (#1530), so a database read or a backup yields nothing redeemable, and `family_id` —
+never the token — is how a row is named. Rotating
 `SECRET_KEY` is the break-glass option for every live session at once, MCP and web; it does not by
 itself stop a refresh chain from minting a fresh JWT under the new key, which is why the allowlist
 re-check above is what actually ends a chain.

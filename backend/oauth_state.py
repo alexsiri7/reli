@@ -15,13 +15,19 @@ owner out for longer than it lasts; the two only a signed-in account can write t
 codes and refresh tokens — refuse with :class:`StoreFullError`, because evicting there would revoke a
 live session to admit a new one. A registration lives an hour until a token is minted for it, then
 as long as the refresh family it serves. Only ``mcp_refresh_tokens`` keeps rows that are no longer
-redeemable: a consumed token stays until it expires, and counts against the cap until then. Client
-secrets are stored in plaintext, as they were before the v4 rebuild: registration is single-tenant
-and a secret is useless without an authorization code bound to it.
+redeemable: a consumed token stays until it expires, and counts against the cap until then.
+
+Authorization codes and refresh tokens are stored as the SHA-256 digest of the value handed to the
+client and looked up by the digest of the value presented (#1530), so a reader of the database or a
+backup holds nothing redeemable, and the plaintext is never read back. Client secrets are stored in
+plaintext, as they were before the v4 rebuild: registration is single-tenant and a secret is
+useless without an authorization code or refresh token bound to it, which the same reader cannot
+present.
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -34,6 +40,11 @@ from sqlmodel import Field, Session, SQLModel, select
 logger = logging.getLogger(__name__)
 
 MAX_ENTRIES = 10_000
+
+
+def credential_digest(value: str) -> str:
+    """What a store that ``hashes_keys`` stores *value* under; the hashing revision computes the same in SQL."""
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def _text(primary_key: bool = False) -> Any:
@@ -81,7 +92,10 @@ class McpOAuthSessionRecord(SQLModel, table=True):
 
 
 class McpAuthCodeRecord(SQLModel, table=True):
-    """An authorization code minted after a Google sign-in, waiting for ``POST /oauth/token``."""
+    """An authorization code minted after a Google sign-in, waiting for ``POST /oauth/token``.
+
+    Keyed by the code's digest, not the code.
+    """
 
     __tablename__ = "mcp_auth_codes"
 
@@ -101,7 +115,8 @@ class McpRefreshTokenRecord(SQLModel, table=True):
 
     Live until one ``grant_type=refresh_token`` exchange consumes it, then kept until it expires so
     that presenting it again is recognised as a replay and revokes its family — every token rotated
-    from the same authorization-code exchange, which all share ``family_id``.
+    from the same authorization-code exchange, which all share ``family_id``. Keyed by the token's
+    digest, not the token.
     """
 
     __tablename__ = "mcp_refresh_tokens"
@@ -136,11 +151,15 @@ class Store:
     an unused registration has at most an hour left and a used one up to thirty days, so eviction
     reaches every unused one first — except a used client in its final hour, which a flood may
     displace up to an hour early; its connector re-authorises, the remedy it was about to need.
+
+    A store that hashes keys stores each row under :func:`credential_digest` of its key and is read
+    by the digest of the presented value, so the row holds nothing redeemable.
     """
 
     model: type[SQLModel]
     max_entries: int
     evicts: bool = False
+    hashes_keys: bool = False
 
     @property
     def primary_key(self) -> str:
@@ -155,10 +174,15 @@ class Store:
 # those two; evicting from them would revoke a live session to admit a new one, and refusing the
 # new one is the lesser harm. One hundred registrations is far more than one owner's connectors
 # will ever hold at once.
+#
+# Whether a store hashes its keys follows from what the key redeems. An authorization code or a
+# refresh token is the credential itself, so the row holds its digest. A client_id is public, and
+# the two sign-in states are the OAuth ``state`` parameter: they travel in URLs and redeem nothing
+# on their own, so those three stay keyed by the value.
 mcp_registered_clients = Store(McpRegisteredClientRecord, max_entries=100, evicts=True)
 mcp_oauth_sessions = Store(McpOAuthSessionRecord, max_entries=MAX_ENTRIES, evicts=True)
-mcp_auth_codes = Store(McpAuthCodeRecord, max_entries=MAX_ENTRIES)
-mcp_refresh_tokens = Store(McpRefreshTokenRecord, max_entries=MAX_ENTRIES)
+mcp_auth_codes = Store(McpAuthCodeRecord, max_entries=MAX_ENTRIES, hashes_keys=True)
+mcp_refresh_tokens = Store(McpRefreshTokenRecord, max_entries=MAX_ENTRIES, hashes_keys=True)
 web_oauth_sessions = Store(WebOAuthSessionRecord, max_entries=MAX_ENTRIES, evicts=True)
 
 
@@ -170,6 +194,10 @@ def _purge_expired(session: Session, store: Store) -> None:
     session.execute(delete(store.model).where(store.model.expires_at <= datetime.now(UTC)))  # type: ignore[attr-defined]
 
 
+def _stored_key(store: Store, key: str) -> str:
+    return credential_digest(key) if store.hashes_keys else key
+
+
 def cleanup_and_store(session: Session, store: Store, key: str, values: dict[str, Any]) -> None:
     """Insert *values* under *key*, replacing any row already there.
 
@@ -179,6 +207,7 @@ def cleanup_and_store(session: Session, store: Store, key: str, values: dict[str
     Raises:
         StoreFullError: The store holds ``max_entries`` live rows and does not evict.
     """
+    key = _stored_key(store, key)
     _purge_expired(session, store)
     table = store.model.__table__  # type: ignore[attr-defined]
     pk = table.c[store.primary_key]
@@ -205,6 +234,7 @@ def cleanup_and_store(session: Session, store: Store, key: str, values: dict[str
 
 def cleanup_and_get(session: Session, store: Store, key: str) -> dict[str, Any] | None:
     """The live row under *key* as a dict, or ``None``."""
+    key = _stored_key(store, key)
     _purge_expired(session, store)
     session.commit()
     record = session.get(store.model, key)
@@ -217,6 +247,7 @@ def cleanup_and_pop(session: Session, store: Store, key: str) -> dict[str, Any] 
     Read and delete are one ``DELETE … RETURNING``, so of any number of concurrent callers exactly
     one gets the row and every other answers ``None``.
     """
+    key = _stored_key(store, key)
     _purge_expired(session, store)
     table = store.model.__table__  # type: ignore[attr-defined]
     row = (
@@ -239,6 +270,7 @@ def extend_expiry(session: Session, store: Store, key: str, expires_at: datetime
     deadlines, and a rotation of the older one must not pull the client back below the newer. A
     missing *key* is a no-op.
     """
+    key = _stored_key(store, key)
     table = store.model.__table__  # type: ignore[attr-defined]
     session.execute(
         update(store.model)
@@ -260,6 +292,7 @@ def consume_refresh_token(session: Session, refresh_token: str) -> dict[str, Any
     consumed, and its :func:`revoke_refresh_token_family` sees the replacement too. A commit
     between the two would leave the replacement alive after the revocation.
     """
+    refresh_token = _stored_key(mcp_refresh_tokens, refresh_token)
     _purge_expired(session, mcp_refresh_tokens)
     table = McpRefreshTokenRecord.__table__  # type: ignore[attr-defined]
     now = datetime.now(UTC)
