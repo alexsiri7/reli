@@ -123,6 +123,35 @@ def test_no_workflow_reads_the_graph_into_github_actions():
     assert offenders == [], f"these workflows read an /api route: {offenders}"
 
 
+def _jobs_on_default_token_grants(directory: Path = WORKFLOWS) -> list[str]:
+    """Jobs whose ``GITHUB_TOKEN`` scope is neither set at the top of the workflow nor on the job."""
+    workflows = (p for p in directory.iterdir() if p.suffix in (".yml", ".yaml"))
+    offenders: list[str] = []
+    for workflow in sorted(workflows):
+        document = yaml.safe_load(workflow.read_text())
+        if "permissions" in document:
+            continue
+        offenders.extend(
+            f"{workflow.name}:{name}" for name, job in document["jobs"].items() if "permissions" not in job
+        )
+    return offenders
+
+
+def test_every_workflow_job_declares_its_token_permissions():
+    """#1539: a job without a ``permissions`` block runs on the repository default, not a chosen minimum."""
+    offenders = _jobs_on_default_token_grants()
+    assert offenders == [], f"these jobs run on the default GITHUB_TOKEN grants: {offenders}"
+
+
+def test_the_permissions_scan_sees_a_job_left_on_the_default_grants(tmp_path):
+    """A top-level block covers every job in its workflow; without one, each job must declare its own."""
+    (tmp_path / "covered.yml").write_text("permissions:\n  contents: read\njobs:\n  x:\n    steps: []\n")
+    (tmp_path / "bare.yml").write_text(
+        "jobs:\n  x:\n    permissions:\n      contents: read\n    steps: []\n  y:\n    steps: []\n"
+    )
+    assert _jobs_on_default_token_grants(tmp_path) == ["bare.yml:y"]
+
+
 def test_the_graph_read_scan_tells_a_deploy_route_from_a_repository_path(tmp_path):
     """Without the negatives the scan would fail on any workflow that merely names ``backend/api.py``."""
     (tmp_path / "reads.yml").write_text('jobs:\n  x:\n    steps:\n      - run: curl "$URL/api/things"\n')
