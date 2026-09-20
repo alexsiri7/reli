@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - "uv.lock"
+      - "frontend/package-lock.json"
   pull_request:
     branches: [main]
     paths:
       - "uv.lock"
+      - "frontend/package-lock.json"
   schedule:
     - cron: "0 6 * * 1" # Weekly on Monday at 06:00 UTC
 
@@ -46,3 +48,19 @@ jobs:
       # Replaces `pip-audit -r` which forces a dry-run pip resolve; see #920.
       - name: Run pip-audit
         run: pip-audit
+
+  frontend-audit:
+    name: Frontend dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # Audits the lockfile directly; no install needed.
+      - name: Run npm audit
+        working-directory: frontend
+        run: npm audit

@@ -209,3 +209,17 @@ def test_dependabot_bumps_the_lockfile_alongside_pyproject():
 
     assert "uv" in ecosystems
     assert "pip" not in ecosystems, "the pip ecosystem raises pyproject-only bumps that leave uv.lock behind"
+
+
+def test_the_frontend_lockfile_is_updated_and_scanned_like_the_backend_one():
+    """#1540: `frontend/package-lock.json` gets the same dependabot bumps and vulnerability scan
+    `uv.lock` does, rather than being patched by hand when someone happens to look."""
+    updates = yaml.safe_load(DEPENDABOT.read_text())["updates"]
+    assert {u["directory"] for u in updates if u["package-ecosystem"] == "npm"} == {"/frontend"}
+
+    scan = yaml.safe_load((WORKFLOWS / "dependency-scan.yml").read_text())
+    # YAML 1.1 reads a bare ``on:`` key as the boolean True.
+    for event in ("push", "pull_request"):
+        assert "frontend/package-lock.json" in scan[True][event]["paths"], event
+    audit_steps = [step for job in scan["jobs"].values() for step in job["steps"] if "npm audit" in step.get("run", "")]
+    assert [step.get("working-directory") for step in audit_steps] == ["frontend"]
