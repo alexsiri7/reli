@@ -409,7 +409,7 @@ def get_related(
     Args:
         thing_id: Where to start walking.
         types: Restrict the walk to these relationship types; omitted walks all five.
-        depth: How many hops out to walk.
+        depth: How many hops out to walk; more than five walks five.
 
     Returns:
         One entry per Thing reached, with its hop count and the edge type that reached it.

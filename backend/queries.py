@@ -204,6 +204,11 @@ def blocked(session: Session) -> list[ThingRecord]:
     return list(session.exec(statement).all())
 
 
+# The walk enumerates every simple path out of the origin, so its row count grows with the
+# branching factor to the power of the depth. Five hops is further than any neighbourhood a session
+# asks for and keeps a request from pinning its connection on a dense graph (#1531).
+MAX_RELATED_DEPTH = 5
+
 _RELATED_WALK = text(
     """
     WITH RECURSIVE walk(thing_id, depth, relationship_type, path) AS (
@@ -247,13 +252,15 @@ def related(
 
     Edges are followed in **both** directions: a Thing's neighbourhood includes what points at it,
     not only what it points at. The origin is never returned, and a Thing already on the path is
-    not revisited, so cycles terminate. ``types=None`` traverses every relationship type.
+    not revisited, so cycles terminate. ``types=None`` traverses every relationship type. A *depth*
+    beyond ``MAX_RELATED_DEPTH`` walks ``MAX_RELATED_DEPTH`` hops.
 
     A Thing reached by several edges is returned once, at its shortest depth; which of the tying
     edges supplies ``relationship_type`` is unspecified. Pass *types* to make that deterministic.
     """
     if depth < 1:
         return []
+    depth = min(depth, MAX_RELATED_DEPTH)
 
     wanted = [t.value for t in (types if types is not None else list(RelationshipType))]
     if not wanted:
