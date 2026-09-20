@@ -167,6 +167,18 @@ def test_missing_sign_in_settings_names_each_empty_one(sign_in_settings, monkeyp
     assert auth.missing_sign_in_settings() == ["SECRET_KEY", "ALLOWED_EMAILS"]
 
 
+def test_a_short_secret_key_is_reported_missing(sign_in_settings, monkeypatch):
+    """#1534: ``SECRET_KEY=x`` would sign brute-forceable tokens, so it counts as unset."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "x")
+    assert auth.missing_sign_in_settings() == ["SECRET_KEY"]
+
+    monkeypatch.setattr(settings, "SECRET_KEY", "k" * 31)
+    assert auth.missing_sign_in_settings() == ["SECRET_KEY"]
+
+    monkeypatch.setattr(settings, "SECRET_KEY", "k" * 32)
+    assert auth.missing_sign_in_settings() == []
+
+
 # --- The callback ------------------------------------------------------------
 
 

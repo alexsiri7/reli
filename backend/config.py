@@ -11,6 +11,10 @@ Usage:
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# RFC 7518 §3.2: an HMAC-SHA256 key shorter than the hash output is brute-forceable. A SECRET_KEY
+# below this is treated exactly like an empty one (#1534).
+MIN_SECRET_KEY_BYTES = 32
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables and .env file."""
@@ -33,8 +37,9 @@ class Settings(BaseSettings):
     # the deploy back. The bundle at / is always public; it is the sign-in view.
     #
     # SECRET_KEY signs every JWT Reli mints (HS256) — the only credential /mcp accepts is one of
-    # them, so an empty value closes /mcp with a 401 rather than opening it. PyJWT warns below
-    # 32 bytes; provision with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+    # them, so a value that is empty or shorter than MIN_SECRET_KEY_BYTES closes /mcp with a 401
+    # rather than opening it; `secret_key_configured` is the one check. Provision with
+    # `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
     SECRET_KEY: str = ""
     # Comma-separated Google account emails allowed to sign in. Empty admits nobody.
     ALLOWED_EMAILS: str = ""
@@ -62,6 +67,11 @@ class Settings(BaseSettings):
     def allowed_emails(self) -> frozenset[str]:
         """The ALLOWED_EMAILS list, lower-cased, with blanks dropped. Empty means nobody may sign in."""
         return frozenset(email.strip().lower() for email in self.ALLOWED_EMAILS.split(",") if email.strip())
+
+    @property
+    def secret_key_configured(self) -> bool:
+        """Whether SECRET_KEY can sign a JWT: set, and at least MIN_SECRET_KEY_BYTES long."""
+        return len(self.SECRET_KEY.encode("utf-8")) >= MIN_SECRET_KEY_BYTES
 
     @property
     def database_url(self) -> str:

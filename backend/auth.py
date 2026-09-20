@@ -66,7 +66,8 @@ WEB_SIGN_IN_TTL_SECONDS = 60 * 10
 # ``Path=/`` and no ``Domain`` — the contract both call sites below meet.
 SESSION_COOKIE = "__Host-reli_session"
 
-#: Every setting the Google sign-in needs; an empty one closes the sign-in with a 501 naming it.
+#: Every setting the Google sign-in needs; an empty one — or a ``SECRET_KEY`` too short to sign
+#: with — closes the sign-in with a 501 naming it.
 SIGN_IN_SETTINGS: tuple[str, ...] = (
     "SECRET_KEY",
     "GOOGLE_CLIENT_ID",
@@ -96,9 +97,19 @@ def base_url() -> str:
     return ""
 
 
+def _sign_in_setting_present(name: str) -> bool:
+    if name == "SECRET_KEY":
+        return settings.secret_key_configured
+    return bool(getattr(settings, name))
+
+
 def missing_sign_in_settings() -> list[str]:
-    """The names in ``SIGN_IN_SETTINGS`` that are empty, read per call so a value set later is seen."""
-    return [name for name in SIGN_IN_SETTINGS if not getattr(settings, name)]
+    """The names in ``SIGN_IN_SETTINGS`` that are empty, read per call so a value set later is seen.
+
+    ``SECRET_KEY`` is also missing when it is shorter than ``MIN_SECRET_KEY_BYTES``: a key that
+    short signs brute-forceable tokens, so it closes the sign-in as an empty one does (#1534).
+    """
+    return [name for name in SIGN_IN_SETTINGS if not _sign_in_setting_present(name)]
 
 
 def not_configured_detail(missing: list[str]) -> str:
@@ -158,12 +169,12 @@ def web_session(request: Request) -> dict[str, Any] | None:
 
     Raises:
         SessionRefused: The cookie is there but expired, not this Reli's, or unverifiable because
-            ``SECRET_KEY`` is empty — each with the sentence a person should see.
+            ``SECRET_KEY`` is empty or too short — each with the sentence a person should see.
     """
     token = request.cookies.get(SESSION_COOKIE, "")
     if not token:
         return None
-    if not settings.SECRET_KEY:
+    if not settings.secret_key_configured:
         raise SessionRefused(not_configured_detail(["SECRET_KEY"]))
     try:
         return decode_jwt(token, WEB_AUDIENCE)

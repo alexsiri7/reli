@@ -492,6 +492,18 @@ def test_a_cookie_with_secret_key_unset_is_401_naming_the_setting_and_not_a_500(
     assert "SECRET_KEY" in response.json()["detail"]
 
 
+def test_a_cookie_with_a_short_secret_key_is_401_naming_the_setting(anonymous, monkeypatch):
+    """#1534: a key under 32 bytes closes the view as an empty one does, even for a cookie it signed."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "x")
+    headers = _cookie(jwt.encode({"sub": "1", "aud": auth.WEB_AUDIENCE, "exp": 2**31}, "x", algorithm="HS256"))
+
+    response = anonymous.get("/api/things", headers=headers)
+
+    assert response.status_code == 401
+    assert "SECRET_KEY" in response.json()["detail"]
+    assert anonymous.get("/healthz").status_code == 200
+
+
 def test_the_mcp_mount_is_not_touched_by_the_web_view_check(session, monkeypatch):
     """/mcp carries its own bearer check, which must stay the only thing deciding it."""
     app = _routed_app(session, monkeypatch)

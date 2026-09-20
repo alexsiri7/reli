@@ -39,6 +39,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlmodel import Session
 
 from . import auth, google_login
+from .config import settings
 from .oauth_state import (
     Store,
     StoreFullError,
@@ -496,7 +497,17 @@ async def oauth_token(
     code_verifier: str = Form(default=""),
     refresh_token: str = Form(default=""),
 ) -> JSONResponse:
-    """Exchange an authorization code, or rotate a refresh token, for an ``aud="mcp"`` JWT."""
+    """Exchange an authorization code, or rotate a refresh token, for an ``aud="mcp"`` JWT.
+
+    Refused up front — 501 naming ``SECRET_KEY`` — while there is no key to sign with, before any
+    grant is consumed: a refresh token issued under a key that was since unset or shortened must
+    mint nothing, and stays redeemable once the key is restored. Only the key is checked here:
+    an emptied ``ALLOWED_EMAILS`` must still reach :func:`_issue_token_response`, which is where
+    the refresh family is revoked.
+    """
+    if not settings.secret_key_configured:
+        logger.error("MCP OAuth: token refused, SECRET_KEY is not configured")
+        raise HTTPException(status_code=501, detail=auth.not_configured_detail(["SECRET_KEY"]))
     try:
         with auth._session() as session:
             if grant_type == "refresh_token":

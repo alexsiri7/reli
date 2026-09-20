@@ -367,6 +367,36 @@ def test_authorize_refuses_up_front_naming_each_missing_setting(client, monkeypa
     assert "GOOGLE_CLIENT_ID" not in detail
 
 
+def test_authorize_refuses_a_short_secret_key_as_it_does_an_empty_one(client, monkeypatch):
+    """#1534: nobody is sent through Google to be issued a token signed with a brute-forceable key."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "x")
+
+    response = client.get("/oauth/authorize", params={"client_id": "x", "redirect_uri": CLIENT_REDIRECT})
+
+    assert response.status_code == 501
+    assert "SECRET_KEY" in response.json()["detail"]
+
+
+def test_a_refresh_token_mints_nothing_while_the_secret_key_is_short_and_is_not_consumed(client, session, monkeypatch):
+    """A refresh token outlives a key change on the deploy: the exchange is refused up front, naming
+    the setting, and the token is still there to redeem once the key is restored."""
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    issued = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
+
+    for short in ("x", ""):
+        monkeypatch.setattr(settings, "SECRET_KEY", short)
+        refused = _refresh(client, issued["refresh_token"], registered["client_id"])
+        assert refused.status_code == 501, refused.text
+        assert "SECRET_KEY" in refused.json()["detail"]
+        assert "access_token" not in refused.text
+
+    monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    restored = _refresh(client, issued["refresh_token"], registered["client_id"])
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["refresh_token"] != issued["refresh_token"]
+
+
 def test_authorize_shows_a_consent_page_naming_the_client_and_remembers_the_request(client, session):
     registered = _register(client)
 

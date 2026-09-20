@@ -887,6 +887,17 @@ def test_with_secret_key_unset_the_401_names_what_to_set(client):
     assert "SECRET_KEY" in response.json()["detail"]
 
 
+def test_a_short_secret_key_closes_the_endpoint_even_to_a_token_it_signed(client, monkeypatch):
+    """#1534: a one-byte HMAC key is brute-forceable, so it is treated as unset rather than honoured."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "x")
+    token = jwt.encode({"sub": "1", "aud": auth.MCP_AUDIENCE, "exp": 2**31}, "x", algorithm="HS256")
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(token))
+
+    assert response.status_code == 401
+    assert "SECRET_KEY" in response.json()["detail"]
+
+
 def test_a_static_token_left_in_the_environment_is_not_a_credential(client, secret_key, monkeypatch):
     """#1461 retired MCP_API_TOKEN: a deploy still carrying the variable boots, and the value it
     holds is refused like any other non-JWT bearer, naming the sign-in as the remedy."""

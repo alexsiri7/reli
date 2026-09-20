@@ -66,7 +66,7 @@ environment (Railway variables, or the host's `.env` for docker compose) rather 
 | Variable | Purpose | Notes |
 |---|---|---|
 | `DATABASE_URL` | Postgres connection string | Required. The service refuses to start without it. |
-| `SECRET_KEY` | Signs the JWTs the OAuth authorization server mints for `/mcp` — the only credential `/mcp` accepts | Human-provisioned; at least 32 random bytes (`python -c "import secrets; print(secrets.token_urlsafe(48))"`). Empty is not a dev-mode bypass: no JWT is issued or accepted, `/mcp` answers 401 to every request, `/healthz` stays green, and a warning is logged at startup. |
+| `SECRET_KEY` | Signs the JWTs the OAuth authorization server mints for `/mcp` — the only credential `/mcp` accepts | Human-provisioned; at least 32 random bytes (`python -c "import secrets; print(secrets.token_urlsafe(48))"`). Empty — or shorter than 32 bytes (#1534) — is not a dev-mode bypass: no JWT is issued or accepted, `/mcp` answers 401 to every request, `/healthz` stays green, and a warning is logged at startup. |
 | `ALLOWED_EMAILS` | Google accounts allowed to sign in, comma-separated | Human-provisioned. Empty admits nobody. |
 | `GOOGLE_AUTH_REDIRECT_URI` | Where Google sends the browser back after sign-in | `https://<host>/api/auth/google/callback`, and the same value authorised on the OAuth client in the Google Cloud console. Empty closes the sign-in. |
 | `RELI_BASE_URL` | Issuer and base of the OAuth metadata documents | Optional; derived from `GOOGLE_AUTH_REDIRECT_URI` when empty. |
