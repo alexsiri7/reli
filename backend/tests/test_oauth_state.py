@@ -172,6 +172,21 @@ def test_a_store_at_its_cap_refuses_rather_than_growing(session):
     assert cleanup_and_get(session, tiny, "client-2") is None
 
 
+def test_a_refusal_does_not_commit_a_flushed_refresh_token_consume(session):
+    """The rotation's consume is only flushed until its replacement commits; a refusal must not commit it."""
+    tiny = Store(McpRefreshTokenRecord, max_entries=1, hashes_keys=True)
+    cleanup_and_store(session, tiny, "token-1", _refresh_token())
+    assert consume_refresh_token(session, "token-1") is not None
+
+    with pytest.raises(StoreFullError):
+        cleanup_and_store(session, tiny, "token-2", _refresh_token())
+
+    with Session(get_engine()) as own:
+        kept = cleanup_and_get(own, mcp_refresh_tokens, "token-1")
+    assert kept is not None
+    assert kept["consumed_at"] is None
+
+
 def test_an_evicting_store_at_its_cap_drops_the_row_nearest_expiry(session, caplog):
     tiny = Store(McpRegisteredClientRecord, max_entries=2, evicts=True)
     cleanup_and_store(session, tiny, "client-1", _client(expires_in=timedelta(hours=1)))
