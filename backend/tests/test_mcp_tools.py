@@ -14,6 +14,7 @@ from typing import get_args
 
 import jwt
 import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 from sqlalchemy import text
 
 from backend import auth, prompts
@@ -44,6 +45,7 @@ from backend.mcp_server import (
     unrelate,
     update_thing,
 )
+from backend.queries import MAX_LIMIT
 from backend.service import ThingNotFound
 from backend.tests.conftest import RETIRED_GOOGLE_TOOL_NAMES
 
@@ -137,6 +139,50 @@ def test_every_writing_tool_requires_an_actor(tool_name):
 
     assert "actor" in schema["required"]
     assert schema["properties"]["actor"]["enum"] == [actor.value for actor in get_args(McpActor)]
+
+
+LIMITED_TOOLS = ("find_things", "needs_input", "get_thing_history", "journal_since")
+
+# ``get_thing_history`` has a required argument beside ``limit``; the other three have none.
+LIMITED_TOOL_ARGUMENTS = {"get_thing_history": {"thing_id": str(uuid.uuid4())}}
+
+
+@pytest.mark.parametrize("tool_name", LIMITED_TOOLS)
+def test_every_limit_is_bounded_in_the_schema(tool_name):
+    """#1535: the model sees the range before it calls, the way the web route's ``Query`` states it."""
+    limit = _tool_schemas()[tool_name]["properties"]["limit"]
+
+    assert limit["minimum"] == 1
+    assert limit["maximum"] == MAX_LIMIT
+
+
+@pytest.mark.parametrize("tool_name", LIMITED_TOOLS)
+@pytest.mark.parametrize("value", [0, -1, MAX_LIMIT + 1])
+def test_an_out_of_range_limit_is_refused_before_it_reaches_the_database(tools, tool_name, value):
+    """#1535: argument validation names the bound; a negative ``LIMIT`` used to fail inside Postgres.
+
+    This one goes through ``call_tool`` on purpose: ``@reli_mcp.tool()`` returns the function
+    unchanged, so calling ``find_things(limit=-1)`` directly bypasses validation and reaches SQL —
+    exactly the bug.
+    """
+    arguments = {**LIMITED_TOOL_ARGUMENTS.get(tool_name, {}), "limit": value}
+
+    with pytest.raises(ToolError) as refused:
+        asyncio.run(reli_mcp.call_tool(tool_name, arguments))
+
+    expected = "greater than or equal to 1" if value < 1 else f"less than or equal to {MAX_LIMIT}"
+    assert expected in str(refused.value)
+    assert "LIMIT must not be negative" not in str(refused.value)
+
+
+def test_the_ceiling_itself_is_accepted(tools):
+    """``prompts/scheduled/morning-conversation.md`` asks for ``limit=1000`` and says why the limit
+    matters, so the bound is inclusive and must not drop below what the pass asks for."""
+    captured = create_thing(actor="claude_interactive", title="captured this morning")
+
+    _, structured = asyncio.run(reli_mcp.call_tool("find_things", {"tags": [NEW_TAG], "limit": MAX_LIMIT}))
+
+    assert [thing["id"] for thing in structured["result"]] == [captured["id"]]
 
 
 # --- Writes and their journal entries --------------------------------------

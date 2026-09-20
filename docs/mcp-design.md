@@ -69,15 +69,15 @@ Reads — no `actor`:
 | Tool | Does |
 |---|---|
 | `get_thing` | One Thing and every edge touching it, each with the id `unrelate` takes. |
-| `find_things` | Things matching every filter given — `tags` (`match` any/all), `active`, a check-in window, a priority range, `limit`. A filter, not a search: there is no text matching anywhere in Reli. |
+| `find_things` | Things matching every filter given — `tags` (`match` any/all), `active`, a check-in window, a priority range, `limit` (1–1000, default 100). A filter, not a search: there is no text matching anywhere in Reli. |
 | `get_related` | The neighbourhood of a Thing within `depth` hops, following edges in both directions, optionally restricted to some `types`. |
 | `due_for_checkin` | Active Things whose check-in date has arrived, as of today or `as_of`, less the `INTERNAL_TAGS` — a heartbeat is dated by design and is read through `find_things` on its tag instead. |
 | `stale` | Active Things untouched for at least `days` (default 30). |
 | `blocked` | Things whose `Blocks` target is still active. |
-| `needs_input` | Active Things tagged `#NeedsInput` — what only the user can settle — most important first, capped at `limit` (default 100) with `total` and `truncated`. The tag is what the prompts apply to a Thing that cannot be resolved from Calendar, Gmail or the graph. |
+| `needs_input` | Active Things tagged `#NeedsInput` — what only the user can settle — most important first, capped at `limit` (1–1000, default 100) with `total` and `truncated`. The tag is what the prompts apply to a Thing that cannot be resolved from Calendar, Gmail or the graph. |
 | `children` | The targets of a Thing's `ChildOf` edges. |
-| `get_thing_history` | The Thing's newest `limit` journal entries, oldest first, with `total` and `truncated`. Edge changes are journalled against the relationship, so they do not appear here. |
-| `journal_since` | Every journal entry with an id above `after_id`, across all Things and relationships, oldest first and capped at `limit`, optionally only those made by `actors`. `total` and `truncated` count under the same filters, so a caller pages by passing the last id back. The learning pass's input. |
+| `get_thing_history` | The Thing's newest `limit` (1–1000, default 200) journal entries, oldest first, with `total` and `truncated`. Edge changes are journalled against the relationship, so they do not appear here. |
+| `journal_since` | Every journal entry with an id above `after_id`, across all Things and relationships, oldest first and capped at `limit` (1–1000, default 200), optionally only those made by `actors`. `total` and `truncated` count under the same filters, so a caller pages by passing the last id back. The learning pass's input. |
 
 User model — see [vision.md §5](vision.md#5-the-user-model):
 
