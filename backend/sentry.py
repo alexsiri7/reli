@@ -12,6 +12,7 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from sentry_sdk.types import Event, Hint
 
+from .auth import router as _auth_router
 from .config import settings
 
 logger = logging.getLogger(__name__)
@@ -35,8 +36,9 @@ def _strip_cookie_breadcrumb(crumb: dict, hint: dict | None) -> dict | None:
 # The routes whose requests carry auth-flow secrets: /oauth/token reads client_secret,
 # refresh_token, code and code_verifier from its form body, and Google lands on
 # /api/auth/google/callback with code and state in the query string. Sentry's default scrubber
-# matches keys exactly ("secret", "token"), so none of those names is caught by it.
-_SECRET_BEARING_PREFIXES = ("/oauth/", "/api/auth/")
+# matches keys exactly ("secret", "token"), so none of those names is caught by it. The second
+# prefix is the auth router's own, so renaming the router moves the scrub with it.
+_SECRET_BEARING_PREFIXES = ("/oauth/", _auth_router.prefix + "/")
 
 
 def _strip_auth_flow_request(event: Event, hint: Hint) -> Event:
@@ -45,13 +47,21 @@ def _strip_auth_flow_request(event: Event, hint: Hint) -> Event:
     Sentry before_send / before_send_transaction hook. The event itself is always kept — the aim
     is that a 503 on /oauth/token still reports, without the credentials that were in the request.
     The SDK records ``request.url`` as a full URL when the Host header is present, so the match
-    is on the path only.
+    is on the path only. The URL echoes the raw Host header, and a bracket in it makes ``urlsplit``
+    raise; the SDK would then drop the event silently, so an unparseable URL is scrubbed rather
+    than trusted.
     """
     request = event.get("request")
     if not isinstance(request, dict):
         return event
     url = request.get("url")
-    if isinstance(url, str) and urlsplit(url).path.startswith(_SECRET_BEARING_PREFIXES):
+    if not isinstance(url, str):
+        return event
+    try:
+        path = urlsplit(url).path
+    except ValueError:
+        path = None
+    if path is None or path.startswith(_SECRET_BEARING_PREFIXES):
         for key in ("data", "query_string", "cookies"):
             request.pop(key, None)
     return event

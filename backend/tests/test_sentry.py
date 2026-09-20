@@ -243,3 +243,34 @@ def test_strip_auth_flow_request_without_request_url(event):
 
     original = {k: (dict(v) if isinstance(v, dict) else v) for k, v in event.items()}
     assert _strip_auth_flow_request(event, None) == original
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http://evil[.attacker.example/oauth/token", "http://evil[.attacker.example/api/things"],
+)
+def test_strip_auth_flow_request_keeps_event_with_unparseable_url(url):
+    """A Host header the SDK echoes into the URL must not blind monitoring.
+
+    ``urlsplit`` raises on an unbalanced bracket, and a raising hook is an event the SDK drops
+    without a trace. The event stays, scrubbed whichever route it came from, because the path
+    cannot be read to prove it safe.
+    """
+    from backend.sentry import _strip_auth_flow_request
+
+    event = _oauth_token_event(url)
+    result = _strip_auth_flow_request(event, None)
+    assert result is event
+    assert "data" not in result["request"]
+    assert "query_string" not in result["request"]
+    assert "cookies" not in result["request"]
+    assert result["request"]["url"] == url
+
+
+def test_secret_bearing_prefixes_follow_the_auth_router():
+    """The auth prefix is the router's own, not a copy that a rename would leave behind."""
+    from backend.auth import router
+    from backend.sentry import _SECRET_BEARING_PREFIXES
+
+    assert _SECRET_BEARING_PREFIXES == ("/oauth/", router.prefix + "/")
+    assert router.prefix == "/api/auth"
