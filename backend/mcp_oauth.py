@@ -13,12 +13,15 @@ Implements the MCP authorization spec
 PKCE is mandatory and only ``S256`` is accepted; refresh tokens rotate on every use, and presenting
 one that has already been rotated away revokes every token from that sign-in (OAuth 2.1 §4.3.1), so
 the connector re-authorises. The identity step is Google's: a client never holds a shared secret,
-and a token is only ever minted for an account in ``ALLOWED_EMAILS``. The JWT is the only
-credential ``/mcp`` accepts.
+and a token is only ever minted for an account in ``ALLOWED_EMAILS`` — re-checked on every
+issuance, not just at sign-in, so removing an email cuts off its refresh chain. Rotation preserves
+the family's original expiry rather than renewing it, so a family cannot outlive its sign-in by
+refreshing indefinitely. The JWT is the only credential ``/mcp`` accepts.
 """
 
 from __future__ import annotations
 
+import html
 import logging
 import secrets
 import urllib.parse
@@ -27,7 +30,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlmodel import Session
 
 from . import auth, google_login
@@ -180,6 +183,32 @@ async def oauth_register(request: Request) -> JSONResponse:
 # --- Authorization ---------------------------------------------------------
 
 
+def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTMLResponse:
+    """The approval step between the client's request and the Google sign-in.
+
+    Names the registered client and where its authorization code will be delivered, so a link the
+    owner did not initiate announces itself instead of completing silently (confused deputy):
+    without this page, ``/oauth/authorize`` sent the browser straight to Google and back to
+    whatever client had registered, with nothing on any screen naming it.
+    """
+    name = html.escape(client_name) or "an unnamed client"
+    uri = html.escape(redirect_uri)
+    state = html.escape(server_state)
+    return HTMLResponse(
+        "<!doctype html><html><head><meta charset='utf-8'><title>Authorize access to Reli</title>"
+        "<meta name='robots' content='noindex'></head><body>"
+        "<h1>Authorize access to Reli?</h1>"
+        f"<p><strong>{name}</strong> is asking for full access to your graph.</p>"
+        f"<p>Its sign-in result will be delivered to: <code>{uri}</code></p>"
+        "<p>Only continue if you just initiated this from a connector you are setting up.</p>"
+        "<form method='post' action='/oauth/authorize/confirm'>"
+        f"<input type='hidden' name='server_state' value='{state}'>"
+        "<button type='submit'>Continue with Google</button></form>"
+        "</body></html>",
+        headers=_NO_STORE,
+    )
+
+
 @router.get("/oauth/authorize", include_in_schema=False)
 def oauth_authorize(
     client_id: str = "",
@@ -189,8 +218,8 @@ def oauth_authorize(
     code_challenge_method: str = "S256",
     scope: str = "mcp",
     response_type: str = "code",
-) -> RedirectResponse:
-    """Take the client's request, remember it, and send the browser to Google.
+) -> HTMLResponse:
+    """Take the client's request, remember it, and show a consent page naming it before Google.
 
     Refuses up front — 501 naming every empty setting — when the sign-in cannot complete, so nobody
     is sent through Google only to be bounced at the callback.
@@ -237,7 +266,33 @@ def oauth_authorize(
             logger.warning("MCP OAuth: authorize refused for client %s — %s", client_id, full)
             raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
 
-    return RedirectResponse(url=google_login.authorization_url(server_state, code_verifier), status_code=302)
+    return _consent_page(server_state, registered["client_name"], redirect_uri)
+
+
+@router.post("/oauth/authorize/confirm", include_in_schema=False)
+def oauth_authorize_confirm(request: Request, server_state: str = Form(...)) -> RedirectResponse:
+    """The owner approved the named client on the consent page: now send the browser to Google.
+
+    *server_state* is not a secret an attacker cannot obtain — the attacker registers their own
+    client and runs ``GET /oauth/authorize`` themselves to read one out of their own consent page.
+    What must be refused is a cross-site auto-submitting form reusing that value against the
+    owner's browser, which would complete the flow with nobody having seen the consent page at
+    all. A browser always sends ``Origin`` on a POST, same-origin included, and never lets script
+    override it, so this is what actually distinguishes the real form's submission from a lure's.
+    Single-use consumption of the underlying flow stays where it already was, at the Google
+    callback.
+    """
+    if request.headers.get("origin") != auth.base_url():
+        raise HTTPException(
+            status_code=400, detail="Approve from Reli's own consent page: start again from the connector."
+        )
+    with auth._session() as session:
+        flow = cleanup_and_get(session, mcp_oauth_sessions, server_state)
+    if flow is None:
+        raise HTTPException(status_code=400, detail="Sign-in expired: start again from the connector.")
+    return RedirectResponse(
+        url=google_login.authorization_url(server_state, flow["google_code_verifier"]), status_code=302
+    )
 
 
 # --- Tokens ----------------------------------------------------------------
@@ -274,9 +329,30 @@ def _validate_client_secret(session: Session, client_id: str, client_secret: str
 
 
 def _issue_token_response(
-    session: Session, subject: str, email: str, client_id: str, scope: str, family_id: str
+    session: Session,
+    subject: str,
+    email: str,
+    client_id: str,
+    scope: str,
+    family_id: str,
+    expires_at: datetime | None = None,
 ) -> JSONResponse:
-    """An access token and a fresh refresh token, RFC 6749 §5.1, never cached."""
+    """An access token and a fresh refresh token, RFC 6749 §5.1, never cached.
+
+    Re-checks ``ALLOWED_EMAILS`` here, not just at the Google callback, so an account removed
+    after sign-in cannot keep rolling its refresh token forward — this covers both grant types,
+    since both end here. *expires_at* is the rotating family's original deadline, not a fresh
+    30-day term: passed through from the consumed refresh token on rotation, ``None`` (a fresh
+    term) on a first issuance from an authorization code.
+    """
+    if not auth.is_allowed(email):
+        revoked = revoke_refresh_token_family(session, family_id)
+        logger.warning(
+            "MCP OAuth: token refused for client %s — account no longer in ALLOWED_EMAILS; revoked %d token(s)",
+            client_id,
+            revoked,
+        )
+        raise _invalid_grant("Account is not allowed: " + auth._INVITE_ONLY)
     access_token = auth.create_jwt(subject, email, audience=auth.MCP_AUDIENCE)
     refresh_token = secrets.token_urlsafe(32)
     try:
@@ -290,7 +366,9 @@ def _issue_token_response(
                 "client_id": client_id,
                 "scope": scope,
                 "family_id": family_id,
-                "expires_at": datetime.now(UTC) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
+                "expires_at": expires_at
+                if expires_at is not None
+                else datetime.now(UTC) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
             },
         )
     except StoreFullError as full:
@@ -362,6 +440,7 @@ def _exchange_refresh_token(session: Session, refresh_token: str, client_id: str
         consumed["client_id"],
         consumed["scope"],
         family_id=consumed["family_id"],
+        expires_at=consumed["expires_at"],
     )
 
 

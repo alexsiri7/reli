@@ -156,6 +156,15 @@ beside `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Every one is human-provisi
 answers 501 naming each missing setting, and no JWT is issued or accepted — and never stops the
 boot. **Empty `ALLOWED_EMAILS` admits nobody.**
 
+**Revoking a connector.** Removing an address from `ALLOWED_EMAILS` is checked again on every
+token issuance in `mcp_oauth.py`, not just at the Google callback, so it also cuts off a connector's
+existing refresh chain — the next refresh exchange is refused and the whole family is deleted. To
+revoke one connector while leaving the account able to sign in to others,
+`DELETE FROM mcp_refresh_tokens WHERE family_id = '<family_id>'` against `DATABASE_URL`. Rotating
+`SECRET_KEY` is the break-glass option for every live session at once, MCP and web; it does not by
+itself stop a refresh chain from minting a fresh JWT under the new key, which is why the allowlist
+re-check above is what actually ends a chain.
+
 **The human steps, none of which an agent can perform or verify.** Do not claim any of these is
 done:
 
@@ -171,7 +180,9 @@ done:
    redirect URI is the only entry the client needs — #1488 retired the loopback `http://127.0.0.1:18765/`
    that the deleted Calendar and Gmail grant used, and a leftover entry may be removed.
 3. Add the claude.ai connector for `https://<host>/mcp` with **no** bearer token. It discovers the
-   server, registers itself, opens Google sign-in, and the allowlisted account completes it.
+   server, registers itself, lands on a Reli-hosted consent page naming the client and where its
+   code will be delivered, and the allowlisted account continues through Google sign-in from
+   there. Only approve a client the human just registered from a connector they are setting up.
 4. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. The
    password that used to stand beside the cookie is gone (#1471), and nothing outside a browser
    needs a way in.

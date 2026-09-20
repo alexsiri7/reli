@@ -8,6 +8,7 @@ The two racing tests use ``racing_client`` instead, which leaves ``auth._session
 session per request: a single connection cannot race itself.
 """
 
+import re
 import secrets
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -144,6 +145,24 @@ def _query(url):
     return {key: values[0] for key, values in parse_qs(urlsplit(url).query).items()}
 
 
+def _server_state(consent_page_body):
+    match = re.search(r"name='server_state' value='([^']+)'", consent_page_body)
+    assert match, consent_page_body
+    return match.group(1)
+
+
+def _authorize(client, client_id, **overrides):
+    params = {
+        "client_id": client_id,
+        "redirect_uri": CLIENT_REDIRECT,
+        "state": "client-state",
+        "code_challenge": "client-challenge",
+        "code_challenge_method": "S256",
+        **overrides,
+    }
+    return client.get("/oauth/authorize", params=params)
+
+
 # --- Discovery ---------------------------------------------------------------
 
 
@@ -257,31 +276,89 @@ def test_authorize_refuses_up_front_naming_each_missing_setting(client, monkeypa
     assert "GOOGLE_CLIENT_ID" not in detail
 
 
-def test_authorize_sends_the_browser_to_google_and_remembers_the_request(client, session):
+def test_authorize_shows_a_consent_page_naming_the_client_and_remembers_the_request(client, session):
     registered = _register(client)
 
-    response = client.get(
-        "/oauth/authorize",
-        params={
-            "client_id": registered["client_id"],
-            "redirect_uri": CLIENT_REDIRECT,
-            "state": "client-state",
-            "code_challenge": "client-challenge",
-            "code_challenge_method": "S256",
-        },
+    response = _authorize(client, registered["client_id"])
+
+    assert response.status_code == 200
+    assert "location" not in response.headers
+    assert response.headers["cache-control"] == "no-store"
+    body = response.text
+    assert "Claude" in body
+    assert CLIENT_REDIRECT in body
+    server_state = _server_state(body)
+    flow = cleanup_and_get(session, mcp_oauth_sessions, server_state)
+    assert flow is not None
+    assert flow["client_state"] == "client-state"
+    assert flow["client_id"] == registered["client_id"]
+    assert flow["code_challenge"] == "client-challenge"
+
+
+def test_authorize_escapes_an_attacker_controlled_client_name_and_redirect_uri(client):
+    malicious_redirect = "https://client.example.test/cb?x=<script>alert(1)</script>"
+    registration = client.post(
+        "/oauth/register",
+        json={"redirect_uris": [malicious_redirect], "client_name": "<script>alert(1)</script>"},
+    ).json()
+
+    response = _authorize(client, registration["client_id"], redirect_uri=malicious_redirect)
+
+    assert response.status_code == 200
+    assert "<script>alert(1)</script>" not in response.text
+    assert "&lt;script&gt;" in response.text
+
+
+def test_authorize_confirm_sends_the_browser_to_google(client, session):
+    registered = _register(client)
+    consent = _authorize(client, registered["client_id"])
+    server_state = _server_state(consent.text)
+
+    response = client.post(
+        "/oauth/authorize/confirm", data={"server_state": server_state}, headers={"Origin": BASE_URL}
     )
 
     assert response.status_code == 302
     location = response.headers["location"]
     assert location.startswith(google_login.AUTHORIZATION_URL)
     query = _query(location)
-    flow = cleanup_and_get(session, mcp_oauth_sessions, query["state"])
-    assert flow is not None
-    assert flow["client_state"] == "client-state"
-    assert flow["client_id"] == registered["client_id"]
-    assert flow["code_challenge"] == "client-challenge"
+    assert query["state"] == server_state
+    flow = cleanup_and_get(session, mcp_oauth_sessions, server_state)
     assert query["code_challenge"] == s256_challenge(flow["google_code_verifier"])
     assert query["redirect_uri"] == settings.GOOGLE_AUTH_REDIRECT_URI
+
+
+def test_authorize_confirm_refuses_an_unknown_or_expired_state(client):
+    response = client.post(
+        "/oauth/authorize/confirm", data={"server_state": "no-such-state"}, headers={"Origin": BASE_URL}
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize("origin", [None, "https://attacker.example.test"], ids=["missing", "foreign"])
+def test_authorize_confirm_refuses_a_cross_site_submission_even_with_a_valid_state(client, origin):
+    """A lure page cannot silently drive the confirm step: only Reli's own origin may submit it.
+
+    ``server_state`` is not attacker-secret — an attacker can read one out of their own consent
+    page by running the authorize step themselves — so the origin check, not the state's opacity,
+    is what stops a cross-site auto-submitting form from completing the flow unseen.
+    """
+    registered = _register(client)
+    consent = _authorize(client, registered["client_id"])
+    server_state = _server_state(consent.text)
+    headers = {"Origin": origin} if origin else {}
+
+    response = client.post("/oauth/authorize/confirm", data={"server_state": server_state}, headers=headers)
+
+    assert response.status_code == 400
+    # The flow is still live: a legitimate retry from Reli's own page still works.
+    assert (
+        client.post(
+            "/oauth/authorize/confirm", data={"server_state": server_state}, headers={"Origin": BASE_URL}
+        ).status_code
+        == 302
+    )
 
 
 def test_authorize_refuses_an_unregistered_client(client):
@@ -568,6 +645,46 @@ def test_a_refresh_token_is_bound_to_the_client_it_was_issued_to(client, session
     assert _refresh(client, issued["refresh_token"], owner["client_id"]).status_code == 200
 
 
+# --- Revocation (REL-002) -----------------------------------------------------
+
+
+def test_refresh_exchange_refuses_a_de_allowlisted_email_and_revokes_the_family(client, session, monkeypatch):
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    issued = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "someone-else@example.com")
+
+    response = _refresh(client, issued["refresh_token"], registered["client_id"])
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_grant"
+    assert cleanup_and_get(session, mcp_refresh_tokens, issued["refresh_token"]) is None
+
+
+def test_authorization_code_exchange_refuses_a_de_allowlisted_email(client, session, monkeypatch):
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "someone-else@example.com")
+
+    response = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier")
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_grant"
+
+
+def test_rotation_preserves_the_familys_original_expiry_instead_of_renewing_it(client, session):
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    first = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
+    second = _refresh(client, first["refresh_token"], registered["client_id"]).json()
+    second_expiry = cleanup_and_get(session, mcp_refresh_tokens, second["refresh_token"])["expires_at"]
+
+    third = _refresh(client, second["refresh_token"], registered["client_id"]).json()
+    third_expiry = cleanup_and_get(session, mcp_refresh_tokens, third["refresh_token"])["expires_at"]
+
+    assert third_expiry == second_expiry
+
+
 # --- End to end --------------------------------------------------------------
 
 
@@ -594,7 +711,7 @@ def test_register_authorize_callback_and_token_end_to_end(client, monkeypatch):
     registered = _register(client)
     verifier = secrets.token_urlsafe(64)
 
-    to_google = client.get(
+    consent = client.get(
         "/oauth/authorize",
         params={
             "client_id": registered["client_id"],
@@ -604,7 +721,11 @@ def test_register_authorize_callback_and_token_end_to_end(client, monkeypatch):
             "code_challenge_method": "S256",
         },
     )
-    server_state = _query(to_google.headers["location"])["state"]
+    server_state = _server_state(consent.text)
+    to_google = client.post(
+        "/oauth/authorize/confirm", data={"server_state": server_state}, headers={"Origin": BASE_URL}
+    )
+    assert _query(to_google.headers["location"])["state"] == server_state
 
     back_from_google = client.get("/api/auth/google/callback", params={"code": "google-code", "state": server_state})
     assert back_from_google.status_code == 302

@@ -329,7 +329,7 @@ def _finish_mcp_sign_in(session: Session, flow: dict[str, Any], code: str, error
         logger.warning("MCP sign-in refused: %s", full)
         raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
 
-    logger.info("MCP sign-in complete, redirecting to client at %s", flow["redirect_uri"])
+    logger.info("MCP sign-in complete for client %r, redirecting to %r", flow["client_id"], flow["redirect_uri"])
     return _client_redirect(flow["redirect_uri"], flow["client_state"], code=auth_code)
 
 
