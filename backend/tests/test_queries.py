@@ -6,6 +6,7 @@ from sqlalchemy import text
 
 from backend.db_models import NEEDS_INPUT_TAG, Actor, RelationshipType
 from backend.queries import (
+    MAX_RELATED_DEPTH,
     blocked,
     by_tag,
     children,
@@ -283,6 +284,26 @@ def test_related_terminates_on_a_cycle(session):
     found = related(session, first.id, depth=5)
 
     assert _titles([r.thing for r in found]) == ["second"]
+
+
+def test_related_walks_no_further_than_the_maximum_depth(session):
+    chain = [_thing(session, f"hop{n}") for n in range(MAX_RELATED_DEPTH + 3)]
+    for near, far in zip(chain, chain[1:], strict=False):
+        relate(
+            session,
+            actor=Actor.USER,
+            source_thing_id=near.id,
+            target_thing_id=far.id,
+            relationship_type=RelationshipType.CHILD_OF,
+        )
+
+    def walk(depth):
+        return [(r.thing.title, r.depth) for r in related(session, chain[0].id, depth=depth)]
+
+    found = walk(MAX_RELATED_DEPTH * 4)
+
+    assert found == [(f"hop{n}", n) for n in range(1, MAX_RELATED_DEPTH + 1)]
+    assert found == walk(MAX_RELATED_DEPTH)
 
 
 def test_related_excludes_the_origin(session):
