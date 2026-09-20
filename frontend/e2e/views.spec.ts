@@ -65,6 +65,24 @@ test("thing detail shows notes, relationships and the journal", async ({ page })
   await expect(page).toHaveScreenshot("thing-detail.png", { fullPage: true });
 });
 
+test("a urls entry outside http(s) is shown as text, not as a link", async ({ page }) => {
+  const tainted = {
+    ...thingDetail,
+    thing: {
+      ...thingDetail.thing,
+      urls: { ...thingDetail.thing.urls, danger: "javascript:alert(1)", scheme_relative: "//evil.test/" },
+    },
+  };
+  await page.route(`**/api/things/${CHILD_ID}`, (route) => route.fulfill({ json: tainted }));
+  await page.goto(`/things/${CHILD_ID}`);
+
+  await expect(page.getByRole("link", { name: "https://github.com/alexsiri7/reli/issues/1414" })).toBeVisible();
+  await expect(page.getByText("javascript:alert(1)")).toBeVisible();
+  await expect(page.getByRole("link", { name: "javascript:alert(1)" })).toHaveCount(0);
+  await expect(page.getByText("//evil.test/")).toBeVisible();
+  await expect(page.getByRole("link", { name: "//evil.test/" })).toHaveCount(0);
+});
+
 test("the user model shows evidence inline and marks a rejected preference", async ({ page }) => {
   await page.goto("/user-model");
 
