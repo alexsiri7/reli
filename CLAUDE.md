@@ -89,8 +89,8 @@ cannot resolve a pre-v4 revision recorded in the database:
 psql "$DATABASE_URL" -c 'DROP TABLE IF EXISTS alembic_version'
 ```
 
-The `/api` routes serve the user's whole graph and admit a request one way: the `reli_session`
-cookie the Google sign-in below sets. There is no HTTP Basic password — #1471 retired
+The `/api` routes serve the user's whole graph and admit a request one way: the
+`__Host-reli_session` cookie the Google sign-in below sets. There is no HTTP Basic password — #1471 retired
 `WEB_UI_PASSWORD` on the owner's decision that the web view is OAuth-only, and no password will be
 provisioned, so nothing may reintroduce one. The bundle at `/` is public — it is the sign-in view,
 and static code from a public repository — so opening `/` presents Google sign-in rather than a
@@ -142,9 +142,11 @@ journals.
 
 The web view (#1449) signs in through the same Google client and the same callback. The sign-in
 view calls `GET /api/auth/google` for the Google URL (a 501 names each missing setting, shown in
-place), Google lands on `/api/auth/google/callback`, and the callback sets `reli_session` — an
-`httponly`, `samesite=lax` cookie holding an `aud="web"` JWT good for seven days, `Secure` whenever
-the base URL is https — and redirects to `/`. An account outside `ALLOWED_EMAILS` is sent to
+place), Google lands on `/api/auth/google/callback`, and the callback sets `__Host-reli_session` —
+an `httponly`, `samesite=lax` cookie holding an `aud="web"` JWT good for seven days, always
+`Secure` and named with the `__Host-` prefix so the browser refuses it otherwise — and redirects to
+`/`. A base URL mis-set to http therefore fails as a sign-in that does not stick, and as a warning
+at startup, never as a cookie sent in the clear (#1533). An account outside `ALLOWED_EMAILS` is sent to
 `/?error=invite_only`, which the view turns into a sentence; a Google refusal at the exchange is a
 502 whose detail names the human step, as for MCP. `GET /api/auth/me` is the view's "am I signed
 in" probe and `POST /api/auth/logout` deletes the cookie; there is no revocation list. The
@@ -358,7 +360,7 @@ Creating documentation that claims success on an action you cannot perform is a 
 - JWTs, the callback and the web session: `backend/auth.py` — `create_jwt` / `decode_jwt`, the
   allowlist, `GET /api/auth/google/callback` (the one address Google redirects to, for both
   flows), the web view's `GET /api/auth/google`, `GET /api/auth/me` and `POST /api/auth/logout`,
-  and `web_session`, the one reading of the `reli_session` cookie
+  and `web_session`, the one reading of the `__Host-reli_session` cookie
 - Authorization server: `backend/mcp_oauth.py` — `/.well-known/*`, `/oauth/register`,
   `/oauth/authorize`, `/oauth/token`
 - OAuth flow state: `backend/oauth_state.py` — the four bounded `mcp_*` stores and

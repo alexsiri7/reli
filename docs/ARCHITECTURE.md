@@ -16,7 +16,7 @@ Claude session (claude.ai, interactive or scheduled)
    /mcp ──────────────┐
                       │        ┌──────────────┐
 Browser               │        │              │──── Postgres (things, relationships, journal)
-        │  reli_session cookie or Basic       │
+        │  __Host-reli_session cookie or Basic│
         ▼             ├───────▶│   FastAPI    │
    /  and  /api ──────┘        │   (reli)     │
                                │              │
@@ -152,9 +152,9 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
   `mcp_refresh_tokens`) refuse with a 503. A registration lives an hour until the owner signs in
   through it, then as long as its refresh family. There is no rate limiter anywhere in the
   service; [CLAUDE.md](../CLAUDE.md) (*Rate limiting*) records why, and where one would go.
-- `/api` — `_WebViewAuthMiddleware` in `backend/api.py` requires the `reli_session` cookie: an
-  `aud="web"` JWT the Google sign-in in `backend/auth.py` sets after the allowlist check, and the
-  only credential, since #1471 retired the HTTP Basic password that used to sit beside it. One path
+- `/api` — `_WebViewAuthMiddleware` in `backend/api.py` requires the `__Host-reli_session` cookie:
+  an `aud="web"` JWT the Google sign-in in `backend/auth.py` sets after the allowlist check, and
+  the only credential, since #1471 retired the HTTP Basic password that used to sit beside it. One path
   is public: `/api/auth/` — the sign-in, its callback, `me` and `logout` — because it is how a
   browser gets a session. #1484 removed the unauthenticated `GET /api/heartbeats` that used to stand
   beside it, and the GitHub Actions watchdog it was there for.

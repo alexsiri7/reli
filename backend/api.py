@@ -10,9 +10,9 @@ through Claude and a rejection the user made themselves are distinguishable in t
 the learning pass's only signal for "the user decided".
 
 Everything here sits behind :func:`add_web_view_auth`: the service is publicly reachable and these
-routes serve the user's whole graph. A request is admitted by the ``reli_session`` cookie the Google
-sign-in sets, and by nothing else. The bundle itself is public — it is the sign-in view — and so is
-``/api/auth/``, which is how a browser gets a session and is the only such path; see
+routes serve the user's whole graph. A request is admitted by the ``__Host-reli_session`` cookie
+the Google sign-in sets, and by nothing else. The bundle itself is public — it is the sign-in view
+— and so is ``/api/auth/``, which is how a browser gets a session and is the only such path; see
 :func:`_is_guarded`.
 """
 
@@ -375,7 +375,7 @@ def _is_guarded(path: str) -> bool:
 
 
 def _refusal(request: Request) -> str | None:
-    """Why the request is not admitted, or ``None`` when the ``reli_session`` cookie admits it."""
+    """Why the request is not admitted, or ``None`` when the ``__Host-reli_session`` cookie admits it."""
     try:
         if auth.web_session(request) is not None:
             return None
@@ -385,7 +385,7 @@ def _refusal(request: Request) -> str | None:
 
 
 class _WebViewAuthMiddleware:
-    """Requires the ``reli_session`` cookie on every ``/api`` path outside the public ones.
+    """Requires the ``__Host-reli_session`` cookie on every ``/api`` path outside the public ones.
 
     The cookie is the only credential: there is no HTTP Basic password any more (#1471), so nothing
     but a Google sign-in opens the graph. Nothing configured closes it rather than opening it —
@@ -420,5 +420,13 @@ def add_web_view_auth(app: FastAPI) -> None:
         logger.warning(
             "The Google sign-in is missing %s: /api will answer 401 to every request.",
             ", ".join(missing),
+        )
+    base = auth.base_url()
+    if base and not base.startswith("https://"):
+        logger.warning(
+            "RELI_BASE_URL / GOOGLE_AUTH_REDIRECT_URI resolve to %s, not https: the %s cookie is Secure "
+            "regardless, and a deploy actually served over http cannot hold a web session.",
+            base,
+            auth.SESSION_COOKIE,
         )
     app.add_middleware(_WebViewAuthMiddleware)

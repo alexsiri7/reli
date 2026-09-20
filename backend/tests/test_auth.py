@@ -324,9 +324,12 @@ def test_a_good_web_sign_in_sets_the_session_cookie_and_lands_on_the_view(client
     assert response.status_code == 302
     assert response.headers["location"] == "/"
     cookie = _session_cookie(response)
+    assert cookie.startswith("__Host-")
     assert "HttpOnly" in cookie
     assert "SameSite=lax" in cookie
     assert "Secure" in cookie
+    assert "Path=/" in cookie
+    assert "Domain=" not in cookie
     assert f"Max-Age={auth.WEB_JWT_EXPIRY_SECONDS}" in cookie
     token = cookie.split(";")[0].split("=", 1)[1]
     claims = auth.decode_jwt(token, audience=auth.WEB_AUDIENCE)
@@ -335,14 +338,27 @@ def test_a_good_web_sign_in_sets_the_session_cookie_and_lands_on_the_view(client
     assert cleanup_and_get(session, web_oauth_sessions, "web-state") is None
 
 
-def test_the_cookie_is_not_marked_secure_for_a_plain_http_deploy(client, session, google, monkeypatch):
+def test_the_cookie_is_secure_even_when_the_base_url_is_plain_http(client, session, google, monkeypatch):
+    """A base URL mis-set to http cannot mint a cookie a browser would send in the clear (#1533)."""
     monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback")
     _seed_web_flow(session)
     google(lambda request: httpx.Response(200, json={"access_token": "never-read", "id_token": _id_token()}))
 
     response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "web-state"})
 
-    assert "Secure" not in _session_cookie(response)
+    assert "Secure" in _session_cookie(response)
+
+
+def test_the_cookie_is_secure_when_reli_base_url_is_mis_set_to_http(client, session, google, monkeypatch):
+    """``RELI_BASE_URL`` wins over the https redirect URI in ``base_url()``; the cookie is Secure either way."""
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "http://reli.example.test")
+    _seed_web_flow(session)
+    google(lambda request: httpx.Response(200, json={"access_token": "never-read", "id_token": _id_token()}))
+
+    response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "web-state"})
+
+    assert response.status_code == 302
+    assert "Secure" in _session_cookie(response)
 
 
 def test_a_web_account_outside_the_allowlist_is_sent_to_the_view_as_invite_only(client, session, google, caplog):
@@ -409,5 +425,7 @@ def test_logout_deletes_the_cookie(client):
 
     assert response.status_code == 204
     cookie = _session_cookie(response)
-    assert 'reli_session=""' in cookie
+    assert f'{auth.SESSION_COOKIE}=""' in cookie
     assert "Max-Age=0" in cookie
+    assert "Secure" in cookie
+    assert "Path=/" in cookie

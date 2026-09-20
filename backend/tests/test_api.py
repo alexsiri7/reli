@@ -7,6 +7,7 @@ it breaks the MCP session manager.
 """
 
 import base64
+import logging
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
@@ -602,3 +603,23 @@ def test_the_bundle_is_public_because_it_is_the_sign_in_view(tmp_path, path):
     api.add_web_view_auth(app)
 
     assert TestClient(app).get(path).status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("redirect_uri", "warned"),
+    [
+        ("http://reli.example.test/api/auth/google/callback", True),
+        ("https://reli.example.test/api/auth/google/callback", False),
+    ],
+    ids=["http", "https"],
+)
+def test_a_plain_http_base_url_is_warned_about_at_startup(monkeypatch, caplog, redirect_uri, warned):
+    """The cookie is Secure whatever the base URL says, so an http one is named at boot rather than
+    left to fail as a sign-in that does not stick (#1533)."""
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "")
+    monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", redirect_uri)
+
+    with caplog.at_level(logging.WARNING, logger="backend.api"):
+        api.add_web_view_auth(FastAPI())
+
+    assert any("not https" in record.getMessage() for record in caplog.records) is warned

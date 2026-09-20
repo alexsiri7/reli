@@ -570,13 +570,14 @@ requirements:
   # ---------------------------------------------------------------------------
   - id: RELI-047
     title: Google OAuth sign-in with JWT sessions
-    statement: "When a user signs in, the system shall authenticate via Google OAuth (openid/email/profile scopes, PKCE, 10-minute one-shot state) and establish a session as a reli_session JWT cookie (HS256; claims sub, email, aud=web, int iat/exp, jti; 7-day expiry; HttpOnly; SameSite=Lax; Secure by default), optionally restricting sign-ups to an ALLOWED_EMAILS allowlist."
+    statement: "When a user signs in, the system shall authenticate via Google OAuth (openid/email/profile scopes, PKCE, 10-minute one-shot state) and establish a session as a __Host-reli_session JWT cookie (HS256; claims sub, email, aud=web, int iat/exp, jti; 7-day expiry; HttpOnly; SameSite=Lax; always Secure), optionally restricting sign-ups to an ALLOWED_EMAILS allowlist."
     category: non-functional
     priority: must
     status: active
     source: back-ported
     acceptance:
       - "The session cookie is HttpOnly, SameSite=Lax, path=/, max_age 604800, with exp-iat == 604800 as integers"
+      - "The session cookie is always Secure and carries the __Host- prefix, whatever scheme RELI_BASE_URL resolves to"
       - "A token with aud 'mcp' presented as a web cookie yields 401"
       - "An email outside ALLOWED_EMAILS is redirected to /?error=invite_only and no session is created"
 
