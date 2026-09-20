@@ -152,6 +152,12 @@ def test_the_permissions_scan_sees_a_job_left_on_the_default_grants(tmp_path):
     assert _jobs_on_default_token_grants(tmp_path) == ["bare.yml:y"]
 
 
+def test_ci_grants_its_default_token_nothing_beyond_read():
+    """The scan above accepts any top-level block; this holds ci.yml's to the read-only grant #1539 chose."""
+    document = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
+    assert document["permissions"] == {"contents": "read"}
+
+
 def test_the_graph_read_scan_tells_a_deploy_route_from_a_repository_path(tmp_path):
     """Without the negatives the scan would fail on any workflow that merely names ``backend/api.py``."""
     (tmp_path / "reads.yml").write_text('jobs:\n  x:\n    steps:\n      - run: curl "$URL/api/things"\n')
