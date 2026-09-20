@@ -13,8 +13,9 @@ import pathlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from starlette.datastructures import MutableHeaders
+from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import api, auth, mcp_oauth
@@ -142,6 +143,21 @@ app.add_middleware(_BareMcpPath)
 api.mount_frontend(app, _DIST)
 api.add_web_view_auth(app)
 
-# Outermost, so added last: the web view's 401 is sent by its middleware without reaching anything
-# inside it, and a headers layer registered earlier would never see that response.
+# Outermost of the layers registered here, so added last: the web view's 401 is sent by its
+# middleware without reaching anything inside it, and a headers layer registered earlier would never
+# see that response.
 app.add_middleware(_SecurityHeaders)
+
+
+async def _unhandled_exception(request: Request, exc: Exception) -> Response:
+    """The 500 for an exception nothing caught, carrying the headers itself.
+
+    Starlette's ``ServerErrorMiddleware`` wraps every ``add_middleware`` layer and sends this
+    response through the ``send`` it was given, past ``_SecurityHeaders``; without a handler its
+    own fallback goes out bare. It re-raises afterwards, so the error still reaches the log and
+    Sentry.
+    """
+    return PlainTextResponse("Internal Server Error", status_code=500, headers=_SECURITY_HEADERS)
+
+
+app.add_exception_handler(Exception, _unhandled_exception)

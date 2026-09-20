@@ -1,6 +1,9 @@
 """What the assembled app routes where."""
 
 import pytest
+from fastapi.testclient import TestClient
+
+from backend import auth
 
 
 def test_healthz_reports_ok(client):
@@ -45,8 +48,28 @@ def test_every_response_carries_the_security_headers(client, path):
     """#1527: one policy on every surface, including the responses that never reach a route — the web
     view's middleware answers its own 401 before anything inside it runs, and the /mcp mount's bearer
     check answers its own."""
-    response = client.get(path)
+    _assert_security_headers(client.get(path))
 
+
+def test_an_unhandled_exception_500_carries_the_security_headers(monkeypatch):
+    """Starlette's ``ServerErrorMiddleware`` wraps every ``add_middleware`` layer and sends its
+    fallback 500 through the raw ``send``, past ``_SecurityHeaders``; the registered handler is what
+    puts the headers on that response. A bare client, because the session one re-raises server
+    exceptions and the app's lifespan may run only once."""
+    from backend.main import app
+
+    def boom() -> list[str]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(auth, "missing_sign_in_settings", boom)
+
+    response = TestClient(app, raise_server_exceptions=False).get("/api/auth/google")
+
+    assert response.status_code == 500
+    _assert_security_headers(response)
+
+
+def _assert_security_headers(response) -> None:
     assert response.headers["Content-Security-Policy"] == "default-src 'self'; frame-ancestors 'none'"
     assert response.headers["Strict-Transport-Security"] == "max-age=31536000"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
