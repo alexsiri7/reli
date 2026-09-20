@@ -9,7 +9,9 @@ import uuid
 
 import pytest
 from sqlalchemy import text
+from sqlmodel import Session
 
+from backend import service
 from backend.db_models import (
     OBSERVATION_TAG,
     PREFERENCE_TAG,
@@ -207,6 +209,31 @@ def test_add_preference_evidence_is_idempotent(session):
     assert again.id == preference.id
     assert len(evidence_for(session, preference.id)) == 2
     assert _journal_count(session) == before
+
+
+def test_add_preference_evidence_survives_losing_the_race(session, monkeypatch):
+    """Two calls both miss the lookup; the index refuses the loser, and it returns the preference anyway."""
+    from backend.db_engine import get_engine
+
+    preference = _preference(session)
+    more = _thing(session, "blocked out Tuesday morning")
+    original_relate = service.relate
+
+    def racing(caller_session, **kwargs):
+        with Session(get_engine()) as racer:
+            original_relate(racer, **kwargs)
+        return original_relate(caller_session, **kwargs)
+
+    monkeypatch.setattr(service, "relate", racing)
+    before = _journal_count(session)
+
+    survivor = add_preference_evidence(
+        session, actor=Actor.CLAUDE_SCHEDULED, preference_id=preference.id, evidence_id=more.id
+    )
+
+    assert survivor.id == preference.id
+    assert len(evidence_for(session, preference.id)) == 2
+    assert _journal_count(session) == before + 1
 
 
 def test_add_preference_evidence_refuses_a_thing_that_is_not_a_preference(session):

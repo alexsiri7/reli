@@ -100,7 +100,10 @@ A single Thing tagged `#User` at the fixed id `USER_ANCHOR_ID` anchors every pre
 preference is its own Thing tagged `#Preference`, carrying `notes["scope"]`, reached by a
 `RelatedTo` edge running anchor → preference. Its evidence is the set of `EvidenceFor` edges
 pointing at it from other Things; strength is the count of those edges, and there is no confidence
-value anywhere. Because an edge can only point at a Thing, a journal entry becomes evidence once a
+value anywhere. `uq_relationships_evidence_for`, a partial unique index on `relationships`, keeps
+that count honest: one `EvidenceFor` edge per (evidence, preference), enforced by Postgres rather
+than by a check before the insert, with the other four types unconstrained (#1536). Because an
+edge can only point at a Thing, a journal entry becomes evidence once a
 Thing tagged `#Observation` carrying `notes["journal_entry_id"]` stands for it. Rejecting a
 preference adds the `#Rejected` tag and journals it; the preference stays readable and is not
 re-derived. `queries.user_model` drops any preference with no evidence or a blank scope, so an
