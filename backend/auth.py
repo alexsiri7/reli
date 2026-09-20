@@ -256,7 +256,7 @@ def _finish_web_sign_in(flow: dict[str, Any], code: str, error: str) -> Redirect
     the URL supplies.
     """
     if error:
-        logger.info("Web sign-in cancelled at Google (%s)", error)
+        logger.info("Web sign-in cancelled at Google (%r)", error)
         return _sign_in_view("cancelled")
 
     try:
@@ -290,7 +290,7 @@ def _finish_mcp_sign_in(session: Session, flow: dict[str, Any], code: str, error
     URI as an ``access_denied`` error (RFC 6749 §4.1.2.1), because that is where the person is.
     """
     if error:
-        logger.info("MCP sign-in cancelled at Google (%s)", error)
+        logger.info("MCP sign-in cancelled at Google (%r)", error)
         return _client_redirect(
             flow["redirect_uri"],
             flow["client_state"],
