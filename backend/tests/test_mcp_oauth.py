@@ -568,6 +568,46 @@ def test_a_refresh_token_is_bound_to_the_client_it_was_issued_to(client, session
     assert _refresh(client, issued["refresh_token"], owner["client_id"]).status_code == 200
 
 
+# --- Revocation (REL-002) -----------------------------------------------------
+
+
+def test_refresh_exchange_refuses_a_de_allowlisted_email_and_revokes_the_family(client, session, monkeypatch):
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    issued = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "someone-else@example.com")
+
+    response = _refresh(client, issued["refresh_token"], registered["client_id"])
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_grant"
+    assert cleanup_and_get(session, mcp_refresh_tokens, issued["refresh_token"]) is None
+
+
+def test_authorization_code_exchange_refuses_a_de_allowlisted_email(client, session, monkeypatch):
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "someone-else@example.com")
+
+    response = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier")
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_grant"
+
+
+def test_rotation_preserves_the_familys_original_expiry_instead_of_renewing_it(client, session):
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    first = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
+    second = _refresh(client, first["refresh_token"], registered["client_id"]).json()
+    second_expiry = cleanup_and_get(session, mcp_refresh_tokens, second["refresh_token"])["expires_at"]
+
+    third = _refresh(client, second["refresh_token"], registered["client_id"]).json()
+    third_expiry = cleanup_and_get(session, mcp_refresh_tokens, third["refresh_token"])["expires_at"]
+
+    assert third_expiry == second_expiry
+
+
 # --- End to end --------------------------------------------------------------
 
 
