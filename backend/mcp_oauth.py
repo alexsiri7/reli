@@ -36,6 +36,7 @@ from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from pydantic import BaseModel, ValidationError
 from sqlmodel import Session
 
 from . import auth, google_login
@@ -118,6 +119,24 @@ def authorization_server_metadata() -> JSONResponse:
 # --- Registration ----------------------------------------------------------
 
 
+class _ClientMetadata(BaseModel):
+    """The RFC 7591 metadata a registration keeps. Anything else in the body is ignored, as §2 allows."""
+
+    redirect_uris: list[str] | None = None
+    client_name: str = ""
+    grant_types: list[str] = ["authorization_code"]
+    response_types: list[str] = ["code"]
+    token_endpoint_auth_method: str = "client_secret_post"
+    scope: str = "mcp"
+
+
+def _describe(invalid: ValidationError) -> str:
+    """Field paths and pydantic's own messages: nothing from the body reaches the log or the response."""
+    return "; ".join(
+        f"{'.'.join(str(part) for part in error['loc']) or 'body'}: {error['msg']}" for error in invalid.errors()
+    )
+
+
 def _redirect_uri_is_safe(uri: str) -> bool:
     parsed = urllib.parse.urlparse(uri)
     return parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1"))
@@ -136,15 +155,22 @@ async def oauth_register(request: Request) -> JSONResponse:
     the flood. A registration never yields a token.
 
     Raises:
-        HTTPException 400: A ``redirect_uri`` is not ``https`` (``http`` only for localhost), or
+        HTTPException 400: The body is not a JSON object of the shapes ``_ClientMetadata`` names, a
+            ``redirect_uri`` is not ``https`` (``http`` only for localhost), or
             ``token_endpoint_auth_method`` is one the token endpoint does not implement.
         HTTPException 413: The body is over ``MAX_REGISTRATION_BYTES``.
     """
-    if len(await request.body()) > MAX_REGISTRATION_BYTES:
+    raw = await request.body()
+    if len(raw) > MAX_REGISTRATION_BYTES:
         raise HTTPException(status_code=413, detail=f"Registration body must be at most {MAX_REGISTRATION_BYTES} bytes")
-    body: dict[str, Any] = await request.json()
+    try:
+        metadata = _ClientMetadata.model_validate_json(raw)
+    except ValidationError as invalid:
+        problems = _describe(invalid)
+        logger.warning("MCP OAuth: rejected registration with invalid client metadata: %s", problems)
+        raise HTTPException(status_code=400, detail=f"invalid_client_metadata: {problems}") from invalid
 
-    auth_method: str = body.get("token_endpoint_auth_method", "client_secret_post")
+    auth_method = metadata.token_endpoint_auth_method
     if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
         logger.warning("MCP OAuth: rejected token_endpoint_auth_method during registration: %r", auth_method)
         raise HTTPException(
@@ -152,7 +178,7 @@ async def oauth_register(request: Request) -> JSONResponse:
             detail=f"token_endpoint_auth_method must be one of {', '.join(TOKEN_ENDPOINT_AUTH_METHODS)}: {auth_method}",
         )
 
-    redirect_uris: list[str] = body.get("redirect_uris") or []
+    redirect_uris = metadata.redirect_uris or []
     for uri in redirect_uris:
         if not _redirect_uri_is_safe(uri):
             logger.warning("MCP OAuth: rejected redirect_uri with unsafe scheme during registration: %r", uri)
@@ -167,11 +193,11 @@ async def oauth_register(request: Request) -> JSONResponse:
     client = {
         "client_secret": client_secret,
         "redirect_uris": redirect_uris,
-        "client_name": body.get("client_name", ""),
-        "grant_types": body.get("grant_types", ["authorization_code"]),
-        "response_types": body.get("response_types", ["code"]),
+        "client_name": metadata.client_name,
+        "grant_types": metadata.grant_types,
+        "response_types": metadata.response_types,
         "token_endpoint_auth_method": auth_method,
-        "scope": body.get("scope", "mcp"),
+        "scope": metadata.scope,
         "expires_at": now + timedelta(seconds=UNUSED_CLIENT_TTL_SECONDS),
     }
     with auth._session() as session:
