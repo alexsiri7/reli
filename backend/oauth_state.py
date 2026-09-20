@@ -204,6 +204,10 @@ def cleanup_and_store(session: Session, store: Store, key: str, values: dict[str
     The cap counts the rows other than *key*: replacing a row in a full store neither refuses nor
     evicts, and an eviction never removes the row about to be replaced.
 
+    A refusal rolls back rather than committing, purge included: the session may be carrying the
+    flushed consume of :func:`consume_refresh_token`, and committing it here would leave a token
+    the caller never got to replace marked consumed, so its retry reads as a replay (#1537).
+
     Raises:
         StoreFullError: The store holds ``max_entries`` live rows and does not evict.
     """
@@ -214,7 +218,7 @@ def cleanup_and_store(session: Session, store: Store, key: str, values: dict[str
     others = session.exec(select(func.count()).select_from(store.model).where(pk != key)).one()
     if others >= store.max_entries:
         if not store.evicts:
-            session.commit()
+            session.rollback()
             raise StoreFullError(f"{table.name} is full ({store.max_entries} entries)")
         nearest_expiry = select(pk).where(pk != key).order_by(table.c.expires_at).limit(others - store.max_entries + 1)
         evicted = session.execute(
