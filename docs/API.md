@@ -2,8 +2,8 @@
 
 `/api` exists for the frontend. It mirrors the query layer and nothing more: every write into the
 graph goes over MCP ([mcp-design.md](mcp-design.md)), with the single exception listed below.
-Every route admits a request by the `reli_session` cookie the Google sign-in sets, and by nothing
-else — #1471 retired the HTTP Basic password that used to sit beside it; without the cookie the
+Every route admits a request by the `__Host-reli_session` cookie the Google sign-in sets, and by
+nothing else — #1471 retired the HTTP Basic password that used to sit beside it; without the cookie the
 answer is a 401 naming the sign-in, and with the sign-in unconfigured every request is a 401. One
 path is exempt: `/api/auth/`, the sign-in itself — `GET /api/auth/google`, Google's callback for
 both the web view and the MCP connector, `GET /api/auth/me` and `POST /api/auth/logout` — which
@@ -22,7 +22,7 @@ The routes and their response models are in `backend/api.py`, the TypeScript mir
 | GET | `/api/user-model?scope=` | `UserModelOut` | Every preference with its evidence. Rejected preferences are **always** included, so the view can make a wrong one spottable. A preference with no evidence or a blank scope never appears. |
 | POST | `/api/preferences/{preference_id}/reject` | `PreferenceOut` | **The only write.** Tags the preference `#Rejected` and journals it as `Actor.USER`. Rejecting twice is a 200 that changes nothing. 404 for a missing id or a Thing that is not tagged `#Preference`. |
 | GET | `/api/auth/google` | `{auth_url}` | Where the sign-in view sends the browser. 501 naming each empty sign-in setting. Public. |
-| GET | `/api/auth/google/callback` | redirect | Where Google sends the browser back, for the web view and the MCP connector alike; public because it lands in a browser with no session yet. A web sign-in answers a 302 to `/` with the `reli_session` cookie, or to `/?error=invite_only` / `/?error=cancelled`; an MCP sign-in a 302 to the connector. 400 for an unknown `state`, 502 naming the human step when Google refuses the exchange. |
+| GET | `/api/auth/google/callback` | redirect | Where Google sends the browser back, for the web view and the MCP connector alike; public because it lands in a browser with no session yet. A web sign-in answers a 302 to `/` with the `__Host-reli_session` cookie, or to `/?error=invite_only` / `/?error=cancelled`; an MCP sign-in a 302 to the connector. 400 for an unknown `state`, 502 naming the human step when Google refuses the exchange. |
 | GET | `/api/auth/me` | `{email}` | The view's "am I signed in" probe: the cookie's email, or 401 whose detail says whether to sign in or which setting is missing. Public. |
 | POST | `/api/auth/logout` | 204 | Deletes the cookie. There is no revocation list. Public. |
 | any | `/api/{anything else}` | — | 404 JSON, never the SPA fallback. |

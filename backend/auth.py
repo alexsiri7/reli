@@ -8,9 +8,9 @@ between the callback and ``POST /oauth/token``.
 ``GET /api/auth/google/callback`` is the one address Google sends a browser back to, for the MCP
 flow of :mod:`backend.mcp_oauth` and for the web view's sign-in that starts at
 ``GET /api/auth/google``. It resolves ``state`` against the two session stores in
-:mod:`backend.oauth_state`: a web state ends in the ``reli_session`` cookie and a redirect to
-``/``, an MCP state in an authorization code delivered to the client, and a state neither knows is
-a 400.
+:mod:`backend.oauth_state`: a web state ends in the ``__Host-reli_session`` cookie and a redirect
+to ``/``, an MCP state in an authorization code delivered to the client, and a state neither knows
+is a 400.
 
 The web session is that cookie: an ``aud="web"`` JWT the middleware in :mod:`backend.api` decodes
 on every ``/api`` request, read through :func:`web_session` so the middleware and
@@ -62,7 +62,9 @@ _EXPIRY_SECONDS_BY_AUDIENCE = {WEB_AUDIENCE: WEB_JWT_EXPIRY_SECONDS, MCP_AUDIENC
 MCP_AUTH_CODE_TTL_SECONDS = 60
 # A web sign-in that takes longer than this answers "start again", which is the remedy.
 WEB_SIGN_IN_TTL_SECONDS = 60 * 10
-SESSION_COOKIE = "reli_session"
+# The ``__Host-`` prefix has the browser refuse the cookie unless it arrives ``Secure``, with
+# ``Path=/`` and no ``Domain`` — the contract both call sites below meet.
+SESSION_COOKIE = "__Host-reli_session"
 
 #: Every setting the Google sign-in needs; an empty one closes the sign-in with a 501 naming it.
 SIGN_IN_SETTINGS: tuple[str, ...] = (
@@ -148,11 +150,11 @@ def decode_jwt(token: str, audience: str) -> dict[str, Any]:
 
 
 class SessionRefused(Exception):
-    """A ``reli_session`` cookie was presented and did not admit the request. The message is the remedy."""
+    """A ``__Host-reli_session`` cookie was presented and did not admit the request. The message is the remedy."""
 
 
 def web_session(request: Request) -> dict[str, Any] | None:
-    """The claims of the request's ``reli_session`` cookie, or ``None`` when it carries none.
+    """The claims of the request's ``__Host-reli_session`` cookie, or ``None`` when it carries none.
 
     Raises:
         SessionRefused: The cookie is there but expired, not this Reli's, or unverifiable because
@@ -169,11 +171,6 @@ def web_session(request: Request) -> dict[str, Any] | None:
         raise SessionRefused(_SESSION_EXPIRED) from expired
     except jwt.InvalidTokenError as invalid:
         raise SessionRefused(_SESSION_INVALID) from invalid
-
-
-def _cookie_secure() -> bool:
-    """``Secure`` whenever the deploy is reached over https, which the base URL's scheme records."""
-    return base_url().startswith("https://")
 
 
 def _client_redirect(redirect_uri: str, client_state: str, **params: str) -> RedirectResponse:
@@ -244,7 +241,7 @@ def current_session(request: Request) -> SessionOut:
 @router.post("/logout", include_in_schema=False, status_code=204)
 def logout() -> Response:
     response = Response(status_code=204)
-    response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax", secure=_cookie_secure())
+    response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax", secure=True)
     return response
 
 
@@ -278,7 +275,7 @@ def _finish_web_sign_in(flow: dict[str, Any], code: str, error: str) -> Redirect
         path="/",
         httponly=True,
         samesite="lax",
-        secure=_cookie_secure(),
+        secure=True,
     )
     return response
 

@@ -89,7 +89,7 @@ export interface UserModel {
   preferences: Preference[];
 }
 
-/** Who the `reli_session` cookie says is signed in. */
+/** Who the `__Host-reli_session` cookie says is signed in. */
 export interface Session {
   email: string;
 }
