@@ -257,6 +257,75 @@ def test_register_refuses_an_unsafe_redirect_whatever_its_position(client, redir
     assert "redirect_uri must use https" in response.json()["detail"]
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [b"[]", b'"Claude"', b"1", b"null", b"", b"{", b"\xff"],
+    ids=["array", "string", "number", "null", "empty", "truncated", "not-utf8"],
+)
+def test_register_refuses_a_body_that_is_not_a_json_object(client, session, raw):
+    """A body that parses to anything but an object, or does not parse, is the client's error, not a 500."""
+    response = client.post("/oauth/register", content=raw, headers={"content-type": "application/json"})
+
+    assert response.status_code == 400
+    assert response.json()["detail"].startswith("invalid_client_metadata: body: ")
+    assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
+
+
+@pytest.mark.parametrize(
+    ("body", "field"),
+    [
+        ({"redirect_uris": CLIENT_REDIRECT}, "redirect_uris"),
+        ({"redirect_uris": [1]}, "redirect_uris.0"),
+        ({"redirect_uris": [CLIENT_REDIRECT], "client_name": ["Claude"]}, "client_name"),
+        ({"redirect_uris": [CLIENT_REDIRECT], "grant_types": "authorization_code"}, "grant_types"),
+        ({"redirect_uris": [CLIENT_REDIRECT], "response_types": [None]}, "response_types.0"),
+        ({"redirect_uris": [CLIENT_REDIRECT], "token_endpoint_auth_method": 0}, "token_endpoint_auth_method"),
+        ({"redirect_uris": [CLIENT_REDIRECT], "scope": {"mcp": True}}, "scope"),
+    ],
+    ids=["uris-string", "uri-number", "name-list", "grants-string", "response-null", "auth-number", "scope-object"],
+)
+def test_register_refuses_a_field_of_the_wrong_shape_and_stores_nothing(client, session, body, field):
+    """Each field lands in a typed column; a wrong shape is refused before it reaches one."""
+    response = client.post("/oauth/register", json=body)
+
+    assert response.status_code == 400
+    assert response.json()["detail"].startswith(f"invalid_client_metadata: {field}: ")
+    assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
+
+
+def test_register_reports_one_problem_however_many_the_body_holds(client):
+    """The refusal must not grow with the body: a flood of wrong elements is not a flood of detail."""
+    body = {"redirect_uris": [0] * ((mcp_oauth.MAX_REGISTRATION_BYTES - 100) // 2)}
+
+    response = client.post("/oauth/register", json=body)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid_client_metadata: redirect_uris.0: Input should be a valid string"
+
+
+def test_register_logs_one_problem_however_many_the_body_holds(client, caplog):
+    """The log line is the second sink the refusal reaches, and it must stay as bounded as the detail."""
+    body = {"redirect_uris": [0] * ((mcp_oauth.MAX_REGISTRATION_BYTES - 100) // 2)}
+
+    with caplog.at_level(logging.WARNING, logger="backend.mcp_oauth"):
+        response = client.post("/oauth/register", json=body)
+
+    assert response.status_code == 400
+    rejected = [record for record in caplog.records if "invalid client metadata" in record.getMessage()]
+    assert len(rejected) == 1
+    assert rejected[0].getMessage() == (
+        "MCP OAuth: rejected registration with invalid client metadata: redirect_uris.0: Input should be a valid string"
+    )
+
+
+def test_register_ignores_metadata_it_does_not_keep(client):
+    """RFC 7591 §2: unknown metadata is ignored, not refused, so a client sending more still registers."""
+    response = client.post("/oauth/register", json={"redirect_uris": [CLIENT_REDIRECT], "logo_uri": "https://x/y.png"})
+
+    assert response.status_code == 201
+    assert "logo_uri" not in response.json()
+
+
 @pytest.mark.parametrize("auth_method", ["none", "client_secret_post"])
 def test_register_echoes_an_auth_method_the_token_endpoint_implements(client, auth_method):
     body = _register(client, auth_method=auth_method)
