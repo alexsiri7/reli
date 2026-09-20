@@ -16,9 +16,12 @@ the connector re-authorises. The identity step is Google's: a client never holds
 and a token is only ever minted for an account in ``ALLOWED_EMAILS`` — re-checked on every
 issuance, not just at sign-in, so removing an email cuts off its refresh chain. Rotation preserves
 the family's original expiry rather than renewing it, so a family cannot outlive its sign-in by
-refreshing indefinitely. The JWT is the only credential ``/mcp`` accepts, and it lives an hour:
-nothing can revoke one once minted, so the hour bounds how long a stolen family's last access token
-outlives its revocation.
+refreshing indefinitely. A registration lives an hour until its first token is minted, then exactly
+as long as that family; the stores a caller without a credential can write to evict their row
+nearest expiry rather than refuse, so a flood of registrations or sign-in starts displaces other
+unfinished flows and nothing else. The JWT is the only credential ``/mcp`` accepts, and it lives an
+hour: nothing can revoke one once minted, so the hour bounds how long a stolen family's last access
+token outlives its revocation.
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ from .oauth_state import (
     cleanup_and_pop,
     cleanup_and_store,
     consume_refresh_token,
+    extend_expiry,
     mcp_auth_codes,
     mcp_oauth_sessions,
     mcp_refresh_tokens,
@@ -57,8 +61,15 @@ router = APIRouter(tags=["oauth"])
 # A sign-in that takes longer than this answers "start again", which is the remedy.
 SESSION_TTL_SECONDS = 60 * 10
 REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
-# A client without a live refresh token is useless, so its registration lives exactly as long.
+# The life of a registration the owner has signed in through: that of the refresh family it serves.
 CLIENT_TTL_SECONDS = REFRESH_TOKEN_TTL_SECONDS
+# Until then a registration lives an hour — longer than any sign-in it can host (a ten-minute
+# session plus a one-minute code), short enough that eviction reaches an unused registration long
+# before a used one. A person who takes over an hour between adding the connector and finishing
+# the sign-in re-adds it.
+UNUSED_CLIENT_TTL_SECONDS = 60 * 60
+# A real registration is a few hundred bytes. This is what bounds every stored field of a row.
+MAX_REGISTRATION_BYTES = 8 * 1024
 
 _AT_CAPACITY = "Server is at capacity; try again later"
 _CODE_GONE = "Authorization code is invalid or expired: re-authorise the connector"
@@ -117,14 +128,19 @@ async def oauth_register(request: Request) -> JSONResponse:
 
     This is an unauthenticated write, by design — dynamic registration is how a connector that holds
     no credential yet gets one, and the Google sign-in behind ``/oauth/authorize`` is what gates
-    identity. What it can cost is bounded: one of a hundred client slots for thirty days, and a 503
-    when they are gone. A registration never yields a token.
+    identity. What it can cost is bounded: a row of at most ``MAX_REGISTRATION_BYTES`` that lives an
+    hour unless the owner signs in through it, in a store that evicts the registration nearest
+    expiry rather than refusing. A flood therefore displaces other unused registrations — a set-up
+    that races it can lose — never a connector the owner has signed in through, and nothing outlasts
+    the flood. A registration never yields a token.
 
     Raises:
         HTTPException 400: A ``redirect_uri`` is not ``https`` (``http`` only for localhost), or
             ``token_endpoint_auth_method`` is one the token endpoint does not implement.
-        HTTPException 503: The client store is at capacity.
+        HTTPException 413: The body is over ``MAX_REGISTRATION_BYTES``.
     """
+    if len(await request.body()) > MAX_REGISTRATION_BYTES:
+        raise HTTPException(status_code=413, detail=f"Registration body must be at most {MAX_REGISTRATION_BYTES} bytes")
     body: dict[str, Any] = await request.json()
 
     auth_method: str = body.get("token_endpoint_auth_method", "client_secret_post")
@@ -146,7 +162,7 @@ async def oauth_register(request: Request) -> JSONResponse:
 
     client_id = str(uuid.uuid4())
     client_secret = secrets.token_urlsafe(32)
-    expires_at = datetime.now(UTC) + timedelta(seconds=CLIENT_TTL_SECONDS)
+    now = datetime.now(UTC)
     client = {
         "client_secret": client_secret,
         "redirect_uris": redirect_uris,
@@ -155,14 +171,10 @@ async def oauth_register(request: Request) -> JSONResponse:
         "response_types": body.get("response_types", ["code"]),
         "token_endpoint_auth_method": auth_method,
         "scope": body.get("scope", "mcp"),
-        "expires_at": expires_at,
+        "expires_at": now + timedelta(seconds=UNUSED_CLIENT_TTL_SECONDS),
     }
     with auth._session() as session:
-        try:
-            cleanup_and_store(session, mcp_registered_clients, client_id, client)
-        except StoreFullError as full:
-            logger.warning("MCP OAuth: client registration rejected — %s", full)
-            raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
+        cleanup_and_store(session, mcp_registered_clients, client_id, client)
 
     logger.info("MCP OAuth: registered client %s (%s)", client_id, client["client_name"])
 
@@ -176,7 +188,10 @@ async def oauth_register(request: Request) -> JSONResponse:
             "response_types": client["response_types"],
             "token_endpoint_auth_method": client["token_endpoint_auth_method"],
             "scope": client["scope"],
-            "client_secret_expires_at": int(expires_at.timestamp()),
+            # The life the registration has once the owner signs in through it. Advertising the
+            # one-hour grace instead would have a client that honours the field re-register hourly
+            # and lose its refresh family each time.
+            "client_secret_expires_at": int((now + timedelta(seconds=CLIENT_TTL_SECONDS)).timestamp()),
         },
         status_code=201,
     )
@@ -248,25 +263,21 @@ def oauth_authorize(
 
         server_state = secrets.token_urlsafe(32)
         code_verifier = secrets.token_urlsafe(64)
-        try:
-            cleanup_and_store(
-                session,
-                mcp_oauth_sessions,
-                server_state,
-                {
-                    "client_state": state,
-                    "redirect_uri": redirect_uri,
-                    "code_challenge": code_challenge,
-                    "code_challenge_method": code_challenge_method,
-                    "client_id": client_id,
-                    "scope": scope,
-                    "google_code_verifier": code_verifier,
-                    "expires_at": datetime.now(UTC) + timedelta(seconds=SESSION_TTL_SECONDS),
-                },
-            )
-        except StoreFullError as full:
-            logger.warning("MCP OAuth: authorize refused for client %s — %s", client_id, full)
-            raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
+        cleanup_and_store(
+            session,
+            mcp_oauth_sessions,
+            server_state,
+            {
+                "client_state": state,
+                "redirect_uri": redirect_uri,
+                "code_challenge": code_challenge,
+                "code_challenge_method": code_challenge_method,
+                "client_id": client_id,
+                "scope": scope,
+                "google_code_verifier": code_verifier,
+                "expires_at": datetime.now(UTC) + timedelta(seconds=SESSION_TTL_SECONDS),
+            },
+        )
 
     return _consent_page(server_state, registered["client_name"], redirect_uri)
 
@@ -337,15 +348,17 @@ def _issue_token_response(
     client_id: str,
     scope: str,
     family_id: str,
-    expires_at: datetime | None = None,
+    expires_at: datetime,
 ) -> JSONResponse:
     """An access token and a fresh refresh token, RFC 6749 §5.1, never cached.
 
     Re-checks ``ALLOWED_EMAILS`` here, not just at the Google callback, so an account removed
     after sign-in cannot keep rolling its refresh token forward — this covers both grant types,
-    since both end here. *expires_at* is the rotating family's original deadline, not a fresh
-    30-day term: passed through from the consumed refresh token on rotation, ``None`` (a fresh
-    term) on a first issuance from an authorization code.
+    since both end here. *expires_at* is the family's deadline: fresh from the code exchange,
+    carried forward on rotation rather than renewed. The client's registration is promoted to that
+    deadline in the same commit as the token — after the allowlist check, so only an allowed
+    account can hold a registration past its first hour — and only ever later (``GREATEST``), so a
+    second family never shortens it.
     """
     if not auth.is_allowed(email):
         revoked = revoke_refresh_token_family(session, family_id)
@@ -357,6 +370,7 @@ def _issue_token_response(
         raise _invalid_grant("Account is not allowed: " + auth._INVITE_ONLY)
     access_token = auth.create_jwt(subject, email, audience=auth.MCP_AUDIENCE)
     refresh_token = secrets.token_urlsafe(32)
+    extend_expiry(session, mcp_registered_clients, client_id, expires_at)
     try:
         cleanup_and_store(
             session,
@@ -368,9 +382,7 @@ def _issue_token_response(
                 "client_id": client_id,
                 "scope": scope,
                 "family_id": family_id,
-                "expires_at": expires_at
-                if expires_at is not None
-                else datetime.now(UTC) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
+                "expires_at": expires_at,
             },
         )
     except StoreFullError as full:
@@ -469,6 +481,7 @@ def _exchange_authorization_code(
         consumed["client_id"],
         consumed["scope"],
         family_id=str(uuid.uuid4()),
+        expires_at=datetime.now(UTC) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
     )
 
 

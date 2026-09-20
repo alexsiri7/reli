@@ -8,15 +8,21 @@ nothing here is journalled — the journal records mutations of Things and relat
 rows are the authorization server's bookkeeping (docs/auth-recovery.md §6.1).
 
 Every access purges expired rows first, so a store never holds anything past its ``expires_at``,
-and a store at its cap refuses with :class:`StoreFullError` rather than growing. Only
-``mcp_refresh_tokens`` keeps rows that are no longer redeemable: a consumed token stays until it
-expires, and counts against the cap until then. Client secrets are stored in plaintext, as they
-were before the v4 rebuild: registration is single-tenant and a secret is useless without an
-authorization code bound to it.
+and no store grows past its cap. At the cap the stores part ways: the three a caller without any
+credential can write to — registrations, MCP sign-ins in flight, web sign-ins in flight — evict the
+row nearest expiry to make room, so a flood can displace other unfinished flows but never lock the
+owner out for longer than it lasts; the two only a signed-in account can write to — authorization
+codes and refresh tokens — refuse with :class:`StoreFullError`, because evicting there would revoke a
+live session to admit a new one. A registration lives an hour until a token is minted for it, then
+as long as the refresh family it serves. Only ``mcp_refresh_tokens`` keeps rows that are no longer
+redeemable: a consumed token stays until it expires, and counts against the cap until then. Client
+secrets are stored in plaintext, as they were before the v4 rebuild: registration is single-tenant
+and a secret is useless without an authorization code bound to it.
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -24,6 +30,8 @@ from typing import Any
 from sqlalchemy import Column, DateTime, Text, delete, func, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Session, SQLModel, select
+
+logger = logging.getLogger(__name__)
 
 MAX_ENTRIES = 10_000
 
@@ -120,24 +128,38 @@ class WebOAuthSessionRecord(SQLModel, table=True):
 
 @dataclass(frozen=True)
 class Store:
-    """One of the five tables, with the most live rows it may hold."""
+    """One of the five tables, with the most live rows it may hold and what happens at that cap.
+
+    An evicting store deletes the row nearest its ``expires_at`` to make room; one that does not
+    evict raises :class:`StoreFullError`. For the session stores every row gets the same TTL at
+    insert, so nearest expiry is oldest. For the registered clients it is what makes eviction safe:
+    an unused registration has at most an hour left and a used one up to thirty days, so eviction
+    reaches every unused one first — except a used client in its final hour, which a flood may
+    displace up to an hour early; its connector re-authorises, the remedy it was about to need.
+    """
 
     model: type[SQLModel]
     max_entries: int
+    evicts: bool = False
 
     @property
     def primary_key(self) -> str:
         return str(self.model.__table__.primary_key.columns.keys()[0])  # type: ignore[attr-defined]
 
 
-# A client without a live refresh token is useless after thirty days, so one hundred is far more
-# than one owner's connectors will ever register in that window — and a low cap bounds what an
-# unauthenticated registration can cost.
-mcp_registered_clients = Store(McpRegisteredClientRecord, max_entries=100)
-mcp_oauth_sessions = Store(McpOAuthSessionRecord, max_entries=MAX_ENTRIES)
+# Whether a store evicts follows from who can write to it. Registrations, MCP sign-ins and web
+# sign-ins are written by callers holding no credential, so a full store must make room rather
+# than refuse — a refusal would let a flood lock the owner out for as long as the rows live. An
+# authorization code exists only after the Google sign-in passed ALLOWED_EMAILS, and a refresh
+# token only after that allowlist is re-checked at issuance, so nobody unauthenticated can fill
+# those two; evicting from them would revoke a live session to admit a new one, and refusing the
+# new one is the lesser harm. One hundred registrations is far more than one owner's connectors
+# will ever hold at once.
+mcp_registered_clients = Store(McpRegisteredClientRecord, max_entries=100, evicts=True)
+mcp_oauth_sessions = Store(McpOAuthSessionRecord, max_entries=MAX_ENTRIES, evicts=True)
 mcp_auth_codes = Store(McpAuthCodeRecord, max_entries=MAX_ENTRIES)
 mcp_refresh_tokens = Store(McpRefreshTokenRecord, max_entries=MAX_ENTRIES)
-web_oauth_sessions = Store(WebOAuthSessionRecord, max_entries=MAX_ENTRIES)
+web_oauth_sessions = Store(WebOAuthSessionRecord, max_entries=MAX_ENTRIES, evicts=True)
 
 
 class StoreFullError(Exception):
@@ -151,14 +173,27 @@ def _purge_expired(session: Session, store: Store) -> None:
 def cleanup_and_store(session: Session, store: Store, key: str, values: dict[str, Any]) -> None:
     """Insert *values* under *key*, replacing any row already there.
 
+    The cap counts the rows other than *key*: replacing a row in a full store neither refuses nor
+    evicts, and an eviction never removes the row about to be replaced.
+
     Raises:
-        StoreFullError: The store holds ``max_entries`` live rows.
+        StoreFullError: The store holds ``max_entries`` live rows and does not evict.
     """
     _purge_expired(session, store)
-    live = session.exec(select(func.count()).select_from(store.model)).one()
-    if live >= store.max_entries:
-        session.commit()
-        raise StoreFullError(f"{store.model.__tablename__} is full ({store.max_entries} entries)")  # type: ignore[attr-defined]
+    table = store.model.__table__  # type: ignore[attr-defined]
+    pk = table.c[store.primary_key]
+    others = session.exec(select(func.count()).select_from(store.model).where(pk != key)).one()
+    if others >= store.max_entries:
+        if not store.evicts:
+            session.commit()
+            raise StoreFullError(f"{table.name} is full ({store.max_entries} entries)")
+        nearest_expiry = select(pk).where(pk != key).order_by(table.c.expires_at).limit(others - store.max_entries + 1)
+        evicted = session.execute(
+            delete(store.model).where(pk.in_(nearest_expiry)).returning(pk).execution_options(synchronize_session=False)
+        ).all()
+        logger.warning(
+            "%s is full (%d entries): evicted %d row(s) nearest expiry", table.name, store.max_entries, len(evicted)
+        )
 
     existing = session.get(store.model, key)
     if existing is not None:
@@ -197,14 +232,32 @@ def cleanup_and_pop(session: Session, store: Store, key: str) -> dict[str, Any] 
     return None if row is None else dict(row)
 
 
+def extend_expiry(session: Session, store: Store, key: str, expires_at: datetime) -> None:
+    """Move the row under *key* to expire at *expires_at* if that is later than it already does.
+
+    Only ever later: a client the owner authorised twice serves two refresh families with different
+    deadlines, and a rotation of the older one must not pull the client back below the newer. A
+    missing *key* is a no-op. Does not commit — the caller's next store commit carries it, which is
+    what lands a promotion in the same transaction as the token that earned it.
+    """
+    table = store.model.__table__  # type: ignore[attr-defined]
+    session.execute(
+        update(store.model)
+        .where(table.c[store.primary_key] == key)
+        .values(expires_at=func.greatest(table.c.expires_at, expires_at, type_=DateTime(timezone=True)))
+    )
+    session.flush()
+
+
 def consume_refresh_token(session: Session, refresh_token: str) -> dict[str, Any] | None:
     """The live refresh token under *refresh_token* as a dict, marked consumed in the same statement.
 
     ``None`` when it is gone, expired, or already consumed — a replay, or a concurrent exchange
     that won. The row is kept, so :func:`cleanup_and_get` still finds it with ``consumed_at`` set.
 
-    This is the one store function that does not commit: the rotation commits together with its
-    replacement in :func:`cleanup_and_store`, and nothing may commit in between. A concurrent
+    This and :func:`extend_expiry` are the store functions that do not commit: the rotation
+    commits together with its replacement in :func:`cleanup_and_store`, and nothing may commit in
+    between. A concurrent
     exchange of the same token blocks on this row's lock until that commit, then finds the token
     consumed, and its :func:`revoke_refresh_token_family` sees the replacement too. A commit
     between the two would leave the replacement alive after the revocation.

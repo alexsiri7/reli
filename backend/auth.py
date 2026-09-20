@@ -216,19 +216,15 @@ def google_sign_in() -> SignInStart:
     state = secrets.token_urlsafe(32)
     code_verifier = secrets.token_urlsafe(64)
     with _session() as session:
-        try:
-            cleanup_and_store(
-                session,
-                web_oauth_sessions,
-                state,
-                {
-                    "google_code_verifier": code_verifier,
-                    "expires_at": datetime.now(UTC) + timedelta(seconds=WEB_SIGN_IN_TTL_SECONDS),
-                },
-            )
-        except StoreFullError as full:
-            logger.warning("Web sign-in refused: %s", full)
-            raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
+        cleanup_and_store(
+            session,
+            web_oauth_sessions,
+            state,
+            {
+                "google_code_verifier": code_verifier,
+                "expires_at": datetime.now(UTC) + timedelta(seconds=WEB_SIGN_IN_TTL_SECONDS),
+            },
+        )
 
     return SignInStart(auth_url=google_login.authorization_url(state, code_verifier))
 
