@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from .db_models import (
     INTERNAL_TAGS,
@@ -34,11 +34,13 @@ from .db_models import (
 )
 
 __all__ = [
+    "BACKFILL_PER_DAY",
     "Actor",
     "EntityType",
     "Operation",
     "ThingNotFound",
     "add_preference_evidence",
+    "backfill_checkin_dates",
     "create_thing",
     "get_or_create_user_anchor",
     "record_preference",
@@ -241,6 +243,57 @@ def update_thing(
     session.commit()
     session.refresh(thing)
     return thing
+
+
+#: How many backfilled Things fall due on one day. The morning conversation asks about three to
+#: five ``NEW_TAG`` Things a morning, so a day of the backfill is the size of one morning's batch.
+BACKFILL_PER_DAY = 5
+
+
+def backfill_checkin_dates(session: Session, *, now: datetime) -> int:
+    """Date every active capture that has none, as #1516's default would have, and return the count.
+
+    The one-off backfill for #1517: a Thing captured before the default existed has no check-in
+    date and so never surfaces. Each such Thing outside ``INTERNAL_TAGS`` gets a date, spread
+    ``BACKFILL_PER_DAY`` to a day from tomorrow in ``OWNER_TIMEZONE``, oldest capture first, so the
+    backlog does not all fall due on one morning; one with no description is a bare capture that
+    was never filled in, so it is marked ``NEW_TAG`` as well. Archived Things, Reli's own records
+    and anything already dated are left alone, which is what makes a second run touch nothing.
+
+    Every write is journalled as an ``update`` by ``Actor.CLAUDE_SCHEDULED``: a bulk pass
+    attributed to ``user`` would read, to the learning pass, as the owner having touched every
+    Thing in one second.
+
+    Unlike the rest of this module this does not commit. It runs inside the migration's
+    transaction, which commits or rolls back the whole backfill with the revision.
+    """
+    undated = session.exec(
+        select(ThingRecord)
+        .where(col(ThingRecord.active).is_(True), col(ThingRecord.checkin_date).is_(None))
+        .order_by(col(ThingRecord.created_at).asc(), col(ThingRecord.id).asc())
+    ).all()
+    captures = [thing for thing in undated if not any(tag in INTERNAL_TAGS for tag in thing.tags)]
+
+    first_date = _default_checkin_date(now)
+    for position, thing in enumerate(captures):
+        before = _snapshot(thing)
+        thing.checkin_date = first_date + timedelta(days=position // BACKFILL_PER_DAY)
+        if not thing.description and NEW_TAG not in thing.tags:
+            thing.tags = [*thing.tags, NEW_TAG]
+        thing.updated_at = now
+        session.add(thing)
+        session.flush()
+        _journalled(
+            session,
+            actor=Actor.CLAUDE_SCHEDULED,
+            operation=Operation.UPDATE,
+            entity_type=EntityType.THING,
+            entity_id=thing.id,
+            before=before,
+            after=_snapshot(thing),
+        )
+    session.flush()
+    return len(captures)
 
 
 def _insert_relationship(

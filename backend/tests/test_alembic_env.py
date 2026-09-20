@@ -1,9 +1,7 @@
 """Tests for backend/alembic: the build_connect_args helper and the env.py migration runner."""
 
 import os
-from collections.abc import Iterator
 
-import pytest
 from sqlalchemy import create_engine, text
 
 from backend.alembic.utils import build_connect_args
@@ -29,43 +27,6 @@ class TestBuildConnectArgs:
     def test_empty_url_treated_as_non_sqlite(self):
         # Empty URL is neither asyncpg nor sqlite, so falls through to psycopg2 branch
         assert build_connect_args("") == {"connect_timeout": 10}
-
-
-@pytest.fixture()
-def fresh_database(postgres_url: str) -> Iterator[str]:
-    """An empty database on the test server, with the app's settings pointed at it for the test.
-
-    ``migrated_db`` starts from nothing and reaches head in one go, which is exactly the path that
-    never exercised the bug below — so this fixture hands out a database the test can walk through
-    revision by revision, and restores the settings singleton afterwards.
-    """
-    from backend import config as config_module
-    from backend import db_engine
-
-    name = "reli_env_regression"
-    server = create_engine(postgres_url, isolation_level="AUTOCOMMIT")
-    with server.connect() as conn:
-        conn.execute(text(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
-        conn.execute(text(f"CREATE DATABASE {name}"))
-
-    url = postgres_url.rsplit("/", 1)[0] + f"/{name}"
-    previous_env = os.environ.get("DATABASE_URL")
-    previous_setting = config_module.settings.DATABASE_URL
-    os.environ["DATABASE_URL"] = url
-    config_module.settings.DATABASE_URL = url
-    db_engine.reset_engine()
-
-    yield url
-
-    config_module.settings.DATABASE_URL = previous_setting
-    if previous_env is None:
-        os.environ.pop("DATABASE_URL", None)
-    else:
-        os.environ["DATABASE_URL"] = previous_env
-    db_engine.reset_engine()
-    with server.connect() as conn:
-        conn.execute(text(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
-    server.dispose()
 
 
 def _alembic_config():
