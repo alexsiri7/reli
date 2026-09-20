@@ -36,6 +36,23 @@ function groupByLabel(relationships: Relationship[]): [string, Relationship[]][]
   return [...grouped.entries()];
 }
 
+/**
+ * Whether a stored `urls` value may become a link.
+ *
+ * `urls` is written by whichever session holds the connector and is not validated on the way in, so
+ * a `javascript:` value would run on this origin from one click. The URL parser, not a prefix match,
+ * decides the scheme: it lowercases and strips the leading whitespace a prefix check misses, and a
+ * value it cannot parse (relative, scheme-relative, garbage) is not a link either.
+ */
+function isLinkable(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function Fields({ thing }: { thing: Thing }) {
   return (
     <dl className="fields">
@@ -48,9 +65,7 @@ function Fields({ thing }: { thing: Thing }) {
       {Object.entries(thing.urls).map(([name, url]) => (
         <div className="url" key={name}>
           <dt>{name}</dt>
-          <dd>
-            <a href={url}>{url}</a>
-          </dd>
+          <dd>{isLinkable(url) ? <a href={url}>{url}</a> : url}</dd>
         </div>
       ))}
     </dl>
