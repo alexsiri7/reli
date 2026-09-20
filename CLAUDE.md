@@ -180,7 +180,9 @@ done:
    redirect URI is the only entry the client needs — #1488 retired the loopback `http://127.0.0.1:18765/`
    that the deleted Calendar and Gmail grant used, and a leftover entry may be removed.
 3. Add the claude.ai connector for `https://<host>/mcp` with **no** bearer token. It discovers the
-   server, registers itself, opens Google sign-in, and the allowlisted account completes it.
+   server, registers itself, lands on a Reli-hosted consent page naming the client and where its
+   code will be delivered, and the allowlisted account continues through Google sign-in from
+   there. Only approve a client the human just registered from a connector they are setting up.
 4. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. The
    password that used to stand beside the cookie is gone (#1471), and nothing outside a browser
    needs a way in.
