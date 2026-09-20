@@ -245,7 +245,7 @@ def _far_ends(edges: Sequence[RelationshipRecord], thing_id: uuid.UUID) -> list[
 
 
 @router.get("/things/{thing_id}/history", summary="A Thing's journal history")
-def thing_history(thing_id: uuid.UUID, limit: int = Query(default=200, ge=1, le=1000)) -> HistoryOut:
+def thing_history(thing_id: uuid.UUID, limit: int = Query(default=200, ge=1, le=queries.MAX_LIMIT)) -> HistoryOut:
     """How a Thing got to its current state: its newest *limit* journal entries, oldest first.
 
     Only entries recorded against the Thing itself. Relating and unrelating are journalled against

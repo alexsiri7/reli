@@ -209,6 +209,13 @@ def blocked(session: Session) -> list[ThingRecord]:
 # asks for and keeps a request from pinning its connection on a dense graph (#1531).
 MAX_RELATED_DEPTH = 5
 
+# The ceiling every caller-supplied ``limit`` is validated against, at both boundaries —
+# ``backend/api.py`` and ``backend/mcp_server.py`` — so the two cannot drift. The standing questions
+# that take no ``limit`` (``due_for_checkin``, ``stale``, ``blocked``) and ``relationships_for`` are
+# bounded by the size of one person's graph rather than by the caller and stay unbounded;
+# ``STATEMENT_TIMEOUT`` in ``backend/db_engine.py`` is their backstop (#1535).
+MAX_LIMIT = 1000
+
 _RELATED_WALK = text(
     """
     WITH RECURSIVE walk(thing_id, depth, relationship_type, path) AS (

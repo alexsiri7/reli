@@ -34,6 +34,7 @@ from backend.mcp_server import (
     record_preference,
     update_thing,
 )
+from backend.queries import MAX_LIMIT
 from backend.tests.conftest import RETIRED_GOOGLE_TOOL_NAMES
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -168,6 +169,14 @@ def test_the_three_prompt_files_exist_and_are_not_empty(name):
 def test_no_pass_reaches_for_a_reli_google_tool(name, tool):
     """#1487: a pass looks through the connectors attached to its own session."""
     assert tool not in _text(name)
+
+
+@pytest.mark.parametrize("name", FILES)
+def test_no_pass_asks_for_a_limit_the_tools_refuse(name):
+    """#1535: the tools validate ``limit`` against ``MAX_LIMIT``, so a pass asking for more would
+    fail overnight with nothing else to catch it."""
+    for value in re.findall(r"limit=(\d+)", _text(name)):
+        assert 1 <= int(value) <= MAX_LIMIT
 
 
 @pytest.mark.parametrize("name", FILES)

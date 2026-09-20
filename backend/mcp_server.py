@@ -15,11 +15,12 @@ import json
 import logging
 import uuid
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import jwt
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.server import TransportSecuritySettings
+from pydantic import Field
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -359,7 +360,7 @@ def find_things(
     checkin_to: date | None = None,
     priority_min: float | None = None,
     priority_max: float | None = None,
-    limit: int = 100,
+    limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 100,
 ) -> list[dict[str, Any]]:
     """Things matching every filter given, highest priority first.
 
@@ -374,7 +375,7 @@ def find_things(
         checkin_to: Only Things whose check-in date is on or before this.
         priority_min: Only Things at or above this priority.
         priority_max: Only Things at or below this priority.
-        limit: How many to return at most.
+        limit: How many to return at most, 1 to 1000.
 
     Returns:
         The matching Things.
@@ -464,7 +465,7 @@ def blocked() -> list[dict[str, Any]]:
 
 
 @reli_mcp.tool()
-def needs_input(limit: int = 100) -> dict[str, Any]:
+def needs_input(limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 100) -> dict[str, Any]:
     """Active Things tagged #NeedsInput — what only the user can settle — most important first.
 
     The tag is what the prompts apply to a Thing that cannot be resolved from Calendar, Gmail or the
@@ -472,7 +473,7 @@ def needs_input(limit: int = 100) -> dict[str, Any]:
     so total says how many there are and truncated whether this answer left any out.
 
     Args:
-        limit: How many Things to return.
+        limit: How many Things to return, 1 to 1000.
 
     Returns:
         things, total and truncated.
@@ -498,7 +499,9 @@ def children(thing_id: uuid.UUID) -> list[dict[str, Any]]:
 
 
 @reli_mcp.tool()
-def get_thing_history(thing_id: uuid.UUID, limit: int = 200) -> dict[str, Any]:
+def get_thing_history(
+    thing_id: uuid.UUID, limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 200
+) -> dict[str, Any]:
     """How a Thing got to its current state: its most recent journal entries, oldest first.
 
     Only entries recorded against the Thing itself. Relating and unrelating are journalled against
@@ -507,7 +510,8 @@ def get_thing_history(thing_id: uuid.UUID, limit: int = 200) -> dict[str, Any]:
 
     Args:
         thing_id: The Thing to trace.
-        limit: How many entries to return at most; the newest this many are the ones returned.
+        limit: How many entries to return at most, 1 to 1000; the newest this many are the ones
+            returned.
 
     Returns:
         {"entries": [...], "total": N, "truncated": bool} — one entry per mutation, each with the
@@ -520,7 +524,9 @@ def get_thing_history(thing_id: uuid.UUID, limit: int = 200) -> dict[str, Any]:
 
 
 @reli_mcp.tool()
-def journal_since(after_id: int = 0, actors: list[Actor] | None = None, limit: int = 200) -> dict[str, Any]:
+def journal_since(
+    after_id: int = 0, actors: list[Actor] | None = None, limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 200
+) -> dict[str, Any]:
     """Everything that happened since a point in the journal, across every Thing and relationship.
 
     This is the learning pass's input: the entries with an id above ``after_id``, oldest first,
@@ -534,7 +540,8 @@ def journal_since(after_id: int = 0, actors: list[Actor] | None = None, limit: i
     Args:
         after_id: Return entries with an id strictly above this; 0 reads from the beginning.
         actors: Only entries these actors made; omitted returns every actor's.
-        limit: How many entries to return at most; the oldest this many are the ones returned.
+        limit: How many entries to return at most, 1 to 1000; the oldest this many are the ones
+            returned.
 
     Returns:
         {"entries": [...], "total": N, "truncated": bool} — one entry per mutation, each with the
