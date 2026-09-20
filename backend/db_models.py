@@ -17,7 +17,20 @@ from enum import Enum
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, Column, Date, DateTime, Dialect, Float, ForeignKey, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    Dialect,
+    Float,
+    ForeignKey,
+    Index,
+    Text,
+    text,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -25,6 +38,7 @@ from sqlalchemy.types import TypeDecorator
 from sqlmodel import Field, SQLModel
 
 RELATIONSHIP_TYPE_CHECK = "relationships_relationship_type_check"
+EVIDENCE_FOR_UNIQUE_INDEX = "uq_relationships_evidence_for"
 
 
 def _enum_values(enum_class: type[Enum]) -> list[str]:
@@ -191,13 +205,24 @@ class ThingRecord(SQLModel, table=True):
 
 
 class RelationshipRecord(SQLModel, table=True):
-    """A directed edge between two Things. See :class:`RelationshipType` for what each direction means."""
+    """A directed edge between two Things. See :class:`RelationshipType` for what each direction means.
+
+    An ``EvidenceFor`` edge is unique per (source, target), because strength is the count of those
+    edges and a pair carrying two would overstate it; the other four types are not constrained.
+    """
 
     __tablename__ = "relationships"
     __table_args__ = (
         CheckConstraint(
             "relationship_type IN ('ChildOf', 'Blocks', 'RelatedTo', 'EvidenceFor', 'References')",
             name=RELATIONSHIP_TYPE_CHECK,
+        ),
+        Index(
+            EVIDENCE_FOR_UNIQUE_INDEX,
+            "source_thing_id",
+            "target_thing_id",
+            unique=True,
+            postgresql_where=text("relationship_type = 'EvidenceFor'"),
         ),
     )
 

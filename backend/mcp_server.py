@@ -285,6 +285,10 @@ def relate(
     - EvidenceFor — source is the evidence, target is what it supports.
     - RelatedTo, References — direction carries no meaning yet.
 
+    A second EvidenceFor edge between the same pair is refused, naming the edge that already
+    exists: strength is the count of those edges. To reinforce a preference, call
+    add_preference_evidence, which changes nothing on a repeat.
+
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
         source_thing_id: The Thing the edge runs from.

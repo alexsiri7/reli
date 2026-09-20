@@ -4,10 +4,10 @@ import uuid
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import DatabaseError
+from sqlalchemy.exc import DatabaseError, IntegrityError
 
-from backend.db_models import Actor
-from backend.service import create_thing
+from backend.db_models import EVIDENCE_FOR_UNIQUE_INDEX, Actor, RelationshipType
+from backend.service import create_thing, relate
 
 LEGACY_TABLES = (
     "thing_relationships",
@@ -95,6 +95,41 @@ def test_relationship_type_check_rejects_an_unknown_value(session):
             {"id": uuid.uuid4(), "src": thing.id, "tgt": thing.id},
         )
     session.rollback()
+
+
+def test_evidence_for_is_unique_per_pair_and_the_other_types_are_not(session):
+    """#1536: strength is the count of ``EvidenceFor`` edges, so the database keeps a pair from carrying two."""
+    evidence = create_thing(session, actor=Actor.USER, title="evidence")
+    supported = create_thing(session, actor=Actor.USER, title="supported")
+    relate(
+        session,
+        actor=Actor.USER,
+        source_thing_id=evidence.id,
+        target_thing_id=supported.id,
+        relationship_type=RelationshipType.EVIDENCE_FOR,
+    )
+    insert = text(
+        "INSERT INTO relationships (id, source_thing_id, target_thing_id, relationship_type, created_at) "
+        "VALUES (:id, :src, :tgt, :type, now())"
+    )
+
+    with pytest.raises(IntegrityError):
+        session.execute(insert, {"id": uuid.uuid4(), "src": evidence.id, "tgt": supported.id, "type": "EvidenceFor"})
+    session.rollback()
+
+    for _ in range(2):
+        session.execute(insert, {"id": uuid.uuid4(), "src": evidence.id, "tgt": supported.id, "type": "References"})
+    session.commit()
+
+
+def test_the_evidence_for_index_is_unique_and_partial(session):
+    """Two assertions rather than one literal: Postgres renders the predicate its own way."""
+    indexdef = session.execute(
+        text("SELECT indexdef FROM pg_indexes WHERE tablename = 'relationships' AND indexname = :name"),
+        {"name": EVIDENCE_FOR_UNIQUE_INDEX},
+    ).scalar_one()
+    assert "UNIQUE" in indexdef
+    assert "EvidenceFor" in indexdef
 
 
 def test_journal_rejects_update(session):

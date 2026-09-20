@@ -36,11 +36,13 @@ from .db_models import (
 __all__ = [
     "BACKFILL_PER_DAY",
     "Actor",
+    "DuplicateRelationship",
     "EntityType",
     "Operation",
     "ThingNotFound",
     "add_preference_evidence",
     "backfill_checkin_dates",
+    "collapse_duplicate_evidence",
     "create_thing",
     "get_or_create_user_anchor",
     "record_preference",
@@ -53,6 +55,24 @@ __all__ = [
 
 class ThingNotFound(LookupError):
     """Raised when a mutation names a Thing or relationship that does not exist."""
+
+
+class DuplicateRelationship(ValueError):
+    """Raised by :func:`relate` when the database refuses a second edge the pair already carries.
+
+    Only ``EvidenceFor`` is constrained that way (see :func:`relate`). ``existing`` is the edge
+    that stands, so the caller can point at it rather than guess.
+    """
+
+    def __init__(self, existing: RelationshipRecord) -> None:
+        self.existing = existing
+        message = (
+            f"an {existing.relationship_type.value} edge from {existing.source_thing_id} to "
+            f"{existing.target_thing_id} already exists ({existing.id})"
+        )
+        if existing.relationship_type is RelationshipType.EVIDENCE_FOR:
+            message += "; add_preference_evidence is the idempotent way to reinforce a preference"
+        super().__init__(message)
 
 
 def _snapshot(record: ThingRecord | RelationshipRecord) -> dict[str, Any]:
@@ -343,26 +363,44 @@ def relate(
     Raises ``ValueError`` for a type outside the five, before any statement is issued, so callers
     that resolve the type from outside the process get the offending value back rather than a
     constraint violation.
+
+    An ``EvidenceFor`` edge is unique per (source, target): strength is the count of those edges,
+    and ``EVIDENCE_FOR_UNIQUE_INDEX`` keeps a pair from carrying two. A second one raises
+    :class:`DuplicateRelationship` naming the edge that stands, after the session has been rolled
+    back — the refused edge and its journal entry go together, and so does anything else the
+    session had not committed. The other four types are not constrained: a second ``References``
+    edge with a different ``context`` is expressible, and so is a second anchor edge, which
+    :func:`backend.queries.user_model` deduplicates on read.
     """
-    relationship = _insert_relationship(
-        session,
-        actor=actor,
-        source_thing_id=source_thing_id,
-        target_thing_id=target_thing_id,
-        relationship_type=relationship_type,
-        context=context,
-    )
-    session.commit()
+    try:
+        relationship = _insert_relationship(
+            session,
+            actor=actor,
+            source_thing_id=source_thing_id,
+            target_thing_id=target_thing_id,
+            relationship_type=relationship_type,
+            context=context,
+        )
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        existing = session.exec(
+            select(RelationshipRecord).where(
+                RelationshipRecord.source_thing_id == source_thing_id,
+                RelationshipRecord.target_thing_id == target_thing_id,
+                RelationshipRecord.relationship_type == RelationshipType(relationship_type),
+            )
+        ).first()
+        if existing is None:
+            raise
+        raise DuplicateRelationship(existing) from exc
     session.refresh(relationship)
     return relationship
 
 
-def unrelate(session: Session, *, actor: Actor, relationship_id: uuid.UUID) -> None:
-    """Remove a relationship and journal it as one ``unrelate`` entry with no ``after``."""
-    relationship = session.get(RelationshipRecord, relationship_id)
-    if relationship is None:
-        raise ThingNotFound(f"no relationship with id {relationship_id}")
-
+def _delete_relationship(session: Session, *, actor: Actor, relationship: RelationshipRecord) -> None:
+    """Remove a relationship and its journal entry without committing. See :func:`_insert_thing`."""
+    relationship_id = relationship.id
     before = _snapshot(relationship)
     session.delete(relationship)
     session.flush()
@@ -375,7 +413,58 @@ def unrelate(session: Session, *, actor: Actor, relationship_id: uuid.UUID) -> N
         before=before,
         after=None,
     )
+
+
+def unrelate(session: Session, *, actor: Actor, relationship_id: uuid.UUID) -> None:
+    """Remove a relationship and journal it as one ``unrelate`` entry with no ``after``."""
+    relationship = session.get(RelationshipRecord, relationship_id)
+    if relationship is None:
+        raise ThingNotFound(f"no relationship with id {relationship_id}")
+
+    _delete_relationship(session, actor=actor, relationship=relationship)
     session.commit()
+
+
+def collapse_duplicate_evidence(session: Session) -> int:
+    """Leave one ``EvidenceFor`` edge per (source, target) and return how many were removed.
+
+    The one-off pass for #1536 that ``EVIDENCE_FOR_UNIQUE_INDEX`` needs before it can be built:
+    until the index existed, a race in :func:`add_preference_evidence` or a repeated ``relate``
+    could land two edges for the same pair, each one overstating a preference by one. The
+    earliest edge of each pair stays — the order :func:`backend.queries.evidence_for` lists them
+    in, so the survivor is the one the read path already showed first — and every later one is
+    journalled as an ``unrelate`` with its snapshot in ``before``, so a removed edge's ``context``
+    is still on the record.
+
+    Every removal is journalled by ``Actor.CLAUDE_SCHEDULED``, as :func:`backfill_checkin_dates`
+    is: the learning pass filters the journal by actor, and a migration attributed to ``user``
+    would read as the owner's own behaviour.
+
+    Unlike the rest of this module this does not commit. It runs inside the migration's
+    transaction, which commits or rolls back the whole collapse with the revision.
+    """
+    edges = session.exec(
+        select(RelationshipRecord)
+        .where(col(RelationshipRecord.relationship_type) == RelationshipType.EVIDENCE_FOR)
+        .order_by(
+            col(RelationshipRecord.source_thing_id).asc(),
+            col(RelationshipRecord.target_thing_id).asc(),
+            col(RelationshipRecord.created_at).asc(),
+            col(RelationshipRecord.id).asc(),
+        )
+    ).all()
+
+    kept: set[tuple[uuid.UUID, uuid.UUID]] = set()
+    removed = 0
+    for edge in edges:
+        pair = (edge.source_thing_id, edge.target_thing_id)
+        if pair in kept:
+            _delete_relationship(session, actor=Actor.CLAUDE_SCHEDULED, relationship=edge)
+            removed += 1
+        else:
+            kept.add(pair)
+    session.flush()
+    return removed
 
 
 # --- The user model --------------------------------------------------------
@@ -500,7 +589,9 @@ def add_preference_evidence(
 
     Idempotent, and not as a nicety: strength *is* the count of these edges, so adding the same
     evidence twice would silently overstate the preference. Evidence already linked leaves the
-    preference untouched and journals nothing.
+    preference untouched and journals nothing. The lookup is the fast path; what makes the promise
+    hold under concurrency is ``EVIDENCE_FOR_UNIQUE_INDEX``, which refuses the second of two calls
+    that both missed the lookup, and the loser returns the preference as the winner left it.
     """
     preference = _require_preference(session, preference_id)
     _require_thing(session, evidence_id)
@@ -514,7 +605,10 @@ def add_preference_evidence(
             RelationshipRecord.relationship_type == RelationshipType.EVIDENCE_FOR,
         )
     ).first()
-    if already_linked is None:
+    if already_linked is not None:
+        return preference
+
+    try:
         relate(
             session,
             actor=actor,
@@ -522,6 +616,10 @@ def add_preference_evidence(
             target_thing_id=preference.id,
             relationship_type=RelationshipType.EVIDENCE_FOR,
         )
+    except DuplicateRelationship:
+        # The race loser: ``relate`` has rolled the session back, so read the preference again
+        # rather than return the expired object.
+        preference = _require_preference(session, preference_id)
     return preference
 
 

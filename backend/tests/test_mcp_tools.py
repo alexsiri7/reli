@@ -261,6 +261,24 @@ def test_relate_and_unrelate_journal_the_edge(tools):
     assert removed == {"unrelated": edge["id"]}
 
 
+def test_relate_refuses_a_duplicate_evidence_for_edge(tools):
+    """A session asserting the same evidence twice is told so, and pointed at the idempotent tool."""
+    evidence = create_thing(actor="claude_interactive", title="evidence")
+    supported = create_thing(actor="claude_interactive", title="supported")
+    edge = dict(
+        actor="claude_interactive",
+        source_thing_id=uuid.UUID(evidence["id"]),
+        target_thing_id=uuid.UUID(supported["id"]),
+        relationship_type=RelationshipType.EVIDENCE_FOR,
+    )
+    first = relate(**edge)
+
+    with pytest.raises(ValueError, match="add_preference_evidence") as raised:
+        relate(**edge)
+
+    assert first["id"] in str(raised.value)
+
+
 def test_update_thing_on_an_unknown_id_raises(tools):
     with pytest.raises(ThingNotFound):
         update_thing(actor="claude_interactive", thing_id=uuid.uuid4(), title="nobody")
