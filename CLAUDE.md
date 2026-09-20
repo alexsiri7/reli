@@ -195,13 +195,14 @@ to trust. The app's own defence against an unauthenticated flood is structural i
 stores a caller without a credential can write to (`mcp_registered_clients`, `mcp_oauth_sessions`,
 `web_oauth_sessions`) evict the row nearest expiry at their cap rather than refusing, a
 registration lives an hour until the owner signs in through it and then as long as its refresh
-family, and a registration body is capped at `MAX_REGISTRATION_BYTES`. A flood therefore displaces
-other unfinished flows for as long as it lasts and nothing more — it never touches a connector the
-owner has signed in through, and nothing outlasts it. A request-rate limit, if the owner wants
-one, is a Cloudflare rate-limiting rule on `/oauth/register`, `/oauth/authorize` and
-`/api/auth/google`: a human step in the `RAILWAY_TOKEN` class that nothing in the repository can
-perform or verify, so do not claim it is in place. Adding an in-app limiter instead needs an issue
-that first decides the trusted-proxy question.
+family, and a registration body is capped at `MAX_REGISTRATION_BYTES`. What a flood can still do
+is displace an unfinished flow that races it — a set-up or a sign-in started while it runs — and a
+used registration inside its final hour; what it cannot do is outlast itself or reach a connector
+with time left on its refresh family. A request-rate limit, if the owner wants one, is a
+Cloudflare rate-limiting rule on `/oauth/register`, `/oauth/authorize` and `/api/auth/google`: a
+human step in the `RAILWAY_TOKEN` class that nothing in the repository can perform or verify, so
+do not claim it is in place. Adding an in-app limiter instead needs an issue that first decides
+the trusted-proxy question.
 
 ## Scheduled passes
 

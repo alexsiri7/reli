@@ -257,10 +257,9 @@ def consume_refresh_token(session: Session, refresh_token: str) -> dict[str, Any
 
     This and :func:`extend_expiry` are the store functions that do not commit: the rotation
     commits together with its replacement in :func:`cleanup_and_store`, and nothing may commit in
-    between. A concurrent
-    exchange of the same token blocks on this row's lock until that commit, then finds the token
-    consumed, and its :func:`revoke_refresh_token_family` sees the replacement too. A commit
-    between the two would leave the replacement alive after the revocation.
+    between. A concurrent exchange of the same token blocks on this row's lock until that commit,
+    then finds the token consumed, and its :func:`revoke_refresh_token_family` sees the replacement
+    too. A commit between the two would leave the replacement alive after the revocation.
     """
     _purge_expired(session, mcp_refresh_tokens)
     table = McpRefreshTokenRecord.__table__  # type: ignore[attr-defined]
