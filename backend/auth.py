@@ -50,9 +50,14 @@ from .oauth_state import (
 logger = logging.getLogger(__name__)
 
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRY_SECONDS = 60 * 60 * 24 * 7
 MCP_AUDIENCE = "mcp"
 WEB_AUDIENCE = "web"
+WEB_JWT_EXPIRY_SECONDS = 60 * 60 * 24 * 7
+# Short because nothing can revoke a minted JWT: revoking a refresh-token family stops the next
+# refresh, and the hour is how long an access token already in the wrong hands outlives that.
+# The connector refreshes transparently, so the user never sees the turnover.
+MCP_JWT_EXPIRY_SECONDS = 60 * 60
+_EXPIRY_SECONDS_BY_AUDIENCE = {WEB_AUDIENCE: WEB_JWT_EXPIRY_SECONDS, MCP_AUDIENCE: MCP_JWT_EXPIRY_SECONDS}
 # RFC 6819 §4.1.1: an authorization code lives just long enough to be exchanged.
 MCP_AUTH_CODE_TTL_SECONDS = 60
 # A web sign-in that takes longer than this answers "start again", which is the remedy.
@@ -107,7 +112,8 @@ def is_allowed(email: str) -> bool:
 
 
 def create_jwt(subject: str, email: str, audience: str) -> str:
-    """A token for *subject*, good for ``JWT_EXPIRY_SECONDS`` and only for *audience*.
+    """A token for *subject*, only for *audience*, good for ``MCP_JWT_EXPIRY_SECONDS`` or
+    ``WEB_JWT_EXPIRY_SECONDS`` as *audience* says.
 
     ``jti`` is kept from the pre-v4 token shape: nothing reads it, but a revocation list, should
     logout ever need one, would key on it.
@@ -118,7 +124,7 @@ def create_jwt(subject: str, email: str, audience: str) -> str:
         "email": email,
         "aud": audience,
         "iat": issued_at,
-        "exp": issued_at + JWT_EXPIRY_SECONDS,
+        "exp": issued_at + _EXPIRY_SECONDS_BY_AUDIENCE[audience],
         "jti": str(uuid.uuid4()),
     }
     return jwt.encode(claims, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
@@ -272,7 +278,7 @@ def _finish_web_sign_in(flow: dict[str, Any], code: str, error: str) -> Redirect
     response.set_cookie(
         SESSION_COOKIE,
         create_jwt(identity.subject, identity.email, WEB_AUDIENCE),
-        max_age=JWT_EXPIRY_SECONDS,
+        max_age=WEB_JWT_EXPIRY_SECONDS,
         path="/",
         httponly=True,
         samesite="lax",

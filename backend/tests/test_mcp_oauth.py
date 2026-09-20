@@ -412,7 +412,7 @@ def test_a_code_exchanges_for_a_jwt_the_mcp_endpoint_accepts(client, session):
     assert response.headers["cache-control"] == "no-store"
     body = response.json()
     assert body["token_type"] == "bearer"
-    assert body["expires_in"] == 604800
+    assert body["expires_in"] == 3600 == auth.MCP_JWT_EXPIRY_SECONDS
     assert body["refresh_token"]
     claims = auth.decode_jwt(body["access_token"], audience="mcp")
     assert claims["sub"] == "1234567890"
