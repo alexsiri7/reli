@@ -61,7 +61,7 @@ Writes — every one takes `actor`, every one is journalled by `backend/service.
 | `create_thing` | Creates a Thing: `title`, `description`, `notes`, `tags`, `urls`, `checkin_date`, `priority`. A capture is tagged `#New` and, without a `checkin_date`, dated tomorrow in Europe/London (#1516); Reli's own records — the `INTERNAL_TAGS` in `backend/db_models.py` — get neither. |
 | `update_thing` | Replaces the fields given — a `tags` or `notes` argument replaces the whole value, nothing is merged, and an unset field is untouched. |
 | `archive_thing` | Sets `active=False`, journalled as an update. The Thing and its edges stay readable; it drops out of `due_for_checkin`, `stale`, `blocked`, `needs_input` and the default `find_things`. There is no hard delete over MCP and nothing un-archives. |
-| `relate` | Links two Things with one of the five `RelationshipType` values (`ChildOf` source is the parent; `Blocks` source is the blocked Thing; `EvidenceFor` source is the evidence) and an optional `context`. |
+| `relate` | Links two Things with one of the five `RelationshipType` values (`ChildOf` source is the parent; `Blocks` source is the blocked Thing; `EvidenceFor` source is the evidence) and an optional `context`. A second `EvidenceFor` edge between the same pair is refused, naming the one that exists. |
 | `unrelate` | Removes an edge by id; both Things stay. |
 
 Reads — no `actor`:

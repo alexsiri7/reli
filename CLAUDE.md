@@ -53,8 +53,9 @@ The user model (#1410) follows from the same rules. Preferences are Things tagge
 anchored to the single `#User` Thing at `USER_ANCHOR_ID` by a `RelatedTo` edge running anchor →
 preference. Evidence is an `EvidenceFor` edge from a Thing, so a journal entry becomes evidence only
 once a Thing tagged `#Observation` carrying `notes["journal_entry_id"]` stands for it — a
-relationship cannot point at anything but a Thing. Strength is the count of those edges; there is no
-confidence anywhere and none may be added. `McpActor` was deliberately **not** widened with
+relationship cannot point at anything but a Thing. Strength is the count of those edges — a partial
+unique index (#1536) keeps a pair from carrying two — and there is no confidence anywhere and none
+may be added. `McpActor` was deliberately **not** widened with
 `Actor.USER`: `reject_preference` over MCP records the Claude session that relayed the rejection.
 
 ## Deployment
