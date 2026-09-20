@@ -58,6 +58,18 @@ CHECKIN_FALLBACK = "when you cannot tell, the check-in is not resolved"
 VOICE_GUARDRAIL = "Confidence of manner is never confidence of fact."
 VOICE_PRECEDENCE = "overrides the default voice"
 
+# #1519: the captures the resolution pass looks around but never touches. The write ban is pinned
+# tool by tool because the decision list above it pushes a Thing it cannot settle towards
+# `#NeedsInput`, and a default date would otherwise read as an overdue obligation.
+NEW_CONTEXT_LITERALS = (
+    f"A `{NEW_TAG}` Thing is for context-gathering only",
+    "A default check-in date is not an obligation to verify",
+    "do not add `#NeedsInput`",
+    f"do not remove `{NEW_TAG}`: nothing is written to the Thing",
+    "put what turns up into the briefing, not into the Thing",
+    'A Thing titled "Fridge" with an order confirmation dated the 12th',
+    "Keep the lookup brief",
+)
 RESOLUTION_LITERALS = (
     "due_for_checkin",
     "archive_thing",
@@ -73,6 +85,7 @@ RESOLUTION_LITERALS = (
     "never sends mail",
     "goes to `unresolved`",
     CHECKIN_FALLBACK,
+    *NEW_CONTEXT_LITERALS,
 )
 LEARNING_LITERALS = (
     "journal_since",

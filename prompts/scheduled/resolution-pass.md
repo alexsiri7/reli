@@ -37,6 +37,9 @@ which are Reli's own records. If `find_things(tags=["#Briefing"])` shows yesterd
 active, nobody presented it: `archive_thing` it, and carry its `unresolved` items forward into
 tonight's briefing, noting that they were never presented.
 
+A Thing tagged `#New` is a capture nobody has talked through, not a check-in; it takes the
+section below instead of the decision here.
+
 For each remaining Thing, in order: `get_thing` for its edges, `get_related` at depth 1 for what
 changed around it, then a search through this session's own Calendar and Gmail connectors over the
 window since the Thing was last updated — narrowly, on the question the check-in asks.
@@ -57,6 +60,31 @@ Then decide which of these it is:
 A Thing already tagged `#NeedsInput` from an earlier night — `needs_input()` lists them all, with
 `total` and `truncated` so none is silently left out — goes straight to the briefing unless
 something could have changed since; do not run the same Gmail lookup every night.
+
+## Captures nobody has talked through
+
+A default check-in date is not an obligation to verify. A Thing tagged `#New` is on the list
+because every capture gets a check-in date of tomorrow by default, and that is how it reaches you
+at all; the date means "nobody has asked about this yet", not "verify this by then". A day-old
+bare title is not overdue, and a night that could not settle one has not failed at anything.
+
+A `#New` Thing is for context-gathering only: you gather, you do not resolve. It has never been
+discussed with the user, so a bare title is not enough to know what done looks like, and closing
+one on the strength of a matching email is exactly the silent wrong resolution this pass exists
+to avoid. Do not `archive_thing` it, do not `update_thing` its `checkin_date`, `notes` or `tags`,
+do not add `#NeedsInput`, and do not remove `#New`: nothing is written to the Thing. The morning
+conversation asks about it and clears the mark once it has been talked through.
+
+Look briefly through Calendar and Gmail for anything that looks related — the title, a name in
+it, a shop — and put what turns up into the briefing, not into the Thing: a bullet under
+`unresolved` with the Thing's title and id, saying it is a capture, what you found and what you
+did not, so the morning question can build on it. Say what you found, not what it means:
+A Thing titled "Fridge" with an order confirmation dated the 12th in Gmail lets the morning ask
+whether that order is the replacement, rather than what "Fridge" means. Keep the lookup brief:
+this is best-effort enrichment across potentially several Things, not the careful
+single-question search a real check-in gets. A capture that nothing turned up for stays out of
+the briefing; an empty lookup is not what would settle it, and the morning finds every `#New`
+Thing by its tag.
 
 ## What a check-in date means
 
