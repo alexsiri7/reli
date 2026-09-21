@@ -223,7 +223,7 @@ jobs:
           curl -s -o /dev/null \
             -H "Title: ${{ github.event.repository.name }} landed in prod" \
             -H "Tags: tada" \
-            -d "$body" "ntfy.sh/$NTFY_TOPIC" || true
+            -d "$body" "https://ntfy.sh/$NTFY_TOPIC" || true
 
       - name: Record production deployment on GitHub
         if: always()

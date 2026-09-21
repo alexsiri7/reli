@@ -25,6 +25,9 @@ BARE_WAIT = re.compile(r"(?:^|[;&|]|\bthen\b|\bdo\b)\s*wait\s*(?:$|[;&|\n])", re
 # An ``/api`` path as a URL, not as a repository path: ``backend/api.py`` is prose a workflow may
 # name, and ``api.github.com`` has no leading slash.
 API_ROUTE = re.compile(r"""/api(?:/|(?=["'\s]|$))""")
+# ``ntfy.sh`` used as a URL without ``https://`` in front of it. curl guesses ``http`` for a bare
+# host, and the topic name is the channel's whole credential.
+PLAINTEXT_NTFY = re.compile(r"""(?<!https://)\bntfy\.sh/""")
 
 # What `gates.sh` needs on PATH before it reaches a stage. Every venv tool goes through
 # `uv run`, because CI never activates the venv.
@@ -109,6 +112,16 @@ def test_no_workflow_step_backgrounds_a_command():
     """A backgrounded gate reports through `wait`, which discards its exit code."""
     offenders = _backgrounding_steps(_workflow_run_steps())
     assert offenders == [], f"these steps cannot fail on a backgrounded command: {offenders}"
+
+
+def _plaintext_ntfy_steps(steps: list[tuple[str, str]]) -> list[str]:
+    return [name for name, run in steps if PLAINTEXT_NTFY.search(run)]
+
+
+def test_no_workflow_step_posts_to_ntfy_over_plaintext():
+    """#1541: a scheme-less ``ntfy.sh/$NTFY_TOPIC`` sends the topic — the channel's only secret — in the clear."""
+    offenders = _plaintext_ntfy_steps(_workflow_run_steps())
+    assert offenders == [], f"these steps reach ntfy.sh without https://: {offenders}"
 
 
 def _graph_reading_workflows(directory: Path = WORKFLOWS) -> list[str]:
