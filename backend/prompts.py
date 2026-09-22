@@ -181,8 +181,9 @@ to its blocker; anything else the user connects in conversation is `RelatedTo`, 
 Set `checkin_date` whenever there is a date by which the world will have changed: the meeting will \
 have happened, the reply will have arrived, the thing will have shipped or slipped. Set it to the \
 day after that, not to the deadline. A capture you leave undated is dated tomorrow and tagged \
-`{NEW_TAG}`, so the morning conversation can fill it in rather than let it sink. Do not set one for the \
-user's own to-do — that is a deadline, and deadlines go in `notes`.
+`{NEW_TAG}`, so the morning conversation can fill it in rather than let it sink. A to-do of the \
+user's gets a check-in date like anything else: its deadline goes in `notes`, and the check-in \
+date is when to look at it next — usually before the deadline, not on it.
 
 {CHECKIN_SEMANTICS}
 

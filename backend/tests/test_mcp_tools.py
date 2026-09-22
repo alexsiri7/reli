@@ -695,6 +695,16 @@ def test_every_prompt_states_what_a_checkin_date_means(name):
     assert "when you cannot tell, the check-in is not resolved" in text
 
 
+def test_capture_dates_the_user_s_own_to_do_like_anything_else():
+    """#1568: #1516 dates every capture, so an instruction not to date a to-do contradicts the
+    sentence above it."""
+    text = _prompt_text("capture")
+
+    assert "Do not set one for the user's own to-do" not in text
+    assert "A to-do of the user's gets a check-in date like anything else" in text
+    assert "its deadline goes in `notes`" in text
+
+
 @pytest.mark.parametrize("name", sorted(PROMPT_SCOPES))
 @pytest.mark.parametrize("tool", RETIRED_GOOGLE_TOOL_NAMES)
 def test_no_prompt_sends_a_session_to_a_reli_google_tool(name, tool):
