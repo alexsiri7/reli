@@ -4,7 +4,7 @@ github_issue: 1516
 id: '024'
 status: idea
 title: Capture fast, fill in during the morning conversation
-updated: '2026-09-19'
+updated: '2026-09-22'
 ---
 
 ## Why
@@ -34,3 +34,4 @@ The purpose is to build up knowledge of the owner's tasks and projects over time
 - #1517 — Backfill: give existing dateless Things a check-in date and #New
 - #1518 — Morning conversation: fill in #New Things with short questions
 - #1519 — Resolution pass: gather context for #New Things without resolving them
+- #1568 — Capture prompt contradicts itself on dating the user's to-dos
