@@ -24,8 +24,10 @@ _engine: Engine | None = None
 # ``blocked``, ``relationships_for``) and for everything else: Postgres cancels a statement that runs
 # past this, so a request fails instead of pinning one of the five pooled connections. Every query
 # is an indexed read on one person's graph and finishes in milliseconds, so this is more than an
-# order of magnitude above anything legitimate. Migrations are not under it — ``alembic/env.py``
-# builds its own engine — so a long ``alembic upgrade head`` cannot be killed by it (#1535).
+# order of magnitude above anything legitimate. Migrations are not under it: prod also sets this
+# timeout as the ``reli`` role's default, because its pooler drops connect-time options, and
+# ``alembic/env.py`` sets ``statement_timeout = 0`` for the migration transaction so a long
+# ``alembic upgrade head`` cannot be killed by it (#1535, #1572).
 STATEMENT_TIMEOUT = "30s"
 
 

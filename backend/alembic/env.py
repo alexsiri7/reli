@@ -99,6 +99,11 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
+            # The prod role carries ``statement_timeout = 30s`` as a server-side default, which this
+            # engine inherits; a migration must not be killed by it (#1535, #1572). ``SET LOCAL``
+            # inside Alembic's own transaction: a session ``SET`` before the probe's rollback above
+            # would be undone, and a transaction-mode pooler need not keep it on this backend.
+            connection.execute(text("SET LOCAL statement_timeout = 0"))
             context.run_migrations()
 
 
