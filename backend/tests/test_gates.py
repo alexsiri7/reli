@@ -177,14 +177,13 @@ def test_the_deploy_runs_only_off_a_push_to_this_repositorys_main():
     pipeline = yaml.safe_load((WORKFLOWS / "staging-pipeline.yml").read_text())
     gate = " ".join(pipeline["jobs"]["deploy-staging"]["if"].split())
 
-    assert "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')" in gate
-    for condition in (
-        "github.event.workflow_run.conclusion == 'success'",
-        "github.event.workflow_run.event == 'push'",
-        "github.event.workflow_run.head_branch == 'main'",
-        "github.event.workflow_run.head_repository.full_name == github.repository",
-    ):
-        assert condition in gate, condition
+    assert gate == (
+        "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || "
+        "(github.event.workflow_run.conclusion == 'success' && "
+        "github.event.workflow_run.event == 'push' && "
+        "github.event.workflow_run.head_branch == 'main' && "
+        "github.event.workflow_run.head_repository.full_name == github.repository)"
+    )
 
 
 def test_the_graph_read_scan_tells_a_deploy_route_from_a_repository_path(tmp_path):
