@@ -171,6 +171,21 @@ def test_ci_grants_its_default_token_nothing_beyond_read():
     assert document["permissions"] == {"contents": "read"}
 
 
+def test_the_deploy_runs_only_off_a_push_to_this_repositorys_main():
+    """#1574: ``head_branch`` is the PR's head branch, and a fork's default branch is ``main``, so a
+    pull request from a fork's ``main`` passes a ``head_branch == 'main'`` check alone."""
+    pipeline = yaml.safe_load((WORKFLOWS / "staging-pipeline.yml").read_text())
+    gate = " ".join(pipeline["jobs"]["deploy-staging"]["if"].split())
+
+    assert gate == (
+        "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || "
+        "(github.event.workflow_run.conclusion == 'success' && "
+        "github.event.workflow_run.event == 'push' && "
+        "github.event.workflow_run.head_branch == 'main' && "
+        "github.event.workflow_run.head_repository.full_name == github.repository)"
+    )
+
+
 def test_the_graph_read_scan_tells_a_deploy_route_from_a_repository_path(tmp_path):
     """Without the negatives the scan would fail on any workflow that merely names ``backend/api.py``."""
     (tmp_path / "reads.yml").write_text('jobs:\n  x:\n    steps:\n      - run: curl "$URL/api/things"\n')
