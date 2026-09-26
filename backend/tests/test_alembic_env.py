@@ -82,3 +82,32 @@ def test_upgrading_from_an_existing_revision_persists(fresh_database: str):
     assert versions != {"v4_baseline"}
     assert {"mcp_registered_clients", "mcp_oauth_sessions", "mcp_auth_codes", "mcp_refresh_tokens"} <= tables
     assert "web_oauth_sessions" in tables
+
+
+def test_migrations_run_without_the_roles_statement_timeout(fresh_database: str, monkeypatch):
+    """Regression: the prod role's ``statement_timeout`` default reached the migrations (#1572).
+
+    Prod enforces the app's 30 s timeout as a role default, which every connection inherits —
+    including the one ``env.py`` hands to Alembic, which #1535 meant to leave unbounded. The
+    database-level default here stands in for the role's; the value is read on the migration
+    connection at the moment the migrations start.
+    """
+    from alembic.runtime.environment import EnvironmentContext
+
+    server = create_engine(fresh_database, isolation_level="AUTOCOMMIT")
+    with server.connect() as conn:
+        conn.execute(text("ALTER DATABASE reli_fresh SET statement_timeout = '30s'"))
+    server.dispose()
+
+    observed: list[str] = []
+    run_migrations = EnvironmentContext.run_migrations
+
+    def observing_run_migrations(self, **kw):
+        observed.append(self.get_bind().execute(text("SHOW statement_timeout")).scalar_one())
+        return run_migrations(self, **kw)
+
+    monkeypatch.setattr(EnvironmentContext, "run_migrations", observing_run_migrations)
+
+    _upgrade("head")
+
+    assert observed == ["0"]
