@@ -60,16 +60,21 @@ may be added. `McpActor` was deliberately **not** widened with
 
 ## Deployment
 
-The app runs in Docker. After merging code changes, the container must be rebuilt:
-
-```bash
-cd /home/asiri/gt/reli/mayor/rig
-git pull
-docker compose build && docker compose up -d
-```
+Production runs only on Railway: once CI passes on `main`, `.github/workflows/staging-pipeline.yml`
+deploys the image to staging and then to production. The Docker Compose "rig" at
+`/home/asiri/gt/reli/mayor/rig` no longer exists, so nothing is rebuilt by hand after a merge.
 
 `DATABASE_URL` must be set in the environment — there is no default, and the service refuses to
 start without it rather than silently using an empty database.
+
+The production database is schema `reli` of a shared Supabase project, reached through the Postgres
+role `reli`. Its pooler ignores connect-time options, so the 30 s `STATEMENT_TIMEOUT` in
+`backend/db_engine.py` is enforced there as the role's default
+(`ALTER ROLE reli SET statement_timeout = '30s'`). That default reaches every connection, the
+migrations' included, which is why `backend/alembic/env.py` sets `statement_timeout = 0` inside
+the migration transaction (#1572). New tables in `reli` do not get row-level security enabled
+automatically — that project has no `ensure_rls` event trigger — and this is not an exposure,
+because `anon` and `authenticated` have no access to the schema.
 
 The only credential `/mcp` accepts is a JWT the OAuth 2.1 authorization server at `/oauth/*` mints
 after a Google sign-in (see *Google sign-in* below), which is how a claude.ai connector authorises
@@ -105,7 +110,7 @@ there is one. Every other `/api` path is behind the cookie, and #1484 removed th
 route there used to be beside it. Adding another needs an issue that asks for it.
 
 The frontend is built inside the image: the Dockerfile's `frontend-build` stage runs `npm ci` and
-`npm run build`, and the python stage copies `frontend/dist` in. `docker compose build` therefore
+`npm run build`, and the python stage copies `frontend/dist` in. Building the image therefore
 rebuilds the web view too — there is nothing to build separately. The backend serves the bundle only
 when `frontend/dist` is present, so a local `uvicorn` run without one still serves `/api`; use
 `npm --prefix frontend run dev` for the view in development.
