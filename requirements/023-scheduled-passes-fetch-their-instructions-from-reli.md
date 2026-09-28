@@ -2,9 +2,9 @@
 created: '2026-09-14'
 github_issue: 1506
 id: '023'
-status: draft
+status: done
 title: Scheduled passes fetch their instructions from Reli
-updated: '2026-09-14'
+updated: '2026-09-28'
 ---
 
 ## Why
