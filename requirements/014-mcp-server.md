@@ -1,9 +1,9 @@
 ---
-id: "014"
-title: "MCP server (Reli as intelligence service)"
-status: "idea"
 github_issue: 955
-updated: 2026-05-12
+id: '014'
+status: done
+title: MCP server (Reli as intelligence service)
+updated: '2026-09-28'
 ---
 
 ## Why
