@@ -1,9 +1,9 @@
 ---
-id: "013"
-title: "Concerns (modular life domains)"
-status: "idea"
 github_issue: 955
-updated: 2026-05-12
+id: '013'
+status: done
+title: Concerns (modular life domains)
+updated: '2026-09-28'
 ---
 
 ## Why
