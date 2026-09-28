@@ -2,9 +2,9 @@
 created: '2026-09-10'
 github_issue: 1406
 id: 018
-status: idea
+status: done
 title: Reli as an MCP-first PA service (vision v4)
-updated: '2026-09-10'
+updated: '2026-09-28'
 ---
 
 ## Why
