@@ -1,8 +1,8 @@
 ---
 created: '2026-09-28'
-github_issue: null
+github_issue: 1632
 id: '025'
-status: draft
+status: idea
 title: Adopt an OpenSpec specification as the statement of what Reli should be
 updated: '2026-09-28'
 ---
@@ -28,4 +28,4 @@ CI validates the specification on every pull request and every push to the defau
 
 ## Issues
 
-_None yet._
+- #1632 — Add Reli's OpenSpec specification and validate it in CI
