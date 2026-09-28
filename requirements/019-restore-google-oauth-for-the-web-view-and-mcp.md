@@ -2,9 +2,9 @@
 created: '2026-09-11'
 github_issue: 1448
 id: 019
-status: idea
+status: done
 title: Restore Google OAuth for the web view and MCP
-updated: '2026-09-11'
+updated: '2026-09-28'
 ---
 
 ## Why
