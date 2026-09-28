@@ -2,9 +2,9 @@
 created: '2026-09-19'
 github_issue: 1516
 id: '024'
-status: idea
+status: done
 title: Capture fast, fill in during the morning conversation
-updated: '2026-09-22'
+updated: '2026-09-28'
 ---
 
 ## Why
