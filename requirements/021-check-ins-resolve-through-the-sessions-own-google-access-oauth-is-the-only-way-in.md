@@ -2,10 +2,10 @@
 created: '2026-09-12'
 github_issue: null
 id: '021'
-status: draft
+status: done
 title: Check-ins resolve through the session's own Google access; OAuth is the only
   way in
-updated: '2026-09-12'
+updated: '2026-09-28'
 ---
 
 ## Why
