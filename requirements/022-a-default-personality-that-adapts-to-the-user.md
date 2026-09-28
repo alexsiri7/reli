@@ -2,9 +2,9 @@
 created: '2026-09-12'
 github_issue: 1492
 id: '022'
-status: idea
+status: done
 title: A default personality that adapts to the user
-updated: '2026-09-12'
+updated: '2026-09-28'
 ---
 
 ## Why
