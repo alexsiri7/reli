@@ -2,9 +2,9 @@
 created: '2026-09-11'
 github_issue: 1466
 id: '020'
-status: idea
+status: done
 title: Ambient PA behaviour via get_initial_instructions
-updated: '2026-09-11'
+updated: '2026-09-28'
 ---
 
 ## Why
