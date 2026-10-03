@@ -2,9 +2,9 @@
 created: '2026-09-28'
 github_issue: 1632
 id: '025'
-status: idea
+status: in-progress
 title: Adopt an OpenSpec specification as the statement of what Reli should be
-updated: '2026-09-28'
+updated: '2026-10-03'
 ---
 
 ## Why
