@@ -117,6 +117,20 @@ NEW_THING_LITERALS = (
     f"`tags` set to the Thing's tags minus `{NEW_TAG}`, reading them first",
     "keeps the mark and comes back another morning",
 )
+# #1640: the push ends on one question and the rest are asked a turn at a time. Pinned clause by
+# clause because each guards a distinct failure — a list nobody answers, a queue lost between
+# turns or mornings, a skip that restarts the questions, a heartbeat left due by a user who never
+# replied.
+QUESTION_QUEUE_LITERALS = (
+    "A question buried in a list is not a question.",
+    "exactly one direct question, the first in the queue, as the last thing in the",
+    "`question_queue` set to every question after the first",
+    "The heartbeat is written here, not at the end",
+    "One question per turn, never a list.",
+    "the queue does not restart from the top",
+    "Then one closing line, and no recap.",
+    "carried over, not listed again",
+)
 MORNING_LITERALS = (
     f'get_user_model(scope="{prompts.SCHEDULING_SCOPE}")',
     f"reli://user-model/{prompts.SCHEDULING_SCOPE}",
@@ -131,6 +145,7 @@ MORNING_LITERALS = (
     CHECKIN_FALLBACK,
     VOICE_PRECEDENCE,
     *NEW_THING_LITERALS,
+    *QUESTION_QUEUE_LITERALS,
 )
 SCOPE_ARGUMENT = re.compile(r'scope="([a-z]+)"')
 # The whole scope vocabulary, and the part of it this pass may record under: the prompts that
@@ -246,6 +261,15 @@ def test_the_learning_pass_records_only_under_the_scopes_the_prompts_load():
 @pytest.mark.parametrize("literal", MORNING_LITERALS)
 def test_the_morning_conversation_presents_and_writes_back(literal):
     assert literal in _text(MORNING)
+
+
+def test_the_push_persists_the_heartbeat_before_sending_and_archives_after():
+    text = _text(MORNING)
+    heartbeat_write = text.index("The heartbeat is written here, not at the end")
+    push_send = text.index("exactly one direct question, the first in the queue, as the last thing in the")
+    archive = text.index("as soon as the push is out and before the user replies")
+
+    assert heartbeat_write < push_send < archive
 
 
 @pytest.mark.parametrize("name", FILES)

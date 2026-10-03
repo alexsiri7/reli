@@ -47,18 +47,19 @@ In this order, each depending on what the one before it wrote:
    run with `journal_since`, filtered to `user` and `claude_interactive` so Claude's own unattended
    edits never count as user behaviour, and records what it finds as evidence-linked preferences.
    Appends `learned` and `conflicts` to the briefing. Every write is `claude_scheduled`.
-3. `morning-conversation.md` — waking hours. Reads the briefing, presents it shaped by the
-   `scheduling` and `voice` preferences, archives it, asks a short question or two about a few of
-   the `#New` captures nobody has talked through yet (#1518), and writes every reply back as it
-   goes. Its own bookkeeping is `claude_scheduled`; every write that encodes something the user
-   said is `claude_interactive`.
+3. `morning-conversation.md` — waking hours. Reads the briefing, turns its decisions and
+   unresolved items and a few of the `#New` captures nobody has talked through yet (#1518) into a
+   queue of questions ordered by the `scheduling` preferences, archives the briefing, and asks the
+   questions one per turn, writing every reply back as it goes (#1640). Its own bookkeeping is
+   `claude_scheduled`; every write that encodes something the user said is `claude_interactive`.
 
 ## What they leave in the graph
 
 - One active Thing per task tagged `#ScheduledTask`, titled `Resolution pass`, `Learning pass` and
   `Morning conversation`. Each run ends by setting its `checkin_date` to tomorrow and `last_run`
   in its notes (the learning pass also keeps `journal_watermark`, the newest journal id it has
-  processed). A run that did not complete leaves the Thing due, so a missed run shows up to every
+  processed, and the morning conversation `question_queue`, the questions it has not yet asked).
+  A run that did not complete leaves the Thing due, so a missed run shows up to every
   pass that reads `find_things(tags=["#ScheduledTask"])` and in the web view's tree. It never
   appears in `due_for_checkin`, which leaves Reli's own records out (#1516). Never archive one — an
   archived Thing leaves both, so archiving a heartbeat hides a missed run instead of reporting it.
