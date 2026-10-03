@@ -1,8 +1,8 @@
 ---
 created: '2026-10-03'
-github_issue: null
+github_issue: 1640
 id: '026'
-status: draft
+status: idea
 title: Morning conversation asks follow-up questions one at a time
 updated: '2026-10-03'
 ---
@@ -22,4 +22,4 @@ The morning conversation lists open items and the questions each one needs, but 
 
 ## Issues
 
-_None yet._
+- #1640 — Morning prompt: end the push with one question, then ask the rest one per turn
