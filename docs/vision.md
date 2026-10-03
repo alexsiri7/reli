@@ -78,7 +78,7 @@ Three tasks, in order, each depending on what the one before it wrote.
 
 **2. Learning pass** (overnight). Read the journal since the last run and look for behavioural patterns: check-in dates repeatedly pushed from Mondays, Claude-generated titles the user consistently rewrites, whole tag families never touched. Write what it finds as preference Things, evidence-linked.
 
-**3. Morning conversation** (waking hours). Claude opens a chat and tells the user about their day. It does not redo the resolution pass — it reads the briefing Thing that already exists and presents it, shaped by scheduling and communication preferences from the user model.
+**3. Morning conversation** (waking hours). Claude opens a chat and tells the user about their day. It does not redo the resolution pass — it reads the briefing Thing that already exists and turns it into questions, asked one at a time, shaped by scheduling and communication preferences from the user model.
 
 The third task is different in kind from the first two, and that difference matters. The overnight passes are silent and their output is data. The morning task produces a **conversation the user can answer**, and that makes it the densest source of explicit signal in the whole system: Claude is asking about precisely the residue that needed a human, and the replies are decisions. "Push that to next week." "Drop it, that's dead." "Why do you keep asking me about this?"
 

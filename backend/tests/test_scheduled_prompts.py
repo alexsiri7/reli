@@ -263,6 +263,15 @@ def test_the_morning_conversation_presents_and_writes_back(literal):
     assert literal in _text(MORNING)
 
 
+def test_the_push_persists_the_heartbeat_before_sending_and_archives_after():
+    text = _text(MORNING)
+    heartbeat_write = text.index("The heartbeat is written here, not at the end")
+    push_send = text.index("exactly one direct question, the first in the queue, as the last thing in the")
+    archive = text.index("as soon as the push is out and before the user replies")
+
+    assert heartbeat_write < push_send < archive
+
+
 @pytest.mark.parametrize("name", FILES)
 def test_every_task_maintains_its_heartbeat(name):
     text = _text(name)
