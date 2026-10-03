@@ -2,7 +2,7 @@
 created: '2026-10-03'
 github_issue: 1640
 id: '026'
-status: idea
+status: done
 title: Morning conversation asks follow-up questions one at a time
 updated: '2026-10-03'
 ---
