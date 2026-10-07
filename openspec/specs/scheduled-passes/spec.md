@@ -49,6 +49,28 @@ For a due Thing tagged "#New", the resolution pass SHALL write nothing to the Th
 - THEN the briefing mentions the order against "Fridge"
 - AND the Thing keeps its "#New" tag, date and notes unchanged
 
+### Requirement: The resolution pass captures new obligations from the inbox
+
+Once a night, after walking the due list, the resolution pass SHALL look through the session's Gmail for mail received since its previous run, using its heartbeat's last run time as the window and the last day when there is none. For each message that implies something the owner must do, decide, attend or reply to, and that no active Thing already covers, it SHALL create one Thing as "claude_scheduled", tagged "#New" and "#FromInbox", with the default check-in date. The Thing SHALL be about the topic, not the message: a title naming the obligation in the owner's terms, and at most a one-line description of what is needed, who it involves and any outside deadline. Message bodies, quoted text, addresses and attachments SHALL NOT be copied into the graph. Newsletters, promotions, automated notifications, receipts with nothing left to do, and mail the owner has already answered SHALL be skipped. A message that bears on an existing active Thing SHALL NOT create a new one; if that Thing is due, the message is evidence for its check-in as usual. Several messages about one topic SHALL become one Thing. When nothing qualifies, nothing SHALL be created and nothing SHALL be said. An obligation that cannot wait for the morning SHALL also go first under the briefing's decisions, saying why.
+
+#### Scenario: An invite that needs the owner
+- GIVEN mail arrived yesterday asking the owner to bring his passport to a right-to-work check on Wednesday at 11:00
+- AND no active Thing covers it
+- WHEN the resolution pass runs
+- THEN one Thing titled along the lines of "Bring passport to the right-to-work check (Wed 11:00)" exists, tagged "#New" and "#FromInbox"
+- AND none of the message's text is stored in it
+
+#### Scenario: Only newsletters and receipts
+- GIVEN the inbox since the last run holds a newsletter, a delivery notification and a paid receipt
+- WHEN the resolution pass runs
+- THEN no Thing is created
+- AND the briefing says nothing about the inbox
+
+#### Scenario: Mail about something already tracked
+- GIVEN an active Thing "Take the cat to the vet"
+- WHEN a Medivet appointment reminder arrives
+- THEN no new Thing is created
+
 ### Requirement: One briefing per morning
 
 The overnight passes SHALL leave one Thing tagged "#Briefing" per morning, titled "Briefing for YYYY-MM-DD" and dated that day, with notes "unresolved", "decisions", "learned" and "conflicts", and a References edge to every Thing it mentions. A quiet night SHALL still write a briefing with empty lists.
@@ -79,13 +101,18 @@ In waking hours the morning conversation SHALL load the "scheduling" and "voice"
 
 ### Requirement: The morning fills in bare captures
 
-The morning conversation SHALL ask about three to five "#New" Things, newest first and always including the oldest, one or two questions each answerable in a word — by when, what does done look like, who is involved, which project. Answers SHALL be written back immediately as description, notes, a real check-in date and a ChildOf edge from the named project, and "#New" SHALL be removed only once the Thing has been talked through. The rest SHALL wait without being mentioned.
+The morning conversation SHALL ask about three to five "#New" Things, newest first and always including the oldest, one or two questions each answerable in a word — by when, what does done look like, who is involved, which project. A Thing tagged "#FromInbox" SHALL be introduced as found in the inbox, so the owner can say it is not worth tracking; that answer archives it as "claude_interactive". Answers SHALL be written back immediately as description, notes, a real check-in date and a ChildOf edge from the named project, and "#New" SHALL be removed only once the Thing has been talked through. The rest SHALL wait without being mentioned.
 
 #### Scenario: Owner skips one
 - GIVEN four "#New" Things raised this morning
 - WHEN the owner answers three and deflects one
 - THEN three lose "#New" and gain their answers
 - AND the deflected one keeps "#New" for another morning
+
+#### Scenario: An inbox capture not worth tracking
+- GIVEN a "#New" Thing tagged "#FromInbox" raised this morning
+- WHEN the owner says it does not need tracking
+- THEN it is archived as "claude_interactive" in the same turn
 
 ### Requirement: A missed run is noticed in-session
 
