@@ -64,7 +64,7 @@ app = FastAPI(
     ),
     version="0.1.0",
     # FastAPI mounts /docs and /redoc only beside a schema, so this one argument takes all three
-    # offline in a deploy (#1476); a local run keeps them.
+    # offline in a deploy (#1476), and the frontend fallback 404s them; a local run keeps them.
     openapi_url=None if settings.production else "/openapi.json",
     lifespan=lifespan,
 )
