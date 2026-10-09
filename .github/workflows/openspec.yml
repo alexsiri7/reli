@@ -23,5 +23,7 @@ jobs:
         with:
           node-version: "22"
 
+      # Pinned: 1.14.1 promoted the long-requirement finding from INFO to WARNING, which --strict
+      # fails on, so a floating version can turn this check red with no change to the specs.
       - name: Validate specs
-        run: npx -y @fission-ai/openspec@latest validate --specs --strict
+        run: npx -y @fission-ai/openspec@1.14.0 validate --specs --strict
