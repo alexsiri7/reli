@@ -1,5 +1,9 @@
 """What the assembled app routes where."""
 
+import os
+import subprocess
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -71,7 +75,44 @@ def test_an_unhandled_exception_500_carries_the_security_headers(monkeypatch):
 
 def _assert_security_headers(response) -> None:
     assert response.headers["Content-Security-Policy"] == "default-src 'self'; frame-ancestors 'none'"
-    assert response.headers["Strict-Transport-Security"] == "max-age=31536000"
+    assert "unsafe-inline" not in response.headers["Content-Security-Policy"]
+    assert response.headers["Strict-Transport-Security"] == "max-age=63072000; includeSubDomains"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["X-Frame-Options"] == "DENY"
-    assert response.headers["Referrer-Policy"] == "same-origin"
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    granted = [
+        directive for directive in response.headers["Permissions-Policy"].split(", ") if not directive.endswith("=()")
+    ]
+    assert not granted, f"Permissions-Policy grants {granted}"
+    assert "camera=()" in response.headers["Permissions-Policy"]
+
+
+# A fresh interpreter, because the app is built once at import and its lifespan may run only once per
+# process. The lifespan is not entered, so no database is reached.
+_DOCS_PROBE = """
+from fastapi.testclient import TestClient
+from backend.main import app
+client = TestClient(app)
+print(client.get("/openapi.json").status_code)
+print(any(marker in client.get(path).text for path in ("/docs", "/redoc") for marker in ("swagger", "redoc")))
+"""
+
+
+@pytest.mark.parametrize(
+    ("switch", "reachable"),
+    [
+        pytest.param({"RAILWAY_ENVIRONMENT_NAME": "production"}, False, id="railway-deploy"),
+        pytest.param({"PRODUCTION": "1"}, False, id="production"),
+        pytest.param({}, True, id="local-run"),
+    ],
+)
+def test_the_api_docs_are_offline_in_a_deploy_and_served_locally(switch, reachable):
+    """#1476: a deploy serves no schema and no Swagger or ReDoc page; a local uvicorn keeps them."""
+    env = {key: value for key, value in os.environ.items() if key not in {"RAILWAY_ENVIRONMENT_NAME", "PRODUCTION"}}
+    probe = subprocess.run(
+        [sys.executable, "-c", _DOCS_PROBE], env={**env, **switch}, capture_output=True, text=True, check=True
+    )
+
+    schema_status, docs_served = probe.stdout.split()
+    assert schema_status == ("200" if reachable else "404")
+    assert docs_served == str(reachable)
