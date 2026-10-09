@@ -604,6 +604,26 @@ def test_a_file_like_path_is_a_404_rather_than_the_bundle_in_disguise(tmp_path, 
     assert "<title>Reli</title>" not in response.text
 
 
+@pytest.mark.parametrize("path", ["/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"])
+def test_the_fallback_refuses_the_docs_paths_an_app_built_without_them(tmp_path, path):
+    """#1476: a deploy builds the app without its docs, and the bundle must not answer in their place."""
+    app = FastAPI(openapi_url=None)
+    api.mount_frontend(app, _dist(tmp_path))
+
+    assert TestClient(app).get(path).status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/openapi.json", "/docs", "/redoc"])
+def test_the_fallback_leaves_the_docs_to_an_app_that_serves_them(tmp_path, path):
+    app = FastAPI()
+    api.mount_frontend(app, _dist(tmp_path))
+
+    response = TestClient(app).get(path)
+
+    assert response.status_code == 200
+    assert "<title>Reli</title>" not in response.text
+
+
 def test_an_image_built_without_a_frontend_still_boots(tmp_path):
     app = FastAPI()
 

@@ -312,6 +312,12 @@ def unmatched_api_route(unmatched: str) -> Response:
 # --- Serving the built frontend --------------------------------------------
 
 
+#: The paths FastAPI generates its schema and docs pages at. A deploy builds the app without them
+#: (#1476), and they must then 404 rather than fall through to the bundle; a local run registers them
+#: ahead of the fallback, so refusing them here never hides them there.
+_FASTAPI_DOCS_PATHS = frozenset({"openapi.json", "docs", "docs/oauth2-redirect", "redoc"})
+
+
 def mount_frontend(app: FastAPI, dist: pathlib.Path) -> None:
     """Serve the Vite bundle in *dist*, with every unmatched route falling back to ``index.html``.
 
@@ -348,6 +354,8 @@ def mount_frontend(app: FastAPI, dist: pathlib.Path) -> None:
         ``site.webmanifest`` or a stale asset should fail loudly, not masquerade as HTML — and a service
         worker whose script URL 404s is the one thing a browser unregisters on its own.
         """
+        if spa_path in _FASTAPI_DOCS_PATHS:
+            raise HTTPException(status_code=404, detail=f"no route at /{spa_path}")
         if "." in spa_path.rsplit("/", 1)[-1]:
             raise HTTPException(status_code=404, detail=f"no file at /{spa_path}")
         return FileResponse(index)

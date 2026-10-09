@@ -627,8 +627,8 @@ requirements:
     source: "PR #982, PR #1094, #1476"
     acceptance:
       - "All six headers are present with the pinned values on every response; CSP contains no 'unsafe-inline'"
-      - "With RAILWAY_ENVIRONMENT_NAME or PRODUCTION set, /openapi.json is 404 and /docs and /redoc serve no Swagger or ReDoc page"
-    notes: "#1476 dropped the Google-avatar image allowance: the v4 view renders no avatar, so the carve-out would only admit off-origin images. With a frontend build present, /docs and /redoc fall through to the bundle's index.html rather than 404."
+      - "With RAILWAY_ENVIRONMENT_NAME or PRODUCTION set, /openapi.json, /docs, and /redoc are 404"
+    notes: "#1476 dropped the Google-avatar image allowance: the v4 view renders no avatar, so the carve-out would only admit off-origin images."
 
   - id: RELI-052
     title: Secrets encrypted at rest

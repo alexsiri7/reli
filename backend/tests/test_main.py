@@ -88,31 +88,39 @@ def _assert_security_headers(response) -> None:
 
 
 # A fresh interpreter, because the app is built once at import and its lifespan may run only once per
-# process. The lifespan is not entered, so no database is reached.
+# process. The lifespan is not entered, so no database is reached. The bundle at argv[1] stands in for
+# the frontend build every image ships, whose fallback answers any path nothing else claims.
 _DOCS_PROBE = """
+import pathlib, sys
 from fastapi.testclient import TestClient
+from backend import api
+mount_frontend = api.mount_frontend
+api.mount_frontend = lambda app, _dist: mount_frontend(app, pathlib.Path(sys.argv[1]))
 from backend.main import app
 client = TestClient(app)
-print(client.get("/openapi.json").status_code)
-print(any(marker in client.get(path).text for path in ("/docs", "/redoc") for marker in ("swagger", "redoc")))
+print(*(client.get(path).status_code for path in ("/openapi.json", "/docs", "/redoc")))
 """
 
 
 @pytest.mark.parametrize(
-    ("switch", "reachable"),
+    ("switch", "expected"),
     [
-        pytest.param({"RAILWAY_ENVIRONMENT_NAME": "production"}, False, id="railway-deploy"),
-        pytest.param({"PRODUCTION": "1"}, False, id="production"),
-        pytest.param({}, True, id="local-run"),
+        pytest.param({"RAILWAY_ENVIRONMENT_NAME": "production"}, ["404"] * 3, id="deploy"),
+        pytest.param({}, ["200"] * 3, id="local-run"),
     ],
 )
-def test_the_api_docs_are_offline_in_a_deploy_and_served_locally(switch, reachable):
-    """#1476: a deploy serves no schema and no Swagger or ReDoc page; a local uvicorn keeps them."""
+def test_the_api_docs_are_404_in_a_deploy_and_served_locally(tmp_path, switch, expected):
+    """#1476: a deploy serves no schema and no Swagger or ReDoc page, even with the bundle's fallback
+    behind them; a local uvicorn keeps all three."""
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<!doctype html><title>Reli</title>")
     env = {key: value for key, value in os.environ.items() if key not in {"RAILWAY_ENVIRONMENT_NAME", "PRODUCTION"}}
     probe = subprocess.run(
-        [sys.executable, "-c", _DOCS_PROBE], env={**env, **switch}, capture_output=True, text=True, check=True
+        [sys.executable, "-c", _DOCS_PROBE, str(tmp_path)],
+        env={**env, **switch},
+        capture_output=True,
+        text=True,
+        check=True,
     )
 
-    schema_status, docs_served = probe.stdout.split()
-    assert schema_status == ("200" if reachable else "404")
-    assert docs_served == str(reachable)
+    assert probe.stdout.split() == expected
