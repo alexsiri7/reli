@@ -109,9 +109,7 @@ def test_the_anchor_race_recovers_by_reading_the_winners_row(session, monkeypatc
 
     assert anchor.id == USER_ANCHOR_ID
     assert USER_TAG in anchor.tags
-    assert (
-        session.execute(text("SELECT count(*) FROM things WHERE id = :id"), {"id": USER_ANCHOR_ID}).scalar_one() == 1
-    )
+    assert session.execute(text("SELECT count(*) FROM things WHERE id = :id"), {"id": USER_ANCHOR_ID}).scalar_one() == 1
     assert _journal_count(session) == before + 1
 
     created = create_thing(session, actor=Actor.USER, title="still usable after recovery")
