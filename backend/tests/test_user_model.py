@@ -85,6 +85,39 @@ def test_the_anchor_is_created_once_and_reused(session):
     assert _journal_count(session) == before
 
 
+def test_the_anchor_race_recovers_by_reading_the_winners_row(session, monkeypatch):
+    """The loser of two concurrent first writes hits the primary key, rolls back and reads the
+    winner's row (service.py's ``get_or_create_user_anchor``), rather than raising or duplicating
+    the anchor."""
+    from backend.db_engine import get_engine
+
+    original_insert_thing = service._insert_thing
+    first_call = True
+
+    def racing_insert_thing(s, **kwargs):
+        nonlocal first_call
+        if first_call:
+            first_call = False
+            with Session(get_engine()) as racer:
+                get_or_create_user_anchor(racer, actor=Actor.CLAUDE_SCHEDULED)
+        return original_insert_thing(s, **kwargs)
+
+    monkeypatch.setattr(service, "_insert_thing", racing_insert_thing)
+    before = _journal_count(session)
+
+    anchor = get_or_create_user_anchor(session, actor=Actor.CLAUDE_INTERACTIVE)
+
+    assert anchor.id == USER_ANCHOR_ID
+    assert USER_TAG in anchor.tags
+    assert (
+        session.execute(text("SELECT count(*) FROM things WHERE id = :id"), {"id": USER_ANCHOR_ID}).scalar_one() == 1
+    )
+    assert _journal_count(session) == before + 1
+
+    created = create_thing(session, actor=Actor.USER, title="still usable after recovery")
+    assert created.title == "still usable after recovery"
+
+
 # --- record_preference -----------------------------------------------------
 
 
