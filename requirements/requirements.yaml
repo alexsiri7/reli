@@ -620,14 +620,15 @@ requirements:
 
   - id: RELI-051
     title: Security headers and CSP
-    statement: "When any HTTP response is served, the system shall include X-Content-Type-Options nosniff, X-Frame-Options DENY, HSTS (max-age 63072000, includeSubDomains), Referrer-Policy strict-origin-when-cross-origin, a restrictive Permissions-Policy, and a Content-Security-Policy restricted to 'self' (plus Google avatar images) that never contains 'unsafe-inline'; while running in production, OpenAPI/Swagger/ReDoc shall be unreachable."
+    statement: "When any HTTP response is served, the system shall include X-Content-Type-Options nosniff, X-Frame-Options DENY, HSTS (max-age 63072000, includeSubDomains), Referrer-Policy strict-origin-when-cross-origin, a restrictive Permissions-Policy, and a Content-Security-Policy restricted to 'self' that never contains 'unsafe-inline'; while running in production, OpenAPI/Swagger/ReDoc shall be unreachable."
     category: non-functional
     priority: must
     status: active
-    source: "PR #982, PR #1094"
+    source: "PR #982, PR #1094, #1476"
     acceptance:
       - "All six headers are present with the pinned values on every response; CSP contains no 'unsafe-inline'"
       - "With RAILWAY_ENVIRONMENT_NAME or PRODUCTION set, /openapi.json, /docs, and /redoc are 404"
+    notes: "#1476 dropped the Google-avatar image allowance: the v4 view renders no avatar, so the carve-out would only admit off-origin images."
 
   - id: RELI-052
     title: Secrets encrypted at rest

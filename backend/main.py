@@ -63,6 +63,9 @@ app = FastAPI(
         "the web frontend consumes, with one exception: rejecting a preference."
     ),
     version="0.1.0",
+    # FastAPI mounts /docs and /redoc only beside a schema, so this one argument takes all three
+    # offline in a deploy (#1476), and the frontend fallback 404s them; a local run keeps them.
+    openapi_url=None if settings.production else "/openapi.json",
     lifespan=lifespan,
 )
 
@@ -93,17 +96,22 @@ class _BareMcpPath:
         await self._app(scope, receive, send)
 
 
-#: Sent on every response (#1527). The bundle is self-hosted Vite output and the consent page in
-#: :mod:`backend.mcp_oauth` inlines nothing, so ``'self'`` covers everything the service serves; an
-#: image in a note's markdown pointing off-origin is what the policy is there to stop. The docs
-#: pages FastAPI generates load Swagger UI from a CDN and stop rendering under it — nothing here
-#: relies on them, and whether they stay reachable at all is #1476's question.
+#: Sent on every response (#1527, #1476). The bundle is self-hosted Vite output and the consent page
+#: in :mod:`backend.mcp_oauth` inlines nothing, so ``'self'`` covers everything the service serves; an
+#: image in a note's markdown pointing off-origin is what the policy is there to stop. The view shows
+#: no Google avatar, so no image host is carved out for one. The docs pages FastAPI generates load
+#: Swagger UI from a CDN and stop rendering under it; a deploy does not serve them at all. The view
+#: uses none of the features the Permissions-Policy names, so it grants every one to nobody.
 _SECURITY_HEADERS = {
     "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'",
-    "Strict-Transport-Security": "max-age=31536000",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "same-origin",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": (
+        "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), "
+        "magnetometer=(), microphone=(), payment=(), usb=()"
+    ),
 }
 
 

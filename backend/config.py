@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
+    # --- Production ---
+    # Railway sets RAILWAY_ENVIRONMENT_NAME on every deploy, staging included; PRODUCTION is the
+    # same switch for a host outside it. Either one set takes the API docs offline (#1476).
+    RAILWAY_ENVIRONMENT_NAME: str = ""
+    PRODUCTION: str = ""
+
     # --- Logging ---
     LOG_LEVEL: str = "INFO"
 
@@ -67,6 +73,11 @@ class Settings(BaseSettings):
     def allowed_emails(self) -> frozenset[str]:
         """The ALLOWED_EMAILS list, lower-cased, with blanks dropped. Empty means nobody may sign in."""
         return frozenset(email.strip().lower() for email in self.ALLOWED_EMAILS.split(",") if email.strip())
+
+    @property
+    def production(self) -> bool:
+        """Whether this is a deploy rather than a local run: RAILWAY_ENVIRONMENT_NAME or PRODUCTION set."""
+        return bool(self.RAILWAY_ENVIRONMENT_NAME or self.PRODUCTION)
 
     @property
     def secret_key_configured(self) -> bool:
