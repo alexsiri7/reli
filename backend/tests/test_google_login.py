@@ -157,3 +157,33 @@ def test_the_client_secret_never_appears_in_a_message_or_a_log(transport, caplog
 
     assert CLIENT_SECRET not in str(raised.value)
     assert CLIENT_SECRET not in caplog.text
+
+
+def test_a_non_json_refusal_body_still_names_the_status(transport):
+    transport(lambda request: httpx.Response(502, text="<html>Bad Gateway</html>"))
+
+    with pytest.raises(GoogleSignInFailed) as raised:
+        exchange_code("the-code", "the-verifier")
+
+    assert str(raised.value) == "Google refused the sign-in with HTTP 502"
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        (
+            {"error": "unsupported_grant_type"},
+            "Google refused the sign-in with HTTP 400 (unsupported_grant_type)",
+        ),
+        ({"foo": "bar"}, "Google refused the sign-in with HTTP 400"),
+    ],
+    ids=["unrecognised-error", "no-error-code"],
+)
+def test_an_unrecognised_or_missing_error_code_falls_back_to_the_status(transport, body, message):
+    transport(lambda request: httpx.Response(400, json=body))
+
+    with pytest.raises(GoogleSignInFailed) as raised:
+        exchange_code("the-code", "the-verifier")
+
+    assert str(raised.value) == message
+    assert CLIENT_SECRET not in str(raised.value)
