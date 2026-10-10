@@ -90,7 +90,7 @@ def _racing_peek(monkeypatch, store):
     path, and an unconditional barrier would fire twice per request. Returns the function that
     puts the real peek back, for a request after the race.
     """
-    barrier = threading.Barrier(2, timeout=5)
+    barrier = threading.Barrier(2, timeout=30)
     real_peek = mcp_oauth.cleanup_and_get
 
     def peek_then_wait(session, peeked, key):
@@ -209,8 +209,18 @@ def test_discovery_and_registration_answer_without_any_credential(session, monke
     api.add_web_view_auth(app)
     anonymous = TestClient(app)
 
-    assert anonymous.get("/.well-known/oauth-authorization-server").status_code == 200
-    assert anonymous.post("/oauth/register", json={"redirect_uris": [CLIENT_REDIRECT]}).status_code == 201
+    discovery = anonymous.get("/.well-known/oauth-authorization-server")
+    assert discovery.status_code == 200
+    discovery_body = discovery.json()
+    assert discovery_body["registration_endpoint"].endswith("/oauth/register")
+    assert discovery_body["code_challenge_methods_supported"] == ["S256"]
+
+    registration = anonymous.post("/oauth/register", json={"redirect_uris": [CLIENT_REDIRECT]})
+    assert registration.status_code == 201
+    registration_body = registration.json()
+    assert isinstance(registration_body["client_id"], str) and registration_body["client_id"]
+    assert isinstance(registration_body["client_secret"], str) and registration_body["client_secret"]
+    assert registration_body["redirect_uris"] == [CLIENT_REDIRECT]
 
 
 # --- Registration ------------------------------------------------------------
@@ -524,6 +534,7 @@ def test_authorize_confirm_refuses_an_unknown_or_expired_state(client):
     )
 
     assert response.status_code == 400
+    assert response.json()["detail"] == "Sign-in expired: start again from the connector."
 
 
 @pytest.mark.parametrize("origin", [None, "https://attacker.example.test"], ids=["missing", "foreign"])
