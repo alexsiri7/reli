@@ -8,13 +8,22 @@ Reli owns no model, so the PA behaviour — what to capture, what a check-in mea
 
 ### Requirement: Every session can obtain the default behaviour
 
-A tool SHALL return Reli's default operating behaviour as text: what is worth a Thing, how to title and tag it, relating before creating, when to set a check-in date and what one means, how and when to record a preference, and which actor to write as. It SHALL take no arguments and read nothing from the graph. It SHALL also name the three mode prompts to load when a conversation turns to daily planning, project planning or review. The server's own instructions SHALL tell every connecting session to call it first.
+A tool SHALL return Reli's default operating behaviour as text: what is worth a Thing, how to title and tag it, relating before creating, when to set a check-in date and what one means, how and when to record a preference, and which actor to write as. It SHALL take no arguments and read nothing from the graph. It SHALL also name the three mode prompts to load when a conversation turns to daily planning, project planning or review.
 
 #### Scenario: An ordinary conversation
 - GIVEN a claude.ai conversation with Reli attached and no prompt selected
 - WHEN the session starts
 - THEN it is told by the server to fetch the default behaviour
 - AND the text it receives covers capture, check-ins, preferences and actors, and names the three mode prompts
+
+### Requirement: Sessions are told to fetch the default behaviour first
+
+The server's own instructions SHALL tell every connecting session to call the default behaviour tool first.
+
+#### Scenario: Connecting to Reli
+- GIVEN a session connecting to Reli
+- WHEN it reads the server's instructions
+- THEN they tell it to call the default behaviour tool first
 
 ### Requirement: The modes are prompts derived from one source
 
@@ -27,13 +36,31 @@ Reli SHALL offer four prompts — capture, daily-planning, project-planning and 
 
 ### Requirement: A check-in date is Claude's obligation
 
-The behaviour SHALL define a check-in date as the date by which Claude establishes whether a Thing is still true, not as a to-do date for the owner. Sessions SHALL be told to settle a check-in from the Calendar and Gmail connectors attached to the session, or from related Things, before involving the owner; to treat what a lookup returns as evidence rather than a verdict, since an empty result may mean the thing did not happen or left no trace; to leave a check-in unresolved when those cannot be told apart; and to keep outside-world deadlines in notes rather than in the check-in date.
+The behaviour SHALL define a check-in date as the date by which Claude establishes whether a Thing is still true, not as a to-do date for the owner. Sessions SHALL be told to settle a check-in from the Calendar and Gmail connectors attached to the session, or from related Things, before involving the owner.
+
+#### Scenario: A check-in the session can settle
+- GIVEN a check-in on a Thing
+- WHEN the session can settle it from its Calendar and Gmail connectors or from related Things
+- THEN it settles it without involving the owner
+
+### Requirement: A lookup is evidence, not a verdict
+
+Sessions SHALL be told to treat what a lookup returns as evidence rather than a verdict, since an empty result may mean the thing did not happen or left no trace, and to leave a check-in unresolved when those cannot be told apart.
 
 #### Scenario: Empty inbox search
 - GIVEN a check-in on "Did the plumber invoice arrive?"
 - WHEN a Gmail search through the session's connector finds nothing
 - THEN the session does not conclude the invoice never came
 - AND the check-in goes to the owner as unresolved
+
+### Requirement: Outside-world deadlines live in notes
+
+Sessions SHALL be told to keep outside-world deadlines in notes rather than in the check-in date.
+
+#### Scenario: A Thing with an outside deadline
+- GIVEN a Thing with a deadline set by the outside world
+- WHEN the session records it
+- THEN the deadline is kept in its notes rather than in its check-in date
 
 ### Requirement: Preferences are recorded the moment they are noticed
 
@@ -51,12 +78,21 @@ The behaviour SHALL tell sessions to record a preference in the same turn it is 
 
 ### Requirement: A default voice, defined once
 
-The assistant SHALL have one default voice, carried by every prompt and every scheduled pass from a single definition: warm and direct; leading with the answer; reporting what it did rather than asking permission for what is within its remit; naming what the owner is avoiding once; brief; never flattering. Confidence of manner SHALL never become confidence of fact: the assistant SHALL be plain about what it has not checked and SHALL NOT state something unverified in a tone that implies it was verified.
+The assistant SHALL have one default voice, carried by every prompt and every scheduled pass from a single definition: warm and direct; leading with the answer; reporting what it did rather than asking permission for what is within its remit; naming what the owner is avoiding once; brief; never flattering.
 
 #### Scenario: A closed loop
 - GIVEN the resolution pass archived a flights check-in after finding the confirmation
 - WHEN the morning conversation mentions it
 - THEN it reports it in the past tense rather than asking whether to close it
+
+### Requirement: Confidence of manner is never confidence of fact
+
+Confidence of manner SHALL never become confidence of fact: the assistant SHALL be plain about what it has not checked and SHALL NOT state something unverified in a tone that implies it was verified.
+
+#### Scenario: Something not checked
+- GIVEN the assistant has not verified a claim
+- WHEN it mentions it
+- THEN it says plainly that it has not checked it, in a tone that does not imply it was verified
 
 ### Requirement: Behaviour is never restated outside the repository
 

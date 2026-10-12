@@ -8,12 +8,30 @@ The proactive half of the PA is three claude.ai scheduled sessions with Reli att
 
 ### Requirement: Passes fetch their instructions from Reli
 
-A tool SHALL return the full instructions for a named pass — "resolution", "learning" or "morning" — as the repository holds them, including the default voice and the shared conventions, ready to follow with no further setup. Any other name SHALL return a sentence naming the three valid passes. A scheduled task SHALL hold only a one-line prompt asking for its pass, so a change to a pass in the repository changes the next run with no one re-pasting anything. The one-line prompt SHALL tell the pass to stop if the instructions cannot be fetched, and the morning conversation SHALL instead say plainly that it could not reach Reli.
+A tool SHALL return the full instructions for a named pass — "resolution", "learning" or "morning" — as the repository holds them, including the default voice and the shared conventions, ready to follow with no further setup. Any other name SHALL return a sentence naming the three valid passes.
 
 #### Scenario: Unknown pass name
 - GIVEN an unattended session
 - WHEN it asks for the instructions of pass "nightly"
 - THEN it receives the names "resolution", "learning" and "morning"
+
+### Requirement: A scheduled task holds only a one-line prompt
+
+A scheduled task SHALL hold only a one-line prompt asking for its pass, so a change to a pass in the repository changes the next run with no one re-pasting anything.
+
+#### Scenario: A pass edited in the repository
+- GIVEN a scheduled task holding only the one-line prompt for its pass
+- WHEN the pass's file changes in the repository
+- THEN the next run follows the changed instructions with nothing re-pasted
+
+### Requirement: A pass stops when its instructions cannot be fetched
+
+The one-line prompt SHALL tell the pass to stop if the instructions cannot be fetched, and the morning conversation SHALL instead say plainly that it could not reach Reli.
+
+#### Scenario: Reli unreachable overnight
+- GIVEN an overnight task that cannot fetch its instructions
+- WHEN it runs
+- THEN it stops
 
 #### Scenario: Reli unreachable in the morning
 - GIVEN the morning task cannot reach Reli
@@ -51,7 +69,7 @@ For a due Thing tagged "#New", the resolution pass SHALL write nothing to the Th
 
 ### Requirement: The resolution pass captures new obligations from the inbox
 
-Once a night, after walking the due list, the resolution pass SHALL look through the session's Gmail for mail received since its previous run, using its heartbeat's last run time as the window and the last day when there is none. For each message that implies something the owner must do, decide, attend or reply to, and that no active Thing already covers, it SHALL create one Thing as "claude_scheduled", tagged "#New" and "#FromInbox", with the default check-in date. The Thing SHALL be about the topic, not the message: a title naming the obligation in the owner's terms, and at most a one-line description of what is needed, who it involves and any outside deadline. Message bodies, quoted text, addresses and attachments SHALL NOT be copied into the graph. Newsletters, promotions, automated notifications, receipts with nothing left to do, and mail the owner has already answered SHALL be skipped. A message that bears on an existing active Thing SHALL NOT create a new one; if that Thing is due, the message is evidence for its check-in as usual. Several messages about one topic SHALL become one Thing. When nothing qualifies, nothing SHALL be created and nothing SHALL be said. An obligation that cannot wait for the morning SHALL also go first under the briefing's decisions, saying why.
+Once a night, after walking the due list, the resolution pass SHALL look through the session's Gmail for mail received since its previous run, using its heartbeat's last run time as the window and the last day when there is none. For each message that implies something the owner must do, decide, attend or reply to, and that no active Thing already covers, it SHALL create one Thing as "claude_scheduled", tagged "#New" and "#FromInbox", with the default check-in date.
 
 #### Scenario: An invite that needs the owner
 - GIVEN mail arrived yesterday asking the owner to bring his passport to a right-to-work check on Wednesday at 11:00
@@ -60,16 +78,48 @@ Once a night, after walking the due list, the resolution pass SHALL look through
 - THEN one Thing titled along the lines of "Bring passport to the right-to-work check (Wed 11:00)" exists, tagged "#New" and "#FromInbox"
 - AND none of the message's text is stored in it
 
+### Requirement: An inbox capture is about the topic, not the message
+
+A Thing created from the inbox SHALL be about the topic, not the message: a title naming the obligation in the owner's terms, and at most a one-line description of what is needed, who it involves and any outside deadline. Message bodies, quoted text, addresses and attachments SHALL NOT be copied into the graph.
+
+#### Scenario: A capture from a long email
+- GIVEN a message that implies an obligation and carries quoted text, addresses and an attachment
+- WHEN the resolution pass captures it
+- THEN the Thing has a title naming the obligation and at most a one-line description
+- AND no message body, quoted text, address or attachment is in the graph
+
+### Requirement: Mail with nothing to do is skipped
+
+Newsletters, promotions, automated notifications, receipts with nothing left to do, and mail the owner has already answered SHALL be skipped. When nothing qualifies, nothing SHALL be created and nothing SHALL be said.
+
 #### Scenario: Only newsletters and receipts
 - GIVEN the inbox since the last run holds a newsletter, a delivery notification and a paid receipt
 - WHEN the resolution pass runs
 - THEN no Thing is created
 - AND the briefing says nothing about the inbox
 
+### Requirement: Inbox mail never duplicates a Thing
+
+A message that bears on an existing active Thing SHALL NOT create a new one; if that Thing is due, the message is evidence for its check-in as usual. Several messages about one topic SHALL become one Thing.
+
 #### Scenario: Mail about something already tracked
 - GIVEN an active Thing "Take the cat to the vet"
 - WHEN a Medivet appointment reminder arrives
 - THEN no new Thing is created
+
+#### Scenario: Several messages about one topic
+- GIVEN three messages since the last run about the same school trip
+- WHEN the resolution pass runs
+- THEN one Thing is created for the trip
+
+### Requirement: An inbox obligation that cannot wait goes first in the briefing
+
+An obligation that cannot wait for the morning SHALL also go first under the briefing's decisions, saying why.
+
+#### Scenario: Mail needing an answer before the morning
+- GIVEN mail implying an obligation that cannot wait for the morning
+- WHEN the resolution pass captures it
+- THEN it also goes first under the briefing's decisions, saying why
 
 ### Requirement: One briefing per morning
 
@@ -101,13 +151,32 @@ In waking hours the morning conversation SHALL load the "scheduling" and "voice"
 
 ### Requirement: The morning fills in bare captures
 
-The morning conversation SHALL ask about three to five "#New" Things, newest first and always including the oldest, one or two questions each answerable in a word — by when, what does done look like, who is involved, which project. A Thing tagged "#FromInbox" SHALL be introduced as found in the inbox, so the owner can say it is not worth tracking; that answer archives it as "claude_interactive". Answers SHALL be written back immediately as description, notes, a real check-in date and a ChildOf edge from the named project, and "#New" SHALL be removed only once the Thing has been talked through. The rest SHALL wait without being mentioned.
+The morning conversation SHALL ask about three to five "#New" Things, newest first and always including the oldest, one or two questions each answerable in a word — by when, what does done look like, who is involved, which project. The rest SHALL wait without being mentioned.
+
+#### Scenario: Seven bare captures
+- GIVEN seven "#New" Things
+- WHEN the morning conversation runs
+- THEN it asks about three to five of them, newest first and including the oldest
+- AND the rest are not mentioned
+
+### Requirement: Answers about a bare capture are written back at once
+
+Answers SHALL be written back immediately as description, notes, a real check-in date and a ChildOf edge from the named project, and "#New" SHALL be removed only once the Thing has been talked through.
 
 #### Scenario: Owner skips one
 - GIVEN four "#New" Things raised this morning
 - WHEN the owner answers three and deflects one
 - THEN three lose "#New" and gain their answers
 - AND the deflected one keeps "#New" for another morning
+
+### Requirement: An inbox capture is introduced as found in the inbox
+
+A Thing tagged "#FromInbox" SHALL be introduced as found in the inbox, so the owner can say it is not worth tracking; that answer archives it as "claude_interactive".
+
+#### Scenario: Raising an inbox capture
+- GIVEN a "#New" Thing tagged "#FromInbox"
+- WHEN the morning conversation raises it
+- THEN it introduces it as found in the inbox
 
 #### Scenario: An inbox capture not worth tracking
 - GIVEN a "#New" Thing tagged "#FromInbox" raised this morning

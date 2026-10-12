@@ -53,9 +53,27 @@ No CI workflow or other repository automation SHALL read any route that answers 
 
 ### Requirement: Deployment is safe by default
 
-The service SHALL run on Postgres from a required connection string with no fallback, and SHALL refuse to start without it. It SHALL apply its migrations on boot and fail the boot on a migration failure. Schema changes after the baseline SHALL be additive unless a destructive change explicitly opts in with its data preserved. Every response SHALL carry security headers, including a content security policy restricted to the service's own origin. The deployed image SHALL contain only the running service and its web view, not retired reference code.
+The service SHALL run on Postgres from a required connection string with no fallback, and SHALL refuse to start without it. It SHALL apply its migrations on boot and fail the boot on a migration failure. Schema changes after the baseline SHALL be additive unless a destructive change explicitly opts in with its data preserved.
 
 #### Scenario: Missing database URL
 - GIVEN no database connection string is set
 - WHEN the service starts
 - THEN it refuses to start with a message naming the missing setting
+
+### Requirement: Every response carries security headers
+
+Every response SHALL carry security headers, including a content security policy restricted to the service's own origin.
+
+#### Scenario: Any response
+- GIVEN a running Reli service
+- WHEN it answers any request
+- THEN the response carries security headers, including a content security policy restricted to its own origin
+
+### Requirement: The image ships only the service
+
+The deployed image SHALL contain only the running service and its web view, not retired reference code.
+
+#### Scenario: Inspecting the deployed image
+- GIVEN the image built for deployment
+- WHEN its contents are listed
+- THEN it holds the running service and its web view and no retired reference code

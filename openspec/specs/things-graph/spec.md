@@ -18,12 +18,16 @@ A Thing SHALL carry a title, an optional description, notes as a mapping of slug
 
 ### Requirement: Relationships are typed and directed
 
-Two Things SHALL be linked only by one of five relationship types: ChildOf, Blocks, RelatedTo, EvidenceFor and References. Each edge SHALL carry an optional sentence of context. Direction SHALL be read per type: for ChildOf the source is the parent and the target the child; for Blocks the source is the blocked Thing and the target its blocker; for EvidenceFor the source is the evidence and the target what it supports. A second EvidenceFor edge between the same pair SHALL be refused, naming the edge that already exists.
+Two Things SHALL be linked only by one of five relationship types: ChildOf, Blocks, RelatedTo, EvidenceFor and References. Each edge SHALL carry an optional sentence of context. Direction SHALL be read per type: for ChildOf the source is the parent and the target the child; for Blocks the source is the blocked Thing and the target its blocker; for EvidenceFor the source is the evidence and the target what it supports.
 
 #### Scenario: Recording a blocker
 - GIVEN Things "Book flights" and "Renew passport"
 - WHEN a Blocks edge is created from "Book flights" to "Renew passport"
 - THEN "Book flights" is the blocked Thing
+
+### Requirement: Evidence between a pair is recorded once
+
+A second EvidenceFor edge between the same pair SHALL be refused, naming the edge that already exists.
 
 #### Scenario: Duplicate evidence refused
 - GIVEN an EvidenceFor edge from an observation to a preference
