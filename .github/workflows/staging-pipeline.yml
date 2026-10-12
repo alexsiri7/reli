@@ -65,36 +65,12 @@ jobs:
           DEPLOY_SHA: ${{ steps.sha.outputs.sha }}
           SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_STAGING_ENVIRONMENT_ID }}
-        run: |
-          IMAGE="ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
-          echo "Deploying $IMAGE to Railway staging..."
-
-          # Update the service to use the new image
-          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" --arg img "$IMAGE" \
-              '{query: "mutation($svc:String!,$env:String!,$img:String!){serviceInstanceUpdate(input:{source:{image:$img}},serviceId:$svc,environmentId:$env)}",
-                variables:{svc:$svc,env:$env,img:$img}}')")
-          echo "serviceInstanceUpdate response: $RESP"
-          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
-
-          # Trigger the deployment
-          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" \
-              '{query: "mutation($svc:String!,$env:String!){serviceInstanceDeploy(serviceId:$svc,environmentId:$env)}",
-                variables:{svc:$svc,env:$env}}')")
-          echo "serviceInstanceDeploy response: $RESP"
-          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
+        run: ./scripts/railway-deploy.sh "ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
 
       - name: Wait for staging health
         env:
           RAILWAY_STAGING_URL: ${{ secrets.RAILWAY_STAGING_URL }}
         run: |
-          echo "Waiting 90s for Railway to start the new container..."
-          sleep 90
           echo "Polling ${RAILWAY_STAGING_URL}/healthz ..."
           for i in $(seq 1 20); do
             HTTP_CODE=$(curl -s -o /tmp/hc_body.txt -w "%{http_code}" --max-time 5 "${RAILWAY_STAGING_URL}/healthz" 2>/dev/null || true)
@@ -158,36 +134,12 @@ jobs:
           DEPLOY_SHA: ${{ needs.deploy-staging.outputs.deploy_sha }}
           SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT_ID }}
-        run: |
-          IMAGE="ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
-          echo "Deploying $IMAGE to Railway production..."
-
-          # Update the service to use the new image
-          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" --arg img "$IMAGE" \
-              '{query: "mutation($svc:String!,$env:String!,$img:String!){serviceInstanceUpdate(input:{source:{image:$img}},serviceId:$svc,environmentId:$env)}",
-                variables:{svc:$svc,env:$env,img:$img}}')")
-          echo "serviceInstanceUpdate response: $RESP"
-          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
-
-          # Trigger the deployment
-          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" \
-              '{query: "mutation($svc:String!,$env:String!){serviceInstanceDeploy(serviceId:$svc,environmentId:$env)}",
-                variables:{svc:$svc,env:$env}}')")
-          echo "serviceInstanceDeploy response: $RESP"
-          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
+        run: ./scripts/railway-deploy.sh "ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
 
       - name: Wait for production health
         env:
           RAILWAY_PRODUCTION_URL: ${{ secrets.RAILWAY_PRODUCTION_URL }}
         run: |
-          echo "Waiting 90s for Railway to start the new container..."
-          sleep 90
           echo "Polling ${RAILWAY_PRODUCTION_URL}/healthz ..."
           for i in $(seq 1 20); do
             HTTP_CODE=$(curl -s -o /tmp/hc_prod_body.txt -w "%{http_code}" --max-time 5 "${RAILWAY_PRODUCTION_URL}/healthz" 2>/dev/null || true)
