@@ -186,6 +186,22 @@ def test_the_deploy_runs_only_off_a_push_to_this_repositorys_main():
     )
 
 
+def test_a_dispatched_ci_run_builds_the_image_without_publishing_it():
+    """#1661: the daily build-drift check dispatches CI on main, which must exercise the image build
+    without pushing to GHCR — the push is what a deploy follows."""
+    ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
+    # PyYAML reads the bare key ``on`` as the boolean True.
+    assert "workflow_dispatch" in ci[True]
+    # A job-level gate would skip the whole build on a dispatch while the run still reports success.
+    assert "if" not in ci["jobs"]["build"]
+
+    steps = {step["name"]: step.get("if") for step in ci["jobs"]["build"]["steps"] if "name" in step}
+    publish_only = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    assert steps["Log in to GitHub Container Registry"] == publish_only
+    assert steps["Build and push image"] == publish_only
+    assert steps["Build image"] == "github.event_name != 'push'"
+
+
 def test_the_graph_read_scan_tells_a_deploy_route_from_a_repository_path(tmp_path):
     """Without the negatives the scan would fail on any workflow that merely names ``backend/api.py``."""
     (tmp_path / "reads.yml").write_text('jobs:\n  x:\n    steps:\n      - run: curl "$URL/api/things"\n')
