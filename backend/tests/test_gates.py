@@ -192,6 +192,8 @@ def test_a_dispatched_ci_run_builds_the_image_without_publishing_it():
     ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
     # PyYAML reads the bare key ``on`` as the boolean True.
     assert "workflow_dispatch" in ci[True]
+    # A job-level gate would skip the whole build on a dispatch while the run still reports success.
+    assert "if" not in ci["jobs"]["build"]
 
     steps = {step["name"]: step.get("if") for step in ci["jobs"]["build"]["steps"] if "name" in step}
     publish_only = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
