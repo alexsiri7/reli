@@ -26,8 +26,8 @@ gh run list --repo alexsiri7/reli --branch main --limit 10
 docker manifest inspect ghcr.io/alexsiri7/reli:<SHA>
 ```
 
-If the image is missing, it may have been pruned (only last 3 are retained). In that case,
-re-trigger CI on the target commit to rebuild it, or use the next-oldest retained SHA.
+CI no longer prunes images (#1660), but images from before that change may be gone or unpullable.
+In that case, re-trigger CI on the target commit to rebuild it, or pick another SHA.
 
 ## Step 3: Redeploy via Railway API
 
@@ -73,4 +73,4 @@ curl -f "${PROD_URL}/healthz"
 
 1. File a post-mortem issue describing what the bad deploy contained.
 2. Fix forward in a new PR — do not leave production on an old SHA indefinitely.
-3. The next successful main CI run will move `latest` forward and prune the oldest retained SHA.
+3. The next successful main CI run will move `latest` forward and deploy it.

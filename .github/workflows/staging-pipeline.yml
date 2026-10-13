@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# One pipeline at a time: a newer run's deploy would otherwise supersede an older run's Railway
+# deployment mid-wait, which the deploy script reports as REMOVED (#1660).
+concurrency:
+  group: staging-pipeline
+  cancel-in-progress: false
+
 jobs:
   deploy-staging:
     name: Deploy to staging
@@ -65,29 +71,7 @@ jobs:
           DEPLOY_SHA: ${{ steps.sha.outputs.sha }}
           SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_STAGING_ENVIRONMENT_ID }}
-        run: |
-          IMAGE="ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
-          echo "Deploying $IMAGE to Railway staging..."
-
-          # Update the service to use the new image
-          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" --arg img "$IMAGE" \
-              '{query: "mutation($svc:String!,$env:String!,$img:String!){serviceInstanceUpdate(input:{source:{image:$img}},serviceId:$svc,environmentId:$env)}",
-                variables:{svc:$svc,env:$env,img:$img}}')")
-          echo "serviceInstanceUpdate response: $RESP"
-          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
-
-          # Trigger the deployment
-          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" \
-              '{query: "mutation($svc:String!,$env:String!){serviceInstanceDeploy(serviceId:$svc,environmentId:$env)}",
-                variables:{svc:$svc,env:$env}}')")
-          echo "serviceInstanceDeploy response: $RESP"
-          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
+        run: ./scripts/deploy-railway.sh "ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
 
       - name: Wait for staging health
         env:
@@ -158,29 +142,7 @@ jobs:
           DEPLOY_SHA: ${{ needs.deploy-staging.outputs.deploy_sha }}
           SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT_ID }}
-        run: |
-          IMAGE="ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
-          echo "Deploying $IMAGE to Railway production..."
-
-          # Update the service to use the new image
-          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" --arg img "$IMAGE" \
-              '{query: "mutation($svc:String!,$env:String!,$img:String!){serviceInstanceUpdate(input:{source:{image:$img}},serviceId:$svc,environmentId:$env)}",
-                variables:{svc:$svc,env:$env,img:$img}}')")
-          echo "serviceInstanceUpdate response: $RESP"
-          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
-
-          # Trigger the deployment
-          RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" \
-              '{query: "mutation($svc:String!,$env:String!){serviceInstanceDeploy(serviceId:$svc,environmentId:$env)}",
-                variables:{svc:$svc,env:$env}}')")
-          echo "serviceInstanceDeploy response: $RESP"
-          echo "$RESP" | jq -e 'if .errors then error("Railway API error: \(.errors[0].message)") else . end'
+        run: ./scripts/deploy-railway.sh "ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
 
       - name: Wait for production health
         env:
