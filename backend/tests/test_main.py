@@ -1,5 +1,9 @@
 """What the assembled app routes where."""
 
+import os
+import subprocess
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -71,7 +75,52 @@ def test_an_unhandled_exception_500_carries_the_security_headers(monkeypatch):
 
 def _assert_security_headers(response) -> None:
     assert response.headers["Content-Security-Policy"] == "default-src 'self'; frame-ancestors 'none'"
-    assert response.headers["Strict-Transport-Security"] == "max-age=31536000"
+    assert "unsafe-inline" not in response.headers["Content-Security-Policy"]
+    assert response.headers["Strict-Transport-Security"] == "max-age=63072000; includeSubDomains"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["X-Frame-Options"] == "DENY"
-    assert response.headers["Referrer-Policy"] == "same-origin"
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    granted = [
+        directive for directive in response.headers["Permissions-Policy"].split(", ") if not directive.endswith("=()")
+    ]
+    assert not granted, f"Permissions-Policy grants {granted}"
+    assert "camera=()" in response.headers["Permissions-Policy"]
+
+
+# A fresh interpreter, because the app is built once at import and its lifespan may run only once per
+# process. The lifespan is not entered, so no database is reached. The bundle at argv[1] stands in for
+# the frontend build every image ships, whose fallback answers any path nothing else claims.
+_DOCS_PROBE = """
+import pathlib, sys
+from fastapi.testclient import TestClient
+from backend import api
+mount_frontend = api.mount_frontend
+api.mount_frontend = lambda app, _dist: mount_frontend(app, pathlib.Path(sys.argv[1]))
+from backend.main import app
+client = TestClient(app)
+print(*(client.get(path).status_code for path in ("/openapi.json", "/docs", "/redoc")))
+"""
+
+
+@pytest.mark.parametrize(
+    ("switch", "expected"),
+    [
+        pytest.param({"RAILWAY_ENVIRONMENT_NAME": "production"}, ["404"] * 3, id="deploy"),
+        pytest.param({}, ["200"] * 3, id="local-run"),
+    ],
+)
+def test_the_api_docs_are_404_in_a_deploy_and_served_locally(tmp_path, switch, expected):
+    """#1476: a deploy serves no schema and no Swagger or ReDoc page, even with the bundle's fallback
+    behind them; a local uvicorn keeps all three."""
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<!doctype html><title>Reli</title>")
+    env = {key: value for key, value in os.environ.items() if key not in {"RAILWAY_ENVIRONMENT_NAME", "PRODUCTION"}}
+    probe = subprocess.run(
+        [sys.executable, "-c", _DOCS_PROBE, str(tmp_path)],
+        env={**env, **switch},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert probe.stdout.split() == expected
