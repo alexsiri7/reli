@@ -11,15 +11,18 @@ runs. Hard delete is deliberately not exposed; archiving goes through :func:`arc
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import uuid
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 import jwt
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.server import TransportSecuritySettings
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -101,7 +104,7 @@ def _needs_input_dict(found: queries.NeedsInput) -> dict[str, Any]:
     }
 
 
-reli_mcp = FastMCP(
+reli_mcp = MCPServer(
     "Reli",
     instructions=(
         "Reli is a personal knowledge graph of Things — tasks, notes, projects, ideas, goals — and "
@@ -132,17 +135,31 @@ reli_mcp = FastMCP(
         "through the connectors attached to this session. What they return is evidence, not a "
         "verdict; what it means is yours to decide."
     ),
-    # Mounted at /mcp by backend.main, so the SDK's own default of "/mcp" would serve /mcp/mcp.
-    streamable_http_path="/",
-    # The tools carry the actor per call and hold no session state, so there is nothing for a
-    # session to remember; stateless also survives a container restart mid-conversation.
-    stateless_http=True,
-    # The SDK's default host allowlist is 127.0.0.1/localhost only, which answers 421 to every
-    # request carrying a real Host header — Reli is served through a Cloudflare tunnel, so that
-    # default is an outage. Safe only because _BearerTokenMiddleware below makes an Authorization
-    # header mandatory, which a cross-origin page cannot set: the two decisions are coupled.
-    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
+
+
+def _tool() -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Register a tool whose refusals reach the session as a message it can act on.
+
+    The SDK hides anything but a ``ToolError`` behind a bare "Error executing tool <name>", which
+    would turn the service's bounded refusals (#1478) — a missing Thing, an oversized field, a
+    duplicate edge — into an error a session cannot act on. Those are ``LookupError`` and
+    ``ValueError``; they are re-raised as ``ToolError`` with their message, and anything else is
+    still masked as a crash. The undecorated function is returned so tests can call it directly.
+    """
+
+    def register(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(fn)
+        def refusing(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return fn(*args, **kwargs)
+            except (LookupError, ValueError) as exc:
+                raise ToolError(str(exc)) from exc
+
+        reli_mcp.tool()(refusing)
+        return fn
+
+    return register
 
 
 # --- Writes ----------------------------------------------------------------
@@ -155,7 +172,7 @@ reli_mcp = FastMCP(
 MAX_STALE_DAYS = 36_500
 
 
-@reli_mcp.tool()
+@_tool()
 def create_thing(
     actor: McpActor,
     title: str,
@@ -206,7 +223,7 @@ def create_thing(
         return _thing_dict(thing)
 
 
-@reli_mcp.tool()
+@_tool()
 def update_thing(
     actor: McpActor,
     thing_id: uuid.UUID,
@@ -263,7 +280,7 @@ def update_thing(
         return _thing_dict(thing)
 
 
-@reli_mcp.tool()
+@_tool()
 def archive_thing(actor: McpActor, thing_id: uuid.UUID) -> dict[str, Any]:
     """Retire a Thing by setting it inactive, journalled as an update.
 
@@ -283,7 +300,7 @@ def archive_thing(actor: McpActor, thing_id: uuid.UUID) -> dict[str, Any]:
         return _thing_dict(thing)
 
 
-@reli_mcp.tool()
+@_tool()
 def relate(
     actor: McpActor,
     source_thing_id: uuid.UUID,
@@ -326,7 +343,7 @@ def relate(
         return _relationship_dict(relationship)
 
 
-@reli_mcp.tool()
+@_tool()
 def unrelate(actor: McpActor, relationship_id: uuid.UUID) -> dict[str, str]:
     """Remove a relationship and journal it. Both Things stay; only the edge goes.
 
@@ -345,7 +362,7 @@ def unrelate(actor: McpActor, relationship_id: uuid.UUID) -> dict[str, str]:
 # --- Reads -----------------------------------------------------------------
 
 
-@reli_mcp.tool()
+@_tool()
 def get_thing(thing_id: uuid.UUID) -> dict[str, Any]:
     """One Thing and every edge touching it, in either direction.
 
@@ -370,7 +387,7 @@ def get_thing(thing_id: uuid.UUID) -> dict[str, Any]:
         }
 
 
-@reli_mcp.tool()
+@_tool()
 def find_things(
     tags: list[str] | None = None,
     match: Literal["any", "all"] = "any",
@@ -414,7 +431,7 @@ def find_things(
         return [_thing_dict(thing) for thing in things]
 
 
-@reli_mcp.tool()
+@_tool()
 def get_related(
     thing_id: uuid.UUID,
     types: list[RelationshipType] | None = None,
@@ -438,7 +455,7 @@ def get_related(
         return [_related_dict(found) for found in queries.related(session, thing_id, types, depth)]
 
 
-@reli_mcp.tool()
+@_tool()
 def due_for_checkin(as_of: date | None = None) -> list[dict[str, Any]]:
     """Active Things whose check-in date has arrived, most important first.
 
@@ -455,7 +472,7 @@ def due_for_checkin(as_of: date | None = None) -> list[dict[str, Any]]:
         return [_thing_dict(thing) for thing in queries.due_for_checkin(session, as_of or datetime.now(UTC).date())]
 
 
-@reli_mcp.tool()
+@_tool()
 def stale(days: Annotated[int, Field(ge=1, le=MAX_STALE_DAYS)] = 30) -> list[dict[str, Any]]:
     """Active Things untouched for at least this many days, longest untouched first.
 
@@ -469,7 +486,7 @@ def stale(days: Annotated[int, Field(ge=1, le=MAX_STALE_DAYS)] = 30) -> list[dic
         return [_thing_dict(thing) for thing in queries.stale(session, datetime.now(UTC) - timedelta(days=days))]
 
 
-@reli_mcp.tool()
+@_tool()
 def blocked() -> list[dict[str, Any]]:
     """Things held up by something still active, most important first.
 
@@ -483,7 +500,7 @@ def blocked() -> list[dict[str, Any]]:
         return [_thing_dict(thing) for thing in queries.blocked(session)]
 
 
-@reli_mcp.tool()
+@_tool()
 def needs_input(limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 100) -> dict[str, Any]:
     """Active Things tagged #NeedsInput — what only the user can settle — most important first.
 
@@ -501,7 +518,7 @@ def needs_input(limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 100) 
         return _needs_input_dict(queries.needs_input(session, limit=limit))
 
 
-@reli_mcp.tool()
+@_tool()
 def children(thing_id: uuid.UUID) -> list[dict[str, Any]]:
     """The children of a Thing — the targets of its ChildOf edges — most important first.
 
@@ -517,7 +534,7 @@ def children(thing_id: uuid.UUID) -> list[dict[str, Any]]:
         return [_thing_dict(thing) for thing in queries.children(session, thing_id)]
 
 
-@reli_mcp.tool()
+@_tool()
 def get_thing_history(
     thing_id: uuid.UUID, limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 200
 ) -> dict[str, Any]:
@@ -542,7 +559,7 @@ def get_thing_history(
         return _history_dict(queries.history(session, thing_id, limit))
 
 
-@reli_mcp.tool()
+@_tool()
 def journal_since(
     after_id: int = 0, actors: list[Actor] | None = None, limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 200
 ) -> dict[str, Any]:
@@ -581,7 +598,7 @@ def _user_model_payload(scope: str | None = None, include_rejected: bool = False
         return {"scope": scope, "preferences": [_preference_dict(preference) for preference in preferences]}
 
 
-@reli_mcp.tool()
+@_tool()
 def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: list[uuid.UUID]) -> dict[str, Any]:
     """Record something you have learned about the user as its own Thing, with its evidence.
 
@@ -618,7 +635,7 @@ def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: lis
         return _preference_dict(queries.preference_of(session, thing))
 
 
-@reli_mcp.tool()
+@_tool()
 def add_preference_evidence(actor: McpActor, preference_id: uuid.UUID, evidence_id: uuid.UUID) -> dict[str, Any]:
     """Link one more piece of evidence to a preference the user has just reinforced.
 
@@ -643,7 +660,7 @@ def add_preference_evidence(actor: McpActor, preference_id: uuid.UUID, evidence_
         return _preference_dict(queries.preference_of(session, thing))
 
 
-@reli_mcp.tool()
+@_tool()
 def reject_preference(actor: McpActor, preference_id: uuid.UUID) -> dict[str, Any]:
     """Tag a preference #Rejected when the user says it is wrong, and journal the rejection.
 
@@ -663,7 +680,7 @@ def reject_preference(actor: McpActor, preference_id: uuid.UUID) -> dict[str, An
         return _preference_dict(queries.preference_of(session, thing))
 
 
-@reli_mcp.tool()
+@_tool()
 def get_user_model(scope: str | None = None, include_rejected: bool = False) -> dict[str, Any]:
     """What Reli knows about the user: their preferences and the evidence behind each one.
 
@@ -719,7 +736,7 @@ def scoped_user_model_resource(scope: str) -> dict[str, Any]:
 # shows before the prompt is picked.
 
 
-@reli_mcp.tool()
+@_tool()
 def get_initial_instructions() -> str:
     """How to behave as the user's assistant with Reli attached. Call this first, every session.
 
@@ -732,7 +749,7 @@ def get_initial_instructions() -> str:
     return prompts.initial_instructions()
 
 
-@reli_mcp.tool()
+@_tool()
 def get_scheduled_instructions(pass_name: str) -> str:
     """The full instructions for one scheduled pass. A scheduled task calls this first and follows
     the result exactly; it holds nothing else.
@@ -882,4 +899,20 @@ def create_mcp_asgi_app() -> ASGIApp:
         )
     elif missing := auth.missing_sign_in_settings():
         logger.warning("SECRET_KEY is set but %s is not: the OAuth sign-in cannot complete.", ", ".join(missing))
-    return _BearerTokenMiddleware(reli_mcp.streamable_http_app())
+    return _BearerTokenMiddleware(
+        reli_mcp.streamable_http_app(
+            # Mounted at /mcp by backend.main, so the SDK's own default of "/mcp" would serve
+            # /mcp/mcp.
+            streamable_http_path="/",
+            # The tools carry the actor per call and hold no session state, so there is nothing
+            # for a session to remember; stateless also survives a container restart
+            # mid-conversation.
+            stateless_http=True,
+            # The SDK's default host allowlist is 127.0.0.1/localhost only, which answers 421 to
+            # every request carrying a real Host header — Reli is served through a Cloudflare
+            # tunnel, so that default is an outage. Safe only because _BearerTokenMiddleware
+            # makes an Authorization header mandatory, which a cross-origin page cannot set: the
+            # two decisions are coupled.
+            transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+        )
+    )

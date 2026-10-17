@@ -14,7 +14,7 @@ from typing import get_args
 
 import jwt
 import pytest
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import text
 
 from backend import auth, prompts, service
@@ -106,7 +106,7 @@ def _tools():
 
 
 def _tool_schemas():
-    return {name: tool.inputSchema for name, tool in _tools().items()}
+    return {name: tool.input_schema for name, tool in _tools().items()}
 
 
 # --- The surface -----------------------------------------------------------
@@ -181,9 +181,9 @@ def test_the_ceiling_itself_is_accepted(tools):
     matters, so the bound is inclusive and must not drop below what the pass asks for."""
     captured = create_thing(actor="claude_interactive", title="captured this morning")
 
-    _, structured = asyncio.run(reli_mcp.call_tool("find_things", {"tags": [NEW_TAG], "limit": MAX_LIMIT}))
+    result = asyncio.run(reli_mcp.call_tool("find_things", {"tags": [NEW_TAG], "limit": MAX_LIMIT}))
 
-    assert [thing["id"] for thing in structured["result"]] == [captured["id"]]
+    assert [thing["id"] for thing in result.structured_content["result"]] == [captured["id"]]
 
 
 # --- Writes and their journal entries --------------------------------------
@@ -593,7 +593,7 @@ def test_reject_preference_over_mcp_hides_it_from_the_default_model(tools):
 
 def test_the_user_model_is_exposed_as_a_resource_scoped_and_unscoped():
     resources = {str(resource.uri) for resource in asyncio.run(reli_mcp.list_resources())}
-    templates = {template.uriTemplate for template in asyncio.run(reli_mcp.list_resource_templates())}
+    templates = {template.uri_template for template in asyncio.run(reli_mcp.list_resource_templates())}
 
     assert "reli://user-model" in resources
     assert "reli://user-model/{scope}" in templates
@@ -840,9 +840,9 @@ def test_get_scheduled_instructions_takes_the_pass_name_and_nothing_else():
 
 def test_get_scheduled_instructions_answers_over_the_registered_surface():
     """The one-liners call it by argument name, which only the registered surface can verify."""
-    content, _ = asyncio.run(reli_mcp.call_tool("get_scheduled_instructions", {"pass_name": "learning"}))
+    result = asyncio.run(reli_mcp.call_tool("get_scheduled_instructions", {"pass_name": "learning"}))
 
-    assert content[0].text == prompts.scheduled_instructions("learning")
+    assert result.content[0].text == prompts.scheduled_instructions("learning")
 
 
 def test_get_scheduled_instructions_names_the_passes_for_a_name_that_is_not_one():
