@@ -6,8 +6,16 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError
 
-from backend.db_models import NEW_TAG, Actor, RelationshipType
-from backend.service import DuplicateRelationship, ThingNotFound, create_thing, relate, update_thing
+from backend import service
+from backend.db_models import NEW_TAG, USER_ANCHOR_ID, Actor, RelationshipType, ThingRecord
+from backend.service import (
+    DuplicateRelationship,
+    FieldTooLarge,
+    ThingNotFound,
+    create_thing,
+    relate,
+    update_thing,
+)
 
 
 def _journal_count(session):
@@ -183,3 +191,114 @@ def test_a_failed_evidence_for_mutation_still_raises_the_database_error(session)
 
     assert not isinstance(raised.value, DuplicateRelationship)
     assert _journal_count(session) == before_count
+
+
+# --- Write bounds (#1478) --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("title", "t" * (service.MAX_TITLE_CHARS + 1)),
+        ("description", "d" * (service.MAX_DESCRIPTION_CHARS + 1)),
+        ("notes", {"long": "n" * service.MAX_MAPPING_BYTES}),
+        ("urls", {"long": "https://example.test/" + "u" * service.MAX_MAPPING_BYTES}),
+        ("tags", [f"#t{i}" for i in range(service.MAX_TAGS + 1)]),
+        ("tags", ["#" + "x" * service.MAX_TAG_CHARS]),
+    ],
+)
+def test_an_oversized_create_is_refused_before_anything_is_written(session, field, value):
+    before = _journal_count(session)
+    things = session.execute(text("SELECT count(*) FROM things")).scalar_one()
+
+    with pytest.raises(FieldTooLarge, match=field.rstrip("s")):
+        create_thing(session, actor=Actor.USER, **{"title": "ok", field: value})
+
+    assert _journal_count(session) == before
+    assert session.execute(text("SELECT count(*) FROM things")).scalar_one() == things
+
+
+def test_a_value_at_every_bound_is_accepted(session):
+    """The bounds are inclusive, and a mapping is measured as the UTF-8 JSON the column stores."""
+    padding = service.MAX_MAPPING_BYTES - len('{"k": ""}')
+    thing = create_thing(
+        session,
+        actor=Actor.USER,
+        title="t" * service.MAX_TITLE_CHARS,
+        description="d" * service.MAX_DESCRIPTION_CHARS,
+        notes={"k": "n" * padding},
+        tags=[f"#t{i}" for i in range(service.MAX_TAGS - 1)],
+        urls={"k": "u" * padding},
+    )
+
+    assert len(thing.title) == service.MAX_TITLE_CHARS
+    assert len(thing.tags) == service.MAX_TAGS  # the 99 given and #New
+
+
+def test_mapping_size_counts_bytes_not_characters(session):
+    """A note of multi-byte characters is measured by what it costs to store, not by its length."""
+    with pytest.raises(FieldTooLarge, match="bytes"):
+        create_thing(session, actor=Actor.USER, title="ok", notes={"k": "é" * (service.MAX_MAPPING_BYTES // 2)})
+
+
+def test_an_oversized_update_is_refused_and_the_thing_is_untouched(session):
+    thing = create_thing(session, actor=Actor.USER, title="before")
+    before = _journal_count(session)
+
+    with pytest.raises(FieldTooLarge, match="title"):
+        update_thing(session, actor=Actor.USER, thing_id=thing.id, title="t" * (service.MAX_TITLE_CHARS + 1))
+
+    session.refresh(thing)
+    assert thing.title == "before"
+    assert _journal_count(session) == before
+
+
+def test_an_update_checks_only_the_fields_it_passes(session):
+    """A Thing stored before the bounds existed stays updatable through the fields within them."""
+    thing = create_thing(session, actor=Actor.USER, title="legacy")
+    session.execute(text("UPDATE things SET title = :t WHERE id = :id"), {"t": "x" * 2000, "id": thing.id})
+    session.commit()
+
+    updated = update_thing(session, actor=Actor.USER, thing_id=thing.id, tags=["#Kept"])
+
+    assert updated.tags == ["#Kept"]
+
+
+@pytest.mark.parametrize("priority", [float("nan"), float("inf"), float("-inf")])
+def test_a_non_finite_priority_is_refused(session, priority):
+    with pytest.raises(ValueError, match="finite"):
+        create_thing(session, actor=Actor.USER, title="ok", priority=priority)
+
+
+def test_an_oversized_relationship_context_is_refused(session):
+    a = create_thing(session, actor=Actor.USER, title="a")
+    b = create_thing(session, actor=Actor.USER, title="b")
+    before = _journal_count(session)
+
+    with pytest.raises(FieldTooLarge, match="context"):
+        relate(
+            session,
+            actor=Actor.USER,
+            source_thing_id=a.id,
+            target_thing_id=b.id,
+            relationship_type=RelationshipType.RELATED_TO,
+            context="c" * (service.MAX_CONTEXT_CHARS + 1),
+        )
+
+    assert _journal_count(session) == before
+
+
+@pytest.mark.parametrize(
+    ("title", "scope", "field"),
+    [("t" * (service.MAX_TITLE_CHARS + 1), "planning", "title"), ("ok", "s" * (service.MAX_SCOPE_CHARS + 1), "scope")],
+)
+def test_an_oversized_preference_leaves_nothing_behind(session, title, scope, field):
+    """Refused before the ``#User`` anchor is created, so the refusal writes nothing at all."""
+    evidence = create_thing(session, actor=Actor.USER, title="evidence")
+    before = _journal_count(session)
+
+    with pytest.raises(FieldTooLarge, match=field):
+        service.record_preference(session, actor=Actor.USER, title=title, scope=scope, evidence_ids=[evidence.id])
+
+    assert _journal_count(session) == before
+    assert session.get(ThingRecord, USER_ANCHOR_ID) is None

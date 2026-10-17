@@ -147,6 +147,13 @@ reli_mcp = FastMCP(
 
 # --- Writes ----------------------------------------------------------------
 
+# Every write is bounded in ``backend.service`` (#1478), and a refusal names the field and its
+# ceiling. The writing tools' docstrings state the bounds so a session can stay inside them rather
+# than discover them by being refused; test_mcp_tools.py holds the stated numbers to the constants.
+
+# ``stale`` turns ``days`` into a timedelta; past this a date overflows rather than answering.
+MAX_STALE_DAYS = 36_500
+
 
 @reli_mcp.tool()
 def create_thing(
@@ -164,6 +171,10 @@ def create_thing(
     A capture is tagged #New — not yet talked through — and, when no checkin_date is given, dated
     tomorrow (Europe/London) so it comes up in the morning rather than never. Reli's own records —
     the user model, the heartbeats and the briefings — get neither.
+
+    Bounds: title up to 500 characters, description up to 100000, notes and urls each up to
+    100000 bytes of JSON, at most 100 tags of up to 100 characters each. A write over a bound is
+    refused whole, naming the field.
 
     Args:
         actor: 'claude_interactive' for a session with a person in it, 'claude_scheduled' for an
@@ -214,6 +225,10 @@ def update_thing(
     mapping. To add one note or one tag, read the Thing first with get_thing and pass the union.
 
     A field left unset is untouched, which also means this tool cannot clear a field back to empty.
+
+    Bounds: title up to 500 characters, description up to 100000, notes and urls each up to
+    100000 bytes of JSON, at most 100 tags of up to 100 characters each. A write over a bound is
+    refused whole, naming the field.
 
     Archiving is not done here — use archive_thing, so there is one journalled way to retire a
     Thing.
@@ -294,7 +309,7 @@ def relate(
         source_thing_id: The Thing the edge runs from.
         target_thing_id: The Thing the edge runs to.
         relationship_type: One of the five types above.
-        context: Why this edge exists, in a sentence.
+        context: Why this edge exists, in a sentence; up to 2000 characters.
 
     Returns:
         The created relationship, including the id unrelate takes.
@@ -441,11 +456,11 @@ def due_for_checkin(as_of: date | None = None) -> list[dict[str, Any]]:
 
 
 @reli_mcp.tool()
-def stale(days: int = 30) -> list[dict[str, Any]]:
+def stale(days: Annotated[int, Field(ge=1, le=MAX_STALE_DAYS)] = 30) -> list[dict[str, Any]]:
     """Active Things untouched for at least this many days, longest untouched first.
 
     Args:
-        days: How many days of silence counts as stale.
+        days: How many days of silence counts as stale, 1 to 36500.
 
     Returns:
         The Things nobody has touched.
@@ -582,11 +597,11 @@ def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: lis
 
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
-        title: The preference stated plainly — "Prefers deep work 9-11am".
+        title: The preference stated plainly — "Prefers deep work 9-11am"; up to 500 characters.
         scope: What it applies to — one of the labels the prompts load: 'capture', 'scheduling',
             'planning', 'review', or 'voice' for how the user wants you to sound. get_user_model
             matches it exactly (case aside), so a label no prompt loads is a preference no session
-            ever sees.
+            ever sees. Up to 100 characters.
         evidence_ids: The Things that support it. At least one.
 
     Returns:
