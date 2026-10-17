@@ -8,8 +8,10 @@ outside this module may construct or mutate ``ThingRecord`` / ``RelationshipReco
 
 from __future__ import annotations
 
+import json
+import math
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -35,9 +37,17 @@ from .db_models import (
 
 __all__ = [
     "BACKFILL_PER_DAY",
+    "MAX_CONTEXT_CHARS",
+    "MAX_DESCRIPTION_CHARS",
+    "MAX_MAPPING_BYTES",
+    "MAX_SCOPE_CHARS",
+    "MAX_TAGS",
+    "MAX_TAG_CHARS",
+    "MAX_TITLE_CHARS",
     "Actor",
     "DuplicateRelationship",
     "EntityType",
+    "FieldTooLarge",
     "Operation",
     "ThingNotFound",
     "add_preference_evidence",
@@ -73,6 +83,70 @@ class DuplicateRelationship(ValueError):
         if existing.relationship_type is RelationshipType.EVIDENCE_FOR:
             message += "; add_preference_evidence is the idempotent way to reinforce a preference"
         super().__init__(message)
+
+
+# --- Write bounds (#1478) ------------------------------------------------------
+#
+# Every field a caller can write has a ceiling, checked here before any statement is issued, so a
+# single request cannot fill a row — and the journal's before/after copy of it — with megabytes.
+# They are enforced in this module rather than at the MCP boundary because this is the one write
+# path: whatever reaches the graph, by any route, passes through these checks. The numbers are
+# generous on purpose. An update replaces a whole field, so a session adding one note resends every
+# note the Thing already has; a ceiling a well-used Thing could reach would turn ordinary updates
+# into refusals. Only the fields a call actually passes are checked, so a Thing written before the
+# bounds existed stays updatable through the fields that are within them.
+MAX_TITLE_CHARS = 500
+MAX_DESCRIPTION_CHARS = 100_000
+#: ``notes`` and ``urls`` each, measured as the UTF-8 JSON the column stores.
+MAX_MAPPING_BYTES = 100_000
+MAX_TAGS = 100
+MAX_TAG_CHARS = 100
+MAX_CONTEXT_CHARS = 2_000
+MAX_SCOPE_CHARS = 100
+
+
+class FieldTooLarge(ValueError):
+    """Raised when a write exceeds one of the bounds above. The message names the field and the bound."""
+
+
+def _check_text(name: str, value: str | None, limit: int) -> None:
+    if value is not None and len(value) > limit:
+        raise FieldTooLarge(f"{name} is {len(value)} characters; the most a {name} may hold is {limit}")
+
+
+def _check_mapping(name: str, value: Mapping[str, str] | None) -> None:
+    if value is None:
+        return
+    size = len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+    if size > MAX_MAPPING_BYTES:
+        raise FieldTooLarge(
+            f"{name} serialises to {size} bytes; the most {name} may hold is {MAX_MAPPING_BYTES} bytes — "
+            "keep long material outside Reli and link to it"
+        )
+
+
+def _check_thing_fields(
+    *,
+    title: str | None = None,
+    description: str | None = None,
+    notes: Mapping[str, str] | None = None,
+    tags: Sequence[str] | None = None,
+    urls: Mapping[str, str] | None = None,
+    priority: float | None = None,
+) -> None:
+    """Refuse a Thing write whose given fields exceed the bounds. ``None`` means not given."""
+    _check_text("title", title, MAX_TITLE_CHARS)
+    _check_text("description", description, MAX_DESCRIPTION_CHARS)
+    _check_mapping("notes", notes)
+    _check_mapping("urls", urls)
+    if tags is not None:
+        if len(tags) > MAX_TAGS:
+            raise FieldTooLarge(f"{len(tags)} tags given; a Thing may carry at most {MAX_TAGS}")
+        for tag in tags:
+            _check_text("tag", tag, MAX_TAG_CHARS)
+    # NaN and infinity sort unpredictably in every priority-ordered listing, and Postgres stores both.
+    if priority is not None and not math.isfinite(priority):
+        raise ValueError(f"priority must be a finite number, not {priority}")
 
 
 def _snapshot(record: ThingRecord | RelationshipRecord) -> dict[str, Any]:
@@ -130,6 +204,7 @@ def _insert_thing(
     Every public function in this module still commits; this half exists for the ones that must
     write more than one row or not write at all.
     """
+    _check_thing_fields(title=title, description=description, notes=notes, tags=tags, urls=urls, priority=priority)
     now = datetime.now(UTC)
     thing = ThingRecord(
         # An explicit ``id=None`` would defeat the field's default_factory, so pass one or neither.
@@ -184,6 +259,7 @@ def create_thing(
     ``OWNER_TIMEZONE`` so it comes up in the morning rather than never. A date given explicitly is
     kept as given, and Reli's own records get neither the tag nor the date.
     """
+    _check_thing_fields(title=title, description=description, notes=notes, tags=tags, urls=urls, priority=priority)
     tags = list(tags) if tags is not None else []
     if not any(tag in INTERNAL_TAGS for tag in tags):
         if NEW_TAG not in tags:
@@ -231,6 +307,7 @@ def update_thing(
     A field left as ``None`` is not touched, which means this function cannot clear a nullable
     field. Whoever needs an explicit clear adds it.
     """
+    _check_thing_fields(title=title, description=description, notes=notes, tags=tags, urls=urls, priority=priority)
     thing = _require_thing(session, thing_id)
     before = _snapshot(thing)
 
@@ -326,6 +403,7 @@ def _insert_relationship(
     context: str | None = None,
 ) -> RelationshipRecord:
     """Add a relationship and its journal entry without committing. See :func:`_insert_thing`."""
+    _check_text("context", context, MAX_CONTEXT_CHARS)
     relationship = RelationshipRecord(
         source_thing_id=source_thing_id,
         target_thing_id=target_thing_id,
@@ -530,6 +608,9 @@ def record_preference(
     scope = scope.strip()
     if not scope:
         raise ValueError("a preference must declare the scope it applies to")
+    # Checked before the anchor is written, so a refused preference leaves nothing behind.
+    _check_text("scope", scope, MAX_SCOPE_CHARS)
+    _check_thing_fields(title=title)
 
     wanted = list(dict.fromkeys(evidence_ids))
     if not wanted:

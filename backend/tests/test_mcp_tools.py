@@ -17,10 +17,11 @@ import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 from sqlalchemy import text
 
-from backend import auth, prompts
+from backend import auth, prompts, service
 from backend.config import settings
 from backend.db_models import NEW_TAG, Actor, RelationshipType
 from backend.mcp_server import (
+    MAX_STALE_DAYS,
     McpActor,
     add_preference_evidence,
     archive_thing,
@@ -371,6 +372,44 @@ def test_stale_counts_days_of_silence(tools):
 
     assert [t["title"] for t in stale(days=30)] == ["forgotten"]
     assert stale(days=365) == []
+
+
+@pytest.mark.parametrize("days", [0, -1, MAX_STALE_DAYS + 1, 10**9])
+def test_an_out_of_range_stale_window_is_refused(tools, days):
+    """#1478: a huge ``days`` used to overflow the timedelta and a negative one listed everything."""
+    with pytest.raises(ToolError) as refused:
+        asyncio.run(reli_mcp.call_tool("stale", {"days": days}))
+
+    assert "than or equal to" in str(refused.value)
+
+
+def test_an_oversized_write_is_refused_naming_the_field(tools):
+    """#1478: the service's bound reaches an MCP session as a refusal it can act on."""
+    with pytest.raises(ToolError) as refused:
+        asyncio.run(
+            reli_mcp.call_tool(
+                "create_thing",
+                {"actor": "claude_interactive", "title": "t" * (service.MAX_TITLE_CHARS + 1)},
+            )
+        )
+
+    assert f"the most a title may hold is {service.MAX_TITLE_CHARS}" in str(refused.value)
+    assert find_things() == []
+
+
+@pytest.mark.parametrize("tool", [create_thing, update_thing])
+def test_the_bounds_a_writing_tool_states_are_the_bounds_enforced(tool):
+    """The docstring is what a session reads; it must not promise a ceiling the service does not hold."""
+    doc = " ".join((tool.__doc__ or "").split())
+    for stated in (
+        f"title up to {service.MAX_TITLE_CHARS} characters",
+        f"description up to {service.MAX_DESCRIPTION_CHARS}",
+        f"notes and urls each up to {service.MAX_MAPPING_BYTES} bytes",
+        f"at most {service.MAX_TAGS} tags of up to {service.MAX_TAG_CHARS} characters",
+    ):
+        assert stated in doc, stated
+    assert f"up to {service.MAX_CONTEXT_CHARS} characters" in (relate.__doc__ or "")
+    assert f"Up to {service.MAX_SCOPE_CHARS} characters" in (record_preference.__doc__ or "")
 
 
 def test_blocked_returns_the_waiting_thing(tools):
