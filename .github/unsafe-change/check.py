@@ -34,7 +34,6 @@ Dry run:    check.py --dry-run [--policy FILE] PR... (uses `gh auth token`,
 
 from __future__ import annotations
 
-import base64
 import fnmatch
 import json
 import os
@@ -73,7 +72,7 @@ def glob_match(path: str, glob: str) -> bool:
 
 
 def _patch_added(patch: str | None) -> list[str]:
-    return [l[1:] for l in (patch or "").splitlines() if l.startswith("+") and not l.startswith("+++")]
+    return [line[1:] for line in (patch or "").splitlines() if line.startswith("+") and not line.startswith("+++")]
 
 
 # ── dependencies ─────────────────────────────────────────────────────────────
@@ -92,7 +91,11 @@ def _src(spec) -> str:
                 v = spec[k]
                 return "%s=%s" % (k, json.dumps(v, sort_keys=True) if isinstance(v, dict) else v)
         return ""
-    if isinstance(spec, str) and re.match(r"(git\+|git:|github:|gitlab:|bitbucket:|https?:|file:|link:|workspace:|npm:|[\w.-]+/[\w.-]+(#|$))", spec.strip()):
+    pattern = (
+        r"(git\+|git:|github:|gitlab:|bitbucket:|https?:|file:|link:|workspace:|npm:"
+        r"|[\w.-]+/[\w.-]+(#|$))"
+    )
+    if isinstance(spec, str) and re.match(pattern, spec.strip()):
         return spec.strip()
     return ""
 
@@ -341,7 +344,7 @@ def evaluate(files: list[dict], policy: dict, fetch=None) -> list[str]:
                 continue
             added = (text or "").splitlines()
         for pat in pats:
-            line = next((l for l in added if re.search(pat, l)), None)
+            line = next((line_text for line_text in added if re.search(pat, line_text)), None)
             if line is not None:
                 problems.append("%s: adds process/env/socket code (%s): %.80s" % (path, pat, line.strip()))
                 break
@@ -400,8 +403,13 @@ class GitHub:
         gql = self.api("https://api.github.com/graphql", json.dumps(q).encode())
         numbers = {n["number"] for n in gql["data"]["repository"]["pullRequest"]["closingIssuesReferences"]["nodes"]}
         numbers |= {int(m) for m in CLOSING_RE.findall(body or "")}
-        return [{"number": n, "labels": [l["name"] for l in self.api("/issues/%d" % n).get("labels", [])]}
-                for n in sorted(numbers)]
+        return [
+            {
+                "number": n,
+                "labels": [label["name"] for label in self.api("/issues/%d" % n).get("labels", [])],
+            }
+            for n in sorted(numbers)
+        ]
 
 
 def check_pr(gh: GitHub, pr: int, policy: dict, force: bool = False) -> tuple[int, list[str], str]:
