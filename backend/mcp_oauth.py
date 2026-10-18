@@ -145,6 +145,38 @@ def _redirect_uri_is_safe(uri: str) -> bool:
     return parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1"))
 
 
+def _validate_registration_body(raw: bytes) -> _ClientMetadata:
+    if len(raw) > MAX_REGISTRATION_BYTES:
+        raise HTTPException(status_code=413, detail=f"Registration body must be at most {MAX_REGISTRATION_BYTES} bytes")
+    try:
+        return _ClientMetadata.model_validate_json(raw)
+    except ValidationError as invalid:
+        problems = _describe(invalid)
+        logger.warning("MCP OAuth: rejected registration with invalid client metadata: %s", problems)
+        raise HTTPException(status_code=400, detail=f"invalid_client_metadata: {problems}") from invalid
+
+
+def _validate_auth_method(metadata: _ClientMetadata) -> str:
+    auth_method = metadata.token_endpoint_auth_method
+    if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
+        logger.warning("MCP OAuth: rejected token_endpoint_auth_method during registration: %r", auth_method)
+        raise HTTPException(
+            status_code=400,
+            detail=f"token_endpoint_auth_method must be one of {', '.join(TOKEN_ENDPOINT_AUTH_METHODS)}: {auth_method}",
+        )
+    return auth_method
+
+
+def _validate_redirect_uris(redirect_uris: list[str]) -> None:
+    for uri in redirect_uris:
+        if not _redirect_uri_is_safe(uri):
+            logger.warning("MCP OAuth: rejected redirect_uri with unsafe scheme during registration: %r", uri)
+            raise HTTPException(
+                status_code=400,
+                detail=f"redirect_uri must use https (or http://localhost / http://127.0.0.1 for development): {uri}",
+            )
+
+
 @router.post("/oauth/register", include_in_schema=False)
 async def oauth_register(request: Request) -> JSONResponse:
     """Register a client (RFC 7591). Single-tenant: no approval step.
@@ -164,31 +196,10 @@ async def oauth_register(request: Request) -> JSONResponse:
         HTTPException 413: The body is over ``MAX_REGISTRATION_BYTES``.
     """
     raw = await request.body()
-    if len(raw) > MAX_REGISTRATION_BYTES:
-        raise HTTPException(status_code=413, detail=f"Registration body must be at most {MAX_REGISTRATION_BYTES} bytes")
-    try:
-        metadata = _ClientMetadata.model_validate_json(raw)
-    except ValidationError as invalid:
-        problems = _describe(invalid)
-        logger.warning("MCP OAuth: rejected registration with invalid client metadata: %s", problems)
-        raise HTTPException(status_code=400, detail=f"invalid_client_metadata: {problems}") from invalid
-
-    auth_method = metadata.token_endpoint_auth_method
-    if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
-        logger.warning("MCP OAuth: rejected token_endpoint_auth_method during registration: %r", auth_method)
-        raise HTTPException(
-            status_code=400,
-            detail=f"token_endpoint_auth_method must be one of {', '.join(TOKEN_ENDPOINT_AUTH_METHODS)}: {auth_method}",
-        )
-
+    metadata = _validate_registration_body(raw)
+    auth_method = _validate_auth_method(metadata)
     redirect_uris = metadata.redirect_uris or []
-    for uri in redirect_uris:
-        if not _redirect_uri_is_safe(uri):
-            logger.warning("MCP OAuth: rejected redirect_uri with unsafe scheme during registration: %r", uri)
-            raise HTTPException(
-                status_code=400,
-                detail=f"redirect_uri must use https (or http://localhost / http://127.0.0.1 for development): {uri}",
-            )
+    _validate_redirect_uris(redirect_uris)
 
     client_id = str(uuid.uuid4())
     client_secret = secrets.token_urlsafe(32)
