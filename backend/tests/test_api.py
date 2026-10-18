@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from backend import api, auth, frontend_serving
+from backend import api, auth, frontend_serving, web_view_auth
 from backend.config import settings
 from backend.db_models import (
     NEW_TAG,
@@ -51,7 +51,7 @@ def _routed_app(session, monkeypatch) -> FastAPI:
         return {"status": "ok", "service": "reli"}
 
     app.include_router(api.router)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
     return app
 
 
@@ -646,7 +646,7 @@ def test_the_bundle_is_public_because_it_is_the_sign_in_view(tmp_path, path):
     (dist / "sw.js").write_text("export {};")
     app = FastAPI()
     frontend_serving.mount_frontend(app, dist)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
 
     assert TestClient(app).get(path).status_code == 200
 
@@ -665,7 +665,7 @@ def test_a_plain_http_base_url_is_warned_about_at_startup(monkeypatch, caplog, r
     monkeypatch.setattr(settings, "RELI_BASE_URL", "")
     monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", redirect_uri)
 
-    with caplog.at_level(logging.WARNING, logger="backend.api"):
-        api.add_web_view_auth(FastAPI())
+    with caplog.at_level(logging.WARNING, logger="backend.web_view_auth"):
+        web_view_auth.add_web_view_auth(FastAPI())
 
     assert any("not https" in record.getMessage() for record in caplog.records) is warned
