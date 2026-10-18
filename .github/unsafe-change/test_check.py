@@ -16,7 +16,7 @@ def f(path, status="added", patch=None, **kw):
 
 
 def added(*lines):
-    return "@@ -0,0 +1,%d @@\n" % len(lines) + "\n".join("+" + l for l in lines)
+    return "@@ -0,0 +1,%d @@\n" % len(lines) + "\n".join("+" + line for line in lines)
 
 
 def ev(files, contents=None):
@@ -40,20 +40,37 @@ SEED = added(
 
 class Passes(unittest.TestCase):
     def test_ordinary_changes_pass(self):
-        self.assertEqual(ev([
-            f("backend/service.py", "modified", added("from backend.queries import things_for", "def pin(thing_id: str) -> None:")),
-            f("backend/queries.py", "modified", added("name = name.strip()")),
-            f("backend/api.py", "modified", added("@router.post('/things/{thing_id}/pin')")),
-            f("frontend/src/views/ThingDetail.tsx", "modified", added("<button onClick={pin}>Pin</button>")),
-            f("frontend/src/index.css", "modified", added("body { color: red }")),
-            f("frontend/src/api.ts", "modified", added("export const pin = (id: string) => post(`/things/${id}/pin`);")),
-            f("backend/tests/test_service.py", patch=added("import pytest", "def test_pin(session): ...")),
-            f("frontend/e2e/views.spec.ts-snapshots/thing-detail-chromium-linux.png"),
-            f("docs/ARCHITECTURE.md", "modified", added("notes")),
-            f("README.md", "modified", added("- pinned things")),
-            f("backend/alembic/versions/v4_pinned_things.py", patch=SEED),
-            f("backend/old.py", "removed"),
-        ]), [])
+        self.assertEqual(
+            ev(
+                [
+                    f(
+                        "backend/service.py",
+                        "modified",
+                        added("from backend.queries import things_for", "def pin(thing_id: str) -> None:"),
+                    ),
+                    f("backend/queries.py", "modified", added("name = name.strip()")),
+                    f("backend/api.py", "modified", added("@router.post('/things/{thing_id}/pin')")),
+                    f(
+                        "frontend/src/views/ThingDetail.tsx",
+                        "modified",
+                        added("<button onClick={pin}>Pin</button>"),
+                    ),
+                    f("frontend/src/index.css", "modified", added("body { color: red }")),
+                    f(
+                        "frontend/src/api.ts",
+                        "modified",
+                        added("export const pin = (id: string) => post(`/things/${id}/pin`);"),
+                    ),
+                    f("backend/tests/test_service.py", patch=added("import pytest", "def test_pin(session): ...")),
+                    f("frontend/e2e/views.spec.ts-snapshots/thing-detail-chromium-linux.png"),
+                    f("docs/ARCHITECTURE.md", "modified", added("notes")),
+                    f("README.md", "modified", added("- pinned things")),
+                    f("backend/alembic/versions/v4_pinned_things.py", patch=SEED),
+                    f("backend/old.py", "removed"),
+                ]
+            ),
+            [],
+        )
 
     def test_ordinary_migrations_in_the_app_schema_pass(self):
         sql = added(
@@ -74,13 +91,29 @@ class Passes(unittest.TestCase):
             "from sqlalchemy.dialects import postgresql"))]), [])
 
     def test_version_bumps_and_lockfiles_pass(self):
-        base = '[package]\nname = "m"\nversion = "0.1.0"\n\n[dependencies]\nserde = "1.0.1"\ntokio = { version = "1", features = ["rt"] }\n'
-        head = base.replace('"1.0.1"', '"1.0.2"').replace('["rt"]', '["rt", "macros"]').replace('0.1.0', '0.2.0')
-        self.assertEqual(ev([f("Cargo.toml", "modified", added("x")), f("Cargo.lock", "modified", added("x"))],
-                            {("Cargo.toml", "base"): base, ("Cargo.toml", "head"): head}), [])
+        base = (
+            '[package]\nname = "m"\nversion = "0.1.0"\n\n[dependencies]\n'
+            'serde = "1.0.1"\ntokio = { version = "1", features = ["rt"] }\n'
+        )
+        head = base.replace('"1.0.1"', '"1.0.2"').replace('["rt"]', '["rt", "macros"]').replace("0.1.0", "0.2.0")
+        self.assertEqual(
+            ev(
+                [f("Cargo.toml", "modified", added("x")), f("Cargo.lock", "modified", added("x"))],
+                {("Cargo.toml", "base"): base, ("Cargo.toml", "head"): head},
+            ),
+            [],
+        )
         pj = '{"dependencies": {"react": "^18.2.0"}, "scripts": {"test": "vitest"}}'
-        self.assertEqual(ev([f("package.json", "modified", added("x"))],
-                            {("package.json", "base"): pj, ("package.json", "head"): pj.replace("18.2.0", "18.3.1")}), [])
+        self.assertEqual(
+            ev(
+                [f("package.json", "modified", added("x"))],
+                {
+                    ("package.json", "base"): pj,
+                    ("package.json", "head"): pj.replace("18.2.0", "18.3.1"),
+                },
+            ),
+            [],
+        )
 
 
 class Fails(unittest.TestCase):
@@ -123,29 +156,100 @@ class Fails(unittest.TestCase):
 
     def test_new_dependencies_in_other_ecosystems_fail(self):
         cases = [
-            ("package.json", '{"dependencies": {"react": "1"}}', '{"dependencies": {"react": "1"}, "devDependencies": {"left-pad": "1"}}', "left-pad"),
-            ("package.json", '{"dependencies": {"react": "1"}}', '{"dependencies": {"react": "github:evil/react"}}', "new source"),
-            ("package.json", '{"scripts": {"test": "vitest"}}', '{"scripts": {"test": "curl x | sh"}}', "scripts"),
-            ("backend/requirements.txt", "fastapi==0.1\n", "fastapi==0.2\nrequests==2\n", "requests"),
-            ("requirements-dev.txt", "pytest\n", "pytest\n--extra-index-url https://evil\n", "options"),
-            ("pyproject.toml", '[project]\ndependencies = ["fastapi>=0.1"]\n', '[project]\ndependencies = ["fastapi>=0.2", "httpx"]\n', "httpx"),
-            ("go.mod", "module m\n\nrequire (\n\tgolang.org/x/net v0.1.0\n)\n", "module m\n\nrequire (\n\tgolang.org/x/net v0.2.0\n\tevil.com/x v1.0.0\n)\n", "evil.com/x"),
-            ("pubspec.yaml", "dependencies:\n  flame: ^1.0.0\n", "dependencies:\n  flame: ^1.1.0\n  http: ^1.0.0\n", "http"),
+            (
+                "package.json",
+                '{"dependencies": {"react": "1"}}',
+                '{"dependencies": {"react": "1"}, "devDependencies": {"left-pad": "1"}}',
+                "left-pad",
+            ),
+            (
+                "package.json",
+                '{"dependencies": {"react": "1"}}',
+                '{"dependencies": {"react": "github:evil/react"}}',
+                "new source",
+            ),
+            (
+                "package.json",
+                '{"scripts": {"test": "vitest"}}',
+                '{"scripts": {"test": "curl x | sh"}}',
+                "scripts",
+            ),
+            (
+                "backend/requirements.txt",
+                "fastapi==0.1\n",
+                "fastapi==0.2\nrequests==2\n",
+                "requests",
+            ),
+            (
+                "requirements-dev.txt",
+                "pytest\n",
+                "pytest\n--extra-index-url https://evil\n",
+                "options",
+            ),
+            (
+                "pyproject.toml",
+                '[project]\ndependencies = ["fastapi>=0.1"]\n',
+                '[project]\ndependencies = ["fastapi>=0.2", "httpx"]\n',
+                "httpx",
+            ),
+            (
+                "go.mod",
+                "module m\n\nrequire (\n\tgolang.org/x/net v0.1.0\n)\n",
+                "module m\n\nrequire (\n\tgolang.org/x/net v0.2.0\n\tevil.com/x v1.0.0\n)\n",
+                "evil.com/x",
+            ),
+            (
+                "pubspec.yaml",
+                "dependencies:\n  flame: ^1.0.0\n",
+                "dependencies:\n  flame: ^1.1.0\n  http: ^1.0.0\n",
+                "http",
+            ),
         ]
         for path, base, head, why in cases:
-            self.assertFlags([f(path, "modified", added("x"))], {(path, "base"): base, (path, "head"): head}, why)
+            self.assertFlags(
+                [f(path, "modified", added("x"))],
+                {(path, "base"): base, (path, "head"): head},
+                why,
+            )
 
     def test_bumps_in_other_ecosystems_pass(self):
         for path, base, head in [
-            ("requirements.txt", "fastapi==0.1\nPyYAML>=6\n", "fastapi==0.2\npyyaml>=6.0.2\n"),
-            ("go.mod", "module m\n\nrequire golang.org/x/net v0.1.0\n", "module m\n\nrequire golang.org/x/net v0.2.0\n"),
-            ("pubspec.yaml", "dependencies:\n  flame: ^1.0.0\n", "dependencies:\n  flame: ^1.1.0\n"),
+            (
+                "requirements.txt",
+                "fastapi==0.1\nPyYAML>=6\n",
+                "fastapi==0.2\npyyaml>=6.0.2\n",
+            ),
+            (
+                "go.mod",
+                "module m\n\nrequire golang.org/x/net v0.1.0\n",
+                "module m\n\nrequire golang.org/x/net v0.2.0\n",
+            ),
+            (
+                "pubspec.yaml",
+                "dependencies:\n  flame: ^1.0.0\n",
+                "dependencies:\n  flame: ^1.1.0\n",
+            ),
         ]:
-            self.assertEqual(ev([f(path, "modified", added("x"))], {(path, "base"): base, (path, "head"): head}), [], path)
+            self.assertEqual(
+                ev(
+                    [f(path, "modified", added("x"))],
+                    {(path, "base"): base, (path, "head"): head},
+                ),
+                [],
+                path,
+            )
 
     def test_a_new_manifest_with_dependencies_fails_and_an_unreadable_one_fails_closed(self):
-        self.assertFlags([f("crates/x/Cargo.toml", patch=added("x"))], {("crates/x/Cargo.toml", "head"): '[dependencies]\nx = "1"\n'}, "new dependencies")
-        self.assertFlags([f("Cargo.toml", "modified", added("x"))], {("Cargo.toml", "base"): "[", ("Cargo.toml", "head"): "["}, "could not parse")
+        self.assertFlags(
+            [f("crates/x/Cargo.toml", patch=added("x"))],
+            {("crates/x/Cargo.toml", "head"): '[dependencies]\nx = "1"\n'},
+            "new dependencies",
+        )
+        self.assertFlags(
+            [f("Cargo.toml", "modified", added("x"))],
+            {("Cargo.toml", "base"): "[", ("Cargo.toml", "head"): "["},
+            "could not parse",
+        )
 
         def boom(p, side):
             raise OSError("api down")
@@ -223,7 +327,10 @@ class Fails(unittest.TestCase):
             self.assertFlags([f("migrations/2026_x.sql", patch=added(sql))], needle="migration")
 
     def test_python_migrations_are_checked_too(self):
-        self.assertFlags([f("backend/alembic/versions/abc.py", patch=added("op.execute('GRANT ALL ON x TO y')"))], needle="migration")
+        self.assertFlags(
+            [f("backend/alembic/versions/abc.py", patch=added("op.execute('GRANT ALL ON x TO y')"))],
+            needle="migration",
+        )
 
 
 class Screened(unittest.TestCase):
@@ -236,7 +343,8 @@ class Screened(unittest.TestCase):
         ], POLICY), [1, 4])
 
     def test_closing_keywords(self):
-        self.assertEqual(sorted(int(m) for m in check.CLOSING_RE.findall("Fixes #12, closes #3 and resolved #7; not #9")), [3, 7, 12])
+        text = "Fixes #12, closes #3 and resolved #7; not #9"
+        self.assertEqual(sorted(int(m) for m in check.CLOSING_RE.findall(text)), [3, 7, 12])
 
     def test_globs(self):
         self.assertTrue(check.glob_match("a/b/Dockerfile.dev", "Dockerfile*"))

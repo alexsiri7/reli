@@ -16,7 +16,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend import api, auth, google_login
+from backend import auth, google_login, web_view_auth
 from backend.config import settings
 from backend.oauth_state import (
     cleanup_and_get,
@@ -49,7 +49,7 @@ def client(session, monkeypatch, sign_in_settings):
     monkeypatch.setattr(auth, "_session", _fixture_session)
     app = FastAPI()
     app.include_router(auth.router)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
     return TestClient(app, follow_redirects=False)
 
 

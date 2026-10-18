@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from backend import api, auth
+from backend import api, auth, frontend_serving, web_view_auth
 from backend.config import settings
 from backend.db_models import (
     NEW_TAG,
@@ -51,7 +51,7 @@ def _routed_app(session, monkeypatch) -> FastAPI:
         return {"status": "ok", "service": "reli"}
 
     app.include_router(api.router)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
     return app
 
 
@@ -553,7 +553,7 @@ def _dist(tmp_path, body="<!doctype html><title>Reli</title>"):
 
 def test_a_deep_link_is_served_the_bundle_so_a_reload_resolves_client_side(tmp_path):
     app = FastAPI()
-    api.mount_frontend(app, _dist(tmp_path))
+    frontend_serving.mount_frontend(app, _dist(tmp_path))
 
     response = TestClient(app).get(f"/things/{uuid.uuid4()}")
 
@@ -567,7 +567,7 @@ def test_the_kill_switch_worker_is_served_as_javascript(tmp_path):
     dist = _dist(tmp_path)
     (dist / "sw.js").write_text("self.addEventListener('install', () => self.skipWaiting());")
     app = FastAPI()
-    api.mount_frontend(app, dist)
+    frontend_serving.mount_frontend(app, dist)
 
     response = TestClient(app).get("/sw.js")
 
@@ -584,7 +584,7 @@ def test_the_worker_media_type_is_stated_rather_than_guessed_from_the_host(tmp_p
     dist = _dist(tmp_path)
     (dist / "sw.js").write_text("export {};")
     app = FastAPI()
-    api.mount_frontend(app, dist)
+    frontend_serving.mount_frontend(app, dist)
 
     response = TestClient(app).get("/sw.js")
 
@@ -596,7 +596,7 @@ def test_a_file_like_path_is_a_404_rather_than_the_bundle_in_disguise(tmp_path, 
     """A stale manifest or asset must fail loudly; a ``/sw.js`` that 404s is what unregisters a worker
     when no build ships one."""
     app = FastAPI()
-    api.mount_frontend(app, _dist(tmp_path))
+    frontend_serving.mount_frontend(app, _dist(tmp_path))
 
     response = TestClient(app).get(path)
 
@@ -608,7 +608,7 @@ def test_a_file_like_path_is_a_404_rather_than_the_bundle_in_disguise(tmp_path, 
 def test_the_fallback_refuses_the_docs_paths_an_app_built_without_them(tmp_path, path):
     """#1476: a deploy builds the app without its docs, and the bundle must not answer in their place."""
     app = FastAPI(openapi_url=None)
-    api.mount_frontend(app, _dist(tmp_path))
+    frontend_serving.mount_frontend(app, _dist(tmp_path))
 
     assert TestClient(app).get(path).status_code == 404
 
@@ -616,7 +616,7 @@ def test_the_fallback_refuses_the_docs_paths_an_app_built_without_them(tmp_path,
 @pytest.mark.parametrize("path", ["/openapi.json", "/docs", "/redoc"])
 def test_the_fallback_leaves_the_docs_to_an_app_that_serves_them(tmp_path, path):
     app = FastAPI()
-    api.mount_frontend(app, _dist(tmp_path))
+    frontend_serving.mount_frontend(app, _dist(tmp_path))
 
     response = TestClient(app).get(path)
 
@@ -627,7 +627,7 @@ def test_the_fallback_leaves_the_docs_to_an_app_that_serves_them(tmp_path, path)
 def test_an_image_built_without_a_frontend_still_boots(tmp_path):
     app = FastAPI()
 
-    api.mount_frontend(app, tmp_path / "absent")
+    frontend_serving.mount_frontend(app, tmp_path / "absent")
 
     assert TestClient(app).get("/").status_code == 404
 
@@ -645,8 +645,8 @@ def test_the_bundle_is_public_because_it_is_the_sign_in_view(tmp_path, path):
     (dist / "assets" / "app.js").write_text("export {};")
     (dist / "sw.js").write_text("export {};")
     app = FastAPI()
-    api.mount_frontend(app, dist)
-    api.add_web_view_auth(app)
+    frontend_serving.mount_frontend(app, dist)
+    web_view_auth.add_web_view_auth(app)
 
     assert TestClient(app).get(path).status_code == 200
 
@@ -665,7 +665,7 @@ def test_a_plain_http_base_url_is_warned_about_at_startup(monkeypatch, caplog, r
     monkeypatch.setattr(settings, "RELI_BASE_URL", "")
     monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", redirect_uri)
 
-    with caplog.at_level(logging.WARNING, logger="backend.api"):
-        api.add_web_view_auth(FastAPI())
+    with caplog.at_level(logging.WARNING, logger="backend.web_view_auth"):
+        web_view_auth.add_web_view_auth(FastAPI())
 
     assert any("not https" in record.getMessage() for record in caplog.records) is warned

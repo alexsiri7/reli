@@ -26,7 +26,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from backend import api, auth, google_login, mcp_oauth
+from backend import auth, google_login, mcp_oauth, web_view_auth
 from backend.config import settings
 from backend.db_engine import get_engine
 from backend.google_login import s256_challenge
@@ -69,7 +69,7 @@ def client(session, monkeypatch, sign_in_settings):
     app = FastAPI()
     app.include_router(auth.router)
     app.include_router(mcp_oauth.router)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
     return TestClient(app, follow_redirects=False)
 
 
@@ -79,7 +79,7 @@ def racing_client(session, sign_in_settings):
     app = FastAPI()
     app.include_router(auth.router)
     app.include_router(mcp_oauth.router)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
     return TestClient(app, follow_redirects=False)
 
 
@@ -206,7 +206,7 @@ def test_discovery_and_registration_answer_without_any_credential(session, monke
     monkeypatch.setattr(auth, "_session", _fixture_session)
     app = FastAPI()
     app.include_router(mcp_oauth.router)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
     anonymous = TestClient(app)
 
     discovery = anonymous.get("/.well-known/oauth-authorization-server")
