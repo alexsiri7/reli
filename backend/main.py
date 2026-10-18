@@ -20,7 +20,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import api, auth, mcp_oauth
 from .config import settings
-from .mcp_server import create_mcp_asgi_app, reli_mcp
+from .mcp_server import reli_mcp
+from .mcp_transport import create_mcp_asgi_app
 from .sentry import init_sentry
 
 logger = logging.getLogger(__name__)
