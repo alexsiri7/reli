@@ -93,9 +93,9 @@ def _assert_security_headers(response) -> None:
 _DOCS_PROBE = """
 import pathlib, sys
 from fastapi.testclient import TestClient
-from backend import api
-mount_frontend = api.mount_frontend
-api.mount_frontend = lambda app, _dist: mount_frontend(app, pathlib.Path(sys.argv[1]))
+from backend import frontend_serving
+mount_frontend = frontend_serving.mount_frontend
+frontend_serving.mount_frontend = lambda app, _dist: mount_frontend(app, pathlib.Path(sys.argv[1]))
 from backend.main import app
 client = TestClient(app)
 print(*(client.get(path).status_code for path in ("/openapi.json", "/docs", "/redoc")))

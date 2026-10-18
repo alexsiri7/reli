@@ -18,7 +18,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from . import api, auth, mcp_oauth
+from . import api, auth, frontend_serving, mcp_oauth
 from .config import settings
 from .mcp_server import reli_mcp
 from .mcp_transport import create_mcp_asgi_app
@@ -149,7 +149,7 @@ app.add_middleware(_BareMcpPath)
 
 # Last, and in this order: the frontend fallback answers every unmatched path, so anything mounted
 # after it would never be reached.
-api.mount_frontend(app, _DIST)
+frontend_serving.mount_frontend(app, _DIST)
 api.add_web_view_auth(app)
 
 # Outermost of the layers registered here, so added last: the web view's 401 is sent by its
