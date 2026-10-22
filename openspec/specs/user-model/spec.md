@@ -20,6 +20,15 @@ The model SHALL be anchored on a single Thing tagged "#User". Each preference SH
 - WHEN a preference is recorded with no evidence
 - THEN the request is refused
 
+### Requirement: Reli's own records are not evidence
+
+Evidence SHALL NOT be a Thing tagged "#User", "#Preference", "#ScheduledTask" or "#Briefing". Those are Reli's own records rather than observed moments, and counting one would add strength nothing observed supports.
+
+#### Scenario: A preference cited as evidence
+- GIVEN a preference "Prefers short titles"
+- WHEN another preference is recorded citing it as evidence
+- THEN the request is refused and nothing is written
+
 ### Requirement: Strength is a count, not a score
 
 A preference's strength SHALL be the number of distinct Things supporting it. No confidence value, decay or score SHALL exist anywhere in the model. Adding the same evidence twice SHALL change nothing.

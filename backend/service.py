@@ -15,12 +15,14 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from .db_models import (
     INTERNAL_TAGS,
     NEW_TAG,
+    OBSERVATION_TAG,
     OWNER_TIMEZONE,
     PREFERENCE_TAG,
     REJECTED_TAG,
@@ -393,6 +395,74 @@ def backfill_checkin_dates(session: Session, *, now: datetime) -> int:
     return len(captures)
 
 
+#: Whether ``:goal`` is ``:start`` or below it in the ``ChildOf`` tree, following edges parent →
+#: child. ``UNION`` drops a Thing already reached, so the walk is bounded by the size of the graph
+#: and ends even on a cycle written before #1696 refused them.
+_CHILD_OF_REACHES = text(
+    """
+    WITH RECURSIVE below(thing_id) AS (
+        SELECT CAST(:start AS uuid)
+      UNION
+        SELECT r.target_thing_id
+        FROM below b
+        JOIN relationships r ON r.source_thing_id = b.thing_id
+        WHERE r.relationship_type = :child_of
+    )
+    SELECT EXISTS (SELECT 1 FROM below WHERE thing_id = :goal)
+    """
+)
+
+#: Serialises every ``ChildOf`` insert until its transaction ends. Without it two transactions
+#: under READ COMMITTED each miss the other's uncommitted edge, and ``A → B`` beside ``B → A``
+#: passes both checks. The lock is global rather than per pair because a longer cycle is closed by
+#: edges between different pairs.
+_LOCK_CHILD_OF_WRITES = text("SELECT pg_advisory_xact_lock(hashtext('reli.ChildOf'))")
+
+#: The internal tags an ``EvidenceFor`` source may not carry. ``#Observation`` is absent because an
+#: observation is what evidence is meant to be; the rest are Reli's own records, and one of them
+#: standing as evidence would add strength no observed moment supports.
+_NOT_EVIDENCE_TAGS = tuple(tag for tag in INTERNAL_TAGS if tag != OBSERVATION_TAG)
+
+
+def _check_edge(
+    session: Session,
+    *,
+    source_thing_id: uuid.UUID,
+    target_thing_id: uuid.UUID,
+    relationship_type: RelationshipType,
+) -> None:
+    """Refuse an edge the read path would misread (#1696), before anything is written.
+
+    A self-loop of any type, and a ``ChildOf`` edge closing a cycle, would drop every Thing in it
+    from the tree's top level while they still fall due; a ``Blocks`` self-loop blocks a Thing
+    forever.
+    """
+    if source_thing_id == target_thing_id:
+        raise ValueError(f"a {relationship_type.value} edge cannot run from Thing {source_thing_id} to itself")
+    if relationship_type is RelationshipType.CHILD_OF:
+        session.execute(_LOCK_CHILD_OF_WRITES)
+        closes_cycle = session.execute(
+            _CHILD_OF_REACHES,
+            {"start": target_thing_id, "goal": source_thing_id, "child_of": RelationshipType.CHILD_OF.value},
+        ).scalar_one()
+        if closes_cycle:
+            raise ValueError(
+                f"Thing {target_thing_id} is already a ChildOf ancestor of {source_thing_id}; "
+                "the edge would close a cycle"
+            )
+    if relationship_type is RelationshipType.EVIDENCE_FOR:
+        # A missing source is left to the foreign key, as for every other type.
+        source = session.get(ThingRecord, source_thing_id)
+        if source is not None:
+            _check_evidence_source(source)
+
+
+def _check_evidence_source(source: ThingRecord) -> None:
+    internal = [tag for tag in source.tags if tag in _NOT_EVIDENCE_TAGS]
+    if internal:
+        raise ValueError(f"Thing {source.id} is tagged {', '.join(internal)} and cannot stand as evidence")
+
+
 def _insert_relationship(
     session: Session,
     *,
@@ -403,11 +473,18 @@ def _insert_relationship(
     context: str | None = None,
 ) -> RelationshipRecord:
     """Add a relationship and its journal entry without committing. See :func:`_insert_thing`."""
+    relationship_type = RelationshipType(relationship_type)
     _check_text("context", context, MAX_CONTEXT_CHARS)
+    _check_edge(
+        session,
+        source_thing_id=source_thing_id,
+        target_thing_id=target_thing_id,
+        relationship_type=relationship_type,
+    )
     relationship = RelationshipRecord(
         source_thing_id=source_thing_id,
         target_thing_id=target_thing_id,
-        relationship_type=RelationshipType(relationship_type),
+        relationship_type=relationship_type,
         context=context,
         created_at=datetime.now(UTC),
     )
@@ -440,7 +517,9 @@ def relate(
 
     Raises ``ValueError`` for a type outside the five, before any statement is issued, so callers
     that resolve the type from outside the process get the offending value back rather than a
-    constraint violation.
+    constraint violation. Also raises ``ValueError``, writing nothing, for an edge from a Thing to
+    itself, a ``ChildOf`` edge that would close a cycle, and an ``EvidenceFor`` edge from a Thing
+    carrying one of Reli's own tags other than ``#Observation`` (#1696).
 
     An ``EvidenceFor`` edge is unique per (source, target): strength is the count of those edges,
     and ``EVIDENCE_FOR_UNIQUE_INDEX`` keeps a pair from carrying two. A second one raises
@@ -616,7 +695,7 @@ def record_preference(
     if not wanted:
         raise ValueError("a preference with no evidence is not recordable")
     for evidence_id in wanted:
-        _require_thing(session, evidence_id)
+        _check_evidence_source(_require_thing(session, evidence_id))
 
     anchor = get_or_create_user_anchor(session, actor=actor)
 
@@ -676,8 +755,6 @@ def add_preference_evidence(
     """
     preference = _require_preference(session, preference_id)
     _require_thing(session, evidence_id)
-    if evidence_id == preference.id:
-        raise ValueError("a preference cannot be its own evidence")
 
     already_linked = session.exec(
         select(RelationshipRecord).where(
