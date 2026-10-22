@@ -144,11 +144,12 @@ def _as_delivered(uri: str) -> AnyUrl:
 
     ``RedirectResponse`` percent-quotes the URL on the way out, which changes what some characters
     mean: a backslash, which the URL standard reads as ``/``, arrives as ``%5C`` and leaves whatever
-    precedes the next ``@`` as user info. So the registered string is parsed in the form the
-    browser receives, by ``AnyUrl``, which parses as a browser does (WHATWG). Raises
-    ``ValidationError`` when that form is not a URL.
+    precedes the next ``@`` as user info. So the registered string is sent through that same
+    redirect and its ``Location`` parsed by ``AnyUrl``, which parses as a browser does (WHATWG);
+    the query the redirect appends cannot move the authority. Raises ``ValidationError`` when that
+    form is not a URL.
     """
-    return AnyUrl(RedirectResponse(uri).headers["location"])
+    return AnyUrl(auth._client_redirect(uri, "").headers["location"])
 
 
 def _redirect_uri_is_safe(uri: str) -> bool:

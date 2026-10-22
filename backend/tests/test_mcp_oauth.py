@@ -568,6 +568,19 @@ def test_the_consent_page_names_the_host_a_browser_would_reach(client, redirect_
     assert f"<strong>{host}</strong>" in response.text
 
 
+def test_the_consent_page_names_the_host_the_redirect_delivers_to_not_the_one_the_string_reads_as():
+    # Registration refuses this URI, so the page is called directly: it is the one shape whose
+    # raw string reads as claude.ai while the code is delivered to attacker.example.
+    redirect_uri = "https://claude.ai\\@attacker.example/cb"
+    delivered = urlsplit(auth._client_redirect(redirect_uri, "", code="c").headers["location"])
+
+    page = mcp_oauth._consent_page("state", "Claude", redirect_uri).body.decode()
+
+    assert delivered.hostname == "attacker.example"
+    assert "<strong>attacker.example</strong>" in page
+    assert "<strong>claude.ai</strong>" not in page
+
+
 def test_authorize_refuses_a_redirect_uri_registered_before_the_check_tightened(client, session):
     smuggled = "https://claude.ai@attacker.example/cb"
     cleanup_and_store(
