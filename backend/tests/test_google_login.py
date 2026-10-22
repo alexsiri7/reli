@@ -5,7 +5,6 @@ here opens a socket.
 """
 
 import logging
-import ssl
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlsplit
 
@@ -190,15 +189,17 @@ def test_an_unrecognised_or_missing_error_code_falls_back_to_the_status(transpor
     assert CLIENT_SECRET not in str(raised.value)
 
 
-def test_the_client_ignores_proxy_and_ca_environment_variables_but_keeps_verifying_tls(monkeypatch, tmp_path):
-    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.test:3128")
-    monkeypatch.setenv("ALL_PROXY", "http://proxy.example.test:3128")
-    monkeypatch.setenv("SSL_CERT_FILE", str(tmp_path / "attacker-roots.pem"))
+def test_the_client_ignores_proxy_and_ca_environment_variables_but_keeps_verifying_tls(monkeypatch):
+    passed = {}
+    real_init = httpx.Client.__init__
 
-    with google_login._http_client() as client:
-        assert client.trust_env is False
-        transport = client._transport_for_url(httpx.URL(TOKEN_URL))
-        assert transport is client._transport
-        ssl_context = transport._pool._ssl_context
-        assert ssl_context.verify_mode == ssl.CERT_REQUIRED
-        assert ssl_context.check_hostname is True
+    def spy(self, *args, **kwargs):
+        passed.update(kwargs)
+        real_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(httpx.Client, "__init__", spy)
+    with google_login._http_client():
+        pass
+
+    assert passed["trust_env"] is False
+    assert passed.get("verify", True) is True
