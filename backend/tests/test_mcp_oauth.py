@@ -278,6 +278,9 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
         ["https://\u0441laude.ai/cb"],
         ["https:///cb"],
         ["http://claude.ai@localhost:3000/cb"],
+        ["https://[not-an-ip]/cb"],
+        ["https://[::1/cb"],
+        ["https://[1.2.3.4]/cb"],
     ],
     ids=[
         "http-remote",
@@ -292,6 +295,9 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
         "homograph",
         "no-host",
         "loopback-userinfo",
+        "bracketed-non-ip",
+        "unterminated-bracket",
+        "bracketed-ipv4",
     ],
 )
 def test_register_refuses_an_unsafe_redirect_whatever_its_position(client, redirect_uris):

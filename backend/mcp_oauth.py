@@ -153,7 +153,10 @@ def _redirect_uri_is_safe(uri: str) -> bool:
     It must be ``https``, or ``http`` to localhost, and its authority a plain ``host[:port]``, so the
     host the consent page names is the host the browser delivers the code to.
     """
-    parsed = urllib.parse.urlsplit(uri)
+    try:
+        parsed = urllib.parse.urlsplit(uri)
+    except ValueError:
+        return False
     if not _PLAIN_AUTHORITY.fullmatch(parsed.netloc):
         return False
     return parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1"))
@@ -323,6 +326,7 @@ def oauth_authorize(
             raise HTTPException(status_code=400, detail="redirect_uri not registered for this client")
         # A registration stored before the check tightened can still hold an unsafe URI.
         if not _redirect_uri_is_safe(redirect_uri):
+            logger.warning("MCP OAuth: refused stored unsafe redirect_uri for client %s: %r", client_id, redirect_uri)
             raise HTTPException(
                 status_code=400, detail="redirect_uri is not one this server accepts: re-register the client"
             )
