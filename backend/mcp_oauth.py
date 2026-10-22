@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 import secrets
 import urllib.parse
 import uuid
@@ -140,8 +141,21 @@ def _describe(invalid: ValidationError) -> str:
     return f"{'.'.join(str(part) for part in first['loc']) or 'body'}: {first['msg']}"
 
 
+# An authority that `urlsplit` and a browser read as the same host. Userinfo, a backslash,
+# percent-encoding and non-ASCII are where the two diverge, so a URI carrying any of them could put
+# one host on the consent page and deliver the code to another (#1702).
+_PLAIN_AUTHORITY = re.compile(r"[A-Za-z0-9.-]+(?::[0-9]+)?|\[[0-9A-Fa-f:.]+\](?::[0-9]+)?")
+
+
 def _redirect_uri_is_safe(uri: str) -> bool:
-    parsed = urllib.parse.urlparse(uri)
+    """Whether ``uri`` may receive an authorization code.
+
+    It must be ``https``, or ``http`` to localhost, and its authority a plain ``host[:port]``, so the
+    host the consent page names is the host the browser delivers the code to.
+    """
+    parsed = urllib.parse.urlsplit(uri)
+    if not _PLAIN_AUTHORITY.fullmatch(parsed.netloc):
+        return False
     return parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1"))
 
 
@@ -170,10 +184,13 @@ def _validate_auth_method(metadata: _ClientMetadata) -> str:
 def _validate_redirect_uris(redirect_uris: list[str]) -> None:
     for uri in redirect_uris:
         if not _redirect_uri_is_safe(uri):
-            logger.warning("MCP OAuth: rejected redirect_uri with unsafe scheme during registration: %r", uri)
+            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %r", uri)
             raise HTTPException(
                 status_code=400,
-                detail=f"redirect_uri must use https (or http://localhost / http://127.0.0.1 for development): {uri}",
+                detail=(
+                    "redirect_uri must use https and a plain host with no user info "
+                    f"(or http://localhost / http://127.0.0.1 for development): {uri}"
+                ),
             )
 
 
@@ -191,7 +208,7 @@ async def oauth_register(request: Request) -> JSONResponse:
 
     Raises:
         HTTPException 400: The body is not a JSON object of the shapes ``_ClientMetadata`` names, a
-            ``redirect_uri`` is not ``https`` (``http`` only for localhost), or
+            ``redirect_uri`` is not ``https`` (``http`` only for localhost) with a plain host, or
             ``token_endpoint_auth_method`` is one the token endpoint does not implement.
         HTTPException 413: The body is over ``MAX_REGISTRATION_BYTES``.
     """
@@ -247,9 +264,12 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
     Names the registered client and where its authorization code will be delivered, so a link the
     owner did not initiate announces itself instead of completing silently (confused deputy):
     without this page, ``/oauth/authorize`` sent the browser straight to Google and back to
-    whatever client had registered, with nothing on any screen naming it.
+    whatever client had registered, with nothing on any screen naming it. The host is shown on its own
+    because ``_redirect_uri_is_safe`` admits only a plain authority, so it is the host the code
+    reaches.
     """
     name = html.escape(client_name) or "an unnamed client"
+    host = html.escape(urllib.parse.urlsplit(redirect_uri).netloc.lower())
     uri = html.escape(redirect_uri)
     state = html.escape(server_state)
     return HTMLResponse(
@@ -257,7 +277,7 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
         "<meta name='robots' content='noindex'></head><body>"
         "<h1>Authorize access to Reli?</h1>"
         f"<p><strong>{name}</strong> is asking for full access to your graph.</p>"
-        f"<p>Its sign-in result will be delivered to: <code>{uri}</code></p>"
+        f"<p>Its sign-in result will be delivered to <strong>{host}</strong> (<code>{uri}</code>).</p>"
         "<p>Only continue if you just initiated this from a connector you are setting up.</p>"
         "<form method='post' action='/oauth/authorize/confirm'>"
         f"<input type='hidden' name='server_state' value='{state}'>"
@@ -301,6 +321,11 @@ def oauth_authorize(
             raise HTTPException(status_code=400, detail="Unknown client_id — register first via POST /oauth/register")
         if redirect_uri not in registered["redirect_uris"]:
             raise HTTPException(status_code=400, detail="redirect_uri not registered for this client")
+        # A registration stored before the check tightened can still hold an unsafe URI.
+        if not _redirect_uri_is_safe(redirect_uri):
+            raise HTTPException(
+                status_code=400, detail="redirect_uri is not one this server accepts: re-register the client"
+            )
 
         server_state = secrets.token_urlsafe(32)
         code_verifier = secrets.token_urlsafe(64)
