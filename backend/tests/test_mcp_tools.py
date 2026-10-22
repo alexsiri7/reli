@@ -971,7 +971,7 @@ def test_mcp_endpoint_refuses_a_jwt_for_another_audience(client, secret_key):
 
 def test_an_expired_jwt_is_refused_naming_the_refresh_path(client, secret_key):
     expired = jwt.encode(
-        {"sub": "1234567890", "aud": "mcp", "exp": datetime.now(UTC) - timedelta(seconds=1)},
+        {"iss": auth.base_url(), "sub": "1234567890", "aud": "mcp", "exp": datetime.now(UTC) - timedelta(seconds=1)},
         secret_key,
         algorithm="HS256",
     )

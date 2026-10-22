@@ -189,8 +189,9 @@ re-check above is what actually ends a chain.
 done:
 
 1. Set the settings on the deploy: `SECRET_KEY` to at least 32 random bytes
-   (`python -c "import secrets; print(secrets.token_urlsafe(48))"`), `ALLOWED_EMAILS` to the
-   owner's Google address, `GOOGLE_AUTH_REDIRECT_URI` to `https://<host>/api/auth/google/callback`.
+   (`python -c "import secrets; print(secrets.token_urlsafe(48))"`), a different one on
+   each environment (#1697), `ALLOWED_EMAILS` to the owner's Google address,
+   `GOOGLE_AUTH_REDIRECT_URI` to `https://<host>/api/auth/google/callback`.
    #1448 found `SECRET_KEY`, `ALLOWED_EMAILS` and `GOOGLE_AUTH_REDIRECT_URI` still set on Railway
    from before the rebuild; a human checks the values, in particular that the redirect URI's path
    is exactly this one.

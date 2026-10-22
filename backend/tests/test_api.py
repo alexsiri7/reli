@@ -479,7 +479,9 @@ def test_an_mcp_token_is_not_a_web_session(anonymous, secret_key):
 
 def test_an_expired_session_is_401_saying_so(anonymous, secret_key):
     expired = datetime.now(UTC) - timedelta(days=1)
-    token = jwt.encode({"sub": "x", "aud": auth.WEB_AUDIENCE, "exp": expired}, SECRET_KEY, algorithm="HS256")
+    token = jwt.encode(
+        {"iss": auth.base_url(), "sub": "x", "aud": auth.WEB_AUDIENCE, "exp": expired}, SECRET_KEY, algorithm="HS256"
+    )
 
     response = anonymous.get("/api/things", headers=_cookie(token))
 
