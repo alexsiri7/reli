@@ -39,7 +39,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.routing import APIRoute
 from pydantic import AfterValidator, AnyUrl, BaseModel, ValidationError
 from sqlmodel import Session
-from starlette.types import Message, Receive
 
 from . import auth, google_login
 from .config import settings
@@ -110,20 +109,6 @@ async def _read_bounded(request: Request) -> bytes:
     return bytes(body)
 
 
-def _replaying(body: bytes, receive: Receive) -> Receive:
-    """A ``receive`` that delivers *body* whole, then hands over to *receive* for the disconnect."""
-    delivered = False
-
-    async def replay() -> Message:
-        nonlocal delivered
-        if delivered:
-            return await receive()
-        delivered = True
-        return {"type": "http.request", "body": body, "more_body": False}
-
-    return replay
-
-
 class _BoundedBodyRoute(APIRoute):
     """A route whose body is read through :func:`_read_bounded` before anything else sees it.
 
@@ -135,8 +120,9 @@ class _BoundedBodyRoute(APIRoute):
         handler = super().get_route_handler()
 
         async def bounded(request: Request) -> Response:
-            body = await _read_bounded(request)
-            return await handler(Request(request.scope, _replaying(body, request.receive)))
+            # Starlette's own cache of a body already read: every later reader is served from it.
+            request._body = await _read_bounded(request)
+            return await handler(request)
 
         return bounded
 
