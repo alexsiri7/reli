@@ -1,10 +1,13 @@
 """The semantics of the write path, beyond the journalling that test_journal.py covers."""
 
+import threading
+import time
 import uuid
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError
+from sqlmodel import Session
 
 from backend import service
 from backend.db_models import (
@@ -248,6 +251,48 @@ def test_relate_refuses_a_child_of_edge_closing_a_longer_cycle(session):
 
     with pytest.raises(ValueError, match="cycle"):
         _relate(session, bottom, top, RelationshipType.CHILD_OF)
+
+
+def test_concurrent_child_of_edges_cannot_close_a_cycle_between_them(session):
+    """Each transaction's check misses the other's uncommitted edge unless the second one waits."""
+    from backend.db_engine import get_engine
+
+    a = create_thing(session, actor=Actor.USER, title="a")
+    b = create_thing(session, actor=Actor.USER, title="b")
+    service._insert_relationship(
+        session,
+        actor=Actor.CLAUDE_INTERACTIVE,
+        source_thing_id=a.id,
+        target_thing_id=b.id,
+        relationship_type=RelationshipType.CHILD_OF,
+    )
+    outcome: list[BaseException] = []
+
+    def reverse() -> None:
+        with Session(get_engine()) as racer:
+            try:
+                _relate(racer, b, a, RelationshipType.CHILD_OF)
+            except ValueError as exc:
+                outcome.append(exc)
+
+    racer = threading.Thread(target=reverse)
+    racer.start()
+    deadline = time.monotonic() + 5
+    while not _waiting_on_an_advisory_lock(session) and racer.is_alive() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    session.commit()
+    racer.join()
+
+    assert len(outcome) == 1 and "cycle" in str(outcome[0])
+    edges = session.execute(text("SELECT count(*) FROM relationships WHERE relationship_type = 'ChildOf'")).scalar_one()
+    assert edges == 1
+
+
+def _waiting_on_an_advisory_lock(session):
+    return (
+        session.execute(text("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted")).scalar_one()
+        > 0
+    )
 
 
 def test_relate_allows_a_second_parent_and_a_reverse_edge_of_another_type(session):

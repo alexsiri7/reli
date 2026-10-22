@@ -406,11 +406,17 @@ _CHILD_OF_REACHES = text(
         SELECT r.target_thing_id
         FROM below b
         JOIN relationships r ON r.source_thing_id = b.thing_id
-        WHERE r.relationship_type = 'ChildOf'
+        WHERE r.relationship_type = :child_of
     )
     SELECT EXISTS (SELECT 1 FROM below WHERE thing_id = :goal)
     """
 )
+
+#: Serialises every ``ChildOf`` insert until its transaction ends. Without it two transactions
+#: under READ COMMITTED each miss the other's uncommitted edge, and ``A → B`` beside ``B → A``
+#: passes both checks. The lock is global rather than per pair because a longer cycle is closed by
+#: edges between different pairs.
+_LOCK_CHILD_OF_WRITES = text("SELECT pg_advisory_xact_lock(hashtext('reli.ChildOf'))")
 
 #: The internal tags an ``EvidenceFor`` source may not carry. ``#Observation`` is absent because an
 #: observation is what evidence is meant to be; the rest are Reli's own records, and one of them
@@ -434,8 +440,10 @@ def _check_edge(
     if source_thing_id == target_thing_id:
         raise ValueError(f"a {relationship_type.value} edge cannot run from Thing {source_thing_id} to itself")
     if relationship_type is RelationshipType.CHILD_OF:
+        session.execute(_LOCK_CHILD_OF_WRITES)
         closes_cycle = session.execute(
-            _CHILD_OF_REACHES, {"start": target_thing_id, "goal": source_thing_id}
+            _CHILD_OF_REACHES,
+            {"start": target_thing_id, "goal": source_thing_id, "child_of": RelationshipType.CHILD_OF.value},
         ).scalar_one()
         if closes_cycle:
             raise ValueError(
