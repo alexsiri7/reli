@@ -276,6 +276,11 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
         ["https://[not-an-ip]/cb"],
         ["https://[::1/cb"],
         ["https://[1.2.3.4]/cb"],
+        ["https://claude.ai\\@attacker.example/cb"],
+        ["https://attacker.example\\@claude.ai/cb"],
+        ["https://claude.ai:\\443@attacker.example/cb"],
+        ["https://attacker.example\\.claude.ai/cb"],
+        ["https://claude.ai\t.attacker.example/cb"],
     ],
     ids=[
         "http-remote",
@@ -288,6 +293,11 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
         "bracketed-non-ip",
         "unterminated-bracket",
         "bracketed-ipv4",
+        "backslash-userinfo",
+        "backslash-userinfo-reversed",
+        "backslash-port",
+        "backslash-host",
+        "tab-host",
     ],
 )
 def test_register_refuses_an_unsafe_redirect_whatever_its_position(client, redirect_uris):
@@ -543,13 +553,11 @@ def test_authorize_escapes_an_attacker_controlled_client_name_and_redirect_uri(c
 @pytest.mark.parametrize(
     ("redirect_uri", "host"),
     [
-        ("https://attacker.example\\@claude.ai/cb", "attacker.example"),
-        ("https://attacker.example\\.claude.ai/cb", "attacker.example"),
         ("https://claude.ai%2eevil.example/cb", "claude.ai.evil.example"),
         ("https://\u0441laude.ai/cb", "xn--laude-0ye.ai"),
         ("https:///cb", "cb"),
     ],
-    ids=["backslash-userinfo", "backslash-host", "percent-host", "homograph", "no-host"],
+    ids=["percent-host", "homograph", "no-host"],
 )
 def test_the_consent_page_names_the_host_a_browser_would_reach(client, redirect_uri, host):
     registered = _register(client, redirect_uris=[redirect_uri])

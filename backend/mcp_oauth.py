@@ -139,14 +139,26 @@ def _describe(invalid: ValidationError) -> str:
     return f"{'.'.join(str(part) for part in first['loc']) or 'body'}: {first['msg']}"
 
 
+def _as_delivered(uri: str) -> AnyUrl:
+    """``uri`` as the browser reads it once ``auth._client_redirect`` sends it there.
+
+    ``RedirectResponse`` percent-quotes the URL on the way out, which changes what some characters
+    mean: a backslash, which the URL standard reads as ``/``, arrives as ``%5C`` and leaves whatever
+    precedes the next ``@`` as user info. So the registered string is parsed in the form the
+    browser receives, by ``AnyUrl``, which parses as a browser does (WHATWG). Raises
+    ``ValidationError`` when that form is not a URL.
+    """
+    return AnyUrl(RedirectResponse(uri).headers["location"])
+
+
 def _redirect_uri_is_safe(uri: str) -> bool:
     """Whether ``uri`` may receive an authorization code.
 
-    It must be ``https``, or ``http`` to localhost, and carry no userinfo. ``AnyUrl`` parses it as a
-    browser does (WHATWG), so the host it reads is the host the browser delivers the code to (#1702).
+    It must be ``https``, or ``http`` to localhost, and carry no userinfo, as the browser reads it,
+    so the host checked is the host the code is delivered to (#1702).
     """
     try:
-        parsed = AnyUrl(uri)
+        parsed = _as_delivered(uri)
     except ValidationError:
         return False
     if parsed.username is not None or parsed.password is not None:
@@ -260,11 +272,10 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
     owner did not initiate announces itself instead of completing silently (confused deputy):
     without this page, ``/oauth/authorize`` sent the browser straight to Google and back to
     whatever client had registered, with nothing on any screen naming it. The host is shown on its own,
-    read by the same browser-conformant parser ``_redirect_uri_is_safe`` uses, so it is the host the
-    code reaches.
+    read as ``_redirect_uri_is_safe`` reads it, so it is the host the code reaches.
     """
     name = html.escape(client_name) or "an unnamed client"
-    host = html.escape(AnyUrl(redirect_uri).host or "")
+    host = html.escape(_as_delivered(redirect_uri).host or "")
     uri = html.escape(redirect_uri)
     state = html.escape(server_state)
     return HTMLResponse(
