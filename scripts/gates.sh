@@ -35,6 +35,7 @@ run_typecheck() {
 
 # Needs a Docker daemon: the suite starts a throwaway Postgres via testcontainers.
 # Set RELI_TEST_DATABASE_URL to run against an existing database instead.
+# A server without TLS, such as the localdb Postgres, needs ?sslmode=disable on that URL.
 run_test() {
     echo "=== Test ==="
     uv run pytest backend/tests/ -x --tb=short --cov=backend --cov-fail-under=70

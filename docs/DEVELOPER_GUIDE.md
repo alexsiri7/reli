@@ -15,7 +15,7 @@ The project layout is in the [README](../README.md) and the rules every change m
 
 `test` starts a throwaway `postgres:16-alpine` via testcontainers and runs the baseline migration
 against it, so it needs a Docker daemon; set `RELI_TEST_DATABASE_URL` to use an existing database
-instead. `frontend` is not in the no-arg default because it needs node and a browser. Screenshot
+instead, ending in `?sslmode=disable` when that server speaks no TLS. `frontend` is not in the no-arg default because it needs node and a browser. Screenshot
 snapshots are only valid from the pinned Playwright container — the regeneration command is in
 the Screenshot Tests section of `CLAUDE.md`.
 

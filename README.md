@@ -109,7 +109,8 @@ same container. Data lives in Postgres, not on the container filesystem.
 
 The suite starts a throwaway `postgres:16-alpine` via testcontainers and runs the baseline migration
 against it, so it needs a working Docker daemon. Set `RELI_TEST_DATABASE_URL` to use an existing
-database instead.
+database instead; a URL naming no `sslmode` requires TLS, so one for a server without it, such as the
+`localdb` Postgres, must end in `?sslmode=disable`.
 
 `frontend` is not in the no-arg default: it needs node and a browser. CI runs it as its own job
 inside the pinned Playwright container, and so must anyone regenerating the screenshots — see the
