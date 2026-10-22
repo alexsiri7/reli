@@ -168,8 +168,9 @@ def web_session(request: Request) -> dict[str, Any] | None:
     """The claims of the request's ``__Host-reli_session`` cookie, or ``None`` when it carries none.
 
     Raises:
-        SessionRefused: The cookie is there but expired, not this Reli's, or unverifiable because
-            ``SECRET_KEY`` is empty or too short — each with the sentence a person should see.
+        SessionRefused: The cookie is there but expired, not this Reli's, unverifiable because
+            ``SECRET_KEY`` is empty or too short, or names an account no longer in
+            ``ALLOWED_EMAILS`` — each with the sentence a person should see.
     """
     token = request.cookies.get(SESSION_COOKIE, "")
     if not token:
@@ -177,11 +178,14 @@ def web_session(request: Request) -> dict[str, Any] | None:
     if not settings.secret_key_configured:
         raise SessionRefused(not_configured_detail(["SECRET_KEY"]))
     try:
-        return decode_jwt(token, WEB_AUDIENCE)
+        claims = decode_jwt(token, WEB_AUDIENCE)
     except jwt.ExpiredSignatureError as expired:
         raise SessionRefused(_SESSION_EXPIRED) from expired
     except jwt.InvalidTokenError as invalid:
         raise SessionRefused(_SESSION_INVALID) from invalid
+    if not is_allowed(str(claims.get("email", ""))):
+        raise SessionRefused(_INVITE_ONLY)
+    return claims
 
 
 def _client_redirect(redirect_uri: str, client_state: str, **params: str) -> RedirectResponse:

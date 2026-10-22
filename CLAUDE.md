@@ -166,9 +166,12 @@ boot. A `SECRET_KEY` shorter than 32 bytes counts as empty (#1534): a key that s
 brute-forceable tokens, so it closes the sign-in rather than opening it. **Empty `ALLOWED_EMAILS`
 admits nobody.**
 
-**Revoking a connector.** Removing an address from `ALLOWED_EMAILS` is checked again on every
-token issuance in `mcp_oauth.py`, not just at the Google callback, so it also cuts off a connector's
-existing refresh chain — the next refresh exchange is refused and the whole family is deleted. To
+**Revoking a connector.** Removing an address from `ALLOWED_EMAILS` is checked again whenever a
+credential is presented, not just at the Google callback (#1693): `web_session` refuses a session
+cookie and the `/mcp` bearer check refuses an access token whose email has left the list, so a live
+JWT stops working on its next request rather than when it expires. It is also checked on every token
+issuance in `mcp_oauth.py`, so it cuts off a connector's existing refresh chain — the next refresh
+exchange is refused and the whole family is deleted. To
 revoke one connector while leaving the account able to sign in to others,
 `DELETE FROM mcp_refresh_tokens WHERE family_id = '<family_id>'` against `DATABASE_URL`.
 `mcp_refresh_tokens` and `mcp_auth_codes` hold SHA-256 digests of the credentials, not the

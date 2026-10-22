@@ -75,6 +75,7 @@ def anonymous(session, monkeypatch):
 @pytest.fixture()
 def secret_key(monkeypatch):
     monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
     return SECRET_KEY
 
 
