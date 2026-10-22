@@ -228,8 +228,16 @@ def test_discovery_and_registration_answer_without_any_credential(session, monke
 
 @pytest.mark.parametrize(
     "redirect_uris",
-    [[CLIENT_REDIRECT], ["http://localhost:3000/cb"], ["http://127.0.0.1:3000/cb"], [], None],
-    ids=["https", "localhost", "loopback", "empty", "null"],
+    [
+        [CLIENT_REDIRECT],
+        ["http://localhost:3000/cb"],
+        ["http://127.0.0.1:3000/cb"],
+        ["https://[::1]:8443/cb"],
+        ["https://client.example.test/p@q"],
+        [],
+        None,
+    ],
+    ids=["https", "localhost", "loopback", "ipv6", "at-in-path", "empty", "null"],
 )
 def test_register_accepts_https_and_loopback_redirects(client, redirect_uris):
     response = client.post("/oauth/register", json={"redirect_uris": redirect_uris, "client_name": "Claude"})
@@ -257,8 +265,40 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
 
 @pytest.mark.parametrize(
     "redirect_uris",
-    [["http://evil.com/cb"], ["javascript:alert(1)"], ["not-a-url"], [CLIENT_REDIRECT, "http://evil.com/cb"]],
-    ids=["http-remote", "javascript", "schemeless", "mixed"],
+    [
+        ["http://evil.com/cb"],
+        ["javascript:alert(1)"],
+        ["not-a-url"],
+        [CLIENT_REDIRECT, "http://evil.com/cb"],
+        ["https://claude.ai@attacker.example/cb"],
+        ["https://claude.ai:x@attacker.example/cb"],
+        ["http://claude.ai@localhost:3000/cb"],
+        ["https://[not-an-ip]/cb"],
+        ["https://[::1/cb"],
+        ["https://[1.2.3.4]/cb"],
+        ["https://claude.ai\\@attacker.example/cb"],
+        ["https://attacker.example\\@claude.ai/cb"],
+        ["https://claude.ai:\\443@attacker.example/cb"],
+        ["https://attacker.example\\.claude.ai/cb"],
+        ["https://claude.ai\t.attacker.example/cb"],
+    ],
+    ids=[
+        "http-remote",
+        "javascript",
+        "schemeless",
+        "mixed",
+        "userinfo",
+        "userinfo-password",
+        "loopback-userinfo",
+        "bracketed-non-ip",
+        "unterminated-bracket",
+        "bracketed-ipv4",
+        "backslash-userinfo",
+        "backslash-userinfo-reversed",
+        "backslash-port",
+        "backslash-host",
+        "tab-host",
+    ],
 )
 def test_register_refuses_an_unsafe_redirect_whatever_its_position(client, redirect_uris):
     response = client.post("/oauth/register", json={"redirect_uris": redirect_uris})
@@ -486,6 +526,7 @@ def test_authorize_shows_a_consent_page_naming_the_client_and_remembers_the_requ
     assert response.headers["cache-control"] == "no-store"
     body = response.text
     assert "Claude" in body
+    assert "<strong>client.example.test</strong>" in body
     assert CLIENT_REDIRECT in body
     server_state = _server_state(body)
     flow = cleanup_and_get(session, mcp_oauth_sessions, server_state)
@@ -507,6 +548,61 @@ def test_authorize_escapes_an_attacker_controlled_client_name_and_redirect_uri(c
     assert response.status_code == 200
     assert "<script>alert(1)</script>" not in response.text
     assert "&lt;script&gt;" in response.text
+
+
+@pytest.mark.parametrize(
+    ("redirect_uri", "host"),
+    [
+        ("https://claude.ai%2eevil.example/cb", "claude.ai.evil.example"),
+        ("https://\u0441laude.ai/cb", "xn--laude-0ye.ai"),
+        ("https:///cb", "cb"),
+    ],
+    ids=["percent-host", "homograph", "no-host"],
+)
+def test_the_consent_page_names_the_host_a_browser_would_reach(client, redirect_uri, host):
+    registered = _register(client, redirect_uris=[redirect_uri])
+
+    response = _authorize(client, registered["client_id"], redirect_uri=redirect_uri)
+
+    assert response.status_code == 200
+    assert f"<strong>{host}</strong>" in response.text
+
+
+def test_the_consent_page_names_the_host_the_redirect_delivers_to_not_the_one_the_string_reads_as():
+    # Registration refuses this URI, so the page is called directly: it is the one shape whose
+    # raw string reads as claude.ai while the code is delivered to attacker.example.
+    redirect_uri = "https://claude.ai\\@attacker.example/cb"
+    delivered = urlsplit(auth._client_redirect(redirect_uri, "", code="c").headers["location"])
+
+    page = mcp_oauth._consent_page("state", "Claude", redirect_uri).body.decode()
+
+    assert delivered.hostname == "attacker.example"
+    assert "<strong>attacker.example</strong>" in page
+    assert "<strong>claude.ai</strong>" not in page
+
+
+def test_authorize_refuses_a_redirect_uri_registered_before_the_check_tightened(client, session):
+    smuggled = "https://claude.ai@attacker.example/cb"
+    cleanup_and_store(
+        session,
+        mcp_registered_clients,
+        "stale-client",
+        {
+            "client_secret": "secret",
+            "redirect_uris": [smuggled],
+            "client_name": "Claude",
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "client_secret_post",
+            "scope": "mcp",
+            "expires_at": datetime.now(UTC) + timedelta(hours=1),
+        },
+    )
+
+    response = _authorize(client, "stale-client", redirect_uri=smuggled)
+
+    assert response.status_code == 400
+    assert "server_state" not in response.text
 
 
 def test_authorize_confirm_sends_the_browser_to_google(client, session):
