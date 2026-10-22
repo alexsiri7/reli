@@ -26,6 +26,7 @@ from .db_models import (
     OWNER_TIMEZONE,
     PREFERENCE_TAG,
     REJECTED_TAG,
+    SCHEDULED_TASK_TAG,
     USER_ANCHOR_ID,
     USER_TAG,
     Actor,
@@ -311,6 +312,7 @@ def update_thing(
     """
     _check_thing_fields(title=title, description=description, notes=notes, tags=tags, urls=urls, priority=priority)
     thing = _require_thing(session, thing_id)
+    _check_heartbeat_kept(thing, tags=tags, active=active)
     before = _snapshot(thing)
 
     updates = {
@@ -342,6 +344,20 @@ def update_thing(
     session.commit()
     session.refresh(thing)
     return thing
+
+
+def _check_heartbeat_kept(thing: ThingRecord, *, tags: list[str] | None, active: bool | None) -> None:
+    """Refuse archiving a heartbeat or dropping its tag (#1704).
+
+    A missed scheduled run is reported only as its ``SCHEDULED_TASK_TAG`` Thing left due, found by
+    that tag among active Things; either write would hide the miss instead of reporting it.
+    """
+    if SCHEDULED_TASK_TAG not in thing.tags:
+        return
+    if active is False:
+        raise ValueError(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and cannot be archived")
+    if tags is not None and SCHEDULED_TASK_TAG not in tags:
+        raise ValueError(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and must keep that tag")
 
 
 #: How many backfilled Things fall due on one day. The morning conversation asks about three to

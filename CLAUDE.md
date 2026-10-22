@@ -266,7 +266,8 @@ resolution pass notes it in the briefing and the morning conversation says so in
 leaves out (#1516). That is the whole signal — #1484 removed the GitHub Actions watchdog that used
 to read the heartbeats from outside, and nothing replaced it. The heartbeats must never be archived,
 because an archived Thing leaves the tree and the tag lookup, so archiving one hides a missed run
-instead of reporting it.
+instead of reporting it. `update_thing` in `backend/service.py` refuses both ways of doing that —
+archiving a `#ScheduledTask` Thing and a tags write that drops the tag (#1704).
 
 **The fallback, documented and not built.** If claude.ai scheduled tasks prove unreliable — the
 owner notices a night the passes left no trace — the overnight two move to a host cron running

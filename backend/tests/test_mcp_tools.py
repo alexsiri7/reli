@@ -19,7 +19,7 @@ from sqlalchemy import text
 
 from backend import auth, prompts, service
 from backend.config import settings
-from backend.db_models import NEW_TAG, Actor, RelationshipType
+from backend.db_models import NEW_TAG, SCHEDULED_TASK_TAG, Actor, RelationshipType
 from backend.mcp_server import (
     MAX_STALE_DAYS,
     McpActor,
@@ -238,6 +238,15 @@ def test_archive_thing_deactivates_without_deleting(tools):
     assert archived["active"] is False
     assert [(e.actor, e.operation) for e in _entries_since(tools, before)] == [("claude_interactive", "update")]
     assert get_thing(uuid.UUID(thing["id"]))["thing"]["active"] is False
+
+
+def test_archive_thing_refuses_a_heartbeat(tools):
+    heartbeat = create_thing(actor="claude_scheduled", title="Morning conversation", tags=[SCHEDULED_TASK_TAG])
+
+    with pytest.raises(ToolError, match="cannot be archived"):
+        asyncio.run(reli_mcp.call_tool("archive_thing", {"actor": "claude_interactive", "thing_id": heartbeat["id"]}))
+
+    assert get_thing(uuid.UUID(heartbeat["id"]))["thing"]["active"] is True
 
 
 def test_relate_and_unrelate_journal_the_edge(tools):

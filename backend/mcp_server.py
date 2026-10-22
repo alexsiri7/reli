@@ -239,7 +239,7 @@ def update_thing(
     refused whole, naming the field.
 
     Archiving is not done here — use archive_thing, so there is one journalled way to retire a
-    Thing.
+    Thing. A tags write that drops #ScheduledTask from a heartbeat is refused.
 
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
@@ -277,7 +277,8 @@ def archive_thing(actor: McpActor, thing_id: uuid.UUID) -> dict[str, Any]:
 
     The Thing and its relationships stay in the graph and stay readable; it simply drops out of
     due_for_checkin, stale, blocked, needs_input and the default find_things. There is no hard
-    delete over MCP and nothing here un-archives.
+    delete over MCP and nothing here un-archives. A #ScheduledTask heartbeat is refused: archiving
+    one would hide a missed scheduled run.
 
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
