@@ -20,11 +20,11 @@ The routes and their response models are in `backend/api.py`, the TypeScript mir
 | GET | `/api/things/{thing_id}` | `ThingDetail` | One Thing and every edge touching it. 404 when absent. `direction` is resolved relative to the requested Thing. |
 | GET | `/api/things/{thing_id}/history?limit=` | `HistoryOut` | The newest `limit` journal entries (1–1000, default 200), oldest first within that window. Only entries recorded against the Thing itself — relating and unrelating are journalled against the relationship, so edge changes do not appear. An unknown id answers an empty history, not a 404. |
 | GET | `/api/user-model?scope=` | `UserModelOut` | Every preference with its evidence. Rejected preferences are **always** included, so the view can make a wrong one spottable. A preference with no evidence or a blank scope never appears. |
-| POST | `/api/preferences/{preference_id}/reject` | `PreferenceOut` | **The only write.** Tags the preference `#Rejected` and journals it as `Actor.USER`. Rejecting twice is a 200 that changes nothing. 404 for a missing id or a Thing that is not tagged `#Preference`. |
+| POST | `/api/preferences/{preference_id}/reject` | `PreferenceOut` | **The only write.** Tags the preference `#Rejected` and journals it as `Actor.USER`. Rejecting twice is a 200 that changes nothing. 404 for a missing id or a Thing that is not tagged `#Preference`. 403 when the request's `Origin` is not the base URL (`auth.require_same_origin`, #1698). |
 | GET | `/api/auth/google` | `{auth_url}` | Where the sign-in view sends the browser. 501 naming each empty sign-in setting. Public. |
 | GET | `/api/auth/google/callback` | redirect | Where Google sends the browser back, for the web view and the MCP connector alike; public because it lands in a browser with no session yet. A web sign-in answers a 302 to `/` with the `__Host-reli_session` cookie, or to `/?error=invite_only` / `/?error=cancelled`; an MCP sign-in a 302 to the connector. 400 for an unknown `state`, 502 naming the human step when Google refuses the exchange. |
 | GET | `/api/auth/me` | `{email}` | The view's "am I signed in" probe: the cookie's email, or 401 whose detail says whether to sign in or which setting is missing. Public. |
-| POST | `/api/auth/logout` | 204 | Deletes the cookie. There is no revocation list. Public. |
+| POST | `/api/auth/logout` | 204 | Deletes the cookie. There is no revocation list. Needs no session, but is 403 when the request's `Origin` is not the base URL (`auth.require_same_origin`, #1698). |
 | any | `/api/{anything else}` | — | 404 JSON, never the SPA fallback. |
 
 `GET /healthz` is unauthenticated and answers `{"status": "ok", "service": "reli"}`.

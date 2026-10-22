@@ -384,6 +384,14 @@ def test_rejecting_from_any_page_but_reli_s_own_is_refused(client, session, orig
     assert _journal_count(session) == before
 
 
+def test_a_read_needs_no_origin(client):
+    """Only the cookie-authenticated POSTs check the ``Origin``; a read stays a plain cookie check."""
+    client.headers.pop("Origin")
+
+    assert client.get("/api/things").status_code == 200
+    assert client.get("/api/user-model").status_code == 200
+
+
 def test_rejecting_a_thing_that_is_not_a_preference_is_404(client, session):
     """The path names a preference resource, and there is no preference there."""
     thing = _thing(session, "Rebuild Reli")
