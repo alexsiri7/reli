@@ -6,6 +6,11 @@ configuration at import time — ``get_engine`` resolves it on first use — so 
 
 Every connection the engine opens carries a ``statement_timeout``, so no statement — however the
 graph is shaped — can hold one of the pool's connections indefinitely.
+
+An unhandled database error is re-raised to the log and Sentry, so the exceptions an engine raises
+must not carry a Thing's title, notes or URLs or a journal entry's before/after snapshots (#1694).
+``hide_parameters`` keeps SQLAlchemy from appending the bound parameters, and
+``redact_statement_errors`` cuts what remains of the server's text, which quotes them.
 """
 
 from __future__ import annotations
@@ -13,7 +18,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
+from sqlalchemy.engine import ExceptionContext
 from sqlmodel import Session, create_engine
 
 from .config import settings
@@ -38,12 +44,32 @@ def get_engine() -> Engine:
         _engine = create_engine(
             settings.database_url,
             echo=False,
+            hide_parameters=True,
             pool_size=3,
             max_overflow=2,
             pool_pre_ping=True,
             connect_args={"options": f"-c statement_timeout={STATEMENT_TIMEOUT}"},
         )
+        redact_statement_errors(_engine)
     return _engine
+
+
+def _keep_the_first_line(context: ExceptionContext) -> None:
+    for error in (context.original_exception, context.sqlalchemy_exception):
+        if error is not None and len(error.args) == 1 and isinstance(error.args[0], str):
+            error.args = (error.args[0].split("\n", 1)[0],)
+
+
+def redact_statement_errors(engine: Engine) -> None:
+    """Cut every database error the engine raises to its first line: the error class and message.
+
+    psycopg2 interpolates the parameters client-side, so the lines Postgres adds beneath its message
+    — the ``LINE`` excerpt, ``DETAIL`` and ``CONTEXT`` — quote the written Thing, and SQLAlchemy
+    copies that text into the error it wraps the driver's in. The ``[SQL: …]`` block is added when
+    the error is printed, so the statement survives the cut, and the engine's ``hide_parameters``
+    decides whether the bound parameters are printed beneath it.
+    """
+    event.listen(engine, "handle_error", _keep_the_first_line)
 
 
 def reset_engine() -> None:

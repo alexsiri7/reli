@@ -13,6 +13,7 @@ from sqlalchemy import engine_from_config, pool, text
 
 from backend.alembic.safety import check_pending_migrations
 from backend.alembic.utils import build_connect_args
+from backend.db_engine import redact_statement_errors
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,10 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
         connect_args=_connect_args,
+        # A data migration binds Thing content, which a failed boot would otherwise log (#1694).
+        hide_parameters=True,
     )
+    redact_statement_errors(connectable)
 
     with connectable.connect() as connection:
         # Safety check: scan pending migrations for destructive DDL
