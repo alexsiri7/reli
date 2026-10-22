@@ -17,7 +17,7 @@ Every route that serves graph data — the web view's data routes and the MCP en
 
 ### Requirement: Only allowlisted accounts are admitted
 
-Only Google accounts on the configured allowlist SHALL be admitted; an empty allowlist SHALL admit nobody. An account outside it SHALL be refused with a clear sentence rather than a blank failure. The allowlist SHALL be checked again on every token issuance, so removing an address ends that account's existing connector sessions at their next refresh.
+Only Google accounts on the configured allowlist SHALL be admitted; an empty allowlist SHALL admit nobody. An account outside it SHALL be refused with a clear sentence rather than a blank failure. The allowlist SHALL be checked again whenever a credential is presented and on every token issuance, so removing an address ends that account's live sessions on their next request and its connector refresh chains.
 
 #### Scenario: A stranger signs in
 - GIVEN an account not on the allowlist
@@ -29,6 +29,11 @@ Only Google accounts on the configured allowlist SHALL be admitted; an empty all
 - GIVEN a connector with a live refresh chain for an allowlisted address
 - WHEN the address is removed from the allowlist and the connector next refreshes
 - THEN the refresh is refused and the chain is ended
+
+#### Scenario: Address removed while a credential is live
+- GIVEN an unexpired web session cookie or MCP access token for an allowlisted address
+- WHEN the address is removed from the allowlist and the credential is next presented
+- THEN the request is refused with 401 and the invite-only sentence
 
 ### Requirement: A claude.ai connector authorises through Google
 
