@@ -312,6 +312,10 @@ def relate(
     exists: strength is the count of those edges. To reinforce a preference, call
     add_preference_evidence, which changes nothing on a repeat.
 
+    Also refused: an edge from a Thing to itself, a ChildOf edge that would make a Thing its own
+    ancestor, and an EvidenceFor edge from a Thing tagged #User, #Preference, #ScheduledTask or
+    #Briefing.
+
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
         source_thing_id: The Thing the edge runs from.

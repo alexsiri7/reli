@@ -7,7 +7,16 @@ from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError
 
 from backend import service
-from backend.db_models import NEW_TAG, USER_ANCHOR_ID, Actor, RelationshipType, ThingRecord
+from backend.db_models import (
+    INTERNAL_TAGS,
+    NEW_TAG,
+    OBSERVATION_TAG,
+    USER_ANCHOR_ID,
+    Actor,
+    RelationshipType,
+    ThingRecord,
+)
+from backend.queries import tree_level
 from backend.service import (
     DuplicateRelationship,
     FieldTooLarge,
@@ -191,6 +200,99 @@ def test_a_failed_evidence_for_mutation_still_raises_the_database_error(session)
 
     assert not isinstance(raised.value, DuplicateRelationship)
     assert _journal_count(session) == before_count
+
+
+# --- Edges the read path would misread (#1696) ------------------------------------------------------
+
+
+def _relate(session, source, target, relationship_type):
+    return relate(
+        session,
+        actor=Actor.CLAUDE_INTERACTIVE,
+        source_thing_id=source.id,
+        target_thing_id=target.id,
+        relationship_type=relationship_type,
+    )
+
+
+@pytest.mark.parametrize("relationship_type", list(RelationshipType))
+def test_relate_refuses_a_self_loop_of_every_type(session, relationship_type):
+    thing = create_thing(session, actor=Actor.USER, title="alone")
+    before_count = _journal_count(session)
+
+    with pytest.raises(ValueError, match="itself"):
+        _relate(session, thing, thing, relationship_type)
+
+    assert _journal_count(session) == before_count
+
+
+def test_relate_refuses_a_child_of_cycle_and_the_tree_keeps_both_things(session):
+    """A two-cycle would drop both Things from the top level: neither would be unclaimed."""
+    a = create_thing(session, actor=Actor.USER, title="a")
+    b = create_thing(session, actor=Actor.USER, title="b")
+    _relate(session, a, b, RelationshipType.CHILD_OF)
+    before_count = _journal_count(session)
+
+    with pytest.raises(ValueError, match="cycle"):
+        _relate(session, b, a, RelationshipType.CHILD_OF)
+
+    assert _journal_count(session) == before_count
+    assert a.id in {node.thing.id for node in tree_level(session)}
+    assert [node.thing.id for node in tree_level(session, parent_id=a.id)] == [b.id]
+
+
+def test_relate_refuses_a_child_of_edge_closing_a_longer_cycle(session):
+    top, middle, bottom = (create_thing(session, actor=Actor.USER, title=title) for title in ("top", "mid", "low"))
+    _relate(session, top, middle, RelationshipType.CHILD_OF)
+    _relate(session, middle, bottom, RelationshipType.CHILD_OF)
+
+    with pytest.raises(ValueError, match="cycle"):
+        _relate(session, bottom, top, RelationshipType.CHILD_OF)
+
+
+def test_relate_allows_a_second_parent_and_a_reverse_edge_of_another_type(session):
+    """Only a ``ChildOf`` path back to the source is a cycle; a diamond and a ``Blocks`` edge are not."""
+    left, right, child = (create_thing(session, actor=Actor.USER, title=title) for title in ("l", "r", "c"))
+    _relate(session, left, child, RelationshipType.CHILD_OF)
+    _relate(session, right, child, RelationshipType.CHILD_OF)
+    _relate(session, left, right, RelationshipType.CHILD_OF)
+
+    _relate(session, child, left, RelationshipType.BLOCKS)
+
+
+def test_the_cycle_check_ends_on_a_cycle_already_in_the_graph(session):
+    """A cycle written before #1696 must not hang the walk that looks for a new one."""
+    a, b, outside = (create_thing(session, actor=Actor.USER, title=title) for title in ("a", "b", "outside"))
+    session.execute(
+        text(
+            "INSERT INTO relationships (id, source_thing_id, target_thing_id, relationship_type, created_at) "
+            "VALUES (:one, :a, :b, 'ChildOf', now()), (:two, :b, :a, 'ChildOf', now())"
+        ),
+        {"one": uuid.uuid4(), "two": uuid.uuid4(), "a": a.id, "b": b.id},
+    )
+    session.commit()
+
+    _relate(session, outside, a, RelationshipType.CHILD_OF)
+
+
+@pytest.mark.parametrize("tag", [tag for tag in INTERNAL_TAGS if tag != OBSERVATION_TAG])
+def test_relate_refuses_evidence_from_one_of_relis_own_records(session, tag):
+    """A preference, the anchor, a heartbeat or a briefing as evidence is strength with no observation."""
+    record = create_thing(session, actor=Actor.CLAUDE_SCHEDULED, title="internal", tags=[tag])
+    supported = create_thing(session, actor=Actor.USER, title="supported")
+    before_count = _journal_count(session)
+
+    with pytest.raises(ValueError, match="evidence"):
+        _relate(session, record, supported, RelationshipType.EVIDENCE_FOR)
+
+    assert _journal_count(session) == before_count
+
+
+def test_relate_accepts_an_observation_as_evidence(session):
+    observation = create_thing(session, actor=Actor.CLAUDE_SCHEDULED, title="seen", tags=[OBSERVATION_TAG])
+    supported = create_thing(session, actor=Actor.USER, title="supported")
+
+    _relate(session, observation, supported, RelationshipType.EVIDENCE_FOR)
 
 
 # --- Write bounds (#1478) --------------------------------------------------------------------------
