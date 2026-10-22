@@ -334,7 +334,8 @@ def oauth_authorize_confirm(request: Request, server_state: str = Form(...)) -> 
     all. A browser always sends ``Origin`` on a POST, same-origin included, and never lets script
     override it, so this is what actually distinguishes the real form's submission from a lure's.
     Single-use consumption of the underlying flow stays where it already was, at the Google
-    callback.
+    callback. The ``MCP_FLOW_COOKIE`` set here is what lets that callback refuse a state this
+    browser never approved (#1701).
     """
     if not auth.is_same_origin(request):
         raise HTTPException(
@@ -344,9 +345,19 @@ def oauth_authorize_confirm(request: Request, server_state: str = Form(...)) -> 
         flow = cleanup_and_get(session, mcp_oauth_sessions, server_state)
     if flow is None:
         raise HTTPException(status_code=400, detail="Sign-in expired: start again from the connector.")
-    return RedirectResponse(
+    response = RedirectResponse(
         url=google_login.authorization_url(server_state, flow["google_code_verifier"]), status_code=302
     )
+    response.set_cookie(
+        auth.MCP_FLOW_COOKIE,
+        server_state,
+        max_age=SESSION_TTL_SECONDS,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=True,
+    )
+    return response
 
 
 # --- Tokens ----------------------------------------------------------------

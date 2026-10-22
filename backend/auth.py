@@ -9,8 +9,8 @@ between the callback and ``POST /oauth/token``.
 flow of :mod:`backend.mcp_oauth` and for the web view's sign-in that starts at
 ``GET /api/auth/google``. It resolves ``state`` against the two session stores in
 :mod:`backend.oauth_state`: a web state ends in the ``__Host-reli_session`` cookie and a redirect
-to ``/``, an MCP state in an authorization code delivered to the client, and a state neither knows
-is a 400.
+to ``/``, an MCP state in an authorization code delivered to the client — but only in the browser
+that approved it on the consent page — and a state neither knows is a 400.
 
 The web session is that cookie: an ``aud="web"`` JWT the middleware in :mod:`backend.api` decodes
 on every ``/api`` request, read through :func:`web_session` so the middleware and
@@ -65,6 +65,9 @@ WEB_SIGN_IN_TTL_SECONDS = 60 * 10
 # The ``__Host-`` prefix has the browser refuse the cookie unless it arrives ``Secure``, with
 # ``Path=/`` and no ``Domain`` — the contract both call sites below meet.
 SESSION_COOKIE = "__Host-reli_session"
+# Binds an MCP sign-in to the browser that approved it on the consent page (#1701): the callback
+# honours an MCP state only alongside this cookie naming it. Same ``__Host-`` contract as above.
+MCP_FLOW_COOKIE = "__Host-reli_mcp_flow"
 
 #: Every setting the Google sign-in needs; an empty one — or a ``SECRET_KEY`` too short to sign
 #: with — closes the sign-in with a 501 naming it.
@@ -83,6 +86,7 @@ _SESSION_EXPIRED = "Session expired: sign in with Google at / again."
 _SESSION_INVALID = "Invalid session: sign in with Google at / again."
 _AT_CAPACITY = "Server is at capacity; try again later"
 _CROSS_ORIGIN = "Refused: this request did not come from Reli's own page."
+_NOT_THIS_BROWSER = "Sign-in was not approved from this browser: start again from the connector."
 
 
 def base_url() -> str:
@@ -371,7 +375,7 @@ def _finish_mcp_sign_in(session: Session, flow: dict[str, Any], code: str, error
 
 
 @router.get("/google/callback", include_in_schema=False)
-def google_callback(code: str = "", state: str = "", error: str = "") -> RedirectResponse:
+def google_callback(request: Request, code: str = "", state: str = "", error: str = "") -> RedirectResponse:
     """Where Google sends the browser after the sign-in, for better or worse.
 
     A web sign-in ends here with the session cookie and a redirect to ``/``, or at ``/?error=``.
@@ -380,6 +384,12 @@ def google_callback(code: str = "", state: str = "", error: str = "") -> Redirec
     redirect URI (RFC 6749 §4.1.2); a cancelled sign-in or an account outside the allowlist is
     delivered there too, as an ``access_denied`` error (§4.1.2.1), because the client's redirect
     URI is where the person actually is.
+
+    The MCP branch is honoured only in the browser that clicked Continue on that flow's consent
+    page, which set ``MCP_FLOW_COOKIE`` to its state. Anywhere else it is a 400 in place, never a
+    redirect: an attacker can read their own client's state off their own consent page, and a
+    callback link built from it would otherwise send whoever opened it to the attacker's redirect
+    URI (#1701).
     """
     with _session() as session:
         web_flow = cleanup_and_pop(session, web_oauth_sessions, state)
@@ -389,4 +399,12 @@ def google_callback(code: str = "", state: str = "", error: str = "") -> Redirec
         flow = cleanup_and_pop(session, mcp_oauth_sessions, state)
         if flow is None:
             raise HTTPException(status_code=400, detail="Invalid or expired sign-in state: start the sign-in again.")
-        return _finish_mcp_sign_in(session, flow, code, error)
+        # Not compare_digest: it raises on the non-ASCII state an attacker can put in the URL.
+        if request.cookies.get(MCP_FLOW_COOKIE) != state:
+            logger.warning(
+                "MCP sign-in refused: the callback reached a browser that did not approve client %r", flow["client_id"]
+            )
+            raise HTTPException(status_code=400, detail=_NOT_THIS_BROWSER)
+        response = _finish_mcp_sign_in(session, flow, code, error)
+    response.delete_cookie(MCP_FLOW_COOKIE, path="/", httponly=True, samesite="lax", secure=True)
+    return response

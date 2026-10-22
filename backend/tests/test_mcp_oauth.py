@@ -526,6 +526,11 @@ def test_authorize_confirm_sends_the_browser_to_google(client, session):
     flow = cleanup_and_get(session, mcp_oauth_sessions, server_state)
     assert query["code_challenge"] == s256_challenge(flow["google_code_verifier"])
     assert query["redirect_uri"] == settings.GOOGLE_AUTH_REDIRECT_URI
+    cookie = response.headers["set-cookie"]
+    assert cookie.startswith(f"{auth.MCP_FLOW_COOKIE}={server_state};")
+    for attribute in ("HttpOnly", "Secure", "SameSite=lax", "Path=/"):
+        assert attribute in cookie
+    assert "Domain=" not in cookie
 
 
 def test_authorize_confirm_refuses_an_unknown_or_expired_state(client):
@@ -553,6 +558,7 @@ def test_authorize_confirm_refuses_a_cross_site_submission_even_with_a_valid_sta
     response = client.post("/oauth/authorize/confirm", data={"server_state": server_state}, headers=headers)
 
     assert response.status_code == 400
+    assert "set-cookie" not in response.headers
     # The flow is still live: a legitimate retry from Reli's own page still works.
     assert (
         client.post(
@@ -984,7 +990,11 @@ def test_register_authorize_callback_and_token_end_to_end(client, monkeypatch):
     )
     assert _query(to_google.headers["location"])["state"] == server_state
 
-    back_from_google = client.get("/api/auth/google/callback", params={"code": "google-code", "state": server_state})
+    # The test client talks plain http, so it would not resend the ``Secure`` cookie by itself.
+    flow_cookie = {"Cookie": f"{auth.MCP_FLOW_COOKIE}={to_google.cookies[auth.MCP_FLOW_COOKIE]}"}
+    back_from_google = client.get(
+        "/api/auth/google/callback", params={"code": "google-code", "state": server_state}, headers=flow_cookie
+    )
     assert back_from_google.status_code == 302
     to_client = _query(back_from_google.headers["location"])
     assert to_client["state"] == "client-state"
