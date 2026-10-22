@@ -28,16 +28,14 @@ from __future__ import annotations
 
 import html
 import logging
-import re
 import secrets
-import urllib.parse
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel, ValidationError
+from pydantic import AnyUrl, BaseModel, ValidationError
 from sqlmodel import Session
 
 from . import auth, google_login
@@ -141,25 +139,19 @@ def _describe(invalid: ValidationError) -> str:
     return f"{'.'.join(str(part) for part in first['loc']) or 'body'}: {first['msg']}"
 
 
-# An authority that `urlsplit` and a browser read as the same host. Userinfo, a backslash,
-# percent-encoding and non-ASCII are where the two diverge, so a URI carrying any of them could put
-# one host on the consent page and deliver the code to another (#1702).
-_PLAIN_AUTHORITY = re.compile(r"[A-Za-z0-9.-]+(?::[0-9]+)?|\[[0-9A-Fa-f:.]+\](?::[0-9]+)?")
-
-
 def _redirect_uri_is_safe(uri: str) -> bool:
     """Whether ``uri`` may receive an authorization code.
 
-    It must be ``https``, or ``http`` to localhost, and its authority a plain ``host[:port]``, so the
-    host the consent page names is the host the browser delivers the code to.
+    It must be ``https``, or ``http`` to localhost, and carry no userinfo. ``AnyUrl`` parses it as a
+    browser does (WHATWG), so the host it reads is the host the browser delivers the code to (#1702).
     """
     try:
-        parsed = urllib.parse.urlsplit(uri)
-    except ValueError:
+        parsed = AnyUrl(uri)
+    except ValidationError:
         return False
-    if not _PLAIN_AUTHORITY.fullmatch(parsed.netloc):
+    if parsed.username is not None or parsed.password is not None:
         return False
-    return parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1"))
+    return parsed.scheme == "https" or (parsed.scheme == "http" and parsed.host in ("localhost", "127.0.0.1"))
 
 
 def _validate_registration_body(raw: bytes) -> _ClientMetadata:
@@ -191,7 +183,7 @@ def _validate_redirect_uris(redirect_uris: list[str]) -> None:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "redirect_uri must use https and a plain host with no user info "
+                    "redirect_uri must use https with no user info "
                     f"(or http://localhost / http://127.0.0.1 for development): {uri}"
                 ),
             )
@@ -211,7 +203,7 @@ async def oauth_register(request: Request) -> JSONResponse:
 
     Raises:
         HTTPException 400: The body is not a JSON object of the shapes ``_ClientMetadata`` names, a
-            ``redirect_uri`` is not ``https`` (``http`` only for localhost) with a plain host, or
+            ``redirect_uri`` is not ``https`` (``http`` only for localhost) with no user info, or
             ``token_endpoint_auth_method`` is one the token endpoint does not implement.
         HTTPException 413: The body is over ``MAX_REGISTRATION_BYTES``.
     """
@@ -267,12 +259,12 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
     Names the registered client and where its authorization code will be delivered, so a link the
     owner did not initiate announces itself instead of completing silently (confused deputy):
     without this page, ``/oauth/authorize`` sent the browser straight to Google and back to
-    whatever client had registered, with nothing on any screen naming it. The host is shown on its own
-    because ``_redirect_uri_is_safe`` admits only a plain authority, so it is the host the code
-    reaches.
+    whatever client had registered, with nothing on any screen naming it. The host is shown on its own,
+    read by the same browser-conformant parser ``_redirect_uri_is_safe`` uses, so it is the host the
+    code reaches.
     """
     name = html.escape(client_name) or "an unnamed client"
-    host = html.escape(urllib.parse.urlsplit(redirect_uri).netloc.lower())
+    host = html.escape(AnyUrl(redirect_uri).host or "")
     uri = html.escape(redirect_uri)
     state = html.escape(server_state)
     return HTMLResponse(

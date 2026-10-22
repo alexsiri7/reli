@@ -272,11 +272,6 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
         [CLIENT_REDIRECT, "http://evil.com/cb"],
         ["https://claude.ai@attacker.example/cb"],
         ["https://claude.ai:x@attacker.example/cb"],
-        ["https://attacker.example\\@claude.ai/cb"],
-        ["https://attacker.example\\.claude.ai/cb"],
-        ["https://claude.ai%2eevil.example/cb"],
-        ["https://\u0441laude.ai/cb"],
-        ["https:///cb"],
         ["http://claude.ai@localhost:3000/cb"],
         ["https://[not-an-ip]/cb"],
         ["https://[::1/cb"],
@@ -289,11 +284,6 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
         "mixed",
         "userinfo",
         "userinfo-password",
-        "backslash-userinfo",
-        "backslash-host",
-        "percent-host",
-        "homograph",
-        "no-host",
         "loopback-userinfo",
         "bracketed-non-ip",
         "unterminated-bracket",
@@ -548,6 +538,26 @@ def test_authorize_escapes_an_attacker_controlled_client_name_and_redirect_uri(c
     assert response.status_code == 200
     assert "<script>alert(1)</script>" not in response.text
     assert "&lt;script&gt;" in response.text
+
+
+@pytest.mark.parametrize(
+    ("redirect_uri", "host"),
+    [
+        ("https://attacker.example\\@claude.ai/cb", "attacker.example"),
+        ("https://attacker.example\\.claude.ai/cb", "attacker.example"),
+        ("https://claude.ai%2eevil.example/cb", "claude.ai.evil.example"),
+        ("https://\u0441laude.ai/cb", "xn--laude-0ye.ai"),
+        ("https:///cb", "cb"),
+    ],
+    ids=["backslash-userinfo", "backslash-host", "percent-host", "homograph", "no-host"],
+)
+def test_the_consent_page_names_the_host_a_browser_would_reach(client, redirect_uri, host):
+    registered = _register(client, redirect_uris=[redirect_uri])
+
+    response = _authorize(client, registered["client_id"], redirect_uri=redirect_uri)
+
+    assert response.status_code == 200
+    assert f"<strong>{host}</strong>" in response.text
 
 
 def test_authorize_refuses_a_redirect_uri_registered_before_the_check_tightened(client, session):
