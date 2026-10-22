@@ -18,6 +18,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlsplit
 
+import anyio
 import httpx
 import jwt
 import pytest
@@ -345,7 +346,7 @@ def test_register_refuses_a_field_of_the_wrong_shape_and_stores_nothing(client, 
 
 def test_register_reports_one_problem_however_many_the_body_holds(client):
     """The refusal must not grow with the body: a flood of wrong elements is not a flood of detail."""
-    body = {"redirect_uris": [0] * ((mcp_oauth.MAX_REGISTRATION_BYTES - 100) // 2)}
+    body = {"redirect_uris": [0] * ((mcp_oauth.MAX_BODY_BYTES - 100) // 2)}
 
     response = client.post("/oauth/register", json=body)
 
@@ -355,7 +356,7 @@ def test_register_reports_one_problem_however_many_the_body_holds(client):
 
 def test_register_logs_one_problem_however_many_the_body_holds(client, caplog):
     """The log line is the second sink the refusal reaches, and it must stay as bounded as the detail."""
-    body = {"redirect_uris": [0] * ((mcp_oauth.MAX_REGISTRATION_BYTES - 100) // 2)}
+    body = {"redirect_uris": [0] * ((mcp_oauth.MAX_BODY_BYTES - 100) // 2)}
 
     with caplog.at_level(logging.WARNING, logger="backend.mcp_oauth"):
         response = client.post("/oauth/register", json=body)
@@ -400,12 +401,127 @@ def test_register_refuses_an_auth_method_the_token_endpoint_does_not_implement(c
 def test_register_refuses_a_body_over_the_cap_and_stores_nothing(client, session):
     response = client.post(
         "/oauth/register",
-        json={"redirect_uris": [CLIENT_REDIRECT], "client_name": "x" * mcp_oauth.MAX_REGISTRATION_BYTES},
+        json={"redirect_uris": [CLIENT_REDIRECT], "client_name": "x" * mcp_oauth.MAX_BODY_BYTES},
     )
 
     assert response.status_code == 413
-    assert str(mcp_oauth.MAX_REGISTRATION_BYTES) in response.json()["detail"]
+    assert str(mcp_oauth.MAX_BODY_BYTES) in response.json()["detail"]
     assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
+
+
+def test_register_refuses_a_chunked_body_over_the_cap(client, session):
+    """No ``Content-Length`` to trust: the cap is counted on the bytes as they arrive."""
+
+    def chunks():
+        yield b'{"redirect_uris": ["' + CLIENT_REDIRECT.encode() + b'"], "client_name": "'
+        yield b"x" * mcp_oauth.MAX_BODY_BYTES
+        yield b'"}'
+
+    response = client.post("/oauth/register", content=chunks(), headers={"Content-Type": "application/json"})
+
+    assert response.status_code == 413
+    assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
+
+
+@pytest.mark.parametrize("path", ["/oauth/register", "/oauth/authorize/confirm", "/oauth/token"])
+def test_a_declared_length_over_the_cap_is_refused_before_a_byte_is_read(client, path):
+    """The route answers 413 without asking the server for the body at all."""
+    sent = []
+
+    async def receive():
+        raise AssertionError("the body was read")
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "https",
+        "path": path,
+        "raw_path": path.encode(),
+        "root_path": "",
+        "query_string": b"",
+        "headers": [
+            (b"host", b"reli.example.test"),
+            (b"content-type", b"application/x-www-form-urlencoded"),
+            (b"content-length", str(mcp_oauth.MAX_BODY_BYTES + 1).encode()),
+        ],
+        "client": ("127.0.0.1", 1),
+        "server": ("reli.example.test", 443),
+    }
+
+    anyio.run(client.app, scope, receive, send)
+
+    assert sent[0]["status"] == 413
+
+
+def test_the_token_endpoint_refuses_a_form_over_the_cap_and_leaves_the_code(client, session):
+    registered = _register(client)
+    verifier = secrets.token_urlsafe(64)
+    code = _seed_code(session, registered["client_id"], verifier)
+
+    response = _token(
+        client,
+        code=code,
+        client_id=registered["client_id"],
+        code_verifier=verifier,
+        padding="x" * mcp_oauth.MAX_BODY_BYTES,
+    )
+
+    assert response.status_code == 413
+    assert cleanup_and_get(session, mcp_auth_codes, code) is not None
+
+
+def test_authorize_confirm_refuses_a_form_over_the_cap(client):
+    registered = _register(client)
+    server_state = _server_state(_authorize(client, registered["client_id"]).text)
+
+    response = client.post(
+        "/oauth/authorize/confirm",
+        data={"server_state": server_state, "padding": "x" * mcp_oauth.MAX_BODY_BYTES},
+        headers={"Origin": BASE_URL},
+    )
+
+    assert response.status_code == 413
+    assert "set-cookie" not in response.headers
+
+
+def test_register_refuses_a_redirect_uri_over_the_length_bound(client, session):
+    uri = f"{CLIENT_REDIRECT}/" + "a" * mcp_oauth.MAX_PARAM_LENGTH
+
+    response = client.post("/oauth/register", json={"redirect_uris": [uri]})
+
+    assert response.status_code == 400
+    assert response.json()["detail"].startswith("invalid_client_metadata: redirect_uris.0: ")
+    assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
+
+
+def test_the_longest_redirect_uri_a_registration_keeps_still_fits_a_token_form(client, session):
+    """Percent-encoding triples a URI of slashes; the body cap must still hold the form that carries it."""
+    prefix = f"{CLIENT_REDIRECT}/"
+    uri = prefix + "/" * (mcp_oauth.MAX_PARAM_LENGTH - len(prefix))
+    registered = _register(client, redirect_uris=[uri])
+    verifier = secrets.token_urlsafe(64)
+    code = _seed_code(session, registered["client_id"], verifier, redirect_uri=uri)
+
+    response = _token(client, code=code, client_id=registered["client_id"], code_verifier=verifier, redirect_uri=uri)
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize("param", ["client_id", "redirect_uri", "state", "code_challenge", "scope"])
+def test_authorize_refuses_a_parameter_over_the_length_bound_and_stores_nothing(client, session, param):
+    registered = _register(client)
+
+    params = {"client_id": registered["client_id"], "redirect_uri": CLIENT_REDIRECT, "code_challenge": "c"}
+
+    response = client.get("/oauth/authorize", params={**params, param: "x" * (mcp_oauth.MAX_PARAM_LENGTH + 1)})
+
+    assert response.status_code == 422
+    assert session.exec(select(func.count()).select_from(mcp_oauth_sessions.model)).one() == 0
 
 
 def test_a_registration_lives_an_hour_until_its_first_token_then_as_long_as_the_family(client, session):

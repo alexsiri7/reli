@@ -30,13 +30,16 @@ import html
 import logging
 import secrets
 import uuid
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import AnyUrl, BaseModel, ValidationError
+from fastapi.routing import APIRoute
+from pydantic import AnyUrl, BaseModel, StringConstraints, ValidationError
 from sqlmodel import Session
+from starlette.types import Message, Receive
 
 from . import auth, google_login
 from .config import settings
@@ -57,8 +60,6 @@ from .oauth_state import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["oauth"])
-
 # A sign-in that takes longer than this answers "start again", which is the remedy.
 SESSION_TTL_SECONDS = 60 * 10
 REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
@@ -69,8 +70,13 @@ CLIENT_TTL_SECONDS = REFRESH_TOKEN_TTL_SECONDS
 # before a used one. A person who takes over an hour between adding the connector and finishing
 # the sign-in re-adds it.
 UNUSED_CLIENT_TTL_SECONDS = 60 * 60
-# A real registration is a few hundred bytes. This is what bounds every stored field of a row.
-MAX_REGISTRATION_BYTES = 8 * 1024
+# A real registration is a few hundred bytes, and a consent or token form fewer. This bounds what
+# any request body here can hold in memory, and with it every stored field of a registration.
+MAX_BODY_BYTES = 8 * 1024
+# The longest redirect URI a registration keeps and authorize accepts, and the bound on every other
+# value authorize stores. Short enough that a token form carrying the URI percent-encoded still fits
+# in MAX_BODY_BYTES.
+MAX_PARAM_LENGTH = 2048
 
 _AT_CAPACITY = "Server is at capacity; try again later"
 _CODE_GONE = "Authorization code is invalid or expired: re-authorise the connector"
@@ -80,6 +86,63 @@ _REFRESH_TOKEN_GONE = "Refresh token is invalid or expired: re-authorise the con
 # way that would fail.
 TOKEN_ENDPOINT_AUTH_METHODS = ("none", "client_secret_post")
 _NO_STORE = {"Cache-Control": "no-store"}
+
+
+def _too_large() -> HTTPException:
+    return HTTPException(status_code=413, detail=f"Request body must be at most {MAX_BODY_BYTES} bytes")
+
+
+async def _read_bounded(request: Request) -> bytes:
+    """The body of *request*, refused with 413 once it passes ``MAX_BODY_BYTES``.
+
+    A declared ``Content-Length`` over the cap is refused before a byte is read; a chunked or
+    understated body is refused as soon as what has arrived passes it.
+    """
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+        raise _too_large()
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > MAX_BODY_BYTES:
+            raise _too_large()
+    return bytes(body)
+
+
+def _replaying(body: bytes, receive: Receive) -> Receive:
+    """A ``receive`` that delivers *body* whole, then hands over to *receive* for the disconnect."""
+    delivered = False
+
+    async def replay() -> Message:
+        nonlocal delivered
+        if delivered:
+            return await receive()
+        delivered = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    return replay
+
+
+class _BoundedBodyRoute(APIRoute):
+    """A route whose body is read through :func:`_read_bounded` before anything else sees it.
+
+    Every route here answers a caller with no credential, and FastAPI reads a ``Form`` body whole
+    before the endpoint runs, with no limit of its own — so the cap has to stand in front of it.
+    """
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        handler = super().get_route_handler()
+
+        async def bounded(request: Request) -> Response:
+            body = await _read_bounded(request)
+            return await handler(Request(request.scope, _replaying(body, request.receive)))
+
+        return bounded
+
+
+router = APIRouter(tags=["oauth"], route_class=_BoundedBodyRoute)
+
+_Param = Annotated[str, StringConstraints(max_length=MAX_PARAM_LENGTH)]
 
 
 # --- Discovery -------------------------------------------------------------
@@ -121,7 +184,7 @@ def authorization_server_metadata() -> JSONResponse:
 class _ClientMetadata(BaseModel):
     """The RFC 7591 metadata a registration keeps. Anything else in the body is ignored, as §2 allows."""
 
-    redirect_uris: list[str] | None = None
+    redirect_uris: list[_Param] | None = None
     client_name: str = ""
     grant_types: list[str] = ["authorization_code"]
     response_types: list[str] = ["code"]
@@ -168,8 +231,6 @@ def _redirect_uri_is_safe(uri: str) -> bool:
 
 
 def _validate_registration_body(raw: bytes) -> _ClientMetadata:
-    if len(raw) > MAX_REGISTRATION_BYTES:
-        raise HTTPException(status_code=413, detail=f"Registration body must be at most {MAX_REGISTRATION_BYTES} bytes")
     try:
         return _ClientMetadata.model_validate_json(raw)
     except ValidationError as invalid:
@@ -208,7 +269,7 @@ async def oauth_register(request: Request) -> JSONResponse:
 
     This is an unauthenticated write, by design — dynamic registration is how a connector that holds
     no credential yet gets one, and the Google sign-in behind ``/oauth/authorize`` is what gates
-    identity. What it can cost is bounded: a row of at most ``MAX_REGISTRATION_BYTES`` that lives an
+    identity. What it can cost is bounded: a row of at most ``MAX_BODY_BYTES`` that lives an
     hour unless the owner signs in through it, in a store that evicts the registration nearest
     expiry rather than refusing. A flood therefore displaces other unused registrations — a set-up
     that races it can lose — never a connector the owner has signed in through, and nothing outlasts
@@ -216,9 +277,10 @@ async def oauth_register(request: Request) -> JSONResponse:
 
     Raises:
         HTTPException 400: The body is not a JSON object of the shapes ``_ClientMetadata`` names, a
-            ``redirect_uri`` is not ``https`` (``http`` only for localhost) with no user info, or
+            ``redirect_uri`` is not ``https`` (``http`` only for localhost) with no user info or is
+            longer than ``MAX_PARAM_LENGTH``, or
             ``token_endpoint_auth_method`` is one the token endpoint does not implement.
-        HTTPException 413: The body is over ``MAX_REGISTRATION_BYTES``.
+        HTTPException 413: The body is over ``MAX_BODY_BYTES``, refused by ``_BoundedBodyRoute``.
     """
     raw = await request.body()
     metadata = _validate_registration_body(raw)
@@ -296,13 +358,13 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
 
 @router.get("/oauth/authorize", include_in_schema=False)
 def oauth_authorize(
-    client_id: str = "",
-    redirect_uri: str = "",
-    state: str = "",
-    code_challenge: str = "",
-    code_challenge_method: str = "S256",
-    scope: str = "mcp",
-    response_type: str = "code",
+    client_id: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "",
+    redirect_uri: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "",
+    state: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "",
+    code_challenge: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "",
+    code_challenge_method: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "S256",
+    scope: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "mcp",
+    response_type: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "code",
 ) -> HTMLResponse:
     """Take the client's request, remember it, and show a consent page naming it before Google.
 

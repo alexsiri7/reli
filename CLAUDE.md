@@ -221,8 +221,8 @@ to trust. The app's own defence against an unauthenticated flood is structural i
 stores a caller without a credential can write to (`mcp_registered_clients`, `mcp_oauth_sessions`,
 `web_oauth_sessions`) evict the row nearest expiry at their cap rather than refusing, a
 registration lives an hour until the owner signs in through it and then as long as its refresh
-family, and a registration body is capped at `MAX_REGISTRATION_BYTES`. What a flood can still do
-is displace an unfinished flow that races it — a set-up or a sign-in started while it runs — and a
+family, and every body under `/oauth/` is capped at `MAX_BODY_BYTES` before it is read whole.
+What a flood can still do is displace an unfinished flow that races it — a set-up or a sign-in started while it runs — and a
 used registration inside its final hour; what it cannot do is outlast itself or reach a connector
 with time left on its refresh family. A request-rate limit, if the owner wants one, is a
 Cloudflare rate-limiting rule on `/oauth/register`, `/oauth/authorize` and `/api/auth/google`: a
