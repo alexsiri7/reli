@@ -24,7 +24,7 @@ docker compose --profile localdb up -d postgres
 `.env.example` already points `DATABASE_URL` at the `localdb` Postgres:
 
 ```
-DATABASE_URL=postgresql://reli:reli@localhost:5432/reli
+DATABASE_URL=postgresql://reli:reli@localhost:5432/reli?sslmode=disable
 ```
 
 Then run the backend, and the web view if you want it:
@@ -100,7 +100,7 @@ These are the fields of `Settings` in `backend/config.py`, and nothing else is r
 
 | Variable | Default | Notes |
 |---|---|---|
-| `DATABASE_URL` | — | **Required.** Postgres connection string. No default: the boot fails without it rather than serving an empty database. |
+| `DATABASE_URL` | — | **Required.** Postgres connection string. No default: the boot fails without it rather than serving an empty database. The connection requires TLS: no `sslmode` means `require`, and a deploy refuses a weaker one (#1695); the `localdb` URL sets `sslmode=disable`, which only a local run accepts. |
 | `SECRET_KEY` | empty | HS256 key for the JWTs the authorization server mints for `/mcp` — the only credential `/mcp` accepts — and the web view's `__Host-reli_session` cookie. Human-provisioned; at least 32 random bytes. Empty — or shorter than 32 bytes (#1534) — means no JWT is issued or accepted, so `/mcp` is closed (401 to everything, and a warning at startup), never a boot failure. |
 | `ALLOWED_EMAILS` | empty | Comma-separated Google account emails allowed to sign in. Empty admits nobody. |
 | `GOOGLE_AUTH_REDIRECT_URI` | empty | `https://<your-host>/api/auth/google/callback`, registered verbatim on the OAuth client. Empty closes the sign-in; there is no localhost guess. |

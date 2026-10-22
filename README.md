@@ -68,7 +68,7 @@ docker compose --profile localdb up -d postgres
 Then set in `.env`:
 
 ```
-DATABASE_URL=postgresql://reli:reli@localhost:5432/reli
+DATABASE_URL=postgresql://reli:reli@localhost:5432/reli?sslmode=disable
 ```
 
 Optional: `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `LOG_LEVEL`.

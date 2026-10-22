@@ -13,7 +13,7 @@ from sqlalchemy import engine_from_config, pool, text
 
 from backend.alembic.safety import check_pending_migrations
 from backend.alembic.utils import build_connect_args
-from backend.db_engine import redact_statement_errors
+from backend.db_engine import redact_statement_errors, tls_connect_args
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode (with a live database connection)."""
     _db_url = config.get_main_option("sqlalchemy.url") or ""
-    _connect_args = build_connect_args(_db_url)
+    _connect_args = {**build_connect_args(_db_url), **tls_connect_args(_db_url)}
 
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),

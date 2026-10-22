@@ -11,6 +11,10 @@ An unhandled database error is re-raised to the log and Sentry, so the exception
 must not carry a Thing's title, notes or URLs or a journal entry's before/after snapshots (#1694).
 ``hide_parameters`` keeps SQLAlchemy from appending the bound parameters, and
 ``redact_statement_errors`` cuts what remains of the server's text, which quotes them.
+
+The connection must be encrypted (#1695): prod reaches the Supabase pooler over the public internet,
+and libpq's default ``prefer`` accepts a server that declines TLS. ``tls_connect_args`` holds the
+rule for this engine and the migrations' alike.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import Engine, event
+from sqlalchemy import Engine, event, make_url
 from sqlalchemy.engine import ExceptionContext
 from sqlmodel import Session, create_engine
 
@@ -36,6 +40,29 @@ _engine: Engine | None = None
 # ``alembic upgrade head`` cannot be killed by it (#1535, #1572).
 STATEMENT_TIMEOUT = "30s"
 
+# The libpq modes that refuse a server which declines TLS. ``verify-full`` with a bundled Supabase CA
+# is the owner's call (#1695); until then ``require`` is what a URL without a mode gets.
+TLS_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
+
+
+def tls_connect_args(database_url: str) -> dict[str, str]:
+    """The ``connect_args`` that make a connection to ``database_url`` require TLS.
+
+    A URL naming no ``sslmode`` gets ``require``; one naming a mode from ``TLS_SSLMODES`` keeps it.
+    A weaker mode is honoured only outside a deploy — the ``localdb`` Postgres speaks no TLS, which
+    is why its URL says ``sslmode=disable`` — and on a deploy it raises, so the boot fails rather
+    than talking to the database in the clear.
+    """
+    sslmode = make_url(database_url).query.get("sslmode")
+    if sslmode is None:
+        return {"sslmode": "require"}
+    if sslmode not in TLS_SSLMODES and settings.production:
+        raise RuntimeError(
+            f"DATABASE_URL sets sslmode={sslmode}, which allows an unencrypted connection. A deploy "
+            f"requires one of {', '.join(sorted(TLS_SSLMODES))}; drop the parameter to get require."
+        )
+    return {}
+
 
 def get_engine() -> Engine:
     """Return the process-wide engine, creating it on first call."""
@@ -48,7 +75,10 @@ def get_engine() -> Engine:
             pool_size=3,
             max_overflow=2,
             pool_pre_ping=True,
-            connect_args={"options": f"-c statement_timeout={STATEMENT_TIMEOUT}"},
+            connect_args={
+                "options": f"-c statement_timeout={STATEMENT_TIMEOUT}",
+                **tls_connect_args(settings.database_url),
+            },
         )
         redact_statement_errors(_engine)
     return _engine

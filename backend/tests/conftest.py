@@ -14,7 +14,7 @@ from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, make_url, text
 from sqlmodel import Session
 
 # The Calendar and Gmail tools #1488 deleted. Hard-coded because there is nothing left to derive
@@ -36,8 +36,9 @@ def postgres_url() -> Iterator[str]:
 
     from testcontainers.community.postgres import PostgresContainer
 
+    # The container speaks no TLS, and a URL without an sslmode is made to require it (#1695).
     with PostgresContainer("postgres:16-alpine", driver="psycopg2") as container:
-        yield container.get_connection_url()
+        yield container.get_connection_url() + "?sslmode=disable"
 
 
 @pytest.fixture(scope="session")
@@ -81,7 +82,7 @@ def fresh_database(postgres_url: str) -> Iterator[str]:
         conn.execute(text(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
         conn.execute(text(f"CREATE DATABASE {name}"))
 
-    url = postgres_url.rsplit("/", 1)[0] + f"/{name}"
+    url = make_url(postgres_url).set(database=name).render_as_string(hide_password=False)
     previous_env = os.environ.get("DATABASE_URL")
     previous_setting = config_module.settings.DATABASE_URL
     os.environ["DATABASE_URL"] = url
