@@ -3,7 +3,7 @@
 fastapi>=0.143.2
 uvicorn[standard]>=0.54.0
 pydantic>=2.14.1
-pydantic-settings>=2.15.0
+pydantic-settings>=2.16.0
 python-dotenv>=1.2.4
 sentry-sdk[fastapi]>=2.72.0
 sqlmodel>=0.0.48
