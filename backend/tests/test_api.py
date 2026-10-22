@@ -33,6 +33,7 @@ from backend.queries import MAX_LIMIT
 from backend.service import create_thing, get_or_create_user_anchor, record_preference, relate, update_thing
 
 SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
+BASE_URL = "https://reli.example.test"
 
 
 def _routed_app(session, monkeypatch) -> FastAPI:
@@ -61,9 +62,9 @@ def _basic(password, username="reli"):
 
 @pytest.fixture()
 def client(session, monkeypatch, secret_key):
-    """An authenticated client. The session cookie is the only way in, so without it every route
-    below would answer 401."""
-    return TestClient(_routed_app(session, monkeypatch), headers=_session_cookie())
+    """An authenticated client on Reli's own page. The session cookie is the only way in, so without
+    it every route below would answer 401; the ``Origin`` is what a browser sends from the bundle."""
+    return TestClient(_routed_app(session, monkeypatch), headers={**_session_cookie(), "Origin": BASE_URL})
 
 
 @pytest.fixture()
@@ -76,6 +77,7 @@ def anonymous(session, monkeypatch):
 def secret_key(monkeypatch):
     monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
     monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    monkeypatch.setattr(settings, "RELI_BASE_URL", BASE_URL)
     return SECRET_KEY
 
 
@@ -366,6 +368,28 @@ def test_rejecting_twice_changes_and_journals_nothing(client, session):
     assert response.status_code == 200
     assert response.json()["rejected"] is True
     assert _journal_count(session) == before
+
+
+@pytest.mark.parametrize("origin", [None, "https://sibling.example.test", "null"])
+def test_rejecting_from_any_page_but_reli_s_own_is_refused(client, session, origin):
+    """``SameSite=Lax`` sends the cookie from a sibling subdomain too (#1698); the ``Origin`` does not lie."""
+    preference, _ = _preference(session)
+    before = _journal_count(session)
+    client.headers.pop("Origin")
+    headers = {} if origin is None else {"Origin": origin}
+
+    response = client.post(f"/api/preferences/{preference.id}/reject", headers=headers)
+
+    assert response.status_code == 403
+    assert _journal_count(session) == before
+
+
+def test_a_read_needs_no_origin(client):
+    """Only the cookie-authenticated POSTs check the ``Origin``; a read stays a plain cookie check."""
+    client.headers.pop("Origin")
+
+    assert client.get("/api/things").status_code == 200
+    assert client.get("/api/user-model").status_code == 200
 
 
 def test_rejecting_a_thing_that_is_not_a_preference_is_404(client, session):

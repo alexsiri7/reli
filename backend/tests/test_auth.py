@@ -463,7 +463,7 @@ def test_a_live_session_is_refused_once_its_account_leaves_the_allowlist(client,
 
 
 def test_logout_deletes_the_cookie(client):
-    response = client.post("/api/auth/logout")
+    response = client.post("/api/auth/logout", headers={"Origin": "https://reli.example.test"})
 
     assert response.status_code == 204
     cookie = _session_cookie(response)
@@ -471,3 +471,14 @@ def test_logout_deletes_the_cookie(client):
     assert "Max-Age=0" in cookie
     assert "Secure" in cookie
     assert "Path=/" in cookie
+
+
+@pytest.mark.parametrize("origin", [None, "https://sibling.example.test", "null"])
+def test_logout_from_any_page_but_reli_s_own_is_refused(client, origin):
+    """A sibling subdomain is the same site, so ``SameSite=Lax`` alone would let it sign the owner out (#1698)."""
+    headers = {} if origin is None else {"Origin": origin}
+
+    response = client.post("/api/auth/logout", headers=headers)
+
+    assert response.status_code == 403
+    assert "set-cookie" not in response.headers
