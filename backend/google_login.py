@@ -75,8 +75,13 @@ def authorization_url(state: str, code_verifier: str) -> str:
 
 
 def _http_client() -> httpx.Client:
-    """The single place an ``httpx.Client`` is built, so tests have one transport to replace."""
-    return httpx.Client(timeout=_TIMEOUT_SECONDS)
+    """The single place an ``httpx.Client`` is built, so tests have one transport to replace.
+
+    ``trust_env=False`` keeps proxy and CA-bundle environment variables from rerouting the
+    exchange or swapping the roots it is verified against: the unchecked id-token signature rests
+    on this request reaching Google directly over verified TLS (#1700).
+    """
+    return httpx.Client(timeout=_TIMEOUT_SECONDS, trust_env=False)
 
 
 def exchange_code(code: str, code_verifier: str) -> Identity:
