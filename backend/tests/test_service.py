@@ -475,16 +475,46 @@ def test_a_concurrent_tag_write_survives_a_rejection(session):
         with Session(get_engine()) as racer:
             service.reject_preference(racer, actor=Actor.USER, preference_id=preference.id)
 
-    racer = threading.Thread(target=reject)
+    _race_against_open_transaction(session, reject)
+
+    session.refresh(preference)
+    assert preference.tags == [PREFERENCE_TAG, "#Other", REJECTED_TAG]
+
+
+def test_an_update_waits_for_a_concurrent_write_and_journals_what_it_found(session):
+    """#1705: the update reads the row as the concurrent write left it, not as it stood before."""
+    from backend.db_engine import get_engine
+
+    thing = create_thing(session, actor=Actor.USER, title="first", tags=["#A"])
+    session.commit()
+    session.execute(text("UPDATE things SET title = 'second' WHERE id = :id"), {"id": thing.id})
+    before = _journal_count(session)
+
+    def update() -> None:
+        with Session(get_engine()) as racer:
+            update_thing(racer, actor=Actor.USER, thing_id=thing.id, tags=["#A", "#B"])
+
+    _race_against_open_transaction(session, update)
+
+    entry = session.execute(
+        text("SELECT before, after FROM journal WHERE entity_id = :id ORDER BY id DESC LIMIT 1"),
+        {"id": str(thing.id)},
+    ).one()
+    assert _journal_count(session) == before + 1
+    assert entry.before["title"] == "second"
+    assert entry.after["title"] == "second"
+    assert entry.after["tags"] == ["#A", "#B"]
+
+
+def _race_against_open_transaction(session, write) -> None:
+    """Run *write* in a thread while *session* holds an uncommitted change, committing it once *write* waits."""
+    racer = threading.Thread(target=write)
     racer.start()
     deadline = time.monotonic() + 5
     while not _waiting_on_a_lock(session) and racer.is_alive() and time.monotonic() < deadline:
         time.sleep(0.01)
     session.commit()
     racer.join()
-
-    session.refresh(preference)
-    assert preference.tags == [PREFERENCE_TAG, "#Other", REJECTED_TAG]
 
 
 def _waiting_on_a_lock(session):
