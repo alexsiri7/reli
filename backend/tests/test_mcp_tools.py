@@ -863,12 +863,11 @@ _MCP_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type":
 
 
 @pytest.fixture()
-def secret_key():
-    """A signing key on the settings singleton, as conftest does for DATABASE_URL, and put it back."""
-    previous = settings.SECRET_KEY
-    settings.SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
-    yield settings.SECRET_KEY
-    settings.SECRET_KEY = previous
+def secret_key(monkeypatch):
+    """A signing key on the settings singleton, and the account the tokens below name allowed."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "a-test-secret-key-that-is-forty-eight-chars-long")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    return settings.SECRET_KEY
 
 
 @pytest.fixture()
@@ -948,6 +947,17 @@ def test_mcp_endpoint_admits_a_jwt_the_authorization_server_minted(client, mcp_t
 
     assert response.status_code != 401
     assert "create_thing" in response.text
+
+
+def test_a_live_jwt_is_refused_once_its_account_leaves_the_allowlist(client, mcp_token, monkeypatch):
+    """#1693: removing an address ends its access tokens on their next request, not at expiry."""
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "someone-else@example.com")
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+    assert response.json()["detail"] == auth._ACCOUNT_NOT_ALLOWED
 
 
 def test_mcp_endpoint_refuses_a_jwt_for_another_audience(client, secret_key):

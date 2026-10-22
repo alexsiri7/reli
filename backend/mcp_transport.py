@@ -39,7 +39,8 @@ class _BearerTokenMiddleware:
     """Requires ``Authorization: Bearer <credential>`` on every request to the mounted app.
 
     The one credential is an ``aud="mcp"`` JWT minted by the authorization server in
-    :mod:`backend.mcp_oauth` after a Google sign-in.
+    :mod:`backend.mcp_oauth` after a Google sign-in, for an account still in ``ALLOWED_EMAILS``:
+    the allowlist is read on every request, so removing an address ends its live tokens at once.
 
     An unset or too-short ``SECRET_KEY`` closes the endpoint rather than opening it: there is no
     dev-mode bypass, because /mcp is the only write path into the graph and it is publicly
@@ -67,12 +68,15 @@ class _BearerTokenMiddleware:
             await _refuse(scope, receive, send, _NO_BEARER)
             return
         try:
-            auth.decode_jwt(provided, audience=auth.MCP_AUDIENCE)
+            claims = auth.decode_jwt(provided, audience=auth.MCP_AUDIENCE)
         except jwt.ExpiredSignatureError:
             await _refuse(scope, receive, send, _EXPIRED, error="invalid_token")
             return
         except jwt.InvalidTokenError:
             await _refuse(scope, receive, send, _NOT_OURS, error="invalid_token")
+            return
+        if not auth.is_allowed(str(claims.get("email", ""))):
+            await _refuse(scope, receive, send, auth._ACCOUNT_NOT_ALLOWED, error="invalid_token")
             return
         await self._app(scope, receive, send)
 

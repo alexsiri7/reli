@@ -432,6 +432,18 @@ def test_me_refuses_an_mcp_token_as_a_web_session(client):
     assert "sign in with Google" in response.json()["detail"]
 
 
+def test_a_live_session_is_refused_once_its_account_leaves_the_allowlist(client, monkeypatch):
+    """#1693: removing an address ends its web session on the next request, not seven days later."""
+    token = auth.create_jwt("1234567890", "owner@example.com", audience=auth.WEB_AUDIENCE)
+    cookie = {"Cookie": f"{auth.SESSION_COOKIE}={token}"}
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "someone-else@example.com")
+
+    for path in ("/api/auth/me", "/api/things"):
+        response = client.get(path, headers=cookie)
+        assert response.status_code == 401
+        assert response.json()["detail"] == auth._INVITE_ONLY
+
+
 def test_logout_deletes_the_cookie(client):
     response = client.post("/api/auth/logout")
 
