@@ -77,6 +77,7 @@ SIGN_IN_SETTINGS: tuple[str, ...] = (
 )
 
 _INVITE_ONLY = "This Reli is invite-only: sign in with the Google account listed in ALLOWED_EMAILS on the deploy."
+_ACCOUNT_NOT_ALLOWED = "Account is not allowed: " + _INVITE_ONLY
 _NOT_SIGNED_IN = "Not signed in: sign in with Google at /."
 _SESSION_EXPIRED = "Session expired: sign in with Google at / again."
 _SESSION_INVALID = "Invalid session: sign in with Google at / again."

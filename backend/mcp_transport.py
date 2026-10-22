@@ -28,7 +28,6 @@ _EXPIRED = (
     "or re-authorises against Google"
 )
 _NOT_OURS = "Not a token this Reli issued: authorise the connector against Google via the authorization server"
-_NOT_ALLOWED = "Account is not allowed: " + auth._INVITE_ONLY
 _CLOSED = "/mcp is closed: a human sets SECRET_KEY and the Google sign-in settings (CLAUDE.md)"
 _NO_BEARER = (
     "Authorization required: a Bearer of the access token the authorization server at /oauth/token "
@@ -77,7 +76,7 @@ class _BearerTokenMiddleware:
             await _refuse(scope, receive, send, _NOT_OURS, error="invalid_token")
             return
         if not auth.is_allowed(str(claims.get("email", ""))):
-            await _refuse(scope, receive, send, _NOT_ALLOWED, error="invalid_token")
+            await _refuse(scope, receive, send, auth._ACCOUNT_NOT_ALLOWED, error="invalid_token")
             return
         await self._app(scope, receive, send)
 

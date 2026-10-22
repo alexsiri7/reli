@@ -957,7 +957,7 @@ def test_a_live_jwt_is_refused_once_its_account_leaves_the_allowlist(client, mcp
 
     assert response.status_code == 401
     assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
-    assert response.json()["detail"] == "Account is not allowed: " + auth._INVITE_ONLY
+    assert response.json()["detail"] == auth._ACCOUNT_NOT_ALLOWED
 
 
 def test_mcp_endpoint_refuses_a_jwt_for_another_audience(client, secret_key):
