@@ -6,8 +6,11 @@ it is Postgres's contract, so there is no ``pg_sleep`` here.
 """
 
 import logging
+import re
+from pathlib import Path
 
 import pytest
+import yaml
 from sqlalchemy import make_url, text
 from sqlalchemy.exc import DataError, OperationalError
 
@@ -55,6 +58,23 @@ def test_a_local_run_keeps_the_localdb_profiles_disable(monkeypatch):
     monkeypatch.setattr(settings, "RAILWAY_ENVIRONMENT_NAME", "")
     monkeypatch.setattr(settings, "PRODUCTION", "")
     assert tls_connect_args("postgresql://reli:reli@localhost:5432/reli?sslmode=disable") == {}
+
+
+def test_the_self_hosted_compose_deploy_refuses_a_weak_mode(monkeypatch):
+    """``docker compose up -d`` runs the ``reli`` service with no Railway variable, so only the
+    ``PRODUCTION`` default it carries makes that container a deploy that refuses ``sslmode=disable``."""
+    compose = yaml.safe_load((Path(__file__).resolve().parents[2] / "docker-compose.yml").read_text())
+    defaults = [
+        match.group(1)
+        for entry in compose["services"]["reli"]["environment"]
+        if (match := re.fullmatch(r"PRODUCTION=\$\{PRODUCTION:-(.*)\}", entry))
+    ]
+    assert len(defaults) == 1, "the reli service must default PRODUCTION when the host leaves it unset"
+
+    monkeypatch.setattr(settings, "RAILWAY_ENVIRONMENT_NAME", "")
+    monkeypatch.setattr(settings, "PRODUCTION", defaults[0])
+    with pytest.raises(RuntimeError, match="sslmode=disable"):
+        tls_connect_args("postgresql://reli@db/reli?sslmode=disable")
 
 
 def _failed_create(session) -> DataError:
