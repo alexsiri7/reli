@@ -67,6 +67,30 @@ def _strip_auth_flow_request(event: Event, hint: Hint) -> Event:
     return event
 
 
+# The modules whose exception messages quote the statement. The engine hides bound parameters
+# (#1694), but psycopg2 interpolates them client-side, so the server's own error text — the ``LINE``
+# excerpt, ``DETAIL`` and ``CONTEXT`` beneath the first line — still echoes Thing content, and
+# SQLAlchemy appends that text and the SQL beneath its own first line.
+_STATEMENT_ERROR_MODULES = ("sqlalchemy", "psycopg2")
+
+
+def _truncate_statement_errors(event: Event) -> Event:
+    """Cut every database exception in the chain down to its first line: the error class and message."""
+    exception = event.get("exception")
+    values = exception.get("values") if isinstance(exception, dict) else None
+    for value in values if isinstance(values, list) else ():
+        message = value.get("value")
+        module = value.get("module") or ""
+        if isinstance(message, str) and module.split(".")[0] in _STATEMENT_ERROR_MODULES:
+            value["value"] = message.split("\n", 1)[0]
+    return event
+
+
+def _scrub_error_event(event: Event, hint: Hint) -> Event:
+    """Sentry before_send hook: the auth-flow request scrub, then the database-message scrub."""
+    return _truncate_statement_errors(_strip_auth_flow_request(event, hint))
+
+
 def init_sentry() -> None:
     """Initialize Sentry SDK if SENTRY_DSN is configured."""
     if not settings.SENTRY_DSN:
@@ -88,7 +112,7 @@ def init_sentry() -> None:
         max_request_body_size="never",
         include_local_variables=False,
         before_breadcrumb=_strip_cookie_breadcrumb,
-        before_send=_strip_auth_flow_request,
+        before_send=_scrub_error_event,
         before_send_transaction=_strip_auth_flow_request,
     )
     logger.info("Sentry initialized (env=%s)", settings.SENTRY_ENVIRONMENT)

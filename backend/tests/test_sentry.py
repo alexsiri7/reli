@@ -3,6 +3,9 @@
 from unittest.mock import patch
 
 import pytest
+from sentry_sdk.utils import event_from_exception
+
+from backend.tests.test_db_engine import _failed_create
 
 
 @pytest.fixture(autouse=True)
@@ -148,11 +151,11 @@ def test_init_sentry_sets_before_send_hooks():
         mock_settings.SENTRY_DSN = "https://examplePublicKey@o0.ingest.sentry.io/0"
         mock_settings.SENTRY_ENVIRONMENT = "test"
         mock_settings.SENTRY_TRACES_SAMPLE_RATE = 0.1
-        from backend.sentry import _strip_auth_flow_request, init_sentry
+        from backend.sentry import _scrub_error_event, _strip_auth_flow_request, init_sentry
 
         init_sentry()
         call_kwargs = mock_sdk.init.call_args[1]
-        assert call_kwargs.get("before_send") is _strip_auth_flow_request
+        assert call_kwargs.get("before_send") is _scrub_error_event
         assert call_kwargs.get("before_send_transaction") is _strip_auth_flow_request
 
 
@@ -274,3 +277,31 @@ def test_secret_bearing_prefixes_follow_the_auth_router():
 
     assert _SECRET_BEARING_PREFIXES == ("/oauth/", router.prefix + "/")
     assert router.prefix == "/api/auth"
+
+
+def test_a_database_error_reaches_sentry_without_the_thing_it_was_writing(session):
+    """The event for a refused write names the error, and none of the title, notes or URLs (#1694).
+
+    The engine hides the bound parameters, but the server's ``LINE`` excerpt and ``CONTEXT`` quote
+    the interpolated statement, on the SQLAlchemy error and again on the psycopg2 error it wraps.
+    """
+    from backend.sentry import _scrub_error_event
+
+    event, hint = event_from_exception(_failed_create(session))
+    unscrubbed = [value["value"] for value in event["exception"]["values"]]
+    assert any("private note" in value for value in unscrubbed)
+
+    scrubbed = [value["value"] for value in _scrub_error_event(event, hint)["exception"]["values"]]
+    assert len(scrubbed) == 2
+    assert any("unsupported Unicode escape sequence" in value for value in scrubbed)
+    for value in scrubbed:
+        assert "private" not in value
+
+
+def test_scrub_error_event_leaves_other_exceptions_whole():
+    """Only a database error is cut: an application error's message is the debugging the event is for."""
+    from backend.sentry import _scrub_error_event
+
+    message = "first line\nsecond line"
+    event = {"exception": {"values": [{"type": "ValueError", "module": None, "value": message}]}}
+    assert _scrub_error_event(event, None)["exception"]["values"][0]["value"] == message

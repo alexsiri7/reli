@@ -67,6 +67,8 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
         connect_args=_connect_args,
+        # A data migration binds Thing content, which a failed boot would otherwise log (#1694).
+        hide_parameters=True,
     )
 
     with connectable.connect() as connection:

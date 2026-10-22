@@ -6,6 +6,10 @@ configuration at import time — ``get_engine`` resolves it on first use — so 
 
 Every connection the engine opens carries a ``statement_timeout``, so no statement — however the
 graph is shaped — can hold one of the pool's connections indefinitely.
+
+The engine hides bound parameters from the exceptions it raises. Those parameters are a Thing's
+title, notes and URLs and a journal entry's before/after snapshots, and an unhandled database error
+is re-raised to the log and Sentry, so the message must not carry them (#1694).
 """
 
 from __future__ import annotations
@@ -38,6 +42,7 @@ def get_engine() -> Engine:
         _engine = create_engine(
             settings.database_url,
             echo=False,
+            hide_parameters=True,
             pool_size=3,
             max_overflow=2,
             pool_pre_ping=True,
