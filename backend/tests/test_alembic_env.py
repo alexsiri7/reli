@@ -143,3 +143,18 @@ def test_the_migration_engine_keeps_bound_content_out_of_its_errors(fresh_databa
     logged = "".join(traceback.format_exception(failure.value))
     assert "SQL parameters hidden" in logged
     assert "private" not in logged
+
+
+def test_the_migrations_will_not_connect_to_a_server_without_tls(fresh_database: str, monkeypatch):
+    """The migration engine applies the same TLS rule as the app's (#1695): the test Postgres speaks
+    no TLS, so with the URL's ``sslmode=disable`` dropped the upgrade is refused at connect."""
+    from sqlalchemy import make_url
+    from sqlalchemy.exc import OperationalError
+
+    from backend import config as config_module
+
+    without_mode = make_url(fresh_database).set(query={}).render_as_string(hide_password=False)
+    monkeypatch.setattr(config_module.settings, "DATABASE_URL", without_mode)
+
+    with pytest.raises(OperationalError, match="SSL"):
+        _upgrade("head")

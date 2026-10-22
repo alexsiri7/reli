@@ -21,6 +21,9 @@ services:
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # This container is only ever a deploy, so it gets the deploy's checks: among them, a
+      # DATABASE_URL naming a weaker sslmode than require fails the boot (#1695).
+      - PRODUCTION=${PRODUCTION:-1}
     restart: unless-stopped
 
   # Local development database: `docker compose --profile localdb up -d`,
