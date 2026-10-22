@@ -37,7 +37,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.routing import APIRoute
-from pydantic import AnyUrl, BaseModel, StringConstraints, ValidationError
+from pydantic import AfterValidator, AnyUrl, BaseModel, ValidationError
 from sqlmodel import Session
 from starlette.types import Message, Receive
 
@@ -73,9 +73,10 @@ UNUSED_CLIENT_TTL_SECONDS = 60 * 60
 # A real registration is a few hundred bytes, and a consent or token form fewer. This bounds what
 # any request body here can hold in memory, and with it every stored field of a registration.
 MAX_BODY_BYTES = 8 * 1024
-# The longest redirect URI a registration keeps and authorize accepts, and the bound on every other
-# value authorize stores. Short enough that a token form carrying the URI percent-encoded still fits
-# in MAX_BODY_BYTES.
+# The longest redirect URI a registration keeps, in UTF-8 bytes, and the bound authorize puts on
+# every value it stores. Percent-encoding turns a byte into at most three, so a token form carrying
+# the longest URI still fits in MAX_BODY_BYTES — a bound in characters would not, since one
+# character can be four bytes.
 MAX_PARAM_LENGTH = 2048
 
 _AT_CAPACITY = "Server is at capacity; try again later"
@@ -142,7 +143,14 @@ class _BoundedBodyRoute(APIRoute):
 
 router = APIRouter(tags=["oauth"], route_class=_BoundedBodyRoute)
 
-_Param = Annotated[str, StringConstraints(max_length=MAX_PARAM_LENGTH)]
+
+def _within_param_bytes(value: str) -> str:
+    if len(value.encode()) > MAX_PARAM_LENGTH:
+        raise ValueError(f"must be at most {MAX_PARAM_LENGTH} bytes as UTF-8")
+    return value
+
+
+_RedirectUri = Annotated[str, AfterValidator(_within_param_bytes)]
 
 
 # --- Discovery -------------------------------------------------------------
@@ -184,7 +192,7 @@ def authorization_server_metadata() -> JSONResponse:
 class _ClientMetadata(BaseModel):
     """The RFC 7591 metadata a registration keeps. Anything else in the body is ignored, as §2 allows."""
 
-    redirect_uris: list[_Param] | None = None
+    redirect_uris: list[_RedirectUri] | None = None
     client_name: str = ""
     grant_types: list[str] = ["authorization_code"]
     response_types: list[str] = ["code"]
@@ -278,7 +286,7 @@ async def oauth_register(request: Request) -> JSONResponse:
     Raises:
         HTTPException 400: The body is not a JSON object of the shapes ``_ClientMetadata`` names, a
             ``redirect_uri`` is not ``https`` (``http`` only for localhost) with no user info or is
-            longer than ``MAX_PARAM_LENGTH``, or
+            longer than ``MAX_PARAM_LENGTH`` bytes as UTF-8, or
             ``token_endpoint_auth_method`` is one the token endpoint does not implement.
         HTTPException 413: The body is over ``MAX_BODY_BYTES``, refused by ``_BoundedBodyRoute``.
     """

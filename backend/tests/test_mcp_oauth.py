@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import anyio
 import httpx
@@ -475,6 +475,48 @@ def test_the_token_endpoint_refuses_a_form_over_the_cap_and_leaves_the_code(clie
     assert cleanup_and_get(session, mcp_auth_codes, code) is not None
 
 
+def _form_chunks(fields):
+    """A form body sent with no ``Content-Length``, so only the bytes as they arrive can refuse it."""
+    yield urlencode(fields).encode()
+    yield b"&padding=" + b"x" * mcp_oauth.MAX_BODY_BYTES
+
+
+def test_the_token_endpoint_refuses_a_chunked_form_over_the_cap_and_leaves_the_code(client, session):
+    registered = _register(client)
+    verifier = secrets.token_urlsafe(64)
+    code = _seed_code(session, registered["client_id"], verifier)
+    fields = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": registered["client_id"],
+        "redirect_uri": CLIENT_REDIRECT,
+        "code_verifier": verifier,
+    }
+
+    response = client.post(
+        "/oauth/token",
+        content=_form_chunks(fields),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    assert response.status_code == 413
+    assert cleanup_and_get(session, mcp_auth_codes, code) is not None
+
+
+def test_authorize_confirm_refuses_a_chunked_form_over_the_cap(client):
+    registered = _register(client)
+    server_state = _server_state(_authorize(client, registered["client_id"]).text)
+
+    response = client.post(
+        "/oauth/authorize/confirm",
+        content=_form_chunks({"server_state": server_state}),
+        headers={"Content-Type": "application/x-www-form-urlencoded", "Origin": BASE_URL},
+    )
+
+    assert response.status_code == 413
+    assert "set-cookie" not in response.headers
+
+
 def test_authorize_confirm_refuses_a_form_over_the_cap(client):
     registered = _register(client)
     server_state = _server_state(_authorize(client, registered["client_id"]).text)
@@ -489,8 +531,10 @@ def test_authorize_confirm_refuses_a_form_over_the_cap(client):
     assert "set-cookie" not in response.headers
 
 
-def test_register_refuses_a_redirect_uri_over_the_length_bound(client, session):
-    uri = f"{CLIENT_REDIRECT}/" + "a" * mcp_oauth.MAX_PARAM_LENGTH
+@pytest.mark.parametrize("character", ["a", "é"])
+def test_register_refuses_a_redirect_uri_over_the_length_bound(client, session, character):
+    """The bound is in bytes: half as many two-byte characters already pass it."""
+    uri = f"{CLIENT_REDIRECT}/" + character * (mcp_oauth.MAX_PARAM_LENGTH // len(character.encode()))
 
     response = client.post("/oauth/register", json={"redirect_uris": [uri]})
 
