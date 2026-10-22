@@ -253,29 +253,39 @@ def test_relate_refuses_a_child_of_edge_closing_a_longer_cycle(session):
         _relate(session, bottom, top, RelationshipType.CHILD_OF)
 
 
-def test_concurrent_child_of_edges_cannot_close_a_cycle_between_them(session):
-    """Each transaction's check misses the other's uncommitted edge unless the second one waits."""
+@pytest.mark.parametrize(
+    ("held", "racing"),
+    [
+        pytest.param([("a", "b")], ("b", "a"), id="same-pair"),
+        # A lock keyed on the edge's pair would let this one through: no held edge shares its pair.
+        pytest.param([("a", "b"), ("b", "c")], ("c", "a"), id="across-pairs"),
+    ],
+)
+def test_concurrent_child_of_edges_cannot_close_a_cycle_between_them(session, held, racing):
+    """Each transaction's check misses the other's uncommitted edges unless the second one waits."""
     from backend.db_engine import get_engine
 
-    a = create_thing(session, actor=Actor.USER, title="a")
-    b = create_thing(session, actor=Actor.USER, title="b")
-    service._insert_relationship(
-        session,
-        actor=Actor.CLAUDE_INTERACTIVE,
-        source_thing_id=a.id,
-        target_thing_id=b.id,
-        relationship_type=RelationshipType.CHILD_OF,
-    )
+    things = {name: create_thing(session, actor=Actor.USER, title=name) for name in "abc"}
+    session.commit()
+    for source, target in held:
+        service._insert_relationship(
+            session,
+            actor=Actor.CLAUDE_INTERACTIVE,
+            source_thing_id=things[source].id,
+            target_thing_id=things[target].id,
+            relationship_type=RelationshipType.CHILD_OF,
+        )
     outcome: list[BaseException] = []
 
-    def reverse() -> None:
+    def close_the_cycle() -> None:
         with Session(get_engine()) as racer:
             try:
-                _relate(racer, b, a, RelationshipType.CHILD_OF)
+                _relate(racer, things[racing[0]], things[racing[1]], RelationshipType.CHILD_OF)
+                racer.commit()
             except ValueError as exc:
                 outcome.append(exc)
 
-    racer = threading.Thread(target=reverse)
+    racer = threading.Thread(target=close_the_cycle)
     racer.start()
     deadline = time.monotonic() + 5
     while not _waiting_on_an_advisory_lock(session) and racer.is_alive() and time.monotonic() < deadline:
@@ -285,7 +295,7 @@ def test_concurrent_child_of_edges_cannot_close_a_cycle_between_them(session):
 
     assert len(outcome) == 1 and "cycle" in str(outcome[0])
     edges = session.execute(text("SELECT count(*) FROM relationships WHERE relationship_type = 'ChildOf'")).scalar_one()
-    assert edges == 1
+    assert edges == len(held)
 
 
 def _waiting_on_an_advisory_lock(session):
