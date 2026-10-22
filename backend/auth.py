@@ -399,6 +399,7 @@ def google_callback(request: Request, code: str = "", state: str = "", error: st
         flow = cleanup_and_pop(session, mcp_oauth_sessions, state)
         if flow is None:
             raise HTTPException(status_code=400, detail="Invalid or expired sign-in state: start the sign-in again.")
+        # Not compare_digest: it raises on the non-ASCII state an attacker can put in the URL.
         if request.cookies.get(MCP_FLOW_COOKIE) != state:
             logger.warning(
                 "MCP sign-in refused: the callback reached a browser that did not approve client %r", flow["client_id"]

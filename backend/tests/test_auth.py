@@ -336,31 +336,37 @@ def test_the_code_is_appended_to_a_redirect_uri_that_already_has_a_query(client,
 
 
 @pytest.mark.parametrize(
-    ("params", "headers"),
+    ("state", "params", "headers"),
     [
-        ({"error": "access_denied"}, {}),
-        ({"error": "access_denied"}, _flow_cookie("another-state")),
-        ({"code": "google-code"}, {}),
+        ("server-state", {"error": "access_denied"}, {}),
+        ("server-state", {"error": "access_denied"}, _flow_cookie("another-state")),
+        ("server-state", {"code": "google-code"}, {}),
+        ("serveür-ßtate", {"error": "access_denied"}, _flow_cookie()),
     ],
-    ids=["cancelled-without-cookie", "cancelled-with-another-flows-cookie", "outside-allowlist-without-cookie"],
+    ids=[
+        "cancelled-without-cookie",
+        "cancelled-with-another-flows-cookie",
+        "outside-allowlist-without-cookie",
+        "non-ascii-state",
+    ],
 )
 def test_a_callback_in_a_browser_that_did_not_approve_the_flow_is_refused_in_place(
-    client, session, google, params, headers
+    client, session, google, state, params, headers
 ):
-    _seed_flow(session)
+    _seed_flow(session, state=state)
     seen = google(
         lambda request: httpx.Response(
             200, json={"access_token": "never-read", "id_token": _id_token(email="intruder@example.com")}
         )
     )
 
-    response = client.get("/api/auth/google/callback", params={**params, "state": "server-state"}, headers=headers)
+    response = client.get("/api/auth/google/callback", params={**params, "state": state}, headers=headers)
 
     assert response.status_code == 400
     assert response.json()["detail"] == auth._NOT_THIS_BROWSER
     assert "location" not in response.headers
     assert seen == []
-    assert cleanup_and_get(session, mcp_oauth_sessions, "server-state") is None
+    assert cleanup_and_get(session, mcp_oauth_sessions, state) is None
 
 
 # --- The web view's sign-in ---------------------------------------------------
