@@ -62,6 +62,16 @@ The graph SHALL express hierarchy only through ChildOf edges. There SHALL be no 
 - WHEN a ChildOf edge is created from the project to the task
 - THEN the task appears among the project's children
 
+### Requirement: No Thing is its own ancestor
+
+An edge from a Thing to itself SHALL be refused for every relationship type, and a ChildOf edge SHALL be refused when its target already reaches its source through ChildOf, so no Thing ever drops out of the tree by sitting in a cycle. The refusal SHALL hold for writes made concurrently, and SHALL write nothing and journal nothing.
+
+#### Scenario: Closing a cycle
+- GIVEN a ChildOf edge from "Move house" to "Pack books"
+- WHEN a ChildOf edge from "Pack books" to "Move house" is created
+- THEN the request is refused
+- AND both Things stay in the tree
+
 ### Requirement: Nothing is hard-deleted
 
 A Thing SHALL be retired by archiving, which sets it inactive and leaves it and its edges readable. There SHALL be no hard delete of a Thing reachable from outside the service. An edge MAY be removed; both Things it joined SHALL remain.
