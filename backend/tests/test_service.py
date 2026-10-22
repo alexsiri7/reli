@@ -3,6 +3,7 @@
 import threading
 import time
 import uuid
+from datetime import date
 
 import pytest
 from sqlalchemy import text
@@ -14,6 +15,7 @@ from backend.db_models import (
     INTERNAL_TAGS,
     NEW_TAG,
     OBSERVATION_TAG,
+    SCHEDULED_TASK_TAG,
     USER_ANCHOR_ID,
     Actor,
     RelationshipType,
@@ -419,6 +421,41 @@ def test_an_update_checks_only_the_fields_it_passes(session):
     updated = update_thing(session, actor=Actor.USER, thing_id=thing.id, tags=["#Kept"])
 
     assert updated.tags == ["#Kept"]
+
+
+@pytest.mark.parametrize(
+    ("change", "refusal"),
+    [({"active": False}, "archived"), ({"tags": ["#Other"]}, "keep that tag"), ({"tags": []}, "keep that tag")],
+)
+def test_a_heartbeat_cannot_be_archived_or_lose_its_tag(session, change, refusal):
+    """#1704: either write would hide a missed scheduled run instead of reporting it."""
+    heartbeat = create_thing(session, actor=Actor.CLAUDE_SCHEDULED, title="Resolution pass", tags=[SCHEDULED_TASK_TAG])
+    before = _journal_count(session)
+
+    with pytest.raises(ValueError, match=refusal):
+        update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=heartbeat.id, **change)
+
+    session.refresh(heartbeat)
+    assert heartbeat.active is True
+    assert heartbeat.tags == [SCHEDULED_TASK_TAG]
+    assert _journal_count(session) == before
+
+
+def test_a_heartbeat_still_takes_its_routine_writes(session):
+    heartbeat = create_thing(session, actor=Actor.CLAUDE_SCHEDULED, title="Learning pass", tags=[SCHEDULED_TASK_TAG])
+    tomorrow = date(2026, 10, 23)
+
+    updated = update_thing(
+        session,
+        actor=Actor.CLAUDE_SCHEDULED,
+        thing_id=heartbeat.id,
+        checkin_date=tomorrow,
+        tags=[SCHEDULED_TASK_TAG, "#Kept"],
+        active=True,
+    )
+
+    assert updated.checkin_date == tomorrow
+    assert updated.tags == [SCHEDULED_TASK_TAG, "#Kept"]
 
 
 @pytest.mark.parametrize("priority", [float("nan"), float("inf"), float("-inf")])
