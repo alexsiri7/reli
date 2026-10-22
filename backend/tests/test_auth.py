@@ -140,6 +140,24 @@ def test_a_token_round_trips_for_its_audience_only(sign_in_settings):
         auth.decode_jwt(token, audience="web")
 
 
+def test_a_token_is_refused_by_a_deploy_with_another_issuer(sign_in_settings, monkeypatch):
+    """Two deploys sharing ``SECRET_KEY`` do not accept each other's tokens (#1697)."""
+    token = auth.create_jwt("1234567890", "owner@example.com", audience="mcp")
+    assert auth.decode_jwt(token, audience="mcp")["iss"] == "https://reli.example.test"
+
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "https://staging.example.test")
+    with pytest.raises(jwt.InvalidIssuerError):
+        auth.decode_jwt(token, audience="mcp")
+
+
+def test_a_token_without_an_issuer_is_refused(sign_in_settings):
+    claims = {"sub": "1234567890", "email": "owner@example.com", "aud": "mcp", "exp": 2**31 - 1}
+    token = jwt.encode(claims, settings.SECRET_KEY, algorithm=auth.JWT_ALGORITHM)
+
+    with pytest.raises(jwt.MissingRequiredClaimError):
+        auth.decode_jwt(token, audience="mcp")
+
+
 def test_an_mcp_token_lives_an_hour_and_a_web_token_a_week(sign_in_settings):
     mcp = auth.decode_jwt(auth.create_jwt("1234567890", "owner@example.com", audience="mcp"), audience="mcp")
     web = auth.decode_jwt(auth.create_jwt("1234567890", "owner@example.com", audience="web"), audience="web")

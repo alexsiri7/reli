@@ -127,13 +127,14 @@ def is_allowed(email: str) -> bool:
 
 def create_jwt(subject: str, email: str, audience: str) -> str:
     """A token for *subject*, only for *audience*, good for ``MCP_JWT_EXPIRY_SECONDS`` or
-    ``WEB_JWT_EXPIRY_SECONDS`` as *audience* says.
+    ``WEB_JWT_EXPIRY_SECONDS`` as *audience* says, issued by this deploy's ``base_url()``.
 
     ``jti`` is kept from the pre-v4 token shape: nothing reads it, but a revocation list, should
     logout ever need one, would key on it.
     """
     issued_at = int(datetime.now(UTC).timestamp())
     claims = {
+        "iss": base_url(),
         "sub": subject,
         "email": email,
         "aud": audience,
@@ -147,16 +148,20 @@ def create_jwt(subject: str, email: str, audience: str) -> str:
 def decode_jwt(token: str, audience: str) -> dict[str, Any]:
     """The claims of a token this Reli minted for *audience*.
 
+    ``iss`` is checked against ``base_url()`` so that another deploy sharing ``SECRET_KEY`` — staging
+    beside production — cannot mint a token this one accepts (#1697).
+
     Raises:
         jwt.ExpiredSignatureError: The token is past its ``exp``.
-        jwt.InvalidTokenError: Anything else — wrong signature, wrong audience, missing claims.
+        jwt.InvalidTokenError: Anything else — wrong signature, audience or issuer, missing claims.
     """
     claims: dict[str, Any] = jwt.decode(
         token,
         settings.SECRET_KEY,
         algorithms=[JWT_ALGORITHM],
         audience=audience,
-        options={"require": ["exp", "aud", "sub"]},
+        issuer=base_url(),
+        options={"require": ["exp", "aud", "iss", "sub"]},
     )
     return claims
 

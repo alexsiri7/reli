@@ -969,9 +969,20 @@ def test_mcp_endpoint_refuses_a_jwt_for_another_audience(client, secret_key):
     assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
 
 
+def test_mcp_endpoint_refuses_a_jwt_minted_by_another_deploy(client, secret_key, monkeypatch):
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "https://staging.example.test")
+    token = auth.create_jwt("1234567890", "owner@example.com", audience="mcp")
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "https://reli.example.test")
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(token))
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+
+
 def test_an_expired_jwt_is_refused_naming_the_refresh_path(client, secret_key):
     expired = jwt.encode(
-        {"sub": "1234567890", "aud": "mcp", "exp": datetime.now(UTC) - timedelta(seconds=1)},
+        {"iss": auth.base_url(), "sub": "1234567890", "aud": "mcp", "exp": datetime.now(UTC) - timedelta(seconds=1)},
         secret_key,
         algorithm="HS256",
     )
