@@ -477,6 +477,17 @@ def test_an_mcp_token_is_not_a_web_session(anonymous, secret_key):
     assert response.json()["detail"] == "Invalid session: sign in with Google at / again."
 
 
+def test_a_session_minted_by_another_deploy_is_401(anonymous, secret_key, monkeypatch):
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "https://staging.example.test")
+    token = auth.create_jwt("x", "owner@example.com", audience=auth.WEB_AUDIENCE)
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "https://reli.example.test")
+
+    response = anonymous.get("/api/things", headers=_cookie(token))
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid session: sign in with Google at / again."
+
+
 def test_an_expired_session_is_401_saying_so(anonymous, secret_key):
     expired = datetime.now(UTC) - timedelta(days=1)
     token = jwt.encode(
