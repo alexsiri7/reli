@@ -29,7 +29,7 @@ from typing import Any
 from urllib.parse import urlencode, urlsplit
 
 import jwt
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlmodel import Session
@@ -82,6 +82,7 @@ _NOT_SIGNED_IN = "Not signed in: sign in with Google at /."
 _SESSION_EXPIRED = "Session expired: sign in with Google at / again."
 _SESSION_INVALID = "Invalid session: sign in with Google at / again."
 _AT_CAPACITY = "Server is at capacity; try again later"
+_CROSS_ORIGIN = "Refused: this request did not come from Reli's own page."
 
 
 def base_url() -> str:
@@ -96,6 +97,22 @@ def base_url() -> str:
     if parts.scheme and parts.netloc:
         return f"{parts.scheme}://{parts.netloc}"
     return ""
+
+
+def is_same_origin(request: Request) -> bool:
+    """Whether the request came from a page Reli served.
+
+    A browser sends ``Origin`` on every POST, same-origin included, and never lets script override
+    it, so it tells Reli's own page apart from any other — a sibling subdomain included, which the
+    session cookie's ``SameSite=Lax`` treats as the same site and lets through (#1698).
+    """
+    return request.headers.get("origin") == base_url()
+
+
+def require_same_origin(request: Request) -> None:
+    """Refuse a cookie-authenticated write a page other than Reli's own sent."""
+    if not is_same_origin(request):
+        raise HTTPException(status_code=403, detail=_CROSS_ORIGIN)
 
 
 def _sign_in_setting_present(name: str) -> bool:
@@ -259,7 +276,7 @@ def current_session(request: Request) -> SessionOut:
     return SessionOut(email=str(claims.get("email", "")))
 
 
-@router.post("/logout", include_in_schema=False, status_code=204)
+@router.post("/logout", include_in_schema=False, status_code=204, dependencies=[Depends(require_same_origin)])
 def logout() -> Response:
     response = Response(status_code=204)
     response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax", secure=True)

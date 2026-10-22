@@ -336,7 +336,7 @@ def oauth_authorize_confirm(request: Request, server_state: str = Form(...)) -> 
     Single-use consumption of the underlying flow stays where it already was, at the Google
     callback.
     """
-    if request.headers.get("origin") != auth.base_url():
+    if not auth.is_same_origin(request):
         raise HTTPException(
             status_code=400, detail="Approve from Reli's own consent page: start again from the connector."
         )

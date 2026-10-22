@@ -24,11 +24,11 @@ from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 from starlette.responses import Response
 
-from . import queries, service
+from . import auth, queries, service
 from .db_engine import open_session as _session
 from .db_models import (
     OBSERVATION_TAG,
@@ -272,7 +272,11 @@ def user_model(scope: str | None = None) -> UserModelOut:
         return UserModelOut(scope=scope, preferences=[_preference(preference) for preference in preferences])
 
 
-@router.post("/preferences/{preference_id}/reject", summary="Reject a preference")
+@router.post(
+    "/preferences/{preference_id}/reject",
+    summary="Reject a preference",
+    dependencies=[Depends(auth.require_same_origin)],
+)
 def reject_preference(preference_id: uuid.UUID) -> PreferenceOut:
     """Tag a preference ``#Rejected`` as the user, and journal it. The only write in the web view.
 

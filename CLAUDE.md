@@ -159,8 +159,10 @@ an `httponly`, `samesite=lax` cookie holding an `aud="web"` JWT good for seven d
 at startup, never as a cookie sent in the clear (#1533). An account outside `ALLOWED_EMAILS` is sent to
 `/?error=invite_only`, which the view turns into a sentence; a Google refusal at the exchange is a
 502 whose detail names the human step, as for MCP. `GET /api/auth/me` is the view's "am I signed
-in" probe and `POST /api/auth/logout` deletes the cookie; there is no revocation list. The
-redirect URI is the one already documented below — the web sign-in adds no console entry.
+in" probe and `POST /api/auth/logout` deletes the cookie; there is no revocation list.
+`samesite=lax` still sends the cookie from a sibling subdomain, so the two `POST`s a cookie reaches —
+logout and `POST /api/preferences/{id}/reject` — also answer 403 unless the request's `Origin` is
+the base URL (`auth.require_same_origin`, #1698). The redirect URI is the one already documented below — the web sign-in adds no console entry.
 
 Its settings are `SECRET_KEY`, `ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and `RELI_BASE_URL`,
 beside `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Every one is human-provisioned on the
