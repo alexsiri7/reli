@@ -206,6 +206,9 @@ done:
    server, registers itself, lands on a Reli-hosted consent page naming the client and where its
    code will be delivered, and the allowlisted account continues through Google sign-in from
    there. Only approve a client the human just registered from a connector they are setting up.
+   Continue on that page binds the flow to the browser with the `__Host-reli_mcp_flow` cookie, so
+   a callback link for it opened in any other browser is a 400 rather than a redirect to the
+   client (#1701).
 4. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. The
    password that used to stand beside the cookie is gone (#1471), and nothing outside a browser
    needs a way in.
