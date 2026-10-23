@@ -341,7 +341,8 @@ def _image_services_keeping_capabilities(directory: Path = REPO_ROOT) -> list[st
     offenders: list[str] = []
     for compose_file in sorted(directory.glob("docker-compose*.yml")):
         for name, service in yaml.safe_load(compose_file.read_text())["services"].items():
-            runs_the_image = "build" in service or service.get("image", "").startswith("ghcr.io/alexsiri7/reli:")
+            repository = re.split("[:@]", service.get("image", ""))[0]
+            runs_the_image = "build" in service or repository == "ghcr.io/alexsiri7/reli"
             if runs_the_image and (service.get("cap_drop") != ["ALL"] or "cap_add" in service):
                 offenders.append(f"{compose_file.name}:{name}")
     return offenders
@@ -364,9 +365,14 @@ def test_the_capability_scan_sees_a_service_running_the_image(tmp_path):
         "services:\n"
         "  built:\n    build: .\n"
         "  readded:\n    image: ghcr.io/alexsiri7/reli:x\n    cap_drop: [ALL]\n    cap_add: [NET_RAW]\n"
+        "  untagged:\n    image: ghcr.io/alexsiri7/reli\n"
+        "  pinned:\n    image: ghcr.io/alexsiri7/reli@sha256:0123\n"
+        "  lookalike:\n    image: ghcr.io/alexsiri7/reli-docs:latest\n"
     )
     assert _image_services_keeping_capabilities(tmp_path) == [
         "docker-compose.preview.yml:built",
         "docker-compose.preview.yml:readded",
+        "docker-compose.preview.yml:untagged",
+        "docker-compose.preview.yml:pinned",
         "docker-compose.yml:kept",
     ]
