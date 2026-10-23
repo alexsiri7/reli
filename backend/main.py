@@ -26,12 +26,11 @@ from .sentry import init_sentry
 
 logger = logging.getLogger(__name__)
 _log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+# Importing backend.mcp_server has already configured the root logger — the MCP SDK's own
+# basicConfig, at INFO — so a basicConfig here would be a no-op and the levels are set directly.
 # LOG_LEVEL below INFO reaches only Reli's own loggers: on the root logger it would turn on every
 # library's debug output, and httpx's carries the bodies of the Google sign-in exchange (#1714).
-logging.basicConfig(
-    level=max(_log_level, logging.INFO),
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
+logging.getLogger().setLevel(max(_log_level, logging.INFO))
 logging.getLogger("backend").setLevel(_log_level)
 
 
