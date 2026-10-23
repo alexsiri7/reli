@@ -265,6 +265,26 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
 
 
 @pytest.mark.parametrize(
+    ("field", "value", "logged"),
+    [
+        ("client_name", "C" * 4000, "registered client"),
+        ("redirect_uris", ["http://evil.com/" + "a" * 2000], "unsafe redirect_uri"),
+        ("token_endpoint_auth_method", "m" * 4000, "token_endpoint_auth_method"),
+    ],
+    ids=["client_name", "redirect_uri", "auth_method"],
+)
+def test_register_logs_a_bounded_prefix_of_what_the_caller_sent(client, caplog, field, value, logged):
+    """An unauthenticated caller chooses these values, so it must not choose the size of the log line (#1716)."""
+    body = {"redirect_uris": [CLIENT_REDIRECT], field: value}
+
+    with caplog.at_level(logging.INFO, logger="backend.mcp_oauth"):
+        client.post("/oauth/register", json=body)
+
+    [record] = [record for record in caplog.records if logged in record.getMessage()]
+    assert len(record.getMessage()) < mcp_oauth.MAX_LOGGED_CHARS + 200
+
+
+@pytest.mark.parametrize(
     "redirect_uris",
     [
         ["http://evil.com/cb"],
