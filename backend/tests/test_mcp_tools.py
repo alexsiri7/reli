@@ -547,11 +547,13 @@ def test_an_out_of_range_after_id_is_refused_before_it_reaches_the_database(tool
 
 
 def test_the_smallest_after_id_reads_from_the_start_of_the_journal(tools):
-    thing = create_thing(actor="claude_interactive", title="first write")
+    create_thing(actor="claude_interactive", title="first write")
+    oldest, count = tools.execute(text("SELECT min(id), count(*) FROM journal")).one()
 
     result = asyncio.run(reli_mcp.call_tool("journal_since", {"after_id": 0}))
 
-    assert thing["id"] in [e["entity_id"] for e in result.structured_content["entries"]]
+    assert result.structured_content["entries"][0]["id"] == oldest
+    assert result.structured_content["total"] == count
 
 
 def test_the_largest_after_id_is_accepted(tools):
