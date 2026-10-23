@@ -1,5 +1,6 @@
 """What the assembled app routes where."""
 
+import logging
 import os
 import socket
 import subprocess
@@ -210,3 +211,34 @@ def test_the_access_log_carries_no_query_string():
     assert log.count('"GET /healthz HTTP/1.1" 200') == 2
     assert "c0de-secret" not in log
     assert "st4te-secret" not in log
+
+
+@pytest.mark.parametrize(
+    ("log_level", "expected"),
+    [
+        ("DEBUG", (logging.DEBUG, logging.INFO, logging.INFO, logging.INFO)),
+        (None, (logging.INFO, logging.INFO, logging.INFO, logging.INFO)),
+        ("WARNING", (logging.WARNING, logging.WARNING, logging.WARNING, logging.WARNING)),
+    ],
+)
+def test_log_level_below_info_reaches_only_the_backend_loggers(log_level, expected):
+    """#1714: on the root logger LOG_LEVEL=DEBUG would turn on httpx's debug output too, and that
+    carries the Google sign-in exchange. Reli's own loggers still go to DEBUG, stay at INFO when it
+    is unset, and a level above INFO quiets everything."""
+    env = {k: v for k, v in os.environ.items() if k != "LOG_LEVEL"}
+    if log_level is not None:
+        env["LOG_LEVEL"] = log_level
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import logging, backend.main; print(*(logging.getLogger(n).getEffectiveLevel() for n in "
+            "('backend.auth', 'httpx', 'httpcore', 'root')))",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert probe.stdout.split() == [str(level) for level in expected]
