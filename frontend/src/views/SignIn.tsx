@@ -13,7 +13,7 @@ const ERRORS: Record<string, string> = {
 
 function errorMessage(code: string | null): string | null {
   if (code === null) return null;
-  return ERRORS[code] ?? `Sign-in did not complete (${code}).`;
+  return ERRORS[code] ?? "Sign-in did not complete.";
 }
 
 /** The whole app while there is no session: one button, and why the last attempt did not work. */
