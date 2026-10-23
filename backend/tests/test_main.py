@@ -75,6 +75,22 @@ def test_an_unhandled_exception_500_carries_the_security_headers(monkeypatch):
     assert response.headers["Cache-Control"] == "no-store"
 
 
+def test_an_unhandled_exception_500_off_the_api_stays_cacheable(monkeypatch):
+    """The handler sends the 500 itself, so it must make the same /api choice the middleware does."""
+    from backend.main import app
+
+    def boom() -> str:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(auth, "base_url", boom)
+
+    response = TestClient(app, raise_server_exceptions=False).get("/.well-known/oauth-authorization-server")
+
+    assert response.status_code == 500
+    _assert_security_headers(response)
+    assert "Cache-Control" not in response.headers
+
+
 @pytest.mark.parametrize(
     "path",
     [

@@ -122,7 +122,7 @@ _API_HEADERS = {**_SECURITY_HEADERS, "Cache-Control": "no-store"}
 
 
 def _is_api(path: str) -> bool:
-    return path == "/api" or path.startswith("/api/")
+    return path == api.router.prefix or path.startswith(f"{api.router.prefix}/")
 
 
 class _SecurityHeaders:
