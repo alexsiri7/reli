@@ -21,3 +21,16 @@ data/
 LICENSE
 .dockerignore
 docker-compose*.yml
+# The legacy data stores and exports .gitignore keeps out of the repository, at any depth, so a
+# build from a working tree that still holds them cannot copy them in with backend/.
+**/legacy/
+**/chroma_db/
+**/chroma/
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/export-*.json
+**/export_*.json
+**/*-export.json
+**/*.dump
+**/*.sql.gz
