@@ -124,8 +124,14 @@ class _BareMcpPath:
 #: no Google avatar, so no image host is carved out for one. The docs pages FastAPI generates load
 #: Swagger UI from a CDN and stop rendering under it; a deploy does not serve them at all. The view
 #: uses none of the features the Permissions-Policy names, so it grants every one to nobody.
+#: ``form-action`` also governs the redirects a submission follows (#1710): the consent form's POST
+#: answers with a 302 to Google, so Google's sign-in host is carved out. The chain stops there,
+#: because ``prompt=select_account`` always halts on Google's account chooser; the callback's later
+#: redirect to the client is a fresh navigation from Google's page, outside this policy.
 _SECURITY_HEADERS = {
-    "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'",
+    "Content-Security-Policy": (
+        "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com"
+    ),
     "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",

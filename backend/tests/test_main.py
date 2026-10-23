@@ -6,12 +6,13 @@ import socket
 import subprocess
 import sys
 import time
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import auth
+from backend import auth, google_login
 from backend.config import settings
 
 
@@ -128,7 +129,9 @@ def test_no_store_stays_off_what_is_not_the_api(client, path):
 
 
 def _assert_security_headers(response) -> None:
-    assert response.headers["Content-Security-Policy"] == "default-src 'self'; frame-ancestors 'none'"
+    assert response.headers["Content-Security-Policy"] == (
+        "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com"
+    )
     assert "unsafe-inline" not in response.headers["Content-Security-Policy"]
     assert response.headers["Strict-Transport-Security"] == "max-age=63072000; includeSubDomains"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
@@ -139,6 +142,15 @@ def _assert_security_headers(response) -> None:
     ]
     assert not granted, f"Permissions-Policy grants {granted}"
     assert "camera=()" in response.headers["Permissions-Policy"]
+
+
+def test_form_action_admits_where_the_consent_form_redirects(client):
+    """#1710: the consent form's POST is redirected to Google's sign-in, and ``form-action`` governs
+    that redirect, so moving the sign-in to another host without the policy blocks every connector."""
+    google = urlsplit(google_login.AUTHORIZATION_URL)
+    directives = client.get("/healthz").headers["Content-Security-Policy"].split("; ")
+
+    assert f"form-action 'self' {google.scheme}://{google.netloc}" in directives
 
 
 # A fresh interpreter, because the app is built once at import and its lifespan may run only once per
