@@ -28,6 +28,9 @@ API_ROUTE = re.compile(r"""/api(?:/|(?=["'\s]|$))""")
 # ``ntfy.sh`` used as a URL without ``https://`` in front of it. curl guesses ``http`` for a bare
 # host, and the topic name is the channel's whole credential.
 PLAINTEXT_NTFY = re.compile(r"""(?<!https://)\bntfy\.sh/""")
+PINNED_ACTION = re.compile(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}")
+NPX_PACKAGE = re.compile(r"\bnpx\s+(?:-\S+\s+)*(\S+)")
+EXACT_VERSION = re.compile(r".@\d+\.\d+\.\d+$")
 
 # What `gates.sh` needs on PATH before it reaches a stage. Every venv tool goes through
 # `uv run`, because CI never activates the venv.
@@ -163,6 +166,44 @@ def test_the_permissions_scan_sees_a_job_left_on_the_default_grants(tmp_path):
         "jobs:\n  x:\n    permissions:\n      contents: read\n    steps: []\n  y:\n    steps: []\n"
     )
     assert _jobs_on_default_token_grants(tmp_path) == ["bare.yml:y"]
+
+
+def _unpinned_actions(directory: Path = WORKFLOWS) -> list[str]:
+    workflows = (p for p in directory.iterdir() if p.suffix in (".yml", ".yaml"))
+    offenders: list[str] = []
+    for workflow in sorted(workflows):
+        for job in yaml.safe_load(workflow.read_text())["jobs"].values():
+            for step in job.get("steps", []):
+                uses = step.get("uses")
+                if uses and not PINNED_ACTION.fullmatch(uses):
+                    offenders.append(f"{workflow.name}:{uses}")
+    return offenders
+
+
+def test_every_action_is_pinned_to_a_commit():
+    """#1711: a tag can be moved to unreviewed code without the workflow changing; a commit cannot."""
+    offenders = _unpinned_actions()
+    assert offenders == [], f"these steps use an action by a movable ref: {offenders}"
+
+
+def test_the_pin_scan_sees_an_action_used_by_its_tag(tmp_path):
+    (tmp_path / "w.yml").write_text(
+        "jobs:\n  x:\n    steps:\n"
+        "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n"
+        "      - uses: actions/setup-node@v7\n"
+    )
+    assert _unpinned_actions(tmp_path) == ["w.yml:actions/setup-node@v7"]
+
+
+def test_every_npx_package_names_an_exact_version():
+    """#1711: ``npx pkg@latest`` runs whatever the registry serves that day."""
+    offenders = [
+        f"{name}:{package}"
+        for name, run in _workflow_run_steps()
+        for package in NPX_PACKAGE.findall(run)
+        if not EXACT_VERSION.search(package)
+    ]
+    assert offenders == [], f"these steps run an unpinned npx package: {offenders}"
 
 
 def test_ci_grants_its_default_token_nothing_beyond_read():
