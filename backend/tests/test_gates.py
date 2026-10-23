@@ -173,8 +173,8 @@ def _unpinned_actions(directory: Path = WORKFLOWS) -> list[str]:
     offenders: list[str] = []
     for workflow in sorted(workflows):
         for job in yaml.safe_load(workflow.read_text())["jobs"].values():
-            for step in job.get("steps", []):
-                uses = step.get("uses")
+            # A job-level ``uses:`` calls a reusable workflow and has no steps of its own.
+            for uses in [job.get("uses"), *(step.get("uses") for step in job.get("steps", []))]:
                 if uses and not PINNED_ACTION.fullmatch(uses):
                     offenders.append(f"{workflow.name}:{uses}")
     return offenders
@@ -191,8 +191,12 @@ def test_the_pin_scan_sees_an_action_used_by_its_tag(tmp_path):
         "jobs:\n  x:\n    steps:\n"
         "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n"
         "      - uses: actions/setup-node@v7\n"
+        "  y:\n    uses: some-org/some-repo/.github/workflows/build.yml@v3\n"
     )
-    assert _unpinned_actions(tmp_path) == ["w.yml:actions/setup-node@v7"]
+    assert _unpinned_actions(tmp_path) == [
+        "w.yml:actions/setup-node@v7",
+        "w.yml:some-org/some-repo/.github/workflows/build.yml@v3",
+    ]
 
 
 def test_every_npx_package_names_an_exact_version():
