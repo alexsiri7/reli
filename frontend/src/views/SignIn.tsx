@@ -6,14 +6,14 @@ import { signInUrl } from "../api";
  * What the callback's `/?error=` codes mean, in the sign-in view's own words. Codes rather than
  * server text, so nothing in the URL can put a sentence of its choosing on this page.
  */
-const ERRORS: Record<string, string> = {
-  invite_only: "This Reli is invite-only: sign in with the Google account listed in ALLOWED_EMAILS on the deploy.",
-  cancelled: "Google sign-in was cancelled.",
-};
+const ERRORS = new Map<string, string>([
+  ["invite_only", "This Reli is invite-only: sign in with the Google account listed in ALLOWED_EMAILS on the deploy."],
+  ["cancelled", "Google sign-in was cancelled."],
+]);
 
 function errorMessage(code: string | null): string | null {
   if (code === null) return null;
-  return ERRORS[code] ?? "Sign-in did not complete.";
+  return ERRORS.get(code) ?? "Sign-in did not complete.";
 }
 
 /** The whole app while there is no session: one button, and why the last attempt did not work. */
