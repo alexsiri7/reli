@@ -335,12 +335,38 @@ def test_the_image_runs_as_reli_from_container_start():
     assert not any(line.startswith("ENTRYPOINT") for line in runtime)
 
 
-@pytest.mark.parametrize(
-    ("compose_file", "service"), [("docker-compose.yml", "reli"), ("docker-compose.staging.yml", "reli-staging")]
-)
-def test_every_compose_service_running_the_image_drops_every_capability(compose_file, service):
+def _image_services_keeping_capabilities(directory: Path = REPO_ROOT) -> list[str]:
+    """Compose services that run Reli's image — pulled by name or built from this repository — and
+    do not drop every Linux capability or add one back."""
+    offenders: list[str] = []
+    for compose_file in sorted(directory.glob("docker-compose*.yml")):
+        for name, service in yaml.safe_load(compose_file.read_text())["services"].items():
+            runs_the_image = "build" in service or service.get("image", "").startswith("ghcr.io/alexsiri7/reli:")
+            if runs_the_image and (service.get("cap_drop") != ["ALL"] or "cap_add" in service):
+                offenders.append(f"{compose_file.name}:{name}")
+    return offenders
+
+
+def test_every_compose_service_running_the_image_drops_every_capability():
     """#1712: the server binds an unprivileged port, so it needs no Linux capability back."""
-    compose = yaml.safe_load((REPO_ROOT / compose_file).read_text())
-    assert compose["services"][service]["image"].startswith("ghcr.io/alexsiri7/reli:")
-    assert compose["services"][service].get("cap_drop") == ["ALL"]
-    assert "cap_add" not in compose["services"][service]
+    offenders = _image_services_keeping_capabilities()
+    assert offenders == [], f"these services run the image with capabilities left: {offenders}"
+
+
+def test_the_capability_scan_sees_a_service_running_the_image(tmp_path):
+    (tmp_path / "docker-compose.yml").write_text(
+        "services:\n"
+        "  dropped:\n    image: ghcr.io/alexsiri7/reli:latest\n    cap_drop: [ALL]\n"
+        "  kept:\n    image: ghcr.io/alexsiri7/reli:latest\n"
+        "  db:\n    image: postgres:16-alpine\n"
+    )
+    (tmp_path / "docker-compose.preview.yml").write_text(
+        "services:\n"
+        "  built:\n    build: .\n"
+        "  readded:\n    image: ghcr.io/alexsiri7/reli:x\n    cap_drop: [ALL]\n    cap_add: [NET_RAW]\n"
+    )
+    assert _image_services_keeping_capabilities(tmp_path) == [
+        "docker-compose.preview.yml:built",
+        "docker-compose.preview.yml:readded",
+        "docker-compose.yml:kept",
+    ]
