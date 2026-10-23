@@ -72,6 +72,15 @@ def test_the_self_hosted_compose_service_is_a_deploy():
     assert len(defaults) == 1 and defaults[0], "the reli service must default PRODUCTION when the host leaves it unset"
 
 
+def test_the_staging_compose_service_hides_the_docs_but_is_no_deploy():
+    """#1720: ``reli-staging`` hides its API docs, but its ``postgres-staging`` speaks no TLS, so the
+    container must not be a deploy that refuses ``sslmode=disable``."""
+    compose = yaml.safe_load((Path(__file__).resolve().parents[2] / "docker-compose.staging.yml").read_text())
+    environment = compose["services"]["reli-staging"]["environment"]
+    assert "HIDE_API_DOCS=1" in environment
+    assert not [entry for entry in environment if entry.startswith(("PRODUCTION=", "RAILWAY_ENVIRONMENT_NAME="))]
+
+
 def _failed_create(session) -> DataError:
     """A real write the database refuses: a NUL is valid JSON but not JSONB text, so the notes fail."""
     with pytest.raises(DataError) as failure:

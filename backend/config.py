@@ -57,9 +57,13 @@ class Settings(BaseSettings):
 
     # --- Production ---
     # Railway sets RAILWAY_ENVIRONMENT_NAME on every deploy, staging included; PRODUCTION is the
-    # same switch for a host outside it. Either one set takes the API docs offline (#1476).
+    # same switch for a host outside it. Either one set marks a deploy, which takes the API docs
+    # offline (#1476). HIDE_API_DOCS takes the docs offline without making this a deploy: the
+    # self-hosted staging compose sets it because its own Postgres speaks no TLS, which a deploy
+    # would refuse (#1720).
     RAILWAY_ENVIRONMENT_NAME: str = ""
     PRODUCTION: str = ""
+    HIDE_API_DOCS: str = ""
 
     # --- Logging ---
     LOG_LEVEL: str = "INFO"
@@ -78,6 +82,11 @@ class Settings(BaseSettings):
     def production(self) -> bool:
         """Whether this is a deploy rather than a local run: RAILWAY_ENVIRONMENT_NAME or PRODUCTION set."""
         return bool(self.RAILWAY_ENVIRONMENT_NAME or self.PRODUCTION)
+
+    @property
+    def api_docs_hidden(self) -> bool:
+        """Whether /openapi.json, /docs and /redoc are offline: on any deploy, or with HIDE_API_DOCS set."""
+        return self.production or bool(self.HIDE_API_DOCS)
 
     @property
     def secret_key_configured(self) -> bool:
