@@ -187,3 +187,19 @@ def test_an_unrecognised_or_missing_error_code_falls_back_to_the_status(transpor
 
     assert str(raised.value) == message
     assert CLIENT_SECRET not in str(raised.value)
+
+
+def test_the_client_ignores_proxy_and_ca_environment_variables_but_keeps_verifying_tls(monkeypatch):
+    passed = {}
+    real_init = httpx.Client.__init__
+
+    def spy(self, *args, **kwargs):
+        passed.update(kwargs)
+        real_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(httpx.Client, "__init__", spy)
+    with google_login._http_client():
+        pass
+
+    assert passed["trust_env"] is False
+    assert passed.get("verify", True) is True

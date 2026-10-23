@@ -182,6 +182,24 @@ def test_record_preference_refuses_unknown_evidence(session):
     assert user_model(session) == []
 
 
+def test_record_preference_refuses_another_preference_as_evidence(session):
+    """One preference standing behind another is strength no observed moment supports (#1696)."""
+    existing = _preference(session)
+    before = _journal_count(session)
+
+    with pytest.raises(ValueError, match="evidence"):
+        record_preference(
+            session,
+            actor=Actor.CLAUDE_INTERACTIVE,
+            title="Prefers mornings",
+            scope="scheduling",
+            evidence_ids=[existing.id],
+        )
+
+    assert _journal_count(session) == before
+    assert [entry.thing.id for entry in user_model(session)] == [existing.id]
+
+
 @blank_scopes
 def test_record_preference_refuses_a_blank_scope(session, scope):
     evidence = _thing(session, "declined a 9am meeting")

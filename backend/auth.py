@@ -9,8 +9,8 @@ between the callback and ``POST /oauth/token``.
 flow of :mod:`backend.mcp_oauth` and for the web view's sign-in that starts at
 ``GET /api/auth/google``. It resolves ``state`` against the two session stores in
 :mod:`backend.oauth_state`: a web state ends in the ``__Host-reli_session`` cookie and a redirect
-to ``/``, an MCP state in an authorization code delivered to the client, and a state neither knows
-is a 400.
+to ``/``, an MCP state in an authorization code delivered to the client — but only in the browser
+that approved it on the consent page — and a state neither knows is a 400.
 
 The web session is that cookie: an ``aud="web"`` JWT the middleware in :mod:`backend.api` decodes
 on every ``/api`` request, read through :func:`web_session` so the middleware and
@@ -29,7 +29,7 @@ from typing import Any
 from urllib.parse import urlencode, urlsplit
 
 import jwt
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlmodel import Session
@@ -65,6 +65,9 @@ WEB_SIGN_IN_TTL_SECONDS = 60 * 10
 # The ``__Host-`` prefix has the browser refuse the cookie unless it arrives ``Secure``, with
 # ``Path=/`` and no ``Domain`` — the contract both call sites below meet.
 SESSION_COOKIE = "__Host-reli_session"
+# Binds an MCP sign-in to the browser that approved it on the consent page (#1701): the callback
+# honours an MCP state only alongside this cookie naming it. Same ``__Host-`` contract as above.
+MCP_FLOW_COOKIE = "__Host-reli_mcp_flow"
 
 #: Every setting the Google sign-in needs; an empty one — or a ``SECRET_KEY`` too short to sign
 #: with — closes the sign-in with a 501 naming it.
@@ -77,10 +80,13 @@ SIGN_IN_SETTINGS: tuple[str, ...] = (
 )
 
 _INVITE_ONLY = "This Reli is invite-only: sign in with the Google account listed in ALLOWED_EMAILS on the deploy."
+_ACCOUNT_NOT_ALLOWED = "Account is not allowed: " + _INVITE_ONLY
 _NOT_SIGNED_IN = "Not signed in: sign in with Google at /."
 _SESSION_EXPIRED = "Session expired: sign in with Google at / again."
 _SESSION_INVALID = "Invalid session: sign in with Google at / again."
 _AT_CAPACITY = "Server is at capacity; try again later"
+_CROSS_ORIGIN = "Refused: this request did not come from Reli's own page."
+_NOT_THIS_BROWSER = "Sign-in was not approved from this browser: start again from the connector."
 
 
 def base_url() -> str:
@@ -95,6 +101,22 @@ def base_url() -> str:
     if parts.scheme and parts.netloc:
         return f"{parts.scheme}://{parts.netloc}"
     return ""
+
+
+def is_same_origin(request: Request) -> bool:
+    """Whether the request came from a page Reli served.
+
+    A browser sends ``Origin`` on every POST, same-origin included, and never lets script override
+    it, so it tells Reli's own page apart from any other — a sibling subdomain included, which the
+    session cookie's ``SameSite=Lax`` treats as the same site and lets through (#1698).
+    """
+    return request.headers.get("origin") == base_url()
+
+
+def require_same_origin(request: Request) -> None:
+    """Refuse a cookie-authenticated write a page other than Reli's own sent."""
+    if not is_same_origin(request):
+        raise HTTPException(status_code=403, detail=_CROSS_ORIGIN)
 
 
 def _sign_in_setting_present(name: str) -> bool:
@@ -126,13 +148,14 @@ def is_allowed(email: str) -> bool:
 
 def create_jwt(subject: str, email: str, audience: str) -> str:
     """A token for *subject*, only for *audience*, good for ``MCP_JWT_EXPIRY_SECONDS`` or
-    ``WEB_JWT_EXPIRY_SECONDS`` as *audience* says.
+    ``WEB_JWT_EXPIRY_SECONDS`` as *audience* says, issued by this deploy's ``base_url()``.
 
     ``jti`` is kept from the pre-v4 token shape: nothing reads it, but a revocation list, should
     logout ever need one, would key on it.
     """
     issued_at = int(datetime.now(UTC).timestamp())
     claims = {
+        "iss": base_url(),
         "sub": subject,
         "email": email,
         "aud": audience,
@@ -146,16 +169,20 @@ def create_jwt(subject: str, email: str, audience: str) -> str:
 def decode_jwt(token: str, audience: str) -> dict[str, Any]:
     """The claims of a token this Reli minted for *audience*.
 
+    ``iss`` is checked against ``base_url()`` so that another deploy sharing ``SECRET_KEY`` — staging
+    beside production — cannot mint a token this one accepts (#1697).
+
     Raises:
         jwt.ExpiredSignatureError: The token is past its ``exp``.
-        jwt.InvalidTokenError: Anything else — wrong signature, wrong audience, missing claims.
+        jwt.InvalidTokenError: Anything else — wrong signature, audience or issuer, missing claims.
     """
     claims: dict[str, Any] = jwt.decode(
         token,
         settings.SECRET_KEY,
         algorithms=[JWT_ALGORITHM],
         audience=audience,
-        options={"require": ["exp", "aud", "sub"]},
+        issuer=base_url(),
+        options={"require": ["exp", "aud", "iss", "sub"]},
     )
     return claims
 
@@ -168,8 +195,9 @@ def web_session(request: Request) -> dict[str, Any] | None:
     """The claims of the request's ``__Host-reli_session`` cookie, or ``None`` when it carries none.
 
     Raises:
-        SessionRefused: The cookie is there but expired, not this Reli's, or unverifiable because
-            ``SECRET_KEY`` is empty or too short — each with the sentence a person should see.
+        SessionRefused: The cookie is there but expired, not this Reli's, unverifiable because
+            ``SECRET_KEY`` is empty or too short, or names an account no longer in
+            ``ALLOWED_EMAILS`` — each with the sentence a person should see.
     """
     token = request.cookies.get(SESSION_COOKIE, "")
     if not token:
@@ -177,11 +205,14 @@ def web_session(request: Request) -> dict[str, Any] | None:
     if not settings.secret_key_configured:
         raise SessionRefused(not_configured_detail(["SECRET_KEY"]))
     try:
-        return decode_jwt(token, WEB_AUDIENCE)
+        claims = decode_jwt(token, WEB_AUDIENCE)
     except jwt.ExpiredSignatureError as expired:
         raise SessionRefused(_SESSION_EXPIRED) from expired
     except jwt.InvalidTokenError as invalid:
         raise SessionRefused(_SESSION_INVALID) from invalid
+    if not is_allowed(str(claims.get("email", ""))):
+        raise SessionRefused(_INVITE_ONLY)
+    return claims
 
 
 def _client_redirect(redirect_uri: str, client_state: str, **params: str) -> RedirectResponse:
@@ -249,7 +280,7 @@ def current_session(request: Request) -> SessionOut:
     return SessionOut(email=str(claims.get("email", "")))
 
 
-@router.post("/logout", include_in_schema=False, status_code=204)
+@router.post("/logout", include_in_schema=False, status_code=204, dependencies=[Depends(require_same_origin)])
 def logout() -> Response:
     response = Response(status_code=204)
     response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax", secure=True)
@@ -344,7 +375,7 @@ def _finish_mcp_sign_in(session: Session, flow: dict[str, Any], code: str, error
 
 
 @router.get("/google/callback", include_in_schema=False)
-def google_callback(code: str = "", state: str = "", error: str = "") -> RedirectResponse:
+def google_callback(request: Request, code: str = "", state: str = "", error: str = "") -> RedirectResponse:
     """Where Google sends the browser after the sign-in, for better or worse.
 
     A web sign-in ends here with the session cookie and a redirect to ``/``, or at ``/?error=``.
@@ -353,6 +384,12 @@ def google_callback(code: str = "", state: str = "", error: str = "") -> Redirec
     redirect URI (RFC 6749 §4.1.2); a cancelled sign-in or an account outside the allowlist is
     delivered there too, as an ``access_denied`` error (§4.1.2.1), because the client's redirect
     URI is where the person actually is.
+
+    The MCP branch is honoured only in the browser that clicked Continue on that flow's consent
+    page, which set ``MCP_FLOW_COOKIE`` to its state. Anywhere else it is a 400 in place, never a
+    redirect: an attacker can read their own client's state off their own consent page, and a
+    callback link built from it would otherwise send whoever opened it to the attacker's redirect
+    URI (#1701).
     """
     with _session() as session:
         web_flow = cleanup_and_pop(session, web_oauth_sessions, state)
@@ -362,4 +399,12 @@ def google_callback(code: str = "", state: str = "", error: str = "") -> Redirec
         flow = cleanup_and_pop(session, mcp_oauth_sessions, state)
         if flow is None:
             raise HTTPException(status_code=400, detail="Invalid or expired sign-in state: start the sign-in again.")
-        return _finish_mcp_sign_in(session, flow, code, error)
+        # Not compare_digest: it raises on the non-ASCII state an attacker can put in the URL.
+        if request.cookies.get(MCP_FLOW_COOKIE) != state:
+            logger.warning(
+                "MCP sign-in refused: the callback reached a browser that did not approve client %r", flow["client_id"]
+            )
+            raise HTTPException(status_code=400, detail=_NOT_THIS_BROWSER)
+        response = _finish_mcp_sign_in(session, flow, code, error)
+    response.delete_cookie(MCP_FLOW_COOKIE, path="/", httponly=True, samesite="lax", secure=True)
+    return response

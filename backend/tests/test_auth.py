@@ -16,7 +16,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend import api, auth, google_login
+from backend import auth, google_login, web_view_auth
 from backend.config import settings
 from backend.oauth_state import (
     cleanup_and_get,
@@ -49,7 +49,7 @@ def client(session, monkeypatch, sign_in_settings):
     monkeypatch.setattr(auth, "_session", _fixture_session)
     app = FastAPI()
     app.include_router(auth.router)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
     return TestClient(app, follow_redirects=False)
 
 
@@ -119,6 +119,10 @@ def _location_query(response, base=CLIENT_REDIRECT):
     return {key: values[0] for key, values in parse_qs(urlsplit(location).query).items()}
 
 
+def _flow_cookie(state="server-state"):
+    return {"Cookie": f"{auth.MCP_FLOW_COOKIE}={state}"}
+
+
 def _session_cookie(response):
     cookie = response.headers["set-cookie"]
     assert cookie.startswith(auth.SESSION_COOKIE + "=")
@@ -138,6 +142,24 @@ def test_a_token_round_trips_for_its_audience_only(sign_in_settings):
 
     with pytest.raises(jwt.InvalidTokenError):
         auth.decode_jwt(token, audience="web")
+
+
+def test_a_token_is_refused_by_a_deploy_with_another_issuer(sign_in_settings, monkeypatch):
+    """Two deploys sharing ``SECRET_KEY`` do not accept each other's tokens (#1697)."""
+    token = auth.create_jwt("1234567890", "owner@example.com", audience="mcp")
+    assert auth.decode_jwt(token, audience="mcp")["iss"] == "https://reli.example.test"
+
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "https://staging.example.test")
+    with pytest.raises(jwt.InvalidIssuerError):
+        auth.decode_jwt(token, audience="mcp")
+
+
+def test_a_token_without_an_issuer_is_refused(sign_in_settings):
+    claims = {"sub": "1234567890", "email": "owner@example.com", "aud": "mcp", "exp": 2**31 - 1}
+    token = jwt.encode(claims, settings.SECRET_KEY, algorithm=auth.JWT_ALGORITHM)
+
+    with pytest.raises(jwt.MissingRequiredClaimError):
+        auth.decode_jwt(token, audience="mcp")
 
 
 def test_an_mcp_token_lives_an_hour_and_a_web_token_a_week(sign_in_settings):
@@ -187,7 +209,9 @@ def test_a_good_sign_in_sends_the_client_a_code_bound_to_the_identity(client, se
     google(lambda request: httpx.Response(200, json={"access_token": "never-read", "id_token": _id_token()}))
 
     with caplog.at_level(logging.DEBUG):
-        response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "server-state"})
+        response = client.get(
+            "/api/auth/google/callback", params={"code": "google-code", "state": "server-state"}, headers=_flow_cookie()
+        )
 
     assert response.status_code == 302
     query = _location_query(response)
@@ -199,6 +223,9 @@ def test_a_good_sign_in_sends_the_client_a_code_bound_to_the_identity(client, se
     assert stored["client_id"] == "client-1"
     assert query["code"] not in caplog.text
     assert cleanup_and_get(session, mcp_oauth_sessions, "server-state") is None
+    flow_cookie = response.headers["set-cookie"]
+    assert flow_cookie.startswith(auth.MCP_FLOW_COOKIE + "=")
+    assert "Max-Age=0" in flow_cookie
 
 
 def test_an_unknown_state_is_400_and_the_callback_is_exempt_from_the_web_view_check(client, google):
@@ -220,7 +247,9 @@ def test_an_account_outside_the_allowlist_is_sent_back_to_the_client_as_access_d
     )
 
     with caplog.at_level(logging.DEBUG):
-        response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "server-state"})
+        response = client.get(
+            "/api/auth/google/callback", params={"code": "google-code", "state": "server-state"}, headers=_flow_cookie()
+        )
 
     assert response.status_code == 302
     query = _location_query(response)
@@ -234,7 +263,9 @@ def test_a_cancelled_sign_in_is_relayed_to_the_client_without_an_exchange(client
     _seed_flow(session)
     seen = google(lambda request: httpx.Response(500))
 
-    response = client.get("/api/auth/google/callback", params={"error": "access_denied", "state": "server-state"})
+    response = client.get(
+        "/api/auth/google/callback", params={"error": "access_denied", "state": "server-state"}, headers=_flow_cookie()
+    )
 
     assert response.status_code == 302
     query = _location_query(response)
@@ -256,6 +287,7 @@ def test_a_cancellation_error_cannot_forge_a_second_log_line(client, session, go
         response = client.get(
             "/api/auth/google/callback",
             params={"error": forged, "state": "server-state" if branch == "mcp" else "web-state"},
+            headers=_flow_cookie(),
         )
 
     assert response.status_code == 302
@@ -268,7 +300,9 @@ def test_a_google_refusal_is_502_naming_the_remedy(client, session, google):
     _seed_flow(session)
     google(lambda request: httpx.Response(400, json={"error": "redirect_uri_mismatch"}))
 
-    response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "server-state"})
+    response = client.get(
+        "/api/auth/google/callback", params={"code": "google-code", "state": "server-state"}, headers=_flow_cookie()
+    )
 
     assert response.status_code == 502
     assert "Google Cloud console" in response.json()["detail"]
@@ -292,11 +326,47 @@ def test_the_code_is_appended_to_a_redirect_uri_that_already_has_a_query(client,
     )
     google(lambda request: httpx.Response(200, json={"access_token": "never-read", "id_token": _id_token()}))
 
-    response = client.get("/api/auth/google/callback", params={"code": "google-code", "state": "server-state"})
+    response = client.get(
+        "/api/auth/google/callback", params={"code": "google-code", "state": "server-state"}, headers=_flow_cookie()
+    )
 
     location = response.headers["location"]
     assert location.startswith(CLIENT_REDIRECT + "?app=claude&code=")
     assert "state=" not in location
+
+
+@pytest.mark.parametrize(
+    ("state", "params", "headers"),
+    [
+        ("server-state", {"error": "access_denied"}, {}),
+        ("server-state", {"error": "access_denied"}, _flow_cookie("another-state")),
+        ("server-state", {"code": "google-code"}, {}),
+        ("serveür-ßtate", {"error": "access_denied"}, _flow_cookie()),
+    ],
+    ids=[
+        "cancelled-without-cookie",
+        "cancelled-with-another-flows-cookie",
+        "outside-allowlist-without-cookie",
+        "non-ascii-state",
+    ],
+)
+def test_a_callback_in_a_browser_that_did_not_approve_the_flow_is_refused_in_place(
+    client, session, google, state, params, headers
+):
+    _seed_flow(session, state=state)
+    seen = google(
+        lambda request: httpx.Response(
+            200, json={"access_token": "never-read", "id_token": _id_token(email="intruder@example.com")}
+        )
+    )
+
+    response = client.get("/api/auth/google/callback", params={**params, "state": state}, headers=headers)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == auth._NOT_THIS_BROWSER
+    assert "location" not in response.headers
+    assert seen == []
+    assert cleanup_and_get(session, mcp_oauth_sessions, state) is None
 
 
 # --- The web view's sign-in ---------------------------------------------------
@@ -432,8 +502,20 @@ def test_me_refuses_an_mcp_token_as_a_web_session(client):
     assert "sign in with Google" in response.json()["detail"]
 
 
+def test_a_live_session_is_refused_once_its_account_leaves_the_allowlist(client, monkeypatch):
+    """#1693: removing an address ends its web session on the next request, not seven days later."""
+    token = auth.create_jwt("1234567890", "owner@example.com", audience=auth.WEB_AUDIENCE)
+    cookie = {"Cookie": f"{auth.SESSION_COOKIE}={token}"}
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "someone-else@example.com")
+
+    for path in ("/api/auth/me", "/api/things"):
+        response = client.get(path, headers=cookie)
+        assert response.status_code == 401
+        assert response.json()["detail"] == auth._INVITE_ONLY
+
+
 def test_logout_deletes_the_cookie(client):
-    response = client.post("/api/auth/logout")
+    response = client.post("/api/auth/logout", headers={"Origin": "https://reli.example.test"})
 
     assert response.status_code == 204
     cookie = _session_cookie(response)
@@ -441,3 +523,14 @@ def test_logout_deletes_the_cookie(client):
     assert "Max-Age=0" in cookie
     assert "Secure" in cookie
     assert "Path=/" in cookie
+
+
+@pytest.mark.parametrize("origin", [None, "https://sibling.example.test", "null"])
+def test_logout_from_any_page_but_reli_s_own_is_refused(client, origin):
+    """A sibling subdomain is the same site, so ``SameSite=Lax`` alone would let it sign the owner out (#1698)."""
+    headers = {} if origin is None else {"Origin": origin}
+
+    response = client.post("/api/auth/logout", headers=headers)
+
+    assert response.status_code == 403
+    assert "set-cookie" not in response.headers

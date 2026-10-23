@@ -14,13 +14,14 @@ from typing import get_args
 
 import jwt
 import pytest
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import text
 
-from backend import auth, prompts
+from backend import auth, prompts, service
 from backend.config import settings
-from backend.db_models import NEW_TAG, Actor, RelationshipType
+from backend.db_models import NEW_TAG, SCHEDULED_TASK_TAG, Actor, RelationshipType
 from backend.mcp_server import (
+    MAX_STALE_DAYS,
     McpActor,
     add_preference_evidence,
     archive_thing,
@@ -105,7 +106,7 @@ def _tools():
 
 
 def _tool_schemas():
-    return {name: tool.inputSchema for name, tool in _tools().items()}
+    return {name: tool.input_schema for name, tool in _tools().items()}
 
 
 # --- The surface -----------------------------------------------------------
@@ -180,9 +181,9 @@ def test_the_ceiling_itself_is_accepted(tools):
     matters, so the bound is inclusive and must not drop below what the pass asks for."""
     captured = create_thing(actor="claude_interactive", title="captured this morning")
 
-    _, structured = asyncio.run(reli_mcp.call_tool("find_things", {"tags": [NEW_TAG], "limit": MAX_LIMIT}))
+    result = asyncio.run(reli_mcp.call_tool("find_things", {"tags": [NEW_TAG], "limit": MAX_LIMIT}))
 
-    assert [thing["id"] for thing in structured["result"]] == [captured["id"]]
+    assert [thing["id"] for thing in result.structured_content["result"]] == [captured["id"]]
 
 
 # --- Writes and their journal entries --------------------------------------
@@ -237,6 +238,15 @@ def test_archive_thing_deactivates_without_deleting(tools):
     assert archived["active"] is False
     assert [(e.actor, e.operation) for e in _entries_since(tools, before)] == [("claude_interactive", "update")]
     assert get_thing(uuid.UUID(thing["id"]))["thing"]["active"] is False
+
+
+def test_archive_thing_refuses_a_heartbeat(tools):
+    heartbeat = create_thing(actor="claude_scheduled", title="Morning conversation", tags=[SCHEDULED_TASK_TAG])
+
+    with pytest.raises(ToolError, match="cannot be archived"):
+        asyncio.run(reli_mcp.call_tool("archive_thing", {"actor": "claude_interactive", "thing_id": heartbeat["id"]}))
+
+    assert get_thing(uuid.UUID(heartbeat["id"]))["thing"]["active"] is True
 
 
 def test_relate_and_unrelate_journal_the_edge(tools):
@@ -371,6 +381,44 @@ def test_stale_counts_days_of_silence(tools):
 
     assert [t["title"] for t in stale(days=30)] == ["forgotten"]
     assert stale(days=365) == []
+
+
+@pytest.mark.parametrize("days", [0, -1, MAX_STALE_DAYS + 1, 10**9])
+def test_an_out_of_range_stale_window_is_refused(tools, days):
+    """#1478: a huge ``days`` used to overflow the timedelta and a negative one listed everything."""
+    with pytest.raises(ToolError) as refused:
+        asyncio.run(reli_mcp.call_tool("stale", {"days": days}))
+
+    assert "than or equal to" in str(refused.value)
+
+
+def test_an_oversized_write_is_refused_naming_the_field(tools):
+    """#1478: the service's bound reaches an MCP session as a refusal it can act on."""
+    with pytest.raises(ToolError) as refused:
+        asyncio.run(
+            reli_mcp.call_tool(
+                "create_thing",
+                {"actor": "claude_interactive", "title": "t" * (service.MAX_TITLE_CHARS + 1)},
+            )
+        )
+
+    assert f"the most a title may hold is {service.MAX_TITLE_CHARS}" in str(refused.value)
+    assert find_things() == []
+
+
+@pytest.mark.parametrize("tool", [create_thing, update_thing])
+def test_the_bounds_a_writing_tool_states_are_the_bounds_enforced(tool):
+    """The docstring is what a session reads; it must not promise a ceiling the service does not hold."""
+    doc = " ".join((tool.__doc__ or "").split())
+    for stated in (
+        f"title up to {service.MAX_TITLE_CHARS} characters",
+        f"description up to {service.MAX_DESCRIPTION_CHARS}",
+        f"notes and urls each up to {service.MAX_MAPPING_BYTES} bytes",
+        f"at most {service.MAX_TAGS} tags of up to {service.MAX_TAG_CHARS} characters",
+    ):
+        assert stated in doc, stated
+    assert f"up to {service.MAX_CONTEXT_CHARS} characters" in (relate.__doc__ or "")
+    assert f"Up to {service.MAX_SCOPE_CHARS} characters" in (record_preference.__doc__ or "")
 
 
 def test_blocked_returns_the_waiting_thing(tools):
@@ -554,7 +602,7 @@ def test_reject_preference_over_mcp_hides_it_from_the_default_model(tools):
 
 def test_the_user_model_is_exposed_as_a_resource_scoped_and_unscoped():
     resources = {str(resource.uri) for resource in asyncio.run(reli_mcp.list_resources())}
-    templates = {template.uriTemplate for template in asyncio.run(reli_mcp.list_resource_templates())}
+    templates = {template.uri_template for template in asyncio.run(reli_mcp.list_resource_templates())}
 
     assert "reli://user-model" in resources
     assert "reli://user-model/{scope}" in templates
@@ -801,9 +849,9 @@ def test_get_scheduled_instructions_takes_the_pass_name_and_nothing_else():
 
 def test_get_scheduled_instructions_answers_over_the_registered_surface():
     """The one-liners call it by argument name, which only the registered surface can verify."""
-    content, _ = asyncio.run(reli_mcp.call_tool("get_scheduled_instructions", {"pass_name": "learning"}))
+    result = asyncio.run(reli_mcp.call_tool("get_scheduled_instructions", {"pass_name": "learning"}))
 
-    assert content[0].text == prompts.scheduled_instructions("learning")
+    assert result.content[0].text == prompts.scheduled_instructions("learning")
 
 
 def test_get_scheduled_instructions_names_the_passes_for_a_name_that_is_not_one():
@@ -824,12 +872,11 @@ _MCP_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type":
 
 
 @pytest.fixture()
-def secret_key():
-    """A signing key on the settings singleton, as conftest does for DATABASE_URL, and put it back."""
-    previous = settings.SECRET_KEY
-    settings.SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
-    yield settings.SECRET_KEY
-    settings.SECRET_KEY = previous
+def secret_key(monkeypatch):
+    """A signing key on the settings singleton, and the account the tokens below name allowed."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "a-test-secret-key-that-is-forty-eight-chars-long")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    return settings.SECRET_KEY
 
 
 @pytest.fixture()
@@ -911,6 +958,17 @@ def test_mcp_endpoint_admits_a_jwt_the_authorization_server_minted(client, mcp_t
     assert "create_thing" in response.text
 
 
+def test_a_live_jwt_is_refused_once_its_account_leaves_the_allowlist(client, mcp_token, monkeypatch):
+    """#1693: removing an address ends its access tokens on their next request, not at expiry."""
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "someone-else@example.com")
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+    assert response.json()["detail"] == auth._ACCOUNT_NOT_ALLOWED
+
+
 def test_mcp_endpoint_refuses_a_jwt_for_another_audience(client, secret_key):
     token = auth.create_jwt("1234567890", "owner@example.com", audience="web")
 
@@ -920,9 +978,20 @@ def test_mcp_endpoint_refuses_a_jwt_for_another_audience(client, secret_key):
     assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
 
 
+def test_mcp_endpoint_refuses_a_jwt_minted_by_another_deploy(client, secret_key, monkeypatch):
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "https://staging.example.test")
+    token = auth.create_jwt("1234567890", "owner@example.com", audience="mcp")
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "https://reli.example.test")
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(token))
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+
+
 def test_an_expired_jwt_is_refused_naming_the_refresh_path(client, secret_key):
     expired = jwt.encode(
-        {"sub": "1234567890", "aud": "mcp", "exp": datetime.now(UTC) - timedelta(seconds=1)},
+        {"iss": auth.base_url(), "sub": "1234567890", "aud": "mcp", "exp": datetime.now(UTC) - timedelta(seconds=1)},
         secret_key,
         algorithm="HS256",
     )

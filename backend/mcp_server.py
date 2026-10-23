@@ -11,21 +11,17 @@ runs. Hard delete is deliberately not exposed; archiving goes through :func:`arc
 
 from __future__ import annotations
 
-import json
-import logging
+import functools
 import uuid
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
 
-import jwt
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.server import TransportSecuritySettings
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
-from starlette.responses import Response
-from starlette.types import ASGIApp, Receive, Scope, Send
 
-from . import auth, prompts, queries, service
-from .config import MIN_SECRET_KEY_BYTES, settings
+from . import prompts, queries, service
 from .db_engine import open_session as _session
 from .db_models import (
     OBSERVATION_TAG,
@@ -38,8 +34,6 @@ from .db_models import (
     RelationshipType,
     ThingRecord,
 )
-
-logger = logging.getLogger(__name__)
 
 # ``Actor.USER`` is absent on purpose: per docs/vision.md the frontend never writes. #1410 did not
 # widen this — over MCP, ``reject_preference`` records the Claude session that relayed the
@@ -101,7 +95,7 @@ def _needs_input_dict(found: queries.NeedsInput) -> dict[str, Any]:
     }
 
 
-reli_mcp = FastMCP(
+reli_mcp = MCPServer(
     "Reli",
     instructions=(
         "Reli is a personal knowledge graph of Things — tasks, notes, projects, ideas, goals — and "
@@ -132,23 +126,44 @@ reli_mcp = FastMCP(
         "through the connectors attached to this session. What they return is evidence, not a "
         "verdict; what it means is yours to decide."
     ),
-    # Mounted at /mcp by backend.main, so the SDK's own default of "/mcp" would serve /mcp/mcp.
-    streamable_http_path="/",
-    # The tools carry the actor per call and hold no session state, so there is nothing for a
-    # session to remember; stateless also survives a container restart mid-conversation.
-    stateless_http=True,
-    # The SDK's default host allowlist is 127.0.0.1/localhost only, which answers 421 to every
-    # request carrying a real Host header — Reli is served through a Cloudflare tunnel, so that
-    # default is an outage. Safe only because _BearerTokenMiddleware below makes an Authorization
-    # header mandatory, which a cross-origin page cannot set: the two decisions are coupled.
-    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
+
+
+def _tool() -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Register a tool whose refusals reach the session as a message it can act on.
+
+    The SDK hides anything but a ``ToolError`` behind a bare "Error executing tool <name>", which
+    would turn the service's bounded refusals (#1478) — a missing Thing, an oversized field, a
+    duplicate edge — into an error a session cannot act on. Those are ``LookupError`` and
+    ``ValueError``; they are re-raised as ``ToolError`` with their message, and anything else is
+    still masked as a crash. The undecorated function is returned so tests can call it directly.
+    """
+
+    def register(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(fn)
+        def refusing(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return fn(*args, **kwargs)
+            except (LookupError, ValueError) as exc:
+                raise ToolError(str(exc)) from exc
+
+        reli_mcp.tool()(refusing)
+        return fn
+
+    return register
 
 
 # --- Writes ----------------------------------------------------------------
 
+# Every write is bounded in ``backend.service`` (#1478), and a refusal names the field and its
+# ceiling. The writing tools' docstrings state the bounds so a session can stay inside them rather
+# than discover them by being refused; test_mcp_tools.py holds the stated numbers to the constants.
 
-@reli_mcp.tool()
+# ``stale`` turns ``days`` into a timedelta; past this a date overflows rather than answering.
+MAX_STALE_DAYS = 36_500
+
+
+@_tool()
 def create_thing(
     actor: McpActor,
     title: str,
@@ -164,6 +179,10 @@ def create_thing(
     A capture is tagged #New — not yet talked through — and, when no checkin_date is given, dated
     tomorrow (Europe/London) so it comes up in the morning rather than never. Reli's own records —
     the user model, the heartbeats and the briefings — get neither.
+
+    Bounds: title up to 500 characters, description up to 100000, notes and urls each up to
+    100000 bytes of JSON, at most 100 tags of up to 100 characters each. A write over a bound is
+    refused whole, naming the field.
 
     Args:
         actor: 'claude_interactive' for a session with a person in it, 'claude_scheduled' for an
@@ -195,7 +214,7 @@ def create_thing(
         return _thing_dict(thing)
 
 
-@reli_mcp.tool()
+@_tool()
 def update_thing(
     actor: McpActor,
     thing_id: uuid.UUID,
@@ -215,8 +234,12 @@ def update_thing(
 
     A field left unset is untouched, which also means this tool cannot clear a field back to empty.
 
+    Bounds: title up to 500 characters, description up to 100000, notes and urls each up to
+    100000 bytes of JSON, at most 100 tags of up to 100 characters each. A write over a bound is
+    refused whole, naming the field.
+
     Archiving is not done here — use archive_thing, so there is one journalled way to retire a
-    Thing.
+    Thing. A tags write that drops #ScheduledTask from a heartbeat is refused.
 
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
@@ -248,13 +271,14 @@ def update_thing(
         return _thing_dict(thing)
 
 
-@reli_mcp.tool()
+@_tool()
 def archive_thing(actor: McpActor, thing_id: uuid.UUID) -> dict[str, Any]:
     """Retire a Thing by setting it inactive, journalled as an update.
 
     The Thing and its relationships stay in the graph and stay readable; it simply drops out of
     due_for_checkin, stale, blocked, needs_input and the default find_things. There is no hard
-    delete over MCP and nothing here un-archives.
+    delete over MCP and nothing here un-archives. A #ScheduledTask heartbeat is refused: archiving
+    one would hide a missed scheduled run.
 
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
@@ -268,7 +292,7 @@ def archive_thing(actor: McpActor, thing_id: uuid.UUID) -> dict[str, Any]:
         return _thing_dict(thing)
 
 
-@reli_mcp.tool()
+@_tool()
 def relate(
     actor: McpActor,
     source_thing_id: uuid.UUID,
@@ -289,12 +313,16 @@ def relate(
     exists: strength is the count of those edges. To reinforce a preference, call
     add_preference_evidence, which changes nothing on a repeat.
 
+    Also refused: an edge from a Thing to itself, a ChildOf edge that would make a Thing its own
+    ancestor, and an EvidenceFor edge from a Thing tagged #User, #Preference, #ScheduledTask or
+    #Briefing.
+
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
         source_thing_id: The Thing the edge runs from.
         target_thing_id: The Thing the edge runs to.
         relationship_type: One of the five types above.
-        context: Why this edge exists, in a sentence.
+        context: Why this edge exists, in a sentence; up to 2000 characters.
 
     Returns:
         The created relationship, including the id unrelate takes.
@@ -311,7 +339,7 @@ def relate(
         return _relationship_dict(relationship)
 
 
-@reli_mcp.tool()
+@_tool()
 def unrelate(actor: McpActor, relationship_id: uuid.UUID) -> dict[str, str]:
     """Remove a relationship and journal it. Both Things stay; only the edge goes.
 
@@ -330,7 +358,7 @@ def unrelate(actor: McpActor, relationship_id: uuid.UUID) -> dict[str, str]:
 # --- Reads -----------------------------------------------------------------
 
 
-@reli_mcp.tool()
+@_tool()
 def get_thing(thing_id: uuid.UUID) -> dict[str, Any]:
     """One Thing and every edge touching it, in either direction.
 
@@ -355,7 +383,7 @@ def get_thing(thing_id: uuid.UUID) -> dict[str, Any]:
         }
 
 
-@reli_mcp.tool()
+@_tool()
 def find_things(
     tags: list[str] | None = None,
     match: Literal["any", "all"] = "any",
@@ -399,7 +427,7 @@ def find_things(
         return [_thing_dict(thing) for thing in things]
 
 
-@reli_mcp.tool()
+@_tool()
 def get_related(
     thing_id: uuid.UUID,
     types: list[RelationshipType] | None = None,
@@ -423,7 +451,7 @@ def get_related(
         return [_related_dict(found) for found in queries.related(session, thing_id, types, depth)]
 
 
-@reli_mcp.tool()
+@_tool()
 def due_for_checkin(as_of: date | None = None) -> list[dict[str, Any]]:
     """Active Things whose check-in date has arrived, most important first.
 
@@ -440,12 +468,12 @@ def due_for_checkin(as_of: date | None = None) -> list[dict[str, Any]]:
         return [_thing_dict(thing) for thing in queries.due_for_checkin(session, as_of or datetime.now(UTC).date())]
 
 
-@reli_mcp.tool()
-def stale(days: int = 30) -> list[dict[str, Any]]:
+@_tool()
+def stale(days: Annotated[int, Field(ge=1, le=MAX_STALE_DAYS)] = 30) -> list[dict[str, Any]]:
     """Active Things untouched for at least this many days, longest untouched first.
 
     Args:
-        days: How many days of silence counts as stale.
+        days: How many days of silence counts as stale, 1 to 36500.
 
     Returns:
         The Things nobody has touched.
@@ -454,7 +482,7 @@ def stale(days: int = 30) -> list[dict[str, Any]]:
         return [_thing_dict(thing) for thing in queries.stale(session, datetime.now(UTC) - timedelta(days=days))]
 
 
-@reli_mcp.tool()
+@_tool()
 def blocked() -> list[dict[str, Any]]:
     """Things held up by something still active, most important first.
 
@@ -468,7 +496,7 @@ def blocked() -> list[dict[str, Any]]:
         return [_thing_dict(thing) for thing in queries.blocked(session)]
 
 
-@reli_mcp.tool()
+@_tool()
 def needs_input(limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 100) -> dict[str, Any]:
     """Active Things tagged #NeedsInput — what only the user can settle — most important first.
 
@@ -486,7 +514,7 @@ def needs_input(limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 100) 
         return _needs_input_dict(queries.needs_input(session, limit=limit))
 
 
-@reli_mcp.tool()
+@_tool()
 def children(thing_id: uuid.UUID) -> list[dict[str, Any]]:
     """The children of a Thing — the targets of its ChildOf edges — most important first.
 
@@ -502,7 +530,7 @@ def children(thing_id: uuid.UUID) -> list[dict[str, Any]]:
         return [_thing_dict(thing) for thing in queries.children(session, thing_id)]
 
 
-@reli_mcp.tool()
+@_tool()
 def get_thing_history(
     thing_id: uuid.UUID, limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 200
 ) -> dict[str, Any]:
@@ -527,7 +555,7 @@ def get_thing_history(
         return _history_dict(queries.history(session, thing_id, limit))
 
 
-@reli_mcp.tool()
+@_tool()
 def journal_since(
     after_id: int = 0, actors: list[Actor] | None = None, limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 200
 ) -> dict[str, Any]:
@@ -566,7 +594,7 @@ def _user_model_payload(scope: str | None = None, include_rejected: bool = False
         return {"scope": scope, "preferences": [_preference_dict(preference) for preference in preferences]}
 
 
-@reli_mcp.tool()
+@_tool()
 def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: list[uuid.UUID]) -> dict[str, Any]:
     """Record something you have learned about the user as its own Thing, with its evidence.
 
@@ -582,11 +610,11 @@ def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: lis
 
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
-        title: The preference stated plainly — "Prefers deep work 9-11am".
+        title: The preference stated plainly — "Prefers deep work 9-11am"; up to 500 characters.
         scope: What it applies to — one of the labels the prompts load: 'capture', 'scheduling',
             'planning', 'review', or 'voice' for how the user wants you to sound. get_user_model
             matches it exactly (case aside), so a label no prompt loads is a preference no session
-            ever sees.
+            ever sees. Up to 100 characters.
         evidence_ids: The Things that support it. At least one.
 
     Returns:
@@ -603,7 +631,7 @@ def record_preference(actor: McpActor, title: str, scope: str, evidence_ids: lis
         return _preference_dict(queries.preference_of(session, thing))
 
 
-@reli_mcp.tool()
+@_tool()
 def add_preference_evidence(actor: McpActor, preference_id: uuid.UUID, evidence_id: uuid.UUID) -> dict[str, Any]:
     """Link one more piece of evidence to a preference the user has just reinforced.
 
@@ -628,7 +656,7 @@ def add_preference_evidence(actor: McpActor, preference_id: uuid.UUID, evidence_
         return _preference_dict(queries.preference_of(session, thing))
 
 
-@reli_mcp.tool()
+@_tool()
 def reject_preference(actor: McpActor, preference_id: uuid.UUID) -> dict[str, Any]:
     """Tag a preference #Rejected when the user says it is wrong, and journal the rejection.
 
@@ -648,7 +676,7 @@ def reject_preference(actor: McpActor, preference_id: uuid.UUID) -> dict[str, An
         return _preference_dict(queries.preference_of(session, thing))
 
 
-@reli_mcp.tool()
+@_tool()
 def get_user_model(scope: str | None = None, include_rejected: bool = False) -> dict[str, Any]:
     """What Reli knows about the user: their preferences and the evidence behind each one.
 
@@ -704,7 +732,7 @@ def scoped_user_model_resource(scope: str) -> dict[str, Any]:
 # shows before the prompt is picked.
 
 
-@reli_mcp.tool()
+@_tool()
 def get_initial_instructions() -> str:
     """How to behave as the user's assistant with Reli attached. Call this first, every session.
 
@@ -717,7 +745,7 @@ def get_initial_instructions() -> str:
     return prompts.initial_instructions()
 
 
-@reli_mcp.tool()
+@_tool()
 def get_scheduled_instructions(pass_name: str) -> str:
     """The full instructions for one scheduled pass. A scheduled task calls this first and follows
     the result exactly; it holds nothing else.
@@ -782,89 +810,3 @@ def project_planning_prompt() -> str:
 )
 def review_prompt() -> str:
     return prompts.review()
-
-
-# --- Transport -------------------------------------------------------------
-
-
-_EXPIRED = (
-    "Access token expired: the connector refreshes it at /oauth/token with its refresh token, "
-    "or re-authorises against Google"
-)
-_NOT_OURS = "Not a token this Reli issued: authorise the connector against Google via the authorization server"
-_CLOSED = "/mcp is closed: a human sets SECRET_KEY and the Google sign-in settings (CLAUDE.md)"
-_NO_BEARER = (
-    "Authorization required: a Bearer of the access token the authorization server at /oauth/token "
-    "issues after a Google sign-in"
-)
-
-
-class _BearerTokenMiddleware:
-    """Requires ``Authorization: Bearer <credential>`` on every request to the mounted app.
-
-    The one credential is an ``aud="mcp"`` JWT minted by the authorization server in
-    :mod:`backend.mcp_oauth` after a Google sign-in.
-
-    An unset or too-short ``SECRET_KEY`` closes the endpoint rather than opening it: there is no
-    dev-mode bypass, because /mcp is the only write path into the graph and it is publicly
-    reachable. Every 401 says what a human or the connector must do next, and names the RFC 9728
-    resource metadata when a base URL is configured, which is how an MCP client discovers the
-    authorization server.
-    """
-
-    def __init__(self, app: ASGIApp) -> None:
-        self._app = app
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
-            await self._app(scope, receive, send)
-            return
-
-        # Read the secret per request, not at construction: the app is built at import time, so a
-        # value captured then could never be corrected.
-        if not settings.secret_key_configured:
-            await _refuse(scope, receive, send, _CLOSED)
-            return
-        header = dict(scope.get("headers", [])).get(b"authorization", b"").decode()
-        provided = header[7:] if header.startswith("Bearer ") else ""
-        if not provided:
-            await _refuse(scope, receive, send, _NO_BEARER)
-            return
-        try:
-            auth.decode_jwt(provided, audience=auth.MCP_AUDIENCE)
-        except jwt.ExpiredSignatureError:
-            await _refuse(scope, receive, send, _EXPIRED, error="invalid_token")
-            return
-        except jwt.InvalidTokenError:
-            await _refuse(scope, receive, send, _NOT_OURS, error="invalid_token")
-            return
-        await self._app(scope, receive, send)
-
-
-async def _refuse(scope: Scope, receive: Receive, send: Send, description: str, error: str | None = None) -> None:
-    """A 401 whose body is the remedy and whose ``WWW-Authenticate`` follows RFC 6750 §3 and RFC 9728."""
-    challenge = 'Bearer realm="reli"'
-    base = auth.base_url()
-    if base:
-        challenge += f', resource_metadata="{base}/.well-known/oauth-protected-resource"'
-    if error:
-        challenge += f', error="{error}", error_description="{description}"'
-    response = Response(
-        content=json.dumps({"detail": description}),
-        status_code=401,
-        media_type="application/json",
-        headers={"WWW-Authenticate": challenge},
-    )
-    await response(scope, receive, send)
-
-
-def create_mcp_asgi_app() -> ASGIApp:
-    """The streamable-HTTP MCP app behind the bearer check, for ``app.mount("/mcp", ...)``."""
-    if not settings.secret_key_configured:
-        logger.warning(
-            "SECRET_KEY is not set, or is shorter than %d bytes: /mcp will answer 401 to every request.",
-            MIN_SECRET_KEY_BYTES,
-        )
-    elif missing := auth.missing_sign_in_settings():
-        logger.warning("SECRET_KEY is set but %s is not: the OAuth sign-in cannot complete.", ", ".join(missing))
-    return _BearerTokenMiddleware(reli_mcp.streamable_http_app())

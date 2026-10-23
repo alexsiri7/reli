@@ -8,20 +8,25 @@ outside this module may construct or mutate ``ThingRecord`` / ``RelationshipReco
 
 from __future__ import annotations
 
+import json
+import math
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from .db_models import (
     INTERNAL_TAGS,
     NEW_TAG,
+    OBSERVATION_TAG,
     OWNER_TIMEZONE,
     PREFERENCE_TAG,
     REJECTED_TAG,
+    SCHEDULED_TASK_TAG,
     USER_ANCHOR_ID,
     USER_TAG,
     Actor,
@@ -35,9 +40,17 @@ from .db_models import (
 
 __all__ = [
     "BACKFILL_PER_DAY",
+    "MAX_CONTEXT_CHARS",
+    "MAX_DESCRIPTION_CHARS",
+    "MAX_MAPPING_BYTES",
+    "MAX_SCOPE_CHARS",
+    "MAX_TAGS",
+    "MAX_TAG_CHARS",
+    "MAX_TITLE_CHARS",
     "Actor",
     "DuplicateRelationship",
     "EntityType",
+    "FieldTooLarge",
     "Operation",
     "ThingNotFound",
     "add_preference_evidence",
@@ -73,6 +86,70 @@ class DuplicateRelationship(ValueError):
         if existing.relationship_type is RelationshipType.EVIDENCE_FOR:
             message += "; add_preference_evidence is the idempotent way to reinforce a preference"
         super().__init__(message)
+
+
+# --- Write bounds (#1478) ------------------------------------------------------
+#
+# Every field a caller can write has a ceiling, checked here before any statement is issued, so a
+# single request cannot fill a row — and the journal's before/after copy of it — with megabytes.
+# They are enforced in this module rather than at the MCP boundary because this is the one write
+# path: whatever reaches the graph, by any route, passes through these checks. The numbers are
+# generous on purpose. An update replaces a whole field, so a session adding one note resends every
+# note the Thing already has; a ceiling a well-used Thing could reach would turn ordinary updates
+# into refusals. Only the fields a call actually passes are checked, so a Thing written before the
+# bounds existed stays updatable through the fields that are within them.
+MAX_TITLE_CHARS = 500
+MAX_DESCRIPTION_CHARS = 100_000
+#: ``notes`` and ``urls`` each, measured as the UTF-8 JSON the column stores.
+MAX_MAPPING_BYTES = 100_000
+MAX_TAGS = 100
+MAX_TAG_CHARS = 100
+MAX_CONTEXT_CHARS = 2_000
+MAX_SCOPE_CHARS = 100
+
+
+class FieldTooLarge(ValueError):
+    """Raised when a write exceeds one of the bounds above. The message names the field and the bound."""
+
+
+def _check_text(name: str, value: str | None, limit: int) -> None:
+    if value is not None and len(value) > limit:
+        raise FieldTooLarge(f"{name} is {len(value)} characters; the most a {name} may hold is {limit}")
+
+
+def _check_mapping(name: str, value: Mapping[str, str] | None) -> None:
+    if value is None:
+        return
+    size = len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+    if size > MAX_MAPPING_BYTES:
+        raise FieldTooLarge(
+            f"{name} serialises to {size} bytes; the most {name} may hold is {MAX_MAPPING_BYTES} bytes — "
+            "keep long material outside Reli and link to it"
+        )
+
+
+def _check_thing_fields(
+    *,
+    title: str | None = None,
+    description: str | None = None,
+    notes: Mapping[str, str] | None = None,
+    tags: Sequence[str] | None = None,
+    urls: Mapping[str, str] | None = None,
+    priority: float | None = None,
+) -> None:
+    """Refuse a Thing write whose given fields exceed the bounds. ``None`` means not given."""
+    _check_text("title", title, MAX_TITLE_CHARS)
+    _check_text("description", description, MAX_DESCRIPTION_CHARS)
+    _check_mapping("notes", notes)
+    _check_mapping("urls", urls)
+    if tags is not None:
+        if len(tags) > MAX_TAGS:
+            raise FieldTooLarge(f"{len(tags)} tags given; a Thing may carry at most {MAX_TAGS}")
+        for tag in tags:
+            _check_text("tag", tag, MAX_TAG_CHARS)
+    # NaN and infinity sort unpredictably in every priority-ordered listing, and Postgres stores both.
+    if priority is not None and not math.isfinite(priority):
+        raise ValueError(f"priority must be a finite number, not {priority}")
 
 
 def _snapshot(record: ThingRecord | RelationshipRecord) -> dict[str, Any]:
@@ -130,6 +207,7 @@ def _insert_thing(
     Every public function in this module still commits; this half exists for the ones that must
     write more than one row or not write at all.
     """
+    _check_thing_fields(title=title, description=description, notes=notes, tags=tags, urls=urls, priority=priority)
     now = datetime.now(UTC)
     thing = ThingRecord(
         # An explicit ``id=None`` would defeat the field's default_factory, so pass one or neither.
@@ -184,6 +262,7 @@ def create_thing(
     ``OWNER_TIMEZONE`` so it comes up in the morning rather than never. A date given explicitly is
     kept as given, and Reli's own records get neither the tag nor the date.
     """
+    _check_thing_fields(title=title, description=description, notes=notes, tags=tags, urls=urls, priority=priority)
     tags = list(tags) if tags is not None else []
     if not any(tag in INTERNAL_TAGS for tag in tags):
         if NEW_TAG not in tags:
@@ -231,7 +310,9 @@ def update_thing(
     A field left as ``None`` is not touched, which means this function cannot clear a nullable
     field. Whoever needs an explicit clear adds it.
     """
+    _check_thing_fields(title=title, description=description, notes=notes, tags=tags, urls=urls, priority=priority)
     thing = _require_thing(session, thing_id)
+    _check_heartbeat_kept(thing, tags=tags, active=active)
     before = _snapshot(thing)
 
     updates = {
@@ -263,6 +344,20 @@ def update_thing(
     session.commit()
     session.refresh(thing)
     return thing
+
+
+def _check_heartbeat_kept(thing: ThingRecord, *, tags: list[str] | None, active: bool | None) -> None:
+    """Refuse archiving a heartbeat or dropping its tag (#1704).
+
+    A missed scheduled run is reported only as its ``SCHEDULED_TASK_TAG`` Thing left due, found by
+    that tag among active Things; either write would hide the miss instead of reporting it.
+    """
+    if SCHEDULED_TASK_TAG not in thing.tags:
+        return
+    if active is False:
+        raise ValueError(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and cannot be archived")
+    if tags is not None and SCHEDULED_TASK_TAG not in tags:
+        raise ValueError(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and must keep that tag")
 
 
 #: How many backfilled Things fall due on one day. The morning conversation asks about three to
@@ -316,6 +411,74 @@ def backfill_checkin_dates(session: Session, *, now: datetime) -> int:
     return len(captures)
 
 
+#: Whether ``:goal`` is ``:start`` or below it in the ``ChildOf`` tree, following edges parent →
+#: child. ``UNION`` drops a Thing already reached, so the walk is bounded by the size of the graph
+#: and ends even on a cycle written before #1696 refused them.
+_CHILD_OF_REACHES = text(
+    """
+    WITH RECURSIVE below(thing_id) AS (
+        SELECT CAST(:start AS uuid)
+      UNION
+        SELECT r.target_thing_id
+        FROM below b
+        JOIN relationships r ON r.source_thing_id = b.thing_id
+        WHERE r.relationship_type = :child_of
+    )
+    SELECT EXISTS (SELECT 1 FROM below WHERE thing_id = :goal)
+    """
+)
+
+#: Serialises every ``ChildOf`` insert until its transaction ends. Without it two transactions
+#: under READ COMMITTED each miss the other's uncommitted edge, and ``A → B`` beside ``B → A``
+#: passes both checks. The lock is global rather than per pair because a longer cycle is closed by
+#: edges between different pairs.
+_LOCK_CHILD_OF_WRITES = text("SELECT pg_advisory_xact_lock(hashtext('reli.ChildOf'))")
+
+#: The internal tags an ``EvidenceFor`` source may not carry. ``#Observation`` is absent because an
+#: observation is what evidence is meant to be; the rest are Reli's own records, and one of them
+#: standing as evidence would add strength no observed moment supports.
+_NOT_EVIDENCE_TAGS = tuple(tag for tag in INTERNAL_TAGS if tag != OBSERVATION_TAG)
+
+
+def _check_edge(
+    session: Session,
+    *,
+    source_thing_id: uuid.UUID,
+    target_thing_id: uuid.UUID,
+    relationship_type: RelationshipType,
+) -> None:
+    """Refuse an edge the read path would misread (#1696), before anything is written.
+
+    A self-loop of any type, and a ``ChildOf`` edge closing a cycle, would drop every Thing in it
+    from the tree's top level while they still fall due; a ``Blocks`` self-loop blocks a Thing
+    forever.
+    """
+    if source_thing_id == target_thing_id:
+        raise ValueError(f"a {relationship_type.value} edge cannot run from Thing {source_thing_id} to itself")
+    if relationship_type is RelationshipType.CHILD_OF:
+        session.execute(_LOCK_CHILD_OF_WRITES)
+        closes_cycle = session.execute(
+            _CHILD_OF_REACHES,
+            {"start": target_thing_id, "goal": source_thing_id, "child_of": RelationshipType.CHILD_OF.value},
+        ).scalar_one()
+        if closes_cycle:
+            raise ValueError(
+                f"Thing {target_thing_id} is already a ChildOf ancestor of {source_thing_id}; "
+                "the edge would close a cycle"
+            )
+    if relationship_type is RelationshipType.EVIDENCE_FOR:
+        # A missing source is left to the foreign key, as for every other type.
+        source = session.get(ThingRecord, source_thing_id)
+        if source is not None:
+            _check_evidence_source(source)
+
+
+def _check_evidence_source(source: ThingRecord) -> None:
+    internal = [tag for tag in source.tags if tag in _NOT_EVIDENCE_TAGS]
+    if internal:
+        raise ValueError(f"Thing {source.id} is tagged {', '.join(internal)} and cannot stand as evidence")
+
+
 def _insert_relationship(
     session: Session,
     *,
@@ -326,10 +489,18 @@ def _insert_relationship(
     context: str | None = None,
 ) -> RelationshipRecord:
     """Add a relationship and its journal entry without committing. See :func:`_insert_thing`."""
+    relationship_type = RelationshipType(relationship_type)
+    _check_text("context", context, MAX_CONTEXT_CHARS)
+    _check_edge(
+        session,
+        source_thing_id=source_thing_id,
+        target_thing_id=target_thing_id,
+        relationship_type=relationship_type,
+    )
     relationship = RelationshipRecord(
         source_thing_id=source_thing_id,
         target_thing_id=target_thing_id,
-        relationship_type=RelationshipType(relationship_type),
+        relationship_type=relationship_type,
         context=context,
         created_at=datetime.now(UTC),
     )
@@ -362,7 +533,9 @@ def relate(
 
     Raises ``ValueError`` for a type outside the five, before any statement is issued, so callers
     that resolve the type from outside the process get the offending value back rather than a
-    constraint violation.
+    constraint violation. Also raises ``ValueError``, writing nothing, for an edge from a Thing to
+    itself, a ``ChildOf`` edge that would close a cycle, and an ``EvidenceFor`` edge from a Thing
+    carrying one of Reli's own tags other than ``#Observation`` (#1696).
 
     An ``EvidenceFor`` edge is unique per (source, target): strength is the count of those edges,
     and ``EVIDENCE_FOR_UNIQUE_INDEX`` keeps a pair from carrying two. A second one raises
@@ -530,12 +703,15 @@ def record_preference(
     scope = scope.strip()
     if not scope:
         raise ValueError("a preference must declare the scope it applies to")
+    # Checked before the anchor is written, so a refused preference leaves nothing behind.
+    _check_text("scope", scope, MAX_SCOPE_CHARS)
+    _check_thing_fields(title=title)
 
     wanted = list(dict.fromkeys(evidence_ids))
     if not wanted:
         raise ValueError("a preference with no evidence is not recordable")
     for evidence_id in wanted:
-        _require_thing(session, evidence_id)
+        _check_evidence_source(_require_thing(session, evidence_id))
 
     anchor = get_or_create_user_anchor(session, actor=actor)
 
@@ -595,8 +771,6 @@ def add_preference_evidence(
     """
     preference = _require_preference(session, preference_id)
     _require_thing(session, evidence_id)
-    if evidence_id == preference.id:
-        raise ValueError("a preference cannot be its own evidence")
 
     already_linked = session.exec(
         select(RelationshipRecord).where(

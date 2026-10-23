@@ -28,6 +28,9 @@ API_ROUTE = re.compile(r"""/api(?:/|(?=["'\s]|$))""")
 # ``ntfy.sh`` used as a URL without ``https://`` in front of it. curl guesses ``http`` for a bare
 # host, and the topic name is the channel's whole credential.
 PLAINTEXT_NTFY = re.compile(r"""(?<!https://)\bntfy\.sh/""")
+PINNED_ACTION = re.compile(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}")
+NPX_PACKAGE = re.compile(r"\bnpx\s+(?:-\S+\s+)*(\S+)")
+EXACT_VERSION = re.compile(r".@\d+\.\d+\.\d+$")
 
 # What `gates.sh` needs on PATH before it reaches a stage. Every venv tool goes through
 # `uv run`, because CI never activates the venv.
@@ -165,6 +168,48 @@ def test_the_permissions_scan_sees_a_job_left_on_the_default_grants(tmp_path):
     assert _jobs_on_default_token_grants(tmp_path) == ["bare.yml:y"]
 
 
+def _unpinned_actions(directory: Path = WORKFLOWS) -> list[str]:
+    workflows = (p for p in directory.iterdir() if p.suffix in (".yml", ".yaml"))
+    offenders: list[str] = []
+    for workflow in sorted(workflows):
+        for job in yaml.safe_load(workflow.read_text())["jobs"].values():
+            # A job-level ``uses:`` calls a reusable workflow and has no steps of its own.
+            for uses in [job.get("uses"), *(step.get("uses") for step in job.get("steps", []))]:
+                if uses and not PINNED_ACTION.fullmatch(uses):
+                    offenders.append(f"{workflow.name}:{uses}")
+    return offenders
+
+
+def test_every_action_is_pinned_to_a_commit():
+    """#1711: a tag can be moved to unreviewed code without the workflow changing; a commit cannot."""
+    offenders = _unpinned_actions()
+    assert offenders == [], f"these steps use an action by a movable ref: {offenders}"
+
+
+def test_the_pin_scan_sees_an_action_used_by_its_tag(tmp_path):
+    (tmp_path / "w.yml").write_text(
+        "jobs:\n  x:\n    steps:\n"
+        "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n"
+        "      - uses: actions/setup-node@v7\n"
+        "  y:\n    uses: some-org/some-repo/.github/workflows/build.yml@v3\n"
+    )
+    assert _unpinned_actions(tmp_path) == [
+        "w.yml:actions/setup-node@v7",
+        "w.yml:some-org/some-repo/.github/workflows/build.yml@v3",
+    ]
+
+
+def test_every_npx_package_names_an_exact_version():
+    """#1711: ``npx pkg@latest`` runs whatever the registry serves that day."""
+    offenders = [
+        f"{name}:{package}"
+        for name, run in _workflow_run_steps()
+        for package in NPX_PACKAGE.findall(run)
+        if not EXACT_VERSION.search(package)
+    ]
+    assert offenders == [], f"these steps run an unpinned npx package: {offenders}"
+
+
 def test_ci_grants_its_default_token_nothing_beyond_read():
     """The scan above accepts any top-level block; this holds ci.yml's to the read-only grant #1539 chose."""
     document = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
@@ -267,3 +312,67 @@ def test_the_frontend_lockfile_is_updated_and_scanned_like_the_backend_one():
         assert "frontend/package-lock.json" in scan[True][event]["paths"], event
     audit_steps = [step for job in scan["jobs"].values() for step in job["steps"] if "npm audit" in step.get("run", "")]
     assert [step.get("working-directory") for step in audit_steps] == ["frontend"]
+
+
+def test_every_image_build_pulls_its_base_rather_than_trusting_the_cache():
+    """#1712: the base is a floating ``python:3.12-slim`` tag so security patches land on rebuild,
+    which only holds if the build fetches the tag instead of reusing a cached layer."""
+    ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
+    builds = [step for step in ci["jobs"]["build"]["steps"] if "docker/build-push-action@" in step.get("uses", "")]
+    assert builds, "found no image build to check"
+    assert [step["name"] for step in builds if step["with"].get("pull") is not True] == []
+
+
+def test_the_image_runs_as_reli_from_container_start():
+    """#1712: a ``USER`` set before ``HEALTHCHECK`` and ``CMD`` keeps the probe and the server off root,
+    where a ``gosu`` entrypoint dropped privilege only for the process it exec'd."""
+    lines = [line.strip() for line in (REPO_ROOT / "Dockerfile").read_text().splitlines()]
+    runtime = lines[max(i for i, line in enumerate(lines) if line.startswith("FROM ")) :]
+    users = [i for i, line in enumerate(runtime) if line.startswith("USER ")]
+    assert [runtime[i] for i in users] == ["USER reli"]
+    for instruction in ("HEALTHCHECK ", "CMD "):
+        assert users[0] < next(i for i, line in enumerate(runtime) if line.startswith(instruction)), instruction
+    assert not any(line.startswith("ENTRYPOINT") for line in runtime)
+
+
+def _image_services_keeping_capabilities(directory: Path = REPO_ROOT) -> list[str]:
+    """Compose services that run Reli's image — pulled by name or built from this repository — and
+    do not drop every Linux capability or add one back."""
+    offenders: list[str] = []
+    for compose_file in sorted(directory.glob("docker-compose*.yml")):
+        for name, service in yaml.safe_load(compose_file.read_text())["services"].items():
+            repository = re.split("[:@]", service.get("image", ""))[0]
+            runs_the_image = "build" in service or repository == "ghcr.io/alexsiri7/reli"
+            if runs_the_image and (service.get("cap_drop") != ["ALL"] or "cap_add" in service):
+                offenders.append(f"{compose_file.name}:{name}")
+    return offenders
+
+
+def test_every_compose_service_running_the_image_drops_every_capability():
+    """#1712: the server binds an unprivileged port, so it needs no Linux capability back."""
+    offenders = _image_services_keeping_capabilities()
+    assert offenders == [], f"these services run the image with capabilities left: {offenders}"
+
+
+def test_the_capability_scan_sees_a_service_running_the_image(tmp_path):
+    (tmp_path / "docker-compose.yml").write_text(
+        "services:\n"
+        "  dropped:\n    image: ghcr.io/alexsiri7/reli:latest\n    cap_drop: [ALL]\n"
+        "  kept:\n    image: ghcr.io/alexsiri7/reli:latest\n"
+        "  db:\n    image: postgres:16-alpine\n"
+    )
+    (tmp_path / "docker-compose.preview.yml").write_text(
+        "services:\n"
+        "  built:\n    build: .\n"
+        "  readded:\n    image: ghcr.io/alexsiri7/reli:x\n    cap_drop: [ALL]\n    cap_add: [NET_RAW]\n"
+        "  untagged:\n    image: ghcr.io/alexsiri7/reli\n"
+        "  pinned:\n    image: ghcr.io/alexsiri7/reli@sha256:0123\n"
+        "  lookalike:\n    image: ghcr.io/alexsiri7/reli-docs:latest\n"
+    )
+    assert _image_services_keeping_capabilities(tmp_path) == [
+        "docker-compose.preview.yml:built",
+        "docker-compose.preview.yml:readded",
+        "docker-compose.preview.yml:untagged",
+        "docker-compose.preview.yml:pinned",
+        "docker-compose.yml:kept",
+    ]

@@ -59,3 +59,10 @@ def test_allowed_emails_is_parsed_lower_cased_and_empty_admits_nobody():
         "owner@example.com",
         "second@example.com",
     }
+
+
+def test_either_deploy_switch_marks_a_deploy():
+    """#1476: Railway sets RAILWAY_ENVIRONMENT_NAME on every deploy; PRODUCTION is the switch elsewhere."""
+    assert not Settings(DATABASE_URL="x").production
+    assert Settings(DATABASE_URL="x", RAILWAY_ENVIRONMENT_NAME="staging").production
+    assert Settings(DATABASE_URL="x", PRODUCTION="1").production

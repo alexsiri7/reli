@@ -29,14 +29,15 @@ from __future__ import annotations
 import html
 import logging
 import secrets
-import urllib.parse
 import uuid
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel, ValidationError
+from fastapi.routing import APIRoute
+from pydantic import AfterValidator, AnyUrl, BaseModel, ValidationError
 from sqlmodel import Session
 
 from . import auth, google_login
@@ -58,8 +59,6 @@ from .oauth_state import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["oauth"])
-
 # A sign-in that takes longer than this answers "start again", which is the remedy.
 SESSION_TTL_SECONDS = 60 * 10
 REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
@@ -70,8 +69,14 @@ CLIENT_TTL_SECONDS = REFRESH_TOKEN_TTL_SECONDS
 # before a used one. A person who takes over an hour between adding the connector and finishing
 # the sign-in re-adds it.
 UNUSED_CLIENT_TTL_SECONDS = 60 * 60
-# A real registration is a few hundred bytes. This is what bounds every stored field of a row.
-MAX_REGISTRATION_BYTES = 8 * 1024
+# A real registration is a few hundred bytes, and a consent or token form fewer. This bounds what
+# any request body here can hold in memory, and with it every stored field of a registration.
+MAX_BODY_BYTES = 8 * 1024
+# The longest redirect URI a registration keeps, in UTF-8 bytes, and the bound authorize puts on
+# every value it stores. Percent-encoding turns a byte into at most three, so a token form carrying
+# the longest URI still fits in MAX_BODY_BYTES — a bound in characters would not, since one
+# character can be four bytes.
+MAX_PARAM_LENGTH = 2048
 
 _AT_CAPACITY = "Server is at capacity; try again later"
 _CODE_GONE = "Authorization code is invalid or expired: re-authorise the connector"
@@ -81,6 +86,57 @@ _REFRESH_TOKEN_GONE = "Refresh token is invalid or expired: re-authorise the con
 # way that would fail.
 TOKEN_ENDPOINT_AUTH_METHODS = ("none", "client_secret_post")
 _NO_STORE = {"Cache-Control": "no-store"}
+
+
+def _too_large() -> HTTPException:
+    return HTTPException(status_code=413, detail=f"Request body must be at most {MAX_BODY_BYTES} bytes")
+
+
+async def _read_bounded(request: Request) -> bytes:
+    """The body of *request*, refused with 413 once it passes ``MAX_BODY_BYTES``.
+
+    A declared ``Content-Length`` over the cap is refused before a byte is read; a chunked or
+    understated body is refused as soon as what has arrived passes it.
+    """
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+        raise _too_large()
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > MAX_BODY_BYTES:
+            raise _too_large()
+    return bytes(body)
+
+
+class _BoundedBodyRoute(APIRoute):
+    """A route whose body is read through :func:`_read_bounded` before anything else sees it.
+
+    Every route here answers a caller with no credential, and FastAPI reads a ``Form`` body whole
+    before the endpoint runs, with no limit of its own — so the cap has to stand in front of it.
+    """
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        handler = super().get_route_handler()
+
+        async def bounded(request: Request) -> Response:
+            # Starlette's own cache of a body already read: every later reader is served from it.
+            request._body = await _read_bounded(request)
+            return await handler(request)
+
+        return bounded
+
+
+router = APIRouter(tags=["oauth"], route_class=_BoundedBodyRoute)
+
+
+def _within_param_bytes(value: str) -> str:
+    if len(value.encode()) > MAX_PARAM_LENGTH:
+        raise ValueError(f"must be at most {MAX_PARAM_LENGTH} bytes as UTF-8")
+    return value
+
+
+_RedirectUri = Annotated[str, AfterValidator(_within_param_bytes)]
 
 
 # --- Discovery -------------------------------------------------------------
@@ -122,7 +178,7 @@ def authorization_server_metadata() -> JSONResponse:
 class _ClientMetadata(BaseModel):
     """The RFC 7591 metadata a registration keeps. Anything else in the body is ignored, as §2 allows."""
 
-    redirect_uris: list[str] | None = None
+    redirect_uris: list[_RedirectUri] | None = None
     client_name: str = ""
     grant_types: list[str] = ["authorization_code"]
     response_types: list[str] = ["code"]
@@ -140,9 +196,65 @@ def _describe(invalid: ValidationError) -> str:
     return f"{'.'.join(str(part) for part in first['loc']) or 'body'}: {first['msg']}"
 
 
+def _as_delivered(uri: str) -> AnyUrl:
+    """``uri`` as the browser reads it once ``auth._client_redirect`` sends it there.
+
+    ``RedirectResponse`` percent-quotes the URL on the way out, which changes what some characters
+    mean: a backslash, which the URL standard reads as ``/``, arrives as ``%5C`` and leaves whatever
+    precedes the next ``@`` as user info. So the registered string is sent through that same
+    redirect and its ``Location`` parsed by ``AnyUrl``, which parses as a browser does (WHATWG);
+    the query the redirect appends cannot move the authority. Raises ``ValidationError`` when that
+    form is not a URL.
+    """
+    return AnyUrl(auth._client_redirect(uri, "").headers["location"])
+
+
 def _redirect_uri_is_safe(uri: str) -> bool:
-    parsed = urllib.parse.urlparse(uri)
-    return parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1"))
+    """Whether ``uri`` may receive an authorization code.
+
+    It must be ``https``, or ``http`` to localhost, and carry no userinfo, as the browser reads it,
+    so the host checked is the host the code is delivered to (#1702).
+    """
+    try:
+        parsed = _as_delivered(uri)
+    except ValidationError:
+        return False
+    if parsed.username is not None or parsed.password is not None:
+        return False
+    return parsed.scheme == "https" or (parsed.scheme == "http" and parsed.host in ("localhost", "127.0.0.1"))
+
+
+def _validate_registration_body(raw: bytes) -> _ClientMetadata:
+    try:
+        return _ClientMetadata.model_validate_json(raw)
+    except ValidationError as invalid:
+        problems = _describe(invalid)
+        logger.warning("MCP OAuth: rejected registration with invalid client metadata: %s", problems)
+        raise HTTPException(status_code=400, detail=f"invalid_client_metadata: {problems}") from invalid
+
+
+def _validate_auth_method(metadata: _ClientMetadata) -> str:
+    auth_method = metadata.token_endpoint_auth_method
+    if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
+        logger.warning("MCP OAuth: rejected token_endpoint_auth_method during registration: %r", auth_method)
+        raise HTTPException(
+            status_code=400,
+            detail=f"token_endpoint_auth_method must be one of {', '.join(TOKEN_ENDPOINT_AUTH_METHODS)}: {auth_method}",
+        )
+    return auth_method
+
+
+def _validate_redirect_uris(redirect_uris: list[str]) -> None:
+    for uri in redirect_uris:
+        if not _redirect_uri_is_safe(uri):
+            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %r", uri)
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "redirect_uri must use https with no user info "
+                    f"(or http://localhost / http://127.0.0.1 for development): {uri}"
+                ),
+            )
 
 
 @router.post("/oauth/register", include_in_schema=False)
@@ -151,7 +263,7 @@ async def oauth_register(request: Request) -> JSONResponse:
 
     This is an unauthenticated write, by design — dynamic registration is how a connector that holds
     no credential yet gets one, and the Google sign-in behind ``/oauth/authorize`` is what gates
-    identity. What it can cost is bounded: a row of at most ``MAX_REGISTRATION_BYTES`` that lives an
+    identity. What it can cost is bounded: a row of at most ``MAX_BODY_BYTES`` that lives an
     hour unless the owner signs in through it, in a store that evicts the registration nearest
     expiry rather than refusing. A flood therefore displaces other unused registrations — a set-up
     that races it can lose — never a connector the owner has signed in through, and nothing outlasts
@@ -159,36 +271,16 @@ async def oauth_register(request: Request) -> JSONResponse:
 
     Raises:
         HTTPException 400: The body is not a JSON object of the shapes ``_ClientMetadata`` names, a
-            ``redirect_uri`` is not ``https`` (``http`` only for localhost), or
+            ``redirect_uri`` is not ``https`` (``http`` only for localhost) with no user info or is
+            longer than ``MAX_PARAM_LENGTH`` bytes as UTF-8, or
             ``token_endpoint_auth_method`` is one the token endpoint does not implement.
-        HTTPException 413: The body is over ``MAX_REGISTRATION_BYTES``.
+        HTTPException 413: The body is over ``MAX_BODY_BYTES``, refused by ``_BoundedBodyRoute``.
     """
     raw = await request.body()
-    if len(raw) > MAX_REGISTRATION_BYTES:
-        raise HTTPException(status_code=413, detail=f"Registration body must be at most {MAX_REGISTRATION_BYTES} bytes")
-    try:
-        metadata = _ClientMetadata.model_validate_json(raw)
-    except ValidationError as invalid:
-        problems = _describe(invalid)
-        logger.warning("MCP OAuth: rejected registration with invalid client metadata: %s", problems)
-        raise HTTPException(status_code=400, detail=f"invalid_client_metadata: {problems}") from invalid
-
-    auth_method = metadata.token_endpoint_auth_method
-    if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
-        logger.warning("MCP OAuth: rejected token_endpoint_auth_method during registration: %r", auth_method)
-        raise HTTPException(
-            status_code=400,
-            detail=f"token_endpoint_auth_method must be one of {', '.join(TOKEN_ENDPOINT_AUTH_METHODS)}: {auth_method}",
-        )
-
+    metadata = _validate_registration_body(raw)
+    auth_method = _validate_auth_method(metadata)
     redirect_uris = metadata.redirect_uris or []
-    for uri in redirect_uris:
-        if not _redirect_uri_is_safe(uri):
-            logger.warning("MCP OAuth: rejected redirect_uri with unsafe scheme during registration: %r", uri)
-            raise HTTPException(
-                status_code=400,
-                detail=f"redirect_uri must use https (or http://localhost / http://127.0.0.1 for development): {uri}",
-            )
+    _validate_redirect_uris(redirect_uris)
 
     client_id = str(uuid.uuid4())
     client_secret = secrets.token_urlsafe(32)
@@ -236,9 +328,11 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
     Names the registered client and where its authorization code will be delivered, so a link the
     owner did not initiate announces itself instead of completing silently (confused deputy):
     without this page, ``/oauth/authorize`` sent the browser straight to Google and back to
-    whatever client had registered, with nothing on any screen naming it.
+    whatever client had registered, with nothing on any screen naming it. The host is shown on its own,
+    read as ``_redirect_uri_is_safe`` reads it, so it is the host the code reaches.
     """
     name = html.escape(client_name) or "an unnamed client"
+    host = html.escape(_as_delivered(redirect_uri).host or "")
     uri = html.escape(redirect_uri)
     state = html.escape(server_state)
     return HTMLResponse(
@@ -246,7 +340,7 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
         "<meta name='robots' content='noindex'></head><body>"
         "<h1>Authorize access to Reli?</h1>"
         f"<p><strong>{name}</strong> is asking for full access to your graph.</p>"
-        f"<p>Its sign-in result will be delivered to: <code>{uri}</code></p>"
+        f"<p>Its sign-in result will be delivered to <strong>{host}</strong> (<code>{uri}</code>).</p>"
         "<p>Only continue if you just initiated this from a connector you are setting up.</p>"
         "<form method='post' action='/oauth/authorize/confirm'>"
         f"<input type='hidden' name='server_state' value='{state}'>"
@@ -258,13 +352,13 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
 
 @router.get("/oauth/authorize", include_in_schema=False)
 def oauth_authorize(
-    client_id: str = "",
-    redirect_uri: str = "",
-    state: str = "",
-    code_challenge: str = "",
-    code_challenge_method: str = "S256",
-    scope: str = "mcp",
-    response_type: str = "code",
+    client_id: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "",
+    redirect_uri: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "",
+    state: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "",
+    code_challenge: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "",
+    code_challenge_method: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "S256",
+    scope: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "mcp",
+    response_type: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "code",
 ) -> HTMLResponse:
     """Take the client's request, remember it, and show a consent page naming it before Google.
 
@@ -290,6 +384,12 @@ def oauth_authorize(
             raise HTTPException(status_code=400, detail="Unknown client_id — register first via POST /oauth/register")
         if redirect_uri not in registered["redirect_uris"]:
             raise HTTPException(status_code=400, detail="redirect_uri not registered for this client")
+        # A registration stored before the check tightened can still hold an unsafe URI.
+        if not _redirect_uri_is_safe(redirect_uri):
+            logger.warning("MCP OAuth: refused stored unsafe redirect_uri for client %s: %r", client_id, redirect_uri)
+            raise HTTPException(
+                status_code=400, detail="redirect_uri is not one this server accepts: re-register the client"
+            )
 
         server_state = secrets.token_urlsafe(32)
         code_verifier = secrets.token_urlsafe(64)
@@ -323,9 +423,10 @@ def oauth_authorize_confirm(request: Request, server_state: str = Form(...)) -> 
     all. A browser always sends ``Origin`` on a POST, same-origin included, and never lets script
     override it, so this is what actually distinguishes the real form's submission from a lure's.
     Single-use consumption of the underlying flow stays where it already was, at the Google
-    callback.
+    callback. The ``MCP_FLOW_COOKIE`` set here is what lets that callback refuse a state this
+    browser never approved (#1701).
     """
-    if request.headers.get("origin") != auth.base_url():
+    if not auth.is_same_origin(request):
         raise HTTPException(
             status_code=400, detail="Approve from Reli's own consent page: start again from the connector."
         )
@@ -333,9 +434,19 @@ def oauth_authorize_confirm(request: Request, server_state: str = Form(...)) -> 
         flow = cleanup_and_get(session, mcp_oauth_sessions, server_state)
     if flow is None:
         raise HTTPException(status_code=400, detail="Sign-in expired: start again from the connector.")
-    return RedirectResponse(
+    response = RedirectResponse(
         url=google_login.authorization_url(server_state, flow["google_code_verifier"]), status_code=302
     )
+    response.set_cookie(
+        auth.MCP_FLOW_COOKIE,
+        server_state,
+        max_age=SESSION_TTL_SECONDS,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=True,
+    )
+    return response
 
 
 # --- Tokens ----------------------------------------------------------------
@@ -398,7 +509,7 @@ def _issue_token_response(
             client_id,
             revoked,
         )
-        raise _invalid_grant("Account is not allowed: " + auth._INVITE_ONLY)
+        raise _invalid_grant(auth._ACCOUNT_NOT_ALLOWED)
     access_token = auth.create_jwt(subject, email, audience=auth.MCP_AUDIENCE)
     refresh_token = secrets.token_urlsafe(32)
     try:

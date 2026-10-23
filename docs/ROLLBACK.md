@@ -4,8 +4,9 @@
 
 Use when a production deployment is unhealthy and you need to restore the previous known-good image.
 
-Production is deployed via Railway using the image `ghcr.io/alexsiri7/reli:<SHA>`. The last 3
-SHA-tagged images are retained in GHCR. To roll back, identify the target SHA and redeploy it.
+Production is deployed via Railway from the image CI pushes as `ghcr.io/alexsiri7/reli:<SHA>`,
+pinned to its digest (`ghcr.io/alexsiri7/reli@sha256:…`) by `scripts/deploy-railway.sh` (#1711). The
+last 3 SHA-tagged images are retained in GHCR. To roll back, identify the target SHA and redeploy it.
 
 ## Step 1: Identify the target SHA
 
@@ -26,10 +27,14 @@ gh run list --repo alexsiri7/reli --branch main --limit 10
 docker manifest inspect ghcr.io/alexsiri7/reli:<SHA>
 ```
 
-If the image is missing, it may have been pruned (only last 3 are retained). In that case,
-re-trigger CI on the target commit to rebuild it, or use the next-oldest retained SHA.
+CI no longer prunes images (#1660), but images from before that change may be gone or unpullable.
+In that case, re-trigger CI on the target commit to rebuild it, or pick another SHA.
 
-## Step 3: Redeploy via Railway API
+## Step 3: Redeploy through the deploy script
+
+Run `scripts/deploy-railway.sh`, the same script the pipeline runs: it checks the image is pullable,
+pins it to its digest, deploys that digest and waits for Railway's verdict. Do not call the Railway
+API by hand — a tag sent to Railway can move after it was checked.
 
 You need three values — find them as follows:
 - `RAILWAY_TOKEN`: GitHub → Settings → Secrets → Actions → `RAILWAY_TOKEN`
@@ -42,24 +47,11 @@ export SERVICE_ID=<RAILWAY_PRODUCTION_SERVICE_ID>
 export ENV_ID=<RAILWAY_PRODUCTION_ENVIRONMENT_ID>
 export TARGET_SHA=<the SHA to roll back to>
 
-IMAGE="ghcr.io/alexsiri7/reli:${TARGET_SHA}"
-
-# Point the service at the rollback image
-curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-  -H "Authorization: Bearer $RAILWAY_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" --arg img "$IMAGE" \
-    '{query: "mutation($svc:String!,$env:String!,$img:String!){serviceInstanceUpdate(input:{source:{image:$img}},serviceId:$svc,environmentId:$env)}",
-      variables:{svc:$svc,env:$env,img:$img}}')"
-
-# Trigger the deployment
-curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-  -H "Authorization: Bearer $RAILWAY_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" \
-    '{query: "mutation($svc:String!,$env:String!){serviceInstanceDeploy(serviceId:$svc,environmentId:$env)}",
-      variables:{svc:$svc,env:$env}}')"
+./scripts/deploy-railway.sh "ghcr.io/alexsiri7/reli:${TARGET_SHA}"
 ```
+
+The script prints the digest it deployed and exits non-zero if the image is not pullable or the
+deployment does not come up; in that case the previous deployment is still serving.
 
 ## Step 4: Verify health
 
@@ -73,4 +65,4 @@ curl -f "${PROD_URL}/healthz"
 
 1. File a post-mortem issue describing what the bad deploy contained.
 2. Fix forward in a new PR — do not leave production on an old SHA indefinitely.
-3. The next successful main CI run will move `latest` forward and prune the oldest retained SHA.
+3. The next successful main CI run will move `latest` forward and deploy it.

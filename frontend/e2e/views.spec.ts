@@ -168,6 +168,24 @@ test("an account outside the allowlist is told the view is invite-only", async (
   await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
 });
 
+test("an unknown error code shows a fixed sentence, never the code itself", async ({ page }) => {
+  await page.route("**/api/auth/me", (route) => route.fulfill(NOT_SIGNED_IN));
+  await page.goto("/?error=" + encodeURIComponent("Your account is locked: call +1 555 0100"));
+
+  await expect(page.getByText("Sign-in did not complete.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Your account is locked")).toHaveCount(0);
+});
+
+for (const code of ["__proto__", "toString"]) {
+  test(`the inherited object member ${code} is an unknown error code too`, async ({ page }) => {
+    await page.route("**/api/auth/me", (route) => route.fulfill(NOT_SIGNED_IN));
+    await page.goto(`/?error=${code}`);
+
+    await expect(page.getByText("Sign-in did not complete.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+  });
+}
+
 test("a 401 mid-session falls back to the sign-in view", async ({ page }) => {
   await page.route("**/api/things", (route) => route.fulfill(NOT_SIGNED_IN));
   await page.goto("/");

@@ -2,6 +2,7 @@
 
 import os
 
+import pytest
 from sqlalchemy import create_engine, text
 
 from backend.alembic.utils import build_connect_args
@@ -111,3 +112,49 @@ def test_migrations_run_without_the_roles_statement_timeout(fresh_database: str,
     _upgrade("head")
 
     assert observed == ["0"]
+
+
+def test_the_migration_engine_keeps_bound_content_out_of_its_errors(fresh_database: str, monkeypatch):
+    """A data migration writes Thing content, and a failed boot logs the error it raised (#1694).
+
+    The engine is the one ``env.py`` builds, captured as it is built; the probe statement fails on a
+    NUL inside a bound JSONB value that the server's error text would otherwise quote.
+    """
+    import traceback
+
+    import sqlalchemy
+    from sqlalchemy.exc import DataError
+
+    built: list[sqlalchemy.Engine] = []
+    engine_from_config = sqlalchemy.engine_from_config
+
+    def capturing_engine_from_config(*args, **kw):
+        built.append(engine_from_config(*args, **kw))
+        return built[-1]
+
+    monkeypatch.setattr(sqlalchemy, "engine_from_config", capturing_engine_from_config)
+
+    _upgrade("head")
+
+    [engine] = built
+    notes = '{"note": "private note\\u0000"}'
+    with engine.connect() as conn, pytest.raises(DataError) as failure:
+        conn.execute(text("SELECT CAST(:notes AS jsonb)"), {"notes": notes})
+    logged = "".join(traceback.format_exception(failure.value))
+    assert "SQL parameters hidden" in logged
+    assert "private" not in logged
+
+
+def test_the_migrations_will_not_connect_to_a_server_without_tls(fresh_database: str, monkeypatch):
+    """The migration engine applies the same TLS rule as the app's (#1695): the test Postgres speaks
+    no TLS, so with the URL's ``sslmode=disable`` dropped the upgrade is refused at connect."""
+    from sqlalchemy import make_url
+    from sqlalchemy.exc import OperationalError
+
+    from backend import config as config_module
+
+    without_mode = make_url(fresh_database).set(query={}).render_as_string(hide_password=False)
+    monkeypatch.setattr(config_module.settings, "DATABASE_URL", without_mode)
+
+    with pytest.raises(OperationalError, match="SSL"):
+        _upgrade("head")

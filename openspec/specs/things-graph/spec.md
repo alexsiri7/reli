@@ -34,6 +34,25 @@ A second EvidenceFor edge between the same pair SHALL be refused, naming the edg
 - WHEN the same edge is created again
 - THEN the request is refused and names the existing edge
 
+### Requirement: Every write is bounded
+
+A write exceeding a ceiling SHALL be refused whole, before anything is stored or journalled, naming the field and its ceiling. The ceilings SHALL be: title 500 characters; description 100,000 characters; notes and urls 100,000 bytes each as stored; 100 tags of 100 characters each; relationship context 2,000 characters; preference scope 100 characters. A priority SHALL be finite.
+
+#### Scenario: A pasted document as a title
+- GIVEN a session creating a Thing
+- WHEN the title it passes is 10,000 characters long
+- THEN the write is refused naming the title and its 500-character ceiling
+- AND no Thing and no journal entry is written
+
+### Requirement: An update is bounded only on the fields it sets
+
+An update SHALL be checked against the ceilings only on the fields it sets, so a Thing stored before a ceiling existed stays updatable through its other fields.
+
+#### Scenario: Adding a tag to an old Thing
+- GIVEN a Thing whose stored title predates the ceiling and exceeds it
+- WHEN it is updated with new tags only
+- THEN the update succeeds
+
 ### Requirement: Hierarchy is a ChildOf relationship and nothing else
 
 The graph SHALL express hierarchy only through ChildOf edges. There SHALL be no parent field on a Thing.
@@ -42,6 +61,16 @@ The graph SHALL express hierarchy only through ChildOf edges. There SHALL be no 
 - GIVEN a project Thing and a task Thing
 - WHEN a ChildOf edge is created from the project to the task
 - THEN the task appears among the project's children
+
+### Requirement: No Thing is its own ancestor
+
+An edge from a Thing to itself SHALL be refused for every relationship type, and a ChildOf edge SHALL be refused when its target already reaches its source through ChildOf, so no Thing ever drops out of the tree by sitting in a cycle. The refusal SHALL hold for writes made concurrently, and SHALL write nothing and journal nothing.
+
+#### Scenario: Closing a cycle
+- GIVEN a ChildOf edge from "Move house" to "Pack books"
+- WHEN a ChildOf edge from "Pack books" to "Move house" is created
+- THEN the request is refused
+- AND both Things stay in the tree
 
 ### Requirement: Nothing is hard-deleted
 

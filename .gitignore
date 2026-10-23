@@ -6,7 +6,6 @@ api_key.txt
 
 # Dolt database files (added by bd init)
 .dolt/
-*.db
 
 # Gas Town (added by gt)
 .runtime/
@@ -34,6 +33,7 @@ legacy/
 backend/chroma_db/
 chroma_db/
 chroma/
+*.db
 *.sqlite
 *.sqlite3
 

@@ -16,8 +16,9 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
+import anyio
 import httpx
 import jwt
 import pytest
@@ -26,7 +27,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from backend import api, auth, google_login, mcp_oauth
+from backend import auth, google_login, mcp_oauth, web_view_auth
 from backend.config import settings
 from backend.db_engine import get_engine
 from backend.google_login import s256_challenge
@@ -69,7 +70,7 @@ def client(session, monkeypatch, sign_in_settings):
     app = FastAPI()
     app.include_router(auth.router)
     app.include_router(mcp_oauth.router)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
     return TestClient(app, follow_redirects=False)
 
 
@@ -79,7 +80,7 @@ def racing_client(session, sign_in_settings):
     app = FastAPI()
     app.include_router(auth.router)
     app.include_router(mcp_oauth.router)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
     return TestClient(app, follow_redirects=False)
 
 
@@ -206,7 +207,7 @@ def test_discovery_and_registration_answer_without_any_credential(session, monke
     monkeypatch.setattr(auth, "_session", _fixture_session)
     app = FastAPI()
     app.include_router(mcp_oauth.router)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
     anonymous = TestClient(app)
 
     discovery = anonymous.get("/.well-known/oauth-authorization-server")
@@ -228,8 +229,16 @@ def test_discovery_and_registration_answer_without_any_credential(session, monke
 
 @pytest.mark.parametrize(
     "redirect_uris",
-    [[CLIENT_REDIRECT], ["http://localhost:3000/cb"], ["http://127.0.0.1:3000/cb"], [], None],
-    ids=["https", "localhost", "loopback", "empty", "null"],
+    [
+        [CLIENT_REDIRECT],
+        ["http://localhost:3000/cb"],
+        ["http://127.0.0.1:3000/cb"],
+        ["https://[::1]:8443/cb"],
+        ["https://client.example.test/p@q"],
+        [],
+        None,
+    ],
+    ids=["https", "localhost", "loopback", "ipv6", "at-in-path", "empty", "null"],
 )
 def test_register_accepts_https_and_loopback_redirects(client, redirect_uris):
     response = client.post("/oauth/register", json={"redirect_uris": redirect_uris, "client_name": "Claude"})
@@ -257,8 +266,40 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
 
 @pytest.mark.parametrize(
     "redirect_uris",
-    [["http://evil.com/cb"], ["javascript:alert(1)"], ["not-a-url"], [CLIENT_REDIRECT, "http://evil.com/cb"]],
-    ids=["http-remote", "javascript", "schemeless", "mixed"],
+    [
+        ["http://evil.com/cb"],
+        ["javascript:alert(1)"],
+        ["not-a-url"],
+        [CLIENT_REDIRECT, "http://evil.com/cb"],
+        ["https://claude.ai@attacker.example/cb"],
+        ["https://claude.ai:x@attacker.example/cb"],
+        ["http://claude.ai@localhost:3000/cb"],
+        ["https://[not-an-ip]/cb"],
+        ["https://[::1/cb"],
+        ["https://[1.2.3.4]/cb"],
+        ["https://claude.ai\\@attacker.example/cb"],
+        ["https://attacker.example\\@claude.ai/cb"],
+        ["https://claude.ai:\\443@attacker.example/cb"],
+        ["https://attacker.example\\.claude.ai/cb"],
+        ["https://claude.ai\t.attacker.example/cb"],
+    ],
+    ids=[
+        "http-remote",
+        "javascript",
+        "schemeless",
+        "mixed",
+        "userinfo",
+        "userinfo-password",
+        "loopback-userinfo",
+        "bracketed-non-ip",
+        "unterminated-bracket",
+        "bracketed-ipv4",
+        "backslash-userinfo",
+        "backslash-userinfo-reversed",
+        "backslash-port",
+        "backslash-host",
+        "tab-host",
+    ],
 )
 def test_register_refuses_an_unsafe_redirect_whatever_its_position(client, redirect_uris):
     response = client.post("/oauth/register", json={"redirect_uris": redirect_uris})
@@ -305,7 +346,7 @@ def test_register_refuses_a_field_of_the_wrong_shape_and_stores_nothing(client, 
 
 def test_register_reports_one_problem_however_many_the_body_holds(client):
     """The refusal must not grow with the body: a flood of wrong elements is not a flood of detail."""
-    body = {"redirect_uris": [0] * ((mcp_oauth.MAX_REGISTRATION_BYTES - 100) // 2)}
+    body = {"redirect_uris": [0] * ((mcp_oauth.MAX_BODY_BYTES - 100) // 2)}
 
     response = client.post("/oauth/register", json=body)
 
@@ -315,7 +356,7 @@ def test_register_reports_one_problem_however_many_the_body_holds(client):
 
 def test_register_logs_one_problem_however_many_the_body_holds(client, caplog):
     """The log line is the second sink the refusal reaches, and it must stay as bounded as the detail."""
-    body = {"redirect_uris": [0] * ((mcp_oauth.MAX_REGISTRATION_BYTES - 100) // 2)}
+    body = {"redirect_uris": [0] * ((mcp_oauth.MAX_BODY_BYTES - 100) // 2)}
 
     with caplog.at_level(logging.WARNING, logger="backend.mcp_oauth"):
         response = client.post("/oauth/register", json=body)
@@ -360,12 +401,171 @@ def test_register_refuses_an_auth_method_the_token_endpoint_does_not_implement(c
 def test_register_refuses_a_body_over_the_cap_and_stores_nothing(client, session):
     response = client.post(
         "/oauth/register",
-        json={"redirect_uris": [CLIENT_REDIRECT], "client_name": "x" * mcp_oauth.MAX_REGISTRATION_BYTES},
+        json={"redirect_uris": [CLIENT_REDIRECT], "client_name": "x" * mcp_oauth.MAX_BODY_BYTES},
     )
 
     assert response.status_code == 413
-    assert str(mcp_oauth.MAX_REGISTRATION_BYTES) in response.json()["detail"]
+    assert str(mcp_oauth.MAX_BODY_BYTES) in response.json()["detail"]
     assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
+
+
+def test_register_refuses_a_chunked_body_over_the_cap(client, session):
+    """No ``Content-Length`` to trust: the cap is counted on the bytes as they arrive."""
+
+    def chunks():
+        yield b'{"redirect_uris": ["' + CLIENT_REDIRECT.encode() + b'"], "client_name": "'
+        yield b"x" * mcp_oauth.MAX_BODY_BYTES
+        yield b'"}'
+
+    response = client.post("/oauth/register", content=chunks(), headers={"Content-Type": "application/json"})
+
+    assert response.status_code == 413
+    assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
+
+
+@pytest.mark.parametrize("path", ["/oauth/register", "/oauth/authorize/confirm", "/oauth/token"])
+def test_a_declared_length_over_the_cap_is_refused_before_a_byte_is_read(client, path):
+    """The route answers 413 without asking the server for the body at all."""
+    sent = []
+
+    async def receive():
+        raise AssertionError("the body was read")
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "https",
+        "path": path,
+        "raw_path": path.encode(),
+        "root_path": "",
+        "query_string": b"",
+        "headers": [
+            (b"host", b"reli.example.test"),
+            (b"content-type", b"application/x-www-form-urlencoded"),
+            (b"content-length", str(mcp_oauth.MAX_BODY_BYTES + 1).encode()),
+        ],
+        "client": ("127.0.0.1", 1),
+        "server": ("reli.example.test", 443),
+    }
+
+    anyio.run(client.app, scope, receive, send)
+
+    assert sent[0]["status"] == 413
+
+
+def test_the_token_endpoint_refuses_a_form_over_the_cap_and_leaves_the_code(client, session):
+    registered = _register(client)
+    verifier = secrets.token_urlsafe(64)
+    code = _seed_code(session, registered["client_id"], verifier)
+
+    response = _token(
+        client,
+        code=code,
+        client_id=registered["client_id"],
+        code_verifier=verifier,
+        padding="x" * mcp_oauth.MAX_BODY_BYTES,
+    )
+
+    assert response.status_code == 413
+    assert cleanup_and_get(session, mcp_auth_codes, code) is not None
+
+
+def _form_chunks(fields):
+    """A form body sent with no ``Content-Length``, so only the bytes as they arrive can refuse it."""
+    yield urlencode(fields).encode()
+    yield b"&padding=" + b"x" * mcp_oauth.MAX_BODY_BYTES
+
+
+def test_the_token_endpoint_refuses_a_chunked_form_over_the_cap_and_leaves_the_code(client, session):
+    registered = _register(client)
+    verifier = secrets.token_urlsafe(64)
+    code = _seed_code(session, registered["client_id"], verifier)
+    fields = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": registered["client_id"],
+        "redirect_uri": CLIENT_REDIRECT,
+        "code_verifier": verifier,
+    }
+
+    response = client.post(
+        "/oauth/token",
+        content=_form_chunks(fields),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    assert response.status_code == 413
+    assert cleanup_and_get(session, mcp_auth_codes, code) is not None
+
+
+def test_authorize_confirm_refuses_a_chunked_form_over_the_cap(client):
+    registered = _register(client)
+    server_state = _server_state(_authorize(client, registered["client_id"]).text)
+
+    response = client.post(
+        "/oauth/authorize/confirm",
+        content=_form_chunks({"server_state": server_state}),
+        headers={"Content-Type": "application/x-www-form-urlencoded", "Origin": BASE_URL},
+    )
+
+    assert response.status_code == 413
+    assert "set-cookie" not in response.headers
+
+
+def test_authorize_confirm_refuses_a_form_over_the_cap(client):
+    registered = _register(client)
+    server_state = _server_state(_authorize(client, registered["client_id"]).text)
+
+    response = client.post(
+        "/oauth/authorize/confirm",
+        data={"server_state": server_state, "padding": "x" * mcp_oauth.MAX_BODY_BYTES},
+        headers={"Origin": BASE_URL},
+    )
+
+    assert response.status_code == 413
+    assert "set-cookie" not in response.headers
+
+
+@pytest.mark.parametrize("character", ["a", "é"])
+def test_register_refuses_a_redirect_uri_over_the_length_bound(client, session, character):
+    """The bound is in bytes: half as many two-byte characters already pass it."""
+    uri = f"{CLIENT_REDIRECT}/" + character * (mcp_oauth.MAX_PARAM_LENGTH // len(character.encode()))
+
+    response = client.post("/oauth/register", json={"redirect_uris": [uri]})
+
+    assert response.status_code == 400
+    assert response.json()["detail"].startswith("invalid_client_metadata: redirect_uris.0: ")
+    assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
+
+
+def test_the_longest_redirect_uri_a_registration_keeps_still_fits_a_token_form(client, session):
+    """Percent-encoding triples a URI of slashes; the body cap must still hold the form that carries it."""
+    prefix = f"{CLIENT_REDIRECT}/"
+    uri = prefix + "/" * (mcp_oauth.MAX_PARAM_LENGTH - len(prefix))
+    registered = _register(client, redirect_uris=[uri])
+    verifier = secrets.token_urlsafe(64)
+    code = _seed_code(session, registered["client_id"], verifier, redirect_uri=uri)
+
+    response = _token(client, code=code, client_id=registered["client_id"], code_verifier=verifier, redirect_uri=uri)
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize("param", ["client_id", "redirect_uri", "state", "code_challenge", "scope"])
+def test_authorize_refuses_a_parameter_over_the_length_bound_and_stores_nothing(client, session, param):
+    registered = _register(client)
+
+    params = {"client_id": registered["client_id"], "redirect_uri": CLIENT_REDIRECT, "code_challenge": "c"}
+
+    response = client.get("/oauth/authorize", params={**params, param: "x" * (mcp_oauth.MAX_PARAM_LENGTH + 1)})
+
+    assert response.status_code == 422
+    assert session.exec(select(func.count()).select_from(mcp_oauth_sessions.model)).one() == 0
 
 
 def test_a_registration_lives_an_hour_until_its_first_token_then_as_long_as_the_family(client, session):
@@ -486,6 +686,7 @@ def test_authorize_shows_a_consent_page_naming_the_client_and_remembers_the_requ
     assert response.headers["cache-control"] == "no-store"
     body = response.text
     assert "Claude" in body
+    assert "<strong>client.example.test</strong>" in body
     assert CLIENT_REDIRECT in body
     server_state = _server_state(body)
     flow = cleanup_and_get(session, mcp_oauth_sessions, server_state)
@@ -509,6 +710,61 @@ def test_authorize_escapes_an_attacker_controlled_client_name_and_redirect_uri(c
     assert "&lt;script&gt;" in response.text
 
 
+@pytest.mark.parametrize(
+    ("redirect_uri", "host"),
+    [
+        ("https://claude.ai%2eevil.example/cb", "claude.ai.evil.example"),
+        ("https://\u0441laude.ai/cb", "xn--laude-0ye.ai"),
+        ("https:///cb", "cb"),
+    ],
+    ids=["percent-host", "homograph", "no-host"],
+)
+def test_the_consent_page_names_the_host_a_browser_would_reach(client, redirect_uri, host):
+    registered = _register(client, redirect_uris=[redirect_uri])
+
+    response = _authorize(client, registered["client_id"], redirect_uri=redirect_uri)
+
+    assert response.status_code == 200
+    assert f"<strong>{host}</strong>" in response.text
+
+
+def test_the_consent_page_names_the_host_the_redirect_delivers_to_not_the_one_the_string_reads_as():
+    # Registration refuses this URI, so the page is called directly: it is the one shape whose
+    # raw string reads as claude.ai while the code is delivered to attacker.example.
+    redirect_uri = "https://claude.ai\\@attacker.example/cb"
+    delivered = urlsplit(auth._client_redirect(redirect_uri, "", code="c").headers["location"])
+
+    page = mcp_oauth._consent_page("state", "Claude", redirect_uri).body.decode()
+
+    assert delivered.hostname == "attacker.example"
+    assert "<strong>attacker.example</strong>" in page
+    assert "<strong>claude.ai</strong>" not in page
+
+
+def test_authorize_refuses_a_redirect_uri_registered_before_the_check_tightened(client, session):
+    smuggled = "https://claude.ai@attacker.example/cb"
+    cleanup_and_store(
+        session,
+        mcp_registered_clients,
+        "stale-client",
+        {
+            "client_secret": "secret",
+            "redirect_uris": [smuggled],
+            "client_name": "Claude",
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "client_secret_post",
+            "scope": "mcp",
+            "expires_at": datetime.now(UTC) + timedelta(hours=1),
+        },
+    )
+
+    response = _authorize(client, "stale-client", redirect_uri=smuggled)
+
+    assert response.status_code == 400
+    assert "server_state" not in response.text
+
+
 def test_authorize_confirm_sends_the_browser_to_google(client, session):
     registered = _register(client)
     consent = _authorize(client, registered["client_id"])
@@ -526,6 +782,11 @@ def test_authorize_confirm_sends_the_browser_to_google(client, session):
     flow = cleanup_and_get(session, mcp_oauth_sessions, server_state)
     assert query["code_challenge"] == s256_challenge(flow["google_code_verifier"])
     assert query["redirect_uri"] == settings.GOOGLE_AUTH_REDIRECT_URI
+    cookie = response.headers["set-cookie"]
+    assert cookie.startswith(f"{auth.MCP_FLOW_COOKIE}={server_state};")
+    for attribute in ("HttpOnly", "Secure", "SameSite=lax", "Path=/"):
+        assert attribute in cookie
+    assert "Domain=" not in cookie
 
 
 def test_authorize_confirm_refuses_an_unknown_or_expired_state(client):
@@ -553,6 +814,7 @@ def test_authorize_confirm_refuses_a_cross_site_submission_even_with_a_valid_sta
     response = client.post("/oauth/authorize/confirm", data={"server_state": server_state}, headers=headers)
 
     assert response.status_code == 400
+    assert "set-cookie" not in response.headers
     # The flow is still live: a legitimate retry from Reli's own page still works.
     assert (
         client.post(
@@ -984,7 +1246,11 @@ def test_register_authorize_callback_and_token_end_to_end(client, monkeypatch):
     )
     assert _query(to_google.headers["location"])["state"] == server_state
 
-    back_from_google = client.get("/api/auth/google/callback", params={"code": "google-code", "state": server_state})
+    # The test client talks plain http, so it would not resend the ``Secure`` cookie by itself.
+    flow_cookie = {"Cookie": f"{auth.MCP_FLOW_COOKIE}={to_google.cookies[auth.MCP_FLOW_COOKIE]}"}
+    back_from_google = client.get(
+        "/api/auth/google/callback", params={"code": "google-code", "state": server_state}, headers=flow_cookie
+    )
     assert back_from_google.status_code == 302
     to_client = _query(back_from_google.headers["location"])
     assert to_client["state"] == "client-state"

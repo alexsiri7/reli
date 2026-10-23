@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from backend import api, auth
+from backend import api, auth, frontend_serving, web_view_auth
 from backend.config import settings
 from backend.db_models import (
     NEW_TAG,
@@ -33,6 +33,7 @@ from backend.queries import MAX_LIMIT
 from backend.service import create_thing, get_or_create_user_anchor, record_preference, relate, update_thing
 
 SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
+BASE_URL = "https://reli.example.test"
 
 
 def _routed_app(session, monkeypatch) -> FastAPI:
@@ -51,7 +52,7 @@ def _routed_app(session, monkeypatch) -> FastAPI:
         return {"status": "ok", "service": "reli"}
 
     app.include_router(api.router)
-    api.add_web_view_auth(app)
+    web_view_auth.add_web_view_auth(app)
     return app
 
 
@@ -61,9 +62,9 @@ def _basic(password, username="reli"):
 
 @pytest.fixture()
 def client(session, monkeypatch, secret_key):
-    """An authenticated client. The session cookie is the only way in, so without it every route
-    below would answer 401."""
-    return TestClient(_routed_app(session, monkeypatch), headers=_session_cookie())
+    """An authenticated client on Reli's own page. The session cookie is the only way in, so without
+    it every route below would answer 401; the ``Origin`` is what a browser sends from the bundle."""
+    return TestClient(_routed_app(session, monkeypatch), headers={**_session_cookie(), "Origin": BASE_URL})
 
 
 @pytest.fixture()
@@ -75,6 +76,8 @@ def anonymous(session, monkeypatch):
 @pytest.fixture()
 def secret_key(monkeypatch):
     monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    monkeypatch.setattr(settings, "RELI_BASE_URL", BASE_URL)
     return SECRET_KEY
 
 
@@ -367,6 +370,28 @@ def test_rejecting_twice_changes_and_journals_nothing(client, session):
     assert _journal_count(session) == before
 
 
+@pytest.mark.parametrize("origin", [None, "https://sibling.example.test", "null"])
+def test_rejecting_from_any_page_but_reli_s_own_is_refused(client, session, origin):
+    """``SameSite=Lax`` sends the cookie from a sibling subdomain too (#1698); the ``Origin`` does not lie."""
+    preference, _ = _preference(session)
+    before = _journal_count(session)
+    client.headers.pop("Origin")
+    headers = {} if origin is None else {"Origin": origin}
+
+    response = client.post(f"/api/preferences/{preference.id}/reject", headers=headers)
+
+    assert response.status_code == 403
+    assert _journal_count(session) == before
+
+
+def test_a_read_needs_no_origin(client):
+    """Only the cookie-authenticated POSTs check the ``Origin``; a read stays a plain cookie check."""
+    client.headers.pop("Origin")
+
+    assert client.get("/api/things").status_code == 200
+    assert client.get("/api/user-model").status_code == 200
+
+
 def test_rejecting_a_thing_that_is_not_a_preference_is_404(client, session):
     """The path names a preference resource, and there is no preference there."""
     thing = _thing(session, "Rebuild Reli")
@@ -476,9 +501,22 @@ def test_an_mcp_token_is_not_a_web_session(anonymous, secret_key):
     assert response.json()["detail"] == "Invalid session: sign in with Google at / again."
 
 
+def test_a_session_minted_by_another_deploy_is_401(anonymous, secret_key, monkeypatch):
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "https://staging.example.test")
+    token = auth.create_jwt("x", "owner@example.com", audience=auth.WEB_AUDIENCE)
+    monkeypatch.setattr(settings, "RELI_BASE_URL", "https://reli.example.test")
+
+    response = anonymous.get("/api/things", headers=_cookie(token))
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid session: sign in with Google at / again."
+
+
 def test_an_expired_session_is_401_saying_so(anonymous, secret_key):
     expired = datetime.now(UTC) - timedelta(days=1)
-    token = jwt.encode({"sub": "x", "aud": auth.WEB_AUDIENCE, "exp": expired}, SECRET_KEY, algorithm="HS256")
+    token = jwt.encode(
+        {"iss": auth.base_url(), "sub": "x", "aud": auth.WEB_AUDIENCE, "exp": expired}, SECRET_KEY, algorithm="HS256"
+    )
 
     response = anonymous.get("/api/things", headers=_cookie(token))
 
@@ -553,7 +591,7 @@ def _dist(tmp_path, body="<!doctype html><title>Reli</title>"):
 
 def test_a_deep_link_is_served_the_bundle_so_a_reload_resolves_client_side(tmp_path):
     app = FastAPI()
-    api.mount_frontend(app, _dist(tmp_path))
+    frontend_serving.mount_frontend(app, _dist(tmp_path))
 
     response = TestClient(app).get(f"/things/{uuid.uuid4()}")
 
@@ -567,7 +605,7 @@ def test_the_kill_switch_worker_is_served_as_javascript(tmp_path):
     dist = _dist(tmp_path)
     (dist / "sw.js").write_text("self.addEventListener('install', () => self.skipWaiting());")
     app = FastAPI()
-    api.mount_frontend(app, dist)
+    frontend_serving.mount_frontend(app, dist)
 
     response = TestClient(app).get("/sw.js")
 
@@ -584,7 +622,7 @@ def test_the_worker_media_type_is_stated_rather_than_guessed_from_the_host(tmp_p
     dist = _dist(tmp_path)
     (dist / "sw.js").write_text("export {};")
     app = FastAPI()
-    api.mount_frontend(app, dist)
+    frontend_serving.mount_frontend(app, dist)
 
     response = TestClient(app).get("/sw.js")
 
@@ -596,7 +634,7 @@ def test_a_file_like_path_is_a_404_rather_than_the_bundle_in_disguise(tmp_path, 
     """A stale manifest or asset must fail loudly; a ``/sw.js`` that 404s is what unregisters a worker
     when no build ships one."""
     app = FastAPI()
-    api.mount_frontend(app, _dist(tmp_path))
+    frontend_serving.mount_frontend(app, _dist(tmp_path))
 
     response = TestClient(app).get(path)
 
@@ -604,10 +642,30 @@ def test_a_file_like_path_is_a_404_rather_than_the_bundle_in_disguise(tmp_path, 
     assert "<title>Reli</title>" not in response.text
 
 
+@pytest.mark.parametrize("path", ["/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"])
+def test_the_fallback_refuses_the_docs_paths_an_app_built_without_them(tmp_path, path):
+    """#1476: a deploy builds the app without its docs, and the bundle must not answer in their place."""
+    app = FastAPI(openapi_url=None)
+    frontend_serving.mount_frontend(app, _dist(tmp_path))
+
+    assert TestClient(app).get(path).status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/openapi.json", "/docs", "/redoc"])
+def test_the_fallback_leaves_the_docs_to_an_app_that_serves_them(tmp_path, path):
+    app = FastAPI()
+    frontend_serving.mount_frontend(app, _dist(tmp_path))
+
+    response = TestClient(app).get(path)
+
+    assert response.status_code == 200
+    assert "<title>Reli</title>" not in response.text
+
+
 def test_an_image_built_without_a_frontend_still_boots(tmp_path):
     app = FastAPI()
 
-    api.mount_frontend(app, tmp_path / "absent")
+    frontend_serving.mount_frontend(app, tmp_path / "absent")
 
     assert TestClient(app).get("/").status_code == 404
 
@@ -625,8 +683,8 @@ def test_the_bundle_is_public_because_it_is_the_sign_in_view(tmp_path, path):
     (dist / "assets" / "app.js").write_text("export {};")
     (dist / "sw.js").write_text("export {};")
     app = FastAPI()
-    api.mount_frontend(app, dist)
-    api.add_web_view_auth(app)
+    frontend_serving.mount_frontend(app, dist)
+    web_view_auth.add_web_view_auth(app)
 
     assert TestClient(app).get(path).status_code == 200
 
@@ -645,7 +703,7 @@ def test_a_plain_http_base_url_is_warned_about_at_startup(monkeypatch, caplog, r
     monkeypatch.setattr(settings, "RELI_BASE_URL", "")
     monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", redirect_uri)
 
-    with caplog.at_level(logging.WARNING, logger="backend.api"):
-        api.add_web_view_auth(FastAPI())
+    with caplog.at_level(logging.WARNING, logger="backend.web_view_auth"):
+        web_view_auth.add_web_view_auth(FastAPI())
 
     assert any("not https" in record.getMessage() for record in caplog.records) is warned

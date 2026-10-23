@@ -17,15 +17,15 @@ jobs:
     name: Lint & Typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -43,15 +43,15 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -72,7 +72,7 @@ jobs:
     # generated in this image; any other renders different pixels and fails on nothing real.
     container: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The checkout is owned by a different uid inside the container, and gates.sh opens with
       # `git rev-parse --show-toplevel`, which git refuses on a repository it calls dubious.
@@ -89,14 +89,14 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to GitHub Container Registry
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -104,18 +104,20 @@ jobs:
 
       - name: Build image
         if: github.event_name != 'push'
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          pull: true
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
 
       - name: Build and push image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          pull: true
           push: true
           tags: |
             ghcr.io/alexsiri7/reli:${{ github.sha }}
@@ -123,24 +125,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
 
-      - name: Prune old GHCR images (keep last 3)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        continue-on-error: true   # GITHUB_TOKEN lacks delete:packages; prune is best-effort until PAT is added
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: reli
-          package-type: container
-          min-versions-to-keep: 3
-          ignore-versions: ^latest$
-          token: ${{ secrets.GITHUB_TOKEN }}
-
   unsafe-change-tests:
     # The unsafe-change check itself runs from the base branch
     # (pull_request_target), so a PR changing it is only tested here.
     name: unsafe-change checker tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Unit tests (system python3 + PyYAML, as the check uses)
         run: python3 -m unittest discover -s .github/unsafe-change
 

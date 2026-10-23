@@ -65,7 +65,11 @@ deploys the image to staging and then to production. The Docker Compose "rig" at
 `/home/asiri/gt/reli/mayor/rig` no longer exists, so nothing is rebuilt by hand after a merge.
 
 `DATABASE_URL` must be set in the environment — there is no default, and the service refuses to
-start without it rather than silently using an empty database.
+start without it rather than silently using an empty database. The connection requires TLS
+(#1695): `tls_connect_args` in `backend/db_engine.py`, used by the app's engine and the migrations',
+gives a URL with no `sslmode` `require`, and on a deploy refuses a weaker one — a deploy is
+`settings.production`, which Railway sets and `docker-compose.yml` sets with `PRODUCTION=1`; the
+`localdb` URL in `.env.example` says `sslmode=disable`, which only a local run accepts.
 
 The production database is schema `reli` of a shared Supabase project, reached through the Postgres
 role `reli`. Its pooler ignores connect-time options, so the 30 s `STATEMENT_TIMEOUT` in
@@ -155,8 +159,10 @@ an `httponly`, `samesite=lax` cookie holding an `aud="web"` JWT good for seven d
 at startup, never as a cookie sent in the clear (#1533). An account outside `ALLOWED_EMAILS` is sent to
 `/?error=invite_only`, which the view turns into a sentence; a Google refusal at the exchange is a
 502 whose detail names the human step, as for MCP. `GET /api/auth/me` is the view's "am I signed
-in" probe and `POST /api/auth/logout` deletes the cookie; there is no revocation list. The
-redirect URI is the one already documented below — the web sign-in adds no console entry.
+in" probe and `POST /api/auth/logout` deletes the cookie; there is no revocation list.
+`samesite=lax` still sends the cookie from a sibling subdomain, so the two `POST`s a cookie reaches —
+logout and `POST /api/preferences/{id}/reject` — also answer 403 unless the request's `Origin` is
+the base URL (`auth.require_same_origin`, #1698). The redirect URI is the one already documented below — the web sign-in adds no console entry.
 
 Its settings are `SECRET_KEY`, `ALLOWED_EMAILS`, `GOOGLE_AUTH_REDIRECT_URI` and `RELI_BASE_URL`,
 beside `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Every one is human-provisioned on the
@@ -166,9 +172,12 @@ boot. A `SECRET_KEY` shorter than 32 bytes counts as empty (#1534): a key that s
 brute-forceable tokens, so it closes the sign-in rather than opening it. **Empty `ALLOWED_EMAILS`
 admits nobody.**
 
-**Revoking a connector.** Removing an address from `ALLOWED_EMAILS` is checked again on every
-token issuance in `mcp_oauth.py`, not just at the Google callback, so it also cuts off a connector's
-existing refresh chain — the next refresh exchange is refused and the whole family is deleted. To
+**Revoking a connector.** Removing an address from `ALLOWED_EMAILS` is checked again whenever a
+credential is presented, not just at the Google callback (#1693): `web_session` refuses a session
+cookie and the `/mcp` bearer check refuses an access token whose email has left the list, so a live
+JWT stops working on its next request rather than when it expires. It is also checked on every token
+issuance in `mcp_oauth.py`, so it cuts off a connector's existing refresh chain — the next refresh
+exchange is refused and the whole family is deleted. To
 revoke one connector while leaving the account able to sign in to others,
 `DELETE FROM mcp_refresh_tokens WHERE family_id = '<family_id>'` against `DATABASE_URL`.
 `mcp_refresh_tokens` and `mcp_auth_codes` hold SHA-256 digests of the credentials, not the
@@ -182,8 +191,9 @@ re-check above is what actually ends a chain.
 done:
 
 1. Set the settings on the deploy: `SECRET_KEY` to at least 32 random bytes
-   (`python -c "import secrets; print(secrets.token_urlsafe(48))"`), `ALLOWED_EMAILS` to the
-   owner's Google address, `GOOGLE_AUTH_REDIRECT_URI` to `https://<host>/api/auth/google/callback`.
+   (`python -c "import secrets; print(secrets.token_urlsafe(48))"`), a different one on
+   each environment (#1697), `ALLOWED_EMAILS` to the owner's Google address,
+   `GOOGLE_AUTH_REDIRECT_URI` to `https://<host>/api/auth/google/callback`.
    #1448 found `SECRET_KEY`, `ALLOWED_EMAILS` and `GOOGLE_AUTH_REDIRECT_URI` still set on Railway
    from before the rebuild; a human checks the values, in particular that the redirect URI's path
    is exactly this one.
@@ -196,6 +206,9 @@ done:
    server, registers itself, lands on a Reli-hosted consent page naming the client and where its
    code will be delivered, and the allowlisted account continues through Google sign-in from
    there. Only approve a client the human just registered from a connector they are setting up.
+   Continue on that page binds the flow to the browser with the `__Host-reli_mcp_flow` cookie, so
+   a callback link for it opened in any other browser is a 400 rather than a redirect to the
+   client (#1701).
 4. Open `https://<host>/`, sign in with the allowlisted account, and confirm the tree loads. The
    password that used to stand beside the cookie is gone (#1471), and nothing outside a browser
    needs a way in.
@@ -208,8 +221,8 @@ to trust. The app's own defence against an unauthenticated flood is structural i
 stores a caller without a credential can write to (`mcp_registered_clients`, `mcp_oauth_sessions`,
 `web_oauth_sessions`) evict the row nearest expiry at their cap rather than refusing, a
 registration lives an hour until the owner signs in through it and then as long as its refresh
-family, and a registration body is capped at `MAX_REGISTRATION_BYTES`. What a flood can still do
-is displace an unfinished flow that races it — a set-up or a sign-in started while it runs — and a
+family, and every body under `/oauth/` is capped at `MAX_BODY_BYTES` before it is read whole.
+What a flood can still do is displace an unfinished flow that races it — a set-up or a sign-in started while it runs — and a
 used registration inside its final hour; what it cannot do is outlast itself or reach a connector
 with time left on its refresh family. A request-rate limit, if the owner wants one, is a
 Cloudflare rate-limiting rule on `/oauth/register`, `/oauth/authorize` and `/api/auth/google`: a
@@ -253,7 +266,8 @@ resolution pass notes it in the briefing and the morning conversation says so in
 leaves out (#1516). That is the whole signal — #1484 removed the GitHub Actions watchdog that used
 to read the heartbeats from outside, and nothing replaced it. The heartbeats must never be archived,
 because an archived Thing leaves the tree and the tag lookup, so archiving one hides a missed run
-instead of reporting it.
+instead of reporting it. `update_thing` in `backend/service.py` refuses both ways of doing that —
+archiving a `#ScheduledTask` Thing and a tags write that drops the tag (#1704).
 
 **The fallback, documented and not built.** If claude.ai scheduled tasks prove unreliable — the
 owner notices a night the passes left no trace — the overnight two move to a host cron running
