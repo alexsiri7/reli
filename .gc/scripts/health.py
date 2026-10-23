@@ -58,10 +58,7 @@ class CheckResult:
 @dataclass
 class FixAction:
     description: str
-    commands: list[list[str]]
-
-    def shell_text(self) -> str:
-        return "; ".join(shlex.join(c) for c in self.commands)
+    command: list[str]
 
 @dataclass
 class HealthReport:
@@ -630,16 +627,19 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
             report.warn(f"{rig}: {issue_count} open issues but NO polecats -- work not being picked up")
             fixes.append(FixAction(
                 f"{rig}: mail mayor to sling work",
-                [["gc", "mail", "send", "mayor", "--subject", f"Read {rig} issues",
-                  f"Read the GitHub issues for {rig} and sling work to polecats. "
-                  f"There are {issue_count} open issues and no polecats working."]],
+                ["gc", "mail", "send", "mayor", "--subject", f"Read {rig} issues",
+                 f"Read the GitHub issues for {rig} and sling work to polecats. "
+                 f"There are {issue_count} open issues and no polecats working."],
             ))
         elif issue_count > 0 and polecats_active == 0 and polecats_very_stale > 0:
             report.warn(f"{rig}: all {polecats_very_stale} polecats hung 60m+ -- probably finished or stuck")
-            fixes.append(FixAction(
-                f"{rig}: kill hung polecats so reconciler creates fresh ones",
-                [["tmux", "-L", "gc", "kill-session", "-t", sn] for sn in very_stale_names],
-            ))
+            fixes.extend(
+                FixAction(
+                    f"{rig}: kill hung polecat {sn} so reconciler creates a fresh one",
+                    ["tmux", "-L", "gc", "kill-session", "-t", sn],
+                )
+                for sn in very_stale_names
+            )
         elif issue_count > 0 and polecats_active == 0 and polecats_stale > 0:
             report.warn(
                 f"{rig}: {issue_count} open issues, all {polecats_stale} polecats stale "
@@ -650,8 +650,8 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
             report.warn(f"{rig}: {pr_count} open PRs but no refinery -- PRs not being merged")
             fixes.append(FixAction(
                 f"{rig}: mail refinery to wake and merge",
-                [["gc", "mail", "send", f"{rig}--refinery", "--subject", "PRs waiting",
-                  f"There are {pr_count} open PRs on {rig} waiting for review and merge."]],
+                ["gc", "mail", "send", f"{rig}--refinery", "--subject", "PRs waiting",
+                 f"There are {pr_count} open PRs on {rig} waiting for review and merge."],
             ))
 
         if pr_count > 0 and has_refinery:
@@ -664,7 +664,7 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
                     )
                     fixes.append(FixAction(
                         f"{rig}: kill stuck refinery, reconciler will restart",
-                        [["tmux", "-L", "gc", "kill-session", "-t", f"{rig}--refinery"]],
+                        ["tmux", "-L", "gc", "kill-session", "-t", f"{rig}--refinery"],
                     ))
 
     # Print fixes section
@@ -674,7 +674,7 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
     else:
         for i, f in enumerate(fixes, 1):
             report.info(f"  {i}. {f.description}")
-            report.info(f"     {DIM}$ {f.shell_text()}{RST}")
+            report.info(f"     {DIM}$ {shlex.join(f.command)}{RST}")
         report.info("")
         report.info(f"  {YEL}REMEMBER: IT'S YOUR JOB TO KEEP THINGS FLOWING.{RST}")
         report.info("  Don't just report -- fix it. Run with --fix or take the actions above.")
@@ -683,11 +683,8 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
             report.info("  Applying fixes...")
             for f in fixes:
                 report.info(f"  -> {f.description}")
-                failed = [c for c in f.commands if run_cmd(c).returncode != 0]
-                if not failed:
-                    report.info("    done")
-                for c in failed:
-                    report.info(f"    failed: {shlex.join(c)}")
+                r = run_cmd(f.command)
+                report.info("    done" if r.returncode == 0 else "    failed")
 
     report.fixes.extend(fixes)
 

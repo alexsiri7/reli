@@ -440,40 +440,8 @@ class TestPipelineFlow(unittest.TestCase):
     @patch("health.gh_issue_list", return_value=[{"number": 1, "title": "t", "url": "u"}])
     @patch("health.get_repo_slug", return_value="owner/repo")
     @patch("os.path.isdir", return_value=True)
-    def test_fix_kills_each_hung_polecat(self, mock_isdir, mock_slug, mock_issues, mock_prs,
-                                         mock_has, mock_run):
-        mock_run.return_value = _cp()
-        now = 1000000
-        hung = now - health.VERY_STALE_THRESHOLD - 1
-        sessions = [
-            {"name": f"gascity--polecat-{i}", "activity": hung, "created": hung,
-             "pane_dead": False, "pane_pid": "1"}
-            for i in (1, 2)
-        ]
-        report = health.HealthReport()
-        with patch.object(health, "RIGS", ["gascity"]), \
-                patch("health.tmux_sessions", return_value=sessions):
-            health.check_pipeline_flow(report, fix=True, city="/tmp/fake", now=now)
-        self.assertEqual(
-            [c[0][0] for c in mock_run.call_args_list],
-            [["tmux", "-L", "gc", "kill-session", "-t", "gascity--polecat-1"],
-             ["tmux", "-L", "gc", "kill-session", "-t", "gascity--polecat-2"]],
-        )
-        infos = [r.message for r in report.results if r.level == "info"]
-        self.assertTrue(any(
-            "$ tmux -L gc kill-session -t gascity--polecat-1; "
-            "tmux -L gc kill-session -t gascity--polecat-2" in m for m in infos
-        ))
-        self.assertIn("    done", infos)
-
-    @patch("health.run_cmd")
-    @patch("health.tmux_has_session", return_value=False)
-    @patch("health.gh_pr_list", return_value=[])
-    @patch("health.gh_issue_list", return_value=[{"number": 1, "title": "t", "url": "u"}])
-    @patch("health.get_repo_slug", return_value="owner/repo")
-    @patch("os.path.isdir", return_value=True)
-    def test_fix_reports_which_polecat_kill_failed(self, mock_isdir, mock_slug, mock_issues,
-                                                   mock_prs, mock_has, mock_run):
+    def test_fix_kills_and_reports_each_hung_polecat(self, mock_isdir, mock_slug, mock_issues,
+                                                     mock_prs, mock_has, mock_run):
         mock_run.side_effect = [_cp(returncode=1), _cp(), _cp(returncode=1)]
         now = 1000000
         hung = now - health.VERY_STALE_THRESHOLD - 1
@@ -486,12 +454,22 @@ class TestPipelineFlow(unittest.TestCase):
         with patch.object(health, "RIGS", ["gascity"]), \
                 patch("health.tmux_sessions", return_value=sessions):
             health.check_pipeline_flow(report, fix=True, city="/tmp/fake", now=now)
-        self.assertEqual(mock_run.call_count, 3)
+        self.assertEqual(
+            [c[0][0] for c in mock_run.call_args_list],
+            [["tmux", "-L", "gc", "kill-session", "-t", f"gascity--polecat-{i}"]
+             for i in (1, 2, 3)],
+        )
         infos = [r.message for r in report.results if r.level == "info"]
-        self.assertIn("    failed: tmux -L gc kill-session -t gascity--polecat-1", infos)
-        self.assertNotIn("    failed: tmux -L gc kill-session -t gascity--polecat-2", infos)
-        self.assertIn("    failed: tmux -L gc kill-session -t gascity--polecat-3", infos)
-        self.assertNotIn("    done", infos)
+        for i in (1, 2, 3):
+            self.assertTrue(any(
+                f"$ tmux -L gc kill-session -t gascity--polecat-{i}" in m for m in infos
+            ))
+        applied = infos[infos.index("  Applying fixes..."):]
+        outcomes = [applied[applied.index(f"  -> {d}") + 1] for d in (
+            f"gascity: kill hung polecat gascity--polecat-{i} so reconciler creates a fresh one"
+            for i in (1, 2, 3)
+        )]
+        self.assertEqual(outcomes, ["    failed", "    done", "    failed"])
 
 
 class TestForemanDispatch(unittest.TestCase):
