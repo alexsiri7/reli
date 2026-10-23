@@ -2,10 +2,11 @@
 
 Five tables, each a bounded store of short-lived rows keyed by an opaque string: the clients that
 registered themselves, the MCP sign-ins in flight, the authorization codes waiting to be exchanged,
-the refresh tokens issued — consumed ones kept until they expire, so a replay is recognised — and
-the web view's sign-ins in flight. None of it is a Thing and nothing here touches the graph, so
-nothing here is journalled — the journal records mutations of Things and relationships, and these
-rows are the authorization server's bookkeeping (docs/auth-recovery.md §6.1).
+the refresh tokens issued — consumed ones kept, without the account they were issued to, until they
+expire, so a replay is recognised — and the web view's sign-ins in flight. None of it is a Thing
+and nothing here touches the graph, so nothing here is journalled — the journal records mutations of
+Things and relationships, and these rows are the authorization server's bookkeeping
+(docs/auth-recovery.md §6.1).
 
 Every access purges expired rows first, so a store never holds anything past its ``expires_at``,
 and no store grows past its cap. At the cap the stores part ways: the three a caller without any
@@ -19,10 +20,10 @@ redeemable: a consumed token stays until it expires, and counts against the cap 
 
 Authorization codes and refresh tokens are stored as the SHA-256 digest of the value handed to the
 client and looked up by the digest of the value presented (#1530), so a reader of the database or a
-backup holds nothing redeemable, and the plaintext is never read back. Client secrets are stored in
-plaintext, as they were before the v4 rebuild: registration is single-tenant and a secret is
-useless without an authorization code or refresh token bound to it, which the same reader cannot
-present.
+backup holds nothing redeemable, and the plaintext is never read back. A client secret is held the
+same way (#1715), as its digest in ``mcp_registered_clients.client_secret``; :mod:`backend.mcp_oauth`
+computes and compares it, because that store is keyed by the public ``client_id`` and so cannot
+hash the secret for it.
 """
 
 from __future__ import annotations
@@ -116,14 +117,15 @@ class McpRefreshTokenRecord(SQLModel, table=True):
     Live until one ``grant_type=refresh_token`` exchange consumes it, then kept until it expires so
     that presenting it again is recognised as a replay and revokes its family — every token rotated
     from the same authorization-code exchange, which all share ``family_id``. Keyed by the token's
-    digest, not the token.
+    digest, not the token. Consuming a token nulls ``subject`` and ``email`` (#1715): recognising a
+    replay needs neither, so a consumed row no longer says whose it was.
     """
 
     __tablename__ = "mcp_refresh_tokens"
 
     refresh_token: str = _text(primary_key=True)
-    subject: str = _text()
-    email: str = _text()
+    subject: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    email: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     client_id: str = _text()
     scope: str = _text()
     family_id: str = _text()
@@ -288,7 +290,10 @@ def consume_refresh_token(session: Session, refresh_token: str) -> dict[str, Any
     """The live refresh token under *refresh_token* as a dict, marked consumed in the same statement.
 
     ``None`` when it is gone, expired, or already consumed — a replay, or a concurrent exchange
-    that won. The row is kept, so :func:`cleanup_and_get` still finds it with ``consumed_at`` set.
+    that won. The row is kept, so :func:`cleanup_and_get` still finds it with ``consumed_at`` set,
+    but the same statement nulls its ``subject`` and ``email``: the dict returned carries the
+    identity the token was issued to, read from the row as it stood before the update, and the
+    stored row no longer does.
 
     This is the one store function that does not commit: the rotation commits together with its
     replacement in :func:`cleanup_and_store`, and nothing may commit in between. A concurrent
@@ -299,13 +304,23 @@ def consume_refresh_token(session: Session, refresh_token: str) -> dict[str, Any
     refresh_token = _stored_key(mcp_refresh_tokens, refresh_token)
     _purge_expired(session, mcp_refresh_tokens)
     table = McpRefreshTokenRecord.__table__  # type: ignore[attr-defined]
+    before = table.alias("before")
     now = datetime.now(UTC)
     row = (
         session.execute(
             update(McpRefreshTokenRecord)
-            .where(table.c.refresh_token == refresh_token, table.c.consumed_at.is_(None), table.c.expires_at > now)
-            .values(consumed_at=now)
-            .returning(*table.c)
+            .where(
+                table.c.refresh_token == before.c.refresh_token,
+                table.c.refresh_token == refresh_token,
+                table.c.consumed_at.is_(None),
+                table.c.expires_at > now,
+            )
+            .values(consumed_at=now, subject=None, email=None)
+            .returning(
+                *(column for column in table.c if column.name not in ("subject", "email")),
+                before.c.subject,
+                before.c.email,
+            )
         )
         .mappings()
         .one_or_none()

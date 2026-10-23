@@ -960,6 +960,20 @@ def test_a_wrong_secret_does_not_consume_the_code(client, session):
     assert right.status_code == 200, right.text
 
 
+def test_a_client_secret_is_stored_as_its_digest_which_does_not_authenticate(client, session):
+    registered = _register(client, auth_method="client_secret_post")
+    stored = cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["client_secret"]
+    assert stored == credential_digest(registered["client_secret"])
+    code = _seed_code(session, registered["client_id"], "verifier")
+
+    response = _token(
+        client, code=code, client_id=registered["client_id"], code_verifier="verifier", client_secret=stored
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"] == "invalid_client"
+
+
 def test_a_wrong_secret_does_not_consume_the_refresh_token(client, session):
     registered = _register(client, auth_method="client_secret_post")
     code = _seed_code(session, registered["client_id"], "verifier")
@@ -1043,6 +1057,8 @@ def test_a_refresh_token_family_starts_at_the_code_exchange_and_survives_rotatio
     assert consumed["family_id"] == live["family_id"]
     assert consumed["consumed_at"] is not None
     assert live["consumed_at"] is None
+    assert (consumed["subject"], consumed["email"]) == (None, None)
+    assert (live["subject"], live["email"]) == ("1234567890", "owner@example.com")
 
     other_code = _seed_code(session, registered["client_id"], "verifier", code="other-code")
     other = _token(client, code=other_code, client_id=registered["client_id"], code_verifier="verifier").json()

@@ -49,6 +49,7 @@ from .oauth_state import (
     cleanup_and_pop,
     cleanup_and_store,
     consume_refresh_token,
+    credential_digest,
     extend_expiry,
     mcp_auth_codes,
     mcp_oauth_sessions,
@@ -286,7 +287,7 @@ async def oauth_register(request: Request) -> JSONResponse:
     client_secret = secrets.token_urlsafe(32)
     now = datetime.now(UTC)
     client = {
-        "client_secret": client_secret,
+        "client_secret": credential_digest(client_secret),
         "redirect_uris": redirect_uris,
         "client_name": metadata.client_name,
         "grant_types": metadata.grant_types,
@@ -478,7 +479,7 @@ def _validate_client_secret(session: Session, client_id: str, client_secret: str
         raise _TokenError(400, "invalid_client", "Unknown client_id: register again via POST /oauth/register")
     if client["token_endpoint_auth_method"] == "none":
         return
-    if not client_secret or not secrets.compare_digest(client_secret, client["client_secret"]):
+    if not client_secret or not secrets.compare_digest(credential_digest(client_secret), client["client_secret"]):
         raise _TokenError(401, "invalid_client", "Invalid client credentials: re-register the connector")
 
 
