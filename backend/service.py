@@ -52,6 +52,7 @@ __all__ = [
     "EntityType",
     "FieldTooLarge",
     "Operation",
+    "StaleWrite",
     "ThingNotFound",
     "add_preference_evidence",
     "backfill_checkin_dates",
@@ -68,6 +69,10 @@ __all__ = [
 
 class ThingNotFound(LookupError):
     """Raised when a mutation names a Thing or relationship that does not exist."""
+
+
+class StaleWrite(ValueError):
+    """Raised by :func:`update_thing` when ``expected_updated_at`` no longer matches the Thing."""
 
 
 class DuplicateRelationship(ValueError):
@@ -181,8 +186,17 @@ def _journalled(
     return entry
 
 
-def _require_thing(session: Session, thing_id: uuid.UUID) -> ThingRecord:
-    thing = session.get(ThingRecord, thing_id)
+def _require_thing(session: Session, thing_id: uuid.UUID, *, lock: bool = False) -> ThingRecord:
+    if lock:
+        # populate_existing: a copy already in the identity map would otherwise keep its unlocked values.
+        thing = session.exec(
+            select(ThingRecord)
+            .where(col(ThingRecord.id) == thing_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+    else:
+        thing = session.get(ThingRecord, thing_id)
     if thing is None:
         raise ThingNotFound(f"no Thing with id {thing_id}")
     return thing
@@ -300,6 +314,7 @@ def update_thing(
     checkin_date: date | None = None,
     priority: float | None = None,
     active: bool | None = None,
+    expected_updated_at: datetime | None = None,
 ) -> ThingRecord:
     """Update the fields that are given and journal the change as one ``update`` entry.
 
@@ -309,9 +324,22 @@ def update_thing(
 
     A field left as ``None`` is not touched, which means this function cannot clear a nullable
     field. Whoever needs an explicit clear adds it.
+
+    The row is locked for the call, so a concurrent writer to the same Thing waits rather than
+    interleaving (#1705). A union computed from an earlier read can still be stale; passing that
+    read's ``updated_at`` as *expected_updated_at* refuses the write with :class:`StaleWrite`,
+    writing nothing, when the Thing has changed since.
     """
     _check_thing_fields(title=title, description=description, notes=notes, tags=tags, urls=urls, priority=priority)
-    thing = _require_thing(session, thing_id)
+    thing = _require_thing(session, thing_id, lock=True)
+    if expected_updated_at is not None:
+        if expected_updated_at.utcoffset() is None:
+            raise ValueError("expected_updated_at must carry the UTC offset get_thing returns with updated_at")
+        if expected_updated_at != thing.updated_at:
+            raise StaleWrite(
+                f"Thing {thing.id} changed at {thing.updated_at.isoformat()} after the read this write was "
+                "based on; read it again and reapply the change"
+            )
     _check_heartbeat_kept(thing, tags=tags, active=active)
     before = _snapshot(thing)
 
@@ -743,9 +771,9 @@ def record_preference(
     return preference
 
 
-def _require_preference(session: Session, preference_id: uuid.UUID) -> ThingRecord:
+def _require_preference(session: Session, preference_id: uuid.UUID, *, lock: bool = False) -> ThingRecord:
     """A Thing that is not a preference exists, so ``ThingNotFound`` would be a lie."""
-    preference = _require_thing(session, preference_id)
+    preference = _require_thing(session, preference_id, lock=lock)
     if PREFERENCE_TAG not in preference.tags:
         raise ValueError(f"Thing {preference_id} is not tagged {PREFERENCE_TAG}")
     return preference
@@ -802,9 +830,10 @@ def reject_preference(session: Session, *, actor: Actor, preference_id: uuid.UUI
 
     The preference is not archived and not deleted: a rejected preference stays readable, both so
     the user can see it and so the learning pass can check it before deriving the same ground again.
-    Rejecting an already-rejected preference changes nothing and journals nothing.
+    Rejecting an already-rejected preference changes nothing and journals nothing. The row is read
+    locked, so a concurrent tag write is extended rather than overwritten (#1705).
     """
-    preference = _require_preference(session, preference_id)
+    preference = _require_preference(session, preference_id, lock=True)
     if REJECTED_TAG in preference.tags:
         return preference
 

@@ -229,6 +229,43 @@ def test_update_thing_replaces_collections_rather_than_merging(tools):
     assert updated["notes"] == {"two": "second"}
 
 
+def test_update_thing_refuses_a_write_based_on_a_stale_read(tools):
+    """#1705: the updated_at a session read round-trips through JSON as the token it passes back."""
+    assert "expected_updated_at" in _tool_schemas()["update_thing"]["properties"]
+    assert "expected_updated_at" not in _tool_schemas()["update_thing"].get("required", [])
+    thing = create_thing(actor="claude_interactive", title="t", tags=["a"])
+    read_at = thing["updated_at"]
+    update_thing(actor="claude_scheduled", thing_id=uuid.UUID(thing["id"]), tags=["a", "b"])
+
+    with pytest.raises(ToolError, match=thing["id"]):
+        asyncio.run(
+            reli_mcp.call_tool(
+                "update_thing",
+                {
+                    "actor": "claude_interactive",
+                    "thing_id": thing["id"],
+                    "tags": ["a", "c"],
+                    "expected_updated_at": read_at,
+                },
+            )
+        )
+
+    current = get_thing(uuid.UUID(thing["id"]))["thing"]
+    assert current["tags"] == ["a", "b"]
+    asyncio.run(
+        reli_mcp.call_tool(
+            "update_thing",
+            {
+                "actor": "claude_interactive",
+                "thing_id": thing["id"],
+                "tags": ["a", "b", "c"],
+                "expected_updated_at": current["updated_at"],
+            },
+        )
+    )
+    assert get_thing(uuid.UUID(thing["id"]))["thing"]["tags"] == ["a", "b", "c"]
+
+
 def test_archive_thing_deactivates_without_deleting(tools):
     thing = create_thing(actor="claude_interactive", title="done with this")
     before = _journal_count(tools)
