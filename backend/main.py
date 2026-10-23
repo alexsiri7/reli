@@ -30,6 +30,24 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 
+
+def _strip_query_string(record: logging.LogRecord) -> bool:
+    """Cuts the query string from uvicorn's access-log line, leaving the path (#1713).
+
+    Google delivers the sign-in's ``code`` and ``state`` on the callback's URL, and uvicorn logs the
+    full request target of every request to a log whose retention Reli does not control. Its
+    protocols all log ``(client, method, target, http_version, status)``.
+    """
+    if isinstance(record.args, tuple) and len(record.args) == 5:
+        client, method, target, http_version, status = record.args
+        if isinstance(target, str):
+            record.args = (client, method, target.partition("?")[0], http_version, status)
+    return True
+
+
+# uvicorn configures its loggers before it imports the app, so the filter outlives that setup.
+logging.getLogger("uvicorn.access").addFilter(_strip_query_string)
+
 init_sentry()
 
 _ALEMBIC_INI = pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
