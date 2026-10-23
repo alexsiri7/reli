@@ -1,7 +1,7 @@
 # Resolution of Issue #1378
 
 **Date**: 2026-09-03
-**Issue**: Deploy down: https://reli.interstellarai.net returning HTTP 000
+**Issue**: Deploy down: https://<reli-host> returning HTTP 000
 **Status**: RESOLVED (false positive)
 
 ## Summary
@@ -43,7 +43,7 @@ issues #1358 and #1361 track a separate lag-detection alert type; #1178/#1179 co
 
 ## Evidence
 
-- **Site confirmed live** — `curl https://reli.interstellarai.net/healthz` returns HTTP 200 `{"status":"ok","service":"reli"}` at time of investigation.
+- **Site confirmed live** — `curl https://<reli-host>/healthz` returns HTTP 200 `{"status":"ok","service":"reli"}` at time of investigation.
 - **No code changes on 2026-09-02 to 2026-09-03** that would trigger a crash. Last deployment was commit `5bf68cc` (docs: add resolution for false positive deploy alert #1376), which is non-breaking documentation only.
 - **HTTP 000 = connection refused** — consistent with Railway container restart (port not yet bound), not a crash loop or config error.
 - **Detection at 03:02:01 UTC** — matches the pattern of Railway periodic container restarts occurring independently of deployments.
