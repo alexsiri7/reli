@@ -474,22 +474,23 @@ class TestPipelineFlow(unittest.TestCase):
     @patch("os.path.isdir", return_value=True)
     def test_fix_reports_which_polecat_kill_failed(self, mock_isdir, mock_slug, mock_issues,
                                                    mock_prs, mock_has, mock_run):
-        mock_run.side_effect = [_cp(returncode=1), _cp()]
+        mock_run.side_effect = [_cp(returncode=1), _cp(), _cp(returncode=1)]
         now = 1000000
         hung = now - health.VERY_STALE_THRESHOLD - 1
         sessions = [
             {"name": f"gascity--polecat-{i}", "activity": hung, "created": hung,
              "pane_dead": False, "pane_pid": "1"}
-            for i in (1, 2)
+            for i in (1, 2, 3)
         ]
         report = health.HealthReport()
         with patch.object(health, "RIGS", ["gascity"]), \
                 patch("health.tmux_sessions", return_value=sessions):
             health.check_pipeline_flow(report, fix=True, city="/tmp/fake", now=now)
-        self.assertEqual(mock_run.call_count, 2)
+        self.assertEqual(mock_run.call_count, 3)
         infos = [r.message for r in report.results if r.level == "info"]
         self.assertIn("    failed: tmux -L gc kill-session -t gascity--polecat-1", infos)
         self.assertNotIn("    failed: tmux -L gc kill-session -t gascity--polecat-2", infos)
+        self.assertIn("    failed: tmux -L gc kill-session -t gascity--polecat-3", infos)
         self.assertNotIn("    done", infos)
 
 
