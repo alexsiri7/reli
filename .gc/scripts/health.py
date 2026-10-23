@@ -58,7 +58,10 @@ class CheckResult:
 @dataclass
 class FixAction:
     description: str
-    command: str
+    commands: list[list[str]]
+
+    def shell_text(self) -> str:
+        return "; ".join(shlex.join(c) for c in self.commands)
 
 @dataclass
 class HealthReport:
@@ -90,17 +93,14 @@ class HealthReport:
     def section(self, title: str) -> None:
         self.results.append(CheckResult("section", title))
 
-    def add_fix(self, description: str, command: str) -> None:
-        self.fixes.append(FixAction(description, command))
 
 
 # ---------------------------------------------------------------------------
 # Subprocess helpers
 # ---------------------------------------------------------------------------
 
-def run_cmd(cmd: list[str] | str, timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> subprocess.CompletedProcess:
+def run_cmd(args: list[str], timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> subprocess.CompletedProcess:
     """Run a command and return the CompletedProcess."""
-    args = cmd if isinstance(cmd, list) else shlex.split(cmd)
     try:
         return subprocess.run(
             args, shell=False, capture_output=True, text=True,
@@ -112,13 +112,13 @@ def run_cmd(cmd: list[str] | str, timeout: int = CMD_TIMEOUT, cwd: Optional[str]
         return subprocess.CompletedProcess(args, 1, stdout="", stderr=str(e))
 
 
-def run_cmd_output(cmd: list[str] | str, timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> str:
+def run_cmd_output(cmd: list[str], timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> str:
     """Run a command and return stripped stdout (empty string on failure)."""
     r = run_cmd(cmd, timeout=timeout, cwd=cwd)
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
-def json_cmd(cmd: str, timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> list | dict:
+def json_cmd(cmd: list[str], timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) -> list | dict:
     """Run a command, parse stdout as JSON, return [] on failure."""
     r = run_cmd(cmd, timeout=timeout, cwd=cwd)
     if r.returncode != 0 or not r.stdout.strip():
@@ -131,34 +131,40 @@ def json_cmd(cmd: str, timeout: int = CMD_TIMEOUT, cwd: Optional[str] = None) ->
 
 def gh_pr_list(repo: str, state: str = "open") -> list:
     """List GitHub PRs for *repo* (owner/name)."""
-    return json_cmd(f"gh pr list -R {repo} --state {state} --json number,headRefName", timeout=15)
+    return json_cmd(
+        ["gh", "pr", "list", "-R", repo, "--state", state, "--json", "number,headRefName"],
+        timeout=15,
+    )
 
 
 def gh_issue_list(repo: str, state: str = "open") -> list:
     """List GitHub issues for *repo*."""
-    return json_cmd(f"gh issue list -R {repo} --state {state} --json number,title,url", timeout=15)
+    return json_cmd(
+        ["gh", "issue", "list", "-R", repo, "--state", state, "--json", "number,title,url"],
+        timeout=15,
+    )
 
 
 def bd_list(type_: str | None = None, status: str | None = None,
             assignee: str | None = None, cwd: str | None = None,
             limit: int = 0) -> list:
     """Wrapper around ``bd list --json``."""
-    parts = ["bd list --json", f"--limit={limit}"]
+    parts = ["bd", "list", "--json", f"--limit={limit}"]
     if type_:
         parts.append(f"--type={type_}")
     if status:
         parts.append(f"--status={status}")
     if assignee:
         parts.append(f"--assignee={assignee}")
-    return json_cmd(" ".join(parts), timeout=15, cwd=cwd) or []
+    return json_cmd(parts, timeout=15, cwd=cwd) or []
 
 
 def tmux_sessions() -> list[dict]:
     """Return list of dicts with keys: name, activity, created, pane_dead, pane_pid."""
-    r = run_cmd(
-        "tmux -L gc list-sessions -F "
-        "'#{session_name} #{session_activity} #{session_created} #{pane_dead} #{pane_pid}'"
-    )
+    r = run_cmd([
+        "tmux", "-L", "gc", "list-sessions", "-F",
+        "#{session_name} #{session_activity} #{session_created} #{pane_dead} #{pane_pid}",
+    ])
     if r.returncode != 0:
         return []
     sessions = []
@@ -178,7 +184,7 @@ def tmux_sessions() -> list[dict]:
 
 def tmux_capture_tail(session_name: str, lines: int = 8) -> str:
     """Capture last *lines* from a tmux pane."""
-    r = run_cmd(f"tmux -L gc capture-pane -t {session_name} -p")
+    r = run_cmd(["tmux", "-L", "gc", "capture-pane", "-t", session_name, "-p"])
     if r.returncode != 0:
         return ""
     all_lines = r.stdout.splitlines()
@@ -186,11 +192,11 @@ def tmux_capture_tail(session_name: str, lines: int = 8) -> str:
 
 
 def tmux_has_session(name: str) -> bool:
-    return run_cmd(f"tmux -L gc has-session -t {name}").returncode == 0
+    return run_cmd(["tmux", "-L", "gc", "has-session", "-t", name]).returncode == 0
 
 
 def tmux_session_names() -> list[str]:
-    r = run_cmd("tmux -L gc list-sessions -F '#{session_name}'")
+    r = run_cmd(["tmux", "-L", "gc", "list-sessions", "-F", "#{session_name}"])
     if r.returncode != 0:
         return []
     return sorted(r.stdout.strip().splitlines())
@@ -205,7 +211,7 @@ def process_alive(pid: str) -> bool:
 
 
 def process_cpu(pid: str) -> Optional[int]:
-    r = run_cmd(f"ps -p {pid} -o %cpu=")
+    r = run_cmd(["ps", "-p", pid, "-o", "%cpu="])
     if r.returncode != 0 or not r.stdout.strip():
         return None
     try:
@@ -216,7 +222,7 @@ def process_cpu(pid: str) -> Optional[int]:
 
 def get_repo_slug(rig_dir: str) -> str:
     """Extract owner/repo from git remote."""
-    url = run_cmd_output(f"git -C {rig_dir} remote get-url origin")
+    url = run_cmd_output(["git", "-C", rig_dir, "remote", "get-url", "origin"])
     if not url:
         return ""
     # Handle both https and ssh urls
@@ -232,7 +238,7 @@ def get_repo_slug(rig_dir: str) -> str:
 def check_controller(report: HealthReport, fix: bool) -> None:
     """Section 0: Controller liveness."""
     report.section("CONTROLLER")
-    r = run_cmd("gc status")
+    r = run_cmd(["gc", "status"])
     status_out = r.stdout + r.stderr
     is_running = "Controller: supervisor" in status_out and "city stopped" not in status_out
     if is_running:
@@ -241,9 +247,9 @@ def check_controller(report: HealthReport, fix: bool) -> None:
         report.fail("Controller not running")
         if fix:
             report.info("       -> starting city...")
-            run_cmd("gc start", timeout=60)
+            run_cmd(["gc", "start"], timeout=60)
             # Re-check
-            r2 = run_cmd("gc status")
+            r2 = run_cmd(["gc", "status"])
             out2 = r2.stdout + r2.stderr
             if "Controller: supervisor" in out2 and "city stopped" not in out2:
                 report.ok("City started successfully")
@@ -350,7 +356,7 @@ def check_dolt(report: HealthReport, fix: bool, city: str = CITY_ROOT) -> None:
     # Auto-repair
     if journal_corrupt and fix:
         report.info("       -> running automated dolt repair...")
-        r = run_cmd(f"{city}/scripts/dolt-repair.sh", timeout=120)
+        r = run_cmd([f"{city}/scripts/dolt-repair.sh"], timeout=120)
         if r.returncode == 0:
             report.ok("Dolt repair completed -- agents restarting")
             report.info("")
@@ -362,7 +368,7 @@ def check_dolt(report: HealthReport, fix: bool, city: str = CITY_ROOT) -> None:
 
     if not journal_corrupt:
         # Write health test via bd
-        bd_r = run_cmd("bd list --type=session --json --limit=1", timeout=15)
+        bd_r = run_cmd(["bd", "list", "--type=session", "--json", "--limit=1"], timeout=15)
         if bd_r.returncode != 0:
             err = bd_r.stdout + bd_r.stderr
             if re.search(r"checksum error", err, re.IGNORECASE):
@@ -414,7 +420,7 @@ def check_agents(report: HealthReport, fix: bool, now: int | None = None,
             dead += 1
             if fix and name in CRITICAL_AGENTS:
                 report.info("       -> restarting via gc nudge...")
-                run_cmd(f"tmux -L gc kill-session -t {name}")
+                run_cmd(["tmux", "-L", "gc", "kill-session", "-t", name])
             continue
 
         # Process gone
@@ -436,7 +442,7 @@ def check_agents(report: HealthReport, fix: bool, now: int | None = None,
             quota += 1
             if fix:
                 report.info("       -> killing quota-blocked session")
-                run_cmd(f"tmux -L gc kill-session -t {name}")
+                run_cmd(["tmux", "-L", "gc", "kill-session", "-t", name])
             continue
 
         # Auth check
@@ -479,7 +485,7 @@ def check_critical_agents(report: HealthReport, fix: bool) -> None:
         if tmux_has_session(agent):
             report.ok(f"{agent} present")
         else:
-            session_list = run_cmd_output("gc session list")
+            session_list = run_cmd_output(["gc", "session", "list"])
             if session_list and re.search(rf"{re.escape(agent)}.*(awake|active|creating)", session_list):
                 report.ok(f"{agent} present (reconciler-managed)")
             else:
@@ -493,7 +499,7 @@ def check_session_bead_collisions(report: HealthReport, fix: bool, city: str = C
     if not fix:
         return
 
-    logs = run_cmd_output("gc supervisor logs")
+    logs = run_cmd_output(["gc", "supervisor", "logs"])
     collision_count = len(re.findall(
         r"session.*alias already exists|session.*name already exists", logs
     ))
@@ -534,7 +540,7 @@ def check_session_bead_collisions(report: HealthReport, fix: bool, city: str = C
                 bead_id = bead.get("id", "")
                 if bead_id:
                     run_cmd(
-                        f'bd close {bead_id} --reason "health.py: clearing bare session bead"',
+                        ["bd", "close", bead_id, "--reason", "health.py: clearing bare session bead"],
                         cwd=city,
                     )
         report.ok("Cleaned bare session beads -- controller should recover on next tick")
@@ -548,19 +554,16 @@ def check_delivery(report: HealthReport, city: str = CITY_ROOT) -> None:
         if not os.path.isdir(os.path.join(rig_dir, ".git")):
             continue
         commits_out = run_cmd_output(
-            f'git -C {rig_dir} log --oneline --since="1 hour ago" master'
+            ["git", "-C", rig_dir, "log", "--oneline", "--since=1 hour ago", "master"]
         )
         commit_count = len(commits_out.splitlines()) if commits_out else 0
         branches_out = run_cmd_output(
-            f"git -C {rig_dir} branch -r --no-merged master 2>/dev/null | grep -c 'origin/'"
+            ["git", "-C", rig_dir, "branch", "-r", "--no-merged", "master"]
         )
-        try:
-            branch_count = int(branches_out)
-        except ValueError:
-            branch_count = 0
+        branch_count = sum("origin/" in line for line in branches_out.splitlines())
 
         if commit_count > 0:
-            latest = run_cmd_output(f"git -C {rig_dir} log --oneline -1 master")
+            latest = run_cmd_output(["git", "-C", rig_dir, "log", "--oneline", "-1", "master"])
             report.ok(
                 f"{rig}: {commit_count} commits merged, {branch_count} unmerged branches -- latest: {latest}"
             )
@@ -627,16 +630,15 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
             report.warn(f"{rig}: {issue_count} open issues but NO polecats -- work not being picked up")
             fixes.append(FixAction(
                 f"{rig}: mail mayor to sling work",
-                f"gc mail send mayor --subject 'Read {rig} issues' "
-                f"'Read the GitHub issues for {rig} and sling work to polecats. "
-                f"There are {issue_count} open issues and no polecats working.'"
+                [["gc", "mail", "send", "mayor", "--subject", f"Read {rig} issues",
+                  f"Read the GitHub issues for {rig} and sling work to polecats. "
+                  f"There are {issue_count} open issues and no polecats working."]],
             ))
         elif issue_count > 0 and polecats_active == 0 and polecats_very_stale > 0:
             report.warn(f"{rig}: all {polecats_very_stale} polecats hung 60m+ -- probably finished or stuck")
-            kill_cmds = "; ".join(f"tmux -L gc kill-session -t {sn}" for sn in very_stale_names)
             fixes.append(FixAction(
                 f"{rig}: kill hung polecats so reconciler creates fresh ones",
-                kill_cmds,
+                [["tmux", "-L", "gc", "kill-session", "-t", sn] for sn in very_stale_names],
             ))
         elif issue_count > 0 and polecats_active == 0 and polecats_stale > 0:
             report.warn(
@@ -648,8 +650,8 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
             report.warn(f"{rig}: {pr_count} open PRs but no refinery -- PRs not being merged")
             fixes.append(FixAction(
                 f"{rig}: mail refinery to wake and merge",
-                f"gc mail send {rig}--refinery --subject 'PRs waiting' "
-                f"'There are {pr_count} open PRs on {rig} waiting for review and merge.'"
+                [["gc", "mail", "send", f"{rig}--refinery", "--subject", "PRs waiting",
+                  f"There are {pr_count} open PRs on {rig} waiting for review and merge."]],
             ))
 
         if pr_count > 0 and has_refinery:
@@ -662,7 +664,7 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
                     )
                     fixes.append(FixAction(
                         f"{rig}: kill stuck refinery, reconciler will restart",
-                        f"tmux -L gc kill-session -t {rig}--refinery",
+                        [["tmux", "-L", "gc", "kill-session", "-t", f"{rig}--refinery"]],
                     ))
 
     # Print fixes section
@@ -672,7 +674,7 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
     else:
         for i, f in enumerate(fixes, 1):
             report.info(f"  {i}. {f.description}")
-            report.info(f"     {DIM}$ {f.command}{RST}")
+            report.info(f"     {DIM}$ {f.shell_text()}{RST}")
         report.info("")
         report.info(f"  {YEL}REMEMBER: IT'S YOUR JOB TO KEEP THINGS FLOWING.{RST}")
         report.info("  Don't just report -- fix it. Run with --fix or take the actions above.")
@@ -681,8 +683,8 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
             report.info("  Applying fixes...")
             for f in fixes:
                 report.info(f"  -> {f.description}")
-                r = run_cmd(f.command)
-                report.info("    done" if r.returncode == 0 else "    failed")
+                ok = all([run_cmd(c).returncode == 0 for c in f.commands])
+                report.info("    done" if ok else "    failed")
 
     report.fixes.extend(fixes)
 
@@ -755,17 +757,17 @@ def _check_orphaned_beads(report: HealthReport, rig: str, rig_dir: str,
 
         if branch:
             has_remote = run_cmd_output(
-                f"git ls-remote --heads origin {branch} | head -1", timeout=10, cwd=rig_dir
+                ["git", "ls-remote", "--heads", "origin", "--", branch], timeout=10, cwd=rig_dir
             )
             if has_remote:
-                r = run_cmd(f'bd update {bead_id} --status=open --assignee=""', timeout=10, cwd=rig_dir)
+                r = run_cmd(["bd", "update", bead_id, "--status=open", "--assignee="], timeout=10, cwd=rig_dir)
                 if r.returncode == 0:
                     report.ok(f"{rig}: reset orphaned {bead_id} to pool (branch {branch} on origin)")
                 else:
                     report.warn(f"{rig}: failed to reset {bead_id}")
             # If branch NOT on origin, leave for witness to salvage
         else:
-            r = run_cmd(f'bd update {bead_id} --status=open --assignee=""', timeout=10, cwd=rig_dir)
+            r = run_cmd(["bd", "update", bead_id, "--status=open", "--assignee="], timeout=10, cwd=rig_dir)
             if r.returncode == 0:
                 report.ok(f"{rig}: reset orphaned {bead_id} to pool (no branch)")
             else:
@@ -802,10 +804,11 @@ def _check_untracked_branches(report: HealthReport, rig: str, rig_dir: str,
 
     if untracked > 0:
         report.warn(f"{rig}: {untracked} unmerged branch(es) with no tracking bead")
-        run_cmd(
-            f'gc nudge mayor "FLOW CHECK: {rig} has {untracked} unmerged branch(es) on origin '
-            f'with no work bead tracking them. Check if they should be adopted or cleaned up."'
-        )
+        run_cmd([
+            "gc", "nudge", "mayor",
+            f"FLOW CHECK: {rig} has {untracked} unmerged branch(es) on origin "
+            "with no work bead tracking them. Check if they should be adopted or cleaned up.",
+        ])
 
 
 def _check_beadless_prs(report: HealthReport, rig: str, rig_dir: str, repo: str,
@@ -832,11 +835,12 @@ def _check_beadless_prs(report: HealthReport, rig: str, rig_dir: str, repo: str,
 
     if beadless_prs > 0:
         report.warn(f"{rig}: {beadless_prs} of {pr_count} open PR(s) have NO refinery bead: {beadless_list}")
-        run_cmd(
-            f'gc session nudge "{rig}/refinery" "FLOW CHECK: {beadless_prs} open PR(s) have no tracking bead '
+        run_cmd([
+            "gc", "session", "nudge", f"{rig}/refinery",
+            f"FLOW CHECK: {beadless_prs} open PR(s) have no tracking bead "
             f"({beadless_list}). Run 'gh pr list -R {repo} --state open' and process each PR: rebase on master, "
-            f'run tests, merge if clean. Do not wait for beads -- process the PRs directly."'
-        )
+            "run tests, merge if clean. Do not wait for beads -- process the PRs directly.",
+        ])
 
     # Check idle refinery with PRs
     ref_session = f"{rig}--refinery"
@@ -845,7 +849,7 @@ def _check_beadless_prs(report: HealthReport, rig: str, rig_dir: str, repo: str,
         ref_age = now - (ref_activity or now)
         if ref_age > REFINERY_IDLE_THRESHOLD:
             report.warn(f"{rig}: refinery idle {ref_age // 60}m with {pr_count} PR(s) -- killing to restart")
-            run_cmd(f"tmux -L gc kill-session -t {ref_session}")
+            run_cmd(["tmux", "-L", "gc", "kill-session", "-t", ref_session])
             report.ok(f"{rig}: killed idle refinery -- reconciler will restart")
     else:
         report.ok(f"{rig}: {pr_count} PR(s) open, refinery not running (work_query should auto-wake)")
@@ -876,10 +880,11 @@ def _check_unslung_issues(report: HealthReport, rig: str, rig_dir: str,
 
     if unslung > 0:
         report.warn(f"{rig}: {unslung} of {issue_count} open issue(s) have no work bead")
-        run_cmd(
-            f'gc session nudge mayor "FLOW CHECK: {rig} has {unslung} open issue(s) '
-            f'with no work bead. Sling them to polecats: {unslung_urls}"'
-        )
+        run_cmd([
+            "gc", "session", "nudge", "mayor",
+            f"FLOW CHECK: {rig} has {unslung} open issue(s) "
+            f"with no work bead. Sling them to polecats: {unslung_urls}",
+        ])
     else:
         report.ok(f"{rig}: all {issue_count} open issue(s) have tracking beads")
 
@@ -896,7 +901,7 @@ def _check_stale_session_beads(report: HealthReport, rig: str, city: str,
         sb_running = any(sb_session in a or title in a for a in running_agents)
         if not sb_running:
             r = run_cmd(
-                f'bd close {bead_id} --reason "Stale session bead -- agent not running"',
+                ["bd", "close", bead_id, "--reason", "Stale session bead -- agent not running"],
                 timeout=10, cwd=city,
             )
             if r.returncode == 0:
@@ -942,7 +947,7 @@ def dispatch_foreman(report: HealthReport, city: str = CITY_ROOT) -> None:
         else:
             pr_count = 0
         commits_out = run_cmd_output(
-            f'git -C {rig_dir} log --oneline --since="1 hour ago" master'
+            ["git", "-C", rig_dir, "log", "--oneline", "--since=1 hour ago", "master"]
         )
         commits_1h = len(commits_out.splitlines()) if commits_out else 0
         if pr_count > 5:
@@ -954,10 +959,11 @@ def dispatch_foreman(report: HealthReport, city: str = CITY_ROOT) -> None:
     summary += " Check stuck polecats, idle refineries, unslung issues."
     summary += " Don't just report -- ACT."
 
-    r = run_cmd(
-        f'gc mail send foreman -s "HEALTH ALERT: {report.problems} issue(s) need attention" '
-        f'-m "{summary}"'
-    )
+    r = run_cmd([
+        "gc", "mail", "send", "foreman",
+        "-s", f"HEALTH ALERT: {report.problems} issue(s) need attention",
+        "-m", summary,
+    ])
     if r.returncode == 0:
         report.info(f"  {DIM}Mailed foreman for investigation.{RST}")
 
