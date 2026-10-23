@@ -25,10 +25,14 @@ from .mcp_transport import create_mcp_asgi_app
 from .sentry import init_sentry
 
 logger = logging.getLogger(__name__)
+_log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+# LOG_LEVEL below INFO reaches only Reli's own loggers: on the root logger it would turn on every
+# library's debug output, and httpx's carries the bodies of the Google sign-in exchange (#1714).
 logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+    level=max(_log_level, logging.INFO),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
+logging.getLogger("backend").setLevel(_log_level)
 
 
 def _strip_query_string(record: logging.LogRecord) -> bool:

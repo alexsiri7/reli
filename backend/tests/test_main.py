@@ -1,5 +1,6 @@
 """What the assembled app routes where."""
 
+import logging
 import os
 import socket
 import subprocess
@@ -210,3 +211,22 @@ def test_the_access_log_carries_no_query_string():
     assert log.count('"GET /healthz HTTP/1.1" 200') == 2
     assert "c0de-secret" not in log
     assert "st4te-secret" not in log
+
+
+def test_log_level_debug_reaches_only_the_backend_loggers():
+    """#1714: on the root logger LOG_LEVEL=DEBUG would turn on httpx's debug output too, and that
+    carries the Google sign-in exchange. Reli's own loggers still go to DEBUG."""
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import logging, backend.main; print(*(logging.getLogger(n).getEffectiveLevel() for n in "
+            "('backend.auth', 'httpx', 'httpcore')))",
+        ],
+        env={**os.environ, "LOG_LEVEL": "DEBUG"},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert probe.stdout.split() == [str(logging.DEBUG), str(logging.INFO), str(logging.INFO)]
