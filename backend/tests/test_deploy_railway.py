@@ -2,10 +2,12 @@
 
 #1660: CI's prune step deleted the platform manifest an image index pointed at, Railway failed to
 pull the tag at ``CREATE_CONTAINER``, the previous container kept answering ``/healthz``, and the
-pipeline went green. ``scripts/deploy-railway.sh`` is run here against a stub ``curl`` that plays
-both GHCR and Railway, and its log is what reached them.
+pipeline went green. #1711: a tag can move after it is checked, so Railway is handed the digest of
+the manifest that was checked. ``scripts/deploy-railway.sh`` is run here against a stub ``curl``
+that plays both GHCR and Railway, and its log is what reached them.
 """
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -20,19 +22,27 @@ WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 
 IMAGE = "ghcr.io/alexsiri7/reli:abc123"
 CHILDREN = ("sha256:aaaa", "sha256:bbbb")
+INDEX = '{"manifests":[{"digest":"sha256:aaaa"},{"digest":"sha256:bbbb"}]}\n'
+PINNED = f"ghcr.io/alexsiri7/reli@sha256:{hashlib.sha256(INDEX.encode()).hexdigest()}"
 
 STUB_CURL = """#!/usr/bin/env bash
 args="$*"
 printf '%s\\n' "${args//$'\\n'/ }" >> "$STUB/log"
+prev=
+for arg in "$@"; do
+  [ "$prev" = -o ] && exec > "$arg"
+  prev=$arg
+done
 case "$*" in
   *ghcr.io/token*) echo '{"token":"t"}' ;;
   */manifests/abc123*)
     [ -e "$STUB/no-tag" ] && exit 22
-    echo '{"manifests":[{"digest":"sha256:aaaa"},{"digest":"sha256:bbbb"}]}' ;;
+    cat "$STUB/index" ;;
   */manifests/sha256:*)
     url=${!#}
     digest=${url##*/manifests/}
     grep -qx "$digest" "$STUB/missing" 2>/dev/null && exit 22
+    [ "ghcr.io/alexsiri7/reli@$digest" = "$PINNED" ] && cat "$STUB/index"
     exit 0 ;;
   *serviceInstanceUpdate*) echo '{"data":{"serviceInstanceUpdate":true}}' ;;
   *serviceInstanceDeployV2*) echo '{"data":{"serviceInstanceDeployV2":"dep-1"}}' ;;
@@ -48,22 +58,31 @@ pytestmark = pytest.mark.skipif(shutil.which("jq") is None, reason="the deploy s
 
 
 def _deploy(
-    tmp_path: Path, statuses: list[str], *, missing: tuple[str, ...] = (), no_tag: bool = False
+    tmp_path: Path,
+    statuses: list[str],
+    *,
+    image: str = IMAGE,
+    index: str = INDEX,
+    missing: tuple[str, ...] = (),
+    no_tag: bool = False,
 ) -> tuple[subprocess.CompletedProcess, list[str]]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "curl").write_text(STUB_CURL)
     (bin_dir / "curl").chmod(0o755)
     (tmp_path / "statuses").write_text("".join(f"{s}\n" for s in statuses))
+    (tmp_path / "index").write_text(index)
     (tmp_path / "missing").write_text("".join(f"{d}\n" for d in missing))
     if no_tag:
         (tmp_path / "no-tag").touch()
     result = subprocess.run(
-        ["bash", str(DEPLOY), IMAGE],
+        ["bash", str(DEPLOY), image],
         env={
             **os.environ,
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
             "STUB": str(tmp_path),
+            "PINNED": PINNED,
+            "GITHUB_OUTPUT": str(tmp_path / "output"),
             "RAILWAY_TOKEN": "token",
             "SERVICE_ID": "svc",
             "ENV_ID": "env",
@@ -113,9 +132,29 @@ def test_a_deployment_that_goes_live_passes(tmp_path):
     assert "Railway deployment dep-1 is live" in result.stdout
     railway = [line for line in log if "backboard.railway.app" in line]
     assert "serviceInstanceUpdate" in railway[0]
-    assert IMAGE in railway[0]
+    assert PINNED in railway[0]
+    assert IMAGE not in railway[0]
     assert "serviceInstanceDeployV2" in railway[1]
     assert len(railway) == 2 + 3
+    assert (tmp_path / "output").read_text() == f"image={PINNED}\n"
+
+
+def test_a_digest_that_staging_deployed_is_deployed_as_it_stands(tmp_path):
+    result, log = _deploy(tmp_path, ["SUCCESS"], image=PINNED)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    railway = [line for line in log if "backboard.railway.app" in line]
+    assert PINNED in railway[0]
+
+
+def test_a_digest_whose_manifest_does_not_hash_to_it_is_never_deployed(tmp_path):
+    """The registry is trusted for availability, not for content: a digest names exact bytes."""
+    forged = "ghcr.io/alexsiri7/reli@sha256:" + "0" * 64
+    result, log = _deploy(tmp_path, ["SUCCESS"], image=forged)
+
+    assert result.returncode != 0
+    assert f"for {forged} — refusing to deploy" in result.stdout
+    assert not _reached_railway(log)
 
 
 def test_a_deployment_that_never_settles_fails(tmp_path):
@@ -145,6 +184,11 @@ def test_both_deploy_jobs_go_through_the_checked_deploy():
 
     for name in ("Deploy staging image to Railway", "Deploy production image to Railway"):
         assert "./scripts/deploy-railway.sh" in steps[name]["run"]
+    assert pipeline["jobs"]["deploy-staging"]["outputs"]["deploy_image"] == "${{ steps.deploy.outputs.image }}"
+    assert steps["Deploy staging image to Railway"]["id"] == "deploy"
+    production = steps["Deploy production image to Railway"]
+    assert production["env"]["DEPLOY_IMAGE"] == "${{ needs.deploy-staging.outputs.deploy_image }}"
+    assert production["run"] == './scripts/deploy-railway.sh "$DEPLOY_IMAGE"'
     assert not any("serviceInstanceDeploy(" in step.get("run", "") for step in steps.values()), (
         "serviceInstanceDeploy returns no deployment id, so nothing can wait on its outcome"
     )

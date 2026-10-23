@@ -66,6 +66,7 @@ jobs:
           fi
 
       - name: Deploy staging image to Railway
+        id: deploy
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           DEPLOY_SHA: ${{ steps.sha.outputs.sha }}
@@ -96,6 +97,8 @@ jobs:
 
     outputs:
       deploy_sha: ${{ steps.sha.outputs.sha }}
+      # The digest staging deployed, so a tag moved in between cannot reach production (#1711).
+      deploy_image: ${{ steps.deploy.outputs.image }}
 
   deploy-production:
     name: Deploy to production
@@ -139,10 +142,10 @@ jobs:
       - name: Deploy production image to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          DEPLOY_SHA: ${{ needs.deploy-staging.outputs.deploy_sha }}
+          DEPLOY_IMAGE: ${{ needs.deploy-staging.outputs.deploy_image }}
           SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT_ID }}
-        run: ./scripts/deploy-railway.sh "ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
+        run: ./scripts/deploy-railway.sh "$DEPLOY_IMAGE"
 
       - name: Wait for production health
         env:

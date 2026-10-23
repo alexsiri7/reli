@@ -4,8 +4,9 @@
 
 Use when a production deployment is unhealthy and you need to restore the previous known-good image.
 
-Production is deployed via Railway using the image `ghcr.io/alexsiri7/reli:<SHA>`. The last 3
-SHA-tagged images are retained in GHCR. To roll back, identify the target SHA and redeploy it.
+Production is deployed via Railway from the image CI pushes as `ghcr.io/alexsiri7/reli:<SHA>`,
+pinned to its digest (`ghcr.io/alexsiri7/reli@sha256:…`) by `scripts/deploy-railway.sh` (#1711). The
+last 3 SHA-tagged images are retained in GHCR. To roll back, identify the target SHA and redeploy it.
 
 ## Step 1: Identify the target SHA
 
