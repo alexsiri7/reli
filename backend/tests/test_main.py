@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import auth
+from backend.config import settings
 
 
 def test_healthz_reports_ok(client):
@@ -71,6 +72,55 @@ def test_an_unhandled_exception_500_carries_the_security_headers(monkeypatch):
 
     assert response.status_code == 500
     _assert_security_headers(response)
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_an_unhandled_exception_500_off_the_api_stays_cacheable(monkeypatch):
+    """The handler sends the 500 itself, so it must make the same /api choice the middleware does."""
+    from backend.main import app
+
+    def boom() -> str:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(auth, "base_url", boom)
+
+    response = TestClient(app, raise_server_exceptions=False).get("/.well-known/oauth-authorization-server")
+
+    assert response.status_code == 500
+    _assert_security_headers(response)
+    assert "Cache-Control" not in response.headers
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param("/api/things", id="web-view-401-sent-by-its-own-middleware"),
+        pytest.param("/api/auth/me", id="public-auth-route"),
+        pytest.param("/api/nowhere", id="unmatched-api-path"),
+    ],
+)
+def test_every_api_response_is_no_store(client, path):
+    """#1709: the graph and the signed-in identity must not outlive the session in any cache, and a
+    refusal is no exception."""
+    assert client.get(path).headers["Cache-Control"] == "no-store"
+
+
+def test_a_served_graph_is_no_store(client, monkeypatch):
+    """The 200 that carries the graph, not only the refusals around it."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "a-test-secret-key-that-is-forty-eight-chars-long")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    token = auth.create_jwt("1234567890", "owner@example.com", audience=auth.WEB_AUDIENCE)
+
+    response = client.get("/api/things", headers={"Cookie": f"{auth.SESSION_COOKIE}={token}"})
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.parametrize("path", ["/healthz", "/mcp/", "/.well-known/oauth-authorization-server"])
+def test_no_store_stays_off_what_is_not_the_api(client, path):
+    """``/oauth/`` sets its own and nothing else here carries the graph."""
+    assert "Cache-Control" not in client.get(path).headers
 
 
 def _assert_security_headers(response) -> None:

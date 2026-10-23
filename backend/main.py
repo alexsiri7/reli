@@ -115,9 +115,19 @@ _SECURITY_HEADERS = {
     ),
 }
 
+#: What an ``/api`` response gets (#1709): that prefix serves the graph and the signed-in
+#: identity, and neither may outlive the session in a browser or proxy cache. The bundle stays
+#: cacheable; ``/oauth/`` sets its own.
+_API_HEADERS = {**_SECURITY_HEADERS, "Cache-Control": "no-store"}
+
+
+def _is_api(path: str) -> bool:
+    return path == api.router.prefix or path.startswith(f"{api.router.prefix}/")
+
 
 class _SecurityHeaders:
-    """Adds :data:`_SECURITY_HEADERS` to every response, whichever layer produced it.
+    """Adds :data:`_SECURITY_HEADERS` to every response, whichever layer produced it, and
+    :data:`_API_HEADERS` to an ``/api`` one.
 
     Raw ASGI rather than ``BaseHTTPMiddleware``, which buffers the response in its own task and
     breaks the streamable-HTTP transport under ``/mcp``.
@@ -131,9 +141,11 @@ class _SecurityHeaders:
             await self._app(scope, receive, send)
             return
 
+        headers = _API_HEADERS if _is_api(scope["path"]) else _SECURITY_HEADERS
+
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
-                MutableHeaders(scope=message).update(_SECURITY_HEADERS)
+                MutableHeaders(scope=message).update(headers)
             await send(message)
 
         await self._app(scope, receive, send_with_headers)
@@ -166,7 +178,8 @@ async def _unhandled_exception(request: Request, exc: Exception) -> Response:
     own fallback goes out bare. It re-raises afterwards, so the error still reaches the log and
     Sentry.
     """
-    return PlainTextResponse("Internal Server Error", status_code=500, headers=_SECURITY_HEADERS)
+    headers = _API_HEADERS if _is_api(request.url.path) else _SECURITY_HEADERS
+    return PlainTextResponse("Internal Server Error", status_code=500, headers=headers)
 
 
 app.add_exception_handler(Exception, _unhandled_exception)
