@@ -1,9 +1,12 @@
 """What the assembled app routes where."""
 
 import os
+import socket
 import subprocess
 import sys
+import time
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -174,3 +177,36 @@ def test_the_api_docs_are_404_in_a_deploy_and_served_locally(tmp_path, switch, e
     )
 
     assert probe.stdout.split() == expected
+
+
+def test_the_access_log_carries_no_query_string():
+    """#1713: Google delivers ``code`` and ``state`` on the callback's URL, and uvicorn's access log
+    writes the request target of every request. Served by uvicorn's CLI as the image serves it, so the line under
+    test is the one uvicorn really writes after its own logging setup. The lifespan is off so no
+    database is needed; the filter does not look at which route answered."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "backend.main:app", "--port", str(port), "--lifespan", "off"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        base = f"http://127.0.0.1:{port}"
+        for _ in range(300):
+            try:
+                httpx.get(f"{base}/healthz")
+                break
+            except httpx.TransportError:
+                time.sleep(0.1)
+        response = httpx.get(f"{base}/healthz", params={"code": "c0de-secret", "state": "st4te-secret"})
+    finally:
+        server.terminate()
+        log, _ = server.communicate(timeout=30)
+
+    assert response.status_code == 200
+    assert log.count('"GET /healthz HTTP/1.1" 200') == 2
+    assert "c0de-secret" not in log
+    assert "st4te-secret" not in log
