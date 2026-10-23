@@ -4,10 +4,15 @@
 #
 # Usage:
 #   RAILWAY_TOKEN=… SERVICE_ID=… ENV_ID=… ./scripts/deploy-railway.sh ghcr.io/<owner>/<name>:<tag>
+#   RAILWAY_TOKEN=… SERVICE_ID=… ENV_ID=… ./scripts/deploy-railway.sh ghcr.io/<owner>/<name>@sha256:<hex>
 #
 # #1660: Railway failed to pull an image whose index referenced a deleted manifest, the previous
 # container kept answering /healthz, and the pipeline went green. So the image is checked the way
 # Railway pulls it before anything is sent, and the job's verdict is the deployment's own status.
+#
+# #1711: a tag can be moved after it is checked, so Railway is given the digest of the manifest
+# that was checked, never the tag. Under Actions the pinned reference is written to $GITHUB_OUTPUT
+# as `image`, so production deploys exactly what staging did.
 set -euo pipefail
 
 POLL_INTERVAL=${RAILWAY_POLL_INTERVAL:-10}
@@ -17,27 +22,39 @@ MANIFEST_TYPES="application/vnd.oci.image.index.v1+json, application/vnd.docker.
 
 image=${1:-}
 if [ -z "$image" ] || [ -z "${RAILWAY_TOKEN:-}" ] || [ -z "${SERVICE_ID:-}" ] || [ -z "${ENV_ID:-}" ]; then
-    echo "::error::usage: RAILWAY_TOKEN=… SERVICE_ID=… ENV_ID=… $0 ghcr.io/<owner>/<name>:<tag>"
-    exit 2
-fi
-if [ "${image#ghcr.io/}" = "$image" ] || [ "${image##*:}" = "$image" ]; then
-    echo "::error::$image is not a tagged ghcr.io image"
+    echo "::error::usage: RAILWAY_TOKEN=… SERVICE_ID=… ENV_ID=… $0 ghcr.io/<owner>/<name>:<tag>|@sha256:<hex>"
     exit 2
 fi
 repo=${image#ghcr.io/}
-tag=${repo##*:}
-repo=${repo%:*}
+case "$repo" in
+    "$image") ref="" ;;
+    *@sha256:*) ref=${repo#*@} repo=${repo%@*} ;;
+    *:*) ref=${repo##*:} repo=${repo%:*} ;;
+    *) ref="" ;;
+esac
+if [ -z "$ref" ]; then
+    echo "::error::$image is not a tagged or digest-pinned ghcr.io image"
+    exit 2
+fi
+manifest=$(mktemp)
+trap 'rm -f "$manifest"' EXIT
 
 # Anonymous, because that is how Railway pulls a public package: what passes here is what it sees.
 check_image() {
-    local token body digest count=1
+    local token digest count=1
     token=$(curl -sf "https://ghcr.io/token?scope=repository:${repo}:pull" | jq -r .token)
-    if ! body=$(curl -sf -H "Authorization: Bearer $token" -H "Accept: $MANIFEST_TYPES" \
-        "https://ghcr.io/v2/${repo}/manifests/${tag}"); then
+    if ! curl -sf -o "$manifest" -H "Authorization: Bearer $token" -H "Accept: $MANIFEST_TYPES" \
+        "https://ghcr.io/v2/${repo}/manifests/${ref}"; then
         echo "::error::Image ${image} does not exist in GHCR — refusing to deploy"
         exit 1
     fi
-    for digest in $(echo "$body" | jq -r '.manifests[]?.digest'); do
+    digest="sha256:$(sha256sum "$manifest" | cut -d' ' -f1)"
+    if [ "${ref#sha256:}" != "$ref" ] && [ "$digest" != "$ref" ]; then
+        echo "::error::GHCR served ${digest} for ${image} — refusing to deploy"
+        exit 1
+    fi
+    pinned="ghcr.io/${repo}@${digest}"
+    for digest in $(jq -r '.manifests[]?.digest' "$manifest"); do
         if ! curl -sf -o /dev/null -H "Authorization: Bearer $token" -H "Accept: $MANIFEST_TYPES" \
             "https://ghcr.io/v2/${repo}/manifests/${digest}"; then
             echo "::error::Image ${image} cannot be pulled: its index references ${digest}, which GHCR no longer holds — refusing to deploy"
@@ -45,7 +62,7 @@ check_image() {
         fi
         count=$((count + 1))
     done
-    echo "Image ${image} is pullable (${count} manifests checked)"
+    echo "Image ${image} is pullable as ${pinned} (${count} manifests checked)"
 }
 
 railway() {
@@ -60,9 +77,12 @@ fail_on_errors() {
 }
 
 check_image
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    echo "image=$pinned" >> "$GITHUB_OUTPUT"
+fi
 
-echo "Deploying $image to Railway..."
-RESP=$(railway "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" --arg img "$image" \
+echo "Deploying $pinned to Railway..."
+RESP=$(railway "$(jq -n --arg svc "$SERVICE_ID" --arg env "$ENV_ID" --arg img "$pinned" \
     '{query: "mutation($svc:String!,$env:String!,$img:String!){serviceInstanceUpdate(input:{source:{image:$img}},serviceId:$svc,environmentId:$env)}",
       variables:{svc:$svc,env:$env,img:$img}}')")
 echo "serviceInstanceUpdate response: $RESP"
