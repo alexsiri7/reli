@@ -546,6 +546,14 @@ def test_an_out_of_range_after_id_is_refused_before_it_reaches_the_database(tool
     assert "than or equal to" in str(refused.value)
 
 
+def test_the_smallest_after_id_reads_from_the_start_of_the_journal(tools):
+    thing = create_thing(actor="claude_interactive", title="first write")
+
+    result = asyncio.run(reli_mcp.call_tool("journal_since", {"after_id": 0}))
+
+    assert thing["id"] in [e["entity_id"] for e in result.structured_content["entries"]]
+
+
 def test_the_largest_after_id_is_accepted(tools):
     result = asyncio.run(reli_mcp.call_tool("journal_since", {"after_id": MAX_JOURNAL_ID}))
 
