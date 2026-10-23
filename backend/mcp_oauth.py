@@ -144,8 +144,12 @@ _RedirectUri = Annotated[str, AfterValidator(_within_param_bytes)]
 
 
 def _clipped(value: str) -> str:
-    """``value`` cut to ``MAX_LOGGED_CHARS`` for a log line; the caller still logs it with ``%r``."""
-    return value if len(value) <= MAX_LOGGED_CHARS else value[:MAX_LOGGED_CHARS] + "…"
+    """``repr(value)`` cut to ``MAX_LOGGED_CHARS``, for a log line to quote with ``%s``.
+
+    Cutting the repr rather than the value bounds what is written: one character can escape to ten.
+    """
+    quoted = repr(value)
+    return quoted if len(quoted) <= MAX_LOGGED_CHARS else quoted[:MAX_LOGGED_CHARS] + "…"
 
 
 # --- Discovery -------------------------------------------------------------
@@ -245,7 +249,7 @@ def _validate_registration_body(raw: bytes) -> _ClientMetadata:
 def _validate_auth_method(metadata: _ClientMetadata) -> str:
     auth_method = metadata.token_endpoint_auth_method
     if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
-        logger.warning("MCP OAuth: rejected token_endpoint_auth_method during registration: %r", _clipped(auth_method))
+        logger.warning("MCP OAuth: rejected token_endpoint_auth_method during registration: %s", _clipped(auth_method))
         raise HTTPException(
             status_code=400,
             detail=f"token_endpoint_auth_method must be one of {', '.join(TOKEN_ENDPOINT_AUTH_METHODS)}: {auth_method}",
@@ -256,7 +260,7 @@ def _validate_auth_method(metadata: _ClientMetadata) -> str:
 def _validate_redirect_uris(redirect_uris: list[str]) -> None:
     for uri in redirect_uris:
         if not _redirect_uri_is_safe(uri):
-            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %r", _clipped(uri))
+            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %s", _clipped(uri))
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -307,7 +311,7 @@ async def oauth_register(request: Request) -> JSONResponse:
     with auth._session() as session:
         cleanup_and_store(session, mcp_registered_clients, client_id, client)
 
-    logger.info("MCP OAuth: registered client %s (%r)", client_id, _clipped(metadata.client_name))
+    logger.info("MCP OAuth: registered client %s (%s)", client_id, _clipped(metadata.client_name))
 
     return JSONResponse(
         {
@@ -396,7 +400,7 @@ def oauth_authorize(
         # A registration stored before the check tightened can still hold an unsafe URI.
         if not _redirect_uri_is_safe(redirect_uri):
             logger.warning(
-                "MCP OAuth: refused stored unsafe redirect_uri for client %s: %r", client_id, _clipped(redirect_uri)
+                "MCP OAuth: refused stored unsafe redirect_uri for client %s: %s", client_id, _clipped(redirect_uri)
             )
             raise HTTPException(
                 status_code=400, detail="redirect_uri is not one this server accepts: re-register the client"

@@ -268,10 +268,11 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
     ("field", "value", "logged"),
     [
         ("client_name", "C" * 4000, "registered client"),
+        ("client_name", "\U0010ffff" * 600, "registered client"),
         ("redirect_uris", ["http://evil.com/" + "a" * 2000], "unsafe redirect_uri"),
         ("token_endpoint_auth_method", "m" * 4000, "token_endpoint_auth_method"),
     ],
-    ids=["client_name", "redirect_uri", "auth_method"],
+    ids=["client_name", "escaped_client_name", "redirect_uri", "auth_method"],
 )
 def test_register_logs_a_bounded_prefix_of_what_the_caller_sent(client, caplog, field, value, logged):
     """An unauthenticated caller chooses these values, so it must not choose the size of the log line (#1716)."""
@@ -783,6 +784,31 @@ def test_authorize_refuses_a_redirect_uri_registered_before_the_check_tightened(
 
     assert response.status_code == 400
     assert "server_state" not in response.text
+
+
+def test_authorize_logs_a_bounded_prefix_of_a_stored_unsafe_redirect_uri(client, session, caplog):
+    smuggled = "https://claude.ai@attacker.example/" + "\x01" * 2000
+    cleanup_and_store(
+        session,
+        mcp_registered_clients,
+        "stale-client",
+        {
+            "client_secret": "secret",
+            "redirect_uris": [smuggled],
+            "client_name": "Claude",
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "client_secret_post",
+            "scope": "mcp",
+            "expires_at": datetime.now(UTC) + timedelta(hours=1),
+        },
+    )
+
+    with caplog.at_level(logging.WARNING, logger="backend.mcp_oauth"):
+        _authorize(client, "stale-client", redirect_uri=smuggled)
+
+    [record] = [record for record in caplog.records if "stored unsafe redirect_uri" in record.getMessage()]
+    assert len(record.getMessage()) < mcp_oauth.MAX_LOGGED_CHARS + 200
 
 
 def test_authorize_confirm_sends_the_browser_to_google(client, session):
