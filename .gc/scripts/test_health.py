@@ -466,6 +466,32 @@ class TestPipelineFlow(unittest.TestCase):
         ))
         self.assertIn("    done", infos)
 
+    @patch("health.run_cmd")
+    @patch("health.tmux_has_session", return_value=False)
+    @patch("health.gh_pr_list", return_value=[])
+    @patch("health.gh_issue_list", return_value=[{"number": 1, "title": "t", "url": "u"}])
+    @patch("health.get_repo_slug", return_value="owner/repo")
+    @patch("os.path.isdir", return_value=True)
+    def test_fix_reports_which_polecat_kill_failed(self, mock_isdir, mock_slug, mock_issues,
+                                                   mock_prs, mock_has, mock_run):
+        mock_run.side_effect = [_cp(returncode=1), _cp()]
+        now = 1000000
+        hung = now - health.VERY_STALE_THRESHOLD - 1
+        sessions = [
+            {"name": f"gascity--polecat-{i}", "activity": hung, "created": hung,
+             "pane_dead": False, "pane_pid": "1"}
+            for i in (1, 2)
+        ]
+        report = health.HealthReport()
+        with patch.object(health, "RIGS", ["gascity"]), \
+                patch("health.tmux_sessions", return_value=sessions):
+            health.check_pipeline_flow(report, fix=True, city="/tmp/fake", now=now)
+        self.assertEqual(mock_run.call_count, 2)
+        infos = [r.message for r in report.results if r.level == "info"]
+        self.assertIn("    failed: tmux -L gc kill-session -t gascity--polecat-1", infos)
+        self.assertNotIn("    failed: tmux -L gc kill-session -t gascity--polecat-2", infos)
+        self.assertNotIn("    done", infos)
+
 
 class TestForemanDispatch(unittest.TestCase):
     @patch("health.run_cmd")

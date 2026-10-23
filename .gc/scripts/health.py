@@ -683,8 +683,11 @@ def check_pipeline_flow(report: HealthReport, fix: bool, city: str = CITY_ROOT,
             report.info("  Applying fixes...")
             for f in fixes:
                 report.info(f"  -> {f.description}")
-                ok = all([run_cmd(c).returncode == 0 for c in f.commands])
-                report.info("    done" if ok else "    failed")
+                failed = [c for c in f.commands if run_cmd(c).returncode != 0]
+                if not failed:
+                    report.info("    done")
+                for c in failed:
+                    report.info(f"    failed: {shlex.join(c)}")
 
     report.fixes.extend(fixes)
 
