@@ -270,9 +270,18 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
         ("client_name", "C" * 4000, "registered client"),
         ("client_name", "\U0010ffff" * 600, "registered client"),
         ("redirect_uris", ["http://evil.com/" + "a" * 2000], "unsafe redirect_uri"),
+        ("redirect_uris", ["http://evil.com/" + "\x01" * 1000], "unsafe redirect_uri"),
         ("token_endpoint_auth_method", "m" * 4000, "token_endpoint_auth_method"),
+        ("token_endpoint_auth_method", "\U0010ffff" * 600, "token_endpoint_auth_method"),
     ],
-    ids=["client_name", "escaped_client_name", "redirect_uri", "auth_method"],
+    ids=[
+        "client_name",
+        "escaped_client_name",
+        "redirect_uri",
+        "escaped_redirect_uri",
+        "auth_method",
+        "escaped_auth_method",
+    ],
 )
 def test_register_logs_a_bounded_prefix_of_what_the_caller_sent(client, caplog, field, value, logged):
     """An unauthenticated caller chooses these values, so it must not choose the size of the log line (#1716)."""
