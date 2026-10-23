@@ -312,3 +312,67 @@ def test_the_frontend_lockfile_is_updated_and_scanned_like_the_backend_one():
         assert "frontend/package-lock.json" in scan[True][event]["paths"], event
     audit_steps = [step for job in scan["jobs"].values() for step in job["steps"] if "npm audit" in step.get("run", "")]
     assert [step.get("working-directory") for step in audit_steps] == ["frontend"]
+
+
+def test_every_image_build_pulls_its_base_rather_than_trusting_the_cache():
+    """#1712: the base is a floating ``python:3.12-slim`` tag so security patches land on rebuild,
+    which only holds if the build fetches the tag instead of reusing a cached layer."""
+    ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
+    builds = [step for step in ci["jobs"]["build"]["steps"] if "docker/build-push-action@" in step.get("uses", "")]
+    assert builds, "found no image build to check"
+    assert [step["name"] for step in builds if step["with"].get("pull") is not True] == []
+
+
+def test_the_image_runs_as_reli_from_container_start():
+    """#1712: a ``USER`` set before ``HEALTHCHECK`` and ``CMD`` keeps the probe and the server off root,
+    where a ``gosu`` entrypoint dropped privilege only for the process it exec'd."""
+    lines = [line.strip() for line in (REPO_ROOT / "Dockerfile").read_text().splitlines()]
+    runtime = lines[max(i for i, line in enumerate(lines) if line.startswith("FROM ")) :]
+    users = [i for i, line in enumerate(runtime) if line.startswith("USER ")]
+    assert [runtime[i] for i in users] == ["USER reli"]
+    for instruction in ("HEALTHCHECK ", "CMD "):
+        assert users[0] < next(i for i, line in enumerate(runtime) if line.startswith(instruction)), instruction
+    assert not any(line.startswith("ENTRYPOINT") for line in runtime)
+
+
+def _image_services_keeping_capabilities(directory: Path = REPO_ROOT) -> list[str]:
+    """Compose services that run Reli's image — pulled by name or built from this repository — and
+    do not drop every Linux capability or add one back."""
+    offenders: list[str] = []
+    for compose_file in sorted(directory.glob("docker-compose*.yml")):
+        for name, service in yaml.safe_load(compose_file.read_text())["services"].items():
+            repository = re.split("[:@]", service.get("image", ""))[0]
+            runs_the_image = "build" in service or repository == "ghcr.io/alexsiri7/reli"
+            if runs_the_image and (service.get("cap_drop") != ["ALL"] or "cap_add" in service):
+                offenders.append(f"{compose_file.name}:{name}")
+    return offenders
+
+
+def test_every_compose_service_running_the_image_drops_every_capability():
+    """#1712: the server binds an unprivileged port, so it needs no Linux capability back."""
+    offenders = _image_services_keeping_capabilities()
+    assert offenders == [], f"these services run the image with capabilities left: {offenders}"
+
+
+def test_the_capability_scan_sees_a_service_running_the_image(tmp_path):
+    (tmp_path / "docker-compose.yml").write_text(
+        "services:\n"
+        "  dropped:\n    image: ghcr.io/alexsiri7/reli:latest\n    cap_drop: [ALL]\n"
+        "  kept:\n    image: ghcr.io/alexsiri7/reli:latest\n"
+        "  db:\n    image: postgres:16-alpine\n"
+    )
+    (tmp_path / "docker-compose.preview.yml").write_text(
+        "services:\n"
+        "  built:\n    build: .\n"
+        "  readded:\n    image: ghcr.io/alexsiri7/reli:x\n    cap_drop: [ALL]\n    cap_add: [NET_RAW]\n"
+        "  untagged:\n    image: ghcr.io/alexsiri7/reli\n"
+        "  pinned:\n    image: ghcr.io/alexsiri7/reli@sha256:0123\n"
+        "  lookalike:\n    image: ghcr.io/alexsiri7/reli-docs:latest\n"
+    )
+    assert _image_services_keeping_capabilities(tmp_path) == [
+        "docker-compose.preview.yml:built",
+        "docker-compose.preview.yml:readded",
+        "docker-compose.preview.yml:untagged",
+        "docker-compose.preview.yml:pinned",
+        "docker-compose.yml:kept",
+    ]
