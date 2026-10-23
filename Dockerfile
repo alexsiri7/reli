@@ -9,9 +9,9 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# Use floating minor tag so security patches land on each rebuild.
-# Run `docker compose build --pull` (or ensure CI uses --pull) to guarantee
-# the latest python:3.12.x base is fetched rather than served from cache.
+# Use floating minor tag so security patches land on each rebuild. CI builds with `pull: true`
+# so the latest python:3.12.x base is fetched rather than served from cache; a local build needs
+# `docker compose build --pull` for the same guarantee.
 FROM python:3.12-slim
 WORKDIR /app
 
@@ -29,7 +29,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends libpq-dev gcc libc6-dev && \
     UV_SYSTEM_PYTHON=1 uv sync --frozen --no-dev && \
     apt-get purge -y libpq-dev gcc libc6-dev && \
-    apt-get install -y --no-install-recommends libpq5 gosu && \
+    apt-get install -y --no-install-recommends libpq5 && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
@@ -43,11 +43,8 @@ COPY backend/ ./backend/
 COPY prompts/ ./prompts/
 COPY --from=frontend-build /frontend/dist ./frontend/dist
 
-# Entrypoint drops to non-root
-COPY --chmod=755 <<'ENTRY' /app/entrypoint.sh
-#!/bin/sh
-exec gosu reli "$@"
-ENTRY
+# Set before HEALTHCHECK and CMD so the server and every probe run as reli from container start.
+USER reli
 
 EXPOSE 8000
 
@@ -56,5 +53,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\",\"8000\")}/healthz')" || exit 1
 
-ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["sh", "-c", "exec /app/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

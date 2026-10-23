@@ -312,3 +312,35 @@ def test_the_frontend_lockfile_is_updated_and_scanned_like_the_backend_one():
         assert "frontend/package-lock.json" in scan[True][event]["paths"], event
     audit_steps = [step for job in scan["jobs"].values() for step in job["steps"] if "npm audit" in step.get("run", "")]
     assert [step.get("working-directory") for step in audit_steps] == ["frontend"]
+
+
+def test_every_image_build_pulls_its_base_rather_than_trusting_the_cache():
+    """#1712: the base is a floating ``python:3.12-slim`` tag so security patches land on rebuild,
+    which only holds if the build fetches the tag instead of reusing a cached layer."""
+    ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
+    builds = [step for step in ci["jobs"]["build"]["steps"] if "docker/build-push-action@" in step.get("uses", "")]
+    assert builds, "found no image build to check"
+    assert [step["name"] for step in builds if step["with"].get("pull") is not True] == []
+
+
+def test_the_image_runs_as_reli_from_container_start():
+    """#1712: a ``USER`` set before ``HEALTHCHECK`` and ``CMD`` keeps the probe and the server off root,
+    where a ``gosu`` entrypoint dropped privilege only for the process it exec'd."""
+    lines = [line.strip() for line in (REPO_ROOT / "Dockerfile").read_text().splitlines()]
+    runtime = lines[max(i for i, line in enumerate(lines) if line.startswith("FROM ")) :]
+    users = [i for i, line in enumerate(runtime) if line.startswith("USER ")]
+    assert [runtime[i] for i in users] == ["USER reli"]
+    for instruction in ("HEALTHCHECK ", "CMD "):
+        assert users[0] < next(i for i, line in enumerate(runtime) if line.startswith(instruction)), instruction
+    assert not any(line.startswith("ENTRYPOINT") for line in runtime)
+
+
+@pytest.mark.parametrize(
+    ("compose_file", "service"), [("docker-compose.yml", "reli"), ("docker-compose.staging.yml", "reli-staging")]
+)
+def test_every_compose_service_running_the_image_drops_every_capability(compose_file, service):
+    """#1712: the server binds an unprivileged port, so it needs no Linux capability back."""
+    compose = yaml.safe_load((REPO_ROOT / compose_file).read_text())
+    assert compose["services"][service]["image"].startswith("ghcr.io/alexsiri7/reli:")
+    assert compose["services"][service].get("cap_drop") == ["ALL"]
+    assert "cap_add" not in compose["services"][service]

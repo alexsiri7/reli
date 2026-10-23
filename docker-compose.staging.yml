@@ -28,6 +28,9 @@ services:
     depends_on:
       postgres-staging:
         condition: service_healthy
+    # The server binds an unprivileged port and needs no Linux capability (#1712).
+    cap_drop:
+      - ALL
     restart: unless-stopped
 
   postgres-staging:
