@@ -91,6 +91,10 @@ def _journal_count(session):
     return session.execute(text("SELECT count(*) FROM journal")).scalar_one()
 
 
+def _oldest_journal_id(session):
+    return session.execute(text("SELECT coalesce(min(id), 0) FROM journal")).scalar_one()
+
+
 def _newest_journal_id(session):
     return session.execute(text("SELECT coalesce(max(id), 0) FROM journal")).scalar_one()
 
@@ -548,7 +552,7 @@ def test_an_out_of_range_after_id_is_refused_before_it_reaches_the_database(tool
 
 def test_the_smallest_after_id_reads_from_the_start_of_the_journal(tools):
     create_thing(actor="claude_interactive", title="first write")
-    oldest, count = tools.execute(text("SELECT min(id), count(*) FROM journal")).one()
+    oldest, count = _oldest_journal_id(tools), _journal_count(tools)
 
     result = asyncio.run(reli_mcp.call_tool("journal_since", {"after_id": 0}))
 
