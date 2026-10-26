@@ -199,17 +199,25 @@ def test_the_access_log_carries_no_query_string():
     try:
         base = f"http://127.0.0.1:{port}"
         for _ in range(300):
+            if server.poll() is not None:
+                break
             try:
                 httpx.get(f"{base}/healthz")
                 break
             except httpx.TransportError:
                 time.sleep(0.1)
-        response = httpx.get(f"{base}/healthz", params={"code": "c0de-secret", "state": "st4te-secret"})
+        started = server.poll() is None
+        response = (
+            httpx.get(f"{base}/healthz", params={"code": "c0de-secret", "state": "st4te-secret"})
+            if started
+            else None
+        )
     finally:
         server.terminate()
         log, _ = server.communicate(timeout=30)
 
-    assert response.status_code == 200
+    assert started, f"uvicorn exited before answering /healthz on port {port}:\n{log}"
+    assert response is not None and response.status_code == 200
     assert log.count('"GET /healthz HTTP/1.1" 200') == 2
     assert "c0de-secret" not in log
     assert "st4te-secret" not in log
