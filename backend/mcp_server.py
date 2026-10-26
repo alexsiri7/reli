@@ -228,12 +228,15 @@ def update_thing(
     urls: dict[str, str] | None = None,
     checkin_date: date | None = None,
     priority: float | None = None,
+    expected_updated_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Update the given fields of a Thing and journal the change.
 
     Every field given **replaces** the stored value; nothing is merged. Passing ``tags`` writes
     exactly that list and drops the tags you left out; passing ``notes`` writes exactly that
-    mapping. To add one note or one tag, read the Thing first with get_thing and pass the union.
+    mapping. To add one note or one tag, read the Thing first with get_thing and pass the union,
+    with the updated_at you read as expected_updated_at: a write that landed in between is then
+    refused rather than overwritten.
 
     A field left unset is untouched, which also means this tool cannot clear a field back to empty.
 
@@ -254,6 +257,8 @@ def update_thing(
         urls: Replaces the whole urls mapping.
         checkin_date: Replaces the check-in date.
         priority: Replaces the priority.
+        expected_updated_at: The updated_at you read. If the Thing has changed since, nothing is
+            written; read it again.
 
     Returns:
         The updated Thing.
@@ -270,6 +275,7 @@ def update_thing(
             urls=urls,
             checkin_date=checkin_date,
             priority=priority,
+            expected_updated_at=expected_updated_at,
         )
         return _thing_dict(thing)
 
