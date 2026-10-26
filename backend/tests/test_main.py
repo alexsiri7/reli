@@ -208,9 +208,7 @@ def test_the_access_log_carries_no_query_string():
                 time.sleep(0.1)
         started = server.poll() is None
         response = (
-            httpx.get(f"{base}/healthz", params={"code": "c0de-secret", "state": "st4te-secret"})
-            if started
-            else None
+            httpx.get(f"{base}/healthz", params={"code": "c0de-secret", "state": "st4te-secret"}) if started else None
         )
     finally:
         server.terminate()
