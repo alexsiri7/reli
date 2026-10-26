@@ -172,6 +172,7 @@ print(*(client.get(path).status_code for path in ("/openapi.json", "/docs", "/re
     ("switch", "expected"),
     [
         pytest.param({"RAILWAY_ENVIRONMENT_NAME": "production"}, ["404"] * 3, id="deploy"),
+        pytest.param({"HIDE_API_DOCS": "1"}, ["404"] * 3, id="hide-api-docs"),
         pytest.param({}, ["200"] * 3, id="local-run"),
     ],
 )
@@ -180,7 +181,8 @@ def test_the_api_docs_are_404_in_a_deploy_and_served_locally(tmp_path, switch, e
     behind them; a local uvicorn keeps all three."""
     (tmp_path / "assets").mkdir()
     (tmp_path / "index.html").write_text("<!doctype html><title>Reli</title>")
-    env = {key: value for key, value in os.environ.items() if key not in {"RAILWAY_ENVIRONMENT_NAME", "PRODUCTION"}}
+    switches = {"RAILWAY_ENVIRONMENT_NAME", "PRODUCTION", "HIDE_API_DOCS"}
+    env = {key: value for key, value in os.environ.items() if key not in switches}
     probe = subprocess.run(
         [sys.executable, "-c", _DOCS_PROBE, str(tmp_path)],
         env={**env, **switch},
@@ -209,17 +211,23 @@ def test_the_access_log_carries_no_query_string():
     try:
         base = f"http://127.0.0.1:{port}"
         for _ in range(300):
+            if server.poll() is not None:
+                break
             try:
                 httpx.get(f"{base}/healthz")
                 break
             except httpx.TransportError:
                 time.sleep(0.1)
-        response = httpx.get(f"{base}/healthz", params={"code": "c0de-secret", "state": "st4te-secret"})
+        started = server.poll() is None
+        response = (
+            httpx.get(f"{base}/healthz", params={"code": "c0de-secret", "state": "st4te-secret"}) if started else None
+        )
     finally:
         server.terminate()
         log, _ = server.communicate(timeout=30)
 
-    assert response.status_code == 200
+    assert started, f"uvicorn exited before answering /healthz on port {port}:\n{log}"
+    assert response is not None and response.status_code == 200
     assert log.count('"GET /healthz HTTP/1.1" 200') == 2
     assert "c0de-secret" not in log
     assert "st4te-secret" not in log

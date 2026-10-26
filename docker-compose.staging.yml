@@ -25,6 +25,9 @@ services:
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=staging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # A deploy hides its API schema, but PRODUCTION would also refuse postgres-staging's
+      # sslmode=disable, so staging hides the docs alone (#1720).
+      - HIDE_API_DOCS=1
     depends_on:
       postgres-staging:
         condition: service_healthy

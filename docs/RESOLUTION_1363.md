@@ -1,7 +1,7 @@
 # Resolution of Issue #1363
 
 **Date**: 2026-08-31
-**Issue**: Deploy down: https://reli.interstellarai.net returning HTTP 000
+**Issue**: Deploy down: https://<reli-host> returning HTTP 000
 **Status**: RESOLVED (false positive)
 
 ## Summary
@@ -43,7 +43,7 @@ This is the nineteenth instance of this false positive:
 - **No code changes on 2026-08-30 to 2026-08-31** that would trigger a crash. Last deployment was commit `f8fe1d4` (pushed 02:15:13Z), which deployed successfully via pipeline run 33351077247 at ~02:38Z.
 - **Detection at 03:01:57 UTC** — ~23 minutes after the last successful deployment, consistent with a scheduled Railway container restart cycle.
 - **HTTP 000 = connection refused** — consistent with Railway container restart (port not yet bound), not a crash loop or config error.
-- **Site confirmed live** — `curl https://reli.interstellarai.net/healthz` returns HTTP 200 at time of investigation.
+- **Site confirmed live** — `curl https://<reli-host>/healthz` returns HTTP 200 at time of investigation.
 - **Subsequent deployment succeeded** — Pipeline run 33354751338 (started 03:43:31Z) deployed `eff65ff` to staging, passed E2E smoke tests, and deployed to production at 03:47:47Z with no issues.
 
 ## Solution

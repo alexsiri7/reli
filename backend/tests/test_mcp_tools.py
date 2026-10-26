@@ -21,6 +21,7 @@ from backend import auth, prompts, service
 from backend.config import settings
 from backend.db_models import NEW_TAG, SCHEDULED_TASK_TAG, Actor, RelationshipType
 from backend.mcp_server import (
+    MAX_JOURNAL_ID,
     MAX_STALE_DAYS,
     McpActor,
     add_preference_evidence,
@@ -88,6 +89,10 @@ WRITING_TOOLS = {
 
 def _journal_count(session):
     return session.execute(text("SELECT count(*) FROM journal")).scalar_one()
+
+
+def _oldest_journal_id(session):
+    return session.execute(text("SELECT coalesce(min(id), 0) FROM journal")).scalar_one()
 
 
 def _newest_journal_id(session):
@@ -534,6 +539,31 @@ def test_journal_since_over_mcp_excludes_the_actor_it_was_told_to(tools):
     assert result["total"] == 1
     assert result["truncated"] is False
     assert json.loads(json.dumps(result))
+
+
+@pytest.mark.parametrize("after_id", [-1, MAX_JOURNAL_ID + 1])
+def test_an_out_of_range_after_id_is_refused_before_it_reaches_the_database(tools, after_id):
+    """#1722: ``journal.id`` is a bigint, and a watermark outside it used to fail inside Postgres."""
+    with pytest.raises(ToolError) as refused:
+        asyncio.run(reli_mcp.call_tool("journal_since", {"after_id": after_id}))
+
+    assert "than or equal to" in str(refused.value)
+
+
+def test_the_smallest_after_id_reads_from_the_start_of_the_journal(tools):
+    create_thing(actor="claude_interactive", title="first write")
+    oldest, count = _oldest_journal_id(tools), _journal_count(tools)
+
+    result = asyncio.run(reli_mcp.call_tool("journal_since", {"after_id": 0}))
+
+    assert result.structured_content["entries"][0]["id"] == oldest
+    assert result.structured_content["total"] == count
+
+
+def test_the_largest_after_id_is_accepted(tools):
+    result = asyncio.run(reli_mcp.call_tool("journal_since", {"after_id": MAX_JOURNAL_ID}))
+
+    assert result.structured_content["entries"] == []
 
 
 # --- The user model --------------------------------------------------------

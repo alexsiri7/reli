@@ -162,6 +162,9 @@ def _tool() -> Callable[[Callable[..., Any]], Callable[..., Any]]:
 # ``stale`` turns ``days`` into a timedelta; past this a date overflows rather than answering.
 MAX_STALE_DAYS = 36_500
 
+# ``journal.id`` is a Postgres ``bigint``; an ``after_id`` past it fails inside the query (#1722).
+MAX_JOURNAL_ID = 2**63 - 1
+
 
 @_tool()
 def create_thing(
@@ -557,7 +560,9 @@ def get_thing_history(
 
 @_tool()
 def journal_since(
-    after_id: int = 0, actors: list[Actor] | None = None, limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 200
+    after_id: Annotated[int, Field(ge=0, le=MAX_JOURNAL_ID)] = 0,
+    actors: list[Actor] | None = None,
+    limit: Annotated[int, Field(ge=1, le=queries.MAX_LIMIT)] = 200,
 ) -> dict[str, Any]:
     """Everything that happened since a point in the journal, across every Thing and relationship.
 

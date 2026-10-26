@@ -21,44 +21,46 @@ class TestRunCmd(unittest.TestCase):
     @patch("subprocess.run")
     def test_timeout_returns_rc1(self, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired("cmd", 30)
-        r = health.run_cmd("sleep 999", timeout=1)
+        r = health.run_cmd(["sleep", "999"], timeout=1)
         self.assertEqual(r.returncode, 1)
         self.assertEqual(r.stderr, "timeout")
 
     @patch("subprocess.run")
     def test_success(self, mock_run):
         mock_run.return_value = _cp(stdout="hello\n")
-        r = health.run_cmd("echo hello")
+        r = health.run_cmd(["echo", "hello"])
         self.assertEqual(r.stdout, "hello\n")
+        self.assertEqual(mock_run.call_args[0][0], ["echo", "hello"])
+        self.assertFalse(mock_run.call_args[1]["shell"])
 
     @patch("subprocess.run")
     def test_run_cmd_output_strips(self, mock_run):
         mock_run.return_value = _cp(stdout="  42  \n")
-        self.assertEqual(health.run_cmd_output("echo 42"), "42")
+        self.assertEqual(health.run_cmd_output(["echo", "42"]), "42")
 
     @patch("subprocess.run")
     def test_run_cmd_output_failure_returns_empty(self, mock_run):
         mock_run.return_value = _cp(returncode=1)
-        self.assertEqual(health.run_cmd_output("false"), "")
+        self.assertEqual(health.run_cmd_output(["false"]), "")
 
 
 class TestJsonCmd(unittest.TestCase):
     @patch("subprocess.run")
     def test_valid_json(self, mock_run):
         mock_run.return_value = _cp(stdout='[{"id": 1}]')
-        result = health.json_cmd("cmd")
+        result = health.json_cmd(["cmd"])
         self.assertEqual(result, [{"id": 1}])
 
     @patch("subprocess.run")
     def test_invalid_json_returns_empty_list(self, mock_run):
         mock_run.return_value = _cp(stdout="not json")
-        result = health.json_cmd("cmd")
+        result = health.json_cmd(["cmd"])
         self.assertEqual(result, [])
 
     @patch("subprocess.run")
     def test_failure_returns_empty_list(self, mock_run):
         mock_run.return_value = _cp(returncode=1)
-        result = health.json_cmd("cmd")
+        result = health.json_cmd(["cmd"])
         self.assertEqual(result, [])
 
 
@@ -274,33 +276,38 @@ class TestCheckDelivery(unittest.TestCase):
     def test_no_commits(self, mock_isdir, mock_output):
         mock_output.side_effect = [
             "",   # git log (no commits)
-            "3",  # branch count
+            "  origin/a\n  origin/b\n  origin/c",  # unmerged branches
             "",   # git log (no commits) -- second rig
-            "0",  # branch count
+            "",   # unmerged branches
             "",   # git log (no commits) -- third rig
-            "0",  # branch count
+            "",   # unmerged branches
         ]
         report = health.HealthReport()
-        health.check_delivery(report, city="/tmp/fake")
+        with patch.object(health, "RIGS", ["reli", "gascity", "other"]):
+            health.check_delivery(report, city="/tmp/fake")
         # No problems from delivery -- only info messages for no merges
         self.assertEqual(report.problems, 0)
+        infos = [r.message for r in report.results if r.level == "info"]
+        self.assertTrue(any("reli: no merges in last hour (3 unmerged branches)" in m for m in infos))
+        branch_cmd = mock_output.call_args_list[1][0][0]
+        self.assertEqual(branch_cmd, ["git", "-C", "/tmp/fake/rigs/reli", "branch", "-r", "--no-merged", "master"])
 
     @patch("health.run_cmd_output")
     @patch("os.path.isdir", return_value=True)
     def test_with_commits(self, mock_isdir, mock_output):
         mock_output.side_effect = [
             "abc123 fix bug\ndef456 add feature",  # 2 commits
-            "5",                                     # branches
+            "  origin/x\n  origin/y",                # unmerged branches
             "abc123 fix bug\ndef456 add feature",    # latest log
             "",                                      # second rig: no commits
-            "0",
+            "",
             "",                                      # third rig: no commits
-            "0",
+            "",
         ]
         report = health.HealthReport()
         health.check_delivery(report, city="/tmp/fake")
         oks = [r for r in report.results if r.level == "ok"]
-        self.assertTrue(any("2 commits merged" in o.message for o in oks))
+        self.assertTrue(any("2 commits merged, 2 unmerged branches" in o.message for o in oks))
 
 
 class TestCheckOrphanedBeads(unittest.TestCase):
@@ -323,6 +330,26 @@ class TestCheckOrphanedBeads(unittest.TestCase):
         health._check_orphaned_beads(report, "reli", "/tmp/rigs/reli", running_agents=[])
         oks = [r for r in report.results if r.level == "ok"]
         self.assertTrue(any("reset orphaned bead-123" in o.message for o in oks))
+        mock_output.assert_called_once_with(
+            ["git", "ls-remote", "--heads", "origin", "--", "fix-bug"],
+            timeout=10, cwd="/tmp/rigs/reli",
+        )
+        mock_run.assert_called_once_with(
+            ["bd", "update", "bead-123", "--status=open", "--assignee="],
+            timeout=10, cwd="/tmp/rigs/reli",
+        )
+
+    @patch("health.run_cmd")
+    @patch("health.run_cmd_output", return_value="")
+    @patch("health.bd_list")
+    def test_orphaned_bead_left_when_branch_not_on_origin(self, mock_bd, mock_output, mock_run):
+        mock_bd.return_value = [
+            {"id": "bead-123", "assignee": "polecat-1", "metadata": {"branch": "fix-bug"}},
+        ]
+        report = health.HealthReport()
+        health._check_orphaned_beads(report, "reli", "/tmp/rigs/reli", running_agents=[])
+        mock_run.assert_not_called()
+        self.assertEqual(report.results, [])
 
     @patch("health.bd_list")
     def test_skips_always_restarted_roles(self, mock_bd):
@@ -407,6 +434,43 @@ class TestPipelineFlow(unittest.TestCase):
         warns = [r for r in report.results if r.level == "warn"]
         self.assertTrue(any("no refinery" in w.message for w in warns))
 
+    @patch("health.run_cmd")
+    @patch("health.tmux_has_session", return_value=False)
+    @patch("health.gh_pr_list", return_value=[])
+    @patch("health.gh_issue_list", return_value=[{"number": 1, "title": "t", "url": "u"}])
+    @patch("health.get_repo_slug", return_value="owner/repo")
+    @patch("os.path.isdir", return_value=True)
+    def test_fix_kills_and_reports_each_hung_polecat(self, mock_isdir, mock_slug, mock_issues,
+                                                     mock_prs, mock_has, mock_run):
+        mock_run.side_effect = [_cp(returncode=1), _cp(), _cp(returncode=1)]
+        now = 1000000
+        hung = now - health.VERY_STALE_THRESHOLD - 1
+        sessions = [
+            {"name": f"gascity--polecat-{i}", "activity": hung, "created": hung,
+             "pane_dead": False, "pane_pid": "1"}
+            for i in (1, 2, 3)
+        ]
+        report = health.HealthReport()
+        with patch.object(health, "RIGS", ["gascity"]), \
+                patch("health.tmux_sessions", return_value=sessions):
+            health.check_pipeline_flow(report, fix=True, city="/tmp/fake", now=now)
+        self.assertEqual(
+            [c[0][0] for c in mock_run.call_args_list],
+            [["tmux", "-L", "gc", "kill-session", "-t", f"gascity--polecat-{i}"]
+             for i in (1, 2, 3)],
+        )
+        infos = [r.message for r in report.results if r.level == "info"]
+        for i in (1, 2, 3):
+            self.assertTrue(any(
+                f"$ tmux -L gc kill-session -t gascity--polecat-{i}" in m for m in infos
+            ))
+        applied = infos[infos.index("  Applying fixes..."):]
+        outcomes = [applied[applied.index(f"  -> {d}") + 1] for d in (
+            f"gascity: kill hung polecat gascity--polecat-{i} so reconciler creates a fresh one"
+            for i in (1, 2, 3)
+        )]
+        self.assertEqual(outcomes, ["    failed", "    done", "    failed"])
+
 
 class TestForemanDispatch(unittest.TestCase):
     @patch("health.run_cmd")
@@ -422,8 +486,9 @@ class TestForemanDispatch(unittest.TestCase):
         # gc mail send should be called
         self.assertTrue(mock_run.called)
         cmd = mock_run.call_args[0][0]
-        self.assertIn("gc mail send foreman", cmd)
-        self.assertIn("HEALTH ALERT", cmd)
+        self.assertEqual(cmd[:4], ["gc", "mail", "send", "foreman"])
+        self.assertIn("HEALTH ALERT", cmd[cmd.index("-s") + 1])
+        self.assertIn("Don't just report", cmd[cmd.index("-m") + 1])
 
     def test_not_dispatched_when_below_threshold(self):
         """main() should only dispatch when problems > threshold AND --fix."""

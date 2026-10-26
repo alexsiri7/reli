@@ -66,3 +66,11 @@ def test_either_deploy_switch_marks_a_deploy():
     assert not Settings(DATABASE_URL="x").production
     assert Settings(DATABASE_URL="x", RAILWAY_ENVIRONMENT_NAME="staging").production
     assert Settings(DATABASE_URL="x", PRODUCTION="1").production
+
+
+def test_hide_api_docs_hides_the_docs_without_marking_a_deploy():
+    """#1720: the self-hosted staging deploy hides its docs, but must not refuse its plaintext Postgres."""
+    assert not Settings(DATABASE_URL="x").api_docs_hidden
+    assert Settings(DATABASE_URL="x", PRODUCTION="1").api_docs_hidden
+    hidden = Settings(DATABASE_URL="x", HIDE_API_DOCS="1")
+    assert hidden.api_docs_hidden and not hidden.production
