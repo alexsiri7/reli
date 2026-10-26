@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import html
 import logging
+import reprlib
 import secrets
 import uuid
 from collections.abc import Callable, Coroutine
@@ -49,6 +50,7 @@ from .oauth_state import (
     cleanup_and_pop,
     cleanup_and_store,
     consume_refresh_token,
+    credential_digest,
     extend_expiry,
     mcp_auth_codes,
     mcp_oauth_sessions,
@@ -77,6 +79,9 @@ MAX_BODY_BYTES = 8 * 1024
 # the longest URI still fits in MAX_BODY_BYTES — a bound in characters would not, since one
 # character can be four bytes.
 MAX_PARAM_LENGTH = 2048
+# The most of a caller-supplied value a log line quotes: enough to recognise it, never the volume a
+# caller with no credential chooses (#1716).
+MAX_LOGGED_CHARS = 200
 
 _AT_CAPACITY = "Server is at capacity; try again later"
 _CODE_GONE = "Authorization code is invalid or expired: re-authorise the connector"
@@ -137,6 +142,11 @@ def _within_param_bytes(value: str) -> str:
 
 
 _RedirectUri = Annotated[str, AfterValidator(_within_param_bytes)]
+
+
+# Cuts the escaped text, not the value: one character can escape to ten.
+_log_repr = reprlib.Repr()
+_log_repr.maxstring = MAX_LOGGED_CHARS
 
 
 # --- Discovery -------------------------------------------------------------
@@ -236,7 +246,9 @@ def _validate_registration_body(raw: bytes) -> _ClientMetadata:
 def _validate_auth_method(metadata: _ClientMetadata) -> str:
     auth_method = metadata.token_endpoint_auth_method
     if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
-        logger.warning("MCP OAuth: rejected token_endpoint_auth_method during registration: %r", auth_method)
+        logger.warning(
+            "MCP OAuth: rejected token_endpoint_auth_method during registration: %s", _log_repr.repr(auth_method)
+        )
         raise HTTPException(
             status_code=400,
             detail=f"token_endpoint_auth_method must be one of {', '.join(TOKEN_ENDPOINT_AUTH_METHODS)}: {auth_method}",
@@ -247,7 +259,7 @@ def _validate_auth_method(metadata: _ClientMetadata) -> str:
 def _validate_redirect_uris(redirect_uris: list[str]) -> None:
     for uri in redirect_uris:
         if not _redirect_uri_is_safe(uri):
-            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %r", uri)
+            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %s", _log_repr.repr(uri))
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -286,7 +298,7 @@ async def oauth_register(request: Request) -> JSONResponse:
     client_secret = secrets.token_urlsafe(32)
     now = datetime.now(UTC)
     client = {
-        "client_secret": client_secret,
+        "client_secret": credential_digest(client_secret),
         "redirect_uris": redirect_uris,
         "client_name": metadata.client_name,
         "grant_types": metadata.grant_types,
@@ -298,7 +310,7 @@ async def oauth_register(request: Request) -> JSONResponse:
     with auth._session() as session:
         cleanup_and_store(session, mcp_registered_clients, client_id, client)
 
-    logger.info("MCP OAuth: registered client %s (%r)", client_id, client["client_name"])
+    logger.info("MCP OAuth: registered client %s (%s)", client_id, _log_repr.repr(metadata.client_name))
 
     return JSONResponse(
         {
@@ -386,7 +398,11 @@ def oauth_authorize(
             raise HTTPException(status_code=400, detail="redirect_uri not registered for this client")
         # A registration stored before the check tightened can still hold an unsafe URI.
         if not _redirect_uri_is_safe(redirect_uri):
-            logger.warning("MCP OAuth: refused stored unsafe redirect_uri for client %s: %r", client_id, redirect_uri)
+            logger.warning(
+                "MCP OAuth: refused stored unsafe redirect_uri for client %s: %s",
+                client_id,
+                _log_repr.repr(redirect_uri),
+            )
             raise HTTPException(
                 status_code=400, detail="redirect_uri is not one this server accepts: re-register the client"
             )
@@ -478,7 +494,7 @@ def _validate_client_secret(session: Session, client_id: str, client_secret: str
         raise _TokenError(400, "invalid_client", "Unknown client_id: register again via POST /oauth/register")
     if client["token_endpoint_auth_method"] == "none":
         return
-    if not client_secret or not secrets.compare_digest(client_secret, client["client_secret"]):
+    if not client_secret or not secrets.compare_digest(credential_digest(client_secret), client["client_secret"]):
         raise _TokenError(401, "invalid_client", "Invalid client credentials: re-register the connector")
 
 

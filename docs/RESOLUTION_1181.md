@@ -1,7 +1,7 @@
 # Resolution of Issue #1181
 
 **Date**: 2026-06-11  
-**Issue**: Deploy down: https://reli.interstellarai.net returning HTTP 000  
+**Issue**: Deploy down: https://<reli-host> returning HTTP 000  
 **Status**: ✅ RESOLVED
 
 ## Summary

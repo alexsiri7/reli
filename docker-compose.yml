@@ -24,6 +24,9 @@ services:
       # This container is only ever a deploy, so it gets the deploy's checks: among them, a
       # DATABASE_URL naming a weaker sslmode than require fails the boot (#1695).
       - PRODUCTION=${PRODUCTION:-1}
+    # The server binds an unprivileged port and needs no Linux capability (#1712).
+    cap_drop:
+      - ALL
     restart: unless-stopped
 
   # Local development database: `docker compose --profile localdb up -d`,

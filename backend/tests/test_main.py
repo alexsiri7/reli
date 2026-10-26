@@ -1,13 +1,18 @@
 """What the assembled app routes where."""
 
+import logging
 import os
+import socket
 import subprocess
 import sys
+import time
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from backend import auth
+from backend.config import settings
 
 
 def test_healthz_reports_ok(client):
@@ -71,6 +76,55 @@ def test_an_unhandled_exception_500_carries_the_security_headers(monkeypatch):
 
     assert response.status_code == 500
     _assert_security_headers(response)
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_an_unhandled_exception_500_off_the_api_stays_cacheable(monkeypatch):
+    """The handler sends the 500 itself, so it must make the same /api choice the middleware does."""
+    from backend.main import app
+
+    def boom() -> str:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(auth, "base_url", boom)
+
+    response = TestClient(app, raise_server_exceptions=False).get("/.well-known/oauth-authorization-server")
+
+    assert response.status_code == 500
+    _assert_security_headers(response)
+    assert "Cache-Control" not in response.headers
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param("/api/things", id="web-view-401-sent-by-its-own-middleware"),
+        pytest.param("/api/auth/me", id="public-auth-route"),
+        pytest.param("/api/nowhere", id="unmatched-api-path"),
+    ],
+)
+def test_every_api_response_is_no_store(client, path):
+    """#1709: the graph and the signed-in identity must not outlive the session in any cache, and a
+    refusal is no exception."""
+    assert client.get(path).headers["Cache-Control"] == "no-store"
+
+
+def test_a_served_graph_is_no_store(client, monkeypatch):
+    """The 200 that carries the graph, not only the refusals around it."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "a-test-secret-key-that-is-forty-eight-chars-long")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    token = auth.create_jwt("1234567890", "owner@example.com", audience=auth.WEB_AUDIENCE)
+
+    response = client.get("/api/things", headers={"Cookie": f"{auth.SESSION_COOKIE}={token}"})
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.parametrize("path", ["/healthz", "/mcp/", "/.well-known/oauth-authorization-server"])
+def test_no_store_stays_off_what_is_not_the_api(client, path):
+    """``/oauth/`` sets its own and nothing else here carries the graph."""
+    assert "Cache-Control" not in client.get(path).headers
 
 
 def _assert_security_headers(response) -> None:
@@ -106,6 +160,7 @@ print(*(client.get(path).status_code for path in ("/openapi.json", "/docs", "/re
     ("switch", "expected"),
     [
         pytest.param({"RAILWAY_ENVIRONMENT_NAME": "production"}, ["404"] * 3, id="deploy"),
+        pytest.param({"HIDE_API_DOCS": "1"}, ["404"] * 3, id="hide-api-docs"),
         pytest.param({}, ["200"] * 3, id="local-run"),
     ],
 )
@@ -114,7 +169,8 @@ def test_the_api_docs_are_404_in_a_deploy_and_served_locally(tmp_path, switch, e
     behind them; a local uvicorn keeps all three."""
     (tmp_path / "assets").mkdir()
     (tmp_path / "index.html").write_text("<!doctype html><title>Reli</title>")
-    env = {key: value for key, value in os.environ.items() if key not in {"RAILWAY_ENVIRONMENT_NAME", "PRODUCTION"}}
+    switches = {"RAILWAY_ENVIRONMENT_NAME", "PRODUCTION", "HIDE_API_DOCS"}
+    env = {key: value for key, value in os.environ.items() if key not in switches}
     probe = subprocess.run(
         [sys.executable, "-c", _DOCS_PROBE, str(tmp_path)],
         env={**env, **switch},
@@ -124,3 +180,73 @@ def test_the_api_docs_are_404_in_a_deploy_and_served_locally(tmp_path, switch, e
     )
 
     assert probe.stdout.split() == expected
+
+
+def test_the_access_log_carries_no_query_string():
+    """#1713: Google delivers ``code`` and ``state`` on the callback's URL, and uvicorn's access log
+    writes the request target of every request. Served by uvicorn's CLI as the image serves it, so the line under
+    test is the one uvicorn really writes after its own logging setup. The lifespan is off so no
+    database is needed; the filter does not look at which route answered."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "backend.main:app", "--port", str(port), "--lifespan", "off"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        base = f"http://127.0.0.1:{port}"
+        for _ in range(300):
+            if server.poll() is not None:
+                break
+            try:
+                httpx.get(f"{base}/healthz")
+                break
+            except httpx.TransportError:
+                time.sleep(0.1)
+        started = server.poll() is None
+        response = (
+            httpx.get(f"{base}/healthz", params={"code": "c0de-secret", "state": "st4te-secret"}) if started else None
+        )
+    finally:
+        server.terminate()
+        log, _ = server.communicate(timeout=30)
+
+    assert started, f"uvicorn exited before answering /healthz on port {port}:\n{log}"
+    assert response is not None and response.status_code == 200
+    assert log.count('"GET /healthz HTTP/1.1" 200') == 2
+    assert "c0de-secret" not in log
+    assert "st4te-secret" not in log
+
+
+@pytest.mark.parametrize(
+    ("log_level", "expected"),
+    [
+        ("DEBUG", (logging.DEBUG, logging.INFO, logging.INFO, logging.INFO)),
+        (None, (logging.INFO, logging.INFO, logging.INFO, logging.INFO)),
+        ("WARNING", (logging.WARNING, logging.WARNING, logging.WARNING, logging.WARNING)),
+    ],
+)
+def test_log_level_below_info_reaches_only_the_backend_loggers(log_level, expected):
+    """#1714: on the root logger LOG_LEVEL=DEBUG would turn on httpx's debug output too, and that
+    carries the Google sign-in exchange. Reli's own loggers still go to DEBUG, stay at INFO when it
+    is unset, and a level above INFO quiets everything."""
+    env = {k: v for k, v in os.environ.items() if k != "LOG_LEVEL"}
+    if log_level is not None:
+        env["LOG_LEVEL"] = log_level
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import logging, backend.main; print(*(logging.getLogger(n).getEffectiveLevel() for n in "
+            "('backend.auth', 'httpx', 'httpcore', 'root')))",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert probe.stdout.split() == [str(level) for level in expected]

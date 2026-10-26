@@ -265,6 +265,36 @@ def test_a_client_name_cannot_forge_a_second_log_line(client, caplog):
 
 
 @pytest.mark.parametrize(
+    ("field", "value", "logged"),
+    [
+        ("client_name", "C" * 4000, "registered client"),
+        ("client_name", "\U0010ffff" * 600, "registered client"),
+        ("redirect_uris", ["http://evil.com/" + "a" * 2000], "unsafe redirect_uri"),
+        ("redirect_uris", ["http://evil.com/" + "\x01" * 1000], "unsafe redirect_uri"),
+        ("token_endpoint_auth_method", "m" * 4000, "token_endpoint_auth_method"),
+        ("token_endpoint_auth_method", "\U0010ffff" * 600, "token_endpoint_auth_method"),
+    ],
+    ids=[
+        "client_name",
+        "escaped_client_name",
+        "redirect_uri",
+        "escaped_redirect_uri",
+        "auth_method",
+        "escaped_auth_method",
+    ],
+)
+def test_register_logs_a_bounded_prefix_of_what_the_caller_sent(client, caplog, field, value, logged):
+    """An unauthenticated caller chooses these values, so it must not choose the size of the log line (#1716)."""
+    body = {"redirect_uris": [CLIENT_REDIRECT], field: value}
+
+    with caplog.at_level(logging.INFO, logger="backend.mcp_oauth"):
+        client.post("/oauth/register", json=body)
+
+    [record] = [record for record in caplog.records if logged in record.getMessage()]
+    assert len(record.getMessage()) < mcp_oauth.MAX_LOGGED_CHARS + 200
+
+
+@pytest.mark.parametrize(
     "redirect_uris",
     [
         ["http://evil.com/cb"],
@@ -765,6 +795,31 @@ def test_authorize_refuses_a_redirect_uri_registered_before_the_check_tightened(
     assert "server_state" not in response.text
 
 
+def test_authorize_logs_a_bounded_prefix_of_a_stored_unsafe_redirect_uri(client, session, caplog):
+    smuggled = "https://claude.ai@attacker.example/" + "\x01" * 2000
+    cleanup_and_store(
+        session,
+        mcp_registered_clients,
+        "stale-client",
+        {
+            "client_secret": "secret",
+            "redirect_uris": [smuggled],
+            "client_name": "Claude",
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "client_secret_post",
+            "scope": "mcp",
+            "expires_at": datetime.now(UTC) + timedelta(hours=1),
+        },
+    )
+
+    with caplog.at_level(logging.WARNING, logger="backend.mcp_oauth"):
+        _authorize(client, "stale-client", redirect_uri=smuggled)
+
+    [record] = [record for record in caplog.records if "stored unsafe redirect_uri" in record.getMessage()]
+    assert len(record.getMessage()) < mcp_oauth.MAX_LOGGED_CHARS + 200
+
+
 def test_authorize_confirm_sends_the_browser_to_google(client, session):
     registered = _register(client)
     consent = _authorize(client, registered["client_id"])
@@ -960,6 +1015,20 @@ def test_a_wrong_secret_does_not_consume_the_code(client, session):
     assert right.status_code == 200, right.text
 
 
+def test_a_client_secret_is_stored_as_its_digest_which_does_not_authenticate(client, session):
+    registered = _register(client, auth_method="client_secret_post")
+    stored = cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["client_secret"]
+    assert stored == credential_digest(registered["client_secret"])
+    code = _seed_code(session, registered["client_id"], "verifier")
+
+    response = _token(
+        client, code=code, client_id=registered["client_id"], code_verifier="verifier", client_secret=stored
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"] == "invalid_client"
+
+
 def test_a_wrong_secret_does_not_consume_the_refresh_token(client, session):
     registered = _register(client, auth_method="client_secret_post")
     code = _seed_code(session, registered["client_id"], "verifier")
@@ -1043,6 +1112,8 @@ def test_a_refresh_token_family_starts_at_the_code_exchange_and_survives_rotatio
     assert consumed["family_id"] == live["family_id"]
     assert consumed["consumed_at"] is not None
     assert live["consumed_at"] is None
+    assert (consumed["subject"], consumed["email"]) == (None, None)
+    assert (live["subject"], live["email"]) == ("1234567890", "owner@example.com")
 
     other_code = _seed_code(session, registered["client_id"], "verifier", code="other-code")
     other = _token(client, code=other_code, client_id=registered["client_id"], code_verifier="verifier").json()

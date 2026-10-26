@@ -25,10 +25,31 @@ from .mcp_transport import create_mcp_asgi_app
 from .sentry import init_sentry
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
+_log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+# Importing backend.mcp_server has already configured the root logger — the MCP SDK's own
+# basicConfig, at INFO — so a basicConfig here would be a no-op and the levels are set directly.
+# LOG_LEVEL below INFO reaches only Reli's own loggers: on the root logger it would turn on every
+# library's debug output, and httpx's carries the bodies of the Google sign-in exchange (#1714).
+logging.getLogger().setLevel(max(_log_level, logging.INFO))
+logging.getLogger("backend").setLevel(_log_level)
+
+
+def _strip_query_string(record: logging.LogRecord) -> bool:
+    """Cuts the query string from uvicorn's access-log line, leaving the path (#1713).
+
+    Google delivers the sign-in's ``code`` and ``state`` on the callback's URL, and uvicorn logs the
+    full request target of every request to a log whose retention Reli does not control. Its
+    protocols all log ``(client, method, target, http_version, status)``.
+    """
+    if isinstance(record.args, tuple) and len(record.args) == 5:
+        client, method, target, http_version, status = record.args
+        if isinstance(target, str):
+            record.args = (client, method, target.partition("?")[0], http_version, status)
+    return True
+
+
+# uvicorn configures its loggers before it imports the app, so the filter outlives that setup.
+logging.getLogger("uvicorn.access").addFilter(_strip_query_string)
 
 init_sentry()
 
@@ -65,8 +86,9 @@ app = FastAPI(
     ),
     version="0.1.0",
     # FastAPI mounts /docs and /redoc only beside a schema, so this one argument takes all three
-    # offline in a deploy (#1476), and the frontend fallback 404s them; a local run keeps them.
-    openapi_url=None if settings.production else "/openapi.json",
+    # offline in a deploy (#1476) or wherever HIDE_API_DOCS is set (#1720), and the frontend
+    # fallback 404s them; a local run keeps them.
+    openapi_url=None if settings.api_docs_hidden else "/openapi.json",
     lifespan=lifespan,
 )
 
@@ -115,9 +137,19 @@ _SECURITY_HEADERS = {
     ),
 }
 
+#: What an ``/api`` response gets (#1709): that prefix serves the graph and the signed-in
+#: identity, and neither may outlive the session in a browser or proxy cache. The bundle stays
+#: cacheable; ``/oauth/`` sets its own.
+_API_HEADERS = {**_SECURITY_HEADERS, "Cache-Control": "no-store"}
+
+
+def _is_api(path: str) -> bool:
+    return path == api.router.prefix or path.startswith(f"{api.router.prefix}/")
+
 
 class _SecurityHeaders:
-    """Adds :data:`_SECURITY_HEADERS` to every response, whichever layer produced it.
+    """Adds :data:`_SECURITY_HEADERS` to every response, whichever layer produced it, and
+    :data:`_API_HEADERS` to an ``/api`` one.
 
     Raw ASGI rather than ``BaseHTTPMiddleware``, which buffers the response in its own task and
     breaks the streamable-HTTP transport under ``/mcp``.
@@ -131,9 +163,11 @@ class _SecurityHeaders:
             await self._app(scope, receive, send)
             return
 
+        headers = _API_HEADERS if _is_api(scope["path"]) else _SECURITY_HEADERS
+
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
-                MutableHeaders(scope=message).update(_SECURITY_HEADERS)
+                MutableHeaders(scope=message).update(headers)
             await send(message)
 
         await self._app(scope, receive, send_with_headers)
@@ -166,7 +200,8 @@ async def _unhandled_exception(request: Request, exc: Exception) -> Response:
     own fallback goes out bare. It re-raises afterwards, so the error still reaches the log and
     Sentry.
     """
-    return PlainTextResponse("Internal Server Error", status_code=500, headers=_SECURITY_HEADERS)
+    headers = _API_HEADERS if _is_api(request.url.path) else _SECURITY_HEADERS
+    return PlainTextResponse("Internal Server Error", status_code=500, headers=headers)
 
 
 app.add_exception_handler(Exception, _unhandled_exception)

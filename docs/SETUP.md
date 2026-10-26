@@ -108,7 +108,8 @@ These are the fields of `Settings` in `backend/config.py`, and nothing else is r
 | `GOOGLE_CLIENT_ID` | empty | The Web application OAuth client that identifies Reli to Google for the sign-in, and the only Google credential Reli holds. Empty closes the sign-in; the boot succeeds. |
 | `GOOGLE_CLIENT_SECRET` | empty | As above. |
 | `PRODUCTION` | empty | Marks a deploy outside Railway, which sets `RAILWAY_ENVIRONMENT_NAME` itself; `docker-compose.yml` sets it to `1`. A deploy hides `/openapi.json` and refuses a `DATABASE_URL` whose `sslmode` is weaker than `require`. |
-| `LOG_LEVEL` | `INFO` | Python logging level. |
+| `HIDE_API_DOCS` | empty | Hides `/openapi.json`, `/docs` and `/redoc` without marking a deploy, so the TLS check stays off; `docker-compose.staging.yml` sets it, since its `postgres-staging` speaks no TLS (#1720). |
+| `LOG_LEVEL` | `INFO` | Level of Reli's own loggers; library loggers never go below `INFO` (#1714). |
 | `SENTRY_DSN` | empty | Empty disables Sentry. |
 | `SENTRY_ENVIRONMENT` | `production` | Environment tag on Sentry events. |
 | `SENTRY_TRACES_SAMPLE_RATE` | `0.2` | Sentry tracing sample rate. |

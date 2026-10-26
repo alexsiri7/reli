@@ -1,7 +1,8 @@
 """The five bounded stores behind the authorization server: what they keep, purge, consume, refuse or evict.
 
-The last test walks a fresh database through the ``v4_hashed_credential_keys`` revision itself,
-since ``migrated_db`` only ever runs it over empty tables.
+The last two tests walk a fresh database through the ``v4_hashed_credential_keys`` and
+``v4_client_secret_digests`` revisions themselves, since ``migrated_db`` only ever runs them over
+empty tables.
 """
 
 import os
@@ -137,10 +138,12 @@ def test_consume_refresh_token_marks_the_row_and_answers_once(session):
     assert consumed is not None
     assert consumed["family_id"] == "fam-1"
     assert consumed["consumed_at"] is not None
+    assert (consumed["subject"], consumed["email"]) == ("google-sub", "owner@example.com")
     assert consume_refresh_token(session, "token-1") is None
     kept = cleanup_and_get(session, mcp_refresh_tokens, "token-1")
     assert kept is not None
     assert kept["consumed_at"] == consumed["consumed_at"]
+    assert (kept["subject"], kept["email"]) == (None, None)
 
 
 def test_consume_refresh_token_ignores_an_expired_token(session):
@@ -325,3 +328,43 @@ def test_the_hashing_revision_keeps_every_live_credential_redeemable(fresh_datab
         assert cleanup_and_get(session, mcp_refresh_tokens, "plain-token") is not None
         assert consume_refresh_token(session, "rotated-token") is not None
         assert cleanup_and_pop(session, mcp_auth_codes, "plain-code") is not None
+
+
+def test_the_client_secret_revision_hashes_secrets_and_scrubs_consumed_refresh_tokens(fresh_database):
+    """A stored secret is rewritten to the digest ``credential_digest`` computes, so the connector
+    holding it still authenticates; a token consumed before the revision loses its identity and a
+    live one keeps it."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    config = AlembicConfig(os.path.join(repo_root, "alembic.ini"))
+    alembic_command.upgrade(config, "v4_unique_evidence_for")
+
+    with Session(get_engine()) as session:
+        session.execute(
+            text(
+                "INSERT INTO mcp_registered_clients (client_id, client_secret, redirect_uris, client_name,"
+                " grant_types, response_types, token_endpoint_auth_method, scope, expires_at)"
+                " VALUES ('client-1', 'plain-secret', '[]', 'Claude', '[]', '[]', 'client_secret_post', 'mcp',"
+                " :expires_at)"
+            ),
+            {"expires_at": datetime.now(UTC) + timedelta(days=30)},
+        )
+        _insert_refresh_token(session, credential_digest("live-token"), family_id="fam-1")
+        _insert_refresh_token(session, credential_digest("consumed-token"), family_id="fam-1")
+        session.execute(
+            text("UPDATE mcp_refresh_tokens SET consumed_at = now() WHERE refresh_token = :token"),
+            {"token": credential_digest("consumed-token")},
+        )
+        session.commit()
+
+    alembic_command.upgrade(config, "head")
+
+    with Session(get_engine()) as session:
+        client = cleanup_and_get(session, mcp_registered_clients, "client-1")
+        assert client is not None
+        assert client["client_secret"] == credential_digest("plain-secret")
+        consumed = cleanup_and_get(session, mcp_refresh_tokens, "consumed-token")
+        assert consumed is not None
+        assert (consumed["subject"], consumed["email"]) == (None, None)
+        live = consume_refresh_token(session, "live-token")
+        assert live is not None
+        assert (live["subject"], live["email"]) == ("google-sub", "owner@example.com")
