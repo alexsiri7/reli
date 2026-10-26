@@ -54,7 +54,17 @@ case "$*" in
 esac
 """
 
-pytestmark = pytest.mark.skipif(shutil.which("jq") is None, reason="the deploy script needs jq")
+_JQ = shutil.which("jq")
+pytestmark = pytest.mark.skipif(
+    _JQ is None and not os.environ.get("CI"),
+    reason="the deploy script needs jq; under CI its absence is a failure, not a skip",
+)
+
+
+def test_jq_is_on_path():
+    """GitHub Actions sets CI=true. There a missing jq fails here by name rather than as nine
+    'command not found' failures or, worse, nine silent skips."""
+    assert _JQ is not None
 
 
 def _deploy(
