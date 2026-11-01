@@ -80,7 +80,6 @@ Every public function writes its row and its journal entry in one transaction:
 - `due_for_checkin` — active Things whose `checkin_date` has arrived, most important first, less
   Reli's own records (the `INTERNAL_TAGS` in `backend/db_models.py`, #1516).
 - `stale` — active Things untouched since a given moment, longest untouched first.
-- `by_tag` — Things carrying any (or all) of a set of tags.
 - `blocked` — Things whose `Blocks` target is still active.
 - `needs_input` — active Things tagged `#NeedsInput`, most important first, capped with a total so
   a decision cannot silently fall off the list.

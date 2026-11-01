@@ -146,23 +146,6 @@ def stale(session: Session, since: datetime) -> list[ThingRecord]:
     return list(session.exec(statement).all())
 
 
-def by_tag(
-    session: Session,
-    tags: Sequence[str],
-    match: Literal["any", "all"] = "any",
-) -> list[ThingRecord]:
-    """Things carrying these tags — any of them by default, all of them on ``match="all"``.
-
-    An empty *tags* returns nothing rather than everything: "matches none of no tags" is the
-    answer that cannot be mistaken for an unfiltered listing.
-    """
-    if not tags:
-        return []
-
-    statement = select(ThingRecord).where(_tagged(tags, match)).order_by(col(ThingRecord.priority).desc())
-    return list(session.exec(statement).all())
-
-
 def needs_input(session: Session, *, limit: int = 100) -> NeedsInput:
     """Active Things tagged ``#NeedsInput`` — what only the user can settle — most important first.
 
@@ -431,10 +414,8 @@ def find_things(
 ) -> list[ThingRecord]:
     """Things matching every filter that was given, most important first.
 
-    An empty or omitted *tags* means "no tag filter" and returns Things regardless of their tags —
-    the opposite of :func:`by_tag`, which reads an empty *tags* as "matches none of no tags" and
-    returns nothing. The two differ because this is the general listing query, where omitting a
-    filter must not empty the result, and ``by_tag`` answers one question about specific tags.
+    An empty or omitted *tags* means "no tag filter" and returns Things regardless of their tags:
+    omitting a filter must not empty the result, since this is the general listing query.
 
     ``active=None`` drops the active filter and returns archived Things alongside live ones.
     """
@@ -495,7 +476,7 @@ def journal_since(
 
     *actors* restricts the window to entries those actors made, which is how a caller keeps
     Claude's own unattended edits out of a conclusion about the user. ``None`` means every actor;
-    an empty sequence means no actors and returns nothing, as :func:`by_tag` reads an empty filter.
+    an empty sequence means no actors and returns nothing.
 
     Ordered by ``id`` rather than ``occurred_at`` for the reason :func:`history` gives: two
     mutations inside one transaction share a timestamp, and the sequence is the point.

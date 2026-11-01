@@ -69,7 +69,7 @@ def test_the_graph_tables_and_the_oauth_state_tables_exist_and_no_legacy_table_d
 
 
 def test_things_tags_has_a_gin_index(session):
-    """by_tag depends on it, and jsonb_ops rather than jsonb_path_ops so that ?| is indexed."""
+    """Every tag-filtered query depends on it, and jsonb_ops rather than jsonb_path_ops so that ?| is indexed."""
     indexdef = session.execute(
         text("SELECT indexdef FROM pg_indexes WHERE tablename = 'things' AND indexname = 'ix_things_tags'")
     ).scalar_one()

@@ -102,7 +102,7 @@ def upgrade() -> None:
     op.create_index("ix_things_checkin_date", "things", ["checkin_date"])
     op.create_index("ix_things_active", "things", ["active"])
     op.create_index("ix_things_updated_at", "things", ["updated_at"])
-    # Default jsonb_ops rather than jsonb_path_ops: by_tag(match="any") uses ?|, which
+    # Default jsonb_ops rather than jsonb_path_ops: find_things(match="any") uses ?|, which
     # jsonb_path_ops does not index.
     op.create_index("ix_things_tags", "things", ["tags"], postgresql_using="gin")
 
