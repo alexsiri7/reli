@@ -207,7 +207,7 @@ def _describe(invalid: ValidationError) -> str:
 
 
 def _as_delivered(uri: str) -> AnyUrl:
-    """``uri`` as the browser reads it once ``auth._client_redirect`` sends it there.
+    """``uri`` as the browser reads it once ``auth.client_redirect`` sends it there.
 
     ``RedirectResponse`` percent-quotes the URL on the way out, which changes what some characters
     mean: a backslash, which the URL standard reads as ``/``, arrives as ``%5C`` and leaves whatever
@@ -216,7 +216,7 @@ def _as_delivered(uri: str) -> AnyUrl:
     the query the redirect appends cannot move the authority. Raises ``ValidationError`` when that
     form is not a URL.
     """
-    return AnyUrl(auth._client_redirect(uri, "").headers["location"])
+    return AnyUrl(auth.client_redirect(uri, "").headers["location"])
 
 
 def _redirect_uri_is_safe(uri: str) -> bool:
@@ -307,7 +307,7 @@ async def oauth_register(request: Request) -> JSONResponse:
         "scope": metadata.scope,
         "expires_at": now + timedelta(seconds=UNUSED_CLIENT_TTL_SECONDS),
     }
-    with auth._session() as session:
+    with auth.open_db_session() as session:
         cleanup_and_store(session, mcp_registered_clients, client_id, client)
 
     logger.info("MCP OAuth: registered client %s (%s)", client_id, _log_repr.repr(metadata.client_name))
@@ -390,7 +390,7 @@ def oauth_authorize(
     if not code_challenge:
         raise HTTPException(status_code=400, detail="code_challenge is required (PKCE required)")
 
-    with auth._session() as session:
+    with auth.open_db_session() as session:
         registered = cleanup_and_get(session, mcp_registered_clients, client_id)
         if registered is None:
             raise HTTPException(status_code=400, detail="Unknown client_id — register first via POST /oauth/register")
@@ -446,7 +446,7 @@ def oauth_authorize_confirm(request: Request, server_state: str = Form(...)) -> 
         raise HTTPException(
             status_code=400, detail="Approve from Reli's own consent page: start again from the connector."
         )
-    with auth._session() as session:
+    with auth.open_db_session() as session:
         flow = cleanup_and_get(session, mcp_oauth_sessions, server_state)
     if flow is None:
         raise HTTPException(status_code=400, detail="Sign-in expired: start again from the connector.")
@@ -665,7 +665,7 @@ async def oauth_token(
         logger.error("MCP OAuth: token refused, SECRET_KEY is not configured")
         raise HTTPException(status_code=501, detail=auth.not_configured_detail(["SECRET_KEY"]))
     try:
-        with auth._session() as session:
+        with auth.open_db_session() as session:
             if grant_type == "refresh_token":
                 return _exchange_refresh_token(session, refresh_token, client_id, client_secret)
             if grant_type != "authorization_code":

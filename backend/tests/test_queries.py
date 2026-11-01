@@ -8,7 +8,6 @@ from backend.db_models import NEEDS_INPUT_TAG, Actor, RelationshipType
 from backend.queries import (
     MAX_RELATED_DEPTH,
     blocked,
-    by_tag,
     children,
     due_for_checkin,
     find_things,
@@ -85,31 +84,6 @@ def test_stale_excludes_inactive(session):
     session.commit()
 
     assert stale(session, now - timedelta(days=7)) == []
-
-
-# --- by_tag ----------------------------------------------------------------
-
-
-def test_by_tag_any_matches_either_tag(session):
-    _thing(session, "work", tags=["work"])
-    _thing(session, "home", tags=["home"])
-    _thing(session, "neither", tags=["other"])
-
-    assert sorted(_titles(by_tag(session, ["work", "home"]))) == ["home", "work"]
-
-
-def test_by_tag_all_requires_every_tag(session):
-    _thing(session, "both", tags=["work", "urgent"])
-    _thing(session, "one", tags=["work"])
-
-    assert _titles(by_tag(session, ["work", "urgent"], match="all")) == ["both"]
-
-
-def test_by_tag_with_no_tags_returns_nothing(session):
-    _thing(session, "tagged", tags=["work"])
-
-    assert by_tag(session, []) == []
-    assert by_tag(session, [], match="all") == []
 
 
 # --- needs_input -----------------------------------------------------------
@@ -393,12 +367,11 @@ def test_relationships_for_an_unconnected_thing_is_empty(session):
 # --- find_things -----------------------------------------------------------
 
 
-def test_find_things_with_no_filters_returns_active_things_unlike_by_tag(session):
+def test_find_things_with_no_filters_returns_active_things(session):
     _thing(session, "untagged")
     _thing(session, "tagged", tags=["work"])
 
     assert sorted(_titles(find_things(session))) == ["tagged", "untagged"]
-    assert by_tag(session, []) == []
 
 
 def test_find_things_filters_by_tag(session):

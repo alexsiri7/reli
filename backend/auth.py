@@ -37,7 +37,7 @@ from starlette.responses import Response
 
 from . import google_login
 from .config import settings
-from .db_engine import open_session as _session
+from .db_engine import open_session as open_db_session
 from .oauth_state import (
     StoreFullError,
     cleanup_and_pop,
@@ -215,7 +215,7 @@ def web_session(request: Request) -> dict[str, Any] | None:
     return claims
 
 
-def _client_redirect(redirect_uri: str, client_state: str, **params: str) -> RedirectResponse:
+def client_redirect(redirect_uri: str, client_state: str, **params: str) -> RedirectResponse:
     """Send the browser back to the client with *params* and, when the client sent one, its state."""
     query = dict(params)
     if client_state:
@@ -254,7 +254,7 @@ def google_sign_in() -> SignInStart:
 
     state = secrets.token_urlsafe(32)
     code_verifier = secrets.token_urlsafe(64)
-    with _session() as session:
+    with open_db_session() as session:
         cleanup_and_store(
             session,
             web_oauth_sessions,
@@ -330,7 +330,7 @@ def _finish_mcp_sign_in(session: Session, flow: dict[str, Any], code: str, error
     """
     if error:
         logger.info("MCP sign-in cancelled at Google (%r)", error)
-        return _client_redirect(
+        return client_redirect(
             flow["redirect_uri"],
             flow["client_state"],
             error="access_denied",
@@ -345,7 +345,7 @@ def _finish_mcp_sign_in(session: Session, flow: dict[str, Any], code: str, error
 
     if not is_allowed(identity.email):
         logger.warning("Google sign-in refused: account not in ALLOWED_EMAILS")
-        return _client_redirect(
+        return client_redirect(
             flow["redirect_uri"], flow["client_state"], error="access_denied", error_description=_INVITE_ONLY
         )
 
@@ -371,7 +371,7 @@ def _finish_mcp_sign_in(session: Session, flow: dict[str, Any], code: str, error
         raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
 
     logger.info("MCP sign-in complete for client %r, redirecting to %r", flow["client_id"], flow["redirect_uri"])
-    return _client_redirect(flow["redirect_uri"], flow["client_state"], code=auth_code)
+    return client_redirect(flow["redirect_uri"], flow["client_state"], code=auth_code)
 
 
 @router.get("/google/callback", include_in_schema=False)
@@ -391,7 +391,7 @@ def google_callback(request: Request, code: str = "", state: str = "", error: st
     callback link built from it would otherwise send whoever opened it to the attacker's redirect
     URI (#1701).
     """
-    with _session() as session:
+    with open_db_session() as session:
         web_flow = cleanup_and_pop(session, web_oauth_sessions, state)
         if web_flow is not None:
             return _finish_web_sign_in(web_flow, code, error)

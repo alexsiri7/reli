@@ -1,10 +1,10 @@
 """The authorization server at /oauth/* and /.well-known/*: discovery, registration, PKCE, tokens.
 
-Built onto a fresh ``FastAPI()`` with ``auth.router`` and ``mcp_oauth.router``, ``auth._session``
+Built onto a fresh ``FastAPI()`` with ``auth.router`` and ``mcp_oauth.router``, ``auth.open_db_session``
 (the one session both routers run in) bound to the fixture session, and the Basic check applied — so
 every request below also proves the exemption. Google is ``httpx.MockTransport`` throughout; nothing opens a socket.
 
-The two racing tests use ``racing_client`` instead, which leaves ``auth._session`` opening one
+The two racing tests use ``racing_client`` instead, which leaves ``auth.open_db_session`` opening one
 session per request: a single connection cannot race itself.
 """
 
@@ -66,7 +66,7 @@ def client(session, monkeypatch, sign_in_settings):
     def _fixture_session():
         yield session
 
-    monkeypatch.setattr(auth, "_session", _fixture_session)
+    monkeypatch.setattr(auth, "open_db_session", _fixture_session)
     app = FastAPI()
     app.include_router(auth.router)
     app.include_router(mcp_oauth.router)
@@ -76,7 +76,7 @@ def client(session, monkeypatch, sign_in_settings):
 
 @pytest.fixture()
 def racing_client(session, sign_in_settings):
-    """The same app on the production ``auth._session``, so two requests run on two connections."""
+    """The same app on the production ``auth.open_db_session``, so two requests run on two connections."""
     app = FastAPI()
     app.include_router(auth.router)
     app.include_router(mcp_oauth.router)
@@ -204,7 +204,7 @@ def test_discovery_and_registration_answer_without_any_credential(session, monke
     def _fixture_session():
         yield session
 
-    monkeypatch.setattr(auth, "_session", _fixture_session)
+    monkeypatch.setattr(auth, "open_db_session", _fixture_session)
     app = FastAPI()
     app.include_router(mcp_oauth.router)
     web_view_auth.add_web_view_auth(app)
@@ -762,7 +762,7 @@ def test_the_consent_page_names_the_host_the_redirect_delivers_to_not_the_one_th
     # Registration refuses this URI, so the page is called directly: it is the one shape whose
     # raw string reads as claude.ai while the code is delivered to attacker.example.
     redirect_uri = "https://claude.ai\\@attacker.example/cb"
-    delivered = urlsplit(auth._client_redirect(redirect_uri, "", code="c").headers["location"])
+    delivered = urlsplit(auth.client_redirect(redirect_uri, "", code="c").headers["location"])
 
     page = mcp_oauth._consent_page("state", "Claude", redirect_uri).body.decode()
 
