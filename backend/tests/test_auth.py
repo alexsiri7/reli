@@ -1,6 +1,6 @@
 """The JWTs Reli mints, Google's callback and the web session: who gets in, who is turned away, what is logged.
 
-The router is built onto a fresh ``FastAPI()`` with ``auth._session`` bound to the fixture session
+The router is built onto a fresh ``FastAPI()`` with ``auth.open_db_session`` bound to the fixture session
 and the web view's check applied, so the tests also prove ``/api/auth/`` is exempt from it — without
 the exemption every request below would be 401. Google is ``httpx.MockTransport`` throughout.
 """
@@ -46,7 +46,7 @@ def client(session, monkeypatch, sign_in_settings):
     def _fixture_session():
         yield session
 
-    monkeypatch.setattr(auth, "_session", _fixture_session)
+    monkeypatch.setattr(auth, "open_db_session", _fixture_session)
     app = FastAPI()
     app.include_router(auth.router)
     web_view_auth.add_web_view_auth(app)
