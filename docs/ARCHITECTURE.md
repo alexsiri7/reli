@@ -150,8 +150,8 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
 - The OAuth flow-state stores in `backend/oauth_state.py` are bounded, and the cap's behaviour
   follows from who can write to the store: the three a caller without a credential can fill
   (`mcp_registered_clients`, `mcp_oauth_sessions`, `web_oauth_sessions`) evict the row nearest
-  expiry to make room, the two only a signed-in account can write to (`mcp_auth_codes`,
-  `mcp_refresh_tokens`) refuse with a 503. A registration lives an hour until the owner signs in
+  expiry to make room, the three only a signed-in account can write to (`mcp_auth_codes`,
+  `mcp_refresh_tokens`, `revoked_tokens`) refuse with a 503. A registration lives an hour until the owner signs in
   through it, then as long as its refresh family. There is no rate limiter anywhere in the
   service; [CLAUDE.md](../CLAUDE.md) (*Rate limiting*) records why, and where one would go.
 - `/api` — `_WebViewAuthMiddleware` in `backend/api.py` requires the `__Host-reli_session` cookie:

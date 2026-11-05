@@ -11,6 +11,7 @@ import logging
 
 import jwt
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -28,6 +29,7 @@ _EXPIRED = (
     "or re-authorises against Google"
 )
 _NOT_OURS = "Not a token this Reli issued: authorise the connector against Google via the authorization server"
+_REVOKED = "Access token revoked: the connector refreshes it at /oauth/token, or re-authorises against Google"
 _CLOSED = "/mcp is closed: a human sets SECRET_KEY and the Google sign-in settings (CLAUDE.md)"
 _NO_BEARER = (
     "Authorization required: a Bearer of the access token the authorization server at /oauth/token "
@@ -40,7 +42,8 @@ class _BearerTokenMiddleware:
 
     The one credential is an ``aud="mcp"`` JWT minted by the authorization server in
     :mod:`backend.mcp_oauth` after a Google sign-in, for an account still in ``ALLOWED_EMAILS``:
-    the allowlist is read on every request, so removing an address ends its live tokens at once.
+    the allowlist and the revocation list logout writes are read on every request, so removing an
+    address ends its live tokens at once.
 
     An unset or too-short ``SECRET_KEY`` closes the endpoint rather than opening it: there is no
     dev-mode bypass, because /mcp is the only write path into the graph and it is publicly
@@ -77,6 +80,9 @@ class _BearerTokenMiddleware:
             return
         if not auth.is_allowed(str(claims.get("email", ""))):
             await _refuse(scope, receive, send, auth._ACCOUNT_NOT_ALLOWED, error="invalid_token")
+            return
+        if await run_in_threadpool(auth.is_revoked, claims):
+            await _refuse(scope, receive, send, _REVOKED, error="invalid_token")
             return
         await self._app(scope, receive, send)
 

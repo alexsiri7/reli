@@ -127,6 +127,7 @@ def session(migrated_db: str) -> Generator[Session, None, None]:
             "mcp_oauth_sessions",
             "mcp_registered_clients",
             "web_oauth_sessions",
+            "revoked_tokens",
         ):
             cleanup.execute(text(f"DELETE FROM {table}"))
         cleanup.commit()

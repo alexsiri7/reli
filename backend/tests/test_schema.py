@@ -64,6 +64,7 @@ def test_the_graph_tables_and_the_oauth_state_tables_exist_and_no_legacy_table_d
         "mcp_auth_codes",
         "mcp_refresh_tokens",
         "web_oauth_sessions",
+        "revoked_tokens",
     } <= tables
     assert not tables & set(LEGACY_TABLES)
 

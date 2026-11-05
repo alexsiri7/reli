@@ -24,7 +24,7 @@ The routes and their response models are in `backend/api.py`, the TypeScript mir
 | GET | `/api/auth/google` | `{auth_url}` | Where the sign-in view sends the browser. 501 naming each empty sign-in setting. Public. |
 | GET | `/api/auth/google/callback` | redirect | Where Google sends the browser back, for the web view and the MCP connector alike; public because it lands in a browser with no session yet. A web sign-in answers a 302 to `/` with the `__Host-reli_session` cookie, or to `/?error=invite_only` / `/?error=cancelled`; an MCP sign-in a 302 to the connector, honoured only in the browser that approved it on the consent page (the `__Host-reli_mcp_flow` cookie, #1701) and elsewhere a 400, never a redirect. 400 for an unknown `state`, 502 naming the human step when Google refuses the exchange. |
 | GET | `/api/auth/me` | `{email}` | The view's "am I signed in" probe: the cookie's email, or 401 whose detail says whether to sign in or which setting is missing. Public. |
-| POST | `/api/auth/logout` | 204 | Deletes the cookie. There is no revocation list. Needs no session, but is 403 when the request's `Origin` is not the base URL (`auth.require_same_origin`, #1698). |
+| POST | `/api/auth/logout` | 204 | Deletes the cookie and revokes the token it carries until that token's `exp`, so a copy of it is refused as `Session revoked` (#1699); 503 when `revoked_tokens` is full, with the cookie kept. Needs no session, but is 403 when the request's `Origin` is not the base URL (`auth.require_same_origin`, #1698). |
 | any | `/api/{anything else}` | — | 404 JSON, never the SPA fallback. |
 
 `GET /healthz` is unauthenticated and answers `{"status": "ok", "service": "reli"}`.

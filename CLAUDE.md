@@ -146,9 +146,9 @@ secret: the connector discovers `/.well-known/oauth-authorization-server`, regis
 itself at `/oauth/register`, is sent through Google by `/oauth/authorize`, lands on
 `/api/auth/google/callback` (`backend/auth.py`), and exchanges the code at `/oauth/token` for an
 `aud="mcp"` JWT that `/mcp` accepts. Identity is the Google account: there is no users table, the
-allowlisted email lives in the token, and the five tables in `backend/oauth_state.py` — four
-`mcp_*` and `web_oauth_sessions` — hold only flow state — none of it is a Thing, so none of it
-journals.
+allowlisted email lives in the token, and the six tables in `backend/oauth_state.py` — four
+`mcp_*`, `web_oauth_sessions` and `revoked_tokens` — hold only flow state — none of it is a Thing,
+so none of it journals.
 
 The web view (#1449) signs in through the same Google client and the same callback. The sign-in
 view calls `GET /api/auth/google` for the Google URL (a 501 names each missing setting, shown in
@@ -159,7 +159,9 @@ an `httponly`, `samesite=lax` cookie holding an `aud="web"` JWT good for seven d
 at startup, never as a cookie sent in the clear (#1533). An account outside `ALLOWED_EMAILS` is sent to
 `/?error=invite_only`, which the view turns into a sentence; a Google refusal at the exchange is a
 502 whose detail names the human step, as for MCP. `GET /api/auth/me` is the view's "am I signed
-in" probe and `POST /api/auth/logout` deletes the cookie; there is no revocation list.
+in" probe and `POST /api/auth/logout` deletes the cookie and records the token's `jti` in
+`revoked_tokens` until the token would have expired (#1699), so a copy kept elsewhere is refused
+too: `auth.is_revoked` is read on every `/api` and `/mcp` request.
 `samesite=lax` still sends the cookie from a sibling subdomain, so the two `POST`s a cookie reaches —
 logout and `POST /api/preferences/{id}/reject` — also answer 403 unless the request's `Origin` is
 the base URL (`auth.require_same_origin`, #1698). The redirect URI is the one already documented below — the web sign-in adds no console entry.
@@ -386,8 +388,8 @@ Creating documentation that claims success on an action you cannot perform is a 
   and `web_session`, the one reading of the `__Host-reli_session` cookie
 - Authorization server: `backend/mcp_oauth.py` — `/.well-known/*`, `/oauth/register`,
   `/oauth/authorize`, `/oauth/token`
-- OAuth flow state: `backend/oauth_state.py` — the four bounded `mcp_*` stores and
-  `web_oauth_sessions`; not graph state, not journalled
+- OAuth flow state: `backend/oauth_state.py` — the four bounded `mcp_*` stores,
+  `web_oauth_sessions` and `revoked_tokens`; not graph state, not journalled
 - HTTP: `backend/main.py` serves `/healthz`, includes the auth, OAuth and `/api` routers in that
   order, mounts the MCP streamable-HTTP app at `/mcp`, and mounts the frontend bundle **last** — its
   catch-all answers every unmatched path, so anything mounted after it would be dead

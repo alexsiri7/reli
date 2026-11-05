@@ -15,14 +15,18 @@ import jwt
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from backend import auth, google_login, web_view_auth
 from backend.config import settings
 from backend.oauth_state import (
+    RevokedTokenRecord,
+    Store,
     cleanup_and_get,
     cleanup_and_store,
     mcp_auth_codes,
     mcp_oauth_sessions,
+    revoked_tokens,
     web_oauth_sessions,
 )
 
@@ -523,6 +527,52 @@ def test_logout_deletes_the_cookie(client):
     assert "Max-Age=0" in cookie
     assert "Secure" in cookie
     assert "Path=/" in cookie
+
+
+def test_logout_revokes_the_session_so_a_copy_of_the_cookie_is_refused(client, session):
+    """#1699: a token kept outside the browser dies with the session, and only until it would have expired."""
+    token = auth.create_jwt("1234567890", "owner@example.com", audience=auth.WEB_AUDIENCE)
+    cookie = {"Cookie": f"{auth.SESSION_COOKIE}={token}"}
+    assert client.get("/api/auth/me", headers=cookie).status_code == 200
+
+    response = client.post("/api/auth/logout", headers={**cookie, "Origin": "https://reli.example.test"})
+
+    assert response.status_code == 204
+    for path in ("/api/auth/me", "/api/things"):
+        refused = client.get(path, headers=cookie)
+        assert refused.status_code == 401
+        assert refused.json()["detail"] == "Session revoked: sign in with Google at / again."
+    claims = auth.decode_jwt(token, auth.WEB_AUDIENCE)
+    revoked = cleanup_and_get(session, revoked_tokens, claims["jti"])
+    assert revoked["expires_at"] == datetime.fromtimestamp(claims["exp"], UTC)
+
+    another = auth.create_jwt("1234567890", "owner@example.com", audience=auth.WEB_AUDIENCE)
+    assert client.get("/api/auth/me", headers={"Cookie": f"{auth.SESSION_COOKIE}={another}"}).status_code == 200
+
+
+def test_logout_with_a_cookie_this_reli_cannot_verify_deletes_it_and_revokes_nothing(client, session):
+    response = client.post(
+        "/api/auth/logout",
+        headers={"Cookie": f"{auth.SESSION_COOKIE}=not-a-jwt", "Origin": "https://reli.example.test"},
+    )
+
+    assert response.status_code == 204
+    assert f'{auth.SESSION_COOKIE}=""' in _session_cookie(response)
+    assert session.exec(select(RevokedTokenRecord)).all() == []
+
+
+def test_logout_that_cannot_record_the_revocation_is_503_and_keeps_the_cookie(client, monkeypatch):
+    """Deleting the cookie anyway would tell the owner they had signed out while a copy still worked."""
+    monkeypatch.setattr(auth, "revoked_tokens", Store(RevokedTokenRecord, max_entries=0))
+    token = auth.create_jwt("1234567890", "owner@example.com", audience=auth.WEB_AUDIENCE)
+
+    response = client.post(
+        "/api/auth/logout",
+        headers={"Cookie": f"{auth.SESSION_COOKIE}={token}", "Origin": "https://reli.example.test"},
+    )
+
+    assert response.status_code == 503
+    assert "set-cookie" not in response.headers
 
 
 @pytest.mark.parametrize("origin", [None, "https://sibling.example.test", "null"])

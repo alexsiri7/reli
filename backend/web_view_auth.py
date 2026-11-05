@@ -10,6 +10,7 @@ import json
 import logging
 
 from fastapi import FastAPI
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -69,7 +70,7 @@ class _WebViewAuthMiddleware:
             await self._app(scope, receive, send)
             return
 
-        reason = _refusal(Request(scope))
+        reason = await run_in_threadpool(_refusal, Request(scope))
         if reason is not None:
             response = Response(content=json.dumps({"detail": reason}), status_code=401, media_type="application/json")
             await response(scope, receive, send)
