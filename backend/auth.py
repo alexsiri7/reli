@@ -14,13 +14,14 @@ that approved it on the consent page — and a state neither knows is a 400.
 
 The web session is that cookie: an ``aud="web"`` JWT the middleware in :mod:`backend.api` decodes
 on every ``/api`` request, read through :func:`web_session` so the middleware and
-``GET /api/auth/me`` cannot disagree about it. Logout deletes the cookie; there is no revocation
-list, so a token lives out its seven days if a copy is kept, which the ``httponly`` flag exists to
-prevent.
+``GET /api/auth/me`` cannot disagree about it. Logout deletes the cookie and records the token's
+``jti`` in ``revoked_tokens`` until the token expires, so a copy kept elsewhere dies with the
+session (#1699); :func:`is_revoked` is that list's one reading, for ``/api`` and ``/mcp`` alike.
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import secrets
 import uuid
@@ -40,10 +41,12 @@ from .config import settings
 from .db_engine import open_session as open_db_session
 from .oauth_state import (
     StoreFullError,
+    cleanup_and_get,
     cleanup_and_pop,
     cleanup_and_store,
     mcp_auth_codes,
     mcp_oauth_sessions,
+    revoked_tokens,
     web_oauth_sessions,
 )
 
@@ -53,7 +56,7 @@ JWT_ALGORITHM = "HS256"
 MCP_AUDIENCE = "mcp"
 WEB_AUDIENCE = "web"
 WEB_JWT_EXPIRY_SECONDS = 60 * 60 * 24 * 7
-# Short because nothing can revoke a minted JWT: revoking a refresh-token family stops the next
+# Short because nothing revokes a minted MCP JWT: revoking a refresh-token family stops the next
 # refresh, and the hour is how long an access token already in the wrong hands outlives that.
 # The connector refreshes transparently, so the user never sees the turnover.
 MCP_JWT_EXPIRY_SECONDS = 60 * 60
@@ -84,6 +87,7 @@ _ACCOUNT_NOT_ALLOWED = "Account is not allowed: " + _INVITE_ONLY
 _NOT_SIGNED_IN = "Not signed in: sign in with Google at /."
 _SESSION_EXPIRED = "Session expired: sign in with Google at / again."
 _SESSION_INVALID = "Invalid session: sign in with Google at / again."
+_SESSION_REVOKED = "Session revoked: sign in with Google at / again."
 _AT_CAPACITY = "Server is at capacity; try again later"
 _CROSS_ORIGIN = "Refused: this request did not come from Reli's own page."
 _NOT_THIS_BROWSER = "Sign-in was not approved from this browser: start again from the connector."
@@ -148,10 +152,8 @@ def is_allowed(email: str) -> bool:
 
 def create_jwt(subject: str, email: str, audience: str) -> str:
     """A token for *subject*, only for *audience*, good for ``MCP_JWT_EXPIRY_SECONDS`` or
-    ``WEB_JWT_EXPIRY_SECONDS`` as *audience* says, issued by this deploy's ``base_url()``.
-
-    ``jti`` is kept from the pre-v4 token shape: nothing reads it, but a revocation list, should
-    logout ever need one, would key on it.
+    ``WEB_JWT_EXPIRY_SECONDS`` as *audience* says, issued by this deploy's ``base_url()`` and named
+    by the ``jti`` that :func:`is_revoked` looks up.
     """
     issued_at = int(datetime.now(UTC).timestamp())
     claims = {
@@ -182,9 +184,27 @@ def decode_jwt(token: str, audience: str) -> dict[str, Any]:
         algorithms=[JWT_ALGORITHM],
         audience=audience,
         issuer=base_url(),
-        options={"require": ["exp", "aud", "iss", "sub"]},
+        options={"require": ["exp", "aud", "iss", "sub", "jti"]},
     )
     return claims
+
+
+def is_revoked(claims: dict[str, Any]) -> bool:
+    """Whether logout ended the token *claims* were decoded from."""
+    with open_db_session() as session:
+        return cleanup_and_get(session, revoked_tokens, str(claims["jti"])) is not None
+
+
+def _revoke(claims: dict[str, Any]) -> None:
+    """Put the token *claims* were decoded from on the revocation list until its own ``exp``.
+
+    Raises:
+        StoreFullError: ``revoked_tokens`` holds ``MAX_ENTRIES`` live rows.
+    """
+    with open_db_session() as session:
+        cleanup_and_store(
+            session, revoked_tokens, str(claims["jti"]), {"expires_at": datetime.fromtimestamp(claims["exp"], UTC)}
+        )
 
 
 class SessionRefused(Exception):
@@ -196,8 +216,8 @@ def web_session(request: Request) -> dict[str, Any] | None:
 
     Raises:
         SessionRefused: The cookie is there but expired, not this Reli's, unverifiable because
-            ``SECRET_KEY`` is empty or too short, or names an account no longer in
-            ``ALLOWED_EMAILS`` — each with the sentence a person should see.
+            ``SECRET_KEY`` is empty or too short, names an account no longer in
+            ``ALLOWED_EMAILS``, or was ended by logout — each with the sentence a person should see.
     """
     token = request.cookies.get(SESSION_COOKIE, "")
     if not token:
@@ -212,6 +232,8 @@ def web_session(request: Request) -> dict[str, Any] | None:
         raise SessionRefused(_SESSION_INVALID) from invalid
     if not is_allowed(str(claims.get("email", ""))):
         raise SessionRefused(_INVITE_ONLY)
+    if is_revoked(claims):
+        raise SessionRefused(_SESSION_REVOKED)
     return claims
 
 
@@ -281,7 +303,22 @@ def current_session(request: Request) -> SessionOut:
 
 
 @router.post("/logout", include_in_schema=False, status_code=204, dependencies=[Depends(require_same_origin)])
-def logout() -> Response:
+def logout(request: Request) -> Response:
+    """Delete the cookie and revoke the token it carries, so a copy of it kept elsewhere stops working too.
+
+    A cookie this Reli cannot verify is deleted without a revocation: nothing would accept it anyway.
+    """
+    token = request.cookies.get(SESSION_COOKIE, "")
+    claims = None
+    if token and settings.secret_key_configured:
+        with contextlib.suppress(jwt.InvalidTokenError):
+            claims = decode_jwt(token, WEB_AUDIENCE)
+    if claims is not None:
+        try:
+            _revoke(claims)
+        except StoreFullError as full:
+            logger.warning("Logout refused: %s", full)
+            raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
     response = Response(status_code=204)
     response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax", secure=True)
     return response

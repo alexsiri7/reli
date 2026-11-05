@@ -33,6 +33,7 @@ from backend.oauth_state import (
     mcp_refresh_tokens,
     mcp_registered_clients,
     revoke_refresh_token_family,
+    revoked_tokens,
     web_oauth_sessions,
 )
 
@@ -234,16 +235,17 @@ def test_extend_expiry_only_ever_moves_a_row_later(session):
 def test_only_the_stores_an_unauthenticated_caller_can_write_to_evict():
     """The routes writing to an evicting store no longer catch StoreFullError: flip a flag and they 500."""
     assert (mcp_registered_clients.evicts, mcp_oauth_sessions.evicts, web_oauth_sessions.evicts) == (True, True, True)
-    assert (mcp_auth_codes.evicts, mcp_refresh_tokens.evicts) == (False, False)
+    assert (mcp_auth_codes.evicts, mcp_refresh_tokens.evicts, revoked_tokens.evicts) == (False, False, False)
 
 
 def test_only_the_two_credential_stores_hash_their_keys():
     assert (mcp_auth_codes.hashes_keys, mcp_refresh_tokens.hashes_keys) == (True, True)
-    assert (mcp_registered_clients.hashes_keys, mcp_oauth_sessions.hashes_keys, web_oauth_sessions.hashes_keys) == (
-        False,
-        False,
-        False,
-    )
+    assert (
+        mcp_registered_clients.hashes_keys,
+        mcp_oauth_sessions.hashes_keys,
+        web_oauth_sessions.hashes_keys,
+        revoked_tokens.hashes_keys,
+    ) == (False, False, False, False)
 
 
 def test_storing_under_an_existing_key_replaces_the_entry(session):

@@ -47,6 +47,7 @@ from backend.mcp_server import (
     unrelate,
     update_thing,
 )
+from backend.oauth_state import cleanup_and_store, revoked_tokens
 from backend.queries import MAX_LIMIT
 from backend.service import ThingNotFound
 from backend.tests.conftest import RETIRED_GOOGLE_TOOL_NAMES
@@ -1056,9 +1057,30 @@ def test_mcp_endpoint_refuses_a_jwt_minted_by_another_deploy(client, secret_key,
     assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
 
 
+def test_mcp_endpoint_refuses_a_revoked_jwt(client, session, mcp_token):
+    """#1699: the revocation list logout writes is read on /mcp as on /api."""
+    claims = auth.decode_jwt(mcp_token, auth.MCP_AUDIENCE)
+    assert client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token)).status_code == 200
+    cleanup_and_store(
+        session, revoked_tokens, claims["jti"], {"expires_at": datetime.fromtimestamp(claims["exp"], UTC)}
+    )
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+    assert "revoked" in response.json()["detail"]
+
+
 def test_an_expired_jwt_is_refused_naming_the_refresh_path(client, secret_key):
     expired = jwt.encode(
-        {"iss": auth.base_url(), "sub": "1234567890", "aud": "mcp", "exp": datetime.now(UTC) - timedelta(seconds=1)},
+        {
+            "iss": auth.base_url(),
+            "sub": "1234567890",
+            "aud": "mcp",
+            "exp": datetime.now(UTC) - timedelta(seconds=1),
+            "jti": "j",
+        },
         secret_key,
         algorithm="HS256",
     )

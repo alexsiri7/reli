@@ -1,9 +1,10 @@
 """Flow state for the OAuth 2.1 authorization server in :mod:`backend.mcp_oauth` and the web view's sign-in.
 
-Five tables, each a bounded store of short-lived rows keyed by an opaque string: the clients that
+Six tables, each a bounded store of short-lived rows keyed by an opaque string: the clients that
 registered themselves, the MCP sign-ins in flight, the authorization codes waiting to be exchanged,
 the refresh tokens issued — consumed ones kept, without the account they were issued to, until they
-expire, so a replay is recognised — and the web view's sign-ins in flight. None of it is a Thing
+expire, so a replay is recognised — the web view's sign-ins in flight, and the ``jti`` of every JWT
+logout revoked, kept until that JWT would have expired anyway. None of it is a Thing
 and nothing here touches the graph, so nothing here is journalled — the journal records mutations of
 Things and relationships, and these rows are the authorization server's bookkeeping
 (docs/auth-recovery.md §6.1).
@@ -12,11 +13,12 @@ Every access purges expired rows first, so a store never holds anything past its
 and no store grows past its cap. At the cap the stores part ways: the three a caller without any
 credential can write to — registrations, MCP sign-ins in flight, web sign-ins in flight — evict the
 row nearest expiry to make room, so a flood can displace other unfinished flows but never lock the
-owner out for longer than it lasts; the two only a signed-in account can write to — authorization
-codes and refresh tokens — refuse with :class:`StoreFullError`, because evicting there would revoke a
-live session to admit a new one. A registration lives an hour until a token is minted for it, then
-as long as the refresh family it serves. Only ``mcp_refresh_tokens`` keeps rows that are no longer
-redeemable: a consumed token stays until it expires, and counts against the cap until then.
+owner out for longer than it lasts; the three only a signed-in account can write to — authorization
+codes, refresh tokens and revoked tokens — refuse with :class:`StoreFullError`, because evicting
+there would revoke a live session to admit a new one, or bring a revoked one back. A registration
+lives an hour until a token is minted for it, then as long as the refresh family it serves. Only
+``mcp_refresh_tokens`` keeps rows that are no longer redeemable: a consumed token stays until it
+expires, and counts against the cap until then.
 
 Authorization codes and refresh tokens are stored as the SHA-256 digest of the value handed to the
 client and looked up by the digest of the value presented (#1530), so a reader of the database or a
@@ -133,6 +135,15 @@ class McpRefreshTokenRecord(SQLModel, table=True):
     expires_at: datetime = _expires_at()
 
 
+class RevokedTokenRecord(SQLModel, table=True):
+    """A JWT logout ended, by its ``jti``, until the ``exp`` after which nothing would accept it anyway."""
+
+    __tablename__ = "revoked_tokens"
+
+    jti: str = _text(primary_key=True)
+    expires_at: datetime = _expires_at()
+
+
 class WebOAuthSessionRecord(SQLModel, table=True):
     """A web-view sign-in in flight: the PKCE verifier, keyed by the state sent to Google."""
 
@@ -145,7 +156,7 @@ class WebOAuthSessionRecord(SQLModel, table=True):
 
 @dataclass(frozen=True)
 class Store:
-    """One of the five tables, with the most live rows it may hold and what happens at that cap.
+    """One of the six tables, with the most live rows it may hold and what happens at that cap.
 
     An evicting store deletes the row nearest its ``expires_at`` to make room; one that does not
     evict raises :class:`StoreFullError`. For the session stores every row gets the same TTL at
@@ -174,18 +185,21 @@ class Store:
 # authorization code exists only after the Google sign-in passed ALLOWED_EMAILS, and a refresh
 # token only after that allowlist is re-checked at issuance, so nobody unauthenticated can fill
 # those two; evicting from them would revoke a live session to admit a new one, and refusing the
-# new one is the lesser harm. One hundred registrations is far more than one owner's connectors
-# will ever hold at once.
+# new one is the lesser harm. A revoked token is written only by a logout presenting a session this
+# Reli signed, and evicting one would bring it back to life, so that store refuses too. One hundred
+# registrations is far more than one owner's connectors will ever hold at once.
 #
 # Whether a store hashes its keys follows from what the key redeems. An authorization code or a
 # refresh token is the credential itself, so the row holds its digest. A client_id is public, and
 # the two sign-in states are the OAuth ``state`` parameter: they travel in URLs and redeem nothing
-# on their own, so those three stay keyed by the value.
+# on their own, so those three stay keyed by the value. A ``jti`` redeems nothing without the signed
+# token around it, so revoked tokens are keyed by the value too.
 mcp_registered_clients = Store(McpRegisteredClientRecord, max_entries=100, evicts=True)
 mcp_oauth_sessions = Store(McpOAuthSessionRecord, max_entries=MAX_ENTRIES, evicts=True)
 mcp_auth_codes = Store(McpAuthCodeRecord, max_entries=MAX_ENTRIES, hashes_keys=True)
 mcp_refresh_tokens = Store(McpRefreshTokenRecord, max_entries=MAX_ENTRIES, hashes_keys=True)
 web_oauth_sessions = Store(WebOAuthSessionRecord, max_entries=MAX_ENTRIES, evicts=True)
+revoked_tokens = Store(RevokedTokenRecord, max_entries=MAX_ENTRIES)
 
 
 class StoreFullError(Exception):

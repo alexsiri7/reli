@@ -83,6 +83,7 @@ def test_upgrading_from_an_existing_revision_persists(fresh_database: str):
     assert versions != {"v4_baseline"}
     assert {"mcp_registered_clients", "mcp_oauth_sessions", "mcp_auth_codes", "mcp_refresh_tokens"} <= tables
     assert "web_oauth_sessions" in tables
+    assert "revoked_tokens" in tables
 
 
 def test_migrations_run_without_the_roles_statement_timeout(fresh_database: str, monkeypatch):

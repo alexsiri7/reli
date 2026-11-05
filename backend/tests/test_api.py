@@ -515,7 +515,9 @@ def test_a_session_minted_by_another_deploy_is_401(anonymous, secret_key, monkey
 def test_an_expired_session_is_401_saying_so(anonymous, secret_key):
     expired = datetime.now(UTC) - timedelta(days=1)
     token = jwt.encode(
-        {"iss": auth.base_url(), "sub": "x", "aud": auth.WEB_AUDIENCE, "exp": expired}, SECRET_KEY, algorithm="HS256"
+        {"iss": auth.base_url(), "sub": "x", "aud": auth.WEB_AUDIENCE, "exp": expired, "jti": "j"},
+        SECRET_KEY,
+        algorithm="HS256",
     )
 
     response = anonymous.get("/api/things", headers=_cookie(token))
