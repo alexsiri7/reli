@@ -47,6 +47,10 @@ export_*.json
 # Agent run logs (may echo Thing titles or notes)
 .archon-logs/
 
+# Agent orchestration state and run output, untracked since #1707
+.gc/
+artifacts/
+
 # Beads / Dolt files (added by bd init)
 .beads-credential-key
 
