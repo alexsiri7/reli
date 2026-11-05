@@ -151,6 +151,7 @@ Explicitly not being built, and not to be added without revisiting this document
 - Any LLM call originating inside the Reli service.
 - Any third-party data integration inside Reli. If a pass needs outside data, the session running it brings its own connector.
 - Multi-user, authentication beyond single-user access control, sharing, or public availability.
+- An erasure or redaction path for personal data. This is the household position on GDPR (Art. 2(2)(c)): one user, one instance, no third-party accounts, and the owner controls all the data. Erasure means deleting the deployment. There is no `redact_thing` tool, and the journal stays append-only (principle 4). This is revisited if Reli becomes multi-user.
 - A findings table, confidence decay algorithms, or any derived-state store that doesn't link to its evidence.
 - Vector search. For one user's Things, `checkin_date`, tags and Postgres full-text are sufficient, and dropping ChromaDB removes a stateful component from the deployment.
 - Concerns as modular domain monitors. The idea is sound and may return, but it is a layer on top of a working core, not part of it.

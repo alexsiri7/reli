@@ -56,6 +56,8 @@ higher sorts first), `active`, `created_at`, `updated_at`. There is no type colu
 `UPDATE`, `DELETE` and `TRUNCATE`, which is why `lifespan` in `backend/main.py` runs
 `alembic upgrade head` at startup with no `create_all` fallback — a schema built from ORM metadata
 would be a silently mutable journal.
+Nothing redacts or erases a journal row either: erasure means deleting the deployment
+([vision.md §7](vision.md#7-non-goals)).
 
 Indexes: btree on `things.title`, `checkin_date`, `active` and `updated_at`; GIN on `things.tags`;
 btree on both relationship endpoints and the type; btree on `journal.occurred_at` and `entity_id`.
