@@ -15,6 +15,7 @@ import jwt
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
 from sqlmodel import select
 
 from backend import auth, google_login, web_view_auth
@@ -573,6 +574,23 @@ def test_logout_that_cannot_record_the_revocation_is_503_and_keeps_the_cookie(cl
 
     assert response.status_code == 503
     assert "set-cookie" not in response.headers
+
+
+def test_a_session_is_refused_when_the_revocation_list_cannot_be_read(client, monkeypatch):
+    """Admitting the request when the read fails would let a revoked copy work for as long as it fails (#1699)."""
+    token = auth.create_jwt("1234567890", "owner@example.com", audience=auth.WEB_AUDIENCE)
+
+    @contextmanager
+    def _unreachable():
+        raise OperationalError("SELECT", {}, Exception("connection refused"))
+        yield
+
+    monkeypatch.setattr(auth, "open_db_session", _unreachable)
+    unreachable = TestClient(client.app, raise_server_exceptions=False)
+
+    for path in ("/api/auth/me", "/api/things"):
+        response = unreachable.get(path, headers={"Cookie": f"{auth.SESSION_COOKIE}={token}"})
+        assert response.status_code == 500
 
 
 @pytest.mark.parametrize("origin", [None, "https://sibling.example.test", "null"])
