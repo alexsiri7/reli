@@ -216,22 +216,38 @@ done:
    password that used to stand beside the cookie is gone (#1471), and nothing outside a browser
    needs a way in.
 
-**Rate limiting.** The service has none and #1528 added none, on a repository fact: there is no
-trustworthy client address inside it. The Cloudflare Tunnel is not read by the app and uvicorn
-trusts no forwarded header, so every request arrives from the same address — an in-app per-IP
-limiter would throttle the owner together with an attacker, or trust a header nothing has decided
-to trust. The app's own defence against an unauthenticated flood is structural instead: the three
-stores a caller without a credential can write to (`mcp_registered_clients`, `mcp_oauth_sessions`,
-`web_oauth_sessions`) evict the row nearest expiry at their cap rather than refusing, a
-registration lives an hour until the owner signs in through it and then as long as its refresh
-family, and every body under `/oauth/` is capped at `MAX_BODY_BYTES` before it is read whole.
-What a flood can still do is displace an unfinished flow that races it — a set-up or a sign-in started while it runs — and a
-used registration inside its final hour; what it cannot do is outlast itself or reach a connector
-with time left on its refresh family. A request-rate limit, if the owner wants one, is a
-Cloudflare rate-limiting rule on `/oauth/register`, `/oauth/authorize` and `/api/auth/google`: a
-human step in the `RAILWAY_TOKEN` class that nothing in the repository can perform or verify, so
-do not claim it is in place. Adding an in-app limiter instead needs an issue that first decides
-the trusted-proxy question.
+**Rate limiting.** `backend/rate_limit.py` (#1475) holds a token bucket per tier and caller, in
+process memory, and answers 429 with `Retry-After` once one is empty; every counted response carries
+`X-RateLimit-Limit` and `X-RateLimit-Remaining`. `main.py` puts it inside `_SecurityHeaders`, so a
+429 carries those headers, and outside the web view's cookie check and the `/mcp` bearer check, so a
+flood without a credential is counted before either refuses it. The tiers, per minute:
+`/oauth/register` 5 (`RATE_LIMIT_REGISTRATION_PER_MINUTE`); the rest of `/oauth/` and `/api/auth/`
+10 (`RATE_LIMIT_AUTH_PER_MINUTE`); `/api`, `/mcp` and `/.well-known/` 60
+(`RATE_LIMIT_API_PER_MINUTE`). There is no LLM tier, because there are no LLM endpoints.
+`/healthz` and the bundle are exempt. An `/api` or `/mcp` request carrying a JWT this deploy signed
+is keyed by its subject, so the owner never shares a bucket with an attacker; every other request
+is keyed by its client address. That address is the peer unless the peer is inside
+`TRUSTED_PROXY_CIDRS`, in which case it is the rightmost `X-Forwarded-For` entry that is not itself
+a trusted proxy. The default is empty and trusts no header, so until it is set every request without
+a credential shares one bucket per tier with every other — the Cloudflare Tunnel and Railway's edge
+present one address. Setting it to the ranges in front of the container (Railway's edge, and
+Cloudflare's published ranges if Cloudflare proxies the host) is a human step in the
+`RAILWAY_TOKEN` class that nothing in the repository can perform or verify, so do not claim it is
+done; a malformed value fails the boot. The buckets assume the single uvicorn process the image runs
+and are lost on restart. The first refusal on a bucket logs `rate limit reached: tier=… key=user`
+or `key=addr`, never the address or subject; a `key=user` line on the scheduled-pass night means
+`RATE_LIMIT_API_PER_MINUTE` is too low.
+
+Underneath the limiter the stores stay structurally bounded: the three a caller without a
+credential can write to (`mcp_registered_clients`, `mcp_oauth_sessions`, `web_oauth_sessions`)
+evict the row nearest expiry at their cap rather than refusing, a registration lives an hour until
+the owner signs in through it and then as long as its refresh family, and every body under
+`/oauth/` is capped at `MAX_BODY_BYTES` before it is read whole. What a flood can still do is
+displace an unfinished flow that races it — a set-up or a sign-in started while it runs — and a used
+registration inside its final hour; what it cannot do is outlast itself or reach a connector with
+time left on its refresh family. A Cloudflare rate-limiting rule on `/oauth/register`,
+`/oauth/authorize` and `/api/auth/google` remains an option on top: a human step that nothing in
+the repository can perform or verify, so do not claim it is in place.
 
 ## Scheduled passes
 
@@ -393,6 +409,8 @@ Creating documentation that claims success on an action you cannot perform is a 
 - HTTP: `backend/main.py` serves `/healthz`, includes the auth, OAuth and `/api` routers in that
   order, mounts the MCP streamable-HTTP app at `/mcp`, and mounts the frontend bundle **last** — its
   catch-all answers every unmatched path, so anything mounted after it would be dead
+- Rate limiting: `backend/rate_limit.py` — the in-process token buckets `main.py` wraps every
+  counted route in; see *Rate limiting* above
 - Web view API: `backend/api.py` — the five `/api` routes, their response models, the session
   middleware and the SPA mount. Read-only apart from
   `POST /api/preferences/{id}/reject`, the only place `Actor.USER` is used

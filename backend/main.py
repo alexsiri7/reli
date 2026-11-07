@@ -18,7 +18,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from . import api, auth, frontend_serving, mcp_oauth, web_view_auth
+from . import api, auth, frontend_serving, mcp_oauth, rate_limit, web_view_auth
 from .config import settings
 from .mcp_server import reli_mcp
 from .mcp_transport import create_mcp_asgi_app
@@ -191,6 +191,9 @@ app.add_middleware(_BareMcpPath)
 # after it would never be reached.
 frontend_serving.mount_frontend(app, _DIST)
 web_view_auth.add_web_view_auth(app)
+# Outside the web view's and /mcp's credential checks, so a flood without a credential is counted
+# before either refuses it; inside the headers layer, so a 429 carries them too.
+app.add_middleware(rate_limit.RateLimit)
 
 # Outermost of the layers registered here, so added last: the web view's 401 is sent by its
 # middleware without reaching anything inside it, and a headers layer registered earlier would never

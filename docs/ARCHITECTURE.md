@@ -154,8 +154,8 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
   (`mcp_registered_clients`, `mcp_oauth_sessions`, `web_oauth_sessions`) evict the row nearest
   expiry to make room, the three only a signed-in account can write to (`mcp_auth_codes`,
   `mcp_refresh_tokens`, `revoked_tokens`) refuse with a 503. A registration lives an hour until the owner signs in
-  through it, then as long as its refresh family. There is no rate limiter anywhere in the
-  service; [CLAUDE.md](../CLAUDE.md) (*Rate limiting*) records why, and where one would go.
+  through it, then as long as its refresh family. Above them, `backend/rate_limit.py`
+  limits each caller per tier; [CLAUDE.md](../CLAUDE.md) (*Rate limiting*) describes the tiers and keys.
 - `/api` — `_WebViewAuthMiddleware` in `backend/api.py` requires the `__Host-reli_session` cookie:
   an `aud="web"` JWT the Google sign-in in `backend/auth.py` sets after the allowlist check, and
   the only credential, since #1471 retired the HTTP Basic password that used to sit beside it. One path

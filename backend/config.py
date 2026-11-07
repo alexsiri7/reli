@@ -9,11 +9,24 @@ Usage:
     settings.database_url
 """
 
+import ipaddress
+from functools import lru_cache
+from typing import Annotated
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # RFC 7518 §3.2: an HMAC-SHA256 key shorter than the hash output is brute-forceable. A SECRET_KEY
 # below this is treated exactly like an empty one (#1534).
 MIN_SECRET_KEY_BYTES = 32
+
+IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
+
+
+@lru_cache(maxsize=8)
+def parse_networks(cidrs: str) -> tuple[IPNetwork, ...]:
+    """The comma-separated *cidrs*, parsed, with blanks dropped. A malformed entry raises ValueError."""
+    return tuple(ipaddress.ip_network(entry.strip(), strict=False) for entry in cidrs.split(",") if entry.strip())
 
 
 class Settings(BaseSettings):
@@ -68,10 +81,32 @@ class Settings(BaseSettings):
     # --- Logging ---
     LOG_LEVEL: str = "INFO"
 
+    # --- Rate limiting (#1475) ---
+    # In-process token buckets, one per tier and caller (backend/rate_limit.py); each limit is
+    # requests per minute. TRUSTED_PROXY_CIDRS names the proxies whose X-Forwarded-For is believed.
+    # Empty trusts no header, so every request is keyed by its peer address. Human-provisioned like
+    # SECRET_KEY: only someone who can see the deploy's ingress knows the ranges.
+    RATE_LIMIT_REGISTRATION_PER_MINUTE: Annotated[int, Field(ge=1)] = 5
+    RATE_LIMIT_AUTH_PER_MINUTE: Annotated[int, Field(ge=1)] = 10
+    RATE_LIMIT_API_PER_MINUTE: Annotated[int, Field(ge=1)] = 60
+    TRUSTED_PROXY_CIDRS: str = ""
+
     # --- Sentry ---
     SENTRY_DSN: str = ""
     SENTRY_ENVIRONMENT: str = "production"
     SENTRY_TRACES_SAMPLE_RATE: float = 0.2
+
+    @field_validator("TRUSTED_PROXY_CIDRS")
+    @classmethod
+    def _cidrs_parse(cls, value: str) -> str:
+        # A typo must fail the boot rather than silently trust nothing, or everything.
+        parse_networks(value)
+        return value
+
+    @property
+    def trusted_proxy_networks(self) -> tuple[IPNetwork, ...]:
+        """The TRUSTED_PROXY_CIDRS networks. Empty means no X-Forwarded-For is trusted."""
+        return parse_networks(self.TRUSTED_PROXY_CIDRS)
 
     @property
     def allowed_emails(self) -> frozenset[str]:
