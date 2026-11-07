@@ -50,6 +50,12 @@ def test_the_tiers_are_separate_buckets(client, session, monkeypatch):
     assert client.get("/api/auth/me").status_code != 429
 
 
+def test_the_sign_in_routes_take_the_auth_tier_not_the_api_tier(client, monkeypatch):
+    _limits(monkeypatch, auth_tier=1, api=10_000)
+    client.get("/api/auth/me")
+    assert client.get("/api/auth/me").status_code == 429
+
+
 @pytest.mark.parametrize("path", ["/healthz", "/", "/some/view"])
 def test_health_and_the_bundle_are_never_counted(client, monkeypatch, path):
     """A throttled /healthz would roll the deploy back."""
