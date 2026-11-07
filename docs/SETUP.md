@@ -110,6 +110,10 @@ These are the fields of `Settings` in `backend/config.py`, and nothing else is r
 | `PRODUCTION` | empty | Marks a deploy outside Railway, which sets `RAILWAY_ENVIRONMENT_NAME` itself; `docker-compose.yml` sets it to `1`. A deploy hides `/openapi.json` and refuses a `DATABASE_URL` whose `sslmode` is weaker than `require`. |
 | `HIDE_API_DOCS` | empty | Hides `/openapi.json`, `/docs` and `/redoc` without marking a deploy, so the TLS check stays off; `docker-compose.staging.yml` sets it, since its `postgres-staging` speaks no TLS (#1720). |
 | `LOG_LEVEL` | `INFO` | Level of Reli's own loggers; library loggers never go below `INFO` (#1714). |
+| `RATE_LIMIT_REGISTRATION_PER_MINUTE` | `5` | Requests a minute one caller may make to `/oauth/register` before a 429 (#1475). |
+| `RATE_LIMIT_AUTH_PER_MINUTE` | `10` | The same for the rest of `/oauth/` and `/api/auth/`. |
+| `RATE_LIMIT_API_PER_MINUTE` | `60` | The same for `/api`, `/mcp` and `/.well-known/`; a signed-in caller is counted by account, not address. |
+| `TRUSTED_PROXY_CIDRS` | empty | Comma-separated proxy ranges whose `X-Forwarded-For` the rate limiter believes. Empty trusts no header, so every caller without a credential shares the proxy's address. Human-provisioned; a malformed entry fails the boot. |
 | `SENTRY_DSN` | empty | Empty disables Sentry. |
 | `SENTRY_ENVIRONMENT` | `production` | Environment tag on Sentry events. |
 | `SENTRY_TRACES_SAMPLE_RATE` | `0.2` | Sentry tracing sample rate. |

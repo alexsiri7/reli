@@ -70,3 +70,4 @@ environment (Railway variables, or the host's `.env` for docker compose) rather 
 | `ALLOWED_EMAILS` | Google accounts allowed to sign in, comma-separated | Human-provisioned. Empty admits nobody. |
 | `GOOGLE_AUTH_REDIRECT_URI` | Where Google sends the browser back after sign-in | `https://<host>/api/auth/google/callback`, and the same value authorised on the OAuth client in the Google Cloud console. Empty closes the sign-in. |
 | `RELI_BASE_URL` | Issuer and base of the OAuth metadata documents | Optional; derived from `GOOGLE_AUTH_REDIRECT_URI` when empty. |
+| `TRUSTED_PROXY_CIDRS` | Proxy ranges whose `X-Forwarded-For` the rate limiter believes, comma-separated | Optional and human-provisioned: the ranges in front of the container (Railway's edge, and Cloudflare's if it proxies the host). Empty trusts no header, so every caller without a credential shares one rate-limit bucket per tier. A malformed entry fails the boot. |

@@ -26,6 +26,18 @@ RETIRED_GOOGLE_TOOL_NAMES = ("find_events", "find_correspondence", "check_occurr
 os.environ.setdefault("SENTRY_DSN", "")
 
 
+@pytest.fixture(autouse=True)
+def _rate_limits_out_of_the_way(monkeypatch):
+    """Every test shares one ``client`` keyed by one address, and the suite alone outruns the default
+    limits; ``test_rate_limit.py`` sets its own."""
+    from backend import rate_limit
+    from backend.config import settings
+
+    rate_limit._BUCKETS.clear()
+    for name in ("RATE_LIMIT_REGISTRATION_PER_MINUTE", "RATE_LIMIT_AUTH_PER_MINUTE", "RATE_LIMIT_API_PER_MINUTE"):
+        monkeypatch.setattr(settings, name, 10_000)
+
+
 @pytest.fixture(scope="session")
 def postgres_url() -> Iterator[str]:
     """A Postgres to test against: the one named in the environment, or a throwaway container."""

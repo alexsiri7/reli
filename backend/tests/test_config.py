@@ -1,6 +1,7 @@
 """Settings: the database URL comes from the environment, or not at all."""
 
 import pytest
+from pydantic import ValidationError
 
 from backend.config import MIN_SECRET_KEY_BYTES, Settings
 
@@ -74,3 +75,21 @@ def test_hide_api_docs_hides_the_docs_without_marking_a_deploy():
     assert Settings(DATABASE_URL="x", PRODUCTION="1").api_docs_hidden
     hidden = Settings(DATABASE_URL="x", HIDE_API_DOCS="1")
     assert hidden.api_docs_hidden and not hidden.production
+
+
+def test_rate_limits_default_to_the_requirement_and_trust_no_proxy():
+    settings = Settings(DATABASE_URL="x")
+
+    assert settings.RATE_LIMIT_REGISTRATION_PER_MINUTE == 5
+    assert settings.RATE_LIMIT_AUTH_PER_MINUTE == 10
+    assert settings.RATE_LIMIT_API_PER_MINUTE == 60
+    assert settings.trusted_proxy_networks == ()
+
+
+def test_a_malformed_trusted_proxy_cidr_fails_the_boot():
+    """A typo must not silently mean "trust nothing" or "trust everything"."""
+    with pytest.raises(ValidationError, match="TRUSTED_PROXY_CIDRS"):
+        Settings(DATABASE_URL="x", TRUSTED_PROXY_CIDRS="10.0.0.0/8, not-a-network")
+    assert [str(n) for n in Settings(DATABASE_URL="x", TRUSTED_PROXY_CIDRS=" 10.0.0.0/8 ,").trusted_proxy_networks] == [
+        "10.0.0.0/8"
+    ]
