@@ -32,7 +32,7 @@ from typing import NamedTuple
 import jwt
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import MutableHeaders
-from starlette.requests import cookie_parser
+from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -109,21 +109,21 @@ async def _user_subject(scope: Scope) -> str | None:
     """The subject of a session cookie or ``/mcp`` bearer the auth layers would admit, else ``None``."""
     if not settings.secret_key_configured:
         return None
-    headers = dict(scope.get("headers", []))
-    candidates: list[tuple[str, str]] = []
-    cookie = cookie_parser(headers.get(b"cookie", b"").decode("latin-1")).get(auth.SESSION_COOKIE)
-    if cookie:
-        candidates.append((cookie, auth.WEB_AUDIENCE))
-    authorization = headers.get(b"authorization", b"").decode("latin-1")
-    if authorization.startswith("Bearer "):
-        candidates.append((authorization[7:], auth.MCP_AUDIENCE))
-    for token, audience in candidates:
-        try:
-            claims = auth.decode_jwt(token, audience)
-        except jwt.PyJWTError:
-            continue
-        if auth.is_allowed(str(claims.get("email", ""))) and not await run_in_threadpool(auth.is_revoked, claims):
-            return str(claims["sub"])
+    try:
+        claims = await run_in_threadpool(auth.web_session, Request(scope))
+    except auth.SessionRefused:
+        claims = None
+    if claims is not None:
+        return str(claims["sub"])
+    authorization = dict(scope.get("headers", [])).get(b"authorization", b"").decode("latin-1")
+    if not authorization.startswith("Bearer "):
+        return None
+    try:
+        claims = auth.decode_jwt(authorization[7:], auth.MCP_AUDIENCE)
+    except jwt.PyJWTError:
+        return None
+    if auth.is_allowed(str(claims.get("email", ""))) and not await run_in_threadpool(auth.is_revoked, claims):
+        return str(claims["sub"])
     return None
 
 
