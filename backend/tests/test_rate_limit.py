@@ -1,5 +1,6 @@
 """The rate limiter (#1475): what it counts, what it refuses, and whose bucket a request spends."""
 
+import asyncio
 import logging
 
 import pytest
@@ -101,7 +102,37 @@ def test_a_token_reli_did_not_sign_spends_the_address_bucket(monkeypatch):
     monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
     forged = {"type": "http", "headers": [(b"authorization", b"Bearer not-a-jwt")]}
 
-    assert rate_limit._user_subject(forged) is None
+    assert asyncio.run(rate_limit._user_subject(forged)) is None
+
+
+def test_a_revoked_cookie_does_not_spend_the_owners_live_bucket(client, session, monkeypatch):
+    """A copy of a cookie kept after logout would otherwise drain the bucket the next sign-in uses."""
+    monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    monkeypatch.setattr(settings, "RELI_BASE_URL", BASE_URL)
+    stolen = {
+        "Cookie": f"{auth.SESSION_COOKIE}={auth.create_jwt('1234567890', 'owner@example.com', auth.WEB_AUDIENCE)}"
+    }
+    assert client.post("/api/auth/logout", headers={**stolen, "Origin": BASE_URL}).status_code == 204
+    _limits(monkeypatch, api=2)
+
+    assert [client.get("/api/things", headers=stolen).status_code for _ in range(3)] == [401, 401, 429]
+
+    fresh = auth.create_jwt("1234567890", "owner@example.com", auth.WEB_AUDIENCE)
+    statuses = [
+        client.get("/api/things", headers={"Cookie": f"{auth.SESSION_COOKIE}={fresh}"}).status_code for _ in range(2)
+    ]
+    assert statuses == [200, 200]
+
+
+def test_a_token_for_an_account_off_the_allowlist_spends_the_address_bucket(monkeypatch):
+    monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    monkeypatch.setattr(settings, "RELI_BASE_URL", BASE_URL)
+    token = auth.create_jwt("1234567890", "former@example.com", auth.MCP_AUDIENCE)
+    scope = {"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())]}
+
+    assert asyncio.run(rate_limit._user_subject(scope)) is None
 
 
 def _scope(peer, *forwarded):

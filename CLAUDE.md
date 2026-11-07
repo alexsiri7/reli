@@ -224,8 +224,9 @@ flood without a credential is counted before either refuses it. The tiers, per m
 `/oauth/register` 5 (`RATE_LIMIT_REGISTRATION_PER_MINUTE`); the rest of `/oauth/` and `/api/auth/`
 10 (`RATE_LIMIT_AUTH_PER_MINUTE`); `/api`, `/mcp` and `/.well-known/` 60
 (`RATE_LIMIT_API_PER_MINUTE`). There is no LLM tier, because there are no LLM endpoints.
-`/healthz` and the bundle are exempt. An `/api` or `/mcp` request carrying a JWT this deploy signed
-is keyed by its subject, so the owner never shares a bucket with an attacker; every other request
+`/healthz` and the bundle are exempt. An `/api` or `/mcp` request carrying a JWT this deploy signed,
+for an allowlisted account and not revoked by logout, is keyed by its subject, so the owner never
+shares a bucket with an attacker — not even one replaying a stolen copy of a revoked token; every other request
 is keyed by its client address. That address is the peer unless the peer is inside
 `TRUSTED_PROXY_CIDRS`, in which case it is the rightmost `X-Forwarded-For` entry that is not itself
 a trusted proxy. The default is empty and trusts no header, so until it is set every request without

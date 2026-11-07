@@ -13,8 +13,8 @@ An ``api`` request presenting a JWT this Reli signed (the session cookie or an `
 keyed by its subject, so the owner never shares a bucket with an attacker behind the same proxy.
 Every other request is keyed by its client address: the peer, unless the peer is inside
 ``TRUSTED_PROXY_CIDRS``, in which case the rightmost ``X-Forwarded-For`` entry that is not itself a
-trusted proxy. Choosing a bucket only needs Reli's signature; the auth layers inside still refuse a
-revoked or non-allowlisted token.
+trusted proxy. A token revoked by logout or naming an account no longer in ``ALLOWED_EMAILS`` is
+keyed by address like any other caller, so a stolen copy cannot spend its owner's bucket.
 
 The buckets live in this process and are lost on restart; the image runs one uvicorn process.
 """
@@ -30,12 +30,13 @@ from dataclasses import dataclass
 from typing import NamedTuple
 
 import jwt
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import MutableHeaders
 from starlette.requests import cookie_parser
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from . import auth
+from . import api, auth
 from .config import settings
 
 logger = logging.getLogger(__name__)
@@ -68,9 +69,9 @@ def tier_for(path: str) -> Tier | None:
     """The tier *path* is counted in, or ``None`` when it is exempt."""
     if path == "/oauth/register":
         return Tier("registration", settings.RATE_LIMIT_REGISTRATION_PER_MINUTE)
-    if path.startswith(("/oauth/", "/api/auth/")):
+    if path.startswith(("/oauth/", f"{auth.router.prefix}/")):
         return Tier("auth", settings.RATE_LIMIT_AUTH_PER_MINUTE)
-    if _under(path, "/api") or _under(path, "/mcp") or path.startswith("/.well-known/"):
+    if _under(path, api.router.prefix) or _under(path, "/mcp") or path.startswith("/.well-known/"):
         return Tier("api", settings.RATE_LIMIT_API_PER_MINUTE)
     return None
 
@@ -104,8 +105,8 @@ def client_address(scope: Scope) -> str:
     return hops[0]
 
 
-def _user_subject(scope: Scope) -> str | None:
-    """The subject of a verifying session cookie or ``/mcp`` bearer, else ``None``."""
+async def _user_subject(scope: Scope) -> str | None:
+    """The subject of a session cookie or ``/mcp`` bearer the auth layers would admit, else ``None``."""
     if not settings.secret_key_configured:
         return None
     headers = dict(scope.get("headers", []))
@@ -118,9 +119,11 @@ def _user_subject(scope: Scope) -> str | None:
         candidates.append((authorization[7:], auth.MCP_AUDIENCE))
     for token, audience in candidates:
         try:
-            return str(auth.decode_jwt(token, audience)["sub"])
+            claims = auth.decode_jwt(token, audience)
         except jwt.PyJWTError:
             continue
+        if auth.is_allowed(str(claims.get("email", ""))) and not await run_in_threadpool(auth.is_revoked, claims):
+            return str(claims["sub"])
     return None
 
 
@@ -166,7 +169,7 @@ class RateLimit:
             await self._app(scope, receive, send)
             return
 
-        subject = _user_subject(scope) if tier.name == "api" else None
+        subject = await _user_subject(scope) if tier.name == "api" else None
         key = f"user:{subject}" if subject is not None else f"addr:{client_address(scope)}"
         allowed, remaining, retry_after = _take(tier, key, time.monotonic())
         headers = {"X-RateLimit-Limit": str(tier.limit), "X-RateLimit-Remaining": str(remaining)}
