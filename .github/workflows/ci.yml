@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     # Pinned to the @playwright/test version in frontend/package.json. The committed snapshots were
     # generated in this image; any other renders different pixels and fails on nothing real.
-    container: mcr.microsoft.com/playwright:v1.63.0-noble
+    container: mcr.microsoft.com/playwright:v1.65.0-noble
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
