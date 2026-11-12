@@ -346,7 +346,7 @@ and the diff means nothing:
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/work -w /work/frontend \
-  mcr.microsoft.com/playwright:v1.63.0-noble npx playwright test --update-snapshots
+  mcr.microsoft.com/playwright:v1.65.0-noble npx playwright test --update-snapshots
 ```
 
 Bumping `@playwright/test` means bumping the tag in that command and in `.github/workflows/ci.yml`
