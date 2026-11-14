@@ -51,6 +51,42 @@ No CI workflow or other repository automation SHALL read any route that answers 
 - WHEN CI runs
 - THEN the gate fails
 
+### Requirement: Workflow tokens carry only the grants they declare
+
+Every workflow job SHALL run with `GITHUB_TOKEN` permissions declared either at the top of its workflow or on the job itself, never on the repository's default grants. A check SHALL fail the build if a job declares none.
+
+#### Scenario: A job without a permissions block
+- GIVEN a workflow with no top-level permissions and a job that declares none
+- WHEN CI runs
+- THEN the gate fails naming that job
+
+### Requirement: Deploy notifications travel over https
+
+A workflow step that posts a notification to ntfy SHALL address it with `https://`, because the topic in the URL is the channel's only secret. A check SHALL fail the build if a step reaches ntfy without that scheme.
+
+#### Scenario: A plaintext notification
+- GIVEN a workflow step that posts to ntfy with no `https://` scheme
+- WHEN CI runs
+- THEN the gate fails naming that step
+
+### Requirement: A failing Railway token files an issue
+
+A daily check SHALL verify the Railway deploy token and, when it is missing or the Railway API rejects it, file a GitHub issue pointing at the rotation runbook unless one is already open. The issue SHALL carry no user data.
+
+#### Scenario: An expired Railway token
+- GIVEN a Railway token the Railway API rejects
+- WHEN the daily token check runs
+- THEN it fails and an open issue names the expired token and the rotation runbook
+
+### Requirement: Dependencies install locked and are audited
+
+CI SHALL install backend dependencies from the committed lockfile and refuse a lockfile that disagrees with the manifest. A scheduled scan, and every change to a lockfile, SHALL audit the backend and frontend dependencies the committed lockfiles pin for known vulnerabilities.
+
+#### Scenario: A lockfile change pulls in a vulnerable package
+- GIVEN a change to a committed lockfile that pins a package with a known vulnerability
+- WHEN the dependency scan runs
+- THEN the audit fails
+
 ### Requirement: Deployment is safe by default
 
 The service SHALL run on Postgres from a required connection string with no fallback, and SHALL refuse to start without it. It SHALL apply its migrations on boot and fail the boot on a migration failure. Schema changes after the baseline SHALL be additive unless a destructive change explicitly opts in with its data preserved.
