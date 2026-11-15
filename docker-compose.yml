@@ -21,6 +21,12 @@ services:
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # The rate limiter's settings (backend/rate_limit.py). The limits are bare names, passed only
+      # when set on the host: an empty value would fail their int parse and the boot.
+      - TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS:-}
+      - RATE_LIMIT_REGISTRATION_PER_MINUTE
+      - RATE_LIMIT_AUTH_PER_MINUTE
+      - RATE_LIMIT_API_PER_MINUTE
       # This container is only ever a deploy, so it gets the deploy's checks: among them, a
       # DATABASE_URL naming any sslmode but verify-full fails the boot (#1695, #1816).
       - PRODUCTION=${PRODUCTION:-1}

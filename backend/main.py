@@ -219,7 +219,7 @@ frontend_serving.mount_frontend(app, _DIST)
 web_view_auth.add_web_view_auth(app)
 # Outside the web view's and /mcp's credential checks, so a flood without a credential is counted
 # before either refuses it; inside the headers layer, so a 429 carries them too.
-app.add_middleware(rate_limit.RateLimit)
+rate_limit.add_rate_limit(app)
 
 # Outermost of the layers registered here, so added last: the web view's 401 is sent by its
 # middleware without reaching anything inside it, and a headers layer registered earlier would never

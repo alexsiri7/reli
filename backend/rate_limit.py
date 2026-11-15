@@ -9,12 +9,15 @@ Three tiers, each a per-minute limit from :mod:`backend.config`:
 
 Everything else — ``/healthz``, the bundle and its fallback — is exempt and gets no headers.
 
-An ``api`` request presenting a JWT this Reli signed (the session cookie or an ``/mcp`` bearer) is
-keyed by its subject, so the owner never shares a bucket with an attacker behind the same proxy.
-Every other request is keyed by its client address: the peer, unless the peer is inside
+A request presenting a JWT this Reli signed (the session cookie or an ``/mcp`` bearer) is keyed by
+its subject in every tier, so the owner never shares a bucket with an attacker behind the same
+proxy. A ``POST /oauth/token`` presenting a live refresh token or authorization code is keyed by the
+client that grant was issued to, so a flood holding no grant cannot hold the connector's refresh at
+429 (#1802). Every other request is keyed by its client address: the peer, unless the peer is inside
 ``TRUSTED_PROXY_CIDRS``, in which case the rightmost ``X-Forwarded-For`` entry that is not itself a
-trusted proxy. A token revoked by logout or naming an account no longer in ``ALLOWED_EMAILS`` is
-keyed by address like any other caller, so a stolen copy cannot spend its owner's bucket.
+trusted proxy. A token revoked by logout or naming an account no longer in ``ALLOWED_EMAILS``, a
+consumed or unknown refresh token, and a form over ``MAX_BODY_BYTES`` are keyed by address like any
+other caller, so a stolen or replayed copy cannot spend its owner's bucket.
 
 The buckets live in this process and are lost on restart; the image runs one uvicorn process.
 """
@@ -28,7 +31,10 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import NamedTuple
+from urllib.parse import parse_qs
 
+import jwt
+from fastapi import FastAPI
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
@@ -37,6 +43,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import api, auth
 from .config import settings
+from .mcp_oauth import MAX_BODY_BYTES
+from .oauth_state import cleanup_and_get, mcp_auth_codes, mcp_refresh_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +126,59 @@ async def _user_subject(scope: Scope) -> str | None:
     return str(claims["sub"]) if claims is not None else None
 
 
+def _lookup_grant_client(fields: dict[str, list[str]]) -> str | None:
+    def field(name: str) -> str:
+        return fields.get(name, [""])[-1]
+
+    grant_type = field("grant_type")
+    with auth.open_db_session() as session:
+        if grant_type == "refresh_token" and field("refresh_token"):
+            row = cleanup_and_get(session, mcp_refresh_tokens, field("refresh_token"))
+            # A consumed row is kept to recognise a replay; a leaked old token must not reach the
+            # live connector's bucket.
+            return None if row is None or row["consumed_at"] is not None else str(row["client_id"])
+        if grant_type == "authorization_code" and field("code"):
+            row = cleanup_and_get(session, mcp_auth_codes, field("code"))
+            return None if row is None else str(row["client_id"])
+    return None
+
+
+async def _grant_client(scope: Scope, receive: Receive) -> tuple[str | None, Receive]:
+    """The client a ``POST /oauth/token`` grant was issued to, and a *receive* that replays the body.
+
+    The client is the stored grant's, never the form's ``client_id``, which anyone can send. A body
+    over ``MAX_BODY_BYTES`` is not parsed and is passed on whole for the route's own 413; one
+    declared over it is not read at all.
+    """
+    if scope["method"] != "POST" or scope["path"] != "/oauth/token" or not settings.secret_key_configured:
+        return None, receive
+    headers = dict(scope.get("headers", []))
+    declared = headers.get(b"content-length", b"").decode("latin-1")
+    if not headers.get(b"content-type", b"").startswith(b"application/x-www-form-urlencoded") or (
+        declared.isdigit() and int(declared) > MAX_BODY_BYTES
+    ):
+        return None, receive
+
+    buffered: list[Message] = []
+    size, more_body = 0, True
+    while more_body and size <= MAX_BODY_BYTES:
+        message = await receive()
+        buffered.append(message)
+        if message["type"] != "http.request":
+            break
+        size += len(message.get("body", b""))
+        more_body = message.get("more_body", False)
+
+    async def replay() -> Message:
+        return buffered.pop(0) if buffered else await receive()
+
+    if more_body or size > MAX_BODY_BYTES:
+        return None, replay
+    body = b"".join(message.get("body", b"") for message in buffered)
+    fields = parse_qs(body.decode("latin-1"), keep_blank_values=True)
+    return await run_in_threadpool(_lookup_grant_client, fields), replay
+
+
 def _take(tier: Tier, key: str, now: float) -> tuple[bool, int, int]:
     """Spend one token from *key*'s bucket in *tier*: whether allowed, tokens left, and seconds to retry."""
     rate = tier.limit / 60
@@ -160,8 +221,12 @@ class RateLimit:
             await self._app(scope, receive, send)
             return
 
-        subject = await _user_subject(scope) if tier.name == "api" else None
-        key = f"user:{subject}" if subject is not None else f"addr:{client_address(scope)}"
+        subject = await _user_subject(scope)
+        if subject is not None:
+            key = f"user:{subject}"
+        else:
+            client_id, receive = await _grant_client(scope, receive)
+            key = f"client:{client_id}" if client_id is not None else f"addr:{client_address(scope)}"
         allowed, remaining, retry_after = _take(tier, key, time.monotonic())
         headers = {"X-RateLimit-Limit": str(tier.limit), "X-RateLimit-Remaining": str(remaining)}
 
@@ -180,3 +245,13 @@ class RateLimit:
             await send(message)
 
         await self._app(scope, receive, send_with_headers)
+
+
+def add_rate_limit(app: FastAPI) -> None:
+    """Add :class:`RateLimit` to *app*, warning first when a deploy believes no ``X-Forwarded-For``."""
+    if settings.production and not settings.trusted_proxy_networks:
+        logger.warning(
+            "TRUSTED_PROXY_CIDRS is empty on a deploy: every request without a credential of Reli's is "
+            "keyed by the proxy's address, so they share one bucket per tier"
+        )
+    app.add_middleware(RateLimit)

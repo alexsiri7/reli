@@ -84,7 +84,8 @@ class Settings(BaseSettings):
     # --- Rate limiting (#1475) ---
     # In-process token buckets, one per tier and caller (backend/rate_limit.py); each limit is
     # requests per minute. TRUSTED_PROXY_CIDRS names the proxies whose X-Forwarded-For is believed.
-    # Empty trusts no header, so every request is keyed by its peer address. Human-provisioned like
+    # Empty trusts no header, so every request is keyed by its peer address, and a deploy with it
+    # empty logs a warning at startup. Human-provisioned like
     # SECRET_KEY: only someone who can see the deploy's ingress knows the ranges.
     RATE_LIMIT_REGISTRATION_PER_MINUTE: Annotated[int, Field(ge=1)] = 5
     RATE_LIMIT_AUTH_PER_MINUTE: Annotated[int, Field(ge=1)] = 10

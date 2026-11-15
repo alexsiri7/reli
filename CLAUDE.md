@@ -240,19 +240,24 @@ flood without a credential is counted before either refuses it. The tiers, per m
 `/oauth/register` 5 (`RATE_LIMIT_REGISTRATION_PER_MINUTE`); the rest of `/oauth/` and `/api/auth/`
 10 (`RATE_LIMIT_AUTH_PER_MINUTE`); `/api`, `/mcp` and `/.well-known/` 60
 (`RATE_LIMIT_API_PER_MINUTE`). There is no LLM tier, because there are no LLM endpoints.
-`/healthz` and the bundle are exempt. An `/api` or `/mcp` request carrying a JWT this deploy signed,
-for an allowlisted account and not revoked by logout or with its refresh family, is keyed by its subject, so the owner never
-shares a bucket with an attacker — not even one replaying a stolen copy of a revoked token; every other request
-is keyed by its client address. That address is the peer unless the peer is inside
+`/healthz` and the bundle are exempt. A request carrying a JWT this deploy signed, for an
+allowlisted account and not revoked by logout or with its refresh family, is keyed by its subject
+in every tier, so the owner never shares a bucket with an attacker — not even one replaying a
+stolen copy of a revoked token. A `POST /oauth/token` presenting a live refresh token or
+authorization code is keyed by the client that grant was issued to — the stored grant's
+`client_id`, never the form's — so a flood holding no grant cannot hold the connector's refresh at
+429 (#1802); a consumed refresh token is keyed by address. Every other request is keyed by its
+client address. That address is the peer unless the peer is inside
 `TRUSTED_PROXY_CIDRS`, in which case it is the rightmost `X-Forwarded-For` entry that is not itself
 a trusted proxy. The default is empty and trusts no header, so until it is set every request without
 a credential shares one bucket per tier with every other — the Cloudflare Tunnel and Railway's edge
-present one address. Setting it to the ranges in front of the container (Railway's edge, and
+present one address — and a deploy logs `TRUSTED_PROXY_CIDRS is empty on a deploy` at startup.
+Setting it to the ranges in front of the container (Railway's edge, and
 Cloudflare's published ranges if Cloudflare proxies the host) is a human step in the
 `RAILWAY_TOKEN` class that nothing in the repository can perform or verify, so do not claim it is
 done; a malformed value fails the boot. The buckets assume the single uvicorn process the image runs
-and are lost on restart. The first refusal on a bucket logs `rate limit reached: tier=… key=user`
-or `key=addr`, never the address or subject; a `key=user` line on the scheduled-pass night means
+and are lost on restart. The first refusal on a bucket logs `rate limit reached: tier=… key=user`,
+`key=client` or `key=addr`, never the address, subject or client; a `key=user` line on the scheduled-pass night means
 `RATE_LIMIT_API_PER_MINUTE` is too low.
 
 Underneath the limiter the stores stay structurally bounded: the three a caller without a
