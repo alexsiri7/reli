@@ -80,7 +80,7 @@ A daily check SHALL verify the Railway deploy token and, when it is missing or t
 
 ### Requirement: Dependencies install locked and are audited
 
-CI SHALL install backend dependencies from the committed lockfile and refuse a lockfile that disagrees with the manifest. A scheduled scan, and every change to a lockfile, SHALL audit the backend and frontend dependencies the committed lockfiles pin for known vulnerabilities. The deploy that follows a push to main SHALL wait on a passing audit of the commit it ships; a manually dispatched deploy does not.
+CI SHALL install backend dependencies from the committed lockfile and refuse a lockfile that disagrees with the manifest. Every push, every pull request and a scheduled scan SHALL audit the backend and frontend dependencies the committed lockfiles pin for known vulnerabilities. The deploy that follows a push to main SHALL wait on a passing audit of the commit it ships; a manually dispatched deploy does not.
 
 #### Scenario: A lockfile change pulls in a vulnerable package
 - GIVEN a change to a committed lockfile that pins a package with a known vulnerability

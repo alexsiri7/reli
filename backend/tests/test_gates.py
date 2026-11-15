@@ -325,7 +325,9 @@ def test_the_deploy_waits_on_a_dependency_audit():
         ]
         assert len(jobs) == 1, command
         [step] = [step for step in jobs[0]["steps"] if step.get("run", "").startswith(command)]
-        # Any of these would skip or excuse the audit while the run still reports success.
+        # A trailing `|| true`, or any of these keys, would skip or excuse the audit while the run
+        # still reports success.
+        assert step["run"].strip() == command, command
         for silenced in (jobs[0], step):
             assert not {"if", "continue-on-error"} & set(silenced), command
 
