@@ -154,7 +154,7 @@ async def _grant_client(scope: Scope, receive: Receive) -> tuple[str | None, Rec
         return None, receive
     headers = dict(scope.get("headers", []))
     declared = headers.get(b"content-length", b"").decode("latin-1")
-    if not headers.get(b"content-type", b"").startswith(b"application/x-www-form-urlencoded") or (
+    if not headers.get(b"content-type", b"").lower().startswith(b"application/x-www-form-urlencoded") or (
         declared.isdigit() and int(declared) > MAX_BODY_BYTES
     ):
         return None, receive

@@ -3,8 +3,10 @@
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
+import yaml
 from fastapi import FastAPI
 
 from backend import auth, rate_limit
@@ -170,9 +172,10 @@ def test_a_token_whose_refresh_family_is_gone_spends_the_address_bucket(session,
     assert asyncio.run(rate_limit._user_subject(scope)) is None
 
 
-def _refresh(client, token, registered=None):
+def _refresh(client, token, registered=None, content_type=None):
     form = {"grant_type": "refresh_token", "refresh_token": token}
-    return client.post("/oauth/token", data={**form, **(registered or {})})
+    headers = {"Content-Type": content_type} if content_type else None
+    return client.post("/oauth/token", data={**form, **(registered or {})}, headers=headers)
 
 
 def _seed_refresh_token(session, token, client_id="connector", consumed_at=None):
@@ -192,7 +195,11 @@ def _seed_refresh_token(session, token, client_id="connector", consumed_at=None)
     )
 
 
-def test_a_live_refresh_token_spends_its_clients_bucket_not_the_addresss(client, session, monkeypatch):
+# The route's form parser folds the media type's case, so the limiter must too.
+@pytest.mark.parametrize(
+    "content_type", ["application/x-www-form-urlencoded", "Application/X-WWW-Form-Urlencoded; charset=UTF-8"]
+)
+def test_a_live_refresh_token_spends_its_clients_bucket_not_the_addresss(client, session, monkeypatch, content_type):
     """A flood holding no grant must not hold the connector's hourly refresh at 429 (#1802)."""
     monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
     monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
@@ -204,10 +211,22 @@ def test_a_live_refresh_token_spends_its_clients_bucket_not_the_addresss(client,
     _seed_refresh_token(session, "live-token", registered["client_id"])
 
     # The route redeems the body the limiter read, so the replay reached it whole.
-    refreshed = _refresh(client, "live-token", registered)
+    refreshed = _refresh(client, "live-token", registered, content_type)
     assert refreshed.status_code == 200, refreshed.text
     assert refreshed.json()["access_token"]
     assert _refresh(client, "bogus").status_code == 429
+
+
+def test_a_live_grant_is_keyed_by_its_stored_client_not_the_forms(client, session, monkeypatch):
+    """Keying by the form's ``client_id`` would open a fresh bucket for every forged id."""
+    monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    _limits(monkeypatch, auth_tier=2)
+    _seed_refresh_token(session, "live-token")
+
+    forged = [_refresh(client, "live-token", {"client_id": f"forged-{n}"}) for n in range(3)]
+
+    assert [r.status_code != 429 for r in forged] == [True, True, False]
+    assert _refresh(client, "bogus").status_code != 429
 
 
 def test_a_consumed_refresh_token_spends_the_address_bucket(client, session, monkeypatch):
@@ -356,3 +375,15 @@ def test_an_empty_bucket_refills_at_its_rate():
 
     assert rate_limit._take(tier, "addr:x", now=0.0) == (False, 0, 1)
     assert rate_limit._take(tier, "addr:x", now=1.0)[0]
+
+
+@pytest.mark.parametrize(
+    ("compose_file", "service"), [("docker-compose.yml", "reli"), ("docker-compose.staging.yml", "reli-staging")]
+)
+def test_the_compose_services_pass_the_rate_limit_settings_through(compose_file, service):
+    compose = yaml.safe_load((Path(__file__).resolve().parents[2] / compose_file).read_text())
+    environment = compose["services"][service]["environment"]
+    assert "TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS:-}" in environment
+    # Bare names: an empty value would fail the limit's int parse and the boot.
+    for name in ("RATE_LIMIT_REGISTRATION_PER_MINUTE", "RATE_LIMIT_AUTH_PER_MINUTE", "RATE_LIMIT_API_PER_MINUTE"):
+        assert name in environment
