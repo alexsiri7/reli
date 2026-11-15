@@ -242,7 +242,7 @@ def has_recordable_scope(notes: Mapping[str, str]) -> bool:
     return bool(_stripped_scope(notes.get("scope")))
 
 
-def normalise_preference(scope: str, evidence_ids: Iterable[uuid.UUID]) -> tuple[str, list[uuid.UUID]]:
+def normalise_preference(title: str, scope: str, evidence_ids: Iterable[uuid.UUID]) -> tuple[str, list[uuid.UUID]]:
     """The scope and evidence a preference is recorded with, or ``ValueError`` if it is not recordable.
 
     Evidence is required: a preference nobody can trace back to specific moments is the confidence
@@ -253,6 +253,7 @@ def normalise_preference(scope: str, evidence_ids: Iterable[uuid.UUID]) -> tuple
     if not scope:
         raise ValueError("a preference must declare the scope it applies to")
     check_text("scope", scope, MAX_SCOPE_CHARS)
+    check_thing_fields(title=title)
     wanted = list(dict.fromkeys(evidence_ids))
     if not wanted:
         raise ValueError("a preference with no evidence is not recordable")

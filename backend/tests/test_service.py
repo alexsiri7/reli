@@ -458,6 +458,21 @@ def test_an_oversized_update_is_refused_and_the_thing_is_untouched(session):
     assert _journal_count(session) == before
 
 
+@pytest.mark.parametrize("priority", [float("nan"), float("inf"), float("-inf")])
+def test_a_non_finite_priority_is_refused_on_create_and_update(session, priority):
+    thing = create_thing(session, actor=Actor.USER, title="ok", priority=1.0)
+    before = _journal_count(session)
+
+    with pytest.raises(ValueError, match="finite"):
+        create_thing(session, actor=Actor.USER, title="ok", priority=priority)
+    with pytest.raises(ValueError, match="finite"):
+        update_thing(session, actor=Actor.USER, thing_id=thing.id, priority=priority)
+
+    session.refresh(thing)
+    assert thing.priority == 1.0
+    assert _journal_count(session) == before
+
+
 def test_an_update_checks_only_the_fields_it_passes(session):
     """A Thing stored before the bounds existed stays updatable through the fields within them."""
     thing = create_thing(session, actor=Actor.USER, title="legacy")

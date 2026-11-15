@@ -22,6 +22,7 @@ from backend.thing_rules import (
     BACKFILL_PER_DAY,
     MAX_MAPPING_BYTES,
     MAX_SCOPE_CHARS,
+    MAX_TITLE_CHARS,
     FieldTooLarge,
     backfill_defaults,
     capture_defaults,
@@ -178,23 +179,32 @@ def test_an_observation_or_a_capture_stands_as_evidence():
 
 
 def test_a_preference_keeps_its_scopes_case_and_its_evidence_in_order_once():
-    assert normalise_preference("  Scheduling\t", [OTHER, THING, OTHER]) == ("Scheduling", [OTHER, THING])
+    assert normalise_preference("ok", "  Scheduling\t", [OTHER, THING, OTHER]) == ("Scheduling", [OTHER, THING])
 
 
 @pytest.mark.parametrize("scope", ["", "   ", "\t\n"])
 def test_a_preference_must_declare_a_scope(scope):
     with pytest.raises(ValueError, match="scope"):
-        normalise_preference(scope, [THING])
+        normalise_preference("ok", scope, [THING])
 
 
 def test_a_preference_scope_is_bounded():
     with pytest.raises(FieldTooLarge, match="scope"):
-        normalise_preference("s" * (MAX_SCOPE_CHARS + 1), [THING])
+        normalise_preference("ok", "s" * (MAX_SCOPE_CHARS + 1), [THING])
 
 
 def test_a_preference_with_no_evidence_is_not_recordable():
     with pytest.raises(ValueError, match="no evidence"):
-        normalise_preference("scheduling", [])
+        normalise_preference("ok", "scheduling", [])
+
+
+def test_a_preference_title_is_checked_after_its_scope_and_before_its_evidence():
+    long_title = "t" * (MAX_TITLE_CHARS + 1)
+    with pytest.raises(ValueError, match="scope") as refused:
+        normalise_preference(long_title, " ", [THING])
+    assert not isinstance(refused.value, FieldTooLarge)
+    with pytest.raises(FieldTooLarge, match="title"):
+        normalise_preference(long_title, "scheduling", [])
 
 
 @pytest.mark.parametrize(
@@ -207,7 +217,7 @@ def test_a_stored_preference_needs_a_non_blank_scope(notes, recordable):
 def test_the_read_and_the_write_floor_agree_on_a_blank_scope():
     for scope in ["", " ", "\t", "planning", " planning "]:
         try:
-            normalise_preference(scope, [THING])
+            normalise_preference("ok", scope, [THING])
             written = True
         except ValueError:
             written = False
