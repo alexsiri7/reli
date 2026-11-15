@@ -215,10 +215,14 @@ def test_the_consumed_pool_forgets_the_earliest_consumed_and_never_a_live_token(
     cleanup_and_store(session, tiny, "t2", _refresh_token(expires_in=timedelta(days=1)))
     assert consume_refresh_token(session, "t2") is not None
     session.commit()
+    cleanup_and_store(session, tiny, "live-1", _refresh_token())
+    cleanup_and_store(session, tiny, "live-2", _refresh_token())
 
     with caplog.at_level("WARNING", logger="backend.oauth_state"):
         cleanup_and_store(session, tiny, "t3", _refresh_token())
 
+    assert cleanup_and_get(session, tiny, "live-1")["consumed_at"] is None
+    assert cleanup_and_get(session, tiny, "live-2")["consumed_at"] is None
     assert cleanup_and_get(session, tiny, "t1") is None
     assert cleanup_and_get(session, tiny, "t2")["consumed_at"] is not None
     assert cleanup_and_get(session, tiny, "t3")["consumed_at"] is None
@@ -235,6 +239,23 @@ def test_a_refusing_store_warns_once_it_is_nearly_full(session, caplog):
         cleanup_and_store(session, tiny, "code-3", _auth_code())
 
     assert any("mcp_auth_codes is nearly full: 4 of 5" in record.message for record in caplog.records)
+
+
+def test_consumed_refresh_tokens_do_not_count_towards_the_nearly_full_warning(session, caplog):
+    tiny = Store(McpRefreshTokenRecord, max_entries=5, hashes_keys=True, max_consumed=10)
+    for n in range(6):
+        cleanup_and_store(session, tiny, f"consumed-{n}", _refresh_token())
+        assert consume_refresh_token(session, f"consumed-{n}") is not None
+    session.commit()
+
+    with caplog.at_level("WARNING", logger="backend.oauth_state"):
+        for n in range(3):
+            cleanup_and_store(session, tiny, f"live-{n}", _refresh_token())
+        assert not any("nearly full" in record.message for record in caplog.records)
+
+        cleanup_and_store(session, tiny, "live-3", _refresh_token())
+
+    assert any("mcp_refresh_tokens is nearly full: 4 of 5" in record.message for record in caplog.records)
 
 
 def test_an_evicting_store_at_its_cap_drops_the_row_nearest_expiry(session, caplog):
