@@ -369,6 +369,9 @@ Creating documentation that claims success on an action you cannot perform is a 
 - Backend: `backend/` (FastAPI, Python) — the whole service
 - Schema: `backend/db_models.py` — `things`, `relationships`, `journal`, and the enums
 - Writes: `backend/service.py` — the only module that may mutate a Thing; every function journals
+- Write rules: `backend/thing_rules.py` — the pure rules `service.py` applies (field bounds,
+  capture defaults, heartbeats, edge shape, evidence sources, preference recordability); no
+  database import, so `backend/tests/test_thing_rules.py` tests them without a `session`
 - Reads: `backend/queries.py` — the indexed queries, including `user_model`
 - Retained reference, not built or shipped: `reference/oauth/` (see its README)
 - MCP: `backend/mcp_server.py` — the twenty-one tools wrapping `service.py`, `queries.py` and

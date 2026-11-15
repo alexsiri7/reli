@@ -406,12 +406,6 @@ def test_a_value_at_every_bound_is_accepted(session):
     assert len(thing.tags) == service.MAX_TAGS  # the 99 given and #New
 
 
-def test_mapping_size_counts_bytes_not_characters(session):
-    """A note of multi-byte characters is measured by what it costs to store, not by its length."""
-    with pytest.raises(FieldTooLarge, match="bytes"):
-        create_thing(session, actor=Actor.USER, title="ok", notes={"k": "é" * (service.MAX_MAPPING_BYTES // 2)})
-
-
 @pytest.mark.parametrize(
     "url",
     [
@@ -708,12 +702,6 @@ def test_a_naive_expected_updated_at_is_refused_as_malformed_not_stale(session):
         )
 
     assert not isinstance(refusal.value, StaleWrite)
-
-
-@pytest.mark.parametrize("priority", [float("nan"), float("inf"), float("-inf")])
-def test_a_non_finite_priority_is_refused(session, priority):
-    with pytest.raises(ValueError, match="finite"):
-        create_thing(session, actor=Actor.USER, title="ok", priority=priority)
 
 
 def test_an_oversized_relationship_context_is_refused(session):
