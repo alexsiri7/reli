@@ -306,12 +306,30 @@ def test_the_frontend_lockfile_is_updated_and_scanned_like_the_backend_one():
     updates = yaml.safe_load(DEPENDABOT.read_text())["updates"]
     assert {u["directory"] for u in updates if u["package-ecosystem"] == "npm"} == {"/frontend"}
 
-    scan = yaml.safe_load((WORKFLOWS / "dependency-scan.yml").read_text())
-    # YAML 1.1 reads a bare ``on:`` key as the boolean True.
-    for event in ("push", "pull_request"):
-        assert "frontend/package-lock.json" in scan[True][event]["paths"], event
-    audit_steps = [step for job in scan["jobs"].values() for step in job["steps"] if "npm audit" in step.get("run", "")]
+    ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
+    audit_steps = [step for job in ci["jobs"].values() for step in job["steps"] if "npm audit" in step.get("run", "")]
     assert [step.get("working-directory") for step in audit_steps] == ["frontend"]
+
+
+def test_the_deploy_waits_on_a_dependency_audit():
+    """#1815: the audits run in the CI run whose success the staging pipeline follows, on every
+    push rather than only on a lockfile change, so a vulnerable pin stops the deploy."""
+    ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
+    pipeline = yaml.safe_load((WORKFLOWS / "staging-pipeline.yml").read_text())
+    # PyYAML reads the bare key ``on`` as the boolean True.
+    assert pipeline[True]["workflow_run"]["workflows"] == [ci["name"]]
+
+    for command in ("pip-audit", "npm audit"):
+        jobs = [
+            job for job in ci["jobs"].values() if any(step.get("run", "").startswith(command) for step in job["steps"])
+        ]
+        assert len(jobs) == 1, command
+        # A job-level gate would skip the audit while the run still reports success.
+        assert "if" not in jobs[0], command
+
+    for event in ("push", "pull_request"):
+        assert not {"paths", "paths-ignore"} & set(ci[True][event]), event
+    assert "schedule" in ci[True]
 
 
 def test_every_image_build_pulls_its_base_rather_than_trusting_the_cache():
