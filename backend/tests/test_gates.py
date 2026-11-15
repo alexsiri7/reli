@@ -324,8 +324,10 @@ def test_the_deploy_waits_on_a_dependency_audit():
             job for job in ci["jobs"].values() if any(step.get("run", "").startswith(command) for step in job["steps"])
         ]
         assert len(jobs) == 1, command
-        # A job-level gate would skip the audit while the run still reports success.
-        assert "if" not in jobs[0], command
+        [step] = [step for step in jobs[0]["steps"] if step.get("run", "").startswith(command)]
+        # Any of these would skip or excuse the audit while the run still reports success.
+        for silenced in (jobs[0], step):
+            assert not {"if", "continue-on-error"} & set(silenced), command
 
     for event in ("push", "pull_request"):
         assert not {"paths", "paths-ignore"} & set(ci[True][event]), event
