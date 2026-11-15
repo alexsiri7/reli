@@ -414,7 +414,16 @@ def test_mapping_size_counts_bytes_not_characters(session):
 
 @pytest.mark.parametrize(
     "url",
-    ["javascript:alert(1)", " JavaScript:alert(1)", "data:text/html,<script>x</script>", "/relative", "https:no-host"],
+    [
+        "javascript:alert(1)",
+        " JavaScript:alert(1)",
+        "data:text/html,<script>x</script>",
+        "/relative",
+        # Stricter than the view's isLinkable, whose parser repairs these into https://no-host/ and
+        # http://example.test/: the service demands the // and the host as written.
+        "https:no-host",
+        "http:/example.test",
+    ],
 )
 def test_a_url_that_is_not_absolute_http_is_refused_on_create_and_update(session, url):
     before = _journal_count(session)

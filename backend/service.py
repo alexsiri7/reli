@@ -141,6 +141,11 @@ def _check_urls(urls: Mapping[str, str] | None) -> None:
     The web view already renders only http(s) values as links; refusing the rest here means no other
     reader of the graph has to repeat that check. ``urlsplit`` lowercases the scheme and strips the
     leading whitespace a prefix match would miss.
+
+    On the scheme this agrees with the view's ``isLinkable``; on the rest of the shape it is
+    deliberately stricter. It also demands ``//`` and a host, so it refuses ``https:no-host``, which
+    the browser's parser would repair into ``https://no-host/`` and link. A value stored before this
+    check, or one ``urlsplit`` accepts and the browser cannot parse, is still shown as text there.
     """
     for name, url in (urls or {}).items():
         try:
@@ -148,7 +153,7 @@ def _check_urls(urls: Mapping[str, str] | None) -> None:
         except ValueError:
             parts = None
         if parts is None or parts.scheme not in ("http", "https") or not parts.netloc:
-            raise ValueError(f"urls[{name!r}] must be an absolute http or https URL, not {url!r}")
+            raise ValueError(f"urls[{name!r}] must be an absolute http or https URL with a host, not {url!r}")
 
 
 def _check_thing_fields(
