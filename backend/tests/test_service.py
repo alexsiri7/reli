@@ -499,6 +499,17 @@ def test_a_rejected_preference_still_takes_tag_writes_that_keep_it(session):
     assert updated.tags == [PREFERENCE_TAG, REJECTED_TAG, "#Kept"]
 
 
+def test_a_rejected_preference_still_takes_writes_that_leave_its_tags_alone(session):
+    preference = create_thing(
+        session, actor=Actor.CLAUDE_SCHEDULED, title="Avoids Friday meetings", tags=[PREFERENCE_TAG, REJECTED_TAG]
+    )
+
+    updated = update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=preference.id, priority=0.5)
+
+    assert updated.priority == 0.5
+    assert updated.tags == [PREFERENCE_TAG, REJECTED_TAG]
+
+
 def test_a_concurrent_tag_write_survives_a_rejection(session):
     """#1705: the rejection extends the tags as they stand when it writes, not as it first read them."""
     from backend.db_engine import get_engine
