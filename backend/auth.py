@@ -26,6 +26,7 @@ import logging
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
@@ -35,6 +36,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlmodel import Session
 from starlette.responses import Response
+from starlette.types import Scope
 
 from . import google_login
 from .config import settings
@@ -83,7 +85,7 @@ SIGN_IN_SETTINGS: tuple[str, ...] = (
 )
 
 _INVITE_ONLY = "This Reli is invite-only: sign in with the Google account listed in ALLOWED_EMAILS on the deploy."
-_ACCOUNT_NOT_ALLOWED = "Account is not allowed: " + _INVITE_ONLY
+ACCOUNT_NOT_ALLOWED = "Account is not allowed: " + _INVITE_ONLY
 _NOT_SIGNED_IN = "Not signed in: sign in with Google at /."
 _SESSION_EXPIRED = "Session expired: sign in with Google at / again."
 _SESSION_INVALID = "Invalid session: sign in with Google at / again."
@@ -207,34 +209,81 @@ def _revoke(claims: dict[str, Any]) -> None:
         )
 
 
+class Refusal(StrEnum):
+    """Why :func:`admit` refused a credential; each caller turns it into its own remedy."""
+
+    CLOSED = "closed"
+    EXPIRED = "expired"
+    INVALID = "invalid"
+    NOT_ALLOWED = "not_allowed"
+    REVOKED = "revoked"
+
+
+class CredentialRefused(Exception):
+    def __init__(self, reason: Refusal) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def admit(token: str, audience: str) -> dict[str, Any]:
+    """The claims of *token* when it admits a request for *audience* — the one statement of that rule.
+
+    A credential admits a request when ``SECRET_KEY`` is configured, the JWT decodes for *audience*
+    and this deploy's issuer, its email is still in ``ALLOWED_EMAILS`` (#1693) and logout has not
+    revoked its ``jti`` (#1699). The session cookie, the ``/mcp`` bearer check and the rate
+    limiter's keying all ask this function, so a new condition reaches all three at once.
+
+    Raises:
+        CredentialRefused: With the :class:`Refusal` naming the first condition that failed.
+    """
+    if not settings.secret_key_configured:
+        raise CredentialRefused(Refusal.CLOSED)
+    try:
+        claims = decode_jwt(token, audience)
+    except jwt.ExpiredSignatureError as expired:
+        raise CredentialRefused(Refusal.EXPIRED) from expired
+    except jwt.InvalidTokenError as invalid:
+        raise CredentialRefused(Refusal.INVALID) from invalid
+    if not is_allowed(str(claims.get("email", ""))):
+        raise CredentialRefused(Refusal.NOT_ALLOWED)
+    if is_revoked(claims):
+        raise CredentialRefused(Refusal.REVOKED)
+    return claims
+
+
+def bearer_token(scope: Scope) -> str:
+    """The credential of the request's ``Authorization: Bearer`` header, or ``""`` when it has none."""
+    header = dict(scope.get("headers", [])).get(b"authorization", b"").decode("latin-1")
+    return header[len("Bearer ") :] if header.startswith("Bearer ") else ""
+
+
 class SessionRefused(Exception):
     """A ``__Host-reli_session`` cookie was presented and did not admit the request. The message is the remedy."""
+
+
+_SESSION_REFUSALS = {
+    Refusal.CLOSED: not_configured_detail(["SECRET_KEY"]),
+    Refusal.EXPIRED: _SESSION_EXPIRED,
+    Refusal.INVALID: _SESSION_INVALID,
+    Refusal.NOT_ALLOWED: _INVITE_ONLY,
+    Refusal.REVOKED: _SESSION_REVOKED,
+}
 
 
 def web_session(request: Request) -> dict[str, Any] | None:
     """The claims of the request's ``__Host-reli_session`` cookie, or ``None`` when it carries none.
 
     Raises:
-        SessionRefused: The cookie is there but expired, not this Reli's, unverifiable because
-            ``SECRET_KEY`` is empty or too short, names an account no longer in
-            ``ALLOWED_EMAILS``, or was ended by logout — each with the sentence a person should see.
+        SessionRefused: The cookie is there and :func:`admit` refused it, with the sentence a
+            person should see.
     """
     token = request.cookies.get(SESSION_COOKIE, "")
     if not token:
         return None
-    if not settings.secret_key_configured:
-        raise SessionRefused(not_configured_detail(["SECRET_KEY"]))
     try:
-        claims = decode_jwt(token, WEB_AUDIENCE)
-    except jwt.ExpiredSignatureError as expired:
-        raise SessionRefused(_SESSION_EXPIRED) from expired
-    except jwt.InvalidTokenError as invalid:
-        raise SessionRefused(_SESSION_INVALID) from invalid
-    if not is_allowed(str(claims.get("email", ""))):
-        raise SessionRefused(_INVITE_ONLY)
-    if is_revoked(claims):
-        raise SessionRefused(_SESSION_REVOKED)
-    return claims
+        return admit(token, WEB_AUDIENCE)
+    except CredentialRefused as refused:
+        raise SessionRefused(_SESSION_REFUSALS[refused.reason]) from refused
 
 
 def client_redirect(redirect_uri: str, client_state: str, **params: str) -> RedirectResponse:

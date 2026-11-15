@@ -525,7 +525,7 @@ def _issue_token_response(
             client_id,
             revoked,
         )
-        raise _invalid_grant(auth._ACCOUNT_NOT_ALLOWED)
+        raise _invalid_grant(auth.ACCOUNT_NOT_ALLOWED)
     access_token = auth.create_jwt(subject, email, audience=auth.MCP_AUDIENCE)
     refresh_token = secrets.token_urlsafe(32)
     try:

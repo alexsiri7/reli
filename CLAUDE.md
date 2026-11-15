@@ -402,7 +402,9 @@ Creating documentation that claims success on an action you cannot perform is a 
 - JWTs, the callback and the web session: `backend/auth.py` — `create_jwt` / `decode_jwt`, the
   allowlist, `GET /api/auth/google/callback` (the one address Google redirects to, for both
   flows), the web view's `GET /api/auth/google`, `GET /api/auth/me` and `POST /api/auth/logout`,
-  and `web_session`, the one reading of the `__Host-reli_session` cookie
+  `web_session`, the one reading of the `__Host-reli_session` cookie, and `admit`, the one
+  statement of when a JWT admits a request — the cookie, the `/mcp` bearer check and the rate
+  limiter's keying all call it, so a new admission condition goes there and nowhere else
 - Authorization server: `backend/mcp_oauth.py` — `/.well-known/*`, `/oauth/register`,
   `/oauth/authorize`, `/oauth/token`
 - OAuth flow state: `backend/oauth_state.py` — the four bounded `mcp_*` stores,
