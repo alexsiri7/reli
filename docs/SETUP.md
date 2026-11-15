@@ -124,6 +124,10 @@ Read by the host or the image, not by the app:
 - `RELI_IMAGE_TAG` — which `ghcr.io/alexsiri7/reli` tag both compose files run; default `latest`.
 - `STAGING_DATABASE_URL`, `STAGING_POSTGRES_PASSWORD` — `docker-compose.staging.yml`, kept distinct
   from production's so staging never points at production data.
+- `STAGING_SECRET_KEY`, `STAGING_RELI_BASE_URL`, `STAGING_GOOGLE_AUTH_REDIRECT_URI` —
+  `docker-compose.staging.yml`'s `SECRET_KEY`, `RELI_BASE_URL` and `GOOGLE_AUTH_REDIRECT_URI`, kept
+  distinct from production's so the two deploys never accept each other's tokens (#1697). Empty
+  closes staging's sign-in.
 - `CLOUDFLARE_TUNNEL_TOKEN` — the Cloudflare Tunnel on the host, pointed at `http://reli:8000`.
 - `RELI_TEST_DATABASE_URL` — `backend/tests/conftest.py`: run the suite against an existing
   database instead of a testcontainers one. A URL naming no `sslmode` requires TLS, so one for a
