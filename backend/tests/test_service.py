@@ -492,6 +492,16 @@ def test_a_heartbeat_may_be_dated_up_to_the_bound_and_no_further(session, monkey
         )
 
 
+def test_an_ordinary_thing_may_still_be_dated_far_ahead(session):
+    """#1806: the bound guards heartbeats only, not every Thing's checkin_date."""
+    thing = create_thing(session, actor=Actor.USER, title="Renew passport", tags=["#Project"])
+    later = date.today() + timedelta(days=365)
+
+    updated = update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=thing.id, checkin_date=later)
+
+    assert updated.checkin_date == later
+
+
 def test_a_concurrent_tag_write_survives_a_rejection(session):
     """#1705: the rejection extends the tags as they stand when it writes, not as it first read them."""
     from backend.db_engine import get_engine
