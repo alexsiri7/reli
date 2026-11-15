@@ -205,13 +205,14 @@ def _unpinned_images(dockerfile: Path = REPO_ROOT / "Dockerfile", directory: Pat
     stages: set[str] = set()
     for line in dockerfile.read_text().splitlines():
         words = line.split()
-        if words[:1] == ["FROM"]:
+        instruction = words[0].upper() if words else ""
+        if instruction == "FROM":
             image, *rest = [word for word in words[1:] if not word.startswith("--platform=")]
             if image not in stages and not DIGEST_PINNED.fullmatch(image):
                 offenders.append(f"{dockerfile.name}:{image}")
             if rest[:1] and rest[0].upper() == "AS":
                 stages.add(rest[1])
-        elif words[:1] == ["COPY"]:
+        elif instruction == "COPY":
             for source in (word.removeprefix("--from=") for word in words if word.startswith("--from=")):
                 if source not in stages and not DIGEST_PINNED.fullmatch(source):
                     offenders.append(f"{dockerfile.name}:{source}")
@@ -239,6 +240,7 @@ def test_the_image_pin_scan_sees_an_image_used_by_its_tag(tmp_path):
         "FROM node:22-slim\n"
         "COPY --from=a /x /x\n"
         "COPY --from=ghcr.io/x/y:1 /y /y\n"
+        "from debian:12\n"
     )
     workflows = tmp_path / "workflows"
     workflows.mkdir()
@@ -251,6 +253,7 @@ def test_the_image_pin_scan_sees_an_image_used_by_its_tag(tmp_path):
     assert _unpinned_images(tmp_path / "Dockerfile", workflows) == [
         "Dockerfile:node:22-slim",
         "Dockerfile:ghcr.io/x/y:1",
+        "Dockerfile:debian:12",
         "w.yml:mcr.microsoft.com/playwright:v1",
         "w.yml:postgres:16-alpine",
     ]
@@ -259,7 +262,23 @@ def test_the_image_pin_scan_sees_an_image_used_by_its_tag(tmp_path):
 def test_dependabot_moves_the_pinned_base_images():
     """#1203/#1814: the digests above only receive security patches if something moves them."""
     updates = yaml.safe_load(DEPENDABOT.read_text())["updates"]
-    assert "/" in {u["directory"] for u in updates if u["package-ecosystem"] == "docker"}
+    docker = [u for u in updates if u["package-ecosystem"] == "docker"]
+    assert "/" in {u["directory"] for u in docker}
+    # A rule without update-types ignores every update to the images it names.
+    blocking = [
+        rule
+        for u in docker
+        for rule in u.get("ignore", [])
+        if "version-update:semver-patch" in rule.get("update-types", ["version-update:semver-patch"])
+    ]
+    assert blocking == [], f"these ignore rules stop a patched base from landing: {blocking}"
+
+
+def test_the_snapshot_command_names_the_image_ci_renders_in():
+    """The snapshots are valid only from the frontend job's container, so CLAUDE.md's regeneration
+    command must name the same tag and digest."""
+    container = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())["jobs"]["frontend"]["container"]
+    assert f"{container} \\\n" in (REPO_ROOT / "CLAUDE.md").read_text()
 
 
 def test_every_npx_package_names_an_exact_version():
