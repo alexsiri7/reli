@@ -151,7 +151,7 @@ _SECURITY_HEADERS = {
 #: The pages a connector's sign-in window passes through, consent page to the redirect back to the
 #: client. The connector may have opened that window itself and be waiting on it, and a
 #: ``Cross-Origin-Opener-Policy`` on any one of them would cut the connector's handle for good.
-_SIGN_IN_WINDOW_PATHS = ("/oauth/authorize", "/api/auth/google/callback")
+_SIGN_IN_WINDOW_PATHS = frozenset({"/oauth/authorize", "/oauth/authorize/confirm", "/api/auth/google/callback"})
 _SIGN_IN_WINDOW_HEADERS = {
     name: value for name, value in _SECURITY_HEADERS.items() if name != "Cross-Origin-Opener-Policy"
 }
@@ -165,7 +165,7 @@ def _headers_for(path: str) -> dict[str, str]:
     """The headers a response at *path* gets: an ``/api`` one adds ``no-store`` (#1709), because that
     prefix serves the graph and the signed-in identity, and neither may outlive the session in a
     browser or proxy cache. The bundle stays cacheable; ``/oauth/`` sets its own."""
-    base = _SIGN_IN_WINDOW_HEADERS if path.startswith(_SIGN_IN_WINDOW_PATHS) else _SECURITY_HEADERS
+    base = _SIGN_IN_WINDOW_HEADERS if path in _SIGN_IN_WINDOW_PATHS else _SECURITY_HEADERS
     return {**base, "Cache-Control": "no-store"} if _is_api(path) else base
 
 

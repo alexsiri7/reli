@@ -164,6 +164,15 @@ def test_a_connector_sign_in_window_keeps_its_opener(client, path):
     assert response.headers["X-Frame-Options"] == "DENY"
 
 
+@pytest.mark.parametrize("path", ["/oauth/register", "/oauth/token"])
+def test_the_credential_endpoints_keep_their_opener_policy(client, path):
+    """#1819: the sign-in window's exemption names its pages exactly; the /oauth/ endpoints that issue
+    and exchange credentials keep the opener policy."""
+    response = client.post(path)
+
+    assert response.headers["Cross-Origin-Opener-Policy"] == "same-origin"
+
+
 def test_form_action_admits_where_the_consent_form_redirects(client):
     """#1710: the consent form's POST is redirected to Google's sign-in, and ``form-action`` governs
     that redirect, so moving the sign-in to another host without the policy blocks every connector."""
