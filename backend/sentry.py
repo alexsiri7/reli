@@ -72,7 +72,9 @@ _MCP_SPAN_DATA_PREFIX = "mcp."
 
 def _strip_mcp_span_data(event: Event) -> Event:
     """Drop MCP request data from a transaction's spans: tool arguments are graph content."""
-    spans = [*event.get("spans", []), event.get("contexts", {}).get("trace", {})]
+    raw_spans = event.get("spans")
+    spans: list[object] = list(raw_spans) if isinstance(raw_spans, list) else []
+    spans.append(event.get("contexts", {}).get("trace", {}))
     for span in spans:
         data = span.get("data") if isinstance(span, dict) else None
         if isinstance(data, dict):
