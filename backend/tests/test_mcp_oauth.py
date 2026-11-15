@@ -992,6 +992,9 @@ def test_a_client_that_did_not_register_refresh_token_gets_no_refresh_token(clie
     assert "refresh_token" not in response.json()
     assert auth.decode_jwt(response.json()["access_token"], audience="mcp")["email"] == "owner@example.com"
     assert session.exec(select(func.count()).select_from(McpRefreshTokenRecord)).one() == 0
+    session.rollback()
+    promoted = cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["expires_at"]
+    assert promoted > datetime.now(UTC) + timedelta(seconds=mcp_oauth.UNUSED_CLIENT_TTL_SECONDS)
 
 
 def test_a_refresh_grant_is_refused_for_a_client_that_did_not_register_refresh_token(client, session):

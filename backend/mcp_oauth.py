@@ -580,11 +580,11 @@ def _issue_token_response(
     after sign-in cannot keep rolling its refresh token forward — this covers both grant types,
     since both end here. *expires_at* is the family's deadline: fresh from the code exchange,
     carried forward on rotation rather than renewed. The client's registration is promoted to that
-    deadline once the token is stored and not before: a refused issuance leaves it at its grace
-    hour, the allowlist check above has already passed, so only an allowed account holds a
+    deadline once the tokens are stored and not before — a client that may not refresh is promoted
+    too, since it signs in again through the same registration: a refused issuance leaves it at its
+    grace hour, the allowlist check above has already passed, so only an allowed account holds a
     registration past its first hour, and the move is only ever later (``GREATEST``), so a second
-    family never shortens it. A token that is not *refreshable* starts no family, so it promotes
-    nothing.
+    family never shortens it.
     """
     if not auth.is_allowed(email):
         revoked = revoke_refresh_token_family(session, family_id)
@@ -600,28 +600,28 @@ def _issue_token_response(
         "expires_in": auth.MCP_JWT_EXPIRY_SECONDS,
         "scope": scope,
     }
-    if not refreshable:
-        return JSONResponse(body, headers=_NO_STORE)
-    refresh_token = secrets.token_urlsafe(32)
-    try:
-        cleanup_and_store(
-            session,
-            mcp_refresh_tokens,
-            refresh_token,
-            {
-                "subject": subject,
-                "email": email,
-                "client_id": client_id,
-                "scope": scope,
-                "family_id": family_id,
-                "expires_at": expires_at,
-            },
-        )
-    except StoreFullError as full:
-        logger.warning("MCP OAuth: token issuance refused for client %s — %s", client_id, full)
-        raise HTTPException(status_code=503, detail=auth.AT_CAPACITY) from full
+    if refreshable:
+        refresh_token = secrets.token_urlsafe(32)
+        try:
+            cleanup_and_store(
+                session,
+                mcp_refresh_tokens,
+                refresh_token,
+                {
+                    "subject": subject,
+                    "email": email,
+                    "client_id": client_id,
+                    "scope": scope,
+                    "family_id": family_id,
+                    "expires_at": expires_at,
+                },
+            )
+        except StoreFullError as full:
+            logger.warning("MCP OAuth: token issuance refused for client %s — %s", client_id, full)
+            raise HTTPException(status_code=503, detail=auth.AT_CAPACITY) from full
+        body["refresh_token"] = refresh_token
     extend_expiry(session, mcp_registered_clients, client_id, expires_at)
-    return JSONResponse({**body, "refresh_token": refresh_token}, headers=_NO_STORE)
+    return JSONResponse(body, headers=_NO_STORE)
 
 
 def _authenticated_grant(
