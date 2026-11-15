@@ -991,6 +991,7 @@ def test_a_code_exchanges_for_a_jwt_the_mcp_endpoint_accepts(client, session):
     assert response.headers["cache-control"] == "no-store"
     body = response.json()
     assert body["token_type"] == "bearer"
+    assert body["scope"] == "mcp"
     assert body["expires_in"] == 3600 == auth.MCP_JWT_EXPIRY_SECONDS
     assert body["refresh_token"]
     claims = auth.decode_jwt(body["access_token"], audience="mcp")
@@ -1206,6 +1207,7 @@ def test_a_refresh_token_rotates(client, session):
     assert response.status_code == 200
     second = response.json()
     assert second["refresh_token"] != first["refresh_token"]
+    assert second["scope"] == "mcp"
     assert auth.decode_jwt(second["access_token"], audience="mcp")["sub"] == "1234567890"
 
     replay = _refresh(client, first["refresh_token"], registered["client_id"])
