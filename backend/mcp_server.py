@@ -194,7 +194,7 @@ def create_thing(
         description: Longer prose about the Thing.
         notes: Slug to markdown mapping, for anything that does not fit the fields.
         tags: Free-form labels. What a Thing *is* lives here, not in a type column.
-        urls: Name to URL mapping.
+        urls: Name to URL mapping. Each URL must be an absolute http or https URL.
         checkin_date: When this should next come up; drives due_for_checkin. Kept as given;
             tomorrow when omitted.
         priority: Higher sorts first in every listing.
@@ -255,7 +255,7 @@ def update_thing(
         description: Replaces the description.
         notes: Replaces the whole notes mapping.
         tags: Replaces the whole tag list.
-        urls: Replaces the whole urls mapping.
+        urls: Replaces the whole urls mapping. Each URL must be an absolute http or https URL.
         checkin_date: Replaces the check-in date. A #ScheduledTask heartbeat's check-in date may
             be at most 2 days ahead.
         priority: Replaces the priority.
