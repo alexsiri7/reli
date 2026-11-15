@@ -219,12 +219,13 @@ def scheduled_instructions(pass_name: str) -> str:
     """The text of one scheduled pass, read from ``prompts/scheduled/`` when asked for.
 
     The caller is an unattended session with nobody to ask, so a name that is not a pass gets a
-    sentence naming the passes that exist rather than an error it cannot act on.
+    sentence naming the passes that exist rather than an error it cannot act on. The name it gave
+    is quoted with ``repr`` and cut to 64 characters, so it cannot add lines to the instructions.
     """
     filename = SCHEDULED_PASSES.get(pass_name)
     if filename is None:
         valid = ", ".join(f"'{name}'" for name in SCHEDULED_PASSES)
-        return f"There is no scheduled pass called '{pass_name}'. The passes are {valid}."
+        return f"There is no scheduled pass called {pass_name[:64]!r}. The passes are {valid}."
     return (SCHEDULED_PROMPTS_DIR / filename).read_text()
 
 
