@@ -140,7 +140,7 @@ def test_init_sentry_never_attaches_request_bodies_or_locals():
 
 
 def test_init_sentry_sets_before_send_hooks():
-    """init_sentry should scrub both error events and sampled transactions with the same hook."""
+    """init_sentry should scrub error events, and transactions with the MCP-aware hook."""
     with (
         patch("backend.sentry.settings") as mock_settings,
         patch("backend.sentry.sentry_sdk") as mock_sdk,
@@ -148,12 +148,87 @@ def test_init_sentry_sets_before_send_hooks():
         mock_settings.SENTRY_DSN = "https://examplePublicKey@o0.ingest.sentry.io/0"
         mock_settings.SENTRY_ENVIRONMENT = "test"
         mock_settings.SENTRY_TRACES_SAMPLE_RATE = 0.1
-        from backend.sentry import _strip_auth_flow_request, init_sentry
+        from backend.sentry import _scrub_transaction, _strip_auth_flow_request, init_sentry
 
         init_sentry()
         call_kwargs = mock_sdk.init.call_args[1]
         assert call_kwargs.get("before_send") is _strip_auth_flow_request
-        assert call_kwargs.get("before_send_transaction") is _strip_auth_flow_request
+        assert call_kwargs.get("before_send_transaction") is _scrub_transaction
+
+
+def test_init_sentry_disables_auto_enabling_integrations():
+    """Auto-enabled integrations (e.g. MCPIntegration) must not load just because a package is installed."""
+    with (
+        patch("backend.sentry.settings") as mock_settings,
+        patch("backend.sentry.sentry_sdk") as mock_sdk,
+    ):
+        mock_settings.SENTRY_DSN = "https://examplePublicKey@o0.ingest.sentry.io/0"
+        mock_settings.SENTRY_ENVIRONMENT = "test"
+        mock_settings.SENTRY_TRACES_SAMPLE_RATE = 0.1
+        from backend.sentry import init_sentry
+
+        init_sentry()
+        call_kwargs = mock_sdk.init.call_args[1]
+        assert call_kwargs["auto_enabling_integrations"] is False
+
+
+def test_init_sentry_never_loads_the_mcp_integration():
+    """With the real SDK, auto_enabling_integrations=False must keep MCPIntegration off the client."""
+    import sentry_sdk as real_sentry_sdk
+    from sentry_sdk.integrations.mcp import MCPIntegration
+
+    with patch("backend.sentry.settings") as mock_settings:
+        mock_settings.SENTRY_DSN = "https://examplePublicKey@o0.ingest.sentry.io/0"
+        mock_settings.SENTRY_ENVIRONMENT = "test"
+        mock_settings.SENTRY_TRACES_SAMPLE_RATE = 0.1
+        from backend.sentry import init_sentry
+
+        try:
+            init_sentry()
+            assert real_sentry_sdk.get_client().get_integration(MCPIntegration) is None
+        finally:
+            real_sentry_sdk.init()
+
+
+def test_scrub_transaction_drops_mcp_tool_arguments():
+    """_scrub_transaction should strip mcp.* span data, which carries Thing titles, notes and preferences."""
+    from backend.sentry import _scrub_transaction
+
+    event = {
+        "type": "transaction",
+        "transaction": "/mcp",
+        "spans": [
+            {
+                "data": {
+                    "mcp.request.argument.title": "synthetic",
+                    "mcp.method.name": "tools/call",
+                    "http.method": "POST",
+                }
+            }
+        ],
+    }
+    result = _scrub_transaction(event, None)
+    span_data = result["spans"][0]["data"]
+    assert "mcp.request.argument.title" not in span_data
+    assert "mcp.method.name" not in span_data
+    assert span_data["http.method"] == "POST"
+
+
+def test_scrub_transaction_still_drops_oauth_token_query_string():
+    """_scrub_transaction composes with the auth-flow scrub, so /oauth/token still loses its query string."""
+    from backend.sentry import _scrub_transaction
+
+    event = {
+        "type": "transaction",
+        "transaction": "/oauth/token",
+        "request": {
+            "url": "https://reli.example.com/oauth/token",
+            "method": "POST",
+            "query_string": "trace=1",
+        },
+    }
+    result = _scrub_transaction(event, None)
+    assert "query_string" not in result["request"]
 
 
 def _oauth_token_event(url: str) -> dict:
