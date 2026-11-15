@@ -341,6 +341,7 @@ def update_thing(
                 "based on; read it again and reapply the change"
             )
     _check_heartbeat_kept(thing, tags=tags, active=active)
+    _check_rejection_kept(thing, tags=tags)
     before = _snapshot(thing)
 
     updates = {
@@ -386,6 +387,16 @@ def _check_heartbeat_kept(thing: ThingRecord, *, tags: list[str] | None, active:
         raise ValueError(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and cannot be archived")
     if tags is not None and SCHEDULED_TASK_TAG not in tags:
         raise ValueError(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and must keep that tag")
+
+
+def _check_rejection_kept(thing: ThingRecord, *, tags: list[str] | None) -> None:
+    """Refuse a tags write that drops ``REJECTED_TAG`` (#1807).
+
+    A rejection is the owner's correction and nothing undoes it: dropping the tag would put the
+    preference back in the model, journalled under whoever wrote the list.
+    """
+    if REJECTED_TAG in thing.tags and tags is not None and REJECTED_TAG not in tags:
+        raise ValueError(f"Thing {thing.id} is a rejected preference and must keep {REJECTED_TAG}")
 
 
 #: How many backfilled Things fall due on one day. The morning conversation asks about three to

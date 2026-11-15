@@ -20,7 +20,14 @@ from sqlalchemy import text
 
 from backend import auth, mcp_transport, prompts, service
 from backend.config import MIN_SECRET_KEY_BYTES, settings
-from backend.db_models import NEW_TAG, SCHEDULED_TASK_TAG, Actor, RelationshipType
+from backend.db_models import (
+    NEW_TAG,
+    PREFERENCE_TAG,
+    REJECTED_TAG,
+    SCHEDULED_TASK_TAG,
+    Actor,
+    RelationshipType,
+)
 from backend.mcp_server import (
     MAX_JOURNAL_ID,
     MAX_STALE_DAYS,
@@ -291,6 +298,22 @@ def test_archive_thing_refuses_a_heartbeat(tools):
         asyncio.run(reli_mcp.call_tool("archive_thing", {"actor": "claude_interactive", "thing_id": heartbeat["id"]}))
 
     assert get_thing(uuid.UUID(heartbeat["id"]))["thing"]["active"] is True
+
+
+def test_update_thing_refuses_dropping_a_rejection(tools):
+    preference = create_thing(
+        actor="claude_scheduled", title="Avoids Friday meetings", tags=[PREFERENCE_TAG, REJECTED_TAG]
+    )
+
+    with pytest.raises(ToolError, match="must keep"):
+        asyncio.run(
+            reli_mcp.call_tool(
+                "update_thing",
+                {"actor": "claude_interactive", "thing_id": preference["id"], "tags": [PREFERENCE_TAG]},
+            )
+        )
+
+    assert REJECTED_TAG in get_thing(uuid.UUID(preference["id"]))["thing"]["tags"]
 
 
 def test_relate_and_unrelate_journal_the_edge(tools):

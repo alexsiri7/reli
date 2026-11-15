@@ -75,6 +75,11 @@ A recorded preference SHALL take effect immediately with no approval step. The o
 - WHEN a later pass finds the same pattern
 - THEN it does not record the preference again
 
+#### Scenario: A tag write does not undo a rejection
+- GIVEN the owner rejected "Avoids meetings on Fridays"
+- WHEN any session writes that preference's tags without "#Rejected"
+- THEN the write is refused and nothing is journalled
+
 ### Requirement: Conflicts are kept, not resolved
 
 Two live preferences that cannot both be followed SHALL both be kept, and the conflict SHALL be put to the owner in the morning conversation for a ruling rather than settled by any rule.
