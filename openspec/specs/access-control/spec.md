@@ -37,7 +37,7 @@ Only Google accounts on the configured allowlist SHALL be admitted; an empty all
 
 ### Requirement: A claude.ai connector authorises through Google
 
-The MCP endpoint SHALL be protected by an OAuth 2.1 authorization server that a connector can discover, register with dynamically, and complete through a Reli-hosted consent page naming the client followed by Google sign-in, receiving short-lived access tokens and rotating refresh tokens. Stored authorization codes and refresh tokens SHALL be held only as digests. A bare and a trailing-slash endpoint address SHALL both work without a redirect. Revoking a refresh-token family SHALL end every access token issued under it on that token's next request.
+The MCP endpoint SHALL be protected by an OAuth 2.1 authorization server that a connector can discover, register with dynamically, and complete through a Reli-hosted consent page naming the client followed by Google sign-in, receiving short-lived access tokens and rotating refresh tokens. Stored authorization codes and refresh tokens SHALL be held only as digests. A bare and a trailing-slash endpoint address SHALL both work without a redirect.
 
 #### Scenario: Adding the connector
 - GIVEN the owner adds Reli's MCP URL in claude.ai with no token
