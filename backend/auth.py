@@ -84,15 +84,15 @@ SIGN_IN_SETTINGS: tuple[str, ...] = (
     "ALLOWED_EMAILS",
 )
 
-_INVITE_ONLY = "This Reli is invite-only: sign in with the Google account listed in ALLOWED_EMAILS on the deploy."
-ACCOUNT_NOT_ALLOWED = "Account is not allowed: " + _INVITE_ONLY
+INVITE_ONLY = "This Reli is invite-only: sign in with the Google account listed in ALLOWED_EMAILS on the deploy."
+ACCOUNT_NOT_ALLOWED = "Account is not allowed: " + INVITE_ONLY
 _NOT_SIGNED_IN = "Not signed in: sign in with Google at /."
 _SESSION_EXPIRED = "Session expired: sign in with Google at / again."
 _SESSION_INVALID = "Invalid session: sign in with Google at / again."
 _SESSION_REVOKED = "Session revoked: sign in with Google at / again."
 _AT_CAPACITY = "Server is at capacity; try again later"
 _CROSS_ORIGIN = "Refused: this request did not come from Reli's own page."
-_NOT_THIS_BROWSER = "Sign-in was not approved from this browser: start again from the connector."
+NOT_THIS_BROWSER = "Sign-in was not approved from this browser: start again from the connector."
 
 
 def base_url() -> str:
@@ -265,7 +265,7 @@ _SESSION_REFUSALS = {
     Refusal.CLOSED: not_configured_detail(["SECRET_KEY"]),
     Refusal.EXPIRED: _SESSION_EXPIRED,
     Refusal.INVALID: _SESSION_INVALID,
-    Refusal.NOT_ALLOWED: _INVITE_ONLY,
+    Refusal.NOT_ALLOWED: INVITE_ONLY,
     Refusal.REVOKED: _SESSION_REVOKED,
 }
 
@@ -432,7 +432,7 @@ def _finish_mcp_sign_in(session: Session, flow: dict[str, Any], code: str, error
     if not is_allowed(identity.email):
         logger.warning("Google sign-in refused: account not in ALLOWED_EMAILS")
         return client_redirect(
-            flow["redirect_uri"], flow["client_state"], error="access_denied", error_description=_INVITE_ONLY
+            flow["redirect_uri"], flow["client_state"], error="access_denied", error_description=INVITE_ONLY
         )
 
     auth_code = secrets.token_urlsafe(32)
@@ -490,7 +490,7 @@ def google_callback(request: Request, code: str = "", state: str = "", error: st
             logger.warning(
                 "MCP sign-in refused: the callback reached a browser that did not approve client %r", flow["client_id"]
             )
-            raise HTTPException(status_code=400, detail=_NOT_THIS_BROWSER)
+            raise HTTPException(status_code=400, detail=NOT_THIS_BROWSER)
         response = _finish_mcp_sign_in(session, flow, code, error)
     response.delete_cookie(MCP_FLOW_COOKIE, path="/", httponly=True, samesite="lax", secure=True)
     return response
