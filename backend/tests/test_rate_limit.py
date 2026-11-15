@@ -9,10 +9,13 @@ from fastapi import FastAPI
 
 from backend import auth, rate_limit
 from backend.config import settings
+from backend.google_login import s256_challenge
+from backend.mcp_oauth import MAX_BODY_BYTES
 from backend.oauth_state import cleanup_and_store, mcp_auth_codes, mcp_refresh_tokens
 
 SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
 BASE_URL = "https://reli.example.test"
+CLIENT_REDIRECT = "https://claude.ai/api/mcp/auth_callback"
 
 
 def _limits(monkeypatch, registration=10_000, auth_tier=10_000, api=10_000):
@@ -22,7 +25,12 @@ def _limits(monkeypatch, registration=10_000, auth_tier=10_000, api=10_000):
 
 
 def _register(client):
-    return client.post("/oauth/register", json={"redirect_uris": ["https://claude.ai/api/mcp/auth_callback"]})
+    return client.post("/oauth/register", json={"redirect_uris": [CLIENT_REDIRECT]})
+
+
+def _credentials(registration):
+    body = registration.json()
+    return {"client_id": body["client_id"], "client_secret": body["client_secret"]}
 
 
 def test_registration_above_its_limit_is_429_with_retry_after(client, session, monkeypatch, caplog):
@@ -162,17 +170,18 @@ def test_a_token_whose_refresh_family_is_gone_spends_the_address_bucket(session,
     assert asyncio.run(rate_limit._user_subject(scope)) is None
 
 
-def _refresh(client, token):
-    return client.post("/oauth/token", data={"grant_type": "refresh_token", "refresh_token": token})
+def _refresh(client, token, registered=None):
+    form = {"grant_type": "refresh_token", "refresh_token": token}
+    return client.post("/oauth/token", data={**form, **(registered or {})})
 
 
-def _seed_refresh_token(session, token, consumed_at=None):
+def _seed_refresh_token(session, token, client_id="connector", consumed_at=None):
     cleanup_and_store(
         session,
         mcp_refresh_tokens,
         token,
         {
-            "client_id": "connector",
+            "client_id": client_id,
             "family_id": "family",
             "scope": "mcp",
             "subject": None if consumed_at else "1234567890",
@@ -186,13 +195,18 @@ def _seed_refresh_token(session, token, consumed_at=None):
 def test_a_live_refresh_token_spends_its_clients_bucket_not_the_addresss(client, session, monkeypatch):
     """A flood holding no grant must not hold the connector's hourly refresh at 429 (#1802)."""
     monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
     _limits(monkeypatch, auth_tier=2)
     _refresh(client, "bogus")
     _refresh(client, "bogus")
     assert _refresh(client, "bogus").status_code == 429
-    _seed_refresh_token(session, "live-token")
+    registered = _credentials(_register(client))
+    _seed_refresh_token(session, "live-token", registered["client_id"])
 
-    assert _refresh(client, "live-token").status_code != 429
+    # The route redeems the body the limiter read, so the replay reached it whole.
+    refreshed = _refresh(client, "live-token", registered)
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["access_token"]
     assert _refresh(client, "bogus").status_code == 429
 
 
@@ -209,8 +223,17 @@ def test_a_consumed_refresh_token_spends_the_address_bucket(client, session, mon
 
 def test_a_live_code_spends_its_clients_bucket(client, session, monkeypatch):
     monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
     _limits(monkeypatch, auth_tier=2)
-    exchange = {"grant_type": "authorization_code", "code": "bogus"}
+    registered = _credentials(_register(client))
+    verifier = "a-pkce-verifier-that-is-at-least-forty-three-characters-long"
+    exchange = {
+        "grant_type": "authorization_code",
+        "code": "bogus",
+        **registered,
+        "redirect_uri": CLIENT_REDIRECT,
+        "code_verifier": verifier,
+    }
     client.post("/oauth/token", data=exchange)
     client.post("/oauth/token", data=exchange)
     assert client.post("/oauth/token", data=exchange).status_code == 429
@@ -221,16 +244,45 @@ def test_a_live_code_spends_its_clients_bucket(client, session, monkeypatch):
         {
             "subject": "1234567890",
             "email": "owner@example.com",
-            "code_challenge": "challenge",
+            "code_challenge": s256_challenge(verifier),
             "code_challenge_method": "S256",
-            "redirect_uri": "https://client.example.test/callback",
-            "client_id": "connector",
+            "redirect_uri": CLIENT_REDIRECT,
+            "client_id": registered["client_id"],
             "scope": "mcp",
             "expires_at": datetime.now(UTC) + timedelta(seconds=60),
         },
     )
 
-    assert client.post("/oauth/token", data={**exchange, "code": "live-code"}).status_code != 429
+    exchanged = client.post("/oauth/token", data={**exchange, "code": "live-code"})
+    assert exchanged.status_code == 200, exchanged.text
+    assert exchanged.json()["access_token"]
+
+
+def test_a_form_streamed_past_the_cap_is_not_read_further_and_is_replayed_whole(monkeypatch):
+    """The limiter stops buffering at ``MAX_BODY_BYTES``, so a chunked flood cannot grow its memory."""
+    monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    chunk = b"x" * (MAX_BODY_BYTES // 4 + 1)
+    stream = [{"type": "http.request", "body": chunk, "more_body": True} for _ in range(8)]
+    sent = iter(stream)
+
+    async def receive():
+        return next(sent)
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/oauth/token",
+        "headers": [(b"content-type", b"application/x-www-form-urlencoded")],
+    }
+
+    async def exchange():
+        client_id, replay = await rate_limit._grant_client(scope, receive)
+        return client_id, [await replay() for _ in stream]
+
+    client_id, replayed = asyncio.run(exchange())
+
+    assert client_id is None
+    assert replayed == stream
 
 
 def test_a_signed_in_owner_spends_their_own_auth_bucket(client, monkeypatch):
