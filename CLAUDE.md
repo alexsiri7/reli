@@ -135,7 +135,8 @@ Widening them is a visible edit to that tuple and needs an issue that asks for i
 
 There is no `GOOGLE_REFRESH_TOKEN` and no consent step: #1488 deleted the `gmail.readonly` /
 `calendar.readonly` grant along with the readers it fed, so the only redirect URI the Web client
-needs is `GOOGLE_AUTH_REDIRECT_URI`. Leaving both variables unset is safe — the boot succeeds and
+needs is each deploy's `GOOGLE_AUTH_REDIRECT_URI` — for the self-hosted staging compose, its own
+`STAGING_GOOGLE_AUTH_REDIRECT_URI` (#1813). Leaving both variables unset is safe — the boot succeeds and
 `/healthz` stays green; only the sign-in is closed, and it says what to set.
 
 ## Google sign-in
@@ -202,9 +203,11 @@ done:
    is exactly this one.
 2. In the Google Cloud console, confirm the OAuth client `GOOGLE_CLIENT_ID` names is a **Web
    application** client with that exact redirect URI authorised. Nothing in the repository can
-   check this; when it is wrong the callback answers 502 naming `redirect_uri_mismatch`. That one
-   redirect URI is the only entry the client needs — #1488 retired the loopback `http://127.0.0.1:18765/`
-   that the deleted Calendar and Gmail grant used, and a leftover entry may be removed.
+   check this; when it is wrong the callback answers 502 naming `redirect_uri_mismatch`. The
+   client needs one entry per deploy that signs in through it: production's redirect URI, and the
+   self-hosted staging compose's `STAGING_GOOGLE_AUTH_REDIRECT_URI` when its sign-in is turned on
+   (#1813). #1488 retired the loopback `http://127.0.0.1:18765/` that the deleted Calendar and
+   Gmail grant used, and that leftover entry may be removed.
 3. Add the claude.ai connector for `https://<host>/mcp` with **no** bearer token. It discovers the
    server, registers itself, lands on a Reli-hosted consent page naming the client and where its
    code will be delivered, and the allowlisted account continues through Google sign-in from
