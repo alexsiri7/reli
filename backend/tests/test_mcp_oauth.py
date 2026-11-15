@@ -1037,6 +1037,20 @@ def test_a_refresh_grant_is_refused_for_a_client_that_did_not_register_refresh_t
     assert session.exec(select(func.count()).select_from(McpRefreshTokenRecord)).one() == 1
 
 
+def test_a_code_exchange_issues_tokens_without_a_response(client, session):
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+
+    issued = mcp_oauth._exchange_authorization_code(
+        session, code, CLIENT_REDIRECT, registered["client_id"], "", "verifier"
+    )
+
+    assert issued.scope == "mcp"
+    assert issued.expires_in == auth.MCP_JWT_EXPIRY_SECONDS
+    assert auth.decode_jwt(issued.access_token, audience="mcp")["sub"] == "1234567890"
+    assert cleanup_and_get(session, mcp_refresh_tokens, issued.refresh_token)["client_id"] == registered["client_id"]
+
+
 def test_a_code_exchanges_once(client, session):
     registered = _register(client)
     verifier = secrets.token_urlsafe(64)
@@ -1262,6 +1276,7 @@ def test_a_rotation_at_the_live_cap_is_not_refused_but_a_new_sign_in_is(client, 
     refused = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier")
 
     assert refused.status_code == 503
+    assert refused.json() == {"detail": "Server is at capacity; try again later"}
 
 
 def test_two_concurrent_redeems_of_one_code_yield_exactly_one_token(racing_client, session, monkeypatch):

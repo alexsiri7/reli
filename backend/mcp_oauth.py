@@ -31,8 +31,9 @@ import logging
 import secrets
 import uuid
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, NamedTuple
 
 from fastapi import APIRouter, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -533,14 +534,57 @@ class _TokenError(Exception):
         self.error = error
         self.description = description
 
-    def response(self) -> JSONResponse:
-        return JSONResponse(
-            {"error": self.error, "error_description": self.description}, status_code=self.status, headers=_NO_STORE
-        )
-
 
 def _invalid_grant(description: str) -> _TokenError:
     return _TokenError(400, "invalid_grant", description)
+
+
+@dataclass(frozen=True)
+class IssuedTokens:
+    """What a successful exchange mints, RFC 6749 §5.1; :func:`oauth_token` is what serialises it."""
+
+    access_token: str
+    refresh_token: str | None
+    scope: str
+    expires_in: int
+
+
+class _Grant(NamedTuple):
+    """Whom a consumed code or refresh token was issued to, and for what: what a token is minted from."""
+
+    subject: str
+    email: str
+    client_id: str
+    scope: str
+
+    @classmethod
+    def of(cls, row: dict[str, Any]) -> _Grant:
+        return cls(row["subject"], row["email"], row["client_id"], row["scope"])
+
+
+class _ConsumedCode(NamedTuple):
+    """A row :func:`cleanup_and_pop` took from ``mcp_auth_codes``."""
+
+    grant: _Grant
+    redirect_uri: str
+    code_challenge: str
+    code_challenge_method: str
+
+    @classmethod
+    def of(cls, row: dict[str, Any]) -> _ConsumedCode:
+        return cls(_Grant.of(row), row["redirect_uri"], row["code_challenge"], row["code_challenge_method"])
+
+
+class _ConsumedRefreshToken(NamedTuple):
+    """A row :func:`consume_refresh_token` marked consumed, with the identity it held before."""
+
+    grant: _Grant
+    family_id: str
+    expires_at: datetime
+
+    @classmethod
+    def of(cls, row: dict[str, Any]) -> _ConsumedRefreshToken:
+        return cls(_Grant.of(row), row["family_id"], row["expires_at"])
 
 
 def _authenticated_client(session: Session, client_id: str, client_secret: str) -> dict[str, Any]:
@@ -563,18 +607,10 @@ def _may_refresh(client: dict[str, Any]) -> bool:
     return "refresh_token" in client["grant_types"]
 
 
-def _issue_token_response(
-    session: Session,
-    subject: str,
-    email: str,
-    client_id: str,
-    scope: str,
-    family_id: str,
-    expires_at: datetime,
-    *,
-    refreshable: bool,
-) -> JSONResponse:
-    """An access token and, when *refreshable*, a fresh refresh token, RFC 6749 §5.1, never cached.
+def _issue_tokens(
+    session: Session, grant: _Grant, family_id: str, expires_at: datetime, *, refreshable: bool
+) -> IssuedTokens:
+    """An access token and, when *refreshable*, a fresh refresh token for *grant*.
 
     Re-checks ``ALLOWED_EMAILS`` here, not just at the Google callback, so an account removed
     after sign-in cannot keep rolling its refresh token forward — this covers both grant types,
@@ -585,43 +621,31 @@ def _issue_token_response(
     grace hour, the allowlist check above has already passed, so only an allowed account holds a
     registration past its first hour, and the move is only ever later (``GREATEST``), so a second
     family never shortens it.
+
+    Raises:
+        _TokenError: ``invalid_grant`` when the account has left ``ALLOWED_EMAILS``.
+        StoreFullError: ``mcp_refresh_tokens`` is at its cap; nothing was issued.
     """
-    if not auth.is_allowed(email):
+    if not auth.is_allowed(grant.email):
         revoked = revoke_refresh_token_family(session, family_id)
         logger.warning(
             "MCP OAuth: token refused for client %s — account no longer in ALLOWED_EMAILS; revoked %d token(s)",
-            client_id,
+            grant.client_id,
             revoked,
         )
         raise _invalid_grant(auth.ACCOUNT_NOT_ALLOWED)
-    body = {
-        "access_token": auth.create_jwt(subject, email, audience=auth.MCP_AUDIENCE),
-        "token_type": "bearer",
-        "expires_in": auth.MCP_JWT_EXPIRY_SECONDS,
-        "scope": scope,
-    }
+    access_token = auth.create_jwt(grant.subject, grant.email, audience=auth.MCP_AUDIENCE)
+    refresh_token = None
     if refreshable:
         refresh_token = secrets.token_urlsafe(32)
-        try:
-            cleanup_and_store(
-                session,
-                mcp_refresh_tokens,
-                refresh_token,
-                {
-                    "subject": subject,
-                    "email": email,
-                    "client_id": client_id,
-                    "scope": scope,
-                    "family_id": family_id,
-                    "expires_at": expires_at,
-                },
-            )
-        except StoreFullError as full:
-            logger.warning("MCP OAuth: token issuance refused for client %s — %s", client_id, full)
-            raise HTTPException(status_code=503, detail=auth.AT_CAPACITY) from full
-        body["refresh_token"] = refresh_token
-    extend_expiry(session, mcp_registered_clients, client_id, expires_at)
-    return JSONResponse(body, headers=_NO_STORE)
+        cleanup_and_store(
+            session,
+            mcp_refresh_tokens,
+            refresh_token,
+            {**grant._asdict(), "family_id": family_id, "expires_at": expires_at},
+        )
+    extend_expiry(session, mcp_registered_clients, grant.client_id, expires_at)
+    return IssuedTokens(access_token, refresh_token, grant.scope, auth.MCP_JWT_EXPIRY_SECONDS)
 
 
 def _authenticated_grant(
@@ -649,11 +673,11 @@ def _authenticated_grant(
     return grant, _authenticated_client(session, client_id, client_secret)
 
 
-def _exchange_refresh_token(session: Session, refresh_token: str, client_id: str, client_secret: str) -> JSONResponse:
+def _exchange_refresh_token(session: Session, refresh_token: str, client_id: str, client_secret: str) -> IssuedTokens:
     """Rotate *refresh_token*; a token presented twice revokes its whole family.
 
     Nothing may commit between :func:`consume_refresh_token` and the replacement's
-    :func:`cleanup_and_store` inside :func:`_issue_token_response`: the two commit together, which
+    :func:`cleanup_and_store` inside :func:`_issue_tokens`: the two commit together, which
     is what lets a concurrent redeem of the same token revoke the replacement as well.
     """
     if not refresh_token:
@@ -665,8 +689,8 @@ def _exchange_refresh_token(session: Session, refresh_token: str, client_id: str
         raise _TokenError(
             400, "unauthorized_client", "This client did not register the refresh_token grant: re-authorise it"
         )
-    consumed = consume_refresh_token(session, refresh_token)
-    if consumed is None:
+    row = consume_refresh_token(session, refresh_token)
+    if row is None:
         revoked = revoke_refresh_token_family(session, grant["family_id"])
         logger.warning(
             "MCP OAuth: refresh token reuse for client %s — revoked %d token(s) in its family", client_id, revoked
@@ -674,40 +698,30 @@ def _exchange_refresh_token(session: Session, refresh_token: str, client_id: str
         raise _invalid_grant(
             "Refresh token already used: every token from that sign-in is revoked, re-authorise the connector"
         )
-    return _issue_token_response(
-        session,
-        consumed["subject"],
-        consumed["email"],
-        consumed["client_id"],
-        consumed["scope"],
-        family_id=consumed["family_id"],
-        expires_at=consumed["expires_at"],
-        refreshable=True,
-    )
+    consumed = _ConsumedRefreshToken.of(row)
+    return _issue_tokens(session, consumed.grant, consumed.family_id, consumed.expires_at, refreshable=True)
 
 
 def _exchange_authorization_code(
     session: Session, code: str, redirect_uri: str, client_id: str, client_secret: str, code_verifier: str
-) -> JSONResponse:
+) -> IssuedTokens:
     _, client = _authenticated_grant(session, mcp_auth_codes, code, client_id, client_secret, gone=_CODE_GONE)
-    consumed = cleanup_and_pop(session, mcp_auth_codes, code)
-    if consumed is None:
+    row = cleanup_and_pop(session, mcp_auth_codes, code)
+    if row is None:
         raise _invalid_grant(_CODE_GONE)
-    if redirect_uri != consumed["redirect_uri"]:
+    consumed = _ConsumedCode.of(row)
+    if redirect_uri != consumed.redirect_uri:
         raise _invalid_grant("redirect_uri mismatch: re-authorise the connector")
 
-    if consumed["code_challenge_method"] == "S256":
+    if consumed.code_challenge_method == "S256":
         if not code_verifier:
             raise _invalid_grant("code_verifier is required")
-        if google_login.s256_challenge(code_verifier) != consumed["code_challenge"]:
+        if google_login.s256_challenge(code_verifier) != consumed.code_challenge:
             raise _invalid_grant("PKCE verification failed: re-authorise the connector")
 
-    return _issue_token_response(
+    return _issue_tokens(
         session,
-        consumed["subject"],
-        consumed["email"],
-        consumed["client_id"],
-        consumed["scope"],
+        consumed.grant,
         family_id=str(uuid.uuid4()),
         expires_at=datetime.now(UTC) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
         refreshable=_may_refresh(client),
@@ -729,8 +743,11 @@ async def oauth_token(
     Refused up front — 501 naming ``SECRET_KEY`` — while there is no key to sign with, before any
     grant is consumed: a refresh token issued under a key that was since unset or shortened must
     mint nothing, and stays redeemable once the key is restored. Only the key is checked here:
-    an emptied ``ALLOWED_EMAILS`` must still reach :func:`_issue_token_response`, which is where
+    an emptied ``ALLOWED_EMAILS`` must still reach :func:`_issue_tokens`, which is where
     the refresh family is revoked.
+
+    The one place an exchange becomes a response: below here a refusal is a :class:`_TokenError`,
+    and a full refresh-token store a :class:`StoreFullError`, answered as every capacity refusal is.
     """
     if not settings.secret_key_configured:
         logger.error("MCP OAuth: token refused, SECRET_KEY is not configured")
@@ -738,9 +755,28 @@ async def oauth_token(
     try:
         with auth.open_db_session() as session:
             if grant_type == "refresh_token":
-                return _exchange_refresh_token(session, refresh_token, client_id, client_secret)
-            if grant_type != "authorization_code":
+                issued = _exchange_refresh_token(session, refresh_token, client_id, client_secret)
+            elif grant_type == "authorization_code":
+                issued = _exchange_authorization_code(
+                    session, code, redirect_uri, client_id, client_secret, code_verifier
+                )
+            else:
                 raise _TokenError(400, "unsupported_grant_type", "Only authorization_code and refresh_token")
-            return _exchange_authorization_code(session, code, redirect_uri, client_id, client_secret, code_verifier)
     except _TokenError as refused:
-        return refused.response()
+        return JSONResponse(
+            {"error": refused.error, "error_description": refused.description},
+            status_code=refused.status,
+            headers=_NO_STORE,
+        )
+    except StoreFullError as full:
+        logger.warning("MCP OAuth: token issuance refused for client %s — %s", client_id, full)
+        raise HTTPException(status_code=503, detail=auth.AT_CAPACITY) from full
+    body = {
+        "access_token": issued.access_token,
+        "token_type": "bearer",
+        "expires_in": issued.expires_in,
+        "scope": issued.scope,
+    }
+    if issued.refresh_token:
+        body["refresh_token"] = issued.refresh_token
+    return JSONResponse(body, headers=_NO_STORE)
