@@ -67,6 +67,26 @@ def _strip_auth_flow_request(event: Event, hint: Hint) -> Event:
     return event
 
 
+_MCP_SPAN_DATA_PREFIX = "mcp."
+
+
+def _strip_mcp_span_data(event: Event) -> Event:
+    """Drop MCP request data from a transaction's spans: tool arguments are graph content."""
+    raw_spans = event.get("spans")
+    spans: list[object] = list(raw_spans) if isinstance(raw_spans, list) else []
+    spans.append(event.get("contexts", {}).get("trace", {}))
+    for span in spans:
+        data = span.get("data") if isinstance(span, dict) else None
+        if isinstance(data, dict):
+            for key in [k for k in data if k.startswith(_MCP_SPAN_DATA_PREFIX)]:
+                del data[key]
+    return event
+
+
+def _scrub_transaction(event: Event, hint: Hint) -> Event:
+    return _strip_mcp_span_data(_strip_auth_flow_request(event, hint))
+
+
 def init_sentry() -> None:
     """Initialize Sentry SDK if SENTRY_DSN is configured."""
     if not settings.SENTRY_DSN:
@@ -77,6 +97,10 @@ def init_sentry() -> None:
         dsn=settings.SENTRY_DSN,
         environment=settings.SENTRY_ENVIRONMENT,
         traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        # Only the integrations listed here load. Left on, the SDK auto-enables one per installed
+        # package, and its MCP integration records every tool argument (Thing titles, notes,
+        # preferences) as span data whatever send_default_pii says.
+        auto_enabling_integrations=False,
         integrations=[
             StarletteIntegration(),
             FastApiIntegration(),
@@ -89,7 +113,7 @@ def init_sentry() -> None:
         include_local_variables=False,
         before_breadcrumb=_strip_cookie_breadcrumb,
         before_send=_strip_auth_flow_request,
-        before_send_transaction=_strip_auth_flow_request,
+        before_send_transaction=_scrub_transaction,
     )
     logger.info("Sentry initialized (env=%s)", settings.SENTRY_ENVIRONMENT)
 
