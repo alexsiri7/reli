@@ -9,8 +9,10 @@ between the callback and ``POST /oauth/token``.
 flow of :mod:`backend.mcp_oauth` and for the web view's sign-in that starts at
 ``GET /api/auth/google``. It resolves ``state`` against the two session stores in
 :mod:`backend.oauth_state`: a web state ends in the ``__Host-reli_session`` cookie and a redirect
-to ``/``, an MCP state in an authorization code delivered to the client — but only in the browser
-that approved it on the consent page — and a state neither knows is a 400.
+to ``/``, an MCP state — but only in the browser that approved it on the consent page — in
+:func:`backend.mcp_oauth.finish_sign_in`, and a state neither knows is a 400. Both branches learn
+who signed in through :func:`google_identity`, and every ``__Host-`` cookie is set and deleted
+through :func:`set_host_cookie` and :func:`delete_host_cookie`.
 
 The web session is that cookie: an ``aud="web"`` JWT the middleware in :mod:`backend.api` decodes
 on every ``/api`` request, read through :func:`web_session` so the middleware and
@@ -33,10 +35,9 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from sqlmodel import Session
 from starlette.responses import Response
 
-from . import google_login
+from . import google_login, mcp_oauth
 from .config import settings
 from .db_engine import open_session as open_db_session
 from .oauth_state import (
@@ -44,7 +45,6 @@ from .oauth_state import (
     cleanup_and_get,
     cleanup_and_pop,
     cleanup_and_store,
-    mcp_auth_codes,
     mcp_oauth_sessions,
     revoked_tokens,
     web_oauth_sessions,
@@ -61,12 +61,10 @@ WEB_JWT_EXPIRY_SECONDS = 60 * 60 * 24 * 7
 # The connector refreshes transparently, so the user never sees the turnover.
 MCP_JWT_EXPIRY_SECONDS = 60 * 60
 _EXPIRY_SECONDS_BY_AUDIENCE = {WEB_AUDIENCE: WEB_JWT_EXPIRY_SECONDS, MCP_AUDIENCE: MCP_JWT_EXPIRY_SECONDS}
-# RFC 6819 §4.1.1: an authorization code lives just long enough to be exchanged.
-MCP_AUTH_CODE_TTL_SECONDS = 60
 # A web sign-in that takes longer than this answers "start again", which is the remedy.
 WEB_SIGN_IN_TTL_SECONDS = 60 * 10
 # The ``__Host-`` prefix has the browser refuse the cookie unless it arrives ``Secure``, with
-# ``Path=/`` and no ``Domain`` — the contract both call sites below meet.
+# ``Path=/`` and no ``Domain`` — the contract :func:`set_host_cookie` meets.
 SESSION_COOKIE = "__Host-reli_session"
 # Binds an MCP sign-in to the browser that approved it on the consent page (#1701): the callback
 # honours an MCP state only alongside this cookie naming it. Same ``__Host-`` contract as above.
@@ -82,13 +80,13 @@ SIGN_IN_SETTINGS: tuple[str, ...] = (
     "ALLOWED_EMAILS",
 )
 
-_INVITE_ONLY = "This Reli is invite-only: sign in with the Google account listed in ALLOWED_EMAILS on the deploy."
-_ACCOUNT_NOT_ALLOWED = "Account is not allowed: " + _INVITE_ONLY
+INVITE_ONLY = "This Reli is invite-only: sign in with the Google account listed in ALLOWED_EMAILS on the deploy."
+ACCOUNT_NOT_ALLOWED = "Account is not allowed: " + INVITE_ONLY
 _NOT_SIGNED_IN = "Not signed in: sign in with Google at /."
 _SESSION_EXPIRED = "Session expired: sign in with Google at / again."
 _SESSION_INVALID = "Invalid session: sign in with Google at / again."
 _SESSION_REVOKED = "Session revoked: sign in with Google at / again."
-_AT_CAPACITY = "Server is at capacity; try again later"
+AT_CAPACITY = "Server is at capacity; try again later"
 _CROSS_ORIGIN = "Refused: this request did not come from Reli's own page."
 _NOT_THIS_BROWSER = "Sign-in was not approved from this browser: start again from the connector."
 
@@ -231,7 +229,7 @@ def web_session(request: Request) -> dict[str, Any] | None:
     except jwt.InvalidTokenError as invalid:
         raise SessionRefused(_SESSION_INVALID) from invalid
     if not is_allowed(str(claims.get("email", ""))):
-        raise SessionRefused(_INVITE_ONLY)
+        raise SessionRefused(INVITE_ONLY)
     if is_revoked(claims):
         raise SessionRefused(_SESSION_REVOKED)
     return claims
@@ -244,6 +242,34 @@ def client_redirect(redirect_uri: str, client_state: str, **params: str) -> Redi
         query["state"] = client_state
     separator = "&" if "?" in redirect_uri else "?"
     return RedirectResponse(url=f"{redirect_uri}{separator}{urlencode(query)}", status_code=302)
+
+
+def set_host_cookie(response: Response, name: str, value: str, max_age: int) -> None:
+    """Set the ``__Host-`` cookie *name* on *response* with the attributes its prefix requires."""
+    response.set_cookie(name, value, max_age=max_age, path="/", httponly=True, samesite="lax", secure=True)
+
+
+def delete_host_cookie(response: Response, name: str) -> None:
+    """Delete the ``__Host-`` cookie *name*; the browser matches a deletion on the attributes it was set with."""
+    response.delete_cookie(name, path="/", httponly=True, samesite="lax", secure=True)
+
+
+def google_identity(flow_name: str, flow: dict[str, Any], code: str) -> google_login.Identity | None:
+    """Who signed in at Google for *flow*, or ``None`` when that account is not in ``ALLOWED_EMAILS``.
+
+    Raises:
+        HTTPException: 502 when Google refuses the exchange, its detail naming the human step.
+    """
+    try:
+        identity = google_login.exchange_code(code, flow["google_code_verifier"])
+    except google_login.GoogleSignInFailed as failed:
+        logger.error("%s sign-in failed at the Google exchange: %s", flow_name, failed)
+        raise HTTPException(status_code=502, detail=str(failed)) from failed
+
+    if not is_allowed(identity.email):
+        logger.warning("Google sign-in refused: account not in ALLOWED_EMAILS")
+        return None
+    return identity
 
 
 def _sign_in_view(error: str) -> RedirectResponse:
@@ -318,9 +344,9 @@ def logout(request: Request) -> Response:
             _revoke(claims)
         except StoreFullError as full:
             logger.warning("Logout refused: %s", full)
-            raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
+            raise HTTPException(status_code=503, detail=AT_CAPACITY) from full
     response = Response(status_code=204)
-    response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="lax", secure=True)
+    delete_host_cookie(response, SESSION_COOKIE)
     return response
 
 
@@ -335,80 +361,16 @@ def _finish_web_sign_in(flow: dict[str, Any], code: str, error: str) -> Redirect
         logger.info("Web sign-in cancelled at Google (%r)", error)
         return _sign_in_view("cancelled")
 
-    try:
-        identity = google_login.exchange_code(code, flow["google_code_verifier"])
-    except google_login.GoogleSignInFailed as failed:
-        logger.error("Web sign-in failed at the Google exchange: %s", failed)
-        raise HTTPException(status_code=502, detail=str(failed)) from failed
-
-    if not is_allowed(identity.email):
-        logger.warning("Google sign-in refused: account not in ALLOWED_EMAILS")
+    identity = google_identity("Web", flow, code)
+    if identity is None:
         return _sign_in_view("invite_only")
 
     logger.info("Web sign-in complete")
     response = RedirectResponse(url="/", status_code=302)
-    response.set_cookie(
-        SESSION_COOKIE,
-        create_jwt(identity.subject, identity.email, WEB_AUDIENCE),
-        max_age=WEB_JWT_EXPIRY_SECONDS,
-        path="/",
-        httponly=True,
-        samesite="lax",
-        secure=True,
+    set_host_cookie(
+        response, SESSION_COOKIE, create_jwt(identity.subject, identity.email, WEB_AUDIENCE), WEB_JWT_EXPIRY_SECONDS
     )
     return response
-
-
-def _finish_mcp_sign_in(session: Session, flow: dict[str, Any], code: str, error: str) -> RedirectResponse:
-    """The MCP branch of the callback: an authorization code delivered to the client, or why not.
-
-    A cancelled sign-in or an account outside the allowlist is delivered to the client's redirect
-    URI as an ``access_denied`` error (RFC 6749 §4.1.2.1), because that is where the person is.
-    """
-    if error:
-        logger.info("MCP sign-in cancelled at Google (%r)", error)
-        return client_redirect(
-            flow["redirect_uri"],
-            flow["client_state"],
-            error="access_denied",
-            error_description="Google sign-in was cancelled",
-        )
-
-    try:
-        identity = google_login.exchange_code(code, flow["google_code_verifier"])
-    except google_login.GoogleSignInFailed as failed:
-        logger.error("MCP sign-in failed at the Google exchange: %s", failed)
-        raise HTTPException(status_code=502, detail=str(failed)) from failed
-
-    if not is_allowed(identity.email):
-        logger.warning("Google sign-in refused: account not in ALLOWED_EMAILS")
-        return client_redirect(
-            flow["redirect_uri"], flow["client_state"], error="access_denied", error_description=_INVITE_ONLY
-        )
-
-    auth_code = secrets.token_urlsafe(32)
-    try:
-        cleanup_and_store(
-            session,
-            mcp_auth_codes,
-            auth_code,
-            {
-                "subject": identity.subject,
-                "email": identity.email,
-                "code_challenge": flow["code_challenge"],
-                "code_challenge_method": flow["code_challenge_method"],
-                "redirect_uri": flow["redirect_uri"],
-                "client_id": flow["client_id"],
-                "scope": flow["scope"],
-                "expires_at": datetime.now(UTC) + timedelta(seconds=MCP_AUTH_CODE_TTL_SECONDS),
-            },
-        )
-    except StoreFullError as full:
-        logger.warning("MCP sign-in refused: %s", full)
-        raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
-
-    logger.info("MCP sign-in complete for client %r, redirecting to %r", flow["client_id"], flow["redirect_uri"])
-    return client_redirect(flow["redirect_uri"], flow["client_state"], code=auth_code)
 
 
 @router.get("/google/callback", include_in_schema=False)
@@ -442,6 +404,6 @@ def google_callback(request: Request, code: str = "", state: str = "", error: st
                 "MCP sign-in refused: the callback reached a browser that did not approve client %r", flow["client_id"]
             )
             raise HTTPException(status_code=400, detail=_NOT_THIS_BROWSER)
-        response = _finish_mcp_sign_in(session, flow, code, error)
-    response.delete_cookie(MCP_FLOW_COOKIE, path="/", httponly=True, samesite="lax", secure=True)
+        response = mcp_oauth.finish_sign_in(session, flow, code, error)
+    delete_host_cookie(response, MCP_FLOW_COOKIE)
     return response
