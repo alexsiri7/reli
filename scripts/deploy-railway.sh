@@ -3,8 +3,8 @@
 # Called by: .github/workflows/staging-pipeline.yml, once per environment.
 #
 # Usage:
-#   RAILWAY_TOKEN=… SERVICE_ID=… ENV_ID=… ./scripts/deploy-railway.sh ghcr.io/<owner>/<name>:<tag>
-#   RAILWAY_TOKEN=… SERVICE_ID=… ENV_ID=… ./scripts/deploy-railway.sh ghcr.io/<owner>/<name>@sha256:<hex>
+#   RAILWAY_TOKEN=<project token for ENV_ID> SERVICE_ID=… ENV_ID=… ./scripts/deploy-railway.sh ghcr.io/<owner>/<name>:<tag>
+#   RAILWAY_TOKEN=<project token for ENV_ID> SERVICE_ID=… ENV_ID=… ./scripts/deploy-railway.sh ghcr.io/<owner>/<name>@sha256:<hex>
 #
 # #1660: Railway failed to pull an image whose index referenced a deleted manifest, the previous
 # container kept answering /healthz, and the pipeline went green. So the image is checked the way
@@ -67,7 +67,7 @@ check_image() {
 
 railway() {
     curl -sf -X POST "$RAILWAY_API" \
-        -H "Authorization: Bearer $RAILWAY_TOKEN" \
+        -H "Project-Access-Token: $RAILWAY_TOKEN" \
         -H "Content-Type: application/json" \
         -d "$1"
 }
