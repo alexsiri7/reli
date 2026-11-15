@@ -13,6 +13,10 @@ concurrency:
   group: staging-pipeline
   cancel-in-progress: false
 
+# Every deploy step refuses an image CI did not sign on main (#1817).
+env:
+  SIGNER_IDENTITY: https://github.com/alexsiri7/reli/.github/workflows/ci.yml@refs/heads/main
+
 jobs:
   deploy-staging:
     name: Deploy to staging
@@ -77,8 +81,6 @@ jobs:
           DEPLOY_SHA: ${{ steps.sha.outputs.sha }}
           SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_STAGING_ENVIRONMENT_ID }}
-          # Only an image CI signed on main is deployed (#1817).
-          SIGNER_IDENTITY: https://github.com/alexsiri7/reli/.github/workflows/ci.yml@refs/heads/main
         run: ./scripts/deploy-railway.sh "ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
 
       - name: Wait for staging health
@@ -155,8 +157,6 @@ jobs:
           DEPLOY_IMAGE: ${{ needs.deploy-staging.outputs.deploy_image }}
           SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT_ID }}
-          # Only an image CI signed on main is deployed (#1817).
-          SIGNER_IDENTITY: https://github.com/alexsiri7/reli/.github/workflows/ci.yml@refs/heads/main
         run: ./scripts/deploy-railway.sh "$DEPLOY_IMAGE"
 
       - name: Wait for production health

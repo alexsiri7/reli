@@ -24,6 +24,7 @@ IMAGE = "ghcr.io/alexsiri7/reli:abc123"
 CHILDREN = ("sha256:aaaa", "sha256:bbbb")
 INDEX = '{"manifests":[{"digest":"sha256:aaaa"},{"digest":"sha256:bbbb"}]}\n'
 PINNED = f"ghcr.io/alexsiri7/reli@sha256:{hashlib.sha256(INDEX.encode()).hexdigest()}"
+ROLLBACK = REPO_ROOT / "docs" / "ROLLBACK.md"
 SIGNER = "https://github.com/alexsiri7/reli/.github/workflows/ci.yml@refs/heads/main"
 
 STUB_CURL = """#!/usr/bin/env bash
@@ -258,13 +259,18 @@ def test_both_deploy_jobs_go_through_the_checked_deploy():
         ("deploy-staging", "Deploy staging image to Railway"),
         ("deploy-production", "Deploy production image to Railway"),
     ):
-        assert steps[name]["env"]["SIGNER_IDENTITY"] == SIGNER
         job_steps = pipeline["jobs"][job]["steps"]
         names = [step.get("name") for step in job_steps]
         installer = next(
             i for i, step in enumerate(job_steps) if str(step.get("uses", "")).startswith("sigstore/cosign-installer@")
         )
         assert installer < names.index(name)
+    assert pipeline["env"]["SIGNER_IDENTITY"] == SIGNER
+    assert not any("SIGNER_IDENTITY" in step.get("env", {}) for step in steps.values())
     assert not any("serviceInstanceDeploy(" in step.get("run", "") for step in steps.values()), (
         "serviceInstanceDeploy returns no deployment id, so nothing can wait on its outcome"
     )
+
+
+def test_the_rollback_runbook_names_the_signer_the_pipeline_checks():
+    assert f"SIGNER_IDENTITY={SIGNER}" in ROLLBACK.read_text()
