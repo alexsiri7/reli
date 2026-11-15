@@ -347,11 +347,12 @@ and the diff means nothing:
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/work -w /work/frontend \
-  mcr.microsoft.com/playwright:v1.65.0-noble npx playwright test --update-snapshots
+  mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe \
+  npx playwright test --update-snapshots
 ```
 
-Bumping `@playwright/test` means bumping the tag in that command and in `.github/workflows/ci.yml`
-together, and regenerating.
+Bumping `@playwright/test` means bumping the tag and digest in that command and in
+`.github/workflows/ci.yml` together, and regenerating.
 
 ## Railway Token Rotation
 
