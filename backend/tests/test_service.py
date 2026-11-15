@@ -3,7 +3,7 @@
 import threading
 import time
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -15,6 +15,7 @@ from backend.db_models import (
     INTERNAL_TAGS,
     NEW_TAG,
     OBSERVATION_TAG,
+    OWNER_TIMEZONE,
     PREFERENCE_TAG,
     REJECTED_TAG,
     SCHEDULED_TASK_TAG,
@@ -428,10 +429,15 @@ def test_an_update_checks_only_the_fields_it_passes(session):
 
 @pytest.mark.parametrize(
     ("change", "refusal"),
-    [({"active": False}, "archived"), ({"tags": ["#Other"]}, "keep that tag"), ({"tags": []}, "keep that tag")],
+    [
+        ({"active": False}, "archived"),
+        ({"tags": ["#Other"]}, "keep that tag"),
+        ({"tags": []}, "keep that tag"),
+        ({"checkin_date": date.today() + timedelta(days=30)}, "cannot be later"),
+    ],
 )
-def test_a_heartbeat_cannot_be_archived_or_lose_its_tag(session, change, refusal):
-    """#1704: either write would hide a missed scheduled run instead of reporting it."""
+def test_a_heartbeat_cannot_be_archived_lose_its_tag_or_be_dated_far_ahead(session, change, refusal):
+    """#1704, #1806: each write would hide a missed scheduled run instead of reporting it."""
     heartbeat = create_thing(session, actor=Actor.CLAUDE_SCHEDULED, title="Resolution pass", tags=[SCHEDULED_TASK_TAG])
     before = _journal_count(session)
 
@@ -441,6 +447,7 @@ def test_a_heartbeat_cannot_be_archived_or_lose_its_tag(session, change, refusal
     session.refresh(heartbeat)
     assert heartbeat.active is True
     assert heartbeat.tags == [SCHEDULED_TASK_TAG]
+    assert heartbeat.checkin_date is None
     assert _journal_count(session) == before
 
 
@@ -459,6 +466,22 @@ def test_a_heartbeat_still_takes_its_routine_writes(session):
 
     assert updated.checkin_date == tomorrow
     assert updated.tags == [SCHEDULED_TASK_TAG, "#Kept"]
+
+
+def test_a_heartbeat_may_be_dated_up_to_the_bound_and_no_further(session):
+    """#1806: the bound is counted in owner-local days, so the day after tomorrow is the last allowed."""
+    heartbeat = create_thing(
+        session, actor=Actor.CLAUDE_SCHEDULED, title="Morning conversation", tags=[SCHEDULED_TASK_TAG]
+    )
+    latest = datetime.now(UTC).astimezone(OWNER_TIMEZONE).date() + timedelta(days=service.HEARTBEAT_MAX_DAYS_AHEAD)
+
+    updated = update_thing(session, actor=Actor.CLAUDE_SCHEDULED, thing_id=heartbeat.id, checkin_date=latest)
+    assert updated.checkin_date == latest
+
+    with pytest.raises(ValueError, match="cannot be later"):
+        update_thing(
+            session, actor=Actor.CLAUDE_SCHEDULED, thing_id=heartbeat.id, checkin_date=latest + timedelta(days=1)
+        )
 
 
 def test_a_concurrent_tag_write_survives_a_rejection(session):
