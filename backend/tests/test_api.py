@@ -30,7 +30,14 @@ from backend.db_models import (
     RelationshipType,
 )
 from backend.queries import MAX_LIMIT
-from backend.service import create_thing, get_or_create_user_anchor, record_preference, relate, update_thing
+from backend.service import (
+    MAX_TAGS,
+    create_thing,
+    get_or_create_user_anchor,
+    record_preference,
+    relate,
+    update_thing,
+)
 
 SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
 BASE_URL = "https://reli.example.test"
@@ -401,6 +408,20 @@ def test_rejecting_a_thing_that_is_not_a_preference_is_404(client, session):
 
 def test_rejecting_an_unknown_id_is_404(client):
     assert client.post(f"/api/preferences/{uuid.uuid4()}/reject").status_code == 404
+
+
+def test_a_refusal_other_than_not_a_preference_is_not_a_404(client, session):
+    """The preference exists; a 404 would tell the user it does not (#1800)."""
+    preference, _ = _preference(session)
+    full = [PREFERENCE_TAG, *(f"#Tag{n}" for n in range(MAX_TAGS - 1))]
+    update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=preference.id, tags=full)
+    before = _journal_count(session)
+
+    response = client.post(f"/api/preferences/{preference.id}/reject")
+
+    assert response.status_code == 409
+    assert f"at most {MAX_TAGS}" in response.json()["detail"]
+    assert _journal_count(session) == before
 
 
 # --- The read-only boundary ----------------------------------------------
