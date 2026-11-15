@@ -36,6 +36,7 @@ def test_the_google_callback_is_routed_before_the_api_catch_all(client):
     response = client.get("/api/auth/google/callback", params={"state": "nope"})
 
     assert response.status_code == 400
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 @pytest.mark.parametrize("method", ["GET", "POST", "DELETE"])
@@ -153,11 +154,11 @@ def _assert_security_headers(response) -> None:
     assert response.headers["Cross-Origin-Opener-Policy"] == "same-origin"
 
 
-@pytest.mark.parametrize("path", ["/oauth/authorize", "/oauth/authorize/confirm", "/api/auth/google/callback"])
-def test_a_connector_sign_in_window_keeps_its_opener(client, path):
+@pytest.mark.parametrize("endpoint", ["oauth_authorize", "oauth_authorize_confirm", "google_callback"])
+def test_a_connector_sign_in_window_keeps_its_opener(client, endpoint):
     """#1819: a connector may open the sign-in in a window it watches, and an opener policy on any
     page of that window cuts the connector's handle to it. The rest of the policy stays."""
-    response = client.get(path)
+    response = client.get(client.app.url_path_for(endpoint))
 
     assert "Cross-Origin-Opener-Policy" not in response.headers
     assert response.headers["Cross-Origin-Resource-Policy"] == "same-origin"

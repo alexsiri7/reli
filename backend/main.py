@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
+from fastapi.routing import APIRoute
 from starlette.datastructures import MutableHeaders
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -151,7 +152,12 @@ _SECURITY_HEADERS = {
 #: The pages a connector's sign-in window passes through, consent page to the redirect back to the
 #: client. The connector may have opened that window itself and be waiting on it, and a
 #: ``Cross-Origin-Opener-Policy`` on any one of them would cut the connector's handle for good.
-_SIGN_IN_WINDOW_PATHS = frozenset({"/oauth/authorize", "/oauth/authorize/confirm", "/api/auth/google/callback"})
+_SIGN_IN_WINDOW_ENDPOINTS = (mcp_oauth.oauth_authorize, mcp_oauth.oauth_authorize_confirm, auth.google_callback)
+_SIGN_IN_WINDOW_PATHS = frozenset(
+    route.path
+    for route in (*mcp_oauth.router.routes, *auth.router.routes)
+    if isinstance(route, APIRoute) and route.endpoint in _SIGN_IN_WINDOW_ENDPOINTS
+)
 _SIGN_IN_WINDOW_HEADERS = {
     name: value for name, value in _SECURITY_HEADERS.items() if name != "Cross-Origin-Opener-Policy"
 }
