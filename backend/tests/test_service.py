@@ -432,6 +432,17 @@ def test_a_url_that_is_not_absolute_http_is_refused_on_create_and_update(session
     assert _journal_count(session) == before
 
 
+@pytest.mark.parametrize("url", ["HTTP://example.test", " https://example.test"])
+def test_a_url_the_parser_reads_as_http_is_accepted_as_given(session, url):
+    """The scheme is decided as a URL parser reads it, so case and a pasted leading space pass."""
+    thing = create_thing(session, actor=Actor.USER, title="ok", urls={"link": url})
+    assert thing.urls == {"link": url}
+
+    update_thing(session, actor=Actor.USER, thing_id=thing.id, urls={"link": url, "other": url})
+    session.refresh(thing)
+    assert thing.urls == {"link": url, "other": url}
+
+
 def test_an_oversized_update_is_refused_and_the_thing_is_untouched(session):
     thing = create_thing(session, actor=Actor.USER, title="before")
     before = _journal_count(session)

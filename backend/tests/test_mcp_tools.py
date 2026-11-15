@@ -473,6 +473,25 @@ def test_an_oversized_write_is_refused_naming_the_field(tools):
     assert find_things() == []
 
 
+def test_a_url_that_is_not_http_is_refused_by_both_writing_tools(tools):
+    """#1822: the scheme rule the docstrings state reaches a session as a refusal, on create and update."""
+    thing = create_thing(actor="claude_interactive", title="linked", urls={"home": "https://example.test"})
+
+    for name, arguments in (
+        ("create_thing", {"title": "t"}),
+        ("update_thing", {"thing_id": thing["id"]}),
+    ):
+        with pytest.raises(ToolError, match="http or https"):
+            asyncio.run(
+                reli_mcp.call_tool(
+                    name, {"actor": "claude_interactive", "urls": {"link": "javascript:alert(1)"}, **arguments}
+                )
+            )
+
+    assert [t["title"] for t in find_things()] == ["linked"]
+    assert get_thing(uuid.UUID(thing["id"]))["thing"]["urls"] == {"home": "https://example.test"}
+
+
 @pytest.mark.parametrize("tool", [create_thing, update_thing])
 def test_the_bounds_a_writing_tool_states_are_the_bounds_enforced(tool):
     """The docstring is what a session reads; it must not promise a ceiling the service does not hold."""
@@ -482,6 +501,7 @@ def test_the_bounds_a_writing_tool_states_are_the_bounds_enforced(tool):
         f"description up to {service.MAX_DESCRIPTION_CHARS}",
         f"notes and urls each up to {service.MAX_MAPPING_BYTES} bytes",
         f"at most {service.MAX_TAGS} tags of up to {service.MAX_TAG_CHARS} characters",
+        "Each URL must be an absolute http or https URL",
     ):
         assert stated in doc, stated
     assert f"at most {service.HEARTBEAT_MAX_DAYS_AHEAD} days ahead" in " ".join((update_thing.__doc__ or "").split())
