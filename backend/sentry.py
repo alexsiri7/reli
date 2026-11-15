@@ -116,10 +116,3 @@ def init_sentry() -> None:
         before_send_transaction=_scrub_transaction,
     )
     logger.info("Sentry initialized (env=%s)", settings.SENTRY_ENVIRONMENT)
-
-
-def set_sentry_user(user_id: str) -> None:
-    """Set user context on the current Sentry scope using opaque user ID only."""
-    if not settings.SENTRY_DSN:
-        return
-    sentry_sdk.set_user({"id": user_id})
