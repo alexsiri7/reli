@@ -15,7 +15,6 @@ from backend.db_models import (
     INTERNAL_TAGS,
     NEW_TAG,
     OBSERVATION_TAG,
-    OWNER_TIMEZONE,
     PREFERENCE_TAG,
     REJECTED_TAG,
     SCHEDULED_TASK_TAG,
@@ -468,12 +467,21 @@ def test_a_heartbeat_still_takes_its_routine_writes(session):
     assert updated.tags == [SCHEDULED_TASK_TAG, "#Kept"]
 
 
-def test_a_heartbeat_may_be_dated_up_to_the_bound_and_no_further(session):
+def test_a_heartbeat_may_be_dated_up_to_the_bound_and_no_further(session, monkeypatch):
     """#1806: the bound is counted in owner-local days, so the day after tomorrow is the last allowed."""
     heartbeat = create_thing(
         session, actor=Actor.CLAUDE_SCHEDULED, title="Morning conversation", tags=[SCHEDULED_TASK_TAG]
     )
-    latest = datetime.now(UTC).astimezone(OWNER_TIMEZONE).date() + timedelta(days=service.HEARTBEAT_MAX_DAYS_AHEAD)
+
+    class _LateEveningUtc(datetime):
+        """23:30 UTC on 15 July, already 16 July in London: the UTC day and the owner's day differ."""
+
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 7, 15, 23, 30, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(service, "datetime", _LateEveningUtc)
+    latest = date(2026, 7, 16) + timedelta(days=service.HEARTBEAT_MAX_DAYS_AHEAD)
 
     updated = update_thing(session, actor=Actor.CLAUDE_SCHEDULED, thing_id=heartbeat.id, checkin_date=latest)
     assert updated.checkin_date == latest

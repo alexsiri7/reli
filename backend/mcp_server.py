@@ -255,7 +255,7 @@ def update_thing(
         notes: Replaces the whole notes mapping.
         tags: Replaces the whole tag list.
         urls: Replaces the whole urls mapping.
-        checkin_date: Replaces the check-in date. A #ScheduledTask heartbeat's may be at most two
+        checkin_date: Replaces the check-in date. A #ScheduledTask heartbeat's may be at most 2
             days ahead.
         priority: Replaces the priority.
         expected_updated_at: The updated_at you read. If the Thing has changed since, nothing is

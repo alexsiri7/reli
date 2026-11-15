@@ -460,6 +460,7 @@ def test_the_bounds_a_writing_tool_states_are_the_bounds_enforced(tool):
         f"at most {service.MAX_TAGS} tags of up to {service.MAX_TAG_CHARS} characters",
     ):
         assert stated in doc, stated
+    assert f"at most {service.HEARTBEAT_MAX_DAYS_AHEAD} days ahead" in " ".join((update_thing.__doc__ or "").split())
     assert f"up to {service.MAX_CONTEXT_CHARS} characters" in (relate.__doc__ or "")
     assert f"Up to {service.MAX_SCOPE_CHARS} characters" in (record_preference.__doc__ or "")
 
