@@ -1260,6 +1260,22 @@ def test_a_replayed_refresh_token_revokes_its_whole_family(client, session):
         assert own.exec(select(func.count()).select_from(McpRefreshTokenRecord)).one() == 0
 
 
+def test_a_replayed_refresh_token_also_ends_the_familys_access_tokens(client, session):
+    """#1808: the access token that leaked with a replayed refresh token dies with its family."""
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+    first = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
+    second = _refresh(client, first["refresh_token"], registered["client_id"]).json()
+    claims = [auth.decode_jwt(issued["access_token"], audience="mcp") for issued in (first, second)]
+    family_id = cleanup_and_get(session, mcp_refresh_tokens, second["refresh_token"])["family_id"]
+    assert [c["fid"] for c in claims] == [family_id, family_id]
+    assert [auth.is_revoked(c) for c in claims] == [False, False]
+
+    assert _refresh(client, first["refresh_token"], registered["client_id"]).status_code == 400
+
+    assert [auth.is_revoked(c) for c in claims] == [True, True]
+
+
 def test_a_rotation_at_the_live_cap_is_not_refused_but_a_new_sign_in_is(client, session, monkeypatch):
     """A rotation frees the live slot it fills, so consumed tokens can no longer lock the owner out (#1804);
     only a new family meets the cap."""

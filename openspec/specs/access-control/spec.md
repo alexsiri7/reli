@@ -37,12 +37,17 @@ Only Google accounts on the configured allowlist SHALL be admitted; an empty all
 
 ### Requirement: A claude.ai connector authorises through Google
 
-The MCP endpoint SHALL be protected by an OAuth 2.1 authorization server that a connector can discover, register with dynamically, and complete through a Reli-hosted consent page naming the client followed by Google sign-in, receiving short-lived access tokens and rotating refresh tokens. Stored authorization codes and refresh tokens SHALL be held only as digests. A bare and a trailing-slash endpoint address SHALL both work without a redirect.
+The MCP endpoint SHALL be protected by an OAuth 2.1 authorization server that a connector can discover, register with dynamically, and complete through a Reli-hosted consent page naming the client followed by Google sign-in, receiving short-lived access tokens and rotating refresh tokens. Stored authorization codes and refresh tokens SHALL be held only as digests. A bare and a trailing-slash endpoint address SHALL both work without a redirect. Revoking a refresh-token family SHALL end every access token issued under it on that token's next request.
 
 #### Scenario: Adding the connector
 - GIVEN the owner adds Reli's MCP URL in claude.ai with no token
 - WHEN the connector discovers, registers and the owner signs in with the allowlisted account
 - THEN the connector can call Reli's tools
+
+#### Scenario: Refresh family revoked while an access token is live
+- GIVEN an unexpired MCP access token whose refresh family is revoked — by refresh-token reuse or by deleting the family's rows
+- WHEN the token is next presented
+- THEN the request is refused with 401 and the detail says to refresh or re-authorise
 
 ### Requirement: The web view signs in with a session cookie
 

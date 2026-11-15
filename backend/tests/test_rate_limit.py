@@ -148,6 +148,17 @@ def test_a_token_for_an_account_off_the_allowlist_spends_the_address_bucket(monk
     assert asyncio.run(rate_limit._user_subject(scope)) is None
 
 
+def test_a_token_whose_refresh_family_is_gone_spends_the_address_bucket(session, monkeypatch):
+    """#1808: a stolen access token whose family was revoked must not drain the owner's bucket."""
+    monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    monkeypatch.setattr(settings, "RELI_BASE_URL", BASE_URL)
+    token = auth.create_jwt("1234567890", "owner@example.com", auth.MCP_AUDIENCE, family_id="gone")
+    scope = {"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())]}
+
+    assert asyncio.run(rate_limit._user_subject(scope)) is None
+
+
 def _scope(peer, *forwarded):
     return {
         "type": "http",
