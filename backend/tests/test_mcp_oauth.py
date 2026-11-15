@@ -1349,7 +1349,7 @@ def test_refresh_exchange_refuses_a_de_allowlisted_email_and_revokes_the_family(
 
 def test_refresh_exchange_with_allowed_emails_emptied_still_revokes_the_family(client, session, monkeypatch):
     """`/oauth/token` gates on `SECRET_KEY` alone, not the whole sign-in settings list: an emptied
-    allowlist must reach `_issue_token_response`, where the family is revoked, rather than answer
+    allowlist must reach `_issue_tokens`, where the family is revoked, rather than answer
     501 with the token left in the store to come alive again once `ALLOWED_EMAILS` is repopulated."""
     registered = _register(client)
     code = _seed_code(session, registered["client_id"], "verifier")
