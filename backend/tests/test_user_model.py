@@ -23,6 +23,9 @@ from backend.db_models import (
 )
 from backend.queries import evidence_for, user_model
 from backend.service import (
+    InvalidEdge,
+    NotAPreference,
+    PreferenceNotRecordable,
     ThingNotFound,
     add_preference_evidence,
     create_thing,
@@ -154,7 +157,7 @@ def test_record_preference_preserves_the_scopes_case_and_strips_only_whitespace(
 def test_record_preference_refuses_an_empty_evidence_list(session):
     before = _journal_count(session)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(PreferenceNotRecordable, match="a preference with no evidence is not recordable"):
         record_preference(
             session,
             actor=Actor.CLAUDE_INTERACTIVE,
@@ -204,7 +207,7 @@ def test_record_preference_refuses_another_preference_as_evidence(session):
 def test_record_preference_refuses_a_blank_scope(session, scope):
     evidence = _thing(session, "declined a 9am meeting")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(PreferenceNotRecordable, match="a preference must declare the scope it applies to"):
         record_preference(
             session,
             actor=Actor.CLAUDE_INTERACTIVE,
@@ -289,7 +292,7 @@ def test_add_preference_evidence_refuses_a_thing_that_is_not_a_preference(sessio
     ordinary = _thing(session, "an ordinary Thing")
     evidence = _thing(session, "some evidence")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(NotAPreference, match="is not tagged #Preference"):
         add_preference_evidence(
             session, actor=Actor.CLAUDE_SCHEDULED, preference_id=ordinary.id, evidence_id=evidence.id
         )
@@ -298,7 +301,7 @@ def test_add_preference_evidence_refuses_a_thing_that_is_not_a_preference(sessio
 def test_add_preference_evidence_refuses_the_preference_as_its_own_evidence(session):
     preference = _preference(session)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidEdge, match="cannot run from Thing .* to itself"):
         add_preference_evidence(
             session, actor=Actor.CLAUDE_SCHEDULED, preference_id=preference.id, evidence_id=preference.id
         )
@@ -331,7 +334,7 @@ def test_reject_preference_is_idempotent(session):
 def test_reject_preference_refuses_a_thing_that_is_not_a_preference(session):
     ordinary = _thing(session, "an ordinary Thing")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(NotAPreference, match="is not tagged #Preference"):
         reject_preference(session, actor=Actor.CLAUDE_INTERACTIVE, preference_id=ordinary.id)
 
 
