@@ -124,9 +124,10 @@ def create_mcp_asgi_app() -> ASGIApp:
             stateless_http=True,
             # The SDK's default host allowlist is 127.0.0.1/localhost only, which answers 421 to
             # every request carrying a real Host header — Reli is served through a Cloudflare
-            # tunnel, so that default is an outage. Safe only because _BearerTokenMiddleware
-            # makes an Authorization header mandatory, which a cross-origin page cannot set: the
-            # two decisions are coupled.
+            # tunnel, so that default is an outage. Rebinding only rides a credential the browser
+            # attaches by itself, and _BearerTokenMiddleware admits nothing but a bearer a rebound
+            # page cannot know and never reads a cookie; test_a_cookie_alone_never_reaches_the_mcp_app
+            # holds that (#1823). Admitting any ambient credential here means turning this on first.
             transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
         )
     )

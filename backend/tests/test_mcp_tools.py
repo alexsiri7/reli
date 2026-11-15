@@ -1017,6 +1017,25 @@ def test_mcp_endpoint_refuses_an_unauthenticated_request(client, secret_key):
     assert response.headers["WWW-Authenticate"].startswith("Bearer")
 
 
+@pytest.mark.parametrize("audience", [auth.WEB_AUDIENCE, auth.MCP_AUDIENCE])
+def test_a_cookie_alone_never_reaches_the_mcp_app(client, secret_key, audience):
+    """#1823: DNS-rebinding protection is off on the mount because /mcp admits only a bearer, which
+    no browser attaches on its own. The session cookie is the credential a browser would carry: if
+    /mcp ever honoured it, the protection would have to come back on."""
+    token = auth.create_jwt("1234567890", "owner@example.com", audience=audience)
+    headers = {
+        **_MCP_HEADERS,
+        "Cookie": f"{auth.SESSION_COOKIE}={token}",
+        "Host": "attacker.example",
+        "Origin": "http://attacker.example",
+    }
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=headers)
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == mcp_transport._NO_BEARER
+
+
 def test_mcp_endpoint_refuses_a_bearer_that_is_not_a_jwt(client, secret_key):
     response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("wrong-token"))
 

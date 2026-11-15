@@ -26,8 +26,11 @@ lifespan never runs.
 
 DNS-rebinding protection is disabled. The SDK's default host allowlist is `127.0.0.1`/`localhost`,
 which answers 421 to any request carrying a real `Host` header — and Reli is served through a
-Cloudflare tunnel. This is safe only because the bearer check below makes an `Authorization`
-header mandatory, which a cross-origin page cannot set; the two decisions are coupled.
+Cloudflare tunnel. Rebinding makes an attacker's page same-origin with Reli, so it can set any
+header; what it rides is a credential the browser attaches by itself. The bearer check below admits
+nothing but an `Authorization` bearer, which such a page cannot know, and never reads a cookie —
+`test_a_cookie_alone_never_reaches_the_mcp_app` holds that (#1823). The two decisions are coupled:
+admitting any ambient credential at `/mcp` means turning the protection on first.
 
 ## 3. Authentication
 
