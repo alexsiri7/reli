@@ -1030,6 +1030,21 @@ def test_an_authorization_header_that_is_not_utf8_is_an_invalid_token(client, se
     assert response.json() == client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("wrong-token")).json()
 
 
+@pytest.mark.parametrize("reason", list(auth.Refusal))
+def test_every_refusal_admit_can_raise_is_a_401_with_a_remedy(client, secret_key, monkeypatch, reason):
+    """A Refusal added to admit without a description here would be a KeyError, a 500, on every bearer."""
+
+    def refuse(token, audience):
+        raise auth.CredentialRefused(reason)
+
+    monkeypatch.setattr(auth, "admit", refuse)
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("any"))
+
+    assert response.status_code == 401
+    assert response.json()["detail"]
+
+
 def test_mcp_endpoint_admits_a_jwt_the_authorization_server_minted(client, mcp_token):
     response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
 

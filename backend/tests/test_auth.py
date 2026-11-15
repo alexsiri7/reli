@@ -519,6 +519,21 @@ def test_a_live_session_is_refused_once_its_account_leaves_the_allowlist(client,
         assert response.json()["detail"] == auth.INVITE_ONLY
 
 
+@pytest.mark.parametrize("reason", list(auth.Refusal))
+def test_every_refusal_admit_can_raise_is_a_401_with_a_remedy(client, monkeypatch, reason):
+    """A Refusal added to admit without a sentence here would be a KeyError, a 500, on every cookie."""
+
+    def refuse(token, audience):
+        raise auth.CredentialRefused(reason)
+
+    monkeypatch.setattr(auth, "admit", refuse)
+
+    response = client.get("/api/auth/me", headers={"Cookie": f"{auth.SESSION_COOKIE}=any"})
+
+    assert response.status_code == 401
+    assert response.json()["detail"]
+
+
 def test_logout_deletes_the_cookie(client):
     response = client.post("/api/auth/logout", headers={"Origin": "https://reli.example.test"})
 
