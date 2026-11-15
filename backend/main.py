@@ -129,6 +129,9 @@ class _BareMcpPath:
 #: answers with a 302 to Google, so Google's sign-in host is carved out. The chain stops there,
 #: because ``prompt=select_account`` always halts on Google's account chooser; the callback's later
 #: redirect to the client is a fresh navigation from Google's page, outside this policy.
+#: Nothing cross-origin embeds a Reli resource, so ``Cross-Origin-Resource-Policy`` keeps every one to
+#: Reli's own pages, and ``Cross-Origin-Opener-Policy`` keeps any other site's window from holding a
+#: handle on one of them (#1819).
 _SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com"
@@ -141,21 +144,34 @@ _SECURITY_HEADERS = {
         "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), "
         "magnetometer=(), microphone=(), payment=(), usb=()"
     ),
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
 }
 
-#: What an ``/api`` response gets (#1709): that prefix serves the graph and the signed-in
-#: identity, and neither may outlive the session in a browser or proxy cache. The bundle stays
-#: cacheable; ``/oauth/`` sets its own.
-_API_HEADERS = {**_SECURITY_HEADERS, "Cache-Control": "no-store"}
+#: The pages a connector's sign-in window passes through, consent page to the redirect back to the
+#: client. The connector may have opened that window itself and be waiting on it, and a
+#: ``Cross-Origin-Opener-Policy`` on any one of them would cut the connector's handle for good.
+_SIGN_IN_WINDOW_PATHS = ("/oauth/authorize", "/api/auth/google/callback")
+_SIGN_IN_WINDOW_HEADERS = {
+    name: value for name, value in _SECURITY_HEADERS.items() if name != "Cross-Origin-Opener-Policy"
+}
 
 
 def _is_api(path: str) -> bool:
     return path == api.router.prefix or path.startswith(f"{api.router.prefix}/")
 
 
+def _headers_for(path: str) -> dict[str, str]:
+    """The headers a response at *path* gets: an ``/api`` one adds ``no-store`` (#1709), because that
+    prefix serves the graph and the signed-in identity, and neither may outlive the session in a
+    browser or proxy cache. The bundle stays cacheable; ``/oauth/`` sets its own."""
+    base = _SIGN_IN_WINDOW_HEADERS if path.startswith(_SIGN_IN_WINDOW_PATHS) else _SECURITY_HEADERS
+    return {**base, "Cache-Control": "no-store"} if _is_api(path) else base
+
+
 class _SecurityHeaders:
-    """Adds :data:`_SECURITY_HEADERS` to every response, whichever layer produced it, and
-    :data:`_API_HEADERS` to an ``/api`` one.
+    """Adds what :func:`_headers_for` gives a response's path to every response, whichever layer
+    produced it.
 
     Raw ASGI rather than ``BaseHTTPMiddleware``, which buffers the response in its own task and
     breaks the streamable-HTTP transport under ``/mcp``.
@@ -169,7 +185,7 @@ class _SecurityHeaders:
             await self._app(scope, receive, send)
             return
 
-        headers = _API_HEADERS if _is_api(scope["path"]) else _SECURITY_HEADERS
+        headers = _headers_for(scope["path"])
 
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
@@ -209,8 +225,7 @@ async def _unhandled_exception(request: Request, exc: Exception) -> Response:
     own fallback goes out bare. It re-raises afterwards, so the error still reaches the log and
     Sentry.
     """
-    headers = _API_HEADERS if _is_api(request.url.path) else _SECURITY_HEADERS
-    return PlainTextResponse("Internal Server Error", status_code=500, headers=headers)
+    return PlainTextResponse("Internal Server Error", status_code=500, headers=_headers_for(request.url.path))
 
 
 app.add_exception_handler(Exception, _unhandled_exception)
