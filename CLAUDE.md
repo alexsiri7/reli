@@ -152,7 +152,9 @@ so none of it journals.
 
 The web view (#1449) signs in through the same Google client and the same callback. The sign-in
 view calls `GET /api/auth/google` for the Google URL (a 501 names each missing setting, shown in
-place), Google lands on `/api/auth/google/callback`, and the callback sets `__Host-reli_session` —
+place) and the `__Host-reli_web_flow` cookie naming its state, Google lands on
+`/api/auth/google/callback` — a 400 in any browser without that cookie, so a callback link built
+from someone else's state cannot sign this one in as them (#1810) — and the callback sets `__Host-reli_session` —
 an `httponly`, `samesite=lax` cookie holding an `aud="web"` JWT good for seven days, always
 `Secure` and named with the `__Host-` prefix so the browser refuses it otherwise — and redirects to
 `/`. A base URL mis-set to http therefore fails as a sign-in that does not stick, and as a warning
