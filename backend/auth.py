@@ -29,15 +29,16 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import reprlib
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 from urllib.parse import urlencode, urlsplit
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from starlette.responses import Response
@@ -75,6 +76,12 @@ SESSION_COOKIE = "__Host-reli_session"
 # Binds an MCP sign-in to the browser that approved it on the consent page (#1701): the callback
 # honours an MCP state only alongside this cookie naming it. Same ``__Host-`` contract as above.
 MCP_FLOW_COOKIE = "__Host-reli_mcp_flow"
+# The longest ``code``, ``state`` or ``error`` the callback accepts: Google's code and the state
+# this service mints are far shorter, and anything longer is a caller's choice, not Google's.
+MAX_CALLBACK_PARAM_LENGTH = 2048
+# The most of a caller-supplied value a log line quotes: enough to recognise it, never the volume a
+# caller with no credential chooses (#1716).
+MAX_LOGGED_CHARS = 200
 
 #: Every setting the Google sign-in needs; an empty one — or a ``SECRET_KEY`` too short to sign
 #: with — closes the sign-in with a 501 naming it.
@@ -95,6 +102,11 @@ _SESSION_REVOKED = "Session revoked: sign in with Google at / again."
 AT_CAPACITY = "Server is at capacity; try again later"
 _CROSS_ORIGIN = "Refused: this request did not come from Reli's own page."
 NOT_THIS_BROWSER = "Sign-in was not approved from this browser: start again from the connector."
+
+# How a log line quotes a caller-supplied value. Cuts the escaped text, not the value: one
+# character can escape to ten.
+log_repr = reprlib.Repr()
+log_repr.maxstring = MAX_LOGGED_CHARS
 
 
 def base_url() -> str:
@@ -411,7 +423,7 @@ def _finish_web_sign_in(flow: dict[str, Any], code: str, error: str) -> Redirect
     the URL supplies.
     """
     if error:
-        logger.info("Web sign-in cancelled at Google (%r)", error)
+        logger.info("Web sign-in cancelled at Google (%s)", log_repr.repr(error))
         return _sign_in_view("cancelled")
 
     identity = google_identity("Web", flow, code)
@@ -427,7 +439,12 @@ def _finish_web_sign_in(flow: dict[str, Any], code: str, error: str) -> Redirect
 
 
 @router.get("/google/callback", include_in_schema=False)
-def google_callback(request: Request, code: str = "", state: str = "", error: str = "") -> RedirectResponse:
+def google_callback(
+    request: Request,
+    code: Annotated[str, Query(max_length=MAX_CALLBACK_PARAM_LENGTH)] = "",
+    state: Annotated[str, Query(max_length=MAX_CALLBACK_PARAM_LENGTH)] = "",
+    error: Annotated[str, Query(max_length=MAX_CALLBACK_PARAM_LENGTH)] = "",
+) -> RedirectResponse:
     """Where Google sends the browser after the sign-in, for better or worse.
 
     A web sign-in ends here with the session cookie and a redirect to ``/``, or at ``/?error=``.

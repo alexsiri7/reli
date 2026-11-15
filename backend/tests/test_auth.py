@@ -301,6 +301,43 @@ def test_a_cancellation_error_cannot_forge_a_second_log_line(client, session, go
     assert "\n" not in cancelled[0].getMessage()
 
 
+@pytest.mark.parametrize("branch", ["mcp", "web"])
+def test_a_cancellation_logs_a_bounded_prefix_of_the_error(client, session, google, caplog, branch):
+    """Anyone can start a sign-in and so reach this line; they must not choose its size (#1826)."""
+    if branch == "mcp":
+        _seed_flow(session)
+    else:
+        _seed_web_flow(session)
+    google(lambda request: httpx.Response(500))
+
+    with caplog.at_level(logging.INFO, logger="backend.auth"):
+        response = client.get(
+            "/api/auth/google/callback",
+            params={
+                "error": "x" * auth.MAX_CALLBACK_PARAM_LENGTH,
+                "state": "server-state" if branch == "mcp" else "web-state",
+            },
+            headers=_flow_cookie(),
+        )
+
+    assert response.status_code == 302
+    [record] = [record for record in caplog.records if "cancelled" in record.getMessage()]
+    assert len(record.getMessage()) < auth.MAX_LOGGED_CHARS + 100
+
+
+@pytest.mark.parametrize("param", ["code", "state", "error"])
+def test_the_callback_refuses_a_parameter_over_the_length_bound_and_keeps_the_flow(client, session, google, param):
+    _seed_web_flow(session)
+    seen = google(lambda request: httpx.Response(500))
+    params = {"code": "google-code", "state": "web-state", param: "x" * (auth.MAX_CALLBACK_PARAM_LENGTH + 1)}
+
+    response = client.get("/api/auth/google/callback", params=params)
+
+    assert response.status_code == 422
+    assert seen == []
+    assert cleanup_and_get(session, web_oauth_sessions, "web-state") is not None
+
+
 def test_a_google_refusal_is_502_naming_the_remedy(client, session, google):
     _seed_flow(session)
     google(lambda request: httpx.Response(400, json={"error": "redirect_uri_mismatch"}))
