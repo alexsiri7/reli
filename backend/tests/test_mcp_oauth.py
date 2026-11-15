@@ -718,6 +718,9 @@ def test_authorize_shows_a_consent_page_naming_the_client_and_remembers_the_requ
     assert "Claude" in body
     assert "<strong>client.example.test</strong>" in body
     assert CLIENT_REDIRECT in body
+    assert body.index("<strong>client.example.test</strong>") < body.index("Claude")
+    assert "self-declared" in body
+    assert "<strong>Claude</strong>" not in body
     server_state = _server_state(body)
     flow = cleanup_and_get(session, mcp_oauth_sessions, server_state)
     assert flow is not None
@@ -769,6 +772,13 @@ def test_the_consent_page_names_the_host_the_redirect_delivers_to_not_the_one_th
     assert delivered.hostname == "attacker.example"
     assert "<strong>attacker.example</strong>" in page
     assert "<strong>claude.ai</strong>" not in page
+
+
+def test_the_consent_page_says_when_a_client_gave_no_name():
+    page = mcp_oauth._consent_page("state", "", CLIENT_REDIRECT).body.decode()
+
+    assert "It gave no name." in page
+    assert "self-declared" not in page
 
 
 def test_authorize_refuses_a_redirect_uri_registered_before_the_check_tightened(client, session):
