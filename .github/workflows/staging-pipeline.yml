@@ -67,6 +67,9 @@ jobs:
             exit 1
           fi
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
       - name: Deploy staging image to Railway
         id: deploy
         env:
@@ -74,6 +77,8 @@ jobs:
           DEPLOY_SHA: ${{ steps.sha.outputs.sha }}
           SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_STAGING_ENVIRONMENT_ID }}
+          # Only an image CI signed on main is deployed (#1817).
+          SIGNER_IDENTITY: https://github.com/alexsiri7/reli/.github/workflows/ci.yml@refs/heads/main
         run: ./scripts/deploy-railway.sh "ghcr.io/alexsiri7/reli:${DEPLOY_SHA}"
 
       - name: Wait for staging health
@@ -141,12 +146,17 @@ jobs:
             exit 1
           fi
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
       - name: Deploy production image to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
           DEPLOY_IMAGE: ${{ needs.deploy-staging.outputs.deploy_image }}
           SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT_ID }}
+          # Only an image CI signed on main is deployed (#1817).
+          SIGNER_IDENTITY: https://github.com/alexsiri7/reli/.github/workflows/ci.yml@refs/heads/main
         run: ./scripts/deploy-railway.sh "$DEPLOY_IMAGE"
 
       - name: Wait for production health

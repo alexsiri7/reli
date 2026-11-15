@@ -5,6 +5,8 @@
 # Usage:
 #   RAILWAY_TOKEN=<project token for ENV_ID> SERVICE_ID=… ENV_ID=… ./scripts/deploy-railway.sh ghcr.io/<owner>/<name>:<tag>
 #   RAILWAY_TOKEN=<project token for ENV_ID> SERVICE_ID=… ENV_ID=… ./scripts/deploy-railway.sh ghcr.io/<owner>/<name>@sha256:<hex>
+# Optionally, to deploy only an image CI signed:
+#   SIGNER_IDENTITY=https://github.com/<owner>/<name>/.github/workflows/ci.yml@refs/heads/main
 #
 # #1660: Railway failed to pull an image whose index referenced a deleted manifest, the previous
 # container kept answering /healthz, and the pipeline went green. So the image is checked the way
@@ -13,6 +15,11 @@
 # #1711: a tag can be moved after it is checked, so Railway is given the digest of the manifest
 # that was checked, never the tag. Under Actions the pinned reference is written to $GITHUB_OUTPUT
 # as `image`, so production deploys exactly what staging did.
+#
+# #1817: a digest proves which bytes, not who built them. With SIGNER_IDENTITY set (the pipeline
+# sets it to CI's workflow on main), the pinned digest must carry a keyless cosign signature from
+# that identity or nothing is sent. Unset, nothing is verified, so a manual rollback to an image
+# built before signing still deploys.
 set -euo pipefail
 
 POLL_INTERVAL=${RAILWAY_POLL_INTERVAL:-10}
@@ -65,6 +72,19 @@ check_image() {
     echo "Image ${image} is pullable as ${pinned} (${count} manifests checked)"
 }
 
+check_signature() {
+    if ! command -v cosign > /dev/null; then
+        echo "::error::SIGNER_IDENTITY is set but cosign is not installed — refusing to deploy"
+        exit 1
+    fi
+    if ! cosign verify "$pinned" --certificate-identity "$SIGNER_IDENTITY" \
+        --certificate-oidc-issuer "https://token.actions.githubusercontent.com" > /dev/null; then
+        echo "::error::${pinned} carries no signature from ${SIGNER_IDENTITY} — refusing to deploy"
+        exit 1
+    fi
+    echo "Image ${pinned} is signed by ${SIGNER_IDENTITY}"
+}
+
 railway() {
     curl -sf -X POST "$RAILWAY_API" \
         -H "Project-Access-Token: $RAILWAY_TOKEN" \
@@ -77,6 +97,9 @@ fail_on_errors() {
 }
 
 check_image
+if [ -n "${SIGNER_IDENTITY:-}" ]; then
+    check_signature
+fi
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
     echo "image=$pinned" >> "$GITHUB_OUTPUT"
 fi
