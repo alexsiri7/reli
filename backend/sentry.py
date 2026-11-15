@@ -1,7 +1,6 @@
 """Sentry error monitoring integration.
 
-Initializes Sentry SDK when SENTRY_DSN is configured. Provides a helper
-to set user context (opaque user_id only) on the current Sentry scope.
+Initializes Sentry SDK when SENTRY_DSN is configured.
 """
 
 import logging
