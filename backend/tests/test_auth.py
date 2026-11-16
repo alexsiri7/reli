@@ -310,7 +310,7 @@ def test_a_cancellation_logs_a_bounded_prefix_of_the_error(client, session, goog
         _seed_web_flow(session)
     google(lambda request: httpx.Response(500))
 
-    with caplog.at_level(logging.INFO, logger="backend.auth"):
+    with caplog.at_level(logging.INFO, logger="backend"):
         response = client.get(
             "/api/auth/google/callback",
             params={
