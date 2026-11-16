@@ -438,6 +438,24 @@ def test_starting_a_web_sign_in_remembers_the_verifier_and_points_at_google(clie
     assert "Domain=" not in flow_cookie
 
 
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        ("GOOGLE_AUTH_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"),
+        ("RELI_BASE_URL", "http://reli.example.test"),
+    ],
+)
+def test_the_web_flow_cookie_is_secure_even_when_the_base_url_is_plain_http(client, monkeypatch, setting, value):
+    """The browser binding is no weaker on a deploy whose base URL is mis-set to http (#1533)."""
+    monkeypatch.setattr(settings, setting, value)
+
+    response = client.get("/api/auth/google")
+
+    assert response.status_code == 200
+    assert response.headers["set-cookie"].startswith(f"{auth.WEB_FLOW_COOKIE}=")
+    assert "Secure" in response.headers["set-cookie"]
+
+
 def test_starting_a_web_sign_in_refuses_up_front_naming_each_missing_setting(client, monkeypatch):
     monkeypatch.setattr(settings, "ALLOWED_EMAILS", "")
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "")
