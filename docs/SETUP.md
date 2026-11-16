@@ -150,6 +150,10 @@ environment — never hard-code one.
 4. **Build Docker image** — on `main`, pushed to GHCR as `:<sha>` and `:latest`, keeping the last
    three SHA tags
 
+Two more jobs, **Python dependency audit** and **Frontend dependency audit**, run `pip-audit` and
+`npm audit` against the committed lockfiles, on every push and pull request and weekly on `main`. A
+failing audit fails the run, so that commit is not deployed.
+
 A green run on `main` triggers `staging-pipeline.yml`: deploy to Railway staging, wait for
 `/healthz`, then deploy the same image to production. The secrets it needs are listed in
 [DEPLOYMENT_SECRETS.md](../DEPLOYMENT_SECRETS.md); rolling back is [ROLLBACK.md](ROLLBACK.md).

@@ -288,7 +288,7 @@ def test_a_cancellation_error_cannot_forge_a_second_log_line(client, session, go
     google(lambda request: httpx.Response(500))
     forged = "access_denied\nINFO backend.auth Web sign-in complete"
 
-    with caplog.at_level(logging.INFO, logger="backend.auth"):
+    with caplog.at_level(logging.INFO, logger="backend"):
         response = client.get(
             "/api/auth/google/callback",
             params={"error": forged, "state": "server-state" if branch == "mcp" else "web-state"},

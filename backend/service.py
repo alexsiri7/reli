@@ -14,6 +14,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -40,6 +41,7 @@ from .db_models import (
 
 __all__ = [
     "BACKFILL_PER_DAY",
+    "HEARTBEAT_MAX_DAYS_AHEAD",
     "MAX_CONTEXT_CHARS",
     "MAX_DESCRIPTION_CHARS",
     "MAX_MAPPING_BYTES",
@@ -51,7 +53,13 @@ __all__ = [
     "DuplicateRelationship",
     "EntityType",
     "FieldTooLarge",
+    "HeartbeatProtected",
+    "InvalidEdge",
+    "NotAPreference",
     "Operation",
+    "PreferenceNotRecordable",
+    "Refused",
+    "RejectionProtected",
     "StaleWrite",
     "ThingNotFound",
     "add_preference_evidence",
@@ -71,11 +79,18 @@ class ThingNotFound(LookupError):
     """Raised when a mutation names a Thing or relationship that does not exist."""
 
 
-class StaleWrite(ValueError):
+class Refused(ValueError):
+    """A write this module refuses, writing nothing. The message says why; the subclass says which refusal.
+
+    A ``ValueError`` so a boundary that maps every refusal the same way catches it as one.
+    """
+
+
+class StaleWrite(Refused):
     """Raised by :func:`update_thing` when ``expected_updated_at`` no longer matches the Thing."""
 
 
-class DuplicateRelationship(ValueError):
+class DuplicateRelationship(Refused):
     """Raised by :func:`relate` when the database refuses a second edge the pair already carries.
 
     Only ``EvidenceFor`` is constrained that way (see :func:`relate`). ``existing`` is the edge
@@ -91,6 +106,26 @@ class DuplicateRelationship(ValueError):
         if existing.relationship_type is RelationshipType.EVIDENCE_FOR:
             message += "; add_preference_evidence is the idempotent way to reinforce a preference"
         super().__init__(message)
+
+
+class HeartbeatProtected(Refused):
+    """Raised by :func:`update_thing` for a write that would hide a missed scheduled run (#1704, #1806)."""
+
+
+class InvalidEdge(Refused):
+    """Raised by :func:`relate` and :func:`record_preference` for an edge the read path would misread (#1696)."""
+
+
+class PreferenceNotRecordable(Refused):
+    """Raised by :func:`record_preference` for a preference with no scope or no evidence."""
+
+
+class NotAPreference(Refused):
+    """Raised when a preference function names a Thing that exists but is not tagged ``#Preference``."""
+
+
+class RejectionProtected(Refused):
+    """Raised by :func:`update_thing` for a tags write that would drop ``REJECTED_TAG`` (#1807)."""
 
 
 # --- Write bounds (#1478) ------------------------------------------------------
@@ -113,7 +148,7 @@ MAX_CONTEXT_CHARS = 2_000
 MAX_SCOPE_CHARS = 100
 
 
-class FieldTooLarge(ValueError):
+class FieldTooLarge(Refused):
     """Raised when a write exceeds one of the bounds above. The message names the field and the bound."""
 
 
@@ -133,6 +168,27 @@ def _check_mapping(name: str, value: Mapping[str, str] | None) -> None:
         )
 
 
+def _check_urls(urls: Mapping[str, str] | None) -> None:
+    """Refuse a ``urls`` value that is not an absolute http(s) URL (#1822).
+
+    The web view already renders only http(s) values as links; refusing the rest here means no other
+    reader of the graph has to repeat that check. ``urlsplit`` lowercases the scheme and strips the
+    leading whitespace a prefix match would miss.
+
+    On the scheme this agrees with the view's ``isLinkable``; on the rest of the shape it is
+    deliberately stricter. It also demands ``//`` and a host, so it refuses ``https:no-host``, which
+    the browser's parser would repair into ``https://no-host/`` and link. A value stored before this
+    check, or one ``urlsplit`` accepts and the browser cannot parse, is still shown as text there.
+    """
+    for name, url in (urls or {}).items():
+        try:
+            parts = urlsplit(url)
+        except ValueError:
+            parts = None
+        if parts is None or parts.scheme not in ("http", "https") or not parts.netloc:
+            raise ValueError(f"urls[{name!r}] must be an absolute http or https URL with a host, not {url!r}")
+
+
 def _check_thing_fields(
     *,
     title: str | None = None,
@@ -147,6 +203,7 @@ def _check_thing_fields(
     _check_text("description", description, MAX_DESCRIPTION_CHARS)
     _check_mapping("notes", notes)
     _check_mapping("urls", urls)
+    _check_urls(urls)
     if tags is not None:
         if len(tags) > MAX_TAGS:
             raise FieldTooLarge(f"{len(tags)} tags given; a Thing may carry at most {MAX_TAGS}")
@@ -340,7 +397,8 @@ def update_thing(
                 f"Thing {thing.id} changed at {thing.updated_at.isoformat()} after the read this write was "
                 "based on; read it again and reapply the change"
             )
-    _check_heartbeat_kept(thing, tags=tags, active=active)
+    _check_heartbeat_kept(thing, tags=tags, active=active, checkin_date=checkin_date)
+    _check_rejection_kept(thing, tags=tags)
     before = _snapshot(thing)
 
     updates = {
@@ -374,18 +432,42 @@ def update_thing(
     return thing
 
 
-def _check_heartbeat_kept(thing: ThingRecord, *, tags: list[str] | None, active: bool | None) -> None:
-    """Refuse archiving a heartbeat or dropping its tag (#1704).
+#: How far ahead a heartbeat's check-in date may be set: each run sets tomorrow, so anything later
+#: would keep a missed run from falling due (#1806).
+HEARTBEAT_MAX_DAYS_AHEAD = 2
+
+
+def _check_heartbeat_kept(
+    thing: ThingRecord, *, tags: list[str] | None, active: bool | None, checkin_date: date | None
+) -> None:
+    """Refuse archiving a heartbeat, dropping its tag (#1704) or dating it far ahead (#1806).
 
     A missed scheduled run is reported only as its ``SCHEDULED_TASK_TAG`` Thing left due, found by
-    that tag among active Things; either write would hide the miss instead of reporting it.
+    that tag among active Things; any of these writes would hide the miss instead of reporting it.
     """
     if SCHEDULED_TASK_TAG not in thing.tags:
         return
     if active is False:
-        raise ValueError(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and cannot be archived")
+        raise HeartbeatProtected(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and cannot be archived")
     if tags is not None and SCHEDULED_TASK_TAG not in tags:
-        raise ValueError(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and must keep that tag")
+        raise HeartbeatProtected(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and must keep that tag")
+    if checkin_date is not None:
+        latest = datetime.now(UTC).astimezone(OWNER_TIMEZONE).date() + timedelta(days=HEARTBEAT_MAX_DAYS_AHEAD)
+        if checkin_date > latest:
+            raise HeartbeatProtected(
+                f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and its checkin_date cannot be later "
+                f"than {latest.isoformat()}"
+            )
+
+
+def _check_rejection_kept(thing: ThingRecord, *, tags: list[str] | None) -> None:
+    """Refuse a tags write that drops ``REJECTED_TAG`` (#1807).
+
+    A rejection is the owner's correction and nothing undoes it: dropping the tag would put the
+    preference back in the model, journalled under whoever wrote the list.
+    """
+    if REJECTED_TAG in thing.tags and tags is not None and REJECTED_TAG not in tags:
+        raise RejectionProtected(f"Thing {thing.id} is a rejected preference and must keep {REJECTED_TAG}")
 
 
 #: How many backfilled Things fall due on one day. The morning conversation asks about three to
@@ -482,7 +564,7 @@ def _check_edge(
     forever.
     """
     if source_thing_id == target_thing_id:
-        raise ValueError(f"a {relationship_type.value} edge cannot run from Thing {source_thing_id} to itself")
+        raise InvalidEdge(f"a {relationship_type.value} edge cannot run from Thing {source_thing_id} to itself")
     if relationship_type is RelationshipType.CHILD_OF:
         session.execute(_LOCK_CHILD_OF_WRITES)
         closes_cycle = session.execute(
@@ -490,7 +572,7 @@ def _check_edge(
             {"start": target_thing_id, "goal": source_thing_id, "child_of": RelationshipType.CHILD_OF.value},
         ).scalar_one()
         if closes_cycle:
-            raise ValueError(
+            raise InvalidEdge(
                 f"Thing {target_thing_id} is already a ChildOf ancestor of {source_thing_id}; "
                 "the edge would close a cycle"
             )
@@ -504,7 +586,7 @@ def _check_edge(
 def _check_evidence_source(source: ThingRecord) -> None:
     internal = [tag for tag in source.tags if tag in _NOT_EVIDENCE_TAGS]
     if internal:
-        raise ValueError(f"Thing {source.id} is tagged {', '.join(internal)} and cannot stand as evidence")
+        raise InvalidEdge(f"Thing {source.id} is tagged {', '.join(internal)} and cannot stand as evidence")
 
 
 def _insert_relationship(
@@ -561,7 +643,7 @@ def relate(
 
     Raises ``ValueError`` for a type outside the five, before any statement is issued, so callers
     that resolve the type from outside the process get the offending value back rather than a
-    constraint violation. Also raises ``ValueError``, writing nothing, for an edge from a Thing to
+    constraint violation. Raises :class:`InvalidEdge`, writing nothing, for an edge from a Thing to
     itself, a ``ChildOf`` edge that would close a cycle, and an ``EvidenceFor`` edge from a Thing
     carrying one of Reli's own tags other than ``#Observation`` (#1696).
 
@@ -730,14 +812,14 @@ def record_preference(
     """
     scope = scope.strip()
     if not scope:
-        raise ValueError("a preference must declare the scope it applies to")
+        raise PreferenceNotRecordable("a preference must declare the scope it applies to")
     # Checked before the anchor is written, so a refused preference leaves nothing behind.
     _check_text("scope", scope, MAX_SCOPE_CHARS)
     _check_thing_fields(title=title)
 
     wanted = list(dict.fromkeys(evidence_ids))
     if not wanted:
-        raise ValueError("a preference with no evidence is not recordable")
+        raise PreferenceNotRecordable("a preference with no evidence is not recordable")
     for evidence_id in wanted:
         _check_evidence_source(_require_thing(session, evidence_id))
 
@@ -775,7 +857,7 @@ def _require_preference(session: Session, preference_id: uuid.UUID, *, lock: boo
     """A Thing that is not a preference exists, so ``ThingNotFound`` would be a lie."""
     preference = _require_thing(session, preference_id, lock=lock)
     if PREFERENCE_TAG not in preference.tags:
-        raise ValueError(f"Thing {preference_id} is not tagged {PREFERENCE_TAG}")
+        raise NotAPreference(f"Thing {preference_id} is not tagged {PREFERENCE_TAG}")
     return preference
 
 

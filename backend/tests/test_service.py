@@ -3,7 +3,7 @@
 import threading
 import time
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -293,11 +293,20 @@ def test_concurrent_child_of_edges_cannot_close_a_cycle_between_them(session, he
     racer = threading.Thread(target=close_the_cycle)
     racer.start()
     deadline = time.monotonic() + 5
-    while not _waiting_on_an_advisory_lock(session) and racer.is_alive() and time.monotonic() < deadline:
+    waited = False
+    while racer.is_alive() and time.monotonic() < deadline:
+        if _waiting_on_an_advisory_lock(session):
+            waited = True
+            break
         time.sleep(0.01)
     session.commit()
-    racer.join()
+    racer.join(timeout=10)
 
+    assert waited, (
+        "the racing transaction never blocked on the advisory lock — the race was not set up, "
+        "so the result says nothing about the cycle check"
+    )
+    assert not racer.is_alive()
     assert len(outcome) == 1 and "cycle" in str(outcome[0])
     edges = session.execute(text("SELECT count(*) FROM relationships WHERE relationship_type = 'ChildOf'")).scalar_one()
     assert edges == len(held)
@@ -390,7 +399,7 @@ def test_a_value_at_every_bound_is_accepted(session):
         description="d" * service.MAX_DESCRIPTION_CHARS,
         notes={"k": "n" * padding},
         tags=[f"#t{i}" for i in range(service.MAX_TAGS - 1)],
-        urls={"k": "u" * padding},
+        urls={"k": "https://e.test/" + "u" * (padding - len("https://e.test/"))},
     )
 
     assert len(thing.title) == service.MAX_TITLE_CHARS
@@ -401,6 +410,46 @@ def test_mapping_size_counts_bytes_not_characters(session):
     """A note of multi-byte characters is measured by what it costs to store, not by its length."""
     with pytest.raises(FieldTooLarge, match="bytes"):
         create_thing(session, actor=Actor.USER, title="ok", notes={"k": "é" * (service.MAX_MAPPING_BYTES // 2)})
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "javascript:alert(1)",
+        " JavaScript:alert(1)",
+        "data:text/html,<script>x</script>",
+        "/relative",
+        # Stricter than the view's isLinkable, whose parser repairs these into https://no-host/ and
+        # http://example.test/: the service demands the // and the host as written.
+        "https:no-host",
+        "http:/example.test",
+    ],
+)
+def test_a_url_that_is_not_absolute_http_is_refused_on_create_and_update(session, url):
+    before = _journal_count(session)
+    with pytest.raises(ValueError, match="http or https"):
+        create_thing(session, actor=Actor.USER, title="ok", urls={"link": url})
+    assert _journal_count(session) == before
+
+    thing = create_thing(session, actor=Actor.USER, title="ok", urls={"home": "https://example.test"})
+    before = _journal_count(session)
+    with pytest.raises(ValueError, match="http or https"):
+        update_thing(session, actor=Actor.USER, thing_id=thing.id, urls={"home": "https://example.test", "link": url})
+
+    session.refresh(thing)
+    assert thing.urls == {"home": "https://example.test"}
+    assert _journal_count(session) == before
+
+
+@pytest.mark.parametrize("url", ["HTTP://example.test", " https://example.test"])
+def test_a_url_the_parser_reads_as_http_is_accepted_as_given(session, url):
+    """The scheme is decided as a URL parser reads it, so case and a pasted leading space pass."""
+    thing = create_thing(session, actor=Actor.USER, title="ok", urls={"link": url})
+    assert thing.urls == {"link": url}
+
+    update_thing(session, actor=Actor.USER, thing_id=thing.id, urls={"link": url, "other": url})
+    session.refresh(thing)
+    assert thing.urls == {"link": url, "other": url}
 
 
 def test_an_oversized_update_is_refused_and_the_thing_is_untouched(session):
@@ -428,10 +477,15 @@ def test_an_update_checks_only_the_fields_it_passes(session):
 
 @pytest.mark.parametrize(
     ("change", "refusal"),
-    [({"active": False}, "archived"), ({"tags": ["#Other"]}, "keep that tag"), ({"tags": []}, "keep that tag")],
+    [
+        ({"active": False}, "archived"),
+        ({"tags": ["#Other"]}, "keep that tag"),
+        ({"tags": []}, "keep that tag"),
+        ({"checkin_date": date.today() + timedelta(days=30)}, "cannot be later"),
+    ],
 )
-def test_a_heartbeat_cannot_be_archived_or_lose_its_tag(session, change, refusal):
-    """#1704: either write would hide a missed scheduled run instead of reporting it."""
+def test_a_heartbeat_cannot_be_archived_lose_its_tag_or_be_dated_far_ahead(session, change, refusal):
+    """#1704, #1806: each write would hide a missed scheduled run instead of reporting it."""
     heartbeat = create_thing(session, actor=Actor.CLAUDE_SCHEDULED, title="Resolution pass", tags=[SCHEDULED_TASK_TAG])
     before = _journal_count(session)
 
@@ -441,6 +495,7 @@ def test_a_heartbeat_cannot_be_archived_or_lose_its_tag(session, change, refusal
     session.refresh(heartbeat)
     assert heartbeat.active is True
     assert heartbeat.tags == [SCHEDULED_TASK_TAG]
+    assert heartbeat.checkin_date is None
     assert _journal_count(session) == before
 
 
@@ -459,6 +514,99 @@ def test_a_heartbeat_still_takes_its_routine_writes(session):
 
     assert updated.checkin_date == tomorrow
     assert updated.tags == [SCHEDULED_TASK_TAG, "#Kept"]
+
+
+def test_a_heartbeat_may_be_dated_up_to_the_bound_and_no_further(session, monkeypatch):
+    """#1806: the bound is counted in owner-local days, so the day after tomorrow is the last allowed."""
+    heartbeat = create_thing(
+        session, actor=Actor.CLAUDE_SCHEDULED, title="Morning conversation", tags=[SCHEDULED_TASK_TAG]
+    )
+
+    class _LateEveningUtc(datetime):
+        """23:30 UTC on 15 July, already 16 July in London: the UTC day and the owner's day differ."""
+
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 7, 15, 23, 30, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(service, "datetime", _LateEveningUtc)
+    latest = date(2026, 7, 16) + timedelta(days=service.HEARTBEAT_MAX_DAYS_AHEAD)
+
+    updated = update_thing(session, actor=Actor.CLAUDE_SCHEDULED, thing_id=heartbeat.id, checkin_date=latest)
+    assert updated.checkin_date == latest
+
+    with pytest.raises(ValueError, match="cannot be later"):
+        update_thing(
+            session, actor=Actor.CLAUDE_SCHEDULED, thing_id=heartbeat.id, checkin_date=latest + timedelta(days=1)
+        )
+
+
+def test_a_heartbeat_cannot_be_dated_three_days_ahead(session, monkeypatch):
+    """#1806: pins the issue's own bound (2 days) with a literal day count rather than one derived
+    from HEARTBEAT_MAX_DAYS_AHEAD, so a widened constant fails this test instead of shipping
+    unnoticed. The clock is fixed, as in the boundary test above, so the owner-local day is exact
+    and the assertion can't flake near a UTC/London day boundary."""
+    heartbeat = create_thing(session, actor=Actor.CLAUDE_SCHEDULED, title="Learning pass", tags=[SCHEDULED_TASK_TAG])
+
+    class _FixedUtc(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 7, 15, 12, 0, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(service, "datetime", _FixedUtc)
+
+    with pytest.raises(ValueError, match="cannot be later"):
+        update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=heartbeat.id, checkin_date=date(2026, 7, 18))
+
+
+def test_an_ordinary_thing_may_still_be_dated_far_ahead(session):
+    """#1806: the bound guards heartbeats only, not every Thing's checkin_date."""
+    thing = create_thing(session, actor=Actor.USER, title="Renew passport", tags=["#Project"])
+    later = date.today() + timedelta(days=365)
+
+    updated = update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=thing.id, checkin_date=later)
+
+    assert updated.checkin_date == later
+
+
+@pytest.mark.parametrize("tags", [[PREFERENCE_TAG], []])
+@pytest.mark.parametrize("actor", [Actor.CLAUDE_INTERACTIVE, Actor.CLAUDE_SCHEDULED, Actor.USER])
+def test_a_rejection_cannot_be_dropped_by_a_tags_write(session, tags, actor):
+    """#1807: dropping the tag would put the rejected preference back in the model."""
+    preference = create_thing(
+        session, actor=Actor.CLAUDE_SCHEDULED, title="Avoids Friday meetings", tags=[PREFERENCE_TAG, REJECTED_TAG]
+    )
+    before = _journal_count(session)
+
+    with pytest.raises(ValueError, match="must keep"):
+        update_thing(session, actor=actor, thing_id=preference.id, tags=tags)
+
+    session.refresh(preference)
+    assert preference.tags == [PREFERENCE_TAG, REJECTED_TAG]
+    assert _journal_count(session) == before
+
+
+def test_a_rejected_preference_still_takes_tag_writes_that_keep_it(session):
+    preference = create_thing(
+        session, actor=Actor.CLAUDE_SCHEDULED, title="Avoids Friday meetings", tags=[PREFERENCE_TAG, REJECTED_TAG]
+    )
+
+    updated = update_thing(
+        session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=preference.id, tags=[PREFERENCE_TAG, REJECTED_TAG, "#Kept"]
+    )
+
+    assert updated.tags == [PREFERENCE_TAG, REJECTED_TAG, "#Kept"]
+
+
+def test_a_rejected_preference_still_takes_writes_that_leave_its_tags_alone(session):
+    preference = create_thing(
+        session, actor=Actor.CLAUDE_SCHEDULED, title="Avoids Friday meetings", tags=[PREFERENCE_TAG, REJECTED_TAG]
+    )
+
+    updated = update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=preference.id, priority=0.5)
+
+    assert updated.priority == 0.5
+    assert updated.tags == [PREFERENCE_TAG, REJECTED_TAG]
 
 
 def test_a_concurrent_tag_write_survives_a_rejection(session):
@@ -511,10 +659,17 @@ def _race_against_open_transaction(session, write) -> None:
     racer = threading.Thread(target=write)
     racer.start()
     deadline = time.monotonic() + 5
-    while not _waiting_on_a_lock(session) and racer.is_alive() and time.monotonic() < deadline:
+    waited = False
+    while racer.is_alive() and time.monotonic() < deadline:
+        if _waiting_on_a_lock(session):
+            waited = True
+            break
         time.sleep(0.01)
     session.commit()
-    racer.join()
+    racer.join(timeout=10)
+
+    assert waited, "the write never blocked on the open transaction's lock — the race was not set up"
+    assert not racer.is_alive(), "the racing write did not finish after the commit"
 
 
 def _waiting_on_a_lock(session):
