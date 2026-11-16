@@ -1224,6 +1224,21 @@ def test_mcp_endpoint_refuses_a_jwt_whose_refresh_family_was_deleted(client, ses
     assert "revoked" in response.json()["detail"]
 
 
+def test_mcp_endpoint_refuses_a_jwt_whose_refresh_family_is_past_its_deadline(client, session, mcp_token):
+    family_id = auth.decode_jwt(mcp_token, auth.MCP_AUDIENCE)["fid"]
+    assert client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token)).status_code == 200
+    session.execute(
+        text("UPDATE mcp_refresh_tokens SET expires_at = now() - interval '1 second' WHERE family_id = :f"),
+        {"f": family_id},
+    )
+    session.commit()
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
+
+    assert response.status_code == 401
+    assert "revoked" in response.json()["detail"]
+
+
 def test_mcp_endpoint_refuses_a_jwt_that_names_no_refresh_family(client, session, secret_key):
     token = auth.create_jwt("1234567890", "owner@example.com", audience="mcp")
 

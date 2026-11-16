@@ -2,11 +2,13 @@
 
 import asyncio
 import logging
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from backend import auth, rate_limit
 from backend.config import settings
+from backend.oauth_state import cleanup_and_store, mcp_refresh_tokens
 
 SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
 BASE_URL = "https://reli.example.test"
@@ -138,12 +140,28 @@ def test_a_revoked_cookie_does_not_spend_the_owners_live_bucket(client, session,
     assert statuses == [200, 200]
 
 
-def test_a_token_for_an_account_off_the_allowlist_spends_the_address_bucket(monkeypatch):
+def test_a_token_for_an_account_off_the_allowlist_spends_the_address_bucket(session, monkeypatch):
     monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
-    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com,former@example.com")
     monkeypatch.setattr(settings, "RELI_BASE_URL", BASE_URL)
-    token = auth.create_jwt("1234567890", "former@example.com", auth.MCP_AUDIENCE)
+    cleanup_and_store(
+        session,
+        mcp_refresh_tokens,
+        "a-refresh-token",
+        {
+            "subject": "1234567890",
+            "email": "former@example.com",
+            "client_id": "connector",
+            "scope": "",
+            "family_id": "live",
+            "expires_at": datetime.now(UTC) + timedelta(days=30),
+        },
+    )
+    token = auth.create_jwt("1234567890", "former@example.com", auth.MCP_AUDIENCE, family_id="live")
     scope = {"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())]}
+    assert asyncio.run(rate_limit._user_subject(scope)) == "1234567890"
+
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
 
     assert asyncio.run(rate_limit._user_subject(scope)) is None
 
