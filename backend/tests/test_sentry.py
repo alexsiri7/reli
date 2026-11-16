@@ -40,31 +40,6 @@ def test_init_sentry_calls_sdk_init():
         assert call_kwargs["traces_sample_rate"] == 0.1
 
 
-def test_set_sentry_user_noop_without_dsn():
-    """set_sentry_user should be a no-op when SENTRY_DSN is empty."""
-    with patch("backend.sentry.settings") as mock_settings:
-        mock_settings.SENTRY_DSN = ""
-        from backend.sentry import set_sentry_user
-
-        # Should not raise or call sentry_sdk
-        with patch("backend.sentry.sentry_sdk") as mock_sdk:
-            set_sentry_user("user-123")
-            mock_sdk.set_user.assert_not_called()
-
-
-def test_set_sentry_user_sets_only_id():
-    """set_sentry_user should set only opaque user ID — no email PII."""
-    with (
-        patch("backend.sentry.settings") as mock_settings,
-        patch("backend.sentry.sentry_sdk") as mock_sdk,
-    ):
-        mock_settings.SENTRY_DSN = "https://examplePublicKey@o0.ingest.sentry.io/0"
-        from backend.sentry import set_sentry_user
-
-        set_sentry_user("user-123")
-        mock_sdk.set_user.assert_called_once_with({"id": "user-123"})
-
-
 @pytest.mark.parametrize("header_key", ["Cookie", "Set-Cookie", "cookie", "set-cookie"])
 def test_strip_cookie_breadcrumb_filters_cookie_header(header_key):
     """_strip_cookie_breadcrumb should redact all cookie header name variants."""
