@@ -8,6 +8,7 @@ because auth and the mount are properties of the ASGI stack and not of the funct
 
 import asyncio
 import json
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import get_args
@@ -17,9 +18,16 @@ import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import text
 
-from backend import auth, prompts, service
-from backend.config import settings
-from backend.db_models import NEW_TAG, SCHEDULED_TASK_TAG, Actor, RelationshipType
+from backend import auth, mcp_transport, prompts, service
+from backend.config import MIN_SECRET_KEY_BYTES, settings
+from backend.db_models import (
+    NEW_TAG,
+    PREFERENCE_TAG,
+    REJECTED_TAG,
+    SCHEDULED_TASK_TAG,
+    Actor,
+    RelationshipType,
+)
 from backend.mcp_server import (
     MAX_JOURNAL_ID,
     MAX_STALE_DAYS,
@@ -292,6 +300,22 @@ def test_archive_thing_refuses_a_heartbeat(tools):
     assert get_thing(uuid.UUID(heartbeat["id"]))["thing"]["active"] is True
 
 
+def test_update_thing_refuses_dropping_a_rejection(tools):
+    preference = create_thing(
+        actor="claude_scheduled", title="Avoids Friday meetings", tags=[PREFERENCE_TAG, REJECTED_TAG]
+    )
+
+    with pytest.raises(ToolError, match="must keep"):
+        asyncio.run(
+            reli_mcp.call_tool(
+                "update_thing",
+                {"actor": "claude_interactive", "thing_id": preference["id"], "tags": [PREFERENCE_TAG]},
+            )
+        )
+
+    assert REJECTED_TAG in get_thing(uuid.UUID(preference["id"]))["thing"]["tags"]
+
+
 def test_relate_and_unrelate_journal_the_edge(tools):
     source = create_thing(actor="claude_interactive", title="parent")
     target = create_thing(actor="claude_interactive", title="child")
@@ -460,6 +484,7 @@ def test_the_bounds_a_writing_tool_states_are_the_bounds_enforced(tool):
         f"at most {service.MAX_TAGS} tags of up to {service.MAX_TAG_CHARS} characters",
     ):
         assert stated in doc, stated
+    assert f"at most {service.HEARTBEAT_MAX_DAYS_AHEAD} days ahead" in " ".join((update_thing.__doc__ or "").split())
     assert f"up to {service.MAX_CONTEXT_CHARS} characters" in (relate.__doc__ or "")
     assert f"Up to {service.MAX_SCOPE_CHARS} characters" in (record_preference.__doc__ or "")
 
@@ -955,6 +980,58 @@ def mcp_token(secret_key):
 
 def _bearer(token):
     return {**_MCP_HEADERS, "Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.parametrize("secret_key_value", ["", "x" * (MIN_SECRET_KEY_BYTES - 1)])
+def test_an_unset_secret_key_is_warned_about_at_startup(monkeypatch, caplog, secret_key_value):
+    """An empty or too-short SECRET_KEY closes /mcp (#1534); the operator's only diagnostic is this
+    warning, so it must name what is wrong and not also claim the sign-in settings are missing."""
+    monkeypatch.setattr(settings, "SECRET_KEY", secret_key_value)
+
+    with caplog.at_level(logging.WARNING, logger="backend.mcp_transport"):
+        mcp_transport.create_mcp_asgi_app()
+
+    warnings = [record for record in caplog.records if record.name == "backend.mcp_transport"]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "SECRET_KEY" in message
+    assert "401 to every request" in message
+    assert "OAuth sign-in cannot complete" not in message
+
+
+def test_missing_sign_in_settings_beside_a_valid_secret_key_are_warned_about_at_startup(monkeypatch, caplog):
+    """A SECRET_KEY that can sign tokens but missing Google sign-in settings is a different failure
+    mode (#1450) and must be named as one, not folded into the SECRET_KEY warning above."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "k" * MIN_SECRET_KEY_BYTES)
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "a-client-secret")
+    monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", "https://reli.example.test/api/auth/google/callback")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "")
+
+    with caplog.at_level(logging.WARNING, logger="backend.mcp_transport"):
+        mcp_transport.create_mcp_asgi_app()
+
+    warnings = [record for record in caplog.records if record.name == "backend.mcp_transport"]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "OAuth sign-in cannot complete" in message
+    assert "GOOGLE_CLIENT_ID" in message
+    assert "ALLOWED_EMAILS" in message
+    assert "shorter than" not in message
+
+
+def test_a_fully_configured_sign_in_logs_no_warning_at_mcp_startup(monkeypatch, caplog):
+    """The warnings above are only trustworthy if they stay quiet once every setting is present."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "k" * MIN_SECRET_KEY_BYTES)
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "a-client-id")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "a-client-secret")
+    monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", "https://reli.example.test/api/auth/google/callback")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+
+    with caplog.at_level(logging.WARNING, logger="backend.mcp_transport"):
+        mcp_transport.create_mcp_asgi_app()
+
+    assert [record for record in caplog.records if record.name == "backend.mcp_transport"] == []
 
 
 def test_mcp_endpoint_refuses_an_unauthenticated_request(client, secret_key):

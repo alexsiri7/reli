@@ -7,14 +7,27 @@ on:
 
 jobs:
   check-token:
-    name: Validate Railway API token
+    name: Validate Railway ${{ matrix.environment }} token
     runs-on: ubuntu-latest
+    # Each Railway token is a project token scoped to one Railway environment and
+    # stored as that GitHub environment's secret, usable only from main (SEC-003).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: staging
+            env_id_secret: RAILWAY_STAGING_ENVIRONMENT_ID
+          - environment: production
+            env_id_secret: RAILWAY_PRODUCTION_ENVIRONMENT_ID
+    environment: ${{ matrix.environment }}
     permissions:
       issues: write
     steps:
-      - name: Check RAILWAY_TOKEN validity
+      - name: Check RAILWAY_PROJECT_TOKEN validity
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
+          ENV_ID: ${{ secrets[matrix.env_id_secret] }}
+          TOKEN_ENV: ${{ matrix.environment }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           create_issue_if_absent() {
@@ -35,20 +48,20 @@ jobs:
           }
 
           if [ -z "$RAILWAY_TOKEN" ]; then
-            create_issue_if_absent "Railway token missing" \
-              "Railway token missing — RAILWAY_TOKEN secret is not set" \
-              "The RAILWAY_TOKEN GitHub secret is missing. See docs/RAILWAY_TOKEN_ROTATION_742.md for rotation instructions."
+            create_issue_if_absent "Railway $TOKEN_ENV token missing" \
+              "Railway $TOKEN_ENV token missing — RAILWAY_PROJECT_TOKEN is not set in the $TOKEN_ENV environment" \
+              "The $TOKEN_ENV GitHub environment has no RAILWAY_PROJECT_TOKEN secret. See DEPLOYMENT_SECRETS.md for how to create and store it."
             exit 1
           fi
           RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Project-Access-Token: $RAILWAY_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"query":"{me{id}}"}')
-          if ! echo "$RESP" | jq -e '.data.me.id' > /dev/null 2>&1; then
-            MSG=$(echo "$RESP" | jq -r '.errors[0].message // "could not reach Railway API or token rejected"')
-            create_issue_if_absent "Railway token expired" \
-              "Railway token expired — rotate RAILWAY_TOKEN before next deploy" \
-              "Daily token health check failed: \`$MSG\`. See docs/RAILWAY_TOKEN_ROTATION_742.md for rotation instructions."
+            -d '{"query":"{projectToken{environmentId}}"}')
+          if ! echo "$RESP" | jq -e --arg env "$ENV_ID" '.data.projectToken.environmentId == $env' > /dev/null 2>&1; then
+            MSG=$(echo "$RESP" | jq -r '.errors[0].message // "token rejected, unreachable API, or token scoped to another environment"')
+            create_issue_if_absent "Railway $TOKEN_ENV token expired" \
+              "Railway $TOKEN_ENV token expired — rotate RAILWAY_PROJECT_TOKEN before next deploy" \
+              "Daily token health check failed for $TOKEN_ENV: \`$MSG\`. See DEPLOYMENT_SECRETS.md for rotation instructions."
             exit 1
           fi
-          echo "RAILWAY_TOKEN is valid."
+          echo "RAILWAY_PROJECT_TOKEN for $TOKEN_ENV is valid."

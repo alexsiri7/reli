@@ -246,6 +246,7 @@ def update_thing(
 
     Archiving is not done here — use archive_thing, so there is one journalled way to retire a
     Thing. A tags write that drops #ScheduledTask from a heartbeat is refused.
+    So is one that drops #Rejected from a rejected preference.
 
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.
@@ -255,7 +256,8 @@ def update_thing(
         notes: Replaces the whole notes mapping.
         tags: Replaces the whole tag list.
         urls: Replaces the whole urls mapping.
-        checkin_date: Replaces the check-in date.
+        checkin_date: Replaces the check-in date. A #ScheduledTask heartbeat's check-in date may
+            be at most 2 days ahead.
         priority: Replaces the priority.
         expected_updated_at: The updated_at you read. If the Thing has changed since, nothing is
             written; read it again.
