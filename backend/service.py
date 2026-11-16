@@ -14,6 +14,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -134,6 +135,27 @@ def _check_mapping(name: str, value: Mapping[str, str] | None) -> None:
         )
 
 
+def _check_urls(urls: Mapping[str, str] | None) -> None:
+    """Refuse a ``urls`` value that is not an absolute http(s) URL (#1822).
+
+    The web view already renders only http(s) values as links; refusing the rest here means no other
+    reader of the graph has to repeat that check. ``urlsplit`` lowercases the scheme and strips the
+    leading whitespace a prefix match would miss.
+
+    On the scheme this agrees with the view's ``isLinkable``; on the rest of the shape it is
+    deliberately stricter. It also demands ``//`` and a host, so it refuses ``https:no-host``, which
+    the browser's parser would repair into ``https://no-host/`` and link. A value stored before this
+    check, or one ``urlsplit`` accepts and the browser cannot parse, is still shown as text there.
+    """
+    for name, url in (urls or {}).items():
+        try:
+            parts = urlsplit(url)
+        except ValueError:
+            parts = None
+        if parts is None or parts.scheme not in ("http", "https") or not parts.netloc:
+            raise ValueError(f"urls[{name!r}] must be an absolute http or https URL with a host, not {url!r}")
+
+
 def _check_thing_fields(
     *,
     title: str | None = None,
@@ -148,6 +170,7 @@ def _check_thing_fields(
     _check_text("description", description, MAX_DESCRIPTION_CHARS)
     _check_mapping("notes", notes)
     _check_mapping("urls", urls)
+    _check_urls(urls)
     if tags is not None:
         if len(tags) > MAX_TAGS:
             raise FieldTooLarge(f"{len(tags)} tags given; a Thing may carry at most {MAX_TAGS}")
