@@ -8,6 +8,10 @@ on:
   # A dispatched run tests and builds without publishing, so the daily build-drift check can
   # exercise main without deploying it (#1661).
   workflow_dispatch:
+  # The weekly run audits the pinned dependencies between pushes (#1815); it cannot deploy,
+  # because the staging pipeline follows only a push run.
+  schedule:
+    - cron: "0 6 * * 1" # Weekly on Monday at 06:00 UTC
 
 permissions:
   contents: read
@@ -134,6 +138,54 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Unit tests (system python3 + PyYAML, as the check uses)
         run: python3 -m unittest discover -s .github/unsafe-change
+
+  # A failing audit fails this run, which is what keeps the staging pipeline from deploying (#1815).
+  python-audit:
+    name: Python dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install pip-audit
+        run: uv pip install --system pip-audit
+
+      - name: Install backend dependencies
+        run: UV_SYSTEM_PYTHON=1 uv sync --locked
+
+      - name: Upgrade pip to patched version
+        run: uv pip install --system "pip>=26.1.2"
+
+      # Audits the installed environment (backend deps + pip-audit's own deps).
+      # Replaces `pip-audit -r` which forces a dry-run pip resolve; see #920.
+      - name: Run pip-audit
+        run: pip-audit
+
+  frontend-audit:
+    name: Frontend dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      # Audits the lockfile directly; no install needed.
+      - name: Run npm audit
+        working-directory: frontend
+        run: npm audit
 
   # Deploy moved to staging-pipeline.yml — CI success triggers staging deploy,
   # then production deploy (with rollback) after staging health check passes.
