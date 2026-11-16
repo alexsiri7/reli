@@ -41,6 +41,7 @@ from .thing_rules import (
     MAX_TAGS,
     MAX_TITLE_CHARS,
     FieldTooLarge,
+    Refused,
     backfill_defaults,
     capture_defaults,
     check_evidence_source,
@@ -89,13 +90,6 @@ __all__ = [
 
 class ThingNotFound(LookupError):
     """Raised when a mutation names a Thing or relationship that does not exist."""
-
-
-class Refused(ValueError):
-    """A write this module refuses, writing nothing. The message says why; the subclass says which refusal.
-
-    A ``ValueError`` so a boundary that maps every refusal the same way catches it as one.
-    """
 
 
 class StaleWrite(Refused):

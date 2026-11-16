@@ -45,7 +45,16 @@ MAX_CONTEXT_CHARS = 2_000
 MAX_SCOPE_CHARS = 100
 
 
-class FieldTooLarge(ValueError):
+class Refused(ValueError):
+    """A write this module refuses, writing nothing. The message says why; the subclass says which refusal.
+
+    A ``ValueError`` so a boundary that maps every refusal the same way catches it as one. Defined
+    here, not in :mod:`backend.service`, so a rule in this module can raise a subclass of it without
+    that module importing the session-touching one back.
+    """
+
+
+class FieldTooLarge(Refused):
     """Raised when a write exceeds one of the bounds above. The message names the field and the bound."""
 
 
