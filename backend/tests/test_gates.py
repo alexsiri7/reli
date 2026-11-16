@@ -264,6 +264,8 @@ def test_dependabot_moves_the_pinned_base_images():
     updates = yaml.safe_load(DEPENDABOT.read_text())["updates"]
     docker = [u for u in updates if u["package-ecosystem"] == "docker"]
     assert "/" in {u["directory"] for u in docker}
+    # A limit of 0 is Dependabot's switch for pausing an ecosystem's version updates outright.
+    assert all(u.get("open-pull-requests-limit") != 0 for u in docker)
     # A rule without update-types ignores every update to the images it names.
     blocking = [
         rule
