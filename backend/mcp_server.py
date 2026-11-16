@@ -246,6 +246,7 @@ def update_thing(
 
     Archiving is not done here — use archive_thing, so there is one journalled way to retire a
     Thing. A tags write that drops #ScheduledTask from a heartbeat is refused.
+    So is one that drops #Rejected from a rejected preference.
 
     Args:
         actor: 'claude_interactive' or 'claude_scheduled'. Required.

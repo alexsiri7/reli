@@ -2,9 +2,10 @@
 
 import logging
 import os
-import socket
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from urllib.parse import urlsplit
 
@@ -198,35 +199,41 @@ def test_the_access_log_carries_no_query_string():
     """#1713: Google delivers ``code`` and ``state`` on the callback's URL, and uvicorn's access log
     writes the request target of every request. Served by uvicorn's CLI as the image serves it, so the line under
     test is the one uvicorn really writes after its own logging setup. The lifespan is off so no
-    database is needed; the filter does not look at which route answered."""
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+    database is needed; the filter does not look at which route answered.
+
+    Served over a Unix domain socket rather than a TCP port: a port number picked by binding to 0
+    and then released is free for anything else to take before uvicorn starts on it.
+    """
+    sock_dir = tempfile.mkdtemp(dir="/tmp")
+    sock = os.path.join(sock_dir, "u.sock")
     server = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "backend.main:app", "--port", str(port), "--lifespan", "off"],
+        [sys.executable, "-m", "uvicorn", "backend.main:app", "--uds", sock, "--lifespan", "off"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
     )
     try:
-        base = f"http://127.0.0.1:{port}"
-        for _ in range(300):
-            if server.poll() is not None:
-                break
-            try:
-                httpx.get(f"{base}/healthz")
-                break
-            except httpx.TransportError:
-                time.sleep(0.1)
-        started = server.poll() is None
-        response = (
-            httpx.get(f"{base}/healthz", params={"code": "c0de-secret", "state": "st4te-secret"}) if started else None
-        )
+        with httpx.Client(transport=httpx.HTTPTransport(uds=sock), base_url="http://reli") as http_client:
+            for _ in range(300):
+                if server.poll() is not None:
+                    break
+                try:
+                    http_client.get("/healthz")
+                    break
+                except httpx.TransportError:
+                    time.sleep(0.1)
+            started = server.poll() is None
+            response = (
+                http_client.get("/healthz", params={"code": "c0de-secret", "state": "st4te-secret"})
+                if started
+                else None
+            )
     finally:
         server.terminate()
         log, _ = server.communicate(timeout=30)
+        shutil.rmtree(sock_dir, ignore_errors=True)
 
-    assert started, f"uvicorn exited before answering /healthz on port {port}:\n{log}"
+    assert started, f"uvicorn exited before answering /healthz on socket {sock}:\n{log}"
     assert response is not None and response.status_code == 200
     assert log.count('"GET /healthz HTTP/1.1" 200') == 2
     assert "c0de-secret" not in log

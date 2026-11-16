@@ -293,11 +293,20 @@ def test_concurrent_child_of_edges_cannot_close_a_cycle_between_them(session, he
     racer = threading.Thread(target=close_the_cycle)
     racer.start()
     deadline = time.monotonic() + 5
-    while not _waiting_on_an_advisory_lock(session) and racer.is_alive() and time.monotonic() < deadline:
+    waited = False
+    while racer.is_alive() and time.monotonic() < deadline:
+        if _waiting_on_an_advisory_lock(session):
+            waited = True
+            break
         time.sleep(0.01)
     session.commit()
-    racer.join()
+    racer.join(timeout=10)
 
+    assert waited, (
+        "the racing transaction never blocked on the advisory lock — the race was not set up, "
+        "so the result says nothing about the cycle check"
+    )
+    assert not racer.is_alive()
     assert len(outcome) == 1 and "cycle" in str(outcome[0])
     edges = session.execute(text("SELECT count(*) FROM relationships WHERE relationship_type = 'ChildOf'")).scalar_one()
     assert edges == len(held)
@@ -502,6 +511,46 @@ def test_an_ordinary_thing_may_still_be_dated_far_ahead(session):
     assert updated.checkin_date == later
 
 
+@pytest.mark.parametrize("tags", [[PREFERENCE_TAG], []])
+@pytest.mark.parametrize("actor", [Actor.CLAUDE_INTERACTIVE, Actor.CLAUDE_SCHEDULED, Actor.USER])
+def test_a_rejection_cannot_be_dropped_by_a_tags_write(session, tags, actor):
+    """#1807: dropping the tag would put the rejected preference back in the model."""
+    preference = create_thing(
+        session, actor=Actor.CLAUDE_SCHEDULED, title="Avoids Friday meetings", tags=[PREFERENCE_TAG, REJECTED_TAG]
+    )
+    before = _journal_count(session)
+
+    with pytest.raises(ValueError, match="must keep"):
+        update_thing(session, actor=actor, thing_id=preference.id, tags=tags)
+
+    session.refresh(preference)
+    assert preference.tags == [PREFERENCE_TAG, REJECTED_TAG]
+    assert _journal_count(session) == before
+
+
+def test_a_rejected_preference_still_takes_tag_writes_that_keep_it(session):
+    preference = create_thing(
+        session, actor=Actor.CLAUDE_SCHEDULED, title="Avoids Friday meetings", tags=[PREFERENCE_TAG, REJECTED_TAG]
+    )
+
+    updated = update_thing(
+        session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=preference.id, tags=[PREFERENCE_TAG, REJECTED_TAG, "#Kept"]
+    )
+
+    assert updated.tags == [PREFERENCE_TAG, REJECTED_TAG, "#Kept"]
+
+
+def test_a_rejected_preference_still_takes_writes_that_leave_its_tags_alone(session):
+    preference = create_thing(
+        session, actor=Actor.CLAUDE_SCHEDULED, title="Avoids Friday meetings", tags=[PREFERENCE_TAG, REJECTED_TAG]
+    )
+
+    updated = update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=preference.id, priority=0.5)
+
+    assert updated.priority == 0.5
+    assert updated.tags == [PREFERENCE_TAG, REJECTED_TAG]
+
+
 def test_a_concurrent_tag_write_survives_a_rejection(session):
     """#1705: the rejection extends the tags as they stand when it writes, not as it first read them."""
     from backend.db_engine import get_engine
@@ -552,10 +601,17 @@ def _race_against_open_transaction(session, write) -> None:
     racer = threading.Thread(target=write)
     racer.start()
     deadline = time.monotonic() + 5
-    while not _waiting_on_a_lock(session) and racer.is_alive() and time.monotonic() < deadline:
+    waited = False
+    while racer.is_alive() and time.monotonic() < deadline:
+        if _waiting_on_a_lock(session):
+            waited = True
+            break
         time.sleep(0.01)
     session.commit()
-    racer.join()
+    racer.join(timeout=10)
+
+    assert waited, "the write never blocked on the open transaction's lock — the race was not set up"
+    assert not racer.is_alive(), "the racing write did not finish after the commit"
 
 
 def _waiting_on_a_lock(session):
