@@ -3,11 +3,11 @@
 Six tables, each a bounded store of short-lived rows keyed by an opaque string: the clients that
 registered themselves, the MCP sign-ins in flight, the authorization codes waiting to be exchanged,
 the refresh tokens issued — consumed ones kept, without the account they were issued to, until they
-expire, so a replay is recognised — the web view's sign-ins in flight, and the ``jti`` of every JWT
-logout revoked, kept until that JWT would have expired anyway. None of it is a Thing
-and nothing here touches the graph, so nothing here is journalled — the journal records mutations of
-Things and relationships, and these rows are the authorization server's bookkeeping
-(docs/auth-recovery.md §6.1).
+expire or the pool of consumed tokens forgets them, so a replay is recognised — the web view's
+sign-ins in flight, and the ``jti`` of every JWT logout revoked, kept until that JWT would have
+expired anyway. None of it is a Thing and nothing here touches the graph, so nothing here is
+journalled — the journal records mutations of Things and relationships, and these rows are the
+authorization server's bookkeeping (docs/auth-recovery.md §6.1).
 
 Every access purges expired rows first, so a store never holds anything past its ``expires_at``,
 and no store grows past its cap. At the cap the stores part ways: the three a caller without any
