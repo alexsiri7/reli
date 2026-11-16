@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "npm run lint && npm run typecheck",
     "e2e": "playwright test"
   },
   "dependencies": {
