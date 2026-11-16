@@ -501,6 +501,24 @@ def test_a_heartbeat_may_be_dated_up_to_the_bound_and_no_further(session, monkey
         )
 
 
+def test_a_heartbeat_cannot_be_dated_three_days_ahead(session, monkeypatch):
+    """#1806: pins the issue's own bound (2 days) with a literal day count rather than one derived
+    from HEARTBEAT_MAX_DAYS_AHEAD, so a widened constant fails this test instead of shipping
+    unnoticed. The clock is fixed, as in the boundary test above, so the owner-local day is exact
+    and the assertion can't flake near a UTC/London day boundary."""
+    heartbeat = create_thing(session, actor=Actor.CLAUDE_SCHEDULED, title="Learning pass", tags=[SCHEDULED_TASK_TAG])
+
+    class _FixedUtc(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 7, 15, 12, 0, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(service, "datetime", _FixedUtc)
+
+    with pytest.raises(ValueError, match="cannot be later"):
+        update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=heartbeat.id, checkin_date=date(2026, 7, 18))
+
+
 def test_an_ordinary_thing_may_still_be_dated_far_ahead(session):
     """#1806: the bound guards heartbeats only, not every Thing's checkin_date."""
     thing = create_thing(session, actor=Actor.USER, title="Renew passport", tags=["#Project"])
