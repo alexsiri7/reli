@@ -58,6 +58,7 @@ __all__ = [
     "Operation",
     "PreferenceNotRecordable",
     "Refused",
+    "RejectionProtected",
     "StaleWrite",
     "ThingNotFound",
     "add_preference_evidence",
@@ -107,7 +108,7 @@ class DuplicateRelationship(Refused):
 
 
 class HeartbeatProtected(Refused):
-    """Raised by :func:`update_thing` for a write that would hide a missed scheduled run (#1704)."""
+    """Raised by :func:`update_thing` for a write that would hide a missed scheduled run (#1704, #1806)."""
 
 
 class InvalidEdge(Refused):
@@ -120,6 +121,10 @@ class PreferenceNotRecordable(Refused):
 
 class NotAPreference(Refused):
     """Raised when a preference function names a Thing that exists but is not tagged ``#Preference``."""
+
+
+class RejectionProtected(Refused):
+    """Raised by :func:`update_thing` for a tags write that would drop ``REJECTED_TAG`` (#1807)."""
 
 
 # --- Write bounds (#1478) ------------------------------------------------------
@@ -426,7 +431,7 @@ def _check_heartbeat_kept(
     if checkin_date is not None:
         latest = datetime.now(UTC).astimezone(OWNER_TIMEZONE).date() + timedelta(days=HEARTBEAT_MAX_DAYS_AHEAD)
         if checkin_date > latest:
-            raise ValueError(
+            raise HeartbeatProtected(
                 f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and its checkin_date cannot be later "
                 f"than {latest.isoformat()}"
             )
@@ -439,7 +444,7 @@ def _check_rejection_kept(thing: ThingRecord, *, tags: list[str] | None) -> None
     preference back in the model, journalled under whoever wrote the list.
     """
     if REJECTED_TAG in thing.tags and tags is not None and REJECTED_TAG not in tags:
-        raise ValueError(f"Thing {thing.id} is a rejected preference and must keep {REJECTED_TAG}")
+        raise RejectionProtected(f"Thing {thing.id} is a rejected preference and must keep {REJECTED_TAG}")
 
 
 #: How many backfilled Things fall due on one day. The morning conversation asks about three to
