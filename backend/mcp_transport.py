@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import logging
 
-import jwt
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
@@ -35,6 +34,15 @@ _NO_BEARER = (
     "Authorization required: a Bearer of the access token the authorization server at /oauth/token "
     "issues after a Google sign-in"
 )
+
+
+_REFUSALS = {
+    auth.Refusal.CLOSED: _CLOSED,
+    auth.Refusal.EXPIRED: _EXPIRED,
+    auth.Refusal.INVALID: _NOT_OURS,
+    auth.Refusal.NOT_ALLOWED: auth.ACCOUNT_NOT_ALLOWED,
+    auth.Refusal.REVOKED: _REVOKED,
+}
 
 
 class _BearerTokenMiddleware:
@@ -65,24 +73,15 @@ class _BearerTokenMiddleware:
         if not settings.secret_key_configured:
             await _refuse(scope, receive, send, _CLOSED)
             return
-        header = dict(scope.get("headers", [])).get(b"authorization", b"").decode()
-        provided = header[7:] if header.startswith("Bearer ") else ""
-        if not provided:
+        token = auth.bearer_token(scope)
+        if not token:
             await _refuse(scope, receive, send, _NO_BEARER)
             return
         try:
-            claims = auth.decode_jwt(provided, audience=auth.MCP_AUDIENCE)
-        except jwt.ExpiredSignatureError:
-            await _refuse(scope, receive, send, _EXPIRED, error="invalid_token")
-            return
-        except jwt.InvalidTokenError:
-            await _refuse(scope, receive, send, _NOT_OURS, error="invalid_token")
-            return
-        if not auth.is_allowed(str(claims.get("email", ""))):
-            await _refuse(scope, receive, send, auth.ACCOUNT_NOT_ALLOWED, error="invalid_token")
-            return
-        if await run_in_threadpool(auth.is_revoked, claims):
-            await _refuse(scope, receive, send, _REVOKED, error="invalid_token")
+            await run_in_threadpool(auth.admit, token, auth.MCP_AUDIENCE)
+        except auth.CredentialRefused as refused:
+            error = None if refused.reason is auth.Refusal.CLOSED else "invalid_token"
+            await _refuse(scope, receive, send, _REFUSALS[refused.reason], error=error)
             return
         await self._app(scope, receive, send)
 

@@ -1116,6 +1116,32 @@ def test_an_unset_secret_key_closes_the_endpoint_rather_than_opening_it(client):
     assert response.status_code == 401
 
 
+def test_an_authorization_header_that_is_not_utf8_is_an_invalid_token(client, secret_key):
+    """HTTP allows obs-text bytes in a header: they are a credential Reli did not issue, not a 500."""
+    headers = {**_MCP_HEADERS, "Authorization": b"Bearer \x80\x81garbage"}
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=headers)
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+    assert response.json() == client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("wrong-token")).json()
+
+
+@pytest.mark.parametrize("reason", list(auth.Refusal))
+def test_every_refusal_admit_can_raise_is_a_401_with_a_remedy(client, secret_key, monkeypatch, reason):
+    """A Refusal added to admit without a description here would be a KeyError, a 500, on every bearer."""
+
+    def refuse(token, audience):
+        raise auth.CredentialRefused(reason)
+
+    monkeypatch.setattr(auth, "admit", refuse)
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("any"))
+
+    assert response.status_code == 401
+    assert response.json()["detail"]
+
+
 def test_mcp_endpoint_admits_a_jwt_the_authorization_server_minted(client, mcp_token):
     response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
 
