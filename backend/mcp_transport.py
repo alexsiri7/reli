@@ -79,7 +79,7 @@ class _BearerTokenMiddleware:
             await _refuse(scope, receive, send, _NOT_OURS, error="invalid_token")
             return
         if not auth.is_allowed(str(claims.get("email", ""))):
-            await _refuse(scope, receive, send, auth._ACCOUNT_NOT_ALLOWED, error="invalid_token")
+            await _refuse(scope, receive, send, auth.ACCOUNT_NOT_ALLOWED, error="invalid_token")
             return
         if await run_in_threadpool(auth.is_revoked, claims):
             await _refuse(scope, receive, send, _REVOKED, error="invalid_token")

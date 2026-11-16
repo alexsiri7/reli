@@ -288,7 +288,7 @@ def test_a_cancellation_error_cannot_forge_a_second_log_line(client, session, go
     google(lambda request: httpx.Response(500))
     forged = "access_denied\nINFO backend.auth Web sign-in complete"
 
-    with caplog.at_level(logging.INFO, logger="backend.auth"):
+    with caplog.at_level(logging.INFO, logger="backend"):
         response = client.get(
             "/api/auth/google/callback",
             params={"error": forged, "state": "server-state" if branch == "mcp" else "web-state"},
@@ -516,7 +516,7 @@ def test_a_live_session_is_refused_once_its_account_leaves_the_allowlist(client,
     for path in ("/api/auth/me", "/api/things"):
         response = client.get(path, headers=cookie)
         assert response.status_code == 401
-        assert response.json()["detail"] == auth._INVITE_ONLY
+        assert response.json()["detail"] == auth.INVITE_ONLY
 
 
 def test_logout_deletes_the_cookie(client):
