@@ -399,7 +399,7 @@ def test_a_value_at_every_bound_is_accepted(session):
         description="d" * service.MAX_DESCRIPTION_CHARS,
         notes={"k": "n" * padding},
         tags=[f"#t{i}" for i in range(service.MAX_TAGS - 1)],
-        urls={"k": "u" * padding},
+        urls={"k": "https://e.test/" + "u" * (padding - len("https://e.test/"))},
     )
 
     assert len(thing.title) == service.MAX_TITLE_CHARS
@@ -410,6 +410,46 @@ def test_mapping_size_counts_bytes_not_characters(session):
     """A note of multi-byte characters is measured by what it costs to store, not by its length."""
     with pytest.raises(FieldTooLarge, match="bytes"):
         create_thing(session, actor=Actor.USER, title="ok", notes={"k": "é" * (service.MAX_MAPPING_BYTES // 2)})
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "javascript:alert(1)",
+        " JavaScript:alert(1)",
+        "data:text/html,<script>x</script>",
+        "/relative",
+        # Stricter than the view's isLinkable, whose parser repairs these into https://no-host/ and
+        # http://example.test/: the service demands the // and the host as written.
+        "https:no-host",
+        "http:/example.test",
+    ],
+)
+def test_a_url_that_is_not_absolute_http_is_refused_on_create_and_update(session, url):
+    before = _journal_count(session)
+    with pytest.raises(ValueError, match="http or https"):
+        create_thing(session, actor=Actor.USER, title="ok", urls={"link": url})
+    assert _journal_count(session) == before
+
+    thing = create_thing(session, actor=Actor.USER, title="ok", urls={"home": "https://example.test"})
+    before = _journal_count(session)
+    with pytest.raises(ValueError, match="http or https"):
+        update_thing(session, actor=Actor.USER, thing_id=thing.id, urls={"home": "https://example.test", "link": url})
+
+    session.refresh(thing)
+    assert thing.urls == {"home": "https://example.test"}
+    assert _journal_count(session) == before
+
+
+@pytest.mark.parametrize("url", ["HTTP://example.test", " https://example.test"])
+def test_a_url_the_parser_reads_as_http_is_accepted_as_given(session, url):
+    """The scheme is decided as a URL parser reads it, so case and a pasted leading space pass."""
+    thing = create_thing(session, actor=Actor.USER, title="ok", urls={"link": url})
+    assert thing.urls == {"link": url}
+
+    update_thing(session, actor=Actor.USER, thing_id=thing.id, urls={"link": url, "other": url})
+    session.refresh(thing)
+    assert thing.urls == {"link": url, "other": url}
 
 
 def test_an_oversized_update_is_refused_and_the_thing_is_untouched(session):

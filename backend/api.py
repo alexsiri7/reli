@@ -286,14 +286,16 @@ def reject_preference(preference_id: uuid.UUID) -> PreferenceOut:
     Rejecting an already-rejected preference is a 200 that changes and journals nothing. A Thing that
     exists but is not tagged ``#Preference`` is a 404: the path names a preference, and there is no
     preference there.
+    Any other refusal is a 409 with the service's reason: the preference is there, and saying it is
+    not would send the user looking for the wrong fault.
     """
     with _session() as session:
         try:
             thing = service.reject_preference(session, actor=Actor.USER, preference_id=preference_id)
-        except service.ThingNotFound as missing:
+        except (service.ThingNotFound, service.NotAPreference) as missing:
             raise HTTPException(status_code=404, detail=str(missing)) from missing
-        except ValueError as not_a_preference:
-            raise HTTPException(status_code=404, detail=str(not_a_preference)) from not_a_preference
+        except service.Refused as refused:
+            raise HTTPException(status_code=409, detail=str(refused)) from refused
 
         return _preference(queries.preference_of(session, thing))
 

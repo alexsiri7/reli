@@ -288,7 +288,7 @@ def test_a_cancellation_error_cannot_forge_a_second_log_line(client, session, go
     google(lambda request: httpx.Response(500))
     forged = "access_denied\nINFO backend.auth Web sign-in complete"
 
-    with caplog.at_level(logging.INFO, logger="backend.auth"):
+    with caplog.at_level(logging.INFO, logger="backend"):
         response = client.get(
             "/api/auth/google/callback",
             params={"error": forged, "state": "server-state" if branch == "mcp" else "web-state"},
@@ -368,7 +368,7 @@ def test_a_callback_in_a_browser_that_did_not_approve_the_flow_is_refused_in_pla
     response = client.get("/api/auth/google/callback", params={**params, "state": state}, headers=headers)
 
     assert response.status_code == 400
-    assert response.json()["detail"] == auth._NOT_THIS_BROWSER
+    assert response.json()["detail"] == auth.NOT_THIS_BROWSER
     assert "location" not in response.headers
     assert seen == []
     assert cleanup_and_get(session, mcp_oauth_sessions, state) is None
@@ -516,7 +516,22 @@ def test_a_live_session_is_refused_once_its_account_leaves_the_allowlist(client,
     for path in ("/api/auth/me", "/api/things"):
         response = client.get(path, headers=cookie)
         assert response.status_code == 401
-        assert response.json()["detail"] == auth._INVITE_ONLY
+        assert response.json()["detail"] == auth.INVITE_ONLY
+
+
+@pytest.mark.parametrize("reason", list(auth.Refusal))
+def test_every_refusal_admit_can_raise_is_a_401_with_a_remedy(client, monkeypatch, reason):
+    """A Refusal added to admit without a sentence here would be a KeyError, a 500, on every cookie."""
+
+    def refuse(token, audience):
+        raise auth.CredentialRefused(reason)
+
+    monkeypatch.setattr(auth, "admit", refuse)
+
+    response = client.get("/api/auth/me", headers={"Cookie": f"{auth.SESSION_COOKIE}=any"})
+
+    assert response.status_code == 401
+    assert response.json()["detail"]
 
 
 def test_logout_deletes_the_cookie(client):

@@ -473,6 +473,25 @@ def test_an_oversized_write_is_refused_naming_the_field(tools):
     assert find_things() == []
 
 
+def test_a_url_that_is_not_http_is_refused_by_both_writing_tools(tools):
+    """#1822: the scheme rule the docstrings state reaches a session as a refusal, on create and update."""
+    thing = create_thing(actor="claude_interactive", title="linked", urls={"home": "https://example.test"})
+
+    for name, arguments in (
+        ("create_thing", {"title": "t"}),
+        ("update_thing", {"thing_id": thing["id"]}),
+    ):
+        with pytest.raises(ToolError, match="http or https"):
+            asyncio.run(
+                reli_mcp.call_tool(
+                    name, {"actor": "claude_interactive", "urls": {"link": "javascript:alert(1)"}, **arguments}
+                )
+            )
+
+    assert [t["title"] for t in find_things()] == ["linked"]
+    assert get_thing(uuid.UUID(thing["id"]))["thing"]["urls"] == {"home": "https://example.test"}
+
+
 @pytest.mark.parametrize("tool", [create_thing, update_thing])
 def test_the_bounds_a_writing_tool_states_are_the_bounds_enforced(tool):
     """The docstring is what a session reads; it must not promise a ceiling the service does not hold."""
@@ -482,6 +501,7 @@ def test_the_bounds_a_writing_tool_states_are_the_bounds_enforced(tool):
         f"description up to {service.MAX_DESCRIPTION_CHARS}",
         f"notes and urls each up to {service.MAX_MAPPING_BYTES} bytes",
         f"at most {service.MAX_TAGS} tags of up to {service.MAX_TAG_CHARS} characters",
+        "Each URL must be an absolute http or https URL",
     ):
         assert stated in doc, stated
     assert f"at most {service.HEARTBEAT_MAX_DAYS_AHEAD} days ahead" in " ".join((update_thing.__doc__ or "").split())
@@ -1096,6 +1116,32 @@ def test_an_unset_secret_key_closes_the_endpoint_rather_than_opening_it(client):
     assert response.status_code == 401
 
 
+def test_an_authorization_header_that_is_not_utf8_is_an_invalid_token(client, secret_key):
+    """HTTP allows obs-text bytes in a header: they are a credential Reli did not issue, not a 500."""
+    headers = {**_MCP_HEADERS, "Authorization": b"Bearer \x80\x81garbage"}
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=headers)
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+    assert response.json() == client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("wrong-token")).json()
+
+
+@pytest.mark.parametrize("reason", list(auth.Refusal))
+def test_every_refusal_admit_can_raise_is_a_401_with_a_remedy(client, secret_key, monkeypatch, reason):
+    """A Refusal added to admit without a description here would be a KeyError, a 500, on every bearer."""
+
+    def refuse(token, audience):
+        raise auth.CredentialRefused(reason)
+
+    monkeypatch.setattr(auth, "admit", refuse)
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("any"))
+
+    assert response.status_code == 401
+    assert response.json()["detail"]
+
+
 def test_mcp_endpoint_admits_a_jwt_the_authorization_server_minted(client, mcp_token):
     response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
 
@@ -1111,7 +1157,7 @@ def test_a_live_jwt_is_refused_once_its_account_leaves_the_allowlist(client, mcp
 
     assert response.status_code == 401
     assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
-    assert response.json()["detail"] == auth._ACCOUNT_NOT_ALLOWED
+    assert response.json()["detail"] == auth.ACCOUNT_NOT_ALLOWED
 
 
 def test_mcp_endpoint_refuses_a_jwt_for_another_audience(client, secret_key):
