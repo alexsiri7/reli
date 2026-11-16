@@ -293,11 +293,20 @@ def test_concurrent_child_of_edges_cannot_close_a_cycle_between_them(session, he
     racer = threading.Thread(target=close_the_cycle)
     racer.start()
     deadline = time.monotonic() + 5
-    while not _waiting_on_an_advisory_lock(session) and racer.is_alive() and time.monotonic() < deadline:
+    waited = False
+    while racer.is_alive() and time.monotonic() < deadline:
+        if _waiting_on_an_advisory_lock(session):
+            waited = True
+            break
         time.sleep(0.01)
     session.commit()
-    racer.join()
+    racer.join(timeout=10)
 
+    assert waited, (
+        "the racing transaction never blocked on the advisory lock — the race was not set up, "
+        "so the result says nothing about the cycle check"
+    )
+    assert not racer.is_alive()
     assert len(outcome) == 1 and "cycle" in str(outcome[0])
     edges = session.execute(text("SELECT count(*) FROM relationships WHERE relationship_type = 'ChildOf'")).scalar_one()
     assert edges == len(held)
@@ -511,10 +520,17 @@ def _race_against_open_transaction(session, write) -> None:
     racer = threading.Thread(target=write)
     racer.start()
     deadline = time.monotonic() + 5
-    while not _waiting_on_a_lock(session) and racer.is_alive() and time.monotonic() < deadline:
+    waited = False
+    while racer.is_alive() and time.monotonic() < deadline:
+        if _waiting_on_a_lock(session):
+            waited = True
+            break
         time.sleep(0.01)
     session.commit()
-    racer.join()
+    racer.join(timeout=10)
+
+    assert waited, "the write never blocked on the open transaction's lock — the race was not set up"
+    assert not racer.is_alive(), "the racing write did not finish after the commit"
 
 
 def _waiting_on_a_lock(session):
