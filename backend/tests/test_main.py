@@ -1,12 +1,16 @@
 """What the assembled app routes where."""
 
+import contextlib
+import json
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx
@@ -15,6 +19,8 @@ from fastapi.testclient import TestClient
 
 from backend import auth, google_login
 from backend.config import settings
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_healthz_reports_ok(client):
@@ -30,6 +36,7 @@ def test_the_google_callback_is_routed_before_the_api_catch_all(client):
     response = client.get("/api/auth/google/callback", params={"state": "nope"})
 
     assert response.status_code == 400
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 @pytest.mark.parametrize("method", ["GET", "POST", "DELETE"])
@@ -143,6 +150,28 @@ def _assert_security_headers(response) -> None:
     ]
     assert not granted, f"Permissions-Policy grants {granted}"
     assert "camera=()" in response.headers["Permissions-Policy"]
+    assert response.headers["Cross-Origin-Resource-Policy"] == "same-origin"
+    assert response.headers["Cross-Origin-Opener-Policy"] == "same-origin"
+
+
+@pytest.mark.parametrize("endpoint", ["oauth_authorize", "oauth_authorize_confirm", "google_callback"])
+def test_a_connector_sign_in_window_keeps_its_opener(client, endpoint):
+    """#1819: a connector may open the sign-in in a window it watches, and an opener policy on any
+    page of that window cuts the connector's handle to it. The rest of the policy stays."""
+    response = client.get(client.app.url_path_for(endpoint))
+
+    assert "Cross-Origin-Opener-Policy" not in response.headers
+    assert response.headers["Cross-Origin-Resource-Policy"] == "same-origin"
+    assert response.headers["X-Frame-Options"] == "DENY"
+
+
+@pytest.mark.parametrize("path", ["/oauth/register", "/oauth/token"])
+def test_the_credential_endpoints_keep_their_opener_policy(client, path):
+    """#1819: the sign-in window's exemption names its pages exactly; the /oauth/ endpoints that issue
+    and exchange credentials keep the opener policy."""
+    response = client.post(path)
+
+    assert response.headers["Cross-Origin-Opener-Policy"] == "same-origin"
 
 
 def test_form_action_admits_where_the_consent_form_redirects(client):
@@ -195,23 +224,42 @@ def test_the_api_docs_are_404_in_a_deploy_and_served_locally(tmp_path, switch, e
     assert probe.stdout.split() == expected
 
 
-def test_the_access_log_carries_no_query_string():
-    """#1713: Google delivers ``code`` and ``state`` on the callback's URL, and uvicorn's access log
-    writes the request target of every request. Served by uvicorn's CLI as the image serves it, so the line under
-    test is the one uvicorn really writes after its own logging setup. The lifespan is off so no
-    database is needed; the filter does not look at which route answered.
+def _image_uvicorn_options() -> list[str]:
+    """The options the Dockerfile's ``CMD`` hands uvicorn, less the address it binds."""
+    cmd = next(line for line in (REPO_ROOT / "Dockerfile").read_text().splitlines() if line.startswith("CMD "))
+    words = shlex.split(json.loads(cmd.removeprefix("CMD "))[-1])
+    options = words[words.index("backend.main:app") + 1 :]
+    for bind in ("--host", "--port"):
+        at = options.index(bind)
+        del options[at : at + 2]
+    return options
 
-    Served over a Unix domain socket rather than a TCP port: a port number picked by binding to 0
-    and then released is free for anything else to take before uvicorn starts on it.
-    """
+
+@contextlib.contextmanager
+def _served_as_the_image():
+    """uvicorn's CLI with the image's options, yielding an httpx client bound to it and, once it has
+    stopped, its log. Served over a Unix domain socket in a short-lived tmpdir rather than a TCP
+    port: a port number picked by binding to 0 and then released is free for anything else to take
+    before uvicorn starts on it. The lifespan is off so no database is needed."""
     sock_dir = tempfile.mkdtemp(dir="/tmp")
     sock = os.path.join(sock_dir, "u.sock")
     server = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "backend.main:app", "--uds", sock, "--lifespan", "off"],
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "backend.main:app",
+            *_image_uvicorn_options(),
+            "--uds",
+            sock,
+            "--lifespan",
+            "off",
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
     )
+    log: list[str] = []
     try:
         with httpx.Client(transport=httpx.HTTPTransport(uds=sock), base_url="http://reli") as http_client:
             for _ in range(300):
@@ -223,21 +271,39 @@ def test_the_access_log_carries_no_query_string():
                 except httpx.TransportError:
                     time.sleep(0.1)
             started = server.poll() is None
-            response = (
-                http_client.get("/healthz", params={"code": "c0de-secret", "state": "st4te-secret"})
-                if started
-                else None
-            )
+            if not started:
+                log.append(server.communicate(timeout=30)[0])
+            assert started, f"uvicorn exited before answering /healthz on socket {sock}:\n{log[0] if log else ''}"
+            yield http_client, log
     finally:
-        server.terminate()
-        log, _ = server.communicate(timeout=30)
+        if server.poll() is None:
+            server.terminate()
+            log.append(server.communicate(timeout=30)[0])
         shutil.rmtree(sock_dir, ignore_errors=True)
 
-    assert started, f"uvicorn exited before answering /healthz on socket {sock}:\n{log}"
-    assert response is not None and response.status_code == 200
-    assert log.count('"GET /healthz HTTP/1.1" 200') == 2
-    assert "c0de-secret" not in log
-    assert "st4te-secret" not in log
+
+def test_the_access_log_carries_no_query_string():
+    """#1713: Google delivers ``code`` and ``state`` on the callback's URL, and uvicorn's access log
+    writes the request target of every request. Served as the image serves it, so the line under
+    test is the one uvicorn really writes after its own logging setup. The filter does not look at
+    which route answered."""
+    with _served_as_the_image() as (http_client, log):
+        response = http_client.get("/healthz", params={"code": "c0de-secret", "state": "st4te-secret"})
+
+    assert response.status_code == 200
+    assert log[0].count('"GET /healthz HTTP/1.1" 200') == 2
+    assert "c0de-secret" not in log[0]
+    assert "st4te-secret" not in log[0]
+
+
+def test_the_image_names_no_server_software():
+    """#1819: uvicorn adds ``Server: uvicorn`` after the app has sent its headers, so only the server
+    the image runs, not a test client, shows whether it is gone."""
+    with _served_as_the_image() as (http_client, _log):
+        response = http_client.get("/healthz")
+
+    assert response.status_code == 200
+    assert "server" not in response.headers
 
 
 @pytest.mark.parametrize(
