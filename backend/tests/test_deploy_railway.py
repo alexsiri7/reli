@@ -240,7 +240,7 @@ def test_ci_signs_the_digest_it_pushed():
 
     assert build["permissions"]["id-token"] == "write"
     assert steps["Build and push image"]["id"] == "push"
-    assert "cosign sign" in steps["Sign image"]["run"]
+    assert steps["Sign image"]["run"] == 'cosign sign --yes "ghcr.io/alexsiri7/reli@${DIGEST}"'
     assert steps["Sign image"]["env"]["DIGEST"] == "${{ steps.push.outputs.digest }}"
 
 
