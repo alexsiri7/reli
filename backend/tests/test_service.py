@@ -3,7 +3,7 @@
 import threading
 import time
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -437,10 +437,15 @@ def test_an_update_checks_only_the_fields_it_passes(session):
 
 @pytest.mark.parametrize(
     ("change", "refusal"),
-    [({"active": False}, "archived"), ({"tags": ["#Other"]}, "keep that tag"), ({"tags": []}, "keep that tag")],
+    [
+        ({"active": False}, "archived"),
+        ({"tags": ["#Other"]}, "keep that tag"),
+        ({"tags": []}, "keep that tag"),
+        ({"checkin_date": date.today() + timedelta(days=30)}, "cannot be later"),
+    ],
 )
-def test_a_heartbeat_cannot_be_archived_or_lose_its_tag(session, change, refusal):
-    """#1704: either write would hide a missed scheduled run instead of reporting it."""
+def test_a_heartbeat_cannot_be_archived_lose_its_tag_or_be_dated_far_ahead(session, change, refusal):
+    """#1704, #1806: each write would hide a missed scheduled run instead of reporting it."""
     heartbeat = create_thing(session, actor=Actor.CLAUDE_SCHEDULED, title="Resolution pass", tags=[SCHEDULED_TASK_TAG])
     before = _journal_count(session)
 
@@ -450,6 +455,7 @@ def test_a_heartbeat_cannot_be_archived_or_lose_its_tag(session, change, refusal
     session.refresh(heartbeat)
     assert heartbeat.active is True
     assert heartbeat.tags == [SCHEDULED_TASK_TAG]
+    assert heartbeat.checkin_date is None
     assert _journal_count(session) == before
 
 
@@ -468,6 +474,59 @@ def test_a_heartbeat_still_takes_its_routine_writes(session):
 
     assert updated.checkin_date == tomorrow
     assert updated.tags == [SCHEDULED_TASK_TAG, "#Kept"]
+
+
+def test_a_heartbeat_may_be_dated_up_to_the_bound_and_no_further(session, monkeypatch):
+    """#1806: the bound is counted in owner-local days, so the day after tomorrow is the last allowed."""
+    heartbeat = create_thing(
+        session, actor=Actor.CLAUDE_SCHEDULED, title="Morning conversation", tags=[SCHEDULED_TASK_TAG]
+    )
+
+    class _LateEveningUtc(datetime):
+        """23:30 UTC on 15 July, already 16 July in London: the UTC day and the owner's day differ."""
+
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 7, 15, 23, 30, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(service, "datetime", _LateEveningUtc)
+    latest = date(2026, 7, 16) + timedelta(days=service.HEARTBEAT_MAX_DAYS_AHEAD)
+
+    updated = update_thing(session, actor=Actor.CLAUDE_SCHEDULED, thing_id=heartbeat.id, checkin_date=latest)
+    assert updated.checkin_date == latest
+
+    with pytest.raises(ValueError, match="cannot be later"):
+        update_thing(
+            session, actor=Actor.CLAUDE_SCHEDULED, thing_id=heartbeat.id, checkin_date=latest + timedelta(days=1)
+        )
+
+
+def test_a_heartbeat_cannot_be_dated_three_days_ahead(session, monkeypatch):
+    """#1806: pins the issue's own bound (2 days) with a literal day count rather than one derived
+    from HEARTBEAT_MAX_DAYS_AHEAD, so a widened constant fails this test instead of shipping
+    unnoticed. The clock is fixed, as in the boundary test above, so the owner-local day is exact
+    and the assertion can't flake near a UTC/London day boundary."""
+    heartbeat = create_thing(session, actor=Actor.CLAUDE_SCHEDULED, title="Learning pass", tags=[SCHEDULED_TASK_TAG])
+
+    class _FixedUtc(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 7, 15, 12, 0, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(service, "datetime", _FixedUtc)
+
+    with pytest.raises(ValueError, match="cannot be later"):
+        update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=heartbeat.id, checkin_date=date(2026, 7, 18))
+
+
+def test_an_ordinary_thing_may_still_be_dated_far_ahead(session):
+    """#1806: the bound guards heartbeats only, not every Thing's checkin_date."""
+    thing = create_thing(session, actor=Actor.USER, title="Renew passport", tags=["#Project"])
+    later = date.today() + timedelta(days=365)
+
+    updated = update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=thing.id, checkin_date=later)
+
+    assert updated.checkin_date == later
 
 
 @pytest.mark.parametrize("tags", [[PREFERENCE_TAG], []])

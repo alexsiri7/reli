@@ -40,6 +40,7 @@ from .db_models import (
 
 __all__ = [
     "BACKFILL_PER_DAY",
+    "HEARTBEAT_MAX_DAYS_AHEAD",
     "MAX_CONTEXT_CHARS",
     "MAX_DESCRIPTION_CHARS",
     "MAX_MAPPING_BYTES",
@@ -340,7 +341,7 @@ def update_thing(
                 f"Thing {thing.id} changed at {thing.updated_at.isoformat()} after the read this write was "
                 "based on; read it again and reapply the change"
             )
-    _check_heartbeat_kept(thing, tags=tags, active=active)
+    _check_heartbeat_kept(thing, tags=tags, active=active, checkin_date=checkin_date)
     _check_rejection_kept(thing, tags=tags)
     before = _snapshot(thing)
 
@@ -375,11 +376,18 @@ def update_thing(
     return thing
 
 
-def _check_heartbeat_kept(thing: ThingRecord, *, tags: list[str] | None, active: bool | None) -> None:
-    """Refuse archiving a heartbeat or dropping its tag (#1704).
+#: How far ahead a heartbeat's check-in date may be set: each run sets tomorrow, so anything later
+#: would keep a missed run from falling due (#1806).
+HEARTBEAT_MAX_DAYS_AHEAD = 2
+
+
+def _check_heartbeat_kept(
+    thing: ThingRecord, *, tags: list[str] | None, active: bool | None, checkin_date: date | None
+) -> None:
+    """Refuse archiving a heartbeat, dropping its tag (#1704) or dating it far ahead (#1806).
 
     A missed scheduled run is reported only as its ``SCHEDULED_TASK_TAG`` Thing left due, found by
-    that tag among active Things; either write would hide the miss instead of reporting it.
+    that tag among active Things; any of these writes would hide the miss instead of reporting it.
     """
     if SCHEDULED_TASK_TAG not in thing.tags:
         return
@@ -387,6 +395,13 @@ def _check_heartbeat_kept(thing: ThingRecord, *, tags: list[str] | None, active:
         raise ValueError(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and cannot be archived")
     if tags is not None and SCHEDULED_TASK_TAG not in tags:
         raise ValueError(f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and must keep that tag")
+    if checkin_date is not None:
+        latest = datetime.now(UTC).astimezone(OWNER_TIMEZONE).date() + timedelta(days=HEARTBEAT_MAX_DAYS_AHEAD)
+        if checkin_date > latest:
+            raise ValueError(
+                f"Thing {thing.id} is a {SCHEDULED_TASK_TAG} heartbeat and its checkin_date cannot be later "
+                f"than {latest.isoformat()}"
+            )
 
 
 def _check_rejection_kept(thing: ThingRecord, *, tags: list[str] | None) -> None:
