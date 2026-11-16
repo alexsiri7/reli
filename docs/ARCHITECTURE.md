@@ -194,7 +194,7 @@ not read the graph. Design:
 | Image | `Dockerfile` | `node:22-slim` stage builds `frontend/dist`; `python:3.12-slim` stage runs `uv sync --frozen --no-dev`, drops to the non-root `reli` user, serves with uvicorn on `$PORT` (default 8000); healthcheck polls `/healthz` |
 | Production compose | `docker-compose.yml` | service `reli` on `127.0.0.1:8000`; a `localdb` profile adds a `postgres:16-alpine` for development, never started in production |
 | Staging compose | `docker-compose.staging.yml` | `reli-staging` on port 8001 with its own Postgres, configured by `STAGING_DATABASE_URL` and `STAGING_POSTGRES_PASSWORD` |
-| CI | `.github/workflows/ci.yml` | Lint & Typecheck, Test, Frontend (inside the pinned Playwright container), Build Docker image — pushed to GHCR on `main`, keeping the last three SHA tags |
+| CI | `.github/workflows/ci.yml` | Lint & Typecheck, Test, Frontend (inside the pinned Playwright container), Build Docker image — pushed to GHCR on `main`, keeping the last three SHA tags — and the Python and frontend dependency audits, which also run weekly |
 | Deploy | `.github/workflows/staging-pipeline.yml` | on a green `main` CI run: Railway staging → health wait → Railway production |
 | Public access | Cloudflare Tunnel | host infrastructure, pointed at `http://reli:8000`; not read by the app |
 | Errors | `backend/sentry.py` | optional; an empty `SENTRY_DSN` disables it |

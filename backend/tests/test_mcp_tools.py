@@ -20,7 +20,14 @@ from sqlalchemy import text
 
 from backend import auth, mcp_transport, prompts, service
 from backend.config import MIN_SECRET_KEY_BYTES, settings
-from backend.db_models import NEW_TAG, SCHEDULED_TASK_TAG, Actor, RelationshipType
+from backend.db_models import (
+    NEW_TAG,
+    PREFERENCE_TAG,
+    REJECTED_TAG,
+    SCHEDULED_TASK_TAG,
+    Actor,
+    RelationshipType,
+)
 from backend.mcp_server import (
     MAX_JOURNAL_ID,
     MAX_STALE_DAYS,
@@ -293,6 +300,22 @@ def test_archive_thing_refuses_a_heartbeat(tools):
     assert get_thing(uuid.UUID(heartbeat["id"]))["thing"]["active"] is True
 
 
+def test_update_thing_refuses_dropping_a_rejection(tools):
+    preference = create_thing(
+        actor="claude_scheduled", title="Avoids Friday meetings", tags=[PREFERENCE_TAG, REJECTED_TAG]
+    )
+
+    with pytest.raises(ToolError, match="must keep"):
+        asyncio.run(
+            reli_mcp.call_tool(
+                "update_thing",
+                {"actor": "claude_interactive", "thing_id": preference["id"], "tags": [PREFERENCE_TAG]},
+            )
+        )
+
+    assert REJECTED_TAG in get_thing(uuid.UUID(preference["id"]))["thing"]["tags"]
+
+
 def test_relate_and_unrelate_journal_the_edge(tools):
     source = create_thing(actor="claude_interactive", title="parent")
     target = create_thing(actor="claude_interactive", title="child")
@@ -461,6 +484,7 @@ def test_the_bounds_a_writing_tool_states_are_the_bounds_enforced(tool):
         f"at most {service.MAX_TAGS} tags of up to {service.MAX_TAG_CHARS} characters",
     ):
         assert stated in doc, stated
+    assert f"at most {service.HEARTBEAT_MAX_DAYS_AHEAD} days ahead" in " ".join((update_thing.__doc__ or "").split())
     assert f"up to {service.MAX_CONTEXT_CHARS} characters" in (relate.__doc__ or "")
     assert f"Up to {service.MAX_SCOPE_CHARS} characters" in (record_preference.__doc__ or "")
 
