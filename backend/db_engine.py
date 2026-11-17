@@ -93,12 +93,6 @@ def get_engine() -> Engine:
     return _engine
 
 
-def _keep_the_first_line(context: ExceptionContext) -> None:
-    for error in (context.original_exception, context.sqlalchemy_exception):
-        if error is not None and len(error.args) == 1 and isinstance(error.args[0], str):
-            error.args = (error.args[0].split("\n", 1)[0],)
-
-
 # libpq's wording, on libpq 17, for a chain that does not end in the root, a certificate that does not
 # name the host, and a root file that is missing.
 _CERTIFICATE_FAILURES = ("certificate verify failed", "does not match host name", "root certificate file")
@@ -111,11 +105,13 @@ CERTIFICATE_FAILURE = (
 )
 
 
-def _name_the_certificate_failure(context: ExceptionContext) -> None:
+def _rewrite_the_message(context: ExceptionContext) -> None:
     for error in (context.original_exception, context.sqlalchemy_exception):
         if error is not None and len(error.args) == 1 and isinstance(error.args[0], str):
-            if any(marker in error.args[0] for marker in _CERTIFICATE_FAILURES):
-                error.args = (CERTIFICATE_FAILURE + error.args[0],)
+            first_line = error.args[0].split("\n", 1)[0]
+            if any(marker in first_line for marker in _CERTIFICATE_FAILURES):
+                first_line = CERTIFICATE_FAILURE + first_line
+            error.args = (first_line,)
 
 
 def redact_statement_errors(engine: Engine) -> None:
@@ -130,8 +126,7 @@ def redact_statement_errors(engine: Engine) -> None:
     A connection refused because the server's certificate did not verify is prefixed with a sentence
     naming the bundled CA, so a stale certificate reads as one at boot.
     """
-    event.listen(engine, "handle_error", _keep_the_first_line)
-    event.listen(engine, "handle_error", _name_the_certificate_failure)
+    event.listen(engine, "handle_error", _rewrite_the_message)
 
 
 def reset_engine() -> None:
