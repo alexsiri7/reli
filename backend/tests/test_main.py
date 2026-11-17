@@ -144,7 +144,7 @@ def _assert_security_headers(response) -> None:
     assert response.headers["Strict-Transport-Security"] == "max-age=63072000; includeSubDomains"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["X-Frame-Options"] == "DENY"
-    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["Referrer-Policy"] == "same-origin"
     granted = [
         directive for directive in response.headers["Permissions-Policy"].split(", ") if not directive.endswith("=()")
     ]

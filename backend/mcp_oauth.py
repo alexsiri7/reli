@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import html
 import logging
-import reprlib
 import secrets
 import uuid
 from collections.abc import Callable, Coroutine
@@ -81,9 +80,6 @@ MAX_BODY_BYTES = 8 * 1024
 # the longest URI still fits in MAX_BODY_BYTES — a bound in characters would not, since one
 # character can be four bytes.
 MAX_PARAM_LENGTH = 2048
-# The most of a caller-supplied value a log line quotes: enough to recognise it, never the volume a
-# caller with no credential chooses (#1716).
-MAX_LOGGED_CHARS = 200
 
 _CODE_GONE = "Authorization code is invalid or expired: re-authorise the connector"
 _REFRESH_TOKEN_GONE = "Refresh token is invalid or expired: re-authorise the connector"
@@ -146,11 +142,6 @@ def _within_param_bytes(value: str) -> str:
 
 
 _RedirectUri = Annotated[str, AfterValidator(_within_param_bytes)]
-
-
-# Cuts the escaped text, not the value: one character can escape to ten.
-_log_repr = reprlib.Repr()
-_log_repr.maxstring = MAX_LOGGED_CHARS
 
 
 # --- Discovery -------------------------------------------------------------
@@ -256,7 +247,7 @@ def _validate_auth_method(metadata: _ClientMetadata) -> str:
     auth_method = metadata.token_endpoint_auth_method
     if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
         logger.warning(
-            "MCP OAuth: rejected token_endpoint_auth_method during registration: %s", _log_repr.repr(auth_method)
+            "MCP OAuth: rejected token_endpoint_auth_method during registration: %s", auth.log_repr.repr(auth_method)
         )
         raise HTTPException(
             status_code=400,
@@ -267,14 +258,14 @@ def _validate_auth_method(metadata: _ClientMetadata) -> str:
 
 def _validate_scope(metadata: _ClientMetadata) -> None:
     if not _is_supported_scope(metadata.scope):
-        logger.warning("MCP OAuth: rejected scope during registration: %s", _log_repr.repr(metadata.scope))
+        logger.warning("MCP OAuth: rejected scope during registration: %s", auth.log_repr.repr(metadata.scope))
         raise HTTPException(status_code=400, detail=f"invalid_client_metadata: scope must be {MCP_SCOPE}")
 
 
 def _validate_redirect_uris(redirect_uris: list[str]) -> None:
     for uri in redirect_uris:
         if not _redirect_uri_is_safe(uri):
-            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %s", _log_repr.repr(uri))
+            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %s", auth.log_repr.repr(uri))
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -326,7 +317,7 @@ async def oauth_register(request: Request) -> JSONResponse:
     with auth.open_db_session() as session:
         cleanup_and_store(session, mcp_registered_clients, client_id, client)
 
-    logger.info("MCP OAuth: registered client %s (%s)", client_id, _log_repr.repr(metadata.client_name))
+    logger.info("MCP OAuth: registered client %s (%s)", client_id, auth.log_repr.repr(metadata.client_name))
 
     return JSONResponse(
         {
@@ -419,7 +410,7 @@ def oauth_authorize(
             logger.warning(
                 "MCP OAuth: refused stored unsafe redirect_uri for client %s: %s",
                 client_id,
-                _log_repr.repr(redirect_uri),
+                auth.log_repr.repr(redirect_uri),
             )
             raise HTTPException(
                 status_code=400, detail="redirect_uri is not one this server accepts: re-register the client"
@@ -482,7 +473,7 @@ def finish_sign_in(session: Session, flow: dict[str, Any], code: str, error: str
     URI as an ``access_denied`` error (RFC 6749 §4.1.2.1), because that is where the person is.
     """
     if error:
-        logger.info("MCP sign-in cancelled at Google (%r)", error)
+        logger.info("MCP sign-in cancelled at Google (%s)", auth.log_repr.repr(error))
         return auth.client_redirect(
             flow["redirect_uri"],
             flow["client_state"],

@@ -6,13 +6,16 @@ the exemption every request below would be 401. Google is ``httpx.MockTransport`
 """
 
 import logging
+import re
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import jwt
 import pytest
+import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
@@ -159,6 +162,23 @@ def test_a_token_is_refused_by_a_deploy_with_another_issuer(sign_in_settings, mo
         auth.decode_jwt(token, audience="mcp")
 
 
+def test_the_staging_compose_signs_and_issues_with_its_own_variables():
+    """The self-hosted staging and production deploys read one ``.env``, so the key and both inputs of
+    ``base_url()`` must come from different host variables there, or each accepts the other's tokens
+    (#1697, #1813)."""
+    root = Path(__file__).resolve().parents[2]
+
+    def host_variables(compose_file: str, service: str, name: str) -> set[str]:
+        environment = yaml.safe_load((root / compose_file).read_text())["services"][service]["environment"]
+        [entry] = [entry for entry in environment if entry.startswith(f"{name}=")]
+        return set(re.findall(r"\$\{(\w+)", entry))
+
+    for name in ("SECRET_KEY", "RELI_BASE_URL", "GOOGLE_AUTH_REDIRECT_URI"):
+        production = host_variables("docker-compose.yml", "reli", name)
+        staging = host_variables("docker-compose.staging.yml", "reli-staging", name)
+        assert production and staging and production.isdisjoint(staging), name
+
+
 def test_a_token_without_an_issuer_is_refused(sign_in_settings):
     claims = {"sub": "1234567890", "email": "owner@example.com", "aud": "mcp", "exp": 2**31 - 1}
     token = jwt.encode(claims, settings.SECRET_KEY, algorithm=auth.JWT_ALGORITHM)
@@ -299,6 +319,43 @@ def test_a_cancellation_error_cannot_forge_a_second_log_line(client, session, go
     cancelled = [record for record in caplog.records if "cancelled" in record.getMessage()]
     assert len(cancelled) == 1
     assert "\n" not in cancelled[0].getMessage()
+
+
+@pytest.mark.parametrize("branch", ["mcp", "web"])
+def test_a_cancellation_logs_a_bounded_prefix_of_the_error(client, session, google, caplog, branch):
+    """Anyone can start a sign-in and so reach this line; they must not choose its size (#1826)."""
+    if branch == "mcp":
+        _seed_flow(session)
+    else:
+        _seed_web_flow(session)
+    google(lambda request: httpx.Response(500))
+
+    with caplog.at_level(logging.INFO, logger="backend"):
+        response = client.get(
+            "/api/auth/google/callback",
+            params={
+                "error": "x" * auth.MAX_CALLBACK_PARAM_LENGTH,
+                "state": "server-state" if branch == "mcp" else "web-state",
+            },
+            headers=_flow_cookie(),
+        )
+
+    assert response.status_code == 302
+    [record] = [record for record in caplog.records if "cancelled" in record.getMessage()]
+    assert len(record.getMessage()) < auth.MAX_LOGGED_CHARS + 100
+
+
+@pytest.mark.parametrize("param", ["code", "state", "error"])
+def test_the_callback_refuses_a_parameter_over_the_length_bound_and_keeps_the_flow(client, session, google, param):
+    _seed_web_flow(session)
+    seen = google(lambda request: httpx.Response(500))
+    params = {"code": "google-code", "state": "web-state", param: "x" * (auth.MAX_CALLBACK_PARAM_LENGTH + 1)}
+
+    response = client.get("/api/auth/google/callback", params=params)
+
+    assert response.status_code == 422
+    assert seen == []
+    assert cleanup_and_get(session, web_oauth_sessions, "web-state") is not None
 
 
 def test_a_google_refusal_is_502_naming_the_remedy(client, session, google):

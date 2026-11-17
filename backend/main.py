@@ -133,6 +133,10 @@ class _BareMcpPath:
 #: Nothing cross-origin embeds a Reli resource, so ``Cross-Origin-Resource-Policy`` keeps every one to
 #: Reli's own pages, and ``Cross-Origin-Opener-Policy`` keeps any other site's window from holding a
 #: handle on one of them (#1819).
+#: ``Referrer-Policy`` sends nothing off-origin, so a linked site never learns the deploy's hostname
+#: (#1827). It is not ``no-referrer``: under that policy a browser sends ``Origin: null`` on a
+#: same-origin POST, and ``auth.is_same_origin`` would refuse the consent form, logout and reject
+#: from Reli's own page.
 _SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com"
@@ -140,7 +144,7 @@ _SECURITY_HEADERS = {
     "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Referrer-Policy": "same-origin",
     "Permissions-Policy": (
         "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), "
         "magnetometer=(), microphone=(), payment=(), usb=()"

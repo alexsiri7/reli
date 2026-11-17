@@ -1,8 +1,10 @@
 # Staging environment — runs alongside production on the same host.
 # Port 8001 to avoid conflicts with production (port 8000).
 # Its own Postgres and its own volume, so staging never touches production data.
-# STAGING_DATABASE_URL is a distinct variable from production's DATABASE_URL for
-# that reason: both files read the same .env on this host.
+# Both files read the same .env on this host, so every STAGING_* variable is distinct from
+# production's: STAGING_DATABASE_URL so staging never touches production data, and
+# STAGING_SECRET_KEY, STAGING_RELI_BASE_URL and STAGING_GOOGLE_AUTH_REDIRECT_URI so neither deploy
+# accepts a token the other minted (#1697, #1813).
 
 services:
   reli-staging:
@@ -17,11 +19,12 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       # The Google sign-in behind /oauth/*, on the same terms: empty closes both the sign-in and
-      # /mcp, never a boot failure.
-      - SECRET_KEY=${SECRET_KEY:-}
+      # /mcp, never a boot failure. The key and the issuer are staging's own, with no fallback to
+      # production's: a fallback would share them again whenever the staging variable is unset.
+      - SECRET_KEY=${STAGING_SECRET_KEY:-}
       - ALLOWED_EMAILS=${ALLOWED_EMAILS:-}
-      - GOOGLE_AUTH_REDIRECT_URI=${GOOGLE_AUTH_REDIRECT_URI:-}
-      - RELI_BASE_URL=${RELI_BASE_URL:-}
+      - GOOGLE_AUTH_REDIRECT_URI=${STAGING_GOOGLE_AUTH_REDIRECT_URI:-}
+      - RELI_BASE_URL=${STAGING_RELI_BASE_URL:-}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=staging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -34,6 +37,11 @@ services:
     # The server binds an unprivileged port and needs no Linux capability (#1712).
     cap_drop:
       - ALL
+    # Nothing in the service writes a file — every byte it keeps is in Postgres — so the root
+    # filesystem can be read-only, and no setuid binary can raise a process's privileges (#1818).
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     restart: unless-stopped
 
   postgres-staging:
