@@ -87,7 +87,7 @@ def racing_client(session, sign_in_settings):
 def _racing_peek(monkeypatch, store):
     """Hold both racing requests after they have peeked *store*, so both reach the consume together.
 
-    Only the peek of *store* waits: ``_validate_client_secret`` peeks the client store on the same
+    Only the peek of *store* waits: ``_authenticated_client`` peeks the client store on the same
     path, and an unconditional barrier would fire twice per request. Returns the function that
     puts the real peek back, for a request after the race.
     """
@@ -109,10 +109,17 @@ def _race(client, requests):
         return list(pool.map(lambda send: send(client), requests))
 
 
-def _register(client, auth_method="none", redirect_uris=(CLIENT_REDIRECT,)):
+def _register(
+    client, auth_method="none", redirect_uris=(CLIENT_REDIRECT,), grant_types=("authorization_code", "refresh_token")
+):
     response = client.post(
         "/oauth/register",
-        json={"redirect_uris": list(redirect_uris), "client_name": "Claude", "token_endpoint_auth_method": auth_method},
+        json={
+            "redirect_uris": list(redirect_uris),
+            "client_name": "Claude",
+            "token_endpoint_auth_method": auth_method,
+            "grant_types": list(grant_types),
+        },
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -374,6 +381,24 @@ def test_register_refuses_a_field_of_the_wrong_shape_and_stores_nothing(client, 
     assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
 
 
+@pytest.mark.parametrize("scope", ["admin", "mcp admin", "mcp:write"])
+def test_register_refuses_a_scope_other_than_mcp_and_stores_nothing(client, session, scope):
+    response = client.post("/oauth/register", json={"redirect_uris": [CLIENT_REDIRECT], "scope": scope})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid_client_metadata: scope must be mcp"
+    assert session.exec(select(func.count()).select_from(McpRegisteredClientRecord)).one() == 0
+
+
+@pytest.mark.parametrize("body", [{}, {"scope": ""}, {"scope": "mcp"}], ids=["omitted", "empty", "mcp"])
+def test_register_grants_mcp_when_asked_for_it_or_for_the_default(client, session, body):
+    response = client.post("/oauth/register", json={"redirect_uris": [CLIENT_REDIRECT], **body})
+
+    assert response.status_code == 201, response.text
+    assert response.json()["scope"] == "mcp"
+    assert cleanup_and_get(session, mcp_registered_clients, response.json()["client_id"])["scope"] == "mcp"
+
+
 def test_register_reports_one_problem_however_many_the_body_holds(client):
     """The refusal must not grow with the body: a flood of wrong elements is not a flood of detail."""
     body = {"redirect_uris": [0] * ((mcp_oauth.MAX_BODY_BYTES - 100) // 2)}
@@ -596,6 +621,26 @@ def test_authorize_refuses_a_parameter_over_the_length_bound_and_stores_nothing(
 
     assert response.status_code == 422
     assert session.exec(select(func.count()).select_from(mcp_oauth_sessions.model)).one() == 0
+
+
+@pytest.mark.parametrize("scope", ["admin", "mcp admin"])
+def test_authorize_refuses_a_scope_other_than_mcp_and_stores_nothing(client, session, scope):
+    registered = _register(client)
+
+    response = _authorize(client, registered["client_id"], scope=scope)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid_scope: only scope=mcp is supported"
+    assert session.exec(select(func.count()).select_from(mcp_oauth_sessions.model)).one() == 0
+
+
+def test_authorize_stores_mcp_whatever_spelling_of_it_the_client_sent(client, session):
+    registered = _register(client)
+
+    consent = _authorize(client, registered["client_id"], scope=" mcp ")
+
+    assert consent.status_code == 200, consent.text
+    assert cleanup_and_get(session, mcp_oauth_sessions, _server_state(consent.text))["scope"] == "mcp"
 
 
 def test_a_registration_lives_an_hour_until_its_first_token_then_as_long_as_the_family(client, session):
@@ -935,6 +980,45 @@ def test_a_code_exchanges_for_a_jwt_the_mcp_endpoint_accepts(client, session):
     claims = auth.decode_jwt(body["access_token"], audience="mcp")
     assert claims["sub"] == "1234567890"
     assert claims["email"] == "owner@example.com"
+
+
+def test_a_client_that_did_not_register_refresh_token_gets_no_refresh_token(client, session):
+    registered = _register(client, grant_types=["authorization_code"])
+    code = _seed_code(session, registered["client_id"], "verifier")
+
+    response = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier")
+
+    assert response.status_code == 200, response.text
+    assert "refresh_token" not in response.json()
+    assert auth.decode_jwt(response.json()["access_token"], audience="mcp")["email"] == "owner@example.com"
+    assert session.exec(select(func.count()).select_from(McpRefreshTokenRecord)).one() == 0
+    session.rollback()
+    promoted = cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["expires_at"]
+    assert promoted > datetime.now(UTC) + timedelta(seconds=mcp_oauth.UNUSED_CLIENT_TTL_SECONDS)
+
+
+def test_a_refresh_grant_is_refused_for_a_client_that_did_not_register_refresh_token(client, session):
+    """A family issued before the grant types were enforced cannot keep refreshing for such a client."""
+    registered = _register(client, grant_types=["authorization_code"])
+    cleanup_and_store(
+        session,
+        mcp_refresh_tokens,
+        "legacy-token",
+        {
+            "subject": "1234567890",
+            "email": "owner@example.com",
+            "client_id": registered["client_id"],
+            "scope": "mcp",
+            "family_id": "legacy-family",
+            "expires_at": datetime.now(UTC) + timedelta(days=30),
+        },
+    )
+
+    response = _refresh(client, "legacy-token", registered["client_id"])
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "unauthorized_client"
+    assert session.exec(select(func.count()).select_from(McpRefreshTokenRecord)).one() == 1
 
 
 def test_a_code_exchanges_once(client, session):
