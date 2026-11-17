@@ -13,14 +13,17 @@ must not carry a Thing's title, notes or URLs or a journal entry's before/after 
 ``redact_statement_errors`` cuts what remains of the server's text, which quotes them.
 
 The connection must be encrypted (#1695): prod reaches the Supabase pooler over the public internet,
-and libpq's default ``prefer`` accepts a server that declines TLS. ``tls_connect_args`` holds the
-rule for this engine and the migrations' alike.
+and libpq's default ``prefer`` accepts a server that declines TLS. A deploy also verifies who the
+server is (#1816): ``require`` would hand the ``reli`` role's password to anything between Railway
+and the pooler that presents a certificate. ``tls_connect_args`` holds the rule for this engine and
+the migrations' alike.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 from sqlalchemy import Engine, event, make_url
 from sqlalchemy.engine import ExceptionContext
@@ -40,27 +43,32 @@ _engine: Engine | None = None
 # ``alembic upgrade head`` cannot be killed by it (#1535, #1572).
 STATEMENT_TIMEOUT = "30s"
 
-# The libpq modes that refuse a server which declines TLS. ``verify-full`` with a bundled Supabase CA
-# is the owner's call (#1695); until then ``require`` is what a URL without a mode gets.
-TLS_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
+# The root the production pooler's chain ends in (Supabase Root 2021 CA), valid until 2031-04-26.
+# When Supabase rotates it, replace the file with the one the Supabase dashboard serves under
+# Database settings → SSL configuration.
+SUPABASE_ROOT_CA = Path(__file__).resolve().parent / "certs" / "supabase-root-2021-ca.crt"
 
 
 def tls_connect_args(database_url: str) -> dict[str, str]:
     """The ``connect_args`` that make a connection to ``database_url`` require TLS.
 
-    A URL naming no ``sslmode`` gets ``require``; one naming a mode from ``TLS_SSLMODES`` keeps it.
-    A weaker mode is honoured only outside a deploy — the ``localdb`` Postgres speaks no TLS, which
-    is why its URL says ``sslmode=disable`` — and on a deploy it raises, so the boot fails rather
-    than talking to the database in the clear.
+    On a deploy the connection is ``verify-full`` against ``SUPABASE_ROOT_CA`` (#1816): a URL may
+    name no ``sslmode`` or ``verify-full``, any other mode raises so the boot fails, and an
+    ``sslrootcert`` in the URL is overridden, because ``connect_args`` win over the URL's query.
+
+    Outside a deploy a URL naming no ``sslmode`` gets ``require`` and one naming a mode keeps it —
+    the ``localdb`` Postgres speaks no TLS, which is why its URL says ``sslmode=disable``.
     """
     sslmode = make_url(database_url).query.get("sslmode")
+    if settings.production:
+        if sslmode not in (None, "verify-full"):
+            raise RuntimeError(
+                f"DATABASE_URL sets sslmode={sslmode}. A deploy connects with sslmode=verify-full against "
+                f"the bundled Supabase root CA (#1816); drop the parameter."
+            )
+        return {"sslmode": "verify-full", "sslrootcert": str(SUPABASE_ROOT_CA)}
     if sslmode is None:
         return {"sslmode": "require"}
-    if sslmode not in TLS_SSLMODES and settings.production:
-        raise RuntimeError(
-            f"DATABASE_URL sets sslmode={sslmode}, which allows an unencrypted connection. A deploy "
-            f"requires one of {', '.join(sorted(TLS_SSLMODES))}; drop the parameter to get require."
-        )
     return {}
 
 
@@ -90,6 +98,25 @@ def _keep_the_first_line(context: ExceptionContext) -> None:
             error.args = (error.args[0].split("\n", 1)[0],)
 
 
+# libpq's wording, on libpq 17, for a chain that does not end in the root, a certificate that does not
+# name the host, and a root file that is missing.
+_CERTIFICATE_FAILURES = ("certificate verify failed", "does not match host name", "root certificate file")
+
+CERTIFICATE_FAILURE = (
+    "The database server's TLS certificate did not verify against the Supabase root CA bundled at "
+    "backend/certs/supabase-root-2021-ca.crt (sslmode=verify-full, #1816). If Supabase has rotated "
+    "its CA, replace that file with the certificate from the Supabase dashboard (Database settings → "
+    "SSL configuration). libpq said: "
+)
+
+
+def _name_the_certificate_failure(context: ExceptionContext) -> None:
+    for error in (context.original_exception, context.sqlalchemy_exception):
+        if error is not None and len(error.args) == 1 and isinstance(error.args[0], str):
+            if any(marker in error.args[0] for marker in _CERTIFICATE_FAILURES):
+                error.args = (CERTIFICATE_FAILURE + error.args[0],)
+
+
 def redact_statement_errors(engine: Engine) -> None:
     """Cut every database error the engine raises to its first line: the error class and message.
 
@@ -98,8 +125,12 @@ def redact_statement_errors(engine: Engine) -> None:
     copies that text into the error it wraps the driver's in. The ``[SQL: …]`` block is added when
     the error is printed, so the statement survives the cut, and the engine's ``hide_parameters``
     decides whether the bound parameters are printed beneath it.
+
+    A connection refused because the server's certificate did not verify is prefixed with a sentence
+    naming the bundled CA, so a stale certificate reads as one at boot.
     """
     event.listen(engine, "handle_error", _keep_the_first_line)
+    event.listen(engine, "handle_error", _name_the_certificate_failure)
 
 
 def reset_engine() -> None:

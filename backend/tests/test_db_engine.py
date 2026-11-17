@@ -1,5 +1,6 @@
 """The engine every request runs on: what a session carries into Postgres (#1535), what its errors
-carry out (#1694) and that it reaches Postgres only over TLS (#1695).
+carry out (#1694), that it reaches Postgres only over TLS (#1695) and that a deploy verifies the
+server against the bundled Supabase root CA (#1816).
 
 The setting being present on the session is the fact this repository can prove; Postgres enforcing
 it is Postgres's contract, so there is no ``pg_sleep`` here.
@@ -7,12 +8,15 @@ it is Postgres's contract, so there is no ``pg_sleep`` here.
 
 import logging
 import re
+import ssl
 from pathlib import Path
 
+import psycopg2
 import pytest
 import yaml
-from sqlalchemy import make_url, text
+from sqlalchemy import create_engine, make_url, text
 from sqlalchemy.exc import DataError, OperationalError
+from sqlalchemy.pool import NullPool
 
 from backend import db_engine, service
 from backend.config import settings
@@ -37,21 +41,46 @@ def test_a_url_without_an_sslmode_will_not_connect_to_a_server_without_tls(migra
         db_engine.reset_engine()
 
 
-@pytest.mark.parametrize("sslmode", ["require", "verify-ca", "verify-full"])
-def test_a_url_naming_a_tls_mode_keeps_it_on_a_deploy(sslmode, monkeypatch):
+@pytest.mark.parametrize("url", ["postgresql://reli@db/reli", "postgresql://reli@db/reli?sslmode=verify-full"])
+def test_a_deploy_verifies_the_server_against_the_bundled_supabase_ca(url, monkeypatch):
     monkeypatch.setattr(settings, "PRODUCTION", "1")
-    assert tls_connect_args(f"postgresql://reli@db/reli?sslmode={sslmode}") == {}
+    assert tls_connect_args(url) == {"sslmode": "verify-full", "sslrootcert": str(db_engine.SUPABASE_ROOT_CA)}
 
 
-def test_a_url_naming_no_mode_requires_tls():
+def test_a_url_naming_no_mode_requires_tls(monkeypatch):
+    monkeypatch.setattr(settings, "RAILWAY_ENVIRONMENT_NAME", "")
+    monkeypatch.setattr(settings, "PRODUCTION", "")
     assert tls_connect_args("postgresql://reli@db/reli") == {"sslmode": "require"}
 
 
-@pytest.mark.parametrize("sslmode", ["disable", "allow", "prefer"])
-def test_a_deploy_refuses_a_mode_that_allows_an_unencrypted_connection(sslmode, monkeypatch):
+@pytest.mark.parametrize("sslmode", ["disable", "allow", "prefer", "require", "verify-ca"])
+def test_a_deploy_refuses_any_mode_short_of_verify_full(sslmode, monkeypatch):
     monkeypatch.setattr(settings, "RAILWAY_ENVIRONMENT_NAME", "production")
     with pytest.raises(RuntimeError, match=f"sslmode={sslmode}"):
         tls_connect_args(f"postgresql://reli@db/reli?sslmode={sslmode}")
+
+
+def test_the_bundled_ca_is_supabases_root():
+    """A moved, renamed or corrupted file would fail every deploy's boot; this fails the build first."""
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_verify_locations(cafile=str(db_engine.SUPABASE_ROOT_CA))
+    [certificate] = context.get_ca_certs()
+    assert (("commonName", "Supabase Root 2021 CA"),) in certificate["subject"]
+
+
+def test_a_certificate_failure_says_so_plainly():
+    """The ``handle_error`` path the boot's connection takes when libpq refuses the server's chain."""
+
+    def refused():
+        raise psycopg2.OperationalError(
+            'connection to server at "h" (1.2.3.4), port 5432 failed: SSL error: certificate verify failed\n'
+        )
+
+    engine = create_engine("postgresql+psycopg2://", creator=refused, poolclass=NullPool)
+    db_engine.redact_statement_errors(engine)
+    with pytest.raises(OperationalError, match="did not verify against the Supabase root CA") as failure:
+        engine.connect()
+    assert "certificate verify failed" in str(failure.value)
 
 
 def test_a_local_run_keeps_the_localdb_profiles_disable(monkeypatch):

@@ -100,14 +100,14 @@ These are the fields of `Settings` in `backend/config.py`, and nothing else is r
 
 | Variable | Default | Notes |
 |---|---|---|
-| `DATABASE_URL` | — | **Required.** Postgres connection string. No default: the boot fails without it rather than serving an empty database. The connection requires TLS: no `sslmode` means `require`, and a deploy — `PRODUCTION` or `RAILWAY_ENVIRONMENT_NAME` set — refuses a weaker one (#1695); the `localdb` URL sets `sslmode=disable`, which only a local run accepts. |
+| `DATABASE_URL` | — | **Required.** Postgres connection string. No default: the boot fails without it rather than serving an empty database. The connection requires TLS (#1695): off a deploy no `sslmode` means `require`; a deploy — `PRODUCTION` or `RAILWAY_ENVIRONMENT_NAME` set — connects with `verify-full` against the bundled Supabase root CA and refuses any other mode (#1816). The `localdb` URL sets `sslmode=disable`, which only a local run accepts. |
 | `SECRET_KEY` | empty | HS256 key for the JWTs the authorization server mints for `/mcp` — the only credential `/mcp` accepts — and the web view's `__Host-reli_session` cookie. Human-provisioned; at least 32 random bytes. Empty — or shorter than 32 bytes (#1534) — means no JWT is issued or accepted, so `/mcp` is closed (401 to everything, and a warning at startup), never a boot failure. Use a different key on each environment: a token names the deploy that minted it in `iss` and another deploy refuses it (#1697), but a key two deploys share is still one secret leaked twice. |
 | `ALLOWED_EMAILS` | empty | Comma-separated Google account emails allowed to sign in. Empty admits nobody. |
 | `GOOGLE_AUTH_REDIRECT_URI` | empty | `https://<your-host>/api/auth/google/callback`, registered verbatim on the OAuth client. Empty closes the sign-in; there is no localhost guess. |
 | `RELI_BASE_URL` | empty | Issuer and base of the OAuth metadata documents. Derived from `GOOGLE_AUTH_REDIRECT_URI` when empty. |
 | `GOOGLE_CLIENT_ID` | empty | The Web application OAuth client that identifies Reli to Google for the sign-in, and the only Google credential Reli holds. Empty closes the sign-in; the boot succeeds. |
 | `GOOGLE_CLIENT_SECRET` | empty | As above. |
-| `PRODUCTION` | empty | Marks a deploy outside Railway, which sets `RAILWAY_ENVIRONMENT_NAME` itself; `docker-compose.yml` sets it to `1`. A deploy hides `/openapi.json` and refuses a `DATABASE_URL` whose `sslmode` is weaker than `require`. |
+| `PRODUCTION` | empty | Marks a deploy outside Railway, which sets `RAILWAY_ENVIRONMENT_NAME` itself; `docker-compose.yml` sets it to `1`. A deploy hides `/openapi.json` and connects to the database with `sslmode=verify-full` against the bundled Supabase root CA, refusing a `DATABASE_URL` that names any other `sslmode`. |
 | `HIDE_API_DOCS` | empty | Hides `/openapi.json`, `/docs` and `/redoc` without marking a deploy, so the TLS check stays off; `docker-compose.staging.yml` sets it, since its `postgres-staging` speaks no TLS (#1720). |
 | `LOG_LEVEL` | `INFO` | Level of Reli's own loggers; library loggers never go below `INFO` (#1714). |
 | `RATE_LIMIT_REGISTRATION_PER_MINUTE` | `5` | Requests a minute one caller may make to `/oauth/register` before a 429 (#1475). |

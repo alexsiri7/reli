@@ -67,9 +67,12 @@ deploys the image to staging and then to production. The Docker Compose "rig" at
 `DATABASE_URL` must be set in the environment — there is no default, and the service refuses to
 start without it rather than silently using an empty database. The connection requires TLS
 (#1695): `tls_connect_args` in `backend/db_engine.py`, used by the app's engine and the migrations',
-gives a URL with no `sslmode` `require`, and on a deploy refuses a weaker one — a deploy is
-`settings.production`, which Railway sets and `docker-compose.yml` sets with `PRODUCTION=1`; the
-`localdb` URL in `.env.example` says `sslmode=disable`, which only a local run accepts.
+gives a local run's URL with no `sslmode` `require`, and on a deploy connects with `verify-full`
+against the Supabase root CA bundled at `backend/certs/supabase-root-2021-ca.crt` and refuses any
+other mode the URL names (#1816) — a deploy is `settings.production`, which Railway sets and
+`docker-compose.yml` sets with `PRODUCTION=1`. A certificate that does not verify fails the boot
+with an error naming that file. The `localdb` URL in `.env.example` says `sslmode=disable`, which
+only a local run accepts.
 
 The production database is schema `reli` of a shared Supabase project, reached through the Postgres
 role `reli`. Its pooler ignores connect-time options, so the 30 s `STATEMENT_TIMEOUT` in
