@@ -6,13 +6,16 @@ the exemption every request below would be 401. Google is ``httpx.MockTransport`
 """
 
 import logging
+import re
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import jwt
 import pytest
+import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
@@ -157,6 +160,23 @@ def test_a_token_is_refused_by_a_deploy_with_another_issuer(sign_in_settings, mo
     monkeypatch.setattr(settings, "RELI_BASE_URL", "https://staging.example.test")
     with pytest.raises(jwt.InvalidIssuerError):
         auth.decode_jwt(token, audience="mcp")
+
+
+def test_the_staging_compose_signs_and_issues_with_its_own_variables():
+    """The self-hosted staging and production deploys read one ``.env``, so the key and both inputs of
+    ``base_url()`` must come from different host variables there, or each accepts the other's tokens
+    (#1697, #1813)."""
+    root = Path(__file__).resolve().parents[2]
+
+    def host_variables(compose_file: str, service: str, name: str) -> set[str]:
+        environment = yaml.safe_load((root / compose_file).read_text())["services"][service]["environment"]
+        [entry] = [entry for entry in environment if entry.startswith(f"{name}=")]
+        return set(re.findall(r"\$\{(\w+)", entry))
+
+    for name in ("SECRET_KEY", "RELI_BASE_URL", "GOOGLE_AUTH_REDIRECT_URI"):
+        production = host_variables("docker-compose.yml", "reli", name)
+        staging = host_variables("docker-compose.staging.yml", "reli-staging", name)
+        assert production and staging and production.isdisjoint(staging), name
 
 
 def test_a_token_without_an_issuer_is_refused(sign_in_settings):
