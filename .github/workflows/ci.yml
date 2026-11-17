@@ -199,10 +199,14 @@ jobs:
         with:
           node-version: "22"
 
-      # Audits the lockfile directly; no install needed.
+      # Audits the lockfile directly; no install needed. Scoped to production
+      # dependencies: the frontend bundle ships only react/react-dom/react-markdown/
+      # react-router-dom, and dev-only tooling (vite, typescript-eslint, ...) carries
+      # advisories for issues that never reach a user, sometimes with no fixed
+      # version yet published upstream.
       - name: Run npm audit
         working-directory: frontend
-        run: npm audit
+        run: npm audit --omit=dev
 
   # Deploy moved to staging-pipeline.yml — CI success triggers staging deploy,
   # then production deploy (with rollback) after staging health check passes.
