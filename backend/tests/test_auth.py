@@ -321,7 +321,7 @@ def test_a_cancellation_logs_a_bounded_prefix_of_the_error(client, session, goog
                 "error": "x" * auth.MAX_CALLBACK_PARAM_LENGTH,
                 "state": "server-state" if branch == "mcp" else "web-state",
             },
-            headers=_flow_cookie(),
+            headers=_flow_cookie() if branch == "mcp" else _web_flow_cookie(),
         )
 
     assert response.status_code == 302
