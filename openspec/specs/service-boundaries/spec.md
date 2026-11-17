@@ -92,6 +92,20 @@ CI SHALL install backend dependencies from the committed lockfile and refuse a l
 - WHEN CI runs
 - THEN the audit fails and the staging pipeline does not deploy it
 
+### Requirement: Images are pulled by digest and kept patched
+
+Every base image the Dockerfile builds from or copies out of, and every container and service image a workflow job runs, SHALL be named by a content digest rather than a tag alone, because a tag can be repointed to other content without the file changing. Dependabot SHALL keep moving the Dockerfile's digests, and nothing in its configuration SHALL stop a patch update to them. A check SHALL fail the build if either does not hold.
+
+#### Scenario: An image pulled by its tag
+- GIVEN a Dockerfile or workflow that names an image by a tag with no digest
+- WHEN CI runs
+- THEN the gate fails naming that image
+
+#### Scenario: Dependabot told to skip patches to the base images
+- GIVEN a Dependabot configuration that ignores patch updates to the Dockerfile's images, or pauses their updates
+- WHEN CI runs
+- THEN the gate fails
+
 ### Requirement: Deployment is safe by default
 
 The service SHALL run on Postgres from a required connection string with no fallback, and SHALL refuse to start without it. It SHALL apply its migrations on boot and fail the boot on a migration failure. Schema changes after the baseline SHALL be additive unless a destructive change explicitly opts in with its data preserved.

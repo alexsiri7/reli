@@ -31,6 +31,7 @@ PLAINTEXT_NTFY = re.compile(r"""(?<!https://)\bntfy\.sh/""")
 PINNED_ACTION = re.compile(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}")
 NPX_PACKAGE = re.compile(r"\bnpx\s+(?:-\S+\s+)*(\S+)")
 EXACT_VERSION = re.compile(r".@\d+\.\d+\.\d+$")
+DIGEST_PINNED = re.compile(r"\S+@sha256:[0-9a-f]{64}")
 
 # What `gates.sh` needs on PATH before it reaches a stage. Every venv tool goes through
 # `uv run`, because CI never activates the venv.
@@ -199,6 +200,89 @@ def test_the_pin_scan_sees_an_action_used_by_its_tag(tmp_path):
     ]
 
 
+def _unpinned_images(dockerfile: Path = REPO_ROOT / "Dockerfile", directory: Path = WORKFLOWS) -> list[str]:
+    offenders: list[str] = []
+    stages: set[str] = set()
+    for line in dockerfile.read_text().splitlines():
+        words = line.split()
+        instruction = words[0].upper() if words else ""
+        if instruction == "FROM":
+            image, *rest = [word for word in words[1:] if not word.startswith("--platform=")]
+            if image not in stages and not DIGEST_PINNED.fullmatch(image):
+                offenders.append(f"{dockerfile.name}:{image}")
+            if rest[:1] and rest[0].upper() == "AS":
+                stages.add(rest[1])
+        elif instruction == "COPY":
+            for source in (word.removeprefix("--from=") for word in words if word.startswith("--from=")):
+                if source not in stages and not DIGEST_PINNED.fullmatch(source):
+                    offenders.append(f"{dockerfile.name}:{source}")
+    workflows = (p for p in directory.iterdir() if p.suffix in (".yml", ".yaml"))
+    for workflow in sorted(workflows):
+        for job in yaml.safe_load(workflow.read_text())["jobs"].values():
+            container = job.get("container")
+            images = [container.get("image") if isinstance(container, dict) else container]
+            images += [service.get("image") for service in job.get("services", {}).values()]
+            offenders += [f"{workflow.name}:{i}" for i in images if i and not DIGEST_PINNED.fullmatch(i)]
+    return offenders
+
+
+def test_every_image_is_pinned_to_a_digest():
+    """#1814: a tag can be repointed to other content without the Dockerfile or workflow changing; a
+    digest cannot."""
+    offenders = _unpinned_images()
+    assert offenders == [], f"these images are pulled by a movable tag: {offenders}"
+
+
+def test_the_image_pin_scan_sees_an_image_used_by_its_tag(tmp_path):
+    digest = "sha256:" + "0" * 64
+    (tmp_path / "Dockerfile").write_text(
+        f"FROM --platform=linux/amd64 python:3.12-slim@{digest} AS a\n"
+        "FROM node:22-slim\n"
+        "COPY --from=a /x /x\n"
+        "COPY --from=ghcr.io/x/y:1 /y /y\n"
+        "from debian:12\n"
+    )
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "w.yml").write_text(
+        "jobs:\n"
+        "  x:\n    container: mcr.microsoft.com/playwright:v1\n"
+        f"  y:\n    container:\n      image: mcr.microsoft.com/playwright:v1@{digest}\n"
+        "    services:\n      db:\n        image: postgres:16-alpine\n"
+    )
+    assert _unpinned_images(tmp_path / "Dockerfile", workflows) == [
+        "Dockerfile:node:22-slim",
+        "Dockerfile:ghcr.io/x/y:1",
+        "Dockerfile:debian:12",
+        "w.yml:mcr.microsoft.com/playwright:v1",
+        "w.yml:postgres:16-alpine",
+    ]
+
+
+def test_dependabot_moves_the_pinned_base_images():
+    """#1203/#1814: the digests above only receive security patches if something moves them."""
+    updates = yaml.safe_load(DEPENDABOT.read_text())["updates"]
+    docker = [u for u in updates if u["package-ecosystem"] == "docker"]
+    assert "/" in {u["directory"] for u in docker}
+    # A limit of 0 is Dependabot's switch for pausing an ecosystem's version updates outright.
+    assert all(u.get("open-pull-requests-limit") != 0 for u in docker)
+    # A rule without update-types ignores every update to the images it names.
+    blocking = [
+        rule
+        for u in docker
+        for rule in u.get("ignore", [])
+        if "version-update:semver-patch" in rule.get("update-types", ["version-update:semver-patch"])
+    ]
+    assert blocking == [], f"these ignore rules stop a patched base from landing: {blocking}"
+
+
+def test_the_snapshot_command_names_the_image_ci_renders_in():
+    """The snapshots are valid only from the frontend job's container, so CLAUDE.md's regeneration
+    command must name the same tag and digest."""
+    container = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())["jobs"]["frontend"]["container"]
+    assert f"{container} \\\n" in (REPO_ROOT / "CLAUDE.md").read_text()
+
+
 def test_every_npx_package_names_an_exact_version():
     """#1711: ``npx pkg@latest`` runs whatever the registry serves that day."""
     offenders = [
@@ -339,8 +423,8 @@ def test_the_deploy_waits_on_a_dependency_audit():
 
 
 def test_every_image_build_pulls_its_base_rather_than_trusting_the_cache():
-    """#1712: the base is a floating ``python:3.12-slim`` tag so security patches land on rebuild,
-    which only holds if the build fetches the tag instead of reusing a cached layer."""
+    """#1712: the build resolves its digest-pinned base (#1814) from the registry rather than from
+    whatever a builder cache holds."""
     ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
     builds = [step for step in ci["jobs"]["build"]["steps"] if "docker/build-push-action@" in step.get("uses", "")]
     assert builds, "found no image build to check"

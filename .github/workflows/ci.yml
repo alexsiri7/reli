@@ -72,9 +72,10 @@ jobs:
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
-    # Pinned to the @playwright/test version in frontend/package.json. The committed snapshots were
-    # generated in this image; any other renders different pixels and fails on nothing real.
-    container: mcr.microsoft.com/playwright:v1.65.0-noble
+    # Pinned to the @playwright/test version in frontend/package.json; the tag and digest are bumped
+    # together with it. The committed snapshots were generated in this image; any other renders
+    # different pixels and fails on nothing real.
+    container: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
