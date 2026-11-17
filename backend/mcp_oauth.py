@@ -348,9 +348,16 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
     owner did not initiate announces itself instead of completing silently (confused deputy):
     without this page, ``/oauth/authorize`` sent the browser straight to Google and back to
     whatever client had registered, with nothing on any screen naming it. The host is shown on its own,
-    read as ``_redirect_uri_is_safe`` reads it, so it is the host the code reaches.
+    read as ``_redirect_uri_is_safe`` reads it, so it is the host the code reaches. The host leads
+    because it is the one value on the page Reli establishes; registration is open, so the name is
+    whatever the client chose and is shown as self-declared (#1811).
     """
-    name = html.escape(client_name) or "an unnamed client"
+    name = html.escape(client_name)
+    name_sentence = (
+        f"The client calls itself &ldquo;{name}&rdquo; (self-declared — Reli has not verified it)."
+        if name
+        else "It gave no name."
+    )
     host = html.escape(_as_delivered(redirect_uri).host or "")
     uri = html.escape(redirect_uri)
     state = html.escape(server_state)
@@ -358,9 +365,11 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
         "<!doctype html><html><head><meta charset='utf-8'><title>Authorize access to Reli</title>"
         "<meta name='robots' content='noindex'></head><body>"
         "<h1>Authorize access to Reli?</h1>"
-        f"<p><strong>{name}</strong> is asking for full access to your graph.</p>"
-        f"<p>Its sign-in result will be delivered to <strong>{host}</strong> (<code>{uri}</code>).</p>"
-        "<p>Only continue if you just initiated this from a connector you are setting up.</p>"
+        "<p>Continuing gives full access to your graph to whatever receives the sign-in result at "
+        f"<strong>{host}</strong> (<code>{uri}</code>).</p>"
+        f"<p>{name_sentence}</p>"
+        "<p>Only continue if you just started this from a connector you are setting up and "
+        f"<strong>{host}</strong> is where you expect it to land.</p>"
         "<form method='post' action='/oauth/authorize/confirm'>"
         f"<input type='hidden' name='server_state' value='{state}'>"
         "<button type='submit'>Continue with Google</button></form>"

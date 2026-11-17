@@ -816,6 +816,22 @@ def test_the_consent_page_names_the_host_the_redirect_delivers_to_not_the_one_th
     assert "<strong>claude.ai</strong>" not in page
 
 
+def test_the_consent_page_leads_with_the_host_and_marks_the_name_self_declared():
+    page = mcp_oauth._consent_page("state", "Claude", CLIENT_REDIRECT).body.decode()
+
+    assert page.index("<strong>client.example.test</strong>") < page.index("Claude")
+    assert "self-declared" in page
+    assert not any("Claude" in emphasised for emphasised in re.findall(r"<strong>(.*?)</strong>", page, re.S))
+    assert "<strong>client.example.test</strong> is where you expect it to land." in page
+
+
+def test_the_consent_page_says_when_a_client_gave_no_name():
+    page = mcp_oauth._consent_page("state", "", CLIENT_REDIRECT).body.decode()
+
+    assert "It gave no name." in page
+    assert "self-declared" not in page
+
+
 def test_authorize_refuses_a_redirect_uri_registered_before_the_check_tightened(client, session):
     smuggled = "https://claude.ai@attacker.example/cb"
     cleanup_and_store(
