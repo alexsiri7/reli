@@ -199,6 +199,7 @@ def test_a_signed_image_is_checked_by_the_digest_it_deploys(tmp_path):
     [verify] = (tmp_path / "cosign-log").read_text().splitlines()
     assert verify.startswith(f"verify {PINNED} ")
     assert f"--certificate-identity {SIGNER}" in verify
+    assert "--certificate-oidc-issuer https://token.actions.githubusercontent.com" in verify
     assert IMAGE not in verify
     assert _reached_railway(log)
 
