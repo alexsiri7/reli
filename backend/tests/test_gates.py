@@ -244,6 +244,8 @@ def test_a_dispatched_ci_run_builds_the_image_without_publishing_it():
     publish_only = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
     assert steps["Log in to GitHub Container Registry"] == publish_only
     assert steps["Build and push image"] == publish_only
+    assert steps["Install cosign"] == publish_only
+    assert steps["Sign image"] == publish_only
     assert steps["Build image"] == "github.event_name != 'push'"
 
 
