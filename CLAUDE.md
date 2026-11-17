@@ -194,6 +194,13 @@ secret, and a consumed refresh token keeps no email or subject (#1715). Rotating
 itself stop a refresh chain from minting a fresh JWT under the new key, which is why the allowlist
 re-check above is what actually ends a chain.
 
+**Accepted risk: the web session has a fixed length and no idle timeout** (#1809). A session cookie
+is good for its full seven days (`WEB_JWT_EXPIRY_SECONDS` in `backend/auth.py`) however long it sits
+unused; only logout or a kill switch ends it early. The owner accepted this on 2026-11-17: for a
+single-user deployment the two global kill switches above — removing the address from
+`ALLOWED_EMAILS`, or rotating `SECRET_KEY` — are enough. No sliding session, idle timeout or
+revoke-all-sessions state is to be added for it.
+
 **The human steps, none of which an agent can perform or verify.** Do not claim any of these is
 done:
 
