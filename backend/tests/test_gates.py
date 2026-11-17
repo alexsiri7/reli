@@ -357,29 +357,38 @@ def test_the_image_runs_as_reli_from_container_start():
     assert not any(line.startswith("ENTRYPOINT") for line in runtime)
 
 
-def _image_services_keeping_capabilities(directory: Path = REPO_ROOT) -> list[str]:
+def _unhardened_image_services(directory: Path = REPO_ROOT) -> list[str]:
     """Compose services that run Reli's image — pulled by name or built from this repository — and
-    do not drop every Linux capability or add one back."""
+    keep a Linux capability, may gain privileges, or can write their root filesystem."""
     offenders: list[str] = []
     for compose_file in sorted(directory.glob("docker-compose*.yml")):
         for name, service in yaml.safe_load(compose_file.read_text())["services"].items():
             repository = re.split("[:@]", service.get("image", ""))[0]
             runs_the_image = "build" in service or repository == "ghcr.io/alexsiri7/reli"
-            if runs_the_image and (service.get("cap_drop") != ["ALL"] or "cap_add" in service):
+            hardened = (
+                service.get("cap_drop") == ["ALL"]
+                and "cap_add" not in service
+                and "no-new-privileges:true" in service.get("security_opt", [])
+                and service.get("read_only") is True
+            )
+            if runs_the_image and not hardened:
                 offenders.append(f"{compose_file.name}:{name}")
     return offenders
 
 
-def test_every_compose_service_running_the_image_drops_every_capability():
-    """#1712: the server binds an unprivileged port, so it needs no Linux capability back."""
-    offenders = _image_services_keeping_capabilities()
-    assert offenders == [], f"these services run the image with capabilities left: {offenders}"
+def test_every_compose_service_running_the_image_is_hardened():
+    """#1712: the server binds an unprivileged port, so it needs no Linux capability back. #1818: it
+    writes no file and runs no setuid binary, so its root filesystem is read-only and no process in
+    it gains privileges."""
+    offenders = _unhardened_image_services()
+    assert offenders == [], f"these services run the image without the hardening: {offenders}"
 
 
-def test_the_capability_scan_sees_a_service_running_the_image(tmp_path):
+def test_the_hardening_scan_sees_a_service_running_the_image(tmp_path):
     (tmp_path / "docker-compose.yml").write_text(
         "services:\n"
-        "  dropped:\n    image: ghcr.io/alexsiri7/reli:latest\n    cap_drop: [ALL]\n"
+        "  hardened:\n    image: ghcr.io/alexsiri7/reli:latest\n    cap_drop: [ALL]\n"
+        "    security_opt: [no-new-privileges:true]\n    read_only: true\n"
         "  kept:\n    image: ghcr.io/alexsiri7/reli:latest\n"
         "  db:\n    image: postgres:16-alpine\n"
     )
@@ -387,13 +396,19 @@ def test_the_capability_scan_sees_a_service_running_the_image(tmp_path):
         "services:\n"
         "  built:\n    build: .\n"
         "  readded:\n    image: ghcr.io/alexsiri7/reli:x\n    cap_drop: [ALL]\n    cap_add: [NET_RAW]\n"
+        "    security_opt: [no-new-privileges:true]\n    read_only: true\n"
+        "  writable:\n    image: ghcr.io/alexsiri7/reli:x\n    cap_drop: [ALL]\n"
+        "    security_opt: [no-new-privileges:true]\n    read_only: false\n"
+        "  escalating:\n    image: ghcr.io/alexsiri7/reli:x\n    cap_drop: [ALL]\n    read_only: true\n"
         "  untagged:\n    image: ghcr.io/alexsiri7/reli\n"
         "  pinned:\n    image: ghcr.io/alexsiri7/reli@sha256:0123\n"
         "  lookalike:\n    image: ghcr.io/alexsiri7/reli-docs:latest\n"
     )
-    assert _image_services_keeping_capabilities(tmp_path) == [
+    assert _unhardened_image_services(tmp_path) == [
         "docker-compose.preview.yml:built",
         "docker-compose.preview.yml:readded",
+        "docker-compose.preview.yml:writable",
+        "docker-compose.preview.yml:escalating",
         "docker-compose.preview.yml:untagged",
         "docker-compose.preview.yml:pinned",
         "docker-compose.yml:kept",
