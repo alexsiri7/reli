@@ -36,12 +36,18 @@ A second EvidenceFor edge between the same pair SHALL be refused, naming the edg
 
 ### Requirement: Every write is bounded
 
-A write exceeding a ceiling SHALL be refused whole, before anything is stored or journalled, naming the field and its ceiling. The ceilings SHALL be: title 500 characters; description 100,000 characters; notes and urls 100,000 bytes each as stored; 100 tags of 100 characters each; relationship context 2,000 characters; preference scope 100 characters. A priority SHALL be finite.
+A write exceeding a ceiling SHALL be refused whole, before anything is stored or journalled, naming the field and its ceiling. The ceilings SHALL be: title 500 characters; description 100,000 characters; notes and urls 100,000 bytes each as stored; 100 tags of 100 characters each; relationship context 2,000 characters; preference scope 100 characters. A priority SHALL be finite. Every urls value SHALL be an absolute http or https URL with a host, as a URL parser reads it.
 
 #### Scenario: A pasted document as a title
 - GIVEN a session creating a Thing
 - WHEN the title it passes is 10,000 characters long
 - THEN the write is refused naming the title and its 500-character ceiling
+- AND no Thing and no journal entry is written
+
+#### Scenario: A script as a link
+- GIVEN a session creating or updating a Thing
+- WHEN a urls value it passes is `javascript:alert(1)`, a `data:` URL or a relative path
+- THEN the write is refused naming the urls key
 - AND no Thing and no journal entry is written
 
 ### Requirement: An update is bounded only on the fields it sets

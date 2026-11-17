@@ -39,10 +39,13 @@ function groupByLabel(relationships: Relationship[]): [string, Relationship[]][]
 /**
  * Whether a stored `urls` value may become a link.
  *
- * `urls` is written by whichever session holds the connector and is not validated on the way in, so
- * a `javascript:` value would run on this origin from one click. The URL parser, not a prefix match,
+ * `urls` is written by whichever session holds the connector. The service refuses a non-http(s) value
+ * on the way in (#1822), but a Thing written before that can still hold one, and a `javascript:`
+ * value would run on this origin from one click. The URL parser, not a prefix match,
  * decides the scheme: it lowercases and strips the leading whitespace a prefix check misses, and a
- * value it cannot parse (relative, scheme-relative, garbage) is not a link either.
+ * value it cannot parse (relative, scheme-relative, garbage) is not a link either. The service is
+ * stricter about the shape — it refuses `https:no-host`, which this parser repairs and links — so the
+ * two agree on the scheme, not on every value.
  */
 function isLinkable(url: string): boolean {
   try {

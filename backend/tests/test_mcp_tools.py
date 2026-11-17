@@ -8,6 +8,7 @@ because auth and the mount are properties of the ASGI stack and not of the funct
 
 import asyncio
 import json
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import get_args
@@ -17,9 +18,16 @@ import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import text
 
-from backend import auth, prompts, service
-from backend.config import settings
-from backend.db_models import NEW_TAG, SCHEDULED_TASK_TAG, Actor, RelationshipType
+from backend import auth, mcp_transport, prompts, service
+from backend.config import MIN_SECRET_KEY_BYTES, settings
+from backend.db_models import (
+    NEW_TAG,
+    PREFERENCE_TAG,
+    REJECTED_TAG,
+    SCHEDULED_TASK_TAG,
+    Actor,
+    RelationshipType,
+)
 from backend.mcp_server import (
     MAX_JOURNAL_ID,
     MAX_STALE_DAYS,
@@ -292,6 +300,22 @@ def test_archive_thing_refuses_a_heartbeat(tools):
     assert get_thing(uuid.UUID(heartbeat["id"]))["thing"]["active"] is True
 
 
+def test_update_thing_refuses_dropping_a_rejection(tools):
+    preference = create_thing(
+        actor="claude_scheduled", title="Avoids Friday meetings", tags=[PREFERENCE_TAG, REJECTED_TAG]
+    )
+
+    with pytest.raises(ToolError, match="must keep"):
+        asyncio.run(
+            reli_mcp.call_tool(
+                "update_thing",
+                {"actor": "claude_interactive", "thing_id": preference["id"], "tags": [PREFERENCE_TAG]},
+            )
+        )
+
+    assert REJECTED_TAG in get_thing(uuid.UUID(preference["id"]))["thing"]["tags"]
+
+
 def test_relate_and_unrelate_journal_the_edge(tools):
     source = create_thing(actor="claude_interactive", title="parent")
     target = create_thing(actor="claude_interactive", title="child")
@@ -449,6 +473,25 @@ def test_an_oversized_write_is_refused_naming_the_field(tools):
     assert find_things() == []
 
 
+def test_a_url_that_is_not_http_is_refused_by_both_writing_tools(tools):
+    """#1822: the scheme rule the docstrings state reaches a session as a refusal, on create and update."""
+    thing = create_thing(actor="claude_interactive", title="linked", urls={"home": "https://example.test"})
+
+    for name, arguments in (
+        ("create_thing", {"title": "t"}),
+        ("update_thing", {"thing_id": thing["id"]}),
+    ):
+        with pytest.raises(ToolError, match="http or https"):
+            asyncio.run(
+                reli_mcp.call_tool(
+                    name, {"actor": "claude_interactive", "urls": {"link": "javascript:alert(1)"}, **arguments}
+                )
+            )
+
+    assert [t["title"] for t in find_things()] == ["linked"]
+    assert get_thing(uuid.UUID(thing["id"]))["thing"]["urls"] == {"home": "https://example.test"}
+
+
 @pytest.mark.parametrize("tool", [create_thing, update_thing])
 def test_the_bounds_a_writing_tool_states_are_the_bounds_enforced(tool):
     """The docstring is what a session reads; it must not promise a ceiling the service does not hold."""
@@ -458,8 +501,10 @@ def test_the_bounds_a_writing_tool_states_are_the_bounds_enforced(tool):
         f"description up to {service.MAX_DESCRIPTION_CHARS}",
         f"notes and urls each up to {service.MAX_MAPPING_BYTES} bytes",
         f"at most {service.MAX_TAGS} tags of up to {service.MAX_TAG_CHARS} characters",
+        "Each URL must be an absolute http or https URL",
     ):
         assert stated in doc, stated
+    assert f"at most {service.HEARTBEAT_MAX_DAYS_AHEAD} days ahead" in " ".join((update_thing.__doc__ or "").split())
     assert f"up to {service.MAX_CONTEXT_CHARS} characters" in (relate.__doc__ or "")
     assert f"Up to {service.MAX_SCOPE_CHARS} characters" in (record_preference.__doc__ or "")
 
@@ -957,6 +1002,58 @@ def _bearer(token):
     return {**_MCP_HEADERS, "Authorization": f"Bearer {token}"}
 
 
+@pytest.mark.parametrize("secret_key_value", ["", "x" * (MIN_SECRET_KEY_BYTES - 1)])
+def test_an_unset_secret_key_is_warned_about_at_startup(monkeypatch, caplog, secret_key_value):
+    """An empty or too-short SECRET_KEY closes /mcp (#1534); the operator's only diagnostic is this
+    warning, so it must name what is wrong and not also claim the sign-in settings are missing."""
+    monkeypatch.setattr(settings, "SECRET_KEY", secret_key_value)
+
+    with caplog.at_level(logging.WARNING, logger="backend.mcp_transport"):
+        mcp_transport.create_mcp_asgi_app()
+
+    warnings = [record for record in caplog.records if record.name == "backend.mcp_transport"]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "SECRET_KEY" in message
+    assert "401 to every request" in message
+    assert "OAuth sign-in cannot complete" not in message
+
+
+def test_missing_sign_in_settings_beside_a_valid_secret_key_are_warned_about_at_startup(monkeypatch, caplog):
+    """A SECRET_KEY that can sign tokens but missing Google sign-in settings is a different failure
+    mode (#1450) and must be named as one, not folded into the SECRET_KEY warning above."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "k" * MIN_SECRET_KEY_BYTES)
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "a-client-secret")
+    monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", "https://reli.example.test/api/auth/google/callback")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "")
+
+    with caplog.at_level(logging.WARNING, logger="backend.mcp_transport"):
+        mcp_transport.create_mcp_asgi_app()
+
+    warnings = [record for record in caplog.records if record.name == "backend.mcp_transport"]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "OAuth sign-in cannot complete" in message
+    assert "GOOGLE_CLIENT_ID" in message
+    assert "ALLOWED_EMAILS" in message
+    assert "shorter than" not in message
+
+
+def test_a_fully_configured_sign_in_logs_no_warning_at_mcp_startup(monkeypatch, caplog):
+    """The warnings above are only trustworthy if they stay quiet once every setting is present."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "k" * MIN_SECRET_KEY_BYTES)
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "a-client-id")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "a-client-secret")
+    monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", "https://reli.example.test/api/auth/google/callback")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+
+    with caplog.at_level(logging.WARNING, logger="backend.mcp_transport"):
+        mcp_transport.create_mcp_asgi_app()
+
+    assert [record for record in caplog.records if record.name == "backend.mcp_transport"] == []
+
+
 def test_mcp_endpoint_refuses_an_unauthenticated_request(client, secret_key):
     response = client.post("/mcp/", json=_TOOLS_LIST, headers=_MCP_HEADERS)
 
@@ -1019,6 +1116,32 @@ def test_an_unset_secret_key_closes_the_endpoint_rather_than_opening_it(client):
     assert response.status_code == 401
 
 
+def test_an_authorization_header_that_is_not_utf8_is_an_invalid_token(client, secret_key):
+    """HTTP allows obs-text bytes in a header: they are a credential Reli did not issue, not a 500."""
+    headers = {**_MCP_HEADERS, "Authorization": b"Bearer \x80\x81garbage"}
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=headers)
+
+    assert response.status_code == 401
+    assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
+    assert response.json() == client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("wrong-token")).json()
+
+
+@pytest.mark.parametrize("reason", list(auth.Refusal))
+def test_every_refusal_admit_can_raise_is_a_401_with_a_remedy(client, secret_key, monkeypatch, reason):
+    """A Refusal added to admit without a description here would be a KeyError, a 500, on every bearer."""
+
+    def refuse(token, audience):
+        raise auth.CredentialRefused(reason)
+
+    monkeypatch.setattr(auth, "admit", refuse)
+
+    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer("any"))
+
+    assert response.status_code == 401
+    assert response.json()["detail"]
+
+
 def test_mcp_endpoint_admits_a_jwt_the_authorization_server_minted(client, mcp_token):
     response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(mcp_token))
 
@@ -1034,7 +1157,7 @@ def test_a_live_jwt_is_refused_once_its_account_leaves_the_allowlist(client, mcp
 
     assert response.status_code == 401
     assert 'error="invalid_token"' in response.headers["WWW-Authenticate"]
-    assert response.json()["detail"] == auth._ACCOUNT_NOT_ALLOWED
+    assert response.json()["detail"] == auth.ACCOUNT_NOT_ALLOWED
 
 
 def test_mcp_endpoint_refuses_a_jwt_for_another_audience(client, secret_key):
