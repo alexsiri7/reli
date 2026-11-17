@@ -80,12 +80,31 @@ A daily check SHALL verify the Railway deploy token and, when it is missing or t
 
 ### Requirement: Dependencies install locked and are audited
 
-CI SHALL install backend dependencies from the committed lockfile and refuse a lockfile that disagrees with the manifest. A scheduled scan, and every change to a lockfile, SHALL audit the backend and frontend dependencies the committed lockfiles pin for known vulnerabilities.
+CI SHALL install backend dependencies from the committed lockfile and refuse a lockfile that disagrees with the manifest. Every push, every pull request and a scheduled scan SHALL audit the backend and frontend dependencies the committed lockfiles pin for known vulnerabilities. The deploy that follows a push to main SHALL wait on a passing audit of the commit it ships; a manually dispatched deploy does not.
 
 #### Scenario: A lockfile change pulls in a vulnerable package
 - GIVEN a change to a committed lockfile that pins a package with a known vulnerability
 - WHEN the dependency scan runs
 - THEN the audit fails
+
+#### Scenario: A deploy of a commit pinning a vulnerable package
+- GIVEN a push to main whose lockfiles pin a package with a known vulnerability
+- WHEN CI runs
+- THEN the audit fails and the staging pipeline does not deploy it
+
+### Requirement: Images are pulled by digest and kept patched
+
+Every base image the Dockerfile builds from or copies out of, and every container and service image a workflow job runs, SHALL be named by a content digest rather than a tag alone, because a tag can be repointed to other content without the file changing. Dependabot SHALL keep moving the Dockerfile's digests, and nothing in its configuration SHALL stop a patch update to them. A check SHALL fail the build if either does not hold.
+
+#### Scenario: An image pulled by its tag
+- GIVEN a Dockerfile or workflow that names an image by a tag with no digest
+- WHEN CI runs
+- THEN the gate fails naming that image
+
+#### Scenario: Dependabot told to skip patches to the base images
+- GIVEN a Dependabot configuration that ignores patch updates to the Dockerfile's images, or pauses their updates
+- WHEN CI runs
+- THEN the gate fails
 
 ### Requirement: Deployment is safe by default
 

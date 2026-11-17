@@ -24,6 +24,8 @@ IMAGE = "ghcr.io/alexsiri7/reli:abc123"
 CHILDREN = ("sha256:aaaa", "sha256:bbbb")
 INDEX = '{"manifests":[{"digest":"sha256:aaaa"},{"digest":"sha256:bbbb"}]}\n'
 PINNED = f"ghcr.io/alexsiri7/reli@sha256:{hashlib.sha256(INDEX.encode()).hexdigest()}"
+ROLLBACK = REPO_ROOT / "docs" / "ROLLBACK.md"
+SIGNER = "https://github.com/alexsiri7/reli/.github/workflows/ci.yml@refs/heads/main"
 
 STUB_CURL = """#!/usr/bin/env bash
 args="$*"
@@ -54,6 +56,12 @@ case "$*" in
 esac
 """
 
+STUB_COSIGN = """#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$STUB/cosign-log"
+[ -e "$STUB/unsigned" ] && exit 1
+exit 0
+"""
+
 _JQ = shutil.which("jq")
 pytestmark = pytest.mark.skipif(
     _JQ is None and not os.environ.get("CI"),
@@ -75,20 +83,27 @@ def _deploy(
     index: str = INDEX,
     missing: tuple[str, ...] = (),
     no_tag: bool = False,
+    signer: str | None = None,
+    unsigned: bool = False,
 ) -> tuple[subprocess.CompletedProcess, list[str]]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "curl").write_text(STUB_CURL)
-    (bin_dir / "curl").chmod(0o755)
+    for name, stub in (("curl", STUB_CURL), ("cosign", STUB_COSIGN)):
+        (bin_dir / name).write_text(stub)
+        (bin_dir / name).chmod(0o755)
     (tmp_path / "statuses").write_text("".join(f"{s}\n" for s in statuses))
     (tmp_path / "index").write_text(index)
     (tmp_path / "missing").write_text("".join(f"{d}\n" for d in missing))
     if no_tag:
         (tmp_path / "no-tag").touch()
+    if unsigned:
+        (tmp_path / "unsigned").touch()
+    inherited = {k: v for k, v in os.environ.items() if k != "SIGNER_IDENTITY"}
     result = subprocess.run(
         ["bash", str(DEPLOY), image],
         env={
-            **os.environ,
+            **inherited,
+            **({"SIGNER_IDENTITY": signer} if signer else {}),
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
             "STUB": str(tmp_path),
             "PINNED": PINNED,
@@ -167,6 +182,36 @@ def test_a_digest_whose_manifest_does_not_hash_to_it_is_never_deployed(tmp_path)
     assert not _reached_railway(log)
 
 
+def test_an_image_ci_did_not_sign_is_never_deployed(tmp_path):
+    """#1817: a moved tag points at real, pullable bytes; only the signature says CI built them."""
+    result, log = _deploy(tmp_path, ["SUCCESS"], signer=SIGNER, unsigned=True)
+
+    assert result.returncode != 0
+    assert f"{PINNED} carries no signature from {SIGNER}" in result.stdout
+    assert not _reached_railway(log)
+    assert not (tmp_path / "output").exists(), "production deploys whatever staging wrote here"
+
+
+def test_a_signed_image_is_checked_by_the_digest_it_deploys(tmp_path):
+    result, log = _deploy(tmp_path, ["SUCCESS"], signer=SIGNER)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    [verify] = (tmp_path / "cosign-log").read_text().splitlines()
+    assert verify.startswith(f"verify {PINNED} ")
+    assert f"--certificate-identity {SIGNER}" in verify
+    assert "--certificate-oidc-issuer https://token.actions.githubusercontent.com" in verify
+    assert IMAGE not in verify
+    assert _reached_railway(log)
+
+
+def test_without_a_signer_the_deploy_checks_no_signature(tmp_path):
+    """The manual rollback in docs/ROLLBACK.md, which may target an image built before signing."""
+    result, _ = _deploy(tmp_path, ["SUCCESS"])
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not (tmp_path / "cosign-log").exists()
+
+
 def test_a_deployment_that_never_settles_fails(tmp_path):
     result, _ = _deploy(tmp_path, ["DEPLOYING"] * 5)
 
@@ -188,6 +233,18 @@ def test_ci_never_deletes_published_images():
     assert offenders == []
 
 
+def test_ci_signs_the_digest_it_pushed():
+    """Every deploy refuses an unsigned image, so a sign step dropped, or signing the tag rather
+    than the pushed digest, stops the pipeline rather than weakening it."""
+    build = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())["jobs"]["build"]
+    steps = {step.get("name"): step for step in build["steps"]}
+
+    assert build["permissions"]["id-token"] == "write"
+    assert steps["Build and push image"]["id"] == "push"
+    assert steps["Sign image"]["run"] == 'cosign sign --yes "ghcr.io/alexsiri7/reli@${DIGEST}"'
+    assert steps["Sign image"]["env"]["DIGEST"] == "${{ steps.push.outputs.digest }}"
+
+
 def test_both_deploy_jobs_go_through_the_checked_deploy():
     pipeline = yaml.safe_load((WORKFLOWS / "staging-pipeline.yml").read_text())
     steps = {step.get("name"): step for job in pipeline["jobs"].values() for step in job["steps"]}
@@ -199,6 +256,22 @@ def test_both_deploy_jobs_go_through_the_checked_deploy():
     production = steps["Deploy production image to Railway"]
     assert production["env"]["DEPLOY_IMAGE"] == "${{ needs.deploy-staging.outputs.deploy_image }}"
     assert production["run"] == './scripts/deploy-railway.sh "$DEPLOY_IMAGE"'
+    for job, name in (
+        ("deploy-staging", "Deploy staging image to Railway"),
+        ("deploy-production", "Deploy production image to Railway"),
+    ):
+        job_steps = pipeline["jobs"][job]["steps"]
+        names = [step.get("name") for step in job_steps]
+        installer = next(
+            i for i, step in enumerate(job_steps) if str(step.get("uses", "")).startswith("sigstore/cosign-installer@")
+        )
+        assert installer < names.index(name)
+    assert pipeline["env"]["SIGNER_IDENTITY"] == SIGNER
+    assert not any("SIGNER_IDENTITY" in step.get("env", {}) for step in steps.values())
     assert not any("serviceInstanceDeploy(" in step.get("run", "") for step in steps.values()), (
         "serviceInstanceDeploy returns no deployment id, so nothing can wait on its outcome"
     )
+
+
+def test_the_rollback_runbook_names_the_signer_the_pipeline_checks():
+    assert f"SIGNER_IDENTITY={SIGNER}" in ROLLBACK.read_text()

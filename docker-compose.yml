@@ -27,6 +27,11 @@ services:
     # The server binds an unprivileged port and needs no Linux capability (#1712).
     cap_drop:
       - ALL
+    # Nothing in the service writes a file — every byte it keeps is in Postgres — so the root
+    # filesystem can be read-only, and no setuid binary can raise a process's privileges (#1818).
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     restart: unless-stopped
 
   # Local development database: `docker compose --profile localdb up -d`,

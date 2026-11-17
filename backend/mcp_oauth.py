@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import html
 import logging
-import reprlib
 import secrets
 import uuid
 from collections.abc import Callable, Coroutine
@@ -63,6 +62,8 @@ logger = logging.getLogger(__name__)
 
 # A sign-in that takes longer than this answers "start again", which is the remedy.
 SESSION_TTL_SECONDS = 60 * 10
+# RFC 6819 §4.1.1: an authorization code lives just long enough to be exchanged.
+AUTH_CODE_TTL_SECONDS = 60
 REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
 # The life of a registration the owner has signed in through: that of the refresh family it serves.
 CLIENT_TTL_SECONDS = REFRESH_TOKEN_TTL_SECONDS
@@ -79,17 +80,16 @@ MAX_BODY_BYTES = 8 * 1024
 # the longest URI still fits in MAX_BODY_BYTES — a bound in characters would not, since one
 # character can be four bytes.
 MAX_PARAM_LENGTH = 2048
-# The most of a caller-supplied value a log line quotes: enough to recognise it, never the volume a
-# caller with no credential chooses (#1716).
-MAX_LOGGED_CHARS = 200
 
-_AT_CAPACITY = "Server is at capacity; try again later"
 _CODE_GONE = "Authorization code is invalid or expired: re-authorise the connector"
 _REFRESH_TOKEN_GONE = "Refresh token is invalid or expired: re-authorise the connector"
 # The only client authentication methods /oauth/token implements: a secret arrives in the form
 # body or not at all. Registration refuses any other, so a client is never told to authenticate a
 # way that would fail.
 TOKEN_ENDPOINT_AUTH_METHODS = ("none", "client_secret_post")
+# The one scope there is: every token grants the whole graph, so any other name would promise a
+# narrower grant than the token carries.
+MCP_SCOPE = "mcp"
 _NO_STORE = {"Cache-Control": "no-store"}
 
 
@@ -144,11 +144,6 @@ def _within_param_bytes(value: str) -> str:
 _RedirectUri = Annotated[str, AfterValidator(_within_param_bytes)]
 
 
-# Cuts the escaped text, not the value: one character can escape to ten.
-_log_repr = reprlib.Repr()
-_log_repr.maxstring = MAX_LOGGED_CHARS
-
-
 # --- Discovery -------------------------------------------------------------
 
 
@@ -159,7 +154,7 @@ def protected_resource_metadata() -> JSONResponse:
         {
             "resource": f"{base}/mcp/",
             "authorization_servers": [base],
-            "scopes_supported": ["mcp"],
+            "scopes_supported": [MCP_SCOPE],
         }
     )
 
@@ -177,9 +172,14 @@ def authorization_server_metadata() -> JSONResponse:
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "code_challenge_methods_supported": ["S256"],
             "token_endpoint_auth_methods_supported": list(TOKEN_ENDPOINT_AUTH_METHODS),
-            "scopes_supported": ["mcp"],
+            "scopes_supported": [MCP_SCOPE],
         }
     )
+
+
+def _is_supported_scope(scope: str) -> bool:
+    """Whether *scope* asks for ``mcp`` and nothing else; an empty one is the default, RFC 6749 §3.3."""
+    return set(scope.split()) <= {MCP_SCOPE}
 
 
 # --- Registration ----------------------------------------------------------
@@ -193,7 +193,7 @@ class _ClientMetadata(BaseModel):
     grant_types: list[str] = ["authorization_code"]
     response_types: list[str] = ["code"]
     token_endpoint_auth_method: str = "client_secret_post"
-    scope: str = "mcp"
+    scope: str = MCP_SCOPE
 
 
 def _describe(invalid: ValidationError) -> str:
@@ -247,7 +247,7 @@ def _validate_auth_method(metadata: _ClientMetadata) -> str:
     auth_method = metadata.token_endpoint_auth_method
     if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
         logger.warning(
-            "MCP OAuth: rejected token_endpoint_auth_method during registration: %s", _log_repr.repr(auth_method)
+            "MCP OAuth: rejected token_endpoint_auth_method during registration: %s", auth.log_repr.repr(auth_method)
         )
         raise HTTPException(
             status_code=400,
@@ -256,10 +256,16 @@ def _validate_auth_method(metadata: _ClientMetadata) -> str:
     return auth_method
 
 
+def _validate_scope(metadata: _ClientMetadata) -> None:
+    if not _is_supported_scope(metadata.scope):
+        logger.warning("MCP OAuth: rejected scope during registration: %s", auth.log_repr.repr(metadata.scope))
+        raise HTTPException(status_code=400, detail=f"invalid_client_metadata: scope must be {MCP_SCOPE}")
+
+
 def _validate_redirect_uris(redirect_uris: list[str]) -> None:
     for uri in redirect_uris:
         if not _redirect_uri_is_safe(uri):
-            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %s", _log_repr.repr(uri))
+            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %s", auth.log_repr.repr(uri))
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -284,13 +290,14 @@ async def oauth_register(request: Request) -> JSONResponse:
     Raises:
         HTTPException 400: The body is not a JSON object of the shapes ``_ClientMetadata`` names, a
             ``redirect_uri`` is not ``https`` (``http`` only for localhost) with no user info or is
-            longer than ``MAX_PARAM_LENGTH`` bytes as UTF-8, or
-            ``token_endpoint_auth_method`` is one the token endpoint does not implement.
+            longer than ``MAX_PARAM_LENGTH`` bytes as UTF-8, ``token_endpoint_auth_method`` is one
+            the token endpoint does not implement, or ``scope`` names anything but ``mcp``.
         HTTPException 413: The body is over ``MAX_BODY_BYTES``, refused by ``_BoundedBodyRoute``.
     """
     raw = await request.body()
     metadata = _validate_registration_body(raw)
     auth_method = _validate_auth_method(metadata)
+    _validate_scope(metadata)
     redirect_uris = metadata.redirect_uris or []
     _validate_redirect_uris(redirect_uris)
 
@@ -304,13 +311,13 @@ async def oauth_register(request: Request) -> JSONResponse:
         "grant_types": metadata.grant_types,
         "response_types": metadata.response_types,
         "token_endpoint_auth_method": auth_method,
-        "scope": metadata.scope,
+        "scope": MCP_SCOPE,
         "expires_at": now + timedelta(seconds=UNUSED_CLIENT_TTL_SECONDS),
     }
     with auth.open_db_session() as session:
         cleanup_and_store(session, mcp_registered_clients, client_id, client)
 
-    logger.info("MCP OAuth: registered client %s (%s)", client_id, _log_repr.repr(metadata.client_name))
+    logger.info("MCP OAuth: registered client %s (%s)", client_id, auth.log_repr.repr(metadata.client_name))
 
     return JSONResponse(
         {
@@ -341,9 +348,16 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
     owner did not initiate announces itself instead of completing silently (confused deputy):
     without this page, ``/oauth/authorize`` sent the browser straight to Google and back to
     whatever client had registered, with nothing on any screen naming it. The host is shown on its own,
-    read as ``_redirect_uri_is_safe`` reads it, so it is the host the code reaches.
+    read as ``_redirect_uri_is_safe`` reads it, so it is the host the code reaches. The host leads
+    because it is the one value on the page Reli establishes; registration is open, so the name is
+    whatever the client chose and is shown as self-declared (#1811).
     """
-    name = html.escape(client_name) or "an unnamed client"
+    name = html.escape(client_name)
+    name_sentence = (
+        f"The client calls itself &ldquo;{name}&rdquo; (self-declared — Reli has not verified it)."
+        if name
+        else "It gave no name."
+    )
     host = html.escape(_as_delivered(redirect_uri).host or "")
     uri = html.escape(redirect_uri)
     state = html.escape(server_state)
@@ -351,9 +365,11 @@ def _consent_page(server_state: str, client_name: str, redirect_uri: str) -> HTM
         "<!doctype html><html><head><meta charset='utf-8'><title>Authorize access to Reli</title>"
         "<meta name='robots' content='noindex'></head><body>"
         "<h1>Authorize access to Reli?</h1>"
-        f"<p><strong>{name}</strong> is asking for full access to your graph.</p>"
-        f"<p>Its sign-in result will be delivered to <strong>{host}</strong> (<code>{uri}</code>).</p>"
-        "<p>Only continue if you just initiated this from a connector you are setting up.</p>"
+        "<p>Continuing gives full access to your graph to whatever receives the sign-in result at "
+        f"<strong>{host}</strong> (<code>{uri}</code>).</p>"
+        f"<p>{name_sentence}</p>"
+        "<p>Only continue if you just started this from a connector you are setting up and "
+        f"<strong>{host}</strong> is where you expect it to land.</p>"
         "<form method='post' action='/oauth/authorize/confirm'>"
         f"<input type='hidden' name='server_state' value='{state}'>"
         "<button type='submit'>Continue with Google</button></form>"
@@ -369,7 +385,7 @@ def oauth_authorize(
     state: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "",
     code_challenge: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "",
     code_challenge_method: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "S256",
-    scope: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "mcp",
+    scope: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = MCP_SCOPE,
     response_type: Annotated[str, Query(max_length=MAX_PARAM_LENGTH)] = "code",
 ) -> HTMLResponse:
     """Take the client's request, remember it, and show a consent page naming it before Google.
@@ -385,6 +401,8 @@ def oauth_authorize(
         raise HTTPException(status_code=400, detail="Only response_type=code is supported")
     if code_challenge_method != "S256":
         raise HTTPException(status_code=400, detail="Only code_challenge_method=S256 is supported")
+    if not _is_supported_scope(scope):
+        raise HTTPException(status_code=400, detail=f"invalid_scope: only scope={MCP_SCOPE} is supported")
     if not redirect_uri:
         raise HTTPException(status_code=400, detail="redirect_uri is required")
     if not code_challenge:
@@ -401,7 +419,7 @@ def oauth_authorize(
             logger.warning(
                 "MCP OAuth: refused stored unsafe redirect_uri for client %s: %s",
                 client_id,
-                _log_repr.repr(redirect_uri),
+                auth.log_repr.repr(redirect_uri),
             )
             raise HTTPException(
                 status_code=400, detail="redirect_uri is not one this server accepts: re-register the client"
@@ -419,7 +437,7 @@ def oauth_authorize(
                 "code_challenge": code_challenge,
                 "code_challenge_method": code_challenge_method,
                 "client_id": client_id,
-                "scope": scope,
+                "scope": MCP_SCOPE,
                 "google_code_verifier": code_verifier,
                 "expires_at": datetime.now(UTC) + timedelta(seconds=SESSION_TTL_SECONDS),
             },
@@ -453,16 +471,54 @@ def oauth_authorize_confirm(request: Request, server_state: str = Form(...)) -> 
     response = RedirectResponse(
         url=google_login.authorization_url(server_state, flow["google_code_verifier"]), status_code=302
     )
-    response.set_cookie(
-        auth.MCP_FLOW_COOKIE,
-        server_state,
-        max_age=SESSION_TTL_SECONDS,
-        path="/",
-        httponly=True,
-        samesite="lax",
-        secure=True,
-    )
+    auth.set_host_cookie(response, auth.MCP_FLOW_COOKIE, server_state, SESSION_TTL_SECONDS)
     return response
+
+
+def finish_sign_in(session: Session, flow: dict[str, Any], code: str, error: str) -> RedirectResponse:
+    """The MCP branch of :func:`backend.auth.google_callback`: an authorization code for the client, or why not.
+
+    A cancelled sign-in or an account outside the allowlist is delivered to the client's redirect
+    URI as an ``access_denied`` error (RFC 6749 §4.1.2.1), because that is where the person is.
+    """
+    if error:
+        logger.info("MCP sign-in cancelled at Google (%s)", auth.log_repr.repr(error))
+        return auth.client_redirect(
+            flow["redirect_uri"],
+            flow["client_state"],
+            error="access_denied",
+            error_description="Google sign-in was cancelled",
+        )
+
+    identity = auth.google_identity("MCP", flow, code)
+    if identity is None:
+        return auth.client_redirect(
+            flow["redirect_uri"], flow["client_state"], error="access_denied", error_description=auth.INVITE_ONLY
+        )
+
+    auth_code = secrets.token_urlsafe(32)
+    try:
+        cleanup_and_store(
+            session,
+            mcp_auth_codes,
+            auth_code,
+            {
+                "subject": identity.subject,
+                "email": identity.email,
+                "code_challenge": flow["code_challenge"],
+                "code_challenge_method": flow["code_challenge_method"],
+                "redirect_uri": flow["redirect_uri"],
+                "client_id": flow["client_id"],
+                "scope": flow["scope"],
+                "expires_at": datetime.now(UTC) + timedelta(seconds=AUTH_CODE_TTL_SECONDS),
+            },
+        )
+    except StoreFullError as full:
+        logger.warning("MCP sign-in refused: %s", full)
+        raise HTTPException(status_code=503, detail=auth.AT_CAPACITY) from full
+
+    logger.info("MCP sign-in complete for client %r, redirecting to %r", flow["client_id"], flow["redirect_uri"])
+    return auth.client_redirect(flow["redirect_uri"], flow["client_state"], code=auth_code)
 
 
 # --- Tokens ----------------------------------------------------------------
@@ -487,15 +543,24 @@ def _invalid_grant(description: str) -> _TokenError:
     return _TokenError(400, "invalid_grant", description)
 
 
-def _validate_client_secret(session: Session, client_id: str, client_secret: str) -> None:
-    """A confidential client must present its secret; a public one (``none``) has none to present."""
+def _authenticated_client(session: Session, client_id: str, client_secret: str) -> dict[str, Any]:
+    """The registration of *client_id*, once it has authenticated.
+
+    A confidential client must present its secret; a public one (``none``) has none to present.
+    """
     client = cleanup_and_get(session, mcp_registered_clients, client_id)
     if client is None:
         raise _TokenError(400, "invalid_client", "Unknown client_id: register again via POST /oauth/register")
     if client["token_endpoint_auth_method"] == "none":
-        return
+        return client
     if not client_secret or not secrets.compare_digest(credential_digest(client_secret), client["client_secret"]):
         raise _TokenError(401, "invalid_client", "Invalid client credentials: re-register the connector")
+    return client
+
+
+def _may_refresh(client: dict[str, Any]) -> bool:
+    """Whether *client* registered the ``refresh_token`` grant; RFC 7591's default leaves it out."""
+    return "refresh_token" in client["grant_types"]
 
 
 def _issue_token_response(
@@ -506,15 +571,18 @@ def _issue_token_response(
     scope: str,
     family_id: str,
     expires_at: datetime,
+    *,
+    refreshable: bool,
 ) -> JSONResponse:
-    """An access token and a fresh refresh token, RFC 6749 §5.1, never cached.
+    """An access token and, when *refreshable*, a fresh refresh token, RFC 6749 §5.1, never cached.
 
     Re-checks ``ALLOWED_EMAILS`` here, not just at the Google callback, so an account removed
     after sign-in cannot keep rolling its refresh token forward — this covers both grant types,
     since both end here. *expires_at* is the family's deadline: fresh from the code exchange,
     carried forward on rotation rather than renewed. The client's registration is promoted to that
-    deadline once the token is stored and not before: a refused issuance leaves it at its grace
-    hour, the allowlist check above has already passed, so only an allowed account holds a
+    deadline once the tokens are stored and not before — a client that may not refresh is promoted
+    too, since it signs in again through the same registration: a refused issuance leaves it at its
+    grace hour, the allowlist check above has already passed, so only an allowed account holds a
     registration past its first hour, and the move is only ever later (``GREATEST``), so a second
     family never shortens it.
     """
@@ -525,44 +593,42 @@ def _issue_token_response(
             client_id,
             revoked,
         )
-        raise _invalid_grant(auth._ACCOUNT_NOT_ALLOWED)
-    access_token = auth.create_jwt(subject, email, audience=auth.MCP_AUDIENCE)
-    refresh_token = secrets.token_urlsafe(32)
-    try:
-        cleanup_and_store(
-            session,
-            mcp_refresh_tokens,
-            refresh_token,
-            {
-                "subject": subject,
-                "email": email,
-                "client_id": client_id,
-                "scope": scope,
-                "family_id": family_id,
-                "expires_at": expires_at,
-            },
-        )
-    except StoreFullError as full:
-        logger.warning("MCP OAuth: token issuance refused for client %s — %s", client_id, full)
-        raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
+        raise _invalid_grant(auth.ACCOUNT_NOT_ALLOWED)
+    body = {
+        "access_token": auth.create_jwt(subject, email, audience=auth.MCP_AUDIENCE),
+        "token_type": "bearer",
+        "expires_in": auth.MCP_JWT_EXPIRY_SECONDS,
+        "scope": scope,
+    }
+    if refreshable:
+        refresh_token = secrets.token_urlsafe(32)
+        try:
+            cleanup_and_store(
+                session,
+                mcp_refresh_tokens,
+                refresh_token,
+                {
+                    "subject": subject,
+                    "email": email,
+                    "client_id": client_id,
+                    "scope": scope,
+                    "family_id": family_id,
+                    "expires_at": expires_at,
+                },
+            )
+        except StoreFullError as full:
+            logger.warning("MCP OAuth: token issuance refused for client %s — %s", client_id, full)
+            raise HTTPException(status_code=503, detail=auth.AT_CAPACITY) from full
+        body["refresh_token"] = refresh_token
     extend_expiry(session, mcp_registered_clients, client_id, expires_at)
-
-    return JSONResponse(
-        {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "expires_in": auth.MCP_JWT_EXPIRY_SECONDS,
-            "refresh_token": refresh_token,
-            "scope": scope,
-        },
-        headers=_NO_STORE,
-    )
+    return JSONResponse(body, headers=_NO_STORE)
 
 
 def _authenticated_grant(
     session: Session, store: Store, key: str, client_id: str, client_secret: str, gone: str
-) -> dict[str, Any]:
-    """The grant under *key*, not yet consumed, once the client it was issued to has authenticated.
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The grant under *key*, not yet consumed, and the registration of the client it was issued to,
+    once that client has authenticated.
 
     The client is authenticated before the grant is consumed (RFC 6749 §3.2.1 puts client
     authentication ahead of processing the grant), so a wrong secret leaves a still-valid code or
@@ -573,15 +639,14 @@ def _authenticated_grant(
 
     Raises:
         _TokenError: ``invalid_grant`` when the grant is gone or belongs to another client;
-            ``invalid_client`` from :func:`_validate_client_secret`.
+            ``invalid_client`` from :func:`_authenticated_client`.
     """
     grant = cleanup_and_get(session, store, key)
     if grant is None:
         raise _invalid_grant(gone)
     if not client_id or client_id != grant["client_id"]:
         raise _invalid_grant("client_id mismatch: re-authorise the connector")
-    _validate_client_secret(session, client_id, client_secret)
-    return grant
+    return grant, _authenticated_client(session, client_id, client_secret)
 
 
 def _exchange_refresh_token(session: Session, refresh_token: str, client_id: str, client_secret: str) -> JSONResponse:
@@ -593,9 +658,13 @@ def _exchange_refresh_token(session: Session, refresh_token: str, client_id: str
     """
     if not refresh_token:
         raise _invalid_grant("refresh_token is required")
-    grant = _authenticated_grant(
+    grant, client = _authenticated_grant(
         session, mcp_refresh_tokens, refresh_token, client_id, client_secret, gone=_REFRESH_TOKEN_GONE
     )
+    if not _may_refresh(client):
+        raise _TokenError(
+            400, "unauthorized_client", "This client did not register the refresh_token grant: re-authorise it"
+        )
     consumed = consume_refresh_token(session, refresh_token)
     if consumed is None:
         revoked = revoke_refresh_token_family(session, grant["family_id"])
@@ -613,13 +682,14 @@ def _exchange_refresh_token(session: Session, refresh_token: str, client_id: str
         consumed["scope"],
         family_id=consumed["family_id"],
         expires_at=consumed["expires_at"],
+        refreshable=True,
     )
 
 
 def _exchange_authorization_code(
     session: Session, code: str, redirect_uri: str, client_id: str, client_secret: str, code_verifier: str
 ) -> JSONResponse:
-    _authenticated_grant(session, mcp_auth_codes, code, client_id, client_secret, gone=_CODE_GONE)
+    _, client = _authenticated_grant(session, mcp_auth_codes, code, client_id, client_secret, gone=_CODE_GONE)
     consumed = cleanup_and_pop(session, mcp_auth_codes, code)
     if consumed is None:
         raise _invalid_grant(_CODE_GONE)
@@ -640,6 +710,7 @@ def _exchange_authorization_code(
         consumed["scope"],
         family_id=str(uuid.uuid4()),
         expires_at=datetime.now(UTC) + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
+        refreshable=_may_refresh(client),
     )
 
 

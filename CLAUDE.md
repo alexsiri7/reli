@@ -135,7 +135,8 @@ Widening them is a visible edit to that tuple and needs an issue that asks for i
 
 There is no `GOOGLE_REFRESH_TOKEN` and no consent step: #1488 deleted the `gmail.readonly` /
 `calendar.readonly` grant along with the readers it fed, so the only redirect URI the Web client
-needs is `GOOGLE_AUTH_REDIRECT_URI`. Leaving both variables unset is safe — the boot succeeds and
+needs is each deploy's `GOOGLE_AUTH_REDIRECT_URI` — for the self-hosted staging compose, its own
+`STAGING_GOOGLE_AUTH_REDIRECT_URI` (#1813). Leaving both variables unset is safe — the boot succeeds and
 `/healthz` stays green; only the sign-in is closed, and it says what to set.
 
 ## Google sign-in
@@ -202,9 +203,11 @@ done:
    is exactly this one.
 2. In the Google Cloud console, confirm the OAuth client `GOOGLE_CLIENT_ID` names is a **Web
    application** client with that exact redirect URI authorised. Nothing in the repository can
-   check this; when it is wrong the callback answers 502 naming `redirect_uri_mismatch`. That one
-   redirect URI is the only entry the client needs — #1488 retired the loopback `http://127.0.0.1:18765/`
-   that the deleted Calendar and Gmail grant used, and a leftover entry may be removed.
+   check this; when it is wrong the callback answers 502 naming `redirect_uri_mismatch`. The
+   client needs one entry per deploy that signs in through it: production's redirect URI, and the
+   self-hosted staging compose's `STAGING_GOOGLE_AUTH_REDIRECT_URI` when its sign-in is turned on
+   (#1813). #1488 retired the loopback `http://127.0.0.1:18765/` that the deleted Calendar and
+   Gmail grant used, and that leftover entry may be removed.
 3. Add the claude.ai connector for `https://<host>/mcp` with **no** bearer token. It discovers the
    server, registers itself, lands on a Reli-hosted consent page naming the client and where its
    code will be delivered, and the allowlisted account continues through Google sign-in from
@@ -286,8 +289,9 @@ resolution pass notes it in the briefing and the morning conversation says so in
 leaves out (#1516). That is the whole signal — #1484 removed the GitHub Actions watchdog that used
 to read the heartbeats from outside, and nothing replaced it. The heartbeats must never be archived,
 because an archived Thing leaves the tree and the tag lookup, so archiving one hides a missed run
-instead of reporting it. `update_thing` in `backend/service.py` refuses both ways of doing that —
-archiving a `#ScheduledTask` Thing and a tags write that drops the tag (#1704).
+instead of reporting it. `update_thing` in `backend/service.py` refuses every way of doing that —
+archiving a `#ScheduledTask` Thing and a tags write that drops the tag (#1704), and a
+`checkin_date` more than two days ahead, which would keep a missed run from falling due (#1806).
 
 **The fallback, documented and not built.** If claude.ai scheduled tasks prove unreliable — the
 owner notices a night the passes left no trace — the overnight two move to a host cron running
@@ -346,11 +350,12 @@ and the diff means nothing:
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/work -w /work/frontend \
-  mcr.microsoft.com/playwright:v1.65.0-noble npx playwright test --update-snapshots
+  mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe \
+  npx playwright test --update-snapshots
 ```
 
-Bumping `@playwright/test` means bumping the tag in that command and in `.github/workflows/ci.yml`
-together, and regenerating.
+Bumping `@playwright/test` means bumping the tag and digest in that command and in
+`.github/workflows/ci.yml` together, and regenerating.
 
 ## Railway Token Rotation
 
@@ -402,7 +407,9 @@ Creating documentation that claims success on an action you cannot perform is a 
 - JWTs, the callback and the web session: `backend/auth.py` — `create_jwt` / `decode_jwt`, the
   allowlist, `GET /api/auth/google/callback` (the one address Google redirects to, for both
   flows), the web view's `GET /api/auth/google`, `GET /api/auth/me` and `POST /api/auth/logout`,
-  and `web_session`, the one reading of the `__Host-reli_session` cookie
+  `web_session`, the one reading of the `__Host-reli_session` cookie, and `admit`, the one
+  statement of when a JWT admits a request — the cookie, the `/mcp` bearer check and the rate
+  limiter's keying all call it, so a new admission condition goes there and nowhere else
 - Authorization server: `backend/mcp_oauth.py` — `/.well-known/*`, `/oauth/register`,
   `/oauth/authorize`, `/oauth/token`
 - OAuth flow state: `backend/oauth_state.py` — the four bounded `mcp_*` stores,

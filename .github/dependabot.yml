@@ -26,3 +26,23 @@ updates:
       time: "06:00"
     assignees:
       - "alexsiri7"
+
+  # The Dockerfile pins every base by tag@digest (#1814); this moves the digests so security
+  # patches still land (#1203). Python stays on 3.12 and Node on 22 until an issue moves them.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    assignees:
+      - "alexsiri7"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]

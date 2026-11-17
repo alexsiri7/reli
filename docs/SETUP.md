@@ -124,6 +124,10 @@ Read by the host or the image, not by the app:
 - `RELI_IMAGE_TAG` — which `ghcr.io/alexsiri7/reli` tag both compose files run; default `latest`.
 - `STAGING_DATABASE_URL`, `STAGING_POSTGRES_PASSWORD` — `docker-compose.staging.yml`, kept distinct
   from production's so staging never points at production data.
+- `STAGING_SECRET_KEY`, `STAGING_RELI_BASE_URL`, `STAGING_GOOGLE_AUTH_REDIRECT_URI` —
+  `docker-compose.staging.yml`'s `SECRET_KEY`, `RELI_BASE_URL` and `GOOGLE_AUTH_REDIRECT_URI`, kept
+  distinct from production's so the two deploys never accept each other's tokens (#1697). Empty
+  closes staging's sign-in.
 - `CLOUDFLARE_TUNNEL_TOKEN` — the Cloudflare Tunnel on the host, pointed at `http://reli:8000`.
 - `RELI_TEST_DATABASE_URL` — `backend/tests/conftest.py`: run the suite against an existing
   database instead of a testcontainers one. A URL naming no `sslmode` requires TLS, so one for a
@@ -149,6 +153,10 @@ environment — never hard-code one.
    the pinned Playwright container the snapshots were generated in
 4. **Build Docker image** — on `main`, pushed to GHCR as `:<sha>` and `:latest`, keeping the last
    three SHA tags
+
+Two more jobs, **Python dependency audit** and **Frontend dependency audit**, run `pip-audit` and
+`npm audit` against the committed lockfiles, on every push and pull request and weekly on `main`. A
+failing audit fails the run, so that commit is not deployed.
 
 A green run on `main` triggers `staging-pipeline.yml`: deploy to Railway staging, wait for
 `/healthz`, then deploy the same image to production. The secrets it needs are listed in

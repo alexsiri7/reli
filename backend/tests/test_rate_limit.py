@@ -111,6 +111,13 @@ def test_a_token_reli_did_not_sign_spends_the_address_bucket(monkeypatch):
     assert asyncio.run(rate_limit._user_subject(forged)) is None
 
 
+def test_a_bearer_token_while_the_secret_key_is_unset_spends_the_address_bucket():
+    """A deploy without SECRET_KEY admits no credential, so no bearer may claim a subject's bucket."""
+    scope = {"type": "http", "headers": [(b"authorization", b"Bearer anything")]}
+
+    assert asyncio.run(rate_limit._user_subject(scope)) is None
+
+
 def test_a_revoked_cookie_does_not_spend_the_owners_live_bucket(client, session, monkeypatch):
     """A copy of a cookie kept after logout would otherwise drain the bucket the next sign-in uses."""
     monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)

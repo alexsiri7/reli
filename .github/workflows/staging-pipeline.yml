@@ -13,10 +13,16 @@ concurrency:
   group: staging-pipeline
   cancel-in-progress: false
 
+# Every deploy step refuses an image CI did not sign on main (#1817).
+env:
+  SIGNER_IDENTITY: https://github.com/alexsiri7/reli/.github/workflows/ci.yml@refs/heads/main
+
 jobs:
   deploy-staging:
     name: Deploy to staging
     runs-on: ubuntu-latest
+    # The staging Railway token is an environment secret: only main may use it (SEC-003).
+    environment: staging
     permissions:
       contents: read
     if: >-
@@ -39,13 +45,13 @@ jobs:
 
       - name: Validate Railway secrets
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
           SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_STAGING_ENVIRONMENT_ID }}
           STAGING_URL: ${{ secrets.RAILWAY_STAGING_URL }}
         run: |
           missing=""
-          [ -z "$RAILWAY_TOKEN" ] && missing="$missing RAILWAY_TOKEN"
+          [ -z "$RAILWAY_TOKEN" ] && missing="$missing RAILWAY_PROJECT_TOKEN"
           [ -z "$SERVICE_ID" ] && missing="$missing RAILWAY_STAGING_SERVICE_ID"
           [ -z "$ENV_ID" ] && missing="$missing RAILWAY_STAGING_ENVIRONMENT_ID"
           [ -z "$STAGING_URL" ] && missing="$missing RAILWAY_STAGING_URL"
@@ -55,20 +61,23 @@ jobs:
             exit 1
           fi
           RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Project-Access-Token: $RAILWAY_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"query":"{me{id}}"}')
-          if ! echo "$RESP" | jq -e '.data.me.id' > /dev/null 2>&1; then
+            -d '{"query":"{projectToken{environmentId}}"}')
+          if ! echo "$RESP" | jq -e --arg env "$ENV_ID" '.data.projectToken.environmentId == $env' > /dev/null 2>&1; then
             MSG=$(echo "$RESP" | jq -r '.errors[0].message // "could not reach Railway API or token rejected"')
-            echo "::error::RAILWAY_TOKEN is invalid or expired: $MSG"
+            echo "::error::RAILWAY_PROJECT_TOKEN is invalid, expired or not scoped to this environment: $MSG"
             echo "Rotate the token — see DEPLOYMENT_SECRETS.md Token Rotation section."
             exit 1
           fi
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
       - name: Deploy staging image to Railway
         id: deploy
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
           DEPLOY_SHA: ${{ steps.sha.outputs.sha }}
           SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_STAGING_ENVIRONMENT_ID }}
@@ -113,13 +122,13 @@ jobs:
 
       - name: Validate Railway secrets
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
           SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT_ID }}
           PROD_URL: ${{ secrets.RAILWAY_PRODUCTION_URL }}
         run: |
           missing=""
-          [ -z "$RAILWAY_TOKEN" ] && missing="$missing RAILWAY_TOKEN"
+          [ -z "$RAILWAY_TOKEN" ] && missing="$missing RAILWAY_PROJECT_TOKEN"
           [ -z "$SERVICE_ID" ] && missing="$missing RAILWAY_PRODUCTION_SERVICE_ID"
           [ -z "$ENV_ID" ] && missing="$missing RAILWAY_PRODUCTION_ENVIRONMENT_ID"
           [ -z "$PROD_URL" ] && missing="$missing RAILWAY_PRODUCTION_URL"
@@ -129,19 +138,22 @@ jobs:
             exit 1
           fi
           RESP=$(curl -sf -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Project-Access-Token: $RAILWAY_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"query":"{me{id}}"}')
-          if ! echo "$RESP" | jq -e '.data.me.id' > /dev/null 2>&1; then
+            -d '{"query":"{projectToken{environmentId}}"}')
+          if ! echo "$RESP" | jq -e --arg env "$ENV_ID" '.data.projectToken.environmentId == $env' > /dev/null 2>&1; then
             MSG=$(echo "$RESP" | jq -r '.errors[0].message // "could not reach Railway API or token rejected"')
-            echo "::error::RAILWAY_TOKEN is invalid or expired: $MSG"
+            echo "::error::RAILWAY_PROJECT_TOKEN is invalid, expired or not scoped to this environment: $MSG"
             echo "Rotate the token — see DEPLOYMENT_SECRETS.md Token Rotation section."
             exit 1
           fi
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
       - name: Deploy production image to Railway
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
           DEPLOY_IMAGE: ${{ needs.deploy-staging.outputs.deploy_image }}
           SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           ENV_ID: ${{ secrets.RAILWAY_PRODUCTION_ENVIRONMENT_ID }}

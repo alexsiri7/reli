@@ -30,7 +30,14 @@ from backend.db_models import (
     RelationshipType,
 )
 from backend.queries import MAX_LIMIT
-from backend.service import create_thing, get_or_create_user_anchor, record_preference, relate, update_thing
+from backend.service import (
+    MAX_TAGS,
+    create_thing,
+    get_or_create_user_anchor,
+    record_preference,
+    relate,
+    update_thing,
+)
 
 SECRET_KEY = "a-test-secret-key-that-is-forty-eight-chars-long"
 BASE_URL = "https://reli.example.test"
@@ -403,6 +410,20 @@ def test_rejecting_an_unknown_id_is_404(client):
     assert client.post(f"/api/preferences/{uuid.uuid4()}/reject").status_code == 404
 
 
+def test_a_refusal_other_than_not_a_preference_is_not_a_404(client, session):
+    """The preference exists; a 404 would tell the user it does not (#1800)."""
+    preference, _ = _preference(session)
+    full = [PREFERENCE_TAG, *(f"#Tag{n}" for n in range(MAX_TAGS - 1))]
+    update_thing(session, actor=Actor.CLAUDE_INTERACTIVE, thing_id=preference.id, tags=full)
+    before = _journal_count(session)
+
+    response = client.post(f"/api/preferences/{preference.id}/reject")
+
+    assert response.status_code == 409
+    assert f"at most {MAX_TAGS}" in response.json()["detail"]
+    assert _journal_count(session) == before
+
+
 # --- The read-only boundary ----------------------------------------------
 
 #: The catch-all is exempt: it answers 404 to every method and reaches no service function, so it
@@ -709,3 +730,37 @@ def test_a_plain_http_base_url_is_warned_about_at_startup(monkeypatch, caplog, r
         web_view_auth.add_web_view_auth(FastAPI())
 
     assert any("not https" in record.getMessage() for record in caplog.records) is warned
+
+
+def test_missing_sign_in_settings_are_warned_about_at_web_view_startup(monkeypatch, caplog):
+    """The operator's only diagnostic for a closed web sign-in: a missing setting must be named,
+    with the https base URL kept valid so that unrelated warning stays quiet."""
+    monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "a-client-id")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "")
+    monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", f"{BASE_URL}/api/auth/google/callback")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    monkeypatch.setattr(settings, "RELI_BASE_URL", BASE_URL)
+
+    with caplog.at_level(logging.WARNING, logger="backend.web_view_auth"):
+        web_view_auth.add_web_view_auth(FastAPI())
+
+    warnings = [record for record in caplog.records if record.name == "backend.web_view_auth"]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "GOOGLE_CLIENT_SECRET" in message
+    assert "/api will answer 401 to every request" in message
+
+
+def test_a_fully_configured_sign_in_logs_no_warning_at_web_view_startup(monkeypatch, caplog):
+    monkeypatch.setattr(settings, "SECRET_KEY", SECRET_KEY)
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "a-client-id")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "a-client-secret")
+    monkeypatch.setattr(settings, "GOOGLE_AUTH_REDIRECT_URI", f"{BASE_URL}/api/auth/google/callback")
+    monkeypatch.setattr(settings, "ALLOWED_EMAILS", "owner@example.com")
+    monkeypatch.setattr(settings, "RELI_BASE_URL", BASE_URL)
+
+    with caplog.at_level(logging.WARNING, logger="backend.web_view_auth"):
+        web_view_auth.add_web_view_auth(FastAPI())
+
+    assert [record for record in caplog.records if record.name == "backend.web_view_auth"] == []

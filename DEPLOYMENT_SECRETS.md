@@ -10,11 +10,11 @@ The deployment pipeline fails because the following secrets were never configure
 
 ## Required Secrets
 
-Add these 7 secrets to GitHub repository settings (Settings → Secrets and variables → Actions):
+Add these secrets to GitHub (Settings → Secrets and variables → Actions). The Railway token is one per GitHub environment; the rest are repository secrets.
 
 | Secret Name | Purpose | Where to find |
 |---|---|---|
-| `RAILWAY_TOKEN` | Authentication token for Railway API | Railway dashboard → Account Settings → Tokens |
+| `RAILWAY_PROJECT_TOKEN` (environment secret, in both `staging` and `production`) | Railway project token scoped to that one Railway environment | Railway dashboard → reli project → Settings → Tokens; kept in Doppler `reli/stg_ci` and `reli/prd_ci` |
 | `RAILWAY_STAGING_SERVICE_ID` | Staging service identifier | Railway dashboard → staging project → service → Settings → Service ID |
 | `RAILWAY_STAGING_ENVIRONMENT_ID` | Staging environment identifier | Railway dashboard → staging project → environment ID in URL |
 | `RAILWAY_PRODUCTION_SERVICE_ID` | Production service identifier | Railway dashboard → production project → service → Settings → Service ID |
@@ -34,14 +34,15 @@ Add these 7 secrets to GitHub repository settings (Settings → Secrets and vari
 
 ## Token Rotation
 
-If `RAILWAY_TOKEN` is expired or revoked, CI will fail at the "Validate Railway secrets" pre-flight step with `RAILWAY_TOKEN is invalid or expired: Not Authorized`.
+Each deploy job runs in a GitHub environment (`staging` or `production`) that only `main` may deploy from, and reads that environment's `RAILWAY_PROJECT_TOKEN`: a Railway **project** token scoped to the matching Railway environment, sent as `Project-Access-Token`. A workflow pushed on any other branch cannot read either token (SEC-003, #1803).
 
-1. Go to https://railway.com/account/tokens
-2. Create a new permanent token named "github-actions"
-3. Set the GitHub secret: `gh secret set RAILWAY_TOKEN --repo alexsiri7/reli`
-   (gh will prompt you to paste the token — it will not appear in shell history)
-4. Re-run the failed CI job: `gh run rerun <run-id> --repo alexsiri7/reli`
-   Or trigger a fresh run: `gh workflow run staging-pipeline.yml --repo alexsiri7/reli`
+If a token is expired or revoked, CI fails at "Validate Railway secrets" with `RAILWAY_PROJECT_TOKEN is invalid, expired or not scoped to this environment`, and the daily token health check opens an issue naming the environment. To rotate one:
+
+1. Railway dashboard → reli project → Settings → Tokens → create a token for the `staging` or `production` environment.
+2. Store it in Doppler: `doppler secrets set RAILWAY_PROJECT_TOKEN --project reli --config stg_ci` (or `prd_ci`), pasting the value at the prompt.
+3. Copy it to the GitHub environment without printing it:
+   `doppler secrets get RAILWAY_PROJECT_TOKEN --project reli --config stg_ci --plain | gh secret set RAILWAY_PROJECT_TOKEN --env staging --repo alexsiri7/reli`
+4. Re-run the failed job: `gh run rerun <run-id> --repo alexsiri7/reli`, or `gh workflow run staging-pipeline.yml --repo alexsiri7/reli`.
 
 ## Token Health Check
 

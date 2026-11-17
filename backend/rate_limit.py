@@ -29,7 +29,6 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import NamedTuple
 
-import jwt
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
@@ -107,24 +106,16 @@ def client_address(scope: Scope) -> str:
 
 async def _user_subject(scope: Scope) -> str | None:
     """The subject of a session cookie or ``/mcp`` bearer the auth layers would admit, else ``None``."""
-    if not settings.secret_key_configured:
-        return None
     try:
         claims = await run_in_threadpool(auth.web_session, Request(scope))
     except auth.SessionRefused:
         claims = None
-    if claims is not None:
-        return str(claims["sub"])
-    authorization = dict(scope.get("headers", [])).get(b"authorization", b"").decode("latin-1")
-    if not authorization.startswith("Bearer "):
-        return None
-    try:
-        claims = auth.decode_jwt(authorization[7:], auth.MCP_AUDIENCE)
-    except jwt.PyJWTError:
-        return None
-    if auth.is_allowed(str(claims.get("email", ""))) and not await run_in_threadpool(auth.is_revoked, claims):
-        return str(claims["sub"])
-    return None
+    if claims is None and (token := auth.bearer_token(scope)):
+        try:
+            claims = await run_in_threadpool(auth.admit, token, auth.MCP_AUDIENCE)
+        except auth.CredentialRefused:
+            return None
+    return str(claims["sub"]) if claims is not None else None
 
 
 def _take(tier: Tier, key: str, now: float) -> tuple[bool, int, int]:
