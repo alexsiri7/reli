@@ -33,7 +33,6 @@ from dataclasses import dataclass
 from typing import NamedTuple
 from urllib.parse import parse_qs
 
-import jwt
 from fastapi import FastAPI
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import MutableHeaders
