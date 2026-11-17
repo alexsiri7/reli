@@ -53,6 +53,11 @@ export TARGET_SHA=<the SHA to roll back to>
 The script prints the digest it deployed and exits non-zero if the image is not pullable or the
 deployment does not come up; in that case the previous deployment is still serving.
 
+Images built since #1817 carry a keyless cosign signature from CI, and the pipeline refuses one
+that does not. A manual rollback checks it only when you also have `cosign` installed and export
+`SIGNER_IDENTITY=https://github.com/alexsiri7/reli/.github/workflows/ci.yml@refs/heads/main`.
+Images built before #1817 are unsigned: leave `SIGNER_IDENTITY` unset to roll back to one of those.
+
 ## Step 4: Verify health
 
 ```bash

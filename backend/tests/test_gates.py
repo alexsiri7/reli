@@ -31,6 +31,7 @@ PLAINTEXT_NTFY = re.compile(r"""(?<!https://)\bntfy\.sh/""")
 PINNED_ACTION = re.compile(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}")
 NPX_PACKAGE = re.compile(r"\bnpx\s+(?:-\S+\s+)*(\S+)")
 EXACT_VERSION = re.compile(r".@\d+\.\d+\.\d+$")
+DIGEST_PINNED = re.compile(r"\S+@sha256:[0-9a-f]{64}")
 
 # What `gates.sh` needs on PATH before it reaches a stage. Every venv tool goes through
 # `uv run`, because CI never activates the venv.
@@ -199,6 +200,89 @@ def test_the_pin_scan_sees_an_action_used_by_its_tag(tmp_path):
     ]
 
 
+def _unpinned_images(dockerfile: Path = REPO_ROOT / "Dockerfile", directory: Path = WORKFLOWS) -> list[str]:
+    offenders: list[str] = []
+    stages: set[str] = set()
+    for line in dockerfile.read_text().splitlines():
+        words = line.split()
+        instruction = words[0].upper() if words else ""
+        if instruction == "FROM":
+            image, *rest = [word for word in words[1:] if not word.startswith("--platform=")]
+            if image not in stages and not DIGEST_PINNED.fullmatch(image):
+                offenders.append(f"{dockerfile.name}:{image}")
+            if rest[:1] and rest[0].upper() == "AS":
+                stages.add(rest[1])
+        elif instruction == "COPY":
+            for source in (word.removeprefix("--from=") for word in words if word.startswith("--from=")):
+                if source not in stages and not DIGEST_PINNED.fullmatch(source):
+                    offenders.append(f"{dockerfile.name}:{source}")
+    workflows = (p for p in directory.iterdir() if p.suffix in (".yml", ".yaml"))
+    for workflow in sorted(workflows):
+        for job in yaml.safe_load(workflow.read_text())["jobs"].values():
+            container = job.get("container")
+            images = [container.get("image") if isinstance(container, dict) else container]
+            images += [service.get("image") for service in job.get("services", {}).values()]
+            offenders += [f"{workflow.name}:{i}" for i in images if i and not DIGEST_PINNED.fullmatch(i)]
+    return offenders
+
+
+def test_every_image_is_pinned_to_a_digest():
+    """#1814: a tag can be repointed to other content without the Dockerfile or workflow changing; a
+    digest cannot."""
+    offenders = _unpinned_images()
+    assert offenders == [], f"these images are pulled by a movable tag: {offenders}"
+
+
+def test_the_image_pin_scan_sees_an_image_used_by_its_tag(tmp_path):
+    digest = "sha256:" + "0" * 64
+    (tmp_path / "Dockerfile").write_text(
+        f"FROM --platform=linux/amd64 python:3.12-slim@{digest} AS a\n"
+        "FROM node:22-slim\n"
+        "COPY --from=a /x /x\n"
+        "COPY --from=ghcr.io/x/y:1 /y /y\n"
+        "from debian:12\n"
+    )
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "w.yml").write_text(
+        "jobs:\n"
+        "  x:\n    container: mcr.microsoft.com/playwright:v1\n"
+        f"  y:\n    container:\n      image: mcr.microsoft.com/playwright:v1@{digest}\n"
+        "    services:\n      db:\n        image: postgres:16-alpine\n"
+    )
+    assert _unpinned_images(tmp_path / "Dockerfile", workflows) == [
+        "Dockerfile:node:22-slim",
+        "Dockerfile:ghcr.io/x/y:1",
+        "Dockerfile:debian:12",
+        "w.yml:mcr.microsoft.com/playwright:v1",
+        "w.yml:postgres:16-alpine",
+    ]
+
+
+def test_dependabot_moves_the_pinned_base_images():
+    """#1203/#1814: the digests above only receive security patches if something moves them."""
+    updates = yaml.safe_load(DEPENDABOT.read_text())["updates"]
+    docker = [u for u in updates if u["package-ecosystem"] == "docker"]
+    assert "/" in {u["directory"] for u in docker}
+    # A limit of 0 is Dependabot's switch for pausing an ecosystem's version updates outright.
+    assert all(u.get("open-pull-requests-limit") != 0 for u in docker)
+    # A rule without update-types ignores every update to the images it names.
+    blocking = [
+        rule
+        for u in docker
+        for rule in u.get("ignore", [])
+        if "version-update:semver-patch" in rule.get("update-types", ["version-update:semver-patch"])
+    ]
+    assert blocking == [], f"these ignore rules stop a patched base from landing: {blocking}"
+
+
+def test_the_snapshot_command_names_the_image_ci_renders_in():
+    """The snapshots are valid only from the frontend job's container, so CLAUDE.md's regeneration
+    command must name the same tag and digest."""
+    container = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())["jobs"]["frontend"]["container"]
+    assert f"{container} \\\n" in (REPO_ROOT / "CLAUDE.md").read_text()
+
+
 def test_every_npx_package_names_an_exact_version():
     """#1711: ``npx pkg@latest`` runs whatever the registry serves that day."""
     offenders = [
@@ -244,6 +328,8 @@ def test_a_dispatched_ci_run_builds_the_image_without_publishing_it():
     publish_only = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
     assert steps["Log in to GitHub Container Registry"] == publish_only
     assert steps["Build and push image"] == publish_only
+    assert steps["Install cosign"] == publish_only
+    assert steps["Sign image"] == publish_only
     assert steps["Build image"] == "github.event_name != 'push'"
 
 
@@ -337,8 +423,8 @@ def test_the_deploy_waits_on_a_dependency_audit():
 
 
 def test_every_image_build_pulls_its_base_rather_than_trusting_the_cache():
-    """#1712: the base is a floating ``python:3.12-slim`` tag so security patches land on rebuild,
-    which only holds if the build fetches the tag instead of reusing a cached layer."""
+    """#1712: the build resolves its digest-pinned base (#1814) from the registry rather than from
+    whatever a builder cache holds."""
     ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
     builds = [step for step in ci["jobs"]["build"]["steps"] if "docker/build-push-action@" in step.get("uses", "")]
     assert builds, "found no image build to check"
@@ -357,29 +443,38 @@ def test_the_image_runs_as_reli_from_container_start():
     assert not any(line.startswith("ENTRYPOINT") for line in runtime)
 
 
-def _image_services_keeping_capabilities(directory: Path = REPO_ROOT) -> list[str]:
+def _unhardened_image_services(directory: Path = REPO_ROOT) -> list[str]:
     """Compose services that run Reli's image — pulled by name or built from this repository — and
-    do not drop every Linux capability or add one back."""
+    keep a Linux capability, may gain privileges, or can write their root filesystem."""
     offenders: list[str] = []
     for compose_file in sorted(directory.glob("docker-compose*.yml")):
         for name, service in yaml.safe_load(compose_file.read_text())["services"].items():
             repository = re.split("[:@]", service.get("image", ""))[0]
             runs_the_image = "build" in service or repository == "ghcr.io/alexsiri7/reli"
-            if runs_the_image and (service.get("cap_drop") != ["ALL"] or "cap_add" in service):
+            hardened = (
+                service.get("cap_drop") == ["ALL"]
+                and "cap_add" not in service
+                and "no-new-privileges:true" in service.get("security_opt", [])
+                and service.get("read_only") is True
+            )
+            if runs_the_image and not hardened:
                 offenders.append(f"{compose_file.name}:{name}")
     return offenders
 
 
-def test_every_compose_service_running_the_image_drops_every_capability():
-    """#1712: the server binds an unprivileged port, so it needs no Linux capability back."""
-    offenders = _image_services_keeping_capabilities()
-    assert offenders == [], f"these services run the image with capabilities left: {offenders}"
+def test_every_compose_service_running_the_image_is_hardened():
+    """#1712: the server binds an unprivileged port, so it needs no Linux capability back. #1818: it
+    writes no file and runs no setuid binary, so its root filesystem is read-only and no process in
+    it gains privileges."""
+    offenders = _unhardened_image_services()
+    assert offenders == [], f"these services run the image without the hardening: {offenders}"
 
 
-def test_the_capability_scan_sees_a_service_running_the_image(tmp_path):
+def test_the_hardening_scan_sees_a_service_running_the_image(tmp_path):
     (tmp_path / "docker-compose.yml").write_text(
         "services:\n"
-        "  dropped:\n    image: ghcr.io/alexsiri7/reli:latest\n    cap_drop: [ALL]\n"
+        "  hardened:\n    image: ghcr.io/alexsiri7/reli:latest\n    cap_drop: [ALL]\n"
+        "    security_opt: [no-new-privileges:true]\n    read_only: true\n"
         "  kept:\n    image: ghcr.io/alexsiri7/reli:latest\n"
         "  db:\n    image: postgres:16-alpine\n"
     )
@@ -387,13 +482,19 @@ def test_the_capability_scan_sees_a_service_running_the_image(tmp_path):
         "services:\n"
         "  built:\n    build: .\n"
         "  readded:\n    image: ghcr.io/alexsiri7/reli:x\n    cap_drop: [ALL]\n    cap_add: [NET_RAW]\n"
+        "    security_opt: [no-new-privileges:true]\n    read_only: true\n"
+        "  writable:\n    image: ghcr.io/alexsiri7/reli:x\n    cap_drop: [ALL]\n"
+        "    security_opt: [no-new-privileges:true]\n    read_only: false\n"
+        "  escalating:\n    image: ghcr.io/alexsiri7/reli:x\n    cap_drop: [ALL]\n    read_only: true\n"
         "  untagged:\n    image: ghcr.io/alexsiri7/reli\n"
         "  pinned:\n    image: ghcr.io/alexsiri7/reli@sha256:0123\n"
         "  lookalike:\n    image: ghcr.io/alexsiri7/reli-docs:latest\n"
     )
-    assert _image_services_keeping_capabilities(tmp_path) == [
+    assert _unhardened_image_services(tmp_path) == [
         "docker-compose.preview.yml:built",
         "docker-compose.preview.yml:readded",
+        "docker-compose.preview.yml:writable",
+        "docker-compose.preview.yml:escalating",
         "docker-compose.preview.yml:untagged",
         "docker-compose.preview.yml:pinned",
         "docker-compose.yml:kept",

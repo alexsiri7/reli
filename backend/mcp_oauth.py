@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import html
 import logging
-import reprlib
 import secrets
 import uuid
 from collections.abc import Callable, Coroutine
@@ -63,6 +62,8 @@ logger = logging.getLogger(__name__)
 
 # A sign-in that takes longer than this answers "start again", which is the remedy.
 SESSION_TTL_SECONDS = 60 * 10
+# RFC 6819 §4.1.1: an authorization code lives just long enough to be exchanged.
+AUTH_CODE_TTL_SECONDS = 60
 REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
 # The life of a registration the owner has signed in through: that of the refresh family it serves.
 CLIENT_TTL_SECONDS = REFRESH_TOKEN_TTL_SECONDS
@@ -79,11 +80,7 @@ MAX_BODY_BYTES = 8 * 1024
 # the longest URI still fits in MAX_BODY_BYTES — a bound in characters would not, since one
 # character can be four bytes.
 MAX_PARAM_LENGTH = 2048
-# The most of a caller-supplied value a log line quotes: enough to recognise it, never the volume a
-# caller with no credential chooses (#1716).
-MAX_LOGGED_CHARS = 200
 
-_AT_CAPACITY = "Server is at capacity; try again later"
 _CODE_GONE = "Authorization code is invalid or expired: re-authorise the connector"
 _REFRESH_TOKEN_GONE = "Refresh token is invalid or expired: re-authorise the connector"
 # The only client authentication methods /oauth/token implements: a secret arrives in the form
@@ -142,11 +139,6 @@ def _within_param_bytes(value: str) -> str:
 
 
 _RedirectUri = Annotated[str, AfterValidator(_within_param_bytes)]
-
-
-# Cuts the escaped text, not the value: one character can escape to ten.
-_log_repr = reprlib.Repr()
-_log_repr.maxstring = MAX_LOGGED_CHARS
 
 
 # --- Discovery -------------------------------------------------------------
@@ -247,7 +239,7 @@ def _validate_auth_method(metadata: _ClientMetadata) -> str:
     auth_method = metadata.token_endpoint_auth_method
     if auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
         logger.warning(
-            "MCP OAuth: rejected token_endpoint_auth_method during registration: %s", _log_repr.repr(auth_method)
+            "MCP OAuth: rejected token_endpoint_auth_method during registration: %s", auth.log_repr.repr(auth_method)
         )
         raise HTTPException(
             status_code=400,
@@ -259,7 +251,7 @@ def _validate_auth_method(metadata: _ClientMetadata) -> str:
 def _validate_redirect_uris(redirect_uris: list[str]) -> None:
     for uri in redirect_uris:
         if not _redirect_uri_is_safe(uri):
-            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %s", _log_repr.repr(uri))
+            logger.warning("MCP OAuth: rejected unsafe redirect_uri during registration: %s", auth.log_repr.repr(uri))
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -310,7 +302,7 @@ async def oauth_register(request: Request) -> JSONResponse:
     with auth.open_db_session() as session:
         cleanup_and_store(session, mcp_registered_clients, client_id, client)
 
-    logger.info("MCP OAuth: registered client %s (%s)", client_id, _log_repr.repr(metadata.client_name))
+    logger.info("MCP OAuth: registered client %s (%s)", client_id, auth.log_repr.repr(metadata.client_name))
 
     return JSONResponse(
         {
@@ -401,7 +393,7 @@ def oauth_authorize(
             logger.warning(
                 "MCP OAuth: refused stored unsafe redirect_uri for client %s: %s",
                 client_id,
-                _log_repr.repr(redirect_uri),
+                auth.log_repr.repr(redirect_uri),
             )
             raise HTTPException(
                 status_code=400, detail="redirect_uri is not one this server accepts: re-register the client"
@@ -453,16 +445,54 @@ def oauth_authorize_confirm(request: Request, server_state: str = Form(...)) -> 
     response = RedirectResponse(
         url=google_login.authorization_url(server_state, flow["google_code_verifier"]), status_code=302
     )
-    response.set_cookie(
-        auth.MCP_FLOW_COOKIE,
-        server_state,
-        max_age=SESSION_TTL_SECONDS,
-        path="/",
-        httponly=True,
-        samesite="lax",
-        secure=True,
-    )
+    auth.set_host_cookie(response, auth.MCP_FLOW_COOKIE, server_state, SESSION_TTL_SECONDS)
     return response
+
+
+def finish_sign_in(session: Session, flow: dict[str, Any], code: str, error: str) -> RedirectResponse:
+    """The MCP branch of :func:`backend.auth.google_callback`: an authorization code for the client, or why not.
+
+    A cancelled sign-in or an account outside the allowlist is delivered to the client's redirect
+    URI as an ``access_denied`` error (RFC 6749 §4.1.2.1), because that is where the person is.
+    """
+    if error:
+        logger.info("MCP sign-in cancelled at Google (%s)", auth.log_repr.repr(error))
+        return auth.client_redirect(
+            flow["redirect_uri"],
+            flow["client_state"],
+            error="access_denied",
+            error_description="Google sign-in was cancelled",
+        )
+
+    identity = auth.google_identity("MCP", flow, code)
+    if identity is None:
+        return auth.client_redirect(
+            flow["redirect_uri"], flow["client_state"], error="access_denied", error_description=auth.INVITE_ONLY
+        )
+
+    auth_code = secrets.token_urlsafe(32)
+    try:
+        cleanup_and_store(
+            session,
+            mcp_auth_codes,
+            auth_code,
+            {
+                "subject": identity.subject,
+                "email": identity.email,
+                "code_challenge": flow["code_challenge"],
+                "code_challenge_method": flow["code_challenge_method"],
+                "redirect_uri": flow["redirect_uri"],
+                "client_id": flow["client_id"],
+                "scope": flow["scope"],
+                "expires_at": datetime.now(UTC) + timedelta(seconds=AUTH_CODE_TTL_SECONDS),
+            },
+        )
+    except StoreFullError as full:
+        logger.warning("MCP sign-in refused: %s", full)
+        raise HTTPException(status_code=503, detail=auth.AT_CAPACITY) from full
+
+    logger.info("MCP sign-in complete for client %r, redirecting to %r", flow["client_id"], flow["redirect_uri"])
+    return auth.client_redirect(flow["redirect_uri"], flow["client_state"], code=auth_code)
 
 
 # --- Tokens ----------------------------------------------------------------
@@ -525,7 +555,7 @@ def _issue_token_response(
             client_id,
             revoked,
         )
-        raise _invalid_grant(auth._ACCOUNT_NOT_ALLOWED)
+        raise _invalid_grant(auth.ACCOUNT_NOT_ALLOWED)
     access_token = auth.create_jwt(subject, email, audience=auth.MCP_AUDIENCE)
     refresh_token = secrets.token_urlsafe(32)
     try:
@@ -544,7 +574,7 @@ def _issue_token_response(
         )
     except StoreFullError as full:
         logger.warning("MCP OAuth: token issuance refused for client %s — %s", client_id, full)
-        raise HTTPException(status_code=503, detail=_AT_CAPACITY) from full
+        raise HTTPException(status_code=503, detail=auth.AT_CAPACITY) from full
     extend_expiry(session, mcp_registered_clients, client_id, expires_at)
 
     return JSONResponse(

@@ -291,7 +291,7 @@ def test_register_logs_a_bounded_prefix_of_what_the_caller_sent(client, caplog, 
         client.post("/oauth/register", json=body)
 
     [record] = [record for record in caplog.records if logged in record.getMessage()]
-    assert len(record.getMessage()) < mcp_oauth.MAX_LOGGED_CHARS + 200
+    assert len(record.getMessage()) < auth.MAX_LOGGED_CHARS + 200
 
 
 @pytest.mark.parametrize(
@@ -817,7 +817,7 @@ def test_authorize_logs_a_bounded_prefix_of_a_stored_unsafe_redirect_uri(client,
         _authorize(client, "stale-client", redirect_uri=smuggled)
 
     [record] = [record for record in caplog.records if "stored unsafe redirect_uri" in record.getMessage()]
-    assert len(record.getMessage()) < mcp_oauth.MAX_LOGGED_CHARS + 200
+    assert len(record.getMessage()) < auth.MAX_LOGGED_CHARS + 200
 
 
 def test_authorize_confirm_sends_the_browser_to_google(client, session):
