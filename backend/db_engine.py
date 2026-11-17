@@ -46,7 +46,8 @@ STATEMENT_TIMEOUT = "30s"
 # The root the production pooler's chain ends in (Supabase Root 2021 CA), valid until 2031-04-26.
 # When Supabase rotates it, replace the file with the one the Supabase dashboard serves under
 # Database settings → SSL configuration.
-SUPABASE_ROOT_CA = Path(__file__).resolve().parent / "certs" / "supabase-root-2021-ca.crt"
+_SUPABASE_ROOT_CA_IN_BACKEND = "certs/supabase-root-2021-ca.crt"
+SUPABASE_ROOT_CA = Path(__file__).resolve().parent / _SUPABASE_ROOT_CA_IN_BACKEND
 
 
 def tls_connect_args(database_url: str) -> dict[str, str]:
@@ -104,7 +105,7 @@ _CERTIFICATE_FAILURES = ("certificate verify failed", "does not match host name"
 
 CERTIFICATE_FAILURE = (
     "The database server's TLS certificate did not verify against the Supabase root CA bundled at "
-    "backend/certs/supabase-root-2021-ca.crt (sslmode=verify-full, #1816). If Supabase has rotated "
+    f"backend/{_SUPABASE_ROOT_CA_IN_BACKEND} (sslmode=verify-full, #1816). If Supabase has rotated "
     "its CA, replace that file with the certificate from the Supabase dashboard (Database settings → "
     "SSL configuration). libpq said: "
 )

@@ -68,19 +68,25 @@ def test_the_bundled_ca_is_supabases_root():
     assert (("commonName", "Supabase Root 2021 CA"),) in certificate["subject"]
 
 
-def test_a_certificate_failure_says_so_plainly():
+@pytest.mark.parametrize(
+    "libpq_says",
+    [
+        "SSL error: certificate verify failed",
+        'server certificate for "h" does not match host name "db.example.com"',
+        'root certificate file "/app/backend/certs/supabase-root-2021-ca.crt" does not exist',
+    ],
+)
+def test_a_certificate_failure_says_so_plainly(libpq_says):
     """The ``handle_error`` path the boot's connection takes when libpq refuses the server's chain."""
 
     def refused():
-        raise psycopg2.OperationalError(
-            'connection to server at "h" (1.2.3.4), port 5432 failed: SSL error: certificate verify failed\n'
-        )
+        raise psycopg2.OperationalError(f'connection to server at "h" (1.2.3.4), port 5432 failed: {libpq_says}\n')
 
     engine = create_engine("postgresql+psycopg2://", creator=refused, poolclass=NullPool)
     db_engine.redact_statement_errors(engine)
     with pytest.raises(OperationalError, match="did not verify against the Supabase root CA") as failure:
         engine.connect()
-    assert "certificate verify failed" in str(failure.value)
+    assert libpq_says in str(failure.value)
 
 
 def test_a_local_run_keeps_the_localdb_profiles_disable(monkeypatch):
