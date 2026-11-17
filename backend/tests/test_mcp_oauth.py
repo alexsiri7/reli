@@ -1244,24 +1244,24 @@ def test_a_replayed_refresh_token_revokes_its_whole_family(client, session):
         assert own.exec(select(func.count()).select_from(McpRefreshTokenRecord)).one() == 0
 
 
-def test_a_rotation_refused_at_capacity_leaves_the_token_usable_for_a_retry(client, session, monkeypatch):
-    """A 503 at the refresh-token cap consumes nothing: the same token retried once there is room
-    rotates, instead of reading as a replay that revokes its family (#1537)."""
+def test_a_rotation_at_the_live_cap_is_not_refused_but_a_new_sign_in_is(client, session, monkeypatch):
+    """A rotation frees the live slot it fills, so consumed tokens can no longer lock the owner out (#1804);
+    only a new family meets the cap."""
     registered = _register(client)
     code = _seed_code(session, registered["client_id"], "verifier")
     first = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier").json()
 
     monkeypatch.setattr(mcp_oauth, "mcp_refresh_tokens", replace(mcp_refresh_tokens, max_entries=1))
-    refused = _refresh(client, first["refresh_token"], registered["client_id"])
+    rotated = _refresh(client, first["refresh_token"], registered["client_id"])
+
+    assert rotated.status_code == 200
+    assert rotated.json()["refresh_token"] != first["refresh_token"]
+    assert cleanup_and_get(session, mcp_refresh_tokens, first["refresh_token"])["consumed_at"] is not None
+
+    code = _seed_code(session, registered["client_id"], "verifier")
+    refused = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier")
 
     assert refused.status_code == 503
-    assert cleanup_and_get(session, mcp_refresh_tokens, first["refresh_token"])["consumed_at"] is None
-
-    monkeypatch.setattr(mcp_oauth, "mcp_refresh_tokens", mcp_refresh_tokens)
-    retried = _refresh(client, first["refresh_token"], registered["client_id"])
-
-    assert retried.status_code == 200
-    assert retried.json()["refresh_token"] != first["refresh_token"]
 
 
 def test_two_concurrent_redeems_of_one_code_yield_exactly_one_token(racing_client, session, monkeypatch):

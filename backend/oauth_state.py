@@ -3,11 +3,11 @@
 Six tables, each a bounded store of short-lived rows keyed by an opaque string: the clients that
 registered themselves, the MCP sign-ins in flight, the authorization codes waiting to be exchanged,
 the refresh tokens issued — consumed ones kept, without the account they were issued to, until they
-expire, so a replay is recognised — the web view's sign-ins in flight, and the ``jti`` of every JWT
-logout revoked, kept until that JWT would have expired anyway. None of it is a Thing
-and nothing here touches the graph, so nothing here is journalled — the journal records mutations of
-Things and relationships, and these rows are the authorization server's bookkeeping
-(docs/auth-recovery.md §6.1).
+expire or the pool of consumed tokens forgets them, so a replay is recognised — the web view's
+sign-ins in flight, and the ``jti`` of every JWT logout revoked, kept until that JWT would have
+expired anyway. None of it is a Thing and nothing here touches the graph, so nothing here is
+journalled — the journal records mutations of Things and relationships, and these rows are the
+authorization server's bookkeeping (docs/auth-recovery.md §6.1).
 
 Every access purges expired rows first, so a store never holds anything past its ``expires_at``,
 and no store grows past its cap. At the cap the stores part ways: the three a caller without any
@@ -18,7 +18,8 @@ codes, refresh tokens and revoked tokens — refuse with :class:`StoreFullError`
 there would revoke a live session to admit a new one, or bring a revoked one back. A registration
 lives an hour until a token is minted for it, then as long as the refresh family it serves. Only
 ``mcp_refresh_tokens`` keeps rows that are no longer redeemable: a consumed token stays until it
-expires, and counts against the cap until then.
+expires or until the pool of consumed tokens is full, the earliest-consumed going first, and it
+never counts against the refusing cap on live tokens (#1804).
 
 Authorization codes and refresh tokens are stored as the SHA-256 digest of the value handed to the
 client and looked up by the digest of the value presented (#1530), so a reader of the database or a
@@ -43,6 +44,8 @@ from sqlmodel import Field, Session, SQLModel, select
 logger = logging.getLogger(__name__)
 
 MAX_ENTRIES = 10_000
+# The share of a refusing store's cap at which each insert warns.
+NEARLY_FULL = 0.8
 
 
 def credential_digest(value: str) -> str:
@@ -116,10 +119,11 @@ class McpAuthCodeRecord(SQLModel, table=True):
 class McpRefreshTokenRecord(SQLModel, table=True):
     """A refresh token issued by ``POST /oauth/token``.
 
-    Live until one ``grant_type=refresh_token`` exchange consumes it, then kept until it expires so
-    that presenting it again is recognised as a replay and revokes its family — every token rotated
-    from the same authorization-code exchange, which all share ``family_id``. Keyed by the token's
-    digest, not the token. Consuming a token nulls ``subject`` and ``email`` (#1715): recognising a
+    Live until one ``grant_type=refresh_token`` exchange consumes it, then kept until it expires, or
+    until the pool of consumed tokens forgets it, earliest-consumed first, so that presenting it
+    again is recognised as a replay and revokes its family — every token rotated from the same
+    authorization-code exchange, which all share ``family_id``. Keyed by the token's digest, not the
+    token. Consuming a token nulls ``subject`` and ``email`` (#1715): recognising a
     replay needs neither, so a consumed row no longer says whose it was.
     """
 
@@ -167,12 +171,17 @@ class Store:
 
     A store that hashes keys stores each row under :func:`credential_digest` of its key and is read
     by the digest of the presented value, so the row holds nothing redeemable.
+
+    A store with ``max_consumed`` holds rows that can be consumed: ``max_entries`` counts only its
+    live rows (``consumed_at`` null), and it keeps at most ``max_consumed`` consumed rows, forgetting
+    the earliest-consumed first.
     """
 
     model: type[SQLModel]
     max_entries: int
     evicts: bool = False
     hashes_keys: bool = False
+    max_consumed: int | None = None
 
     @property
     def primary_key(self) -> str:
@@ -189,6 +198,12 @@ class Store:
 # Reli signed, and evicting one would bring it back to life, so that store refuses too. One hundred
 # registrations is far more than one owner's connectors will ever hold at once.
 #
+# A consumed refresh token redeems nothing and is kept only so a replay is recognised, so consumed
+# tokens sit in a pool of their own that forgets the earliest-consumed rather than refusing (#1804).
+# Forgetting one turns its replay into "invalid or expired" rather than a family revocation, and
+# never touches a live token. The pool is MAX_ENTRIES, which a dozen connectors refreshing hourly
+# do not reach within the thirty days a row lives.
+#
 # Whether a store hashes its keys follows from what the key redeems. An authorization code or a
 # refresh token is the credential itself, so the row holds its digest. A client_id is public, and
 # the two sign-in states are the OAuth ``state`` parameter: they travel in URLs and redeem nothing
@@ -197,7 +212,7 @@ class Store:
 mcp_registered_clients = Store(McpRegisteredClientRecord, max_entries=100, evicts=True)
 mcp_oauth_sessions = Store(McpOAuthSessionRecord, max_entries=MAX_ENTRIES, evicts=True)
 mcp_auth_codes = Store(McpAuthCodeRecord, max_entries=MAX_ENTRIES, hashes_keys=True)
-mcp_refresh_tokens = Store(McpRefreshTokenRecord, max_entries=MAX_ENTRIES, hashes_keys=True)
+mcp_refresh_tokens = Store(McpRefreshTokenRecord, max_entries=MAX_ENTRIES, hashes_keys=True, max_consumed=MAX_ENTRIES)
 web_oauth_sessions = Store(WebOAuthSessionRecord, max_entries=MAX_ENTRIES, evicts=True)
 revoked_tokens = Store(RevokedTokenRecord, max_entries=MAX_ENTRIES)
 
@@ -217,12 +232,17 @@ def _stored_key(store: Store, key: str) -> str:
 def cleanup_and_store(session: Session, store: Store, key: str, values: dict[str, Any]) -> None:
     """Insert *values* under *key*, replacing any row already there.
 
-    The cap counts the rows other than *key*: replacing a row in a full store neither refuses nor
-    evicts, and an eviction never removes the row about to be replaced.
+    The cap counts the rows other than *key* — for a store with ``max_consumed``, only the
+    unconsumed ones: replacing a row in a full store neither refuses nor evicts, and an eviction
+    never removes the row about to be replaced. Consumed rows past ``max_consumed`` are forgotten in
+    the same transaction. A non-evicting store warns on each insert that takes it to
+    ``NEARLY_FULL`` of its cap.
 
     A refusal rolls back rather than committing, purge included: the session may be carrying the
     flushed consume of :func:`consume_refresh_token`, and committing it here would leave a token
-    the caller never got to replace marked consumed, so its retry reads as a replay (#1537).
+    the caller never got to replace marked consumed, so its retry reads as a replay (#1537). For
+    ``mcp_refresh_tokens`` a rotation frees the live slot it fills, so only a new family can be
+    refused.
 
     Raises:
         StoreFullError: The store holds ``max_entries`` live rows and does not evict.
@@ -231,7 +251,10 @@ def cleanup_and_store(session: Session, store: Store, key: str, values: dict[str
     _purge_expired(session, store)
     table = store.model.__table__  # type: ignore[attr-defined]
     pk = table.c[store.primary_key]
-    others = session.exec(select(func.count()).select_from(store.model).where(pk != key)).one()
+    counted = select(func.count()).select_from(store.model).where(pk != key)
+    if store.max_consumed is not None:
+        counted = counted.where(table.c.consumed_at.is_(None))
+    others = session.exec(counted).one()
     if others >= store.max_entries:
         if not store.evicts:
             session.rollback()
@@ -243,6 +266,26 @@ def cleanup_and_store(session: Session, store: Store, key: str, values: dict[str
         logger.warning(
             "%s is full (%d entries): evicted %d row(s) nearest expiry", table.name, store.max_entries, len(evicted)
         )
+    elif not store.evicts and others + 1 >= store.max_entries * NEARLY_FULL:
+        logger.warning("%s is nearly full: %d of %d entries", table.name, others + 1, store.max_entries)
+
+    if store.max_consumed is not None:
+        beyond_pool = (
+            select(pk)
+            .where(pk != key, table.c.consumed_at.is_not(None))
+            .order_by(table.c.consumed_at.desc())
+            .offset(store.max_consumed)
+        )
+        forgotten = session.execute(
+            delete(store.model).where(pk.in_(beyond_pool)).returning(pk).execution_options(synchronize_session=False)
+        ).all()
+        if forgotten:
+            logger.warning(
+                "%s holds %d consumed rows: forgot %d consumed earliest",
+                table.name,
+                store.max_consumed,
+                len(forgotten),
+            )
 
     existing = session.get(store.model, key)
     if existing is not None:
@@ -304,10 +347,10 @@ def consume_refresh_token(session: Session, refresh_token: str) -> dict[str, Any
     """The live refresh token under *refresh_token* as a dict, marked consumed in the same statement.
 
     ``None`` when it is gone, expired, or already consumed — a replay, or a concurrent exchange
-    that won. The row is kept, so :func:`cleanup_and_get` still finds it with ``consumed_at`` set,
-    but the same statement nulls its ``subject`` and ``email``: the dict returned carries the
-    identity the token was issued to, read from the row as it stood before the update, and the
-    stored row no longer does.
+    that won. The row is kept (within the store's ``max_consumed`` pool), so :func:`cleanup_and_get`
+    still finds it with ``consumed_at`` set, but the same statement nulls its ``subject`` and
+    ``email``: the dict returned carries the identity the token was issued to, read from the row as
+    it stood before the update, and the stored row no longer does.
 
     This is the one store function that does not commit: the rotation commits together with its
     replacement in :func:`cleanup_and_store`, and nothing may commit in between. A concurrent

@@ -153,7 +153,9 @@ which `backend/main.py` calls **last** because its fallback answers every unmatc
   follows from who can write to the store: the three a caller without a credential can fill
   (`mcp_registered_clients`, `mcp_oauth_sessions`, `web_oauth_sessions`) evict the row nearest
   expiry to make room, the three only a signed-in account can write to (`mcp_auth_codes`,
-  `mcp_refresh_tokens`, `revoked_tokens`) refuse with a 503. A registration lives an hour until the owner signs in
+  `mcp_refresh_tokens`, `revoked_tokens`) refuse with a 503, though `mcp_refresh_tokens` counts
+  only live tokens against its cap: consumed ones are forgotten from a pool of their own,
+  earliest-consumed first, so they never block issuance (#1804). A registration lives an hour until the owner signs in
   through it, then as long as its refresh family. Above them, `backend/rate_limit.py`
   limits each caller per tier; [CLAUDE.md](../CLAUDE.md) (*Rate limiting*) describes the tiers and keys.
 - `/api` — `_WebViewAuthMiddleware` in `backend/api.py` requires the `__Host-reli_session` cookie:

@@ -17,6 +17,7 @@ from sqlmodel import Session, select
 
 from backend.db_engine import get_engine
 from backend.oauth_state import (
+    MAX_ENTRIES,
     McpAuthCodeRecord,
     McpRefreshTokenRecord,
     McpRegisteredClientRecord,
@@ -191,6 +192,72 @@ def test_a_refusal_does_not_commit_a_flushed_refresh_token_consume(session):
     assert kept["consumed_at"] is None
 
 
+def test_a_consumed_token_frees_its_live_slot(session):
+    """Consumed tokens no longer count against the refusing cap, so they cannot lock the owner out (#1804)."""
+    tiny = Store(McpRefreshTokenRecord, max_entries=1, hashes_keys=True, max_consumed=5)
+    cleanup_and_store(session, tiny, "token-1", _refresh_token())
+    assert consume_refresh_token(session, "token-1") is not None
+
+    cleanup_and_store(session, tiny, "token-2", _refresh_token())
+
+    assert cleanup_and_get(session, tiny, "token-1")["consumed_at"] is not None
+    assert cleanup_and_get(session, tiny, "token-2")["consumed_at"] is None
+    with pytest.raises(StoreFullError):
+        cleanup_and_store(session, tiny, "token-3", _refresh_token())
+
+
+def test_the_consumed_pool_forgets_the_earliest_consumed_and_never_a_live_token(session, caplog):
+    """Ordered by when a token was consumed, not by expiry: rotation carries one family's expiry forward."""
+    tiny = Store(McpRefreshTokenRecord, max_entries=5, hashes_keys=True, max_consumed=1)
+    cleanup_and_store(session, tiny, "t1", _refresh_token(expires_in=timedelta(days=30)))
+    assert consume_refresh_token(session, "t1") is not None
+    session.commit()
+    cleanup_and_store(session, tiny, "t2", _refresh_token(expires_in=timedelta(days=1)))
+    assert consume_refresh_token(session, "t2") is not None
+    session.commit()
+    cleanup_and_store(session, tiny, "live-1", _refresh_token())
+    cleanup_and_store(session, tiny, "live-2", _refresh_token())
+
+    with caplog.at_level("WARNING", logger="backend.oauth_state"):
+        cleanup_and_store(session, tiny, "t3", _refresh_token())
+
+    assert cleanup_and_get(session, tiny, "live-1")["consumed_at"] is None
+    assert cleanup_and_get(session, tiny, "live-2")["consumed_at"] is None
+    assert cleanup_and_get(session, tiny, "t1") is None
+    assert cleanup_and_get(session, tiny, "t2")["consumed_at"] is not None
+    assert cleanup_and_get(session, tiny, "t3")["consumed_at"] is None
+    assert any("mcp_refresh_tokens" in record.message and "forgot 1" in record.message for record in caplog.records)
+
+
+def test_a_refusing_store_warns_once_it_is_nearly_full(session, caplog):
+    tiny = Store(McpAuthCodeRecord, max_entries=5, hashes_keys=True)
+    with caplog.at_level("WARNING", logger="backend.oauth_state"):
+        for n in range(3):
+            cleanup_and_store(session, tiny, f"code-{n}", _auth_code())
+        assert not any("nearly full" in record.message for record in caplog.records)
+
+        cleanup_and_store(session, tiny, "code-3", _auth_code())
+
+    assert any("mcp_auth_codes is nearly full: 4 of 5" in record.message for record in caplog.records)
+
+
+def test_consumed_refresh_tokens_do_not_count_towards_the_nearly_full_warning(session, caplog):
+    tiny = Store(McpRefreshTokenRecord, max_entries=5, hashes_keys=True, max_consumed=10)
+    for n in range(6):
+        cleanup_and_store(session, tiny, f"consumed-{n}", _refresh_token())
+        assert consume_refresh_token(session, f"consumed-{n}") is not None
+    session.commit()
+
+    with caplog.at_level("WARNING", logger="backend.oauth_state"):
+        for n in range(3):
+            cleanup_and_store(session, tiny, f"live-{n}", _refresh_token())
+        assert not any("nearly full" in record.message for record in caplog.records)
+
+        cleanup_and_store(session, tiny, "live-3", _refresh_token())
+
+    assert any("mcp_refresh_tokens is nearly full: 4 of 5" in record.message for record in caplog.records)
+
+
 def test_an_evicting_store_at_its_cap_drops_the_row_nearest_expiry(session, caplog):
     tiny = Store(McpRegisteredClientRecord, max_entries=2, evicts=True)
     cleanup_and_store(session, tiny, "client-1", _client(expires_in=timedelta(hours=1)))
@@ -236,6 +303,11 @@ def test_only_the_stores_an_unauthenticated_caller_can_write_to_evict():
     """The routes writing to an evicting store no longer catch StoreFullError: flip a flag and they 500."""
     assert (mcp_registered_clients.evicts, mcp_oauth_sessions.evicts, web_oauth_sessions.evicts) == (True, True, True)
     assert (mcp_auth_codes.evicts, mcp_refresh_tokens.evicts, revoked_tokens.evicts) == (False, False, False)
+    assert mcp_refresh_tokens.max_consumed == MAX_ENTRIES
+    assert all(
+        store.max_consumed is None
+        for store in (mcp_registered_clients, mcp_oauth_sessions, web_oauth_sessions, mcp_auth_codes, revoked_tokens)
+    )
 
 
 def test_only_the_two_credential_stores_hash_their_keys():
