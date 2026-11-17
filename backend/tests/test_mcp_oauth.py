@@ -991,6 +991,7 @@ def test_a_code_exchanges_for_a_jwt_the_mcp_endpoint_accepts(client, session):
     assert response.headers["cache-control"] == "no-store"
     body = response.json()
     assert body["token_type"] == "bearer"
+    assert body["scope"] == "mcp"
     assert body["expires_in"] == 3600 == auth.MCP_JWT_EXPIRY_SECONDS
     assert body["refresh_token"]
     claims = auth.decode_jwt(body["access_token"], audience="mcp")
@@ -1035,6 +1036,20 @@ def test_a_refresh_grant_is_refused_for_a_client_that_did_not_register_refresh_t
     assert response.status_code == 400
     assert response.json()["error"] == "unauthorized_client"
     assert session.exec(select(func.count()).select_from(McpRefreshTokenRecord)).one() == 1
+
+
+def test_a_code_exchange_issues_tokens_without_a_response(client, session):
+    registered = _register(client)
+    code = _seed_code(session, registered["client_id"], "verifier")
+
+    issued = mcp_oauth._exchange_authorization_code(
+        session, code, CLIENT_REDIRECT, registered["client_id"], "", "verifier"
+    )
+
+    assert issued.scope == "mcp"
+    assert issued.expires_in == auth.MCP_JWT_EXPIRY_SECONDS
+    assert auth.decode_jwt(issued.access_token, audience="mcp")["sub"] == "1234567890"
+    assert cleanup_and_get(session, mcp_refresh_tokens, issued.refresh_token)["client_id"] == registered["client_id"]
 
 
 def test_a_code_exchanges_once(client, session):
@@ -1192,6 +1207,7 @@ def test_a_refresh_token_rotates(client, session):
     assert response.status_code == 200
     second = response.json()
     assert second["refresh_token"] != first["refresh_token"]
+    assert second["scope"] == "mcp"
     assert auth.decode_jwt(second["access_token"], audience="mcp")["sub"] == "1234567890"
 
     replay = _refresh(client, first["refresh_token"], registered["client_id"])
@@ -1262,6 +1278,7 @@ def test_a_rotation_at_the_live_cap_is_not_refused_but_a_new_sign_in_is(client, 
     refused = _token(client, code=code, client_id=registered["client_id"], code_verifier="verifier")
 
     assert refused.status_code == 503
+    assert refused.json() == {"detail": "Server is at capacity; try again later"}
 
 
 def test_two_concurrent_redeems_of_one_code_yield_exactly_one_token(racing_client, session, monkeypatch):
@@ -1334,7 +1351,7 @@ def test_refresh_exchange_refuses_a_de_allowlisted_email_and_revokes_the_family(
 
 def test_refresh_exchange_with_allowed_emails_emptied_still_revokes_the_family(client, session, monkeypatch):
     """`/oauth/token` gates on `SECRET_KEY` alone, not the whole sign-in settings list: an emptied
-    allowlist must reach `_issue_token_response`, where the family is revoked, rather than answer
+    allowlist must reach `_issue_tokens`, where the family is revoked, rather than answer
     501 with the token left in the store to come alive again once `ALLOWED_EMAILS` is repopulated."""
     registered = _register(client)
     code = _seed_code(session, registered["client_id"], "verifier")
