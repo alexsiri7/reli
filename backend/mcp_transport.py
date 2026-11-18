@@ -50,8 +50,9 @@ class _BearerTokenMiddleware:
 
     The one credential is an ``aud="mcp"`` JWT minted by the authorization server in
     :mod:`backend.mcp_oauth` after a Google sign-in, for an account still in ``ALLOWED_EMAILS``:
-    the allowlist and the revocation list logout writes are read on every request, so removing an
-    address ends its live tokens at once.
+    the allowlist, the revocation list logout writes and the refresh family the token was issued
+    under are read on every request, so removing an address or revoking the family ends its live
+    tokens at once.
 
     An unset or too-short ``SECRET_KEY`` closes the endpoint rather than opening it: there is no
     dev-mode bypass, because /mcp is the only write path into the graph and it is publicly

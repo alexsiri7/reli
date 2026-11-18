@@ -18,7 +18,8 @@ The web session is that cookie: an ``aud="web"`` JWT the middleware in :mod:`bac
 on every ``/api`` request, read through :func:`web_session` so the middleware and
 ``GET /api/auth/me`` cannot disagree about it. Logout deletes the cookie and records the token's
 ``jti`` in ``revoked_tokens`` until the token expires, so a copy kept elsewhere dies with the
-session (#1699); :func:`is_revoked` is that list's one reading, for ``/api`` and ``/mcp`` alike.
+session (#1699); :func:`is_revoked` is that list's one reading, for ``/api`` and ``/mcp`` alike, and
+for an MCP access token it also asks whether the refresh family the token names is still live (#1808).
 
 :func:`admit` is the one statement of when a JWT admits a request at all: the session cookie, the
 ``/mcp`` bearer check and the rate limiter's keying all call it, so a new admission condition
@@ -53,6 +54,7 @@ from .oauth_state import (
     cleanup_and_pop,
     cleanup_and_store,
     mcp_oauth_sessions,
+    refresh_family_is_live,
     revoked_tokens,
     web_oauth_sessions,
 )
@@ -63,9 +65,9 @@ JWT_ALGORITHM = "HS256"
 MCP_AUDIENCE = "mcp"
 WEB_AUDIENCE = "web"
 WEB_JWT_EXPIRY_SECONDS = 60 * 60 * 24 * 7
-# Short because nothing revokes a minted MCP JWT: revoking a refresh-token family stops the next
-# refresh, and the hour is how long an access token already in the wrong hands outlives that.
-# The connector refreshes transparently, so the user never sees the turnover.
+# Revoking a refresh-token family ends its access tokens on their next request, through
+# ``is_revoked``; the hour bounds a token whose family is still live. The connector refreshes
+# transparently, so the user never sees the turnover.
 MCP_JWT_EXPIRY_SECONDS = 60 * 60
 _EXPIRY_SECONDS_BY_AUDIENCE = {WEB_AUDIENCE: WEB_JWT_EXPIRY_SECONDS, MCP_AUDIENCE: MCP_JWT_EXPIRY_SECONDS}
 # A web sign-in that takes longer than this answers "start again", which is the remedy.
@@ -166,10 +168,13 @@ def is_allowed(email: str) -> bool:
     return email.lower() in settings.allowed_emails
 
 
-def create_jwt(subject: str, email: str, audience: str) -> str:
+def create_jwt(subject: str, email: str, audience: str, family_id: str | None = None) -> str:
     """A token for *subject*, only for *audience*, good for ``MCP_JWT_EXPIRY_SECONDS`` or
     ``WEB_JWT_EXPIRY_SECONDS`` as *audience* says, issued by this deploy's ``base_url()`` and named
     by the ``jti`` that :func:`is_revoked` looks up.
+
+    An MCP access token issued under a tracked refresh family carries it as ``fid``, which
+    :func:`is_revoked` checks is still live.
     """
     issued_at = int(datetime.now(UTC).timestamp())
     claims = {
@@ -181,6 +186,8 @@ def create_jwt(subject: str, email: str, audience: str) -> str:
         "exp": issued_at + _EXPIRY_SECONDS_BY_AUDIENCE[audience],
         "jti": str(uuid.uuid4()),
     }
+    if family_id is not None:
+        claims["fid"] = family_id
     return jwt.encode(claims, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
@@ -206,9 +213,19 @@ def decode_jwt(token: str, audience: str) -> dict[str, Any]:
 
 
 def is_revoked(claims: dict[str, Any]) -> bool:
-    """Whether logout ended the token *claims* were decoded from."""
+    """Whether logout ended the token *claims* were decoded from, or, for an MCP access token, that
+    its refresh family is gone: revoked on reuse, on an allowlist failure, by the manual ``DELETE``
+    in CLAUDE.md, or past its deadline (#1808). A token naming no family — a client that did not
+    register the ``refresh_token`` grant, or one minted before #1808 — has no family left to be
+    live, so it is refused the same way; the connector refreshes.
+    """
     with open_db_session() as session:
-        return cleanup_and_get(session, revoked_tokens, str(claims["jti"])) is not None
+        if cleanup_and_get(session, revoked_tokens, str(claims["jti"])) is not None:
+            return True
+        if claims.get("aud") != MCP_AUDIENCE:
+            return False
+        family_id = claims.get("fid")
+        return not (isinstance(family_id, str) and refresh_family_is_live(session, family_id))
 
 
 def _revoke(claims: dict[str, Any]) -> None:
