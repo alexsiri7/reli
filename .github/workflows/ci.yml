@@ -199,10 +199,15 @@ jobs:
         with:
           node-version: "22"
 
-      # Audits the lockfile directly; no install needed.
-      - name: Run npm audit
+      # Both audit the lockfile directly; no install needed. What ships is audited with no
+      # exceptions; the whole tree fails on every advisory scripts/npm_audit.py does not record.
+      - name: Run npm audit on shipped dependencies
         working-directory: frontend
-        run: npm audit
+        run: npm audit --omit=dev
+
+      - name: Run npm audit on every dependency
+        working-directory: frontend
+        run: python3 ../scripts/npm_audit.py
 
   # Deploy moved to staging-pipeline.yml — CI success triggers staging deploy,
   # then production deploy (with rollback) after staging health check passes.

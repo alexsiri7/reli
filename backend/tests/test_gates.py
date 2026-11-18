@@ -32,6 +32,7 @@ PINNED_ACTION = re.compile(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}")
 NPX_PACKAGE = re.compile(r"\bnpx\s+(?:-\S+\s+)*(\S+)")
 EXACT_VERSION = re.compile(r".@\d+\.\d+\.\d+$")
 DIGEST_PINNED = re.compile(r"\S+@sha256:[0-9a-f]{64}")
+FRONTEND_AUDITS = ("npm audit --omit=dev", "python3 ../scripts/npm_audit.py")
 
 # What `gates.sh` needs on PATH before it reaches a stage. Every venv tool goes through
 # `uv run`, because CI never activates the venv.
@@ -393,19 +394,24 @@ def test_the_frontend_lockfile_is_updated_and_scanned_like_the_backend_one():
     assert {u["directory"] for u in updates if u["package-ecosystem"] == "npm"} == {"/frontend"}
 
     ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
-    audit_steps = [step for job in ci["jobs"].values() for step in job["steps"] if "npm audit" in step.get("run", "")]
-    assert [step.get("working-directory") for step in audit_steps] == ["frontend"]
+    audit_steps = [
+        step for job in ci["jobs"].values() for step in job["steps"] if step.get("run", "").startswith(FRONTEND_AUDITS)
+    ]
+    assert [step.get("working-directory") for step in audit_steps] == ["frontend", "frontend"]
 
 
 def test_the_deploy_waits_on_a_dependency_audit():
     """#1815: the audits run in the CI run whose success the staging pipeline follows, on every
-    push rather than only on a lockfile change, so a vulnerable pin stops the deploy."""
+    push rather than only on a lockfile change, so a vulnerable pin stops the deploy. #1880: the
+    frontend's shipped dependencies are audited with no exception, and its whole tree with only the
+    advisories `scripts/npm_audit.py` names and gives a reason for — test_npm_audit.py holds that
+    script to failing on every other one."""
     ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text())
     pipeline = yaml.safe_load((WORKFLOWS / "staging-pipeline.yml").read_text())
     # PyYAML reads the bare key ``on`` as the boolean True.
     assert pipeline[True]["workflow_run"]["workflows"] == [ci["name"]]
 
-    for command in ("pip-audit", "npm audit"):
+    for command in ("pip-audit", *FRONTEND_AUDITS):
         jobs = [
             job for job in ci["jobs"].values() if any(step.get("run", "").startswith(command) for step in job["steps"])
         ]
