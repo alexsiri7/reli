@@ -37,7 +37,7 @@ by the OAuth 2.1 authorization server in `backend/mcp_oauth.py` after a Google s
 `/.well-known/*`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, with the callback in
 `backend/auth.py`. A 401 carries an RFC 9728 `resource_metadata` pointer when a base URL is
 configured, which is how a claude.ai connector finds the authorization server, and its body names
-the remedy. The JWT names the refresh family it was issued under, and a token whose family is gone
+the remedy. A JWT issued with a refresh token names the refresh family it belongs to, and one whose family is gone
 — revoked on reuse, on an allowlist failure or by hand, or past its deadline — is refused as
 revoked on its next request (#1808). An empty `SECRET_KEY` — or one shorter than 32 bytes (#1534) — closes the endpoint —
 401 to everything, and a warning at startup — rather than opening it, because `/mcp` is the only

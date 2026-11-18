@@ -213,11 +213,11 @@ def decode_jwt(token: str, audience: str) -> dict[str, Any]:
 
 
 def is_revoked(claims: dict[str, Any]) -> bool:
-    """Whether logout ended the token *claims* were decoded from, or, for an MCP access token, that
-    its refresh family is gone: revoked on reuse, on an allowlist failure, by the manual ``DELETE``
-    in CLAUDE.md, or past its deadline (#1808). A token naming no family — a client that did not
-    register the ``refresh_token`` grant, or one minted before #1808 — has no family left to be
-    live, so it is refused the same way; the connector refreshes.
+    """Whether logout ended the token *claims* were decoded from, or, for an MCP access token that
+    names a refresh family, that family is gone: revoked on reuse, on an allowlist failure, by the
+    manual ``DELETE`` in CLAUDE.md, or past its deadline (#1808). A token naming no family comes
+    from a client that did not register the ``refresh_token`` grant, which has no family to revoke
+    and no way to refresh, so only the ``jti`` list above ends it.
     """
     with open_db_session() as session:
         if cleanup_and_get(session, revoked_tokens, str(claims["jti"])) is not None:
@@ -225,7 +225,7 @@ def is_revoked(claims: dict[str, Any]) -> bool:
         if claims.get("aud") != MCP_AUDIENCE:
             return False
         family_id = claims.get("fid")
-        return not (isinstance(family_id, str) and refresh_family_is_live(session, family_id))
+        return family_id is not None and not refresh_family_is_live(session, str(family_id))
 
 
 def _revoke(claims: dict[str, Any]) -> None:

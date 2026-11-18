@@ -1007,7 +1007,9 @@ def test_a_client_that_did_not_register_refresh_token_gets_no_refresh_token(clie
 
     assert response.status_code == 200, response.text
     assert "refresh_token" not in response.json()
-    assert auth.decode_jwt(response.json()["access_token"], audience="mcp")["email"] == "owner@example.com"
+    claims = auth.admit(response.json()["access_token"], audience="mcp")
+    assert claims["email"] == "owner@example.com"
+    assert "fid" not in claims
     assert session.exec(select(func.count()).select_from(McpRefreshTokenRecord)).one() == 0
     session.rollback()
     promoted = cleanup_and_get(session, mcp_registered_clients, registered["client_id"])["expires_at"]

@@ -1239,13 +1239,12 @@ def test_mcp_endpoint_refuses_a_jwt_whose_refresh_family_is_past_its_deadline(cl
     assert "revoked" in response.json()["detail"]
 
 
-def test_mcp_endpoint_refuses_a_jwt_that_names_no_refresh_family(client, session, secret_key):
+def test_mcp_endpoint_admits_a_jwt_that_names_no_refresh_family(client, session, secret_key):
+    """What a client that did not register the ``refresh_token`` grant holds: it cannot refresh, so
+    refusing it for want of a family would end it from its first request."""
     token = auth.create_jwt("1234567890", "owner@example.com", audience="mcp")
 
-    response = client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(token))
-
-    assert response.status_code == 401
-    assert "revoked" in response.json()["detail"]
+    assert client.post("/mcp/", json=_TOOLS_LIST, headers=_bearer(token)).status_code == 200
 
 
 def test_an_expired_jwt_is_refused_naming_the_refresh_path(client, secret_key):
