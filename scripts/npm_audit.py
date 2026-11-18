@@ -34,7 +34,7 @@ def advisories(report: dict) -> dict[str, list[str]]:
     for package, vulnerability in report["vulnerabilities"].items():
         for via in vulnerability["via"]:
             if isinstance(via, dict):
-                found.setdefault(via.get("url", str(via.get("source"))).rsplit("/", 1)[-1], []).append(package)
+                found.setdefault(via["url"].rsplit("/", 1)[-1], []).append(package)
     return found
 
 
