@@ -26,14 +26,15 @@ EXCEPTIONS = {
 }
 
 
-def advisories(report: dict) -> dict[str, str]:
-    """GHSA id -> package, for every advisory the report names. A `via` that is a string names a
-    package that is only vulnerable through another one, whose own entry carries the advisory."""
-    found = {}
+def advisories(report: dict) -> dict[str, list[str]]:
+    """GHSA id -> the packages it is reported against, for every advisory the report names. A `via`
+    that is a string names a package that is only vulnerable through another one, whose own entry
+    carries the advisory."""
+    found: dict[str, list[str]] = {}
     for package, vulnerability in report["vulnerabilities"].items():
         for via in vulnerability["via"]:
             if isinstance(via, dict):
-                found[via.get("url", str(via.get("source"))).rsplit("/", 1)[-1]] = package
+                found.setdefault(via.get("url", str(via.get("source"))).rsplit("/", 1)[-1], []).append(package)
     return found
 
 
@@ -44,15 +45,16 @@ def problems(report: dict) -> list[str]:
     vulnerabilities = report["vulnerabilities"]
     return [
         *(
-            f"{ghsa} in {package} has no recorded exception"
-            for ghsa, package in sorted(found.items())
+            f"{ghsa} in {', '.join(packages)} has no recorded exception"
+            for ghsa, packages in sorted(found.items())
             if ghsa not in EXCEPTIONS
         ),
         *(f"{ghsa} is no longer reported: remove its exception" for ghsa in sorted(EXCEPTIONS.keys() - found.keys())),
         *(
-            f"{ghsa} in {found[ghsa]} now has a non-breaking fix: run `npm audit fix` and remove its exception"
+            f"{ghsa} in {package} now has a non-breaking fix: run `npm audit fix` and remove its exception"
             for ghsa in sorted(EXCEPTIONS.keys() & found.keys())
-            if vulnerabilities[found[ghsa]]["fixAvailable"] is True
+            for package in found[ghsa]
+            if vulnerabilities[package]["fixAvailable"] is True
         ),
     ]
 

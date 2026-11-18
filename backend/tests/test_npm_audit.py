@@ -59,9 +59,13 @@ def test_it_audits_the_whole_tree_and_passes_on_the_recorded_advisory(tmp_path):
         (_report(UNFIXABLE, ("esbuild", [_advisory("GHSA-aaaa-bbbb-cccc")], True)), "GHSA-aaaa-bbbb-cccc in esbuild"),
         (_report(("esbuild", [_advisory("GHSA-aaaa-bbbb-cccc")], False)), f"{EXCUSED} is no longer reported"),
         (_report(("picomatch", [_advisory(EXCUSED)], True)), "now has a non-breaking fix"),
+        (
+            _report(("picomatch-browser", [_advisory(EXCUSED)], True), UNFIXABLE),
+            "in picomatch-browser now has a non-breaking fix",
+        ),
         ({"error": {"code": "ENOLOCK"}}, "did not produce a report"),
     ],
-    ids=["another-advisory", "advisory-gone", "fix-released", "npm-error"],
+    ids=["another-advisory", "advisory-gone", "fix-released", "fix-released-for-one-of-two", "npm-error"],
 )
 def test_it_fails_on_anything_else(tmp_path, report, complaint):
     result = _run(tmp_path, json.dumps(report))
