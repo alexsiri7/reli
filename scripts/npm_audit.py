@@ -15,15 +15,9 @@ import json
 import subprocess
 import sys
 
-# Each entry: why the advisory cannot be fixed yet, and when the entry goes.
-EXCEPTIONS = {
-    "GHSA-fc5q-39xc-vjpf": (
-        "picomatch ReDoS through repeated extglobs, with no patched release (latest 4.0.7 on "
-        "2026-11-18). It is reached only through the devDependencies vite and typescript-eslint, "
-        "which match the repository's own globs at build and lint time; nothing shipped contains "
-        "it. Remove this entry once picomatch ships a fix (#1880)."
-    ),
-}
+# Each entry: why the advisory cannot be fixed yet, and when the entry goes. None today: the picomatch
+# advisory GHSA-fc5q-39xc-vjpf (#1880) stopped being reported once vite 8.3.8 dropped it.
+EXCEPTIONS: dict[str, str] = {}
 
 
 def advisories(report: dict) -> dict[str, list[str]]:
