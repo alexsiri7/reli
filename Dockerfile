@@ -11,7 +11,7 @@ RUN npm run build
 
 # uv is its own stage rather than an inline `COPY --from=<image>` so Dependabot's docker updates
 # see it and move it.
-FROM ghcr.io/astral-sh/uv:0.11.13@sha256:841c8e6fe30a8b07b4478d12d0c608cba6de66102d29d65d1cc423af86051563 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uv
 
 # Every base is pinned by digest, so a repointed tag cannot change the image unseen (#1814). The tag
 # stays beside it because Dependabot's docker updates read it and move the digest to each patched
